@@ -160,6 +160,8 @@ PTO_INTERNAL void TPartArgCheck(DstValTileData &dstVal, Src0ValTileData &src0Val
     PTO_ASSERT((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
                    (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol),
                "Fix: TPARTARG output tile dstVal valid shape mismatch with input tile src0Val or src1Val valid shape");
+    PTO_ASSERT(max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol,
+               "Fix: TPARTARG src validrow/validcol must smaller or equal to dst.");
 }
 
 template <typename Op, typename DstValTileData, typename Src0ValTileData, typename Src1ValTileData,
@@ -171,9 +173,15 @@ PTO_INTERNAL void TPartArgImpl(
     uint32_t dstValidRow, uint32_t dstValidCol, uint32_t src0ValidRow, uint32_t src0ValidCol, uint32_t src1ValidRow,
     uint32_t src1ValidCol, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    if (((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
-         (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol)) &&
-        (max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol)) {
+    if (dstValidRow == 0 || dstValidCol == 0) {
+        return;
+    } else if (src0ValidRow == 0 || src0ValidCol == 0) {
+        TMOV_IMPL(dstVal, src1Val);
+        TMOV_IMPL(dstIdx, src1Idx);
+    } else if (src1ValidRow == 0 || src1ValidCol == 0) {
+        TMOV_IMPL(dstVal, src0Val);
+        TMOV_IMPL(dstIdx, src0Idx);
+    } else {
         TPartArgProc<Op, DstValTileData, Src0ValTileData, Src1ValTileData, DstIdxTileData, Src0IdxTileData,
                      Src1IdxTileData>(dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx, dstValidRow, dstValidCol,
                                       src0ValidRow, src0ValidCol, src1ValidRow, src1ValidCol);
