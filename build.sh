@@ -187,7 +187,7 @@ configure_ptoas_build() {
     cmake_args+=("-DPTOAS_FORTIFY_MARKER_OBJECT=${PTOAS_FORTIFY_MARKER_OBJECT}")
   fi
 
-  cmake -C "${HARDENING_CACHE_FILE}" -G Ninja     -S .     -B build     -DLLVM_DIR="${LLVM_BUILD_DIR}/lib/cmake/llvm"     -DMLIR_DIR="${LLVM_BUILD_DIR}/lib/cmake/mlir"     -DPython3_EXECUTABLE="$(which python3)"     -DPython3_FIND_STRATEGY=LOCATION     -Dpybind11_DIR="${PYBIND11_CMAKE_DIR}"     -DMLIR_ENABLE_BINDINGS_PYTHON=ON     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DCMAKE_C_FLAGS="${cmake_c_flags}"     -DCMAKE_CXX_FLAGS="${cmake_cxx_flags}"     -DLLVM_USE_LINKER=lld     -DMLIR_PYTHON_PACKAGE_DIR="${LLVM_BUILD_DIR}/tools/mlir/python_packages/mlir_core"     -DCMAKE_INSTALL_PREFIX="${PTO_INSTALL_DIR}"     "${cmake_args[@]}"
+  cmake -C "${HARDENING_CACHE_FILE}" -G Ninja     -S .     -B build     -DLLVM_DIR="${LLVM_BUILD_DIR}/lib/cmake/llvm"     -DMLIR_DIR="${LLVM_BUILD_DIR}/lib/cmake/mlir"     -DPython3_EXECUTABLE="$(which python3)"     -DPython3_FIND_STRATEGY=LOCATION     -Dpybind11_DIR="${PYBIND11_CMAKE_DIR}"     -DMLIR_ENABLE_BINDINGS_PYTHON=ON     -DCMAKE_BUILD_TYPE=Release     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DCMAKE_C_FLAGS="${cmake_c_flags}"     -DCMAKE_CXX_FLAGS="${cmake_cxx_flags}"     -DLLVM_USE_LINKER=lld     -DMLIR_PYTHON_PACKAGE_DIR="${LLVM_BUILD_DIR}/tools/mlir/python_packages/mlir_core"     -DCMAKE_INSTALL_PREFIX="${PTO_INSTALL_DIR}"     "${cmake_args[@]}"
 }
 
 checkopts() {
