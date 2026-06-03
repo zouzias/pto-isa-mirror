@@ -127,6 +127,15 @@ inline uint8_t EncodeE4M3Fn(float value)
     if (std::isnan(value)) {
         return 0x7Fu;
     }
+    if (std::fabs(value) < 0.0009765625f) {
+        // FIX: Safe Sign-Retention Check mimicking Python's ml_dtypes underflow tracking
+        if (std::signbit(value)) {
+            return 0x80u; // Match negative zero output requirement
+        } else {
+            return 0x00u; // Clean positive zero
+        }
+    }
+
     const float clipped = std::clamp(value, -448.0f, 448.0f);
     uint8_t bestCode = 0;
     float bestDistance = std::numeric_limits<float>::infinity();
@@ -345,7 +354,6 @@ inline void StoreMxEncodedValue(TileDataOut &dst, TileDataSrc &src, FlatScalingT
 {
     using SrcT = typename TileDataSrc::DType;
     if constexpr (quant_type == QuantType::MXFP8) {
-        flatScaling.data()[row * cols + col] = static_cast<typename FlatScalingTile::DType>(groupScaling);
         const float value = static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, col)]);
         const uint8_t encoded = EncodeE4M3Fn(value * groupScaling);
         dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
@@ -449,6 +457,7 @@ inline void QuantizeMxTile(TileDataOut &dst, TileDataSrc &src, FlatExpTile &flat
             const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
             flatMax.data()[flatGroupIdx] = maxAbsValue;
             flatExp.data()[flatGroupIdx] = e8m0;
+            flatScaling.data()[flatGroupIdx] = groupScaling;
             QuantizeMxGroup<quant_type>(dst, src, flatScaling, row, group, cols, flatGroupIdx, groupScaling);
         }
     }
