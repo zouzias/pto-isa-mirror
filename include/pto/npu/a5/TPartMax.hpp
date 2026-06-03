@@ -11,14 +11,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TPARTMAX_HPP
 #define TPARTMAX_HPP
 
-#include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
+#include "TPartBinOps.hpp"
 
 namespace pto {
 
 template <typename T>
 struct TPartMaxOp {
-    PTO_INTERNAL static void PartInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg preg)
+    PTO_INTERNAL static void BinInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg preg)
     {
         vmax(dst, src0, src1, preg, MODE_ZEROING);
     }

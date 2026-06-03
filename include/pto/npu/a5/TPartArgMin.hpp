@@ -17,8 +17,6 @@ namespace pto {
 
 template <typename T, typename U>
 struct TPartArgMinOp {
-    static constexpr typename Padding<T>::Type PadVal = Padding<T>::Max;
-    static constexpr typename Padding<U>::Type PadIdx = Padding<U>::Max;
     PTO_INTERNAL static void BinInstr(MaskReg &maskReg, RegTensor<T> &src, RegTensor<T> &dst, MaskReg preg)
     {
         vcmp_lt(maskReg, src, dst, preg);
@@ -28,15 +26,11 @@ struct TPartArgMinOp {
 template <typename DstValTileData, typename Src0ValTileData, typename Src1ValTileData, typename DstIdxTileData,
           typename Src0IdxTileData, typename Src1IdxTileData>
 PTO_INTERNAL void TPARTARGMIN_IMPL(DstValTileData &dstVal, Src0ValTileData &src0Val, Src1ValTileData &src1Val,
-                                   DstIdxTileData &dstIdx, Src0IdxTileData &src0Idx, Src1IdxTileData &src1Idx,
-                                   VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+                                   DstIdxTileData &dstIdx, Src0IdxTileData &src0Idx, Src1IdxTileData &src1Idx)
 {
-    TPartArgCheck(dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx);
     TPartArgImpl<TPartArgMinOp<typename DstValTileData::DType, typename DstIdxTileData::DType>, DstValTileData,
                  Src0ValTileData, Src1ValTileData, DstIdxTileData, Src0IdxTileData, Src1IdxTileData>(
-        dstVal.data(), src0Val.data(), src1Val.data(), dstIdx.data(), src0Idx.data(), src1Idx.data(),
-        dstVal.GetValidRow(), dstVal.GetValidCol(), src0Val.GetValidRow(), src0Val.GetValidCol(), src1Val.GetValidRow(),
-        src1Val.GetValidCol(), version);
+        dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx);
 }
 } // namespace pto
 #endif
