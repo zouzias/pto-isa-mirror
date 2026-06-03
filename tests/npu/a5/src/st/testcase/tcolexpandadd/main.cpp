@@ -115,4 +115,8 @@ TEST_F(TColExpandAddTest, case_int16_16_64_1_64)
 {
     test_tcolexpandadd<int16_t, 16, 64, 1, 64>();
 }
+TEST_F(TColExpandAddTest, case_fp32_1_128_1_128)
+{
+    test_tcolexpandadd<float, 1, 128, 1, 128>();
+}
 } // namespace TColExpandAddTest

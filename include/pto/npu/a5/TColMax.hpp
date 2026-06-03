@@ -23,9 +23,10 @@ struct TColMaxOp {
 };
 
 template <typename T, typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL void TColMax(typename TileDataOut::TileDType __out__ dstData,
-                                 typename TileDataIn::TileDType __in__ srcData, uint16_t validRow, int validCol,
-                                 unsigned version)
+__tf__ PTO_INTERNAL OP_NAME(TCOLMAX)
+    OP_TYPE(reduce) void TColMax(typename TileDataOut::TileDType __out__ dstData,
+                                 typename TileDataIn::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
+                                 unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
@@ -36,14 +37,13 @@ __tf__ PTO_INTERNAL void TColMax(typename TileDataOut::TileDType __out__ dstData
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TCOLMAX_IMPL(TileDataOut &dst, TileDataIn &src)
 {
-    int validCol = src.GetValidCol();
-    int validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
+    unsigned validRow = src.GetValidRow();
     TColReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidCol());
     if (validCol == 0 || validRow == 0) {
         return;
     }
-    TColMax<typename TileDataIn::DType, TileDataOut, TileDataIn>(dst.data(), src.data(), validRow, validCol,
-                                                                 VFImplKind::VFIMPL_DEFAULT);
+    TColMax<typename TileDataIn::DType, TileDataOut, TileDataIn>(dst.data(), src.data(), validRow, validCol);
 }
 } // namespace pto
 #endif

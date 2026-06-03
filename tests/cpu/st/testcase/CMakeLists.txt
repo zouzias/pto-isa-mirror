@@ -80,6 +80,7 @@ tget_scale_addr
 thistogram
 timg2col
 tinsert
+tinsert_quant
 tload
 tloadconv
 tlog
@@ -101,10 +102,15 @@ tnotify
 tor
 tors
 tpartadd
+tpartargmax
+tpartargmin
 tpartmax
 tpartmin
+tpow
+tpows
 tprefetch
 tprelu
+tprint
 tpushpop
 tput
 tput_async
@@ -133,6 +139,7 @@ tshrs
 tsort32
 tsqrt
 tstore
+tstore_quant
 tsub
 tsubc
 tsubs
@@ -144,6 +151,7 @@ ttri
 twait
 txor
 txors
+ttrans_conv
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

@@ -90,69 +90,58 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src, IdxTile &idx)
     TScatterImpl<DstTile, SrcTile, IdxTile>(dst.data(), src.data(), idx.data(), validRow, validCol);
 }
 
-template <MaskPattern mask>
-PTO_INTERNAL constexpr int GetTimesByMask()
-{
-    constexpr uint16_t TIMES_1 = 1;
-    constexpr uint16_t TIMES_2 = 2;
-    constexpr uint16_t TIMES_4 = 4;
-
-    switch (mask) {
-        case MaskPattern::P1111:
-            return TIMES_1;
-        case MaskPattern::P1010:
-            return TIMES_2;
-        case MaskPattern::P0101:
-            return TIMES_2;
-        default:
-            return TIMES_4;
-    }
-}
-
 template <MaskPattern mask, int RowStride>
 PTO_INTERNAL int GetIdxByMask(int i, int j)
 {
-    constexpr uint16_t TIMES_2 = 2;
-    constexpr uint16_t TIMES_4 = 4;
-    constexpr uint16_t INDEX_0 = 0;
-    constexpr uint16_t INDEX_1 = 1;
-    constexpr uint16_t INDEX_2 = 2;
-    constexpr uint16_t INDEX_3 = 3;
-
     switch (mask) {
-        case MaskPattern::P1010:
-            return i * RowStride + TIMES_2 * j + INDEX_0;
         case MaskPattern::P0101:
-            return i * RowStride + TIMES_2 * j + INDEX_1;
-        case MaskPattern::P1000:
-            return i * RowStride + TIMES_4 * j + INDEX_0;
-        case MaskPattern::P0100:
-            return i * RowStride + TIMES_4 * j + INDEX_1;
-        case MaskPattern::P0010:
-            return i * RowStride + TIMES_4 * j + INDEX_2;
+            return i * RowStride + PTO_TIME_2 * j + PTO_IDX_0;
+        case MaskPattern::P1010:
+            return i * RowStride + PTO_TIME_2 * j + PTO_IDX_1;
         case MaskPattern::P0001:
-            return i * RowStride + TIMES_4 * j + INDEX_3;
+            return i * RowStride + PTO_TIME_4 * j + PTO_IDX_0;
+        case MaskPattern::P0010:
+            return i * RowStride + PTO_TIME_4 * j + PTO_IDX_1;
+        case MaskPattern::P0100:
+            return i * RowStride + PTO_TIME_4 * j + PTO_IDX_2;
+        case MaskPattern::P1000:
+            return i * RowStride + PTO_TIME_4 * j + PTO_IDX_3;
         default:
             return i * RowStride + j;
     }
 }
 
-template <MaskPattern mask, typename DstTile, typename SrcTile>
+template <MaskPattern mask, auto ScatterType = ScatterAxis::SCATTER_ROW, typename DstTile, typename SrcTile>
 __tf__ PTO_INTERNAL void TScatterMaskImpl(typename DstTile::TileDType __out__ dst,
                                           typename SrcTile::TileDType __in__ src, unsigned validRow, unsigned validCol)
 {
     using T = typename DstTile::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    constexpr unsigned dstStride = DstTile::RowStride;
+    constexpr unsigned srcStride = SrcTile::RowStride;
 
     // Initialize dst UB buffer
     InitUBBuffer<DstTile>(dstPtr);
 
-    int idx = 0;
-    for (int i = 0; i < validRow; i++) {
-        for (int j = 0; j < validCol; j++) {
-            idx = GetIdxByMask<mask, DstTile::RowStride>(i, j);
-            dstPtr[idx] = srcPtr[i * SrcTile::Cols + j];
+    if constexpr (ScatterType == ScatterAxis::SCATTER_COL) {
+        using copyType = std::conditional_t<sizeof(T) == sizeof(int32_t), __ubuf__ int32_t, __ubuf__ int16_t>;
+        uint16_t stride = 0;
+        set_mask_count();
+        set_vector_mask(0, validCol);
+        for (int i = 0; i < validRow; i++) {
+            stride = GetStrideByMask<mask, dstStride>(i);
+            vcopy((copyType *)(dstPtr + stride), (copyType *)(srcPtr + i * srcStride), 1, 1, 1, 8, 8);
+        }
+        set_mask_norm();
+        set_vector_mask(-1, -1);
+    } else {
+        int idx = 0;
+        for (int i = 0; i < validRow; i++) {
+            for (int j = 0; j < validCol; j++) {
+                idx = GetIdxByMask<mask, DstTile::RowStride>(i, j);
+                dstPtr[idx] = srcPtr[i * SrcTile::Cols + j];
+            }
         }
     }
 #ifndef __PTO_AUTO__
@@ -160,10 +149,14 @@ __tf__ PTO_INTERNAL void TScatterMaskImpl(typename DstTile::TileDType __out__ ds
 #endif
 }
 
-template <MaskPattern mask, typename DstTile, typename SrcTile>
+template <MaskPattern mask, auto ScatterType = ScatterAxis::SCATTER_ROW, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src)
 {
+    unsigned validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
     if constexpr (mask == MaskPattern::P1111) {
+        PTO_ASSERT(validRow == dst.GetValidRow(), "TSCATTER: validRow of src must match dst.");
+        PTO_ASSERT(validCol == dst.GetValidCol(), "TSCATTER: validCol of src must match dst.");
         return TMOV_IMPL(dst, src);
     } else {
         using T = typename DstTile::DType;
@@ -184,13 +177,16 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src)
                       "TSCATTER: Number of valid rows must not be greater than number of tile rows.");
         static_assert(mask >= MaskPattern::P0101 && mask <= MaskPattern::P1111,
                       "TSCATTER: MaskPattern parameter value out of range: must be P0101...P1111 inclusive.");
-        unsigned validRow = src.GetValidRow();
-        unsigned validCol = src.GetValidCol();
 
-        PTO_ASSERT(validRow == dst.GetValidRow(), "TSCATTER: validRow of src must match dst.");
-        PTO_ASSERT(validCol == dst.GetValidCol() * GetTimesByMask<mask>, "TSCATTER: validRow of src must match dst.");
-
-        TScatterMaskImpl<mask, DstTile, SrcTile>(dst.data(), src.data(), validRow, validCol);
+        if constexpr (ScatterType == ScatterAxis::SCATTER_COL) {
+            PTO_ASSERT(dst.GetValidRow() == validRow * GetTimesByMask<mask>,
+                       "TSCATTER: validRow of dst must be 2 or 4 times that of src.");
+        } else {
+            PTO_ASSERT(validRow == dst.GetValidRow(), "TSCATTER: validRow of src must match dst.");
+            PTO_ASSERT(validCol == dst.GetValidCol() * GetTimesByMask<mask>,
+                       "TSCATTER: validRow of src must match dst.");
+        }
+        TScatterMaskImpl<mask, ScatterType, DstTile, SrcTile>(dst.data(), src.data(), validRow, validCol);
     }
 }
 } // namespace pto

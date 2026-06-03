@@ -49,6 +49,84 @@ PTO_INST void TSYNC()
     TSYNC_IMPL<OpCode>();
 }
 
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
+PTO_INST void SYNCALL()
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    SYNCALL_IMPL<CoreType>();
+#else
+    PTO_STATIC_ASSERT(CoreType != CoreType, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Vec,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)ubWorkspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+#ifndef __PTO_AUTO__
+        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), usedCores);
+#endif
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Mat,
+                           int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+#ifndef __PTO_AUTO__
+        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), l1Workspace.data(), usedCores);
+#endif
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
+template <
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix, typename GlobalData, typename UbTileData,
+    typename L1TileData,
+    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
+                         is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
+                     int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)ubWorkspace;
+        (void)l1Workspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else {
+#ifndef __PTO_AUTO__
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
+#endif
+    }
+#else
+    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
+#endif
+}
+
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &...events)
 {
@@ -165,6 +243,25 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src)
     return {};
 }
 
+// ============================================================================
+// TPREFETCH_ASYNC - L2 cache prefetch via SDMA CMO (opcode = 6).
+//
+// Stages a contiguous GlobalTensor region into L2 cache so subsequent TLOADs
+// hit warm lines. The public compute API takes a compute-side prefetch context;
+// the implementation builds the SDMA session in that context, and callers can
+// wait on the returned event with evt.Wait(ctx.session).
+// ============================================================================
+#if (defined(__CCE_AICORE__) || defined(__CPU_SIM)) && !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
+
+template <typename GlobalData, typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST comm::AsyncEvent TPREFETCH_ASYNC(GlobalData &srcGlobalData, PrefetchAsyncContext &ctx, WaitEvents &...events)
+{
+    TSYNC(events...);
+    return TPREFETCH_ASYNC_IMPL(srcGlobalData, ctx);
+}
+
+#endif // (__CCE_AICORE__ || __CPU_SIM) && !__COSTMODEL && !PTO_COMM_NOT_SUPPORTED
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents,
           std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
 PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1, CmpMode mode,
@@ -185,8 +282,8 @@ PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1, CmpMode cmpMode,
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, CmpMode cmpMode,
                           WaitEvents &...events)
 {
     TSYNC(events...);
@@ -796,7 +893,7 @@ PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &...event
     return {};
 }
 #endif
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &...events)
 {
@@ -880,7 +977,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &...events)
@@ -985,11 +1082,12 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &...events)
     return {};
 }
 
-template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, typename... WaitEvents>
+template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern = MaskPattern::P1111,
+          auto gatherType = GatherAxis::GATHER_ROW, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
 {
     TSYNC(events...);
-    TGATHER_IMPL<DstTileData, SrcTileData, maskPattern>(dst, src);
+    TGATHER_IMPL<DstTileData, SrcTileData, maskPattern, gatherType>(dst, src);
     return {};
 }
 
@@ -1778,12 +1876,12 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
-template <MaskPattern maskPattern = MaskPattern::P1111, typename DstTileData, typename SrcTileData,
-          typename... WaitEvents>
+template <MaskPattern maskPattern = MaskPattern::P1111, auto ScatterType = ScatterAxis::SCATTER_ROW,
+          typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TSCATTER(DstTileData &dst, SrcTileData &src, WaitEvents &...events)
 {
     TSYNC(events...);
-    TSCATTER_IMPL<maskPattern>(dst, src);
+    TSCATTER_IMPL<maskPattern, ScatterType>(dst, src);
     return {};
 }
 
@@ -1804,6 +1902,25 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
 }
 
 #ifdef PTO_NPU_ARCH_A5
+template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MGATHER_IMPL<CMode>(dst, src, indexes);
+    return {};
+}
+
+template <Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd,
+          typename... WaitEvents>
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
+    return {};
+}
+#endif
+
+#ifdef PTO_NPU_ARCH_A2A3
 template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
 {
@@ -1863,6 +1980,34 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 {
     TSYNC(events...);
     MSCATTER_IMPL<Mode, Atomic, Oob, Conflict>(dst, src, indexes);
+    return {};
+}
+#endif
+
+#ifdef PTO_NPU_ARCH_A2A3
+template <Coalesce Mode, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MSCATTER_IMPL<Mode>(dst, src, indexes);
+    return {};
+}
+
+template <Coalesce Mode, ScatterAtomicOp Atomic, typename GlobalData, typename TileSrc, typename TileInd,
+          typename... WaitEvents>
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MSCATTER_IMPL<Mode, Atomic>(dst, src, indexes);
+    return {};
+}
+
+template <Coalesce Mode, ScatterAtomicOp Atomic, ScatterOOB Oob, typename GlobalData, typename TileSrc,
+          typename TileInd, typename... WaitEvents>
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MSCATTER_IMPL<Mode, Atomic, Oob>(dst, src, indexes);
     return {};
 }
 #endif
@@ -2045,8 +2190,7 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
     TFREE_IMPL<Pipe>(pipe);
     return {};
 }
-
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
 template <HistByte byte, typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename... WaitEvents>
 PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, WaitEvents &...events)
 {
@@ -2056,13 +2200,13 @@ PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx 
 }
 
 template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-          typename TileDataScaling, typename... WaitEvents>
+          typename TileDataScaling, auto scale_alg = QuantScaleAlg::OCP, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                             TileDataScaling *scaling, WaitEvents &...events)
 {
     TSYNC(events...);
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(dst, src, exp, max,
-                                                                                                 scaling);
+    TQUANT_IMPL<quant_type, scale_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+        dst, src, exp, max, scaling);
     return {};
 }
 
@@ -2084,6 +2228,17 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 {
     TSYNC(events...);
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+    return {};
+}
+
+// Tmp-aware overload (A2/A3): the row-wise scale/offset broadcast needs an explicit scratch tile.
+template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataTmp &tmp,
+                            TileDataPara *offset = nullptr, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara, TileDataTmp>(dst, src, scale, tmp, offset);
     return {};
 }
 

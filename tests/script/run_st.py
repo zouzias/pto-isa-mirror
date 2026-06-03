@@ -254,6 +254,7 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
 
         if run_mode == "sim":
             camodel_log_dir = "camodel_log"
+            os.makedirs("log/ub_log", exist_ok=True)
             os.makedirs(camodel_log_dir, exist_ok=True)
             os.environ["CAMODEL_LOG_PATH"] = camodel_log_dir
 

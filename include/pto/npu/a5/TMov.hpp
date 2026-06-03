@@ -72,7 +72,8 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
                   "TMov: When TileType is Scaling, col * sizeof(Dtype) must be aligned to 128.");
     static_assert(dstCol * sizeof(DstType) <= FIXPIPE_BUFFER_SIZE,
                   "TMov: The memory occupation of FbTile exceeds 4.0KB fixpipe buffer size.");
-
+    static_assert(std::is_same<DstType, uint64_t>::value || std::is_same<DstType, int64_t>::value,
+                  "TMov: Invalid data type.");
     __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
     __fbuf__ DstType *dstAddrP = (__fbuf__ DstType *)__cce_get_tile_ptr(dst);
 
@@ -386,7 +387,7 @@ PTO_INTERNAL void TMovNd2NzLoop(__ubuf__ WorkT *srcPtr, __ubuf__ WorkT *dstPtr, 
     MaskReg preg;
     uint32_t cols = validCol;
     for (uint16_t j = 0; j < repeatTimes; ++j) {
-        uint32_t count = cols > elementsPerRepeat ? elementsPerRepeat : cols;
+        uint32_t count = cols - static_cast<uint32_t>(cols > elementsPerRepeat) * (cols - elementsPerRepeat);
         preg = CreatePredicate<WorkT>(count);
         for (uint16_t i = 0; i < innerLoopNum; ++i) {
             vlds(vreg, srcPtr, SrcTileData::RowStride, NORM, POST_UPDATE);
@@ -425,7 +426,7 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
                                               (alignRow * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE;
     uint32_t virtualRow = isOptForConflict ? alignRow + 1 : alignRow;
     uint32_t repeatStride = 1;
-    uint16_t innerLoopNum = validRow - 1;
+    uint16_t innerLoopNum = srcValidRow - 1;
     uint32_t cfgVsstb = (blockStride << 16u) | (1 & 0xFFFFU);
     uint32_t repeatStrideLast = (REPEAT_BYTE * virtualRow - innerLoopNum * BLOCK_BYTE_SIZE) / BLOCK_BYTE_SIZE;
     uint32_t cfgVsstbLast = (blockStride << 16u) | (repeatStrideLast & 0xFFFFU);

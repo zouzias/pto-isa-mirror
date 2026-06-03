@@ -3,6 +3,7 @@
     <package_info>
         <product_name>cann</product_name>
         <func_name>pto-isa</func_name>
+        <share_info_name>pto_isa</share_info_name>
         <suffix>run</suffix>
         <install_script>share/info/pto_isa/scripts/install.sh</install_script>
         <help>share/info/pto_isa/scripts/help.info</help>

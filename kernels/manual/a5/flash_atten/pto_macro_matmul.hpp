@@ -52,7 +52,7 @@ enum class AccMode
 #define L0C_BUF0 ((__ca__ half *)(__ca__ char *)0x0)
 #define L0C_BUF1 ((__ca__ half *)(__ca__ char *)0x20000)
 
-#define LAST_LOOP(x, n) ((x) == ((n)-1))
+#define LAST_LOOP(x, n) ((x) == ((n) - 1))
 #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
 
 AICORE inline uint64_t getPingPong(uint32_t flip)
@@ -80,19 +80,19 @@ constexpr uint32_t HALF_SIZE_BYTES = 2;                   // sizeof(half) = 2 by
  */
 // Choose the largest Cube_K that fits both L0A (Cube_M x Cube_K) and L0B (Cube_K x Cube_N)
 // so TMATMUL stays compute-dense while respecting L0 ping-pong capacity.
-AICORE inline constexpr uint32_t calculateFittingCubeK(uint32_t Cube_M, uint32_t Cube_N)
+template <uint32_t Cube_M, uint32_t Cube_N>
+AICORE inline constexpr uint32_t calculateFittingCubeK()
 {
     uint32_t bestCubeK = CUBE_K_SMALLEST; // Default to smallest value
+    // Compute capacity in elements (half-sized elements) once to avoid repeated multiplications.
+    constexpr uint32_t maxElements = MEM_BUFFER_SIZE_BYTES / HALF_SIZE_BYTES;
 
-    // Test candidates from largest to smallest to find the largest that fits
-    if (Cube_M * CUBE_K_256 * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES &&
-        CUBE_K_256 * Cube_N * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES) {
+    // Test candidates from largest to smallest using element counts (fewer scalar multiplies).
+    if constexpr (Cube_M * CUBE_K_256 <= maxElements && CUBE_K_256 * Cube_N <= maxElements) {
         bestCubeK = CUBE_K_256;
-    } else if (Cube_M * CUBE_K_128 * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES &&
-               CUBE_K_128 * Cube_N * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES) {
+    } else if constexpr (Cube_M * CUBE_K_128 <= maxElements && CUBE_K_128 * Cube_N <= maxElements) {
         bestCubeK = CUBE_K_128;
-    } else if (Cube_M * CUBE_K_64 * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES &&
-               CUBE_K_64 * Cube_N * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES) {
+    } else if constexpr (Cube_M * CUBE_K_64 <= maxElements && CUBE_K_64 * Cube_N <= maxElements) {
         bestCubeK = CUBE_K_64;
     }
 
@@ -155,31 +155,26 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
 
     // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
     uint64_t pingpong = getPingPong(0);
-    const uint64_t Cube_K =
-        calculateFittingCubeK(Cube_M, Cube_N) > Tile_K ? Tile_K : calculateFittingCubeK(Cube_M, Cube_N);
+    constexpr uint32_t fittingCubeK = calculateFittingCubeK<Cube_M, Cube_N>();
+    const uint64_t Cube_K = fittingCubeK > Tile_K ? Tile_K : fittingCubeK;
     const uint64_t kSegments = (uint64_t)(Tile_K / Cube_K);
+    using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
+    using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
+    LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
+    RightTile bl0Tiles[2] = {RightTile(), RightTile()};
+
+    TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
+    TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
+    TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
+    TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
     for (uint64_t k = 0; k < kSegments; k++) {
-        using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
-        LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
-        using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
-        RightTile bl0Tiles[2] = {RightTile(), RightTile()};
-
-        TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
-        TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
-        TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
-        TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
-
         // Wait until previous TMATMUL finishes using this L0 buffer before overwriting it via TEXTRACT.
         wait_flag(PIPE_M, PIPE_MTE1, pingpong);
-
-        if (layout == layout_t::NT) {
-            TASSIGN(aMatTile, (uint64_t)aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
-            TASSIGN(bMatTile, (uint64_t)bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
-        }
+        uint16_t kOffset = k * Cube_K;
 
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
-        TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
-        TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+        TEXTRACT(al0Tiles[pingpong], aMatTile, 0, kOffset);
+        TEXTRACT(bl0Tiles[pingpong], bMatTile, kOffset, 0);
 
         set_flag(PIPE_MTE1, PIPE_M, pingpong);
         wait_flag(PIPE_MTE1, PIPE_M, pingpong);

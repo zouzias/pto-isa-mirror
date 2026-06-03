@@ -13,11 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
-#ifdef PTO_NPU_ARCH_A5
 #include "common.hpp"
 #include "utils.hpp"
 #include "TColReduceOps.hpp"
-#endif
 
 namespace pto {
 template <typename T>
@@ -107,7 +105,8 @@ PTO_INTERNAL void TColSum_Binary(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *t
 }
 
 template <typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp, bool isBinary>
-__tf__ PTO_INTERNAL void TColSum(typename TileDataOut::TileDType __out__ dstData,
+__tf__ PTO_INTERNAL OP_NAME(TCOLSUM)
+    OP_TYPE(reduce) void TColSum(typename TileDataOut::TileDType __out__ dstData,
                                  typename TileDataIn::TileDType __in__ srcData,
                                  typename TileDataTmp::TileDType __in__ tmpData, unsigned validRow, unsigned validCol,
                                  unsigned version = VFImplKind::VFIMPL_DEFAULT)
@@ -128,8 +127,8 @@ __tf__ PTO_INTERNAL void TColSum(typename TileDataOut::TileDType __out__ dstData
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TCOLSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, bool isBinary)
 {
-    int32_t validCol = src.GetValidCol();
-    int32_t validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
+    unsigned validRow = src.GetValidRow();
     TColReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidCol());
     if (validCol == 0 || validRow == 0) {
         return;
