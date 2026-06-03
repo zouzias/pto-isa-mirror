@@ -113,7 +113,8 @@ __tf__ PTO_INTERNAL void TPartOp(typename TileDataDst::TileDType __out__ dst,
 }
 
 template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
+PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1,
+                               VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileDataDst::DType;
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
@@ -127,24 +128,32 @@ PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
     constexpr unsigned dstRowStride = TileDataDst::RowStride;
     constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
     constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
+    PTO_ASSERT(max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol,
+        "Fix: TPARTADD/MUL At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
     if (dstValidRow == 0 || dstValidCol == 0) {
         return;
-    }
-    bool condSrc0EqDst = (src0ValidRow == dstValidRow && src0ValidCol == dstValidCol);
-    bool condSrc1EqDst = (src1ValidRow == dstValidRow && src1ValidCol == dstValidCol);
-    PTO_ASSERT(
-        condSrc0EqDst || condSrc1EqDst,
-        "Fix: TPARTADD/MUL At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
-
-    if (condSrc0EqDst) { // Ensure that the src equal to dst comes before the other
+    } else if (src0ValidRow == 0 || src0ValidCol == 0) {
+        TMOV_IMPL<TileDataDst, TileDataSrc1>(dst, src1);
+    } else if (src1ValidRow == 0 || src1ValidCol == 0) {
+        TMOV_IMPL<TileDataDst, TileDataSrc0>(dst, src0);
+    } else if (dstValidRow == src0ValidRow && dstValidRow == src1ValidRow &&
+        dstValidCol == src0ValidCol && dstValidCol && src1ValidCol) {
+        BinaryInstr<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
+            dstPtr, src0Ptr, src1Ptr, dstValidRow, dstValidCol, version);
+    } else {
         TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
                 src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
                                               src1ValidRow, src1ValidCol, dstValidRow, dstValidCol);
-    } else if (condSrc1EqDst) {
-        TPartOp<Op, TileDataDst, TileDataSrc1, TileDataSrc0, elementsPerRepeat, blockSizeElem, dstRowStride,
-                src1RowStride, src0RowStride>(dst.data(), src1.data(), src0.data(), src1ValidRow, src1ValidCol,
-                                              src0ValidRow, src0ValidCol, dstValidRow, dstValidCol);
     }
+    // if (condSrc0EqDst) { // Ensure that the src equal to dst comes before the other
+    //     TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
+    //             src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
+    //                                           src1ValidRow, src1ValidCol, dstValidRow, dstValidCol);
+    // } else if (condSrc1EqDst) {
+    //     TPartOp<Op, TileDataDst, TileDataSrc1, TileDataSrc0, elementsPerRepeat, blockSizeElem, dstRowStride,
+    //             src1RowStride, src0RowStride>(dst.data(), src1.data(), src0.data(), src1ValidRow, src1ValidCol,
+    //                                           src0ValidRow, src0ValidCol, dstValidRow, dstValidCol);
+    // }
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
