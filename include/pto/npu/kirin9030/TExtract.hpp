@@ -287,8 +287,6 @@ __tf__ AICORE void TExtractAccToVec(typename DstTile::TileDType __out__ dst, typ
     using dstType = typename DstTile::DType;
     using srcType = typename SrcTile::DType;
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
-    constexpr bool subBlockId = (mode == AccToVecMode::SingleModeVec1);
-    constexpr uint8_t dualDstCtl = GetDualDstCtl<DstTile, SrcTile, mode, quantPre>();
     constexpr uint32_t dstStride = DstTile::Cols;
     static_assert(((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
                   "Dst Tile Cols * sizeof(dstT) must be multiples of 32 and not 0 when nz2nd.");
@@ -309,9 +307,8 @@ __tf__ AICORE void TExtractAccToVec(typename DstTile::TileDType __out__ dst, typ
     }
     validCol = (validCol + c0Size - 1) / c0Size * c0Size;
     __cc__ srcType *srcData = (__cc__ srcType *)__cce_get_tile_ptr(src) + srcOffset;
-    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, dualDstCtl, subBlockId, 0, 0,
-                         quantPre, reluMode, false, true, 0, 0, false, false, 0, false, false, false, false, false,
-                         false);
+    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, quantPre, reluMode, false,
+                         true, 0, 0, false, false, 0, false, false, false, false, false, false);
 }
 
 template <typename T>
