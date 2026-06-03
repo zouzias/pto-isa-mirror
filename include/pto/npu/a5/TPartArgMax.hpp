@@ -17,8 +17,6 @@ namespace pto {
 
 template <typename T, typename U>
 struct TPartArgMaxOp {
-    static constexpr typename Padding<T>::Type PadVal = Padding<T>::Min;
-    static constexpr typename Padding<U>::Type PadIdx = Padding<U>::Min;
     PTO_INTERNAL static void BinInstr(MaskReg &maskReg, RegTensor<T> &src, RegTensor<T> &dst, MaskReg preg)
     {
         vcmp_gt(maskReg, src, dst, preg);
