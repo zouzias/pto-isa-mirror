@@ -165,6 +165,7 @@ configure_llvm_runtime_build() {
   cmake_cxx_flags="$(compose_runtime_compiler_flags "${CXXFLAGS:-}")"
   cmake_args+=(
     "-DLLVM_ENABLE_ZSTD=OFF"
+    "-DHAVE_LIBRT=ON"
     "-DLLVM_NATIVE_TOOL_DIR=${LLVM_NATIVE_BUILD_DIR}/bin"
     "-DLLVM_TABLEGEN=${LLVM_NATIVE_BUILD_DIR}/bin/llvm-tblgen"
     "-DMLIR_TABLEGEN_EXE=${LLVM_NATIVE_BUILD_DIR}/bin/mlir-tblgen"

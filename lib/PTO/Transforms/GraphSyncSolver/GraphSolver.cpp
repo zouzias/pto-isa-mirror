@@ -45,7 +45,7 @@ static bool exceededSearchBound(const UnitDistMap &distance,
 static bool reachedUnitFlagDestination(CorePipeInfo curCorePipe,
                                        pto::TCoreType coreDst, int startIndex,
                                        int curIndex) {
-  auto [curCore, curPipe] = curCorePipe;
+  [[maybe_unused]] auto [curCore, curPipe] = curCorePipe;
   return curCore == coreDst &&
          ((curIndex != startIndex && curPipe == pto::PIPE::PIPE_S) ||
           curPipe == pto::PIPE::PIPE_ALL);
