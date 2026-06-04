@@ -88,7 +88,7 @@ int main()
     constexpr uint32_t blockDim = 24;
     constexpr uint32_t baseM = 128;
     constexpr uint32_t baseK = 64;
-    constexpr uint32_t baseN = 128;
+    constexpr uint32_t baseN = 256;
     constexpr uint32_t stepM = 1;
     constexpr uint32_t stepKa = 4;
     constexpr uint32_t stepKb = 4;
