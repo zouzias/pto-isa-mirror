@@ -166,6 +166,7 @@ private:
             #pragma pto v_loop_barrier
             f(i * NumBuffs + buffIndex, std::integral_constant<int, buffIndex>{});
         } else {
+            #pragma pto v_loop_reset
             f(i * NumBuffs + buffIndex, std::integral_constant<int, buffIndex>{});
         }
     }
