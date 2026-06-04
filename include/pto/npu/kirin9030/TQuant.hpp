@@ -35,11 +35,14 @@ __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ 
         RegTensor<float> v_input, v_scale;
         RegTensor<int32_t> v_s32;
         RegTensor<half> vb16;
-        RegTensor<int8_t> v_output_s8;
+        RegTensor<int8_t> v_output_s8, v_s8_tmp;
+        uint32_t sreg1 = 0;
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
-            uint32_t sreg = validCols;
+            uint32_t sreg0 = validCols;
             for (uint16_t idx = 0; idx < repeatTimes; ++idx) {
-                MaskReg preg_b32 = CreatePredicate<float>(sreg);
+                sreg1 = sreg0 >= ELE_CNT_B32 ? ELE_CNT_B32 : sreg0;
+                MaskReg preg_b32 = CreatePredicate<float>(sreg0);
+                MaskReg preg_b8 = CreatePredicate<int8_t>(sreg1);
                 vlds(v_scale, scalePtr, row, BRC_B32); // broadcast row scaling
                 vlds(v_input, srcPtr, ELE_CNT_B32 * idx + row * TileDataSrc::Cols, NORM);
                 vmul(v_input, v_input, v_scale, preg_b32, MODE_ZEROING);
@@ -48,7 +51,10 @@ __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ 
                 vcvt(v_input, v_s32, preg_b32, ROUND_R);
                 vcvt(vb16, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vcvt(v_output_s8, vb16, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
-                vsts(v_output_s8, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, PK4_B32, preg_b32);
+                vdintlv(v_output_s8, v_s8_tmp, v_output_s8, v_s8_tmp);
+                vdintlv(v_output_s8, v_s8_tmp, v_output_s8, v_s8_tmp);
+                
+                vsts(v_output_s8, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, NORM_B8, preg_b8);
             }
         }
     }
@@ -75,11 +81,15 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(typename TileDataOut::TileDType __out__
         RegTensor<float> vb32_scale, vb32_input, vb32_offset;
         RegTensor<int32_t> vb32_int;
         RegTensor<half> vb16_output;
-        RegTensor<uint8_t> vb8_output;
+        RegTensor<uint8_t> vb8_output, vb8_tmp;
+        uint32_t sreg1 = 0;
+
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
-            uint32_t sreg = validCols;
+            uint32_t sreg0 = validCols;
             for (uint16_t idx = 0; idx < repeatTimes; ++idx) {
-                MaskReg preg_b32 = CreatePredicate<float>(sreg);
+                sreg1 = sreg0 >= ELE_CNT_B32 ? ELE_CNT_B32 : sreg0;
+                MaskReg preg_b32 = CreatePredicate<float>(sreg0);
+                MaskReg preg_b8 = CreatePredicate<uint8_t>(sreg1);
                 vlds(vb32_scale, scalePtr, row, BRC_B32);   // broadcast row scaling
                 vlds(vb32_offset, offsetPtr, row, BRC_B32); // broadcast row offset
                 vlds(vb32_input, srcPtr, ELE_CNT_B32 * idx + row * TileDataSrc::Cols, NORM);
@@ -90,7 +100,9 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(typename TileDataOut::TileDType __out__
                 vcvt(vb32_input, vb32_int, preg_b32, ROUND_R);
                 vcvt(vb16_output, vb32_input, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vcvt(vb8_output, vb16_output, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
-                vsts(vb8_output, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, PK4_B32, preg_b32);
+                vdintlv(vb8_output, vb8_tmp, vb8_output, vb8_tmp);
+                vdintlv(vb8_output, vb8_tmp, vb8_output, vb8_tmp);
+                vsts(vb8_output, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, NORM_B8, preg_b8);
             }
         }
     }
