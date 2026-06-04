@@ -46,6 +46,8 @@ add_link_options(
 
 set(CMAKE_CCE_COMPILE_OPTIONS
     -xcce
+    --cce-pto-enable                           
+    --cce-pto-auto-enable
     -Xhost-start -Xhost-end
     "SHELL:-mllvm -cce-aicore-stack-size=0x8000"
     "SHELL:-mllvm -cce-aicore-function-stack-size=0x8000"
