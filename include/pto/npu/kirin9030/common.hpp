@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "datatype.hpp"
 #include <pto/common/type.hpp>
-#include <pto/common/arch_capability.hpp>
 
 namespace pto {
 
@@ -156,7 +155,6 @@ PTO_INTERNAL constexpr uint8_t GetDualDstCtl()
     }
     return 0;
 }
-<<<<<<< HEAD
 
 template <typename T>
 struct Padding {
@@ -203,8 +201,6 @@ struct Padding {
     static constexpr Type Max = GetPaddingMax();
 };
 
-=======
->>>>>>> 76dfbd4d ([需求]Kirin9030指令适配范围拉齐A5)
 } // namespace pto
 
 #endif
