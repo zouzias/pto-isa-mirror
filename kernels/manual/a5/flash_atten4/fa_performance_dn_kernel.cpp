@@ -504,7 +504,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                               TileMatVData &vMatTile, TilePVData &pvAccTile, TilePVData &pvAccPendTile,
                               TileOutT &runningOTile, TileOutT &pvPendTile, TileOutT (&pvVecTile)[OUT_O_TILE_NBUFFERS],
                               uint64_t svMatTileEventId, int accTileEvtID, TSyncSM2PV &sm2pvSync, TSyncPV2GU &pv2guSync,
-                              int blk_idx)
+                              int blk_idx, int pvDrainCarryCount)
 {
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t Cube_S1 = CUBE_S1;
@@ -606,7 +606,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
 #if skip_rescale
-            if (tile_id >= static_cast<int>(1)) {
+            if (tile_id < pvDrainCarryCount || tile_id >= static_cast<int>(1)) {
                 pv2guSync.allocate();
             }
             if (cond4_non_skip_after_skip) {
@@ -654,7 +654,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             pv2guSync.record();
 #else
 
-            if (tile_id >= static_cast<int>(OUT_O_TILE_NBUFFERS)) {
+            if (tile_id < pvDrainCarryCount || tile_id >= static_cast<int>(OUT_O_TILE_NBUFFERS)) {
                 pv2guSync.allocate();
             }
 
@@ -1116,6 +1116,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     const int physical_comm_slot = use_cv_comm ? pto::TSYNC_CVID(physical_block_idx, cv_comm_buf) : physical_block_idx;
 
     int deferredQkUbDrains = 0;
+    int deferredPvUbDrains = 0;
     for (int logical_block_idx = physical_block_idx; logical_block_idx < static_cast<int>(logical_block_count);
          logical_block_idx += static_cast<int>(launch_block_count)) {
         const uint64_t tStart = get_sys_cnt();
@@ -1167,7 +1168,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         const bool has_next_logical_block =
             logical_block_idx + static_cast<int>(launch_block_count) < static_cast<int>(logical_block_count);
         const int qkDrainCarryCount = deferredQkUbDrains;
+        const int pvDrainCarryCount = deferredPvUbDrains;
         deferredQkUbDrains = 0;
+        deferredPvUbDrains = 0;
 
         // QK and P pre-computation (tile_id based)
         for (int preload_tile = 0; preload_tile < static_cast<int>(qkPreloadNum) && preload_tile < num_tiles_s1;
@@ -1242,7 +1245,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                         pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
                         vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile,
                         pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID,
-                        sm2pvSync, pv2guSync, logical_block_idx);
+                        sm2pvSync, pv2guSync, logical_block_idx, pvDrainCarryCount);
                     pv_src_pingpong_id++;
                 }
             }
@@ -1277,7 +1280,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                             pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
                             vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccActiveTile, pvAccPendTile, runningOTile,
                             pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0,
-                            pvAccActiveTileEvtID, sm2pvSync, pv2guSync, logical_block_idx);
+                            pvAccActiveTileEvtID, sm2pvSync, pv2guSync, logical_block_idx, pvDrainCarryCount);
                     } else {
                         pvAccTileEvtID = assign_running_acc_tile(pvAccCurrTile, sharedAccSlotBytes);
                         compute_pv<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
@@ -1287,7 +1290,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                             pv_pend_tile_fifo_block, pMatTile[pv_src_pingpong_id % pMatTNBuffers],
                             vMatTile[pv_src_pingpong_id % vMatTNBuffers], pvAccCurrTile, pvAccPendTile, runningOTile,
                             pvPendTile, pvVecTile, pv_src_pingpong_id % vMatTNBuffers + PV_EVENT_ID0, pvAccTileEvtID,
-                            sm2pvSync, pv2guSync, logical_block_idx);
+                            sm2pvSync, pv2guSync, logical_block_idx, pvDrainCarryCount);
                     }
                     pv_src_pingpong_id++;
                 }
@@ -1310,12 +1313,15 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         const int remaining_qk_carry = qkDrainCarryCount - paid_qk_carry;
         const int pending_qk_ub_consumed =
             remaining_qk_carry + pending_ring_events(num_tiles_s1, static_cast<int>(srcVecTNBuffers));
+        const int paid_pv_carry =
+            (pvDrainCarryCount < num_tiles_s1) ? pvDrainCarryCount : num_tiles_s1;
+        const int remaining_pv_carry = pvDrainCarryCount - paid_pv_carry;
 #if skip_rescale
         const int pending_pv_ub_consumed =
-            pending_ring_events(num_tiles_s1, static_cast<int>(1));
+            remaining_pv_carry + pending_ring_events(num_tiles_s1, static_cast<int>(1));
 #else
         const int pending_pv_ub_consumed =
-            pending_ring_events(num_tiles_s1, static_cast<int>(outOTileNBuffers));
+            remaining_pv_carry + pending_ring_events(num_tiles_s1, static_cast<int>(outOTileNBuffers));
 #endif
         const int pending_sv_consumed =
             pending_ring_events(num_tiles_s1, static_cast<int>(pMatTNBuffers));
@@ -1327,8 +1333,12 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                 for (int i = 0; i < pending_qk_ub_consumed; ++i)
                     qk2smSync.allocate();
             }
-            for (int i = 0; i < pending_pv_ub_consumed; ++i)
-                pv2guSync.allocate();
+            if (has_next_logical_block) {
+                deferredPvUbDrains = pending_pv_ub_consumed;
+            } else {
+                for (int i = 0; i < pending_pv_ub_consumed; ++i)
+                    pv2guSync.allocate();
+            }
         }
 
         if constexpr (DAV_VEC) {
