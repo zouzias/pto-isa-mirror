@@ -86,8 +86,7 @@ AICORE inline bool aiv_should_wait_consumption(int sync_iter)
     return (sync_iter % period) == 0;
 }
 
-#define USE_MANUAL 1
-#define HEADSIZE_128 1
+
 
 template <int HEAD_SIZE, bool CAUSAL_MASK, typename ReduceTileD1, typename TileDataD2, typename TileDataS1, typename TileDataH_NZ_T, int MODE>
 __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter, TileDataD2 __out__ x_exp,

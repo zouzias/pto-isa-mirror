@@ -223,7 +223,7 @@ def gen_case(
     vt = v.T.astype(np.float16)    
     vt.tofile(os.path.join(path, 'vt.bin'))  
     nd2nz(copy.deepcopy(v)).tofile(os.path.join(path, 'v_nz.bin'))
-    nd2nz(copy.deepcopy(vt.T)).tofile(os.path.join(path, 'v_t_nz.bin'))
+    nd2nz(copy.deepcopy(vt)).tofile(os.path.join(path, 'v_nz.bin'))
     pv.tofile(os.path.join(path, 'pv.bin'))
     nd2nz(copy.deepcopy(pv)).tofile(os.path.join(path, 'pv_nz.bin'))
     # write per-tile partials as pv_tile_fifo0.bin, pv_tile_fifo1.bin

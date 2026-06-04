@@ -15,6 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 
+#define USE_MANUAL 1
+#define HEADSIZE_128 0
+
 // Shared defaults for FA performance kernels and host driver
 constexpr int kFaCvFifoSize = 8;
 constexpr int kFaCvFifoConsSyncPeriod = kFaCvFifoSize / 2;
