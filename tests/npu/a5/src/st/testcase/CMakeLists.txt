@@ -239,6 +239,7 @@ set(ALL_TESTCASES
     tmov_nd2nz
     textract_acc2vec
     tsoftmax_fa
+    tgu
 )
 
 if(NOT AUTO_MODE)
