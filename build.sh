@@ -35,6 +35,7 @@ LLVM_GIT_REF="llvmorg-19.1.7"
 LLVM_CLONE_RETRY_COUNT=3
 LLVM_CLONE_RETRY_INTERVAL=5
 DEVTOOLSET_TOOLCHAIN_FLAGS="--sysroot=/opt/rh/devtoolset-7/root --gcc-toolchain=/opt/rh/devtoolset-7/root/usr"
+LLVM_SOURCE_CACHE_HIT=FALSE
 
 #print usage message
 usage() {
@@ -145,11 +146,65 @@ clone_llvm_source() {
   exit 1
 }
 
+prepare_llvm_cache_layout() {
+  mkdir -p "${CANN_3RD_LIB_PATH}"
+  mkdir -p "${CANN_3RD_LIB_PATH}/lib_cache/llvm-19"
+
+  export LLVM_SOURCE_DIR="${CANN_3RD_LIB_PATH}/llvm-19"
+  export LLVM_NATIVE_BUILD_DIR="${CANN_3RD_LIB_PATH}/lib_cache/llvm-19/build-native-tools"
+  export LLVM_BUILD_DIR="${CANN_3RD_LIB_PATH}/lib_cache/llvm-19/build-shared"
+}
+
+prepare_llvm_source_cache() {
+  if [ -d "${LLVM_SOURCE_DIR}/llvm" ]; then
+    LLVM_SOURCE_CACHE_HIT=TRUE
+    echo "[LLVM cache] Reusing source cache: ${LLVM_SOURCE_DIR}"
+    return 0
+  fi
+
+  LLVM_SOURCE_CACHE_HIT=FALSE
+  echo "[LLVM cache] Source cache miss, cloning llvm-project into: ${LLVM_SOURCE_DIR}"
+  clone_llvm_source "${LLVM_SOURCE_DIR}"
+}
+
+llvm_build_cache_ready() {
+  [ -x "${LLVM_NATIVE_BUILD_DIR}/bin/llvm-tblgen" ] &&
+    [ -x "${LLVM_NATIVE_BUILD_DIR}/bin/mlir-tblgen" ] &&
+    [ -f "${LLVM_BUILD_DIR}/CMakeCache.txt" ] &&
+    [ -f "${LLVM_BUILD_DIR}/build.ninja" ] &&
+    [ -f "${LLVM_BUILD_DIR}/lib/cmake/llvm/LLVMConfig.cmake" ] &&
+    [ -f "${LLVM_BUILD_DIR}/lib/cmake/mlir/MLIRConfig.cmake" ] &&
+    [ -f "${LLVM_BUILD_DIR}/tools/mlir/python_packages/mlir_core/mlir/ir.py" ] &&
+    [ -d "${LLVM_BUILD_DIR}/tools/mlir/python_packages/mlir_core/mlir/_mlir_libs" ]
+}
+
+prepare_llvm_build_cache() {
+  if llvm_build_cache_ready; then
+    echo "[LLVM cache] Reusing build tree: ${LLVM_BUILD_DIR}"
+    return 0
+  fi
+
+  echo "[LLVM cache] Build tree cache miss, rebuilding: ${LLVM_BUILD_DIR}"
+  rm -rf "${LLVM_NATIVE_BUILD_DIR}" "${LLVM_BUILD_DIR}"
+  mkdir -p "$(dirname "${LLVM_NATIVE_BUILD_DIR}")" "$(dirname "${LLVM_BUILD_DIR}")"
+
+  build_llvm_host_tools
+  configure_llvm_runtime_build
+  ninja -C "${LLVM_BUILD_DIR}"
+
+  if ! llvm_build_cache_ready; then
+    print_error "llvm build cache is incomplete after build: ${LLVM_BUILD_DIR}"
+    exit 1
+  fi
+
+  echo "[LLVM cache] Build tree cached at: ${LLVM_BUILD_DIR}"
+}
+
 configure_llvm_host_tools_build() {
   local cmake_args=("$@")
   cmake_args+=("-DLLVM_ENABLE_ZSTD=OFF")
 
-  cmake -G Ninja -S llvm -B "${LLVM_NATIVE_BUILD_DIR}"     -DLLVM_ENABLE_PROJECTS="mlir"     -DBUILD_SHARED_LIBS=OFF     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DLLVM_USE_LINKER=lld     -DMLIR_ENABLE_BINDINGS_PYTHON=OFF     -DPython3_EXECUTABLE="$(which python3)"     -DCMAKE_BUILD_TYPE=Release     -DLLVM_TARGETS_TO_BUILD="host"     -DLLVM_INCLUDE_TESTS=OFF     -DLLVM_INCLUDE_BENCHMARKS=OFF     -DLLVM_INCLUDE_EXAMPLES=OFF     "${cmake_args[@]}"
+  cmake -G Ninja -S "${LLVM_SOURCE_DIR}/llvm" -B "${LLVM_NATIVE_BUILD_DIR}"     -DLLVM_ENABLE_PROJECTS="mlir"     -DBUILD_SHARED_LIBS=OFF     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DLLVM_USE_LINKER=lld     -DMLIR_ENABLE_BINDINGS_PYTHON=OFF     -DPython3_EXECUTABLE="$(which python3)"     -DCMAKE_BUILD_TYPE=Release     -DLLVM_TARGETS_TO_BUILD="host"     -DLLVM_INCLUDE_TESTS=OFF     -DLLVM_INCLUDE_BENCHMARKS=OFF     -DLLVM_INCLUDE_EXAMPLES=OFF     "${cmake_args[@]}"
 }
 
 build_llvm_host_tools() {
@@ -174,7 +229,7 @@ configure_llvm_runtime_build() {
     cmake_args+=("-DPTOAS_FORTIFY_MARKER_OBJECT=${PTOAS_FORTIFY_MARKER_OBJECT}")
   fi
 
-  cmake -C "${HARDENING_CACHE_FILE}" -G Ninja -S llvm -B "${LLVM_BUILD_DIR}"     -DLLVM_ENABLE_PROJECTS="mlir"     -DBUILD_SHARED_LIBS=ON     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DCMAKE_C_FLAGS="${cmake_c_flags}"     -DCMAKE_CXX_FLAGS="${cmake_cxx_flags}"     -DLLVM_USE_LINKER=lld     -DMLIR_ENABLE_BINDINGS_PYTHON=ON     -DPython3_EXECUTABLE="$(which python3)"     -DCMAKE_BUILD_TYPE=Release     -DLLVM_TARGETS_TO_BUILD="host"     -DLLVM_INCLUDE_TESTS=OFF     -DLLVM_INCLUDE_BENCHMARKS=OFF     -DLLVM_INCLUDE_EXAMPLES=OFF     "${cmake_args[@]}"
+  cmake -C "${HARDENING_CACHE_FILE}" -G Ninja -S "${LLVM_SOURCE_DIR}/llvm" -B "${LLVM_BUILD_DIR}"     -DLLVM_ENABLE_PROJECTS="mlir"     -DBUILD_SHARED_LIBS=ON     -DCMAKE_C_COMPILER=clang     -DCMAKE_CXX_COMPILER=clang++     -DCMAKE_C_FLAGS="${cmake_c_flags}"     -DCMAKE_CXX_FLAGS="${cmake_cxx_flags}"     -DLLVM_USE_LINKER=lld     -DMLIR_ENABLE_BINDINGS_PYTHON=ON     -DPython3_EXECUTABLE="$(which python3)"     -DCMAKE_BUILD_TYPE=Release     -DLLVM_TARGETS_TO_BUILD="host"     -DLLVM_INCLUDE_TESTS=OFF     -DLLVM_INCLUDE_BENCHMARKS=OFF     -DLLVM_INCLUDE_EXAMPLES=OFF     "${cmake_args[@]}"
 }
 
 configure_ptoas_build() {
@@ -241,29 +296,16 @@ build_only() {
   echo $dotted_line
   echo "build only"
   ensure_hardening_cache
-  export LLVM_SOURCE_DIR=$WORKSPACE/llvm-project
-  clone_llvm_source "${LLVM_SOURCE_DIR}"
-  export LLVM_NATIVE_BUILD_DIR=$LLVM_SOURCE_DIR/build-native-tools
-  export LLVM_BUILD_DIR=$LLVM_SOURCE_DIR/build-shared
   export PTO_SOURCE_DIR=$WORKSPACE
   export PTO_INSTALL_DIR=$PTO_SOURCE_DIR/install
+  prepare_llvm_cache_layout
+  prepare_llvm_source_cache
   prepare_fortify_marker_object "${BASE_PATH}/build/fortify_marker"
-
-  cd $LLVM_SOURCE_DIR
-  rm -rf "${LLVM_NATIVE_BUILD_DIR}" "${LLVM_BUILD_DIR}"
-
-  build_llvm_host_tools
-  configure_llvm_runtime_build
-  ninja -C $LLVM_BUILD_DIR
+  prepare_llvm_build_cache
 
   cd $PTO_SOURCE_DIR
   export PYBIND11_CMAKE_DIR=$(python3 -m pybind11 --cmakedir)
-
-  if [ -d "$CANN_3RD_LIB_PATH/llvm-19" ]; then
-    configure_ptoas_build
-  else
-    configure_ptoas_build
-  fi
+  configure_ptoas_build
 
   ninja -C build
   ninja -C build install
@@ -300,31 +342,17 @@ package() {
   clean_build
   mkdir $BUILD_PATH
   mkdir $BUILD_OUT_PATH
-  cd $BUILD_PATH
-  export LLVM_SOURCE_DIR=$BUILD_PATH/llvm-project
-  clone_llvm_source "${LLVM_SOURCE_DIR}"
-  export LLVM_NATIVE_BUILD_DIR=$LLVM_SOURCE_DIR/build-native-tools
-  export LLVM_BUILD_DIR=$LLVM_SOURCE_DIR/build-shared
   export PTO_SOURCE_DIR=$BASE_PATH
   export PTO_INSTALL_DIR=$PTO_SOURCE_DIR/install
+  prepare_llvm_cache_layout
+  prepare_llvm_source_cache
   prepare_fortify_marker_object "${BUILD_PATH}/fortify_marker"
-
-  cd $LLVM_SOURCE_DIR
-  rm -rf "${LLVM_NATIVE_BUILD_DIR}" "${LLVM_BUILD_DIR}"
-
-  build_llvm_host_tools
-  configure_llvm_runtime_build
-  ninja -C $LLVM_BUILD_DIR
+  prepare_llvm_build_cache
 
   cd $PTO_SOURCE_DIR
   export PYBIND11_CMAKE_DIR=$(python3 -m pybind11 --cmakedir)
   mkdir -p "${BUILD_PATH}/package_runtime/tools/ptoas/bin" "${BUILD_PATH}/package_runtime/tools/ptoas/lib"
-
-  if [ -d "$CANN_3RD_LIB_PATH/llvm-19" ]; then
-    configure_ptoas_build ${CMAKE_ARGS}
-  else
-    configure_ptoas_build ${CMAKE_ARGS}
-  fi
+  configure_ptoas_build ${CMAKE_ARGS}
 
   ninja -C build
   harden_package_artifacts
