@@ -83,8 +83,8 @@ constexpr std::size_t MAX_VEC_UB_BYTES = 256U * 1024U;
 template <typename DstTileData, typename SrcTileData>
 AICORE inline void TMOVUB2L1(DstTileData &dst, const SrcTileData &src)
 {
-    uint16_t rows = src.GetValidRow();
-    uint16_t cols = src.GetValidCol();
+    uint16_t rows = src.GetValidRow(); // 256
+    uint16_t cols = src.GetValidCol(); // 64
     copy_ubuf_to_cbuf(dst.data(), src.data(), 0, cols / 16, rows / 2, 1, rows / 2);
 }
 
@@ -822,13 +822,13 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             using TileMatPSub = Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1,
                                      SLayout::ColMajor, 512>;
             TileMatPSub pMatSub;
-            TASSIGN(pMatSub, (uint64_t)pMatTile.data() +
-                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0 * sizeof(half));
+            TASSIGN(pMatSub, (uint64_t)(pMatTile.data() +
+                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0));
             TMOVUB2L1(pMatSub, nzConvBuffer);
 
-            TASSIGN(pMatSub, (uint64_t)pMatTile.data() + Cube_S1 / 2 * 16 +
-                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0 * sizeof(half));
-            TASSIGN(nzConvBuffer, (uint64_t)(nzConvBuffer.data() + Vec_S0 * (Cube_S1 / 2 + 1) * sizeof(half)));
+            TASSIGN(pMatSub, (uint64_t)(pMatTile.data() + Cube_S1 / 2 * 16 +
+                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0 ));
+            TASSIGN(nzConvBuffer, (uint64_t)(nzConvBuffer.data() + Vec_S0 * (Cube_S1 / 2 + 1)));
             TMOVUB2L1(pMatSub, nzConvBuffer);
 #endif
         }
