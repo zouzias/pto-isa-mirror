@@ -378,16 +378,22 @@ struct QReadyHook {
     }
 };
 
-template <typename TileScratch, typename GlobalQ, typename GlobalK, typename GlobalV>
-AICORE inline void prefetch_first_qkv_tiles(TileScratch &scratchTile, GlobalQ &qGlobal, GlobalK &kGlobal,
-                                            GlobalV &vGlobal)
+template <bool PrefetchK1, bool PrefetchK2, typename TileScratch, typename GlobalK, typename GlobalKNext,
+          typename GlobalKNext2, typename GlobalV>
+AICORE inline void prefetch_first_qkv_tiles(TileScratch &scratchTile, GlobalK &kGlobal, GlobalKNext &kNextGlobal,
+                                            GlobalKNext2 &kNext2Global, GlobalV &vGlobal)
 {
     if constexpr (DAV_VEC) {
         if (static_cast<size_t>(get_subblockid()) == 0U) {
-            TPREFETCH(scratchTile, qGlobal);
-            TPREFETCH(scratchTile, vGlobal);
-        } else {
             TPREFETCH(scratchTile, kGlobal);
+            if constexpr (PrefetchK2) {
+                TPREFETCH(scratchTile, kNext2Global);
+            }
+        } else {
+            if constexpr (PrefetchK1) {
+                TPREFETCH(scratchTile, kNextGlobal);
+            }
+            TPREFETCH(scratchTile, vGlobal);
         }
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -599,13 +605,15 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         }
         Sm2PvFreeHook<TSyncSM2PV> sm2pvFreeHook{sm2pvSync, sub_tile_id == static_cast<int>(kTileFactor) - 1};
-        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, dstTile, accMode, PV_DONE * 1000 + tile_id,
-                                                      pReadyHook, preBTExtOpReadyHook, sm2pvFreeHook);
+        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD, true>(pMatTile, vMatTile, dstTile, accMode,
+                                                            PV_DONE * 1000 + tile_id, pReadyHook, preBTExtOpReadyHook,
+                                                            sm2pvFreeHook);
 #else
         const AccMode accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         Sm2PvFreeHook<TSyncSM2PV> sm2pvFreeHook{sm2pvSync, sub_tile_id == static_cast<int>(kTileFactor) - 1};
-        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, accMode, PV_DONE * 1000 + tile_id,
-                                                      pReadyHook, preBTExtOpReadyHook, sm2pvFreeHook);
+        pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD, true>(pMatTile, vMatTile, pvAccTile, accMode,
+                                                            PV_DONE * 1000 + tile_id, pReadyHook, preBTExtOpReadyHook,
+                                                            sm2pvFreeHook);
 #endif
 #if defined MARK_STAMP
         bisheng::cce::mark_stamp<PIPE_M>(PV_DONE * 1000 + tile_id);
@@ -973,13 +981,12 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         PrefetchScratchTile startupScratch;
         TASSIGN(startupScratch, 0u);
 
-        const int block_offset_rows = block_idx * static_cast<int>(Cube_S0);
-        __gm__ half *q_block = q + block_offset_rows * HEAD_SIZE;
-
-        PrefetchGlobalBytes qPrefetch(reinterpret_cast<__gm__ uint8_t *>(q_block));
         PrefetchGlobalBytes kPrefetch(reinterpret_cast<__gm__ uint8_t *>(k));
+        PrefetchGlobalBytes kNextPrefetch(reinterpret_cast<__gm__ uint8_t *>(k + static_cast<size_t>(Tile_S1) * HEAD_SIZE));
+        PrefetchGlobalBytes kNext2Prefetch(reinterpret_cast<__gm__ uint8_t *>(k + 2U * static_cast<size_t>(Tile_S1) * HEAD_SIZE));
         PrefetchGlobalBytes vPrefetch(reinterpret_cast<__gm__ uint8_t *>(v));
-        prefetch_first_qkv_tiles(startupScratch, qPrefetch, kPrefetch, vPrefetch);
+        prefetch_first_qkv_tiles<(S1 > Tile_S1), (S1 > 2U * Tile_S1)>(startupScratch, kPrefetch, kNextPrefetch,
+                                                                       kNext2Prefetch, vPrefetch);
     }
 
     // ------------------------------------------------------------------------------
