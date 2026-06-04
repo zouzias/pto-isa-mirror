@@ -113,7 +113,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
 
-    #if HEADSIZE_128
+    #if VL_HALF_SOLUTION
         __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
         __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
         __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
@@ -286,7 +286,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
 
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
             // vector_address areg_x_1 = vag_b32(128);
-            #if HEADSIZE_128
+            #if VL_HALF_SOLUTION
                 vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
                 vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
                 vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
@@ -329,7 +329,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
             // vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
             // vsts(vreg_x_exp_f16_1_pack, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108);
         
-            #if HEADSIZE_128
+            #if VL_HALF_SOLUTION
                 vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
                 vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
                 vpack((vector_u16&)vreg_x_exp_odd_f16, (vector_u32&)vreg_x_exp_odd_f16, LOWER);
@@ -695,7 +695,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
     unsigned ubM = TileDataD2::Cols;
     unsigned ubN = TileDataD2::Rows;
 
-    #if HEADSIZE_128
+    #if VL_HALF_SOLUTION
         __ubuf__ half *nz_buffer_Ptr2 = nz_buffer_Ptr + 16;
         __ubuf__ half *nz_buffer_Ptr3 = nz_buffer_Ptr + ubN/2*16;
         __ubuf__ half *nz_buffer_Ptr4 = nz_buffer_Ptr + ubN/2*16 + 16;
@@ -882,7 +882,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
         // vdup(vreg_x_sum_1_odd, 0, preg_134, MODE_ZEROING);
 
         for (uint16_t i0 = 0; i0 < uint16_t(ubN / 4) ; ++i0) { //128,64
-            #if HEADSIZE_128
+            #if VL_HALF_SOLUTION
                 vld(vreg_x_f32_a, input_x_Ptr, vag_b32(128), NORM);
                 vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + 64), vag_b32(128), NORM);
                 vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), NORM);
@@ -909,7 +909,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             vadd(vreg_x_sum_even, vreg_x_exp_even_1, vreg_x_sum_even, preg_134, MODE_ZEROING);
             vadd(vreg_x_sum_odd, vreg_x_exp_odd_1, vreg_x_sum_odd, preg_134, MODE_ZEROING);
 
-            #if HEADSIZE_128
+            #if VL_HALF_SOLUTION
                 vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_100, PART_EVEN);
                 vpack((vector_u16&)vreg_x_exp_even_f16, (vector_u32&)vreg_x_exp_even_f16, LOWER);
                 vsstb(vreg_x_exp_even_f16, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_low_half, POST_UPDATE);
