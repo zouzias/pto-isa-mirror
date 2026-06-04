@@ -95,7 +95,8 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     constexpr uint32_t kLoop = singleCoreK / baseK;
 
     MultiBuffered<BUFFER_NUM> db;
-
+    LeftTile aTile[BUFFER_NUM];
+    RightTile bTile[BUFFER_NUM];
     for (uint32_t i = 0; i < mLoop; i++) {
         for (uint32_t j = 0; j < nLoop; j++) {
             constexpr int NumIters = kLoop / stepKa;
@@ -114,8 +115,6 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
                 MultiBuffered<BUFFER_NUM> inner_db;
 
                 inner_db.loop<Range<stepKa>>([&](auto inner_ctx) {
-                    LeftTile aTile;
-                    RightTile bTile;
                     int inner_iter = inner_ctx.iter;
                     int inner_buf = inner_ctx.bufferId;
                     int general_iter = outer_iter * stepKa + inner_iter;
@@ -123,15 +122,15 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
                     bool last = inner_iter == stepKa - 1 && outer_iter == NumIters - 1 && inner_buf == BUFFER_NUM - 1 &&
                                 outer_buf == BUFFER_NUM - 1;
 
-                    TEXTRACT(aTile, aMatTile, 0, (general_iter % stepKa) * baseK);
-                    TEXTRACT(bTile, bMatTile, (general_iter % stepKb) * baseK, 0);
+                    TEXTRACT(aTile[inner_buf], aMatTile, 0, (general_iter % stepKa) * baseK);
+                    TEXTRACT(bTile[inner_buf], bMatTile, (general_iter % stepKb) * baseK, 0);
 
                     if (first) {
-                        TMATMUL<AccPhase::Partial>(cTile, aTile, bTile);
+                        TMATMUL<AccPhase::Partial>(cTile, aTile[inner_buf], bTile[inner_buf]);
                     } else if (last){
-                        TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
+                        TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile[inner_buf], bTile[inner_buf]);
                     }else {
-                        TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
+                        TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile[inner_buf], bTile[inner_buf]);
                     }
                 });
             });
@@ -163,7 +162,7 @@ void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     constexpr uint32_t singleCoreN = 1024;
     constexpr uint32_t singleCoreK = 6144;
     constexpr uint32_t baseM = 128;
-    constexpr uint32_t baseN = 128;
+    constexpr uint32_t baseN = 256;
     constexpr uint32_t baseK = 64;
     constexpr uint32_t stepM = 1;
     constexpr uint32_t stepKa = 4;
