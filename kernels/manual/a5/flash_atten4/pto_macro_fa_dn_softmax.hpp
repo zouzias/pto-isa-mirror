@@ -293,8 +293,8 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
                 vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + 64), vag_b32(128), NORM);
             #else
                 vld(vreg_x_f32_a, input_x_Ptr, vag_b32(64), NORM);
-                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/4), vag_b32(64), NORM);
-                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(64), NORM);
+                vld(vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(64), NORM);
+                vld(vreg_x_f32_1_a, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/4), vag_b32(64), NORM);
                 vld(vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2 + ubN*ubM/4), vag_b32(64), NORM);
             #endif
 
