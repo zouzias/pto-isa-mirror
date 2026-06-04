@@ -211,7 +211,8 @@ template <typename Op, typename TileDataDst, typename TileDataSrc0, typename Til
 __tf__ PTO_INTERNAL void TRowExpandBin(typename TileDataDst::TileDType __out__ dst,
                                        typename TileDataSrc0::TileDType __in__ src0,
                                        typename TileDataSrc1::TileDType __in__ src1,
-                                       typename TileDataTmp::TileDType __in__ tmp, unsigned validRow, unsigned validCol)
+                                       typename TileDataTmp::TileDType __out__ tmp, unsigned validRow,
+                                       unsigned validCol)
 {
     using T = typename TileDataDst::DType;
     using U = typename std::conditional<sizeof(typename TileDataDst::DType) == 4, uint32_t, uint16_t>::type;
