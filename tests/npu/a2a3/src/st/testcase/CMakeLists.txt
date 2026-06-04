@@ -223,6 +223,8 @@ tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_subtile
 syncall
+moe_token_permute_chevron
+moe_token_permute_register
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
