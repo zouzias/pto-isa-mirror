@@ -7,7 +7,7 @@ PTO 虚拟 ISA 的设计目标是：
 - 在硬件代际演进中提供稳定架构契约
 - 以 Tile 为中心定义语义，并显式定义有效区域行为
 - 明确区分“架构定义”与“实现定义”
-- 在内建接口/PTO-AS/IR/后端代码生成之间建立可验证桥接
+- 在内建接口、IR 与后端代码生成之间建立可验证桥接
 
 ## 1.2 PTO 的架构特征
 
@@ -41,7 +41,6 @@ PTO 权威来源：
 
 - 单条指令语义：[PTO ISA 参考](/docs/isa/README_zh.md)
 - 公共 API 签名：`include/pto/common/pto_instr.hpp`
-- 汇编文法：[PTO-AS 规范](/docs/assembly/PTO-AS_zh.md) 与 `docs/assembly/PTO-AS.bnf`
 
 本章节用于将这些来源组合为完整的虚拟 ISA 契约。
 
@@ -57,7 +56,7 @@ PTO 指令族按以下层次组织：
 - 布局与数据搬运变换
 - 不规则与复杂操作
 
-[指令族契约](07-instructions_zh.md)在 `manual/07-instructions_zh.md` 定义。
+[指令族契约](06-instructions_zh.md)在 `manual/06-instructions_zh.md` 定义。
 [逐条语义](/docs/isa/README_zh.md)仍以 `docs/isa/*_zh.md` 为准。
 
 ## 1.6 兼容性原则
