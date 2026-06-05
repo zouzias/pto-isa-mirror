@@ -215,7 +215,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(int tile_id, int sync_iter
                     // ND output
                     // vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) nz_buffer_Ptr + i*2*elementsPerRepeat + j*ubN), 0, NORM_B32, preg_b32_all);
                     // NZ+1 output
-                    vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_b32_all, POST_UPDATE);
+                    vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_b16_all, POST_UPDATE);
                 }
                 vsts(sum_1a, new_global_sum_Ptr, (i*2) * elementsPerRepeat, distValue, preg_b32_all);
                 vsts(sum_1b, new_global_sum_Ptr, (i*2+1) * elementsPerRepeat, distValue, preg_b32_all);
@@ -435,7 +435,7 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
                     // ND output
                     // vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) nz_buffer_Ptr + i*2*elementsPerRepeat + j*ubN), 0, NORM_B32, preg_b32_all);
                     // NZ+1 output
-                    vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_b32_all, POST_UPDATE);
+                    vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), VSSTB_CONFIG, preg_b16_all, POST_UPDATE);
                 }
                 vsts(sum_1a, local_sum_Ptr, (i*2) * elementsPerRepeat, distValue, preg_b32_all);
                 vsts(sum_1b, local_sum_Ptr, (i*2+1) * elementsPerRepeat, distValue, preg_b32_all);
