@@ -20,6 +20,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // #define SOFTMAX_S064_2VSSTB
 // #define SOFTMAX_S0128_1VSSTB
 
+
+#ifndef skip_rescale
+#define skip_rescale 0
+#endif
+
+#ifndef FIFO_MODE
+#define FIFO_MODE 1
+#endif
+
+#ifndef REUSE_QK_PV_BUFFERS
+#define REUSE_QK_PV_BUFFERS 0
+#endif
+
 // Shared defaults for FA performance kernels and host driver
 constexpr int kFaCvFifoSize = 8;
 constexpr int kFaCvFifoConsSyncPeriod = kFaCvFifoSize / 2;

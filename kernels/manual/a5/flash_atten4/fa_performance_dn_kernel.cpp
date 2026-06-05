@@ -33,17 +33,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-#ifndef skip_rescale
-#define skip_rescale 0
-#endif
-
-#ifndef FIFO_MODE
-#define FIFO_MODE 1
-#endif
-
-#ifndef REUSE_QK_PV_BUFFERS
-#define REUSE_QK_PV_BUFFERS 0
-#endif
 
 enum CoreEvtID : uint32_t
 {
@@ -832,22 +821,22 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             // Softmax vsstb already filled nzConvBuffer (NZ+1); skip ND->NZ TMOV before TINSERT.
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-#if VL_HALF_SOLUTION
-            uint16_t row_offset = static_cast<uint16_t>(sub_col * Cube_S1);
-            uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
-            TINSERT(pMatTile, nzConvBuffer, row_offset, col_offset);
-#else
+#if defined (SOFTMAX_S064_2VSSTB)
             using TileMatPSub = Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1,
-                                     SLayout::ColMajor, 512>;
+                                    SLayout::ColMajor, 512>;
             TileMatPSub pMatSub;
             TASSIGN(pMatSub, (uint64_t)(pMatTile.data() +
-                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0));
+                                get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0));
             TMOVUB2L1(pMatSub, nzConvBuffer);
 
             TASSIGN(pMatSub, (uint64_t)(pMatTile.data() + Cube_S1 / 2 * 16 +
-                                 get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0 ));
+                                get_subblockid() * static_cast<uint64_t>(Cube_S1) * Vec_S0 ));
             TASSIGN(nzConvBuffer, (uint64_t)(nzConvBuffer.data() + Vec_S0 * (Cube_S1 / 2 + 1)));
             TMOVUB2L1(pMatSub, nzConvBuffer);
+#else            
+            uint16_t row_offset = static_cast<uint16_t>(sub_col * Cube_S1);
+            uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
+            TINSERT(pMatTile, nzConvBuffer, row_offset, col_offset);
 #endif
         }
 #if defined MARK_STAMP_DATA_PIPE
