@@ -58,24 +58,87 @@ __tf__ AICORE inline void pto_macro_fa_gu(svTileData __out__ prev_sv_tile, svTil
                 RegTensor<T> vreg1;
                 RegTensor<T> vreg2;
                 RegTensor<T> vreg3;
+                RegTensor<T> vreg5;
                 RegTensor<T> vreg_uld;
                 MaskReg preg;
                 vector_bool preg_b8_all = pset_b8(PAT_ALL);
                 vector_align ureg_1;
+                MaskReg preg_all;
+                preg_all = pset_b32(PAT_ALL);
                 constexpr auto distValue =
                     std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-                for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
-                    vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
-                    uint32_t sreg = (uint32_t)(ubN);
-                    for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                        preg = CreatePredicate<T>(sreg);
-                        vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
-                        vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
-                        vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
-                        vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
-                        vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                // version 1
+                // for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //     vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                //     uint32_t sreg = (uint32_t)(ubN);
+                //     for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                //         preg = CreatePredicate<T>(sreg);
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                //         vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
+                //         vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                //     }
+                // }
+                // version 2, vmadd is a little faster than vmul and vadd
+                if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {  //unroll2
+                    uint32_t sreg0 = elementsPerRepeat;
+                    uint32_t sreg1 = elementsPerRepeat;
+                    MaskReg preg0 = CreatePredicate<T>(sreg0);
+                    MaskReg preg1 = CreatePredicate<T>(sreg1);
+                    for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                        __ubuf__ T *prev_row_ptr = prev_sv_tile_Ptr + i * rowStride;
+                        __ubuf__ T *est_row_ptr = est_sv_tile_Ptr + i * rowStride;
+                        vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                        vlds(vreg0, prev_row_ptr, 0, NORM);
+                        vlds(vreg3, est_row_ptr, 0, NORM);
+                        vlds(vreg2, prev_row_ptr, elementsPerRepeat, NORM);
+                        vmadd(vreg0, vreg1, vreg3, preg0, MODE_ZEROING);
+                        vlds(vreg5, est_row_ptr, elementsPerRepeat, NORM);
+                        vmadd(vreg2, vreg1, vreg5, preg1, MODE_ZEROING);
+                        vsts(vreg0, prev_row_ptr, 0, distValue, preg0);
+                        vsts(vreg2, prev_row_ptr, elementsPerRepeat, distValue, preg1);
+                    }
+                } else {
+                    for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                        vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                        uint32_t sreg = (uint32_t)(ubN);
+                        for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                            preg = CreatePredicate<T>(sreg);
+                            vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                            vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                            vmadd(vreg0, vreg1, vreg3, preg, MODE_ZEROING);
+                            vsts(vreg0, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                        }
                     }
                 }
+                // version 3, why need vmula if there is vmadd?
+                // if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {  //unroll2
+                //     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //         vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                        
+                //         vmula(vreg3, vreg0, vreg1, preg_all);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                //         vmula(vreg3, vreg0, vreg1, preg_all);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                //     }
+                // } else {
+                //     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //         vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                //         uint32_t sreg = (uint32_t)(ubN);
+                //         for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                //             preg = CreatePredicate<T>(sreg);
+                //             vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //             vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                //             vmula(vreg3, vreg0, vreg1, preg_all);
+                //             vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                //         }
+                //     }
+                // }
             }
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
@@ -162,32 +225,125 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
                 RegTensor<T> vreg2;
                 RegTensor<T> vreg3;
                 RegTensor<T> vreg4;
+                RegTensor<T> vreg5;
                 RegTensor<T> vreg_uld1;
                 RegTensor<T> vreg_uld2;
                 MaskReg preg;
                 vector_bool preg_b8_all = pset_b8(PAT_ALL);
                 vector_align ureg_1;
                 vector_align ureg_2;
+                RegTensor<T> vreg_one;
+                MaskReg preg_all;
+                preg_all = pset_b32(PAT_ALL);
+                vdup(vreg_one, (T)1.0, preg_all, MODE_ZEROING);
                 constexpr auto distValue =
                     std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-                for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
-                    vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                // version 1
+                // for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //     vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
 
-                    vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
-                    uint32_t sreg = (uint32_t)(ubN);
-                    for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                        preg = CreatePredicate<T>(sreg);
-                        vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //     vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                //     uint32_t sreg = (uint32_t)(ubN);
+                //     for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                //         preg = CreatePredicate<T>(sreg);
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
 
-                        vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
 
-                        vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
-                        vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
+                //         vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
+                //         vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
 
-                        vdiv(vreg3, vreg3, vreg4, preg, MODE_ZEROING);
-                        vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                //         vdiv(vreg3, vreg3, vreg4, preg, MODE_ZEROING);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                //     }
+                // }
+                // version 2
+                if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {
+                    uint32_t sreg0 = elementsPerRepeat;
+                    uint32_t sreg1 = elementsPerRepeat;
+                    MaskReg preg0 = CreatePredicate<T>(sreg0);
+                    MaskReg preg1 = CreatePredicate<T>(sreg1);
+                    for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                        __ubuf__ T *prev_row_ptr = prev_sv_tile_Ptr + i * rowStride;
+                        __ubuf__ T *est_row_ptr = est_sv_tile_Ptr + i * rowStride;
+                        vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+
+                        vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                        vlds(vreg0, prev_row_ptr, 0, NORM);
+                        vlds(vreg3, est_row_ptr, 0, NORM);
+                        vlds(vreg2, prev_row_ptr, elementsPerRepeat, NORM);
+
+                        vmadd(vreg0, vreg1, vreg3, preg0, MODE_ZEROING);
+                        vlds(vreg5, est_row_ptr, elementsPerRepeat, NORM);
+                        vmadd(vreg2, vreg1, vreg5, preg1, MODE_ZEROING);
+
+                        vdiv(vreg0, vreg0, vreg4, preg0, MODE_ZEROING);
+                        vdiv(vreg2, vreg2, vreg4, preg1, MODE_ZEROING);
+                        vsts(vreg0, prev_row_ptr, 0, distValue, preg0);
+                        vsts(vreg2, prev_row_ptr, elementsPerRepeat, distValue, preg1);
+                    }
+                } else {
+                    for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                        vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+
+                        vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                        uint32_t sreg = (uint32_t)(ubN);
+                        for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                            preg = CreatePredicate<T>(sreg);
+                            vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+
+                            vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+
+                            vmadd(vreg0, vreg1, vreg3, preg, MODE_ZEROING);
+
+                            vdiv(vreg0, vreg0, vreg4, preg, MODE_ZEROING);
+                            vsts(vreg0, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
+                        }
                     }
                 }
+                // version 3
+                // if constexpr (svTileData::Cols == 2 * (REPEAT_BYTE / sizeof(T))) {
+                //     uint32_t sreg0 = elementsPerRepeat;
+                //     uint32_t sreg1 = elementsPerRepeat;
+                //     MaskReg preg0 = CreatePredicate<T>(sreg0);
+                //     MaskReg preg1 = CreatePredicate<T>(sreg1);
+                //     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //         vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+                //         vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                //         vdiv(vreg4, vreg_one, vreg4, preg_all);
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+
+                //         vmula(vreg3, vreg0, vreg1, preg_all);
+                //         vmul(vreg3, vreg3, vreg4, preg_all);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+
+                //         vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+                //         vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                //         vmula(vreg3, vreg0, vreg1, preg_all);
+                //         vmul(vreg3, vreg3, vreg4, preg_all);
+                //         vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                //     }
+                // } else {
+                //     for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
+                //         vlds(vreg1, (__ubuf__ T *)(exp_max_Ptr), i * stride, BRC_B32);
+
+                //         vlds(vreg4, (__ubuf__ T *)(new_global_sum_Ptr), i * stride, BRC_B32);
+                //         vdiv(vreg4, vreg_one, vreg4, preg_all);
+                //         uint32_t sreg = (uint32_t)(ubN);
+                //         for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                //             preg = CreatePredicate<T>(sreg);
+                //             vlds(vreg0, prev_sv_tile_Ptr, 0, NORM, POST_UPDATE);
+
+                //             vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+
+                //             vmula(vreg3, vreg0, vreg1, preg_all);
+                //             vmul(vreg3, vreg3, vreg4, preg_all);
+
+                //             vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, NORM_B32, preg_all, POST_UPDATE);
+                //         }
+                //     }
+                // }
             }
         #else
             pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);

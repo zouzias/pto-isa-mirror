@@ -113,12 +113,12 @@ void test_tgu(bool last_tile)
     EXPECT_TRUE(cmp);
 }
 
-TEST(TGUTest, case1_regular)
+TEST(TGUTest, case1_32_128)
 {
     test_tgu<float, 32, 128>(false);
 }
 
-TEST(TGUTest, case2_last_tile)
+TEST(TGUTest, case2_32_128_last_tile)
 {
     test_tgu<float, 32, 128>(true);
 }

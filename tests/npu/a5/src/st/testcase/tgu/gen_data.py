@@ -51,8 +51,8 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     cases = [
-        ("case1_regular", False),
-        ("case2_last_tile", True),
+        ("case1_32_128", False),
+        ("case2_32_128_last_tile", True),
     ]
 
     for case_name, last_tile in cases:
