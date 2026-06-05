@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/TBinOp.hpp>
 #include <pto/common/debug.h>
 #include "custom/TFmodRemHp.hpp"
+#include <pto/common/npu_dedup/rem_common.hpp>
 
 namespace pto {
 
@@ -29,17 +30,7 @@ struct RemOp {
         if constexpr (PrecisionType == RemAlgorithm::HIGH_PRECISION && std::is_same<T, float>::value) {
             TFmodRemHP<false>(reg_dst, reg_src0, reg_src1, preg);
         } else if constexpr (std::is_same<T, float>::value) {
-            MaskReg sign_diff_mask;
-            RegTensor<T> reg_tmp;
-            vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
-            vtrc(reg_dst, reg_dst, ROUND_F, preg);
-            vmul(reg_dst, reg_dst, reg_src1, preg, MODE_ZEROING);
-            vsub(reg_dst, reg_src0, reg_dst, preg, MODE_ZEROING);
-
-            vmul(reg_tmp, reg_src1, reg_dst, preg, MODE_ZEROING);
-            vcmps_lt(sign_diff_mask, reg_tmp, 0.0f, preg);
-            vadd(reg_tmp, reg_dst, reg_src1, sign_diff_mask, MODE_ZEROING);
-            vsel(reg_dst, reg_tmp, reg_dst, sign_diff_mask);
+            RemFloatCommon(reg_dst, reg_src0, reg_src1, preg);
         } else if constexpr (std::is_same<T, half>::value) {
             RegTensor<float> reg_tmp_even0, reg_tmp_even1, reg_tmp_even2, reg_tmp_odd0, reg_tmp_odd1, reg_tmp_odd2;
             RegTensor<T> reg_dst_even, reg_dst_odd, reg_tmp;

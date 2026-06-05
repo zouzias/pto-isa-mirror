@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 #include "TBinSOp.hpp"
+#include <pto/common/npu_dedup/subs_common.hpp>
 
 namespace pto {
 
@@ -47,15 +48,15 @@ template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TSUBS_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1)
 {
     using T = typename TileDataDst::DType;
-    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, int8_t> ||
-                      std::is_same_v<T, uint32_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, uint8_t> ||
-                      std::is_same_v<T, half> || std::is_same_v<T, float32_t> || std::is_same_v<T, bfloat16_t>,
-                  "TSUBS: Invalid data type");
-    static_assert((TileDataDst::Loc == TileType::Vec) && (TileDataSrc::Loc == TileType::Vec),
-                  "TileType of dst and src tiles must be TileType::Vec.");
-    static_assert((TileDataDst::ValidCol <= TileDataDst::Cols) && (TileDataDst::ValidRow <= TileDataDst::Rows) &&
-                      (TileDataSrc::ValidCol <= TileDataSrc::Cols) && (TileDataSrc::ValidRow <= TileDataSrc::Rows),
-                  "Number of valid columns and rows must not be greater than number of tile columns and rows.");
+    if constexpr (std::is_same_v<T, bfloat16_t>) {
+        static_assert((TileDataDst::Loc == TileType::Vec) && (TileDataSrc::Loc == TileType::Vec),
+                      "TileType of dst and src tiles must be TileType::Vec.");
+        static_assert((TileDataDst::ValidCol <= TileDataDst::Cols) && (TileDataDst::ValidRow <= TileDataDst::Rows) &&
+                          (TileDataSrc::ValidCol <= TileDataSrc::Cols) && (TileDataSrc::ValidRow <= TileDataSrc::Rows),
+                      "Number of valid columns and rows must not be greater than number of tile columns and rows.");
+    } else {
+        TSubSCheckBase<TileDataDst, TileDataSrc>();
+    }
 
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);

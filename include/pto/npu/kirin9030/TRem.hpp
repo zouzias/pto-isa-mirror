@@ -14,13 +14,87 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include <pto/npu/a5/TBinOp.hpp>
+#include <pto/common/npu_dedup/rem_common.hpp>
 
 namespace pto {
 
 template <typename T>
 struct RemOp {
-    PTO_INTERNAL static void BinInstr(RegTensor<T> &dstReg, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
-                                      MaskReg &preg)
+    using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint16_t>;
+    static const U inf = sizeof(T) == sizeof(int32_t) ? 0x7F800000 : 0x7C00;
+    static const U abs = sizeof(T) == sizeof(int32_t) ? 0x7FFFFFFF : 0x7FFF;
+    static const U nan = sizeof(T) == sizeof(int32_t) ? 0x7FC00000 : 0x7E00;
+    PTO_INTERNAL static void RemFloat(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &preg)
+    {
+        RemFloatCommon(dst, src0, src1, preg);
+    }
+
+    PTO_INTERNAL static void RemHalf(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &preg)
+    {
+        MaskReg infMask, diffSignMask;
+        RegTensor<float> even0, even1, evenQuotient, odd0, odd1, oddQuotient;
+        RegTensor<T> evenDst, oddDst, diffSign, src0Abs, nanReg, absReg;
+        vcvt(even0, src0, preg, PART_EVEN);
+        vcvt(even1, src1, preg, PART_EVEN);
+        vcvt(odd0, src0, preg, PART_ODD);
+        vcvt(odd1, src1, preg, PART_ODD);
+
+        vdiv(evenQuotient, even0, even1, preg, MODE_ZEROING);
+        vdiv(oddQuotient, odd0, odd1, preg, MODE_ZEROING);
+
+        vtrc(evenQuotient, evenQuotient, ROUND_F, preg);
+        vtrc(oddQuotient, oddQuotient, ROUND_F, preg);
+
+        vmul(evenQuotient, evenQuotient, even1, preg, MODE_ZEROING);
+        vmul(oddQuotient, oddQuotient, odd1, preg, MODE_ZEROING);
+
+        vsub(evenQuotient, even0, evenQuotient, preg, MODE_ZEROING);
+        vsub(oddQuotient, odd0, oddQuotient, preg, MODE_ZEROING);
+
+        vcvt(evenDst, evenQuotient, preg, ROUND_Z, RS_ENABLE, PART_EVEN);
+        vcvt(oddDst, oddQuotient, preg, ROUND_Z, RS_ENABLE, PART_ODD);
+
+        vor(dst, evenDst, oddDst, preg);
+
+        vmul(diffSign, src1, dst, preg, MODE_ZEROING);
+        vcmps_lt(diffSignMask, diffSign, 0.0f, preg);
+        vadd(dst, dst, src1, diffSignMask, MODE_MERGING);
+
+        vdup((RegTensor<U> &)absReg, abs, preg, MODE_ZEROING);
+        vand((RegTensor<U> &)src0Abs, (RegTensor<U> &)src0, (RegTensor<U> &)absReg, preg);
+        vcmps_eq(infMask, (RegTensor<U> &)src0Abs, inf, preg);
+        vdup((RegTensor<U> &)nanReg, nan, infMask, MODE_ZEROING);
+        vsel(dst, nanReg, dst, infMask);
+    }
+
+    PTO_INTERNAL static void RemInt(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &preg)
+    {
+        MaskReg diffSignMask;
+        RegTensor<T> invalidRes;
+        MaskReg dstNegMask, src1NegMask, zeroMask, curMask;
+        curMask = preg;
+        vdiv(dst, src0, src1, preg, MODE_ZEROING);
+        vmul(dst, dst, src1, preg, MODE_ZEROING);
+        vsub(dst, src0, dst, preg, MODE_ZEROING);
+
+        // x/0 = -1
+        vcmps_eq(zeroMask, src1, 0, preg);
+        vdup(invalidRes, (T)-1, zeroMask, MODE_ZEROING);
+        vsel(dst, invalidRes, dst, zeroMask);
+        pxor(curMask, zeroMask, preg, preg);
+
+        // dst[x] == 0 do not participate in subsequent processing.
+        vcmps_eq(zeroMask, dst, 0, preg);
+        pxor(curMask, zeroMask, curMask, curMask);
+
+        // multiplication may cause overflow to become negative
+        vcmps_lt(dstNegMask, dst, 0, curMask);
+        vcmps_lt(src1NegMask, src1, 0, curMask);
+        pxor(diffSignMask, dstNegMask, src1NegMask, curMask); // same is 0, diff is 1
+        vadd(dst, dst, src1, diffSignMask, MODE_MERGING);     // add src1 if diff sign
+    }
+
+    PTO_INTERNAL static void BinInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &preg)
     {
         if constexpr (std::is_same_v<T, float>) {
             MaskReg sign_diff_mask;

@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "datatype.hpp"
 #include <pto/common/type.hpp>
+#include <pto/common/npu_dedup/common_base.hpp>
 
 namespace pto {
 
@@ -23,39 +24,6 @@ PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
         return (value + 1) >> 1; // fp4 4bits, ceil division to include last nibble for odd counts
     }
     return sizeof(T) * value;
-}
-
-template <typename T, int U, int... Args>
-AICORE constexpr bool SupportBytes()
-{
-    if constexpr (sizeof...(Args) > 0) {
-        return sizeof(T) == U || SupportBytes<T, Args...>();
-    }
-    return sizeof(T) == U;
-}
-
-using MaskReg = vector_bool;
-using UnalignReg = vector_align;
-using AddrReg = vector_address;
-
-template <typename T>
-PTO_INTERNAL MaskReg CreatePredicateImpl(uint32_t &scalar)
-{
-    MaskReg reg;
-    if constexpr (sizeof(T) == 1) {
-        reg = plt_b8(scalar, POST_UPDATE);
-    } else if constexpr (sizeof(T) == 2) {
-        reg = plt_b16(scalar, POST_UPDATE);
-    } else if constexpr (sizeof(T) == 4) {
-        reg = plt_b32(scalar, POST_UPDATE);
-    }
-    return reg;
-}
-
-template <typename T>
-PTO_INTERNAL MaskReg CreatePredicate(uint32_t &scalar)
-{
-    return CreatePredicateImpl<T>(scalar);
 }
 
 template <typename T>

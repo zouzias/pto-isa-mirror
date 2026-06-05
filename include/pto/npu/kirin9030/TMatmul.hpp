@@ -12,11 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMATMUL_HPP
 
 #include <cstdint>
+#include <pto/common/npu_dedup/matmul_common.hpp>
 
 namespace pto {
 
 inline namespace TMatmulInternel {
-constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
 constexpr const int TF32_MODE_BIT = 46;
 constexpr const int TF32_TRANS_MODE_BIT = 47;
 } // namespace TMatmulInternel
@@ -61,16 +61,6 @@ __tf__ PTO_INTERNAL void TMatmulBias(typename TileRes::TileDType __out__ cMatrix
     } else {
         static_assert(sizeof(T) == 0, "TMATMUL: Invalid Acc DType.");
     }
-}
-
-PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
-{
-    PTO_ASSERT(aMatrixRow >= 1 && aMatrixRow <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid aMatrixRow is [1, 4095].");
-    PTO_ASSERT(aMatrixCol >= 1 && aMatrixCol <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(bMatrixCol >= 1 && bMatrixCol <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid bMatrixCol is [1, 4095].");
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>

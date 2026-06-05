@@ -12,12 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMATMUL_HPP
 
 #include <cstdint>
+#include <pto/common/npu_dedup/matmul_common.hpp>
 
 namespace pto {
-
-inline namespace TMatmulInternel {
-constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
-} // namespace TMatmulInternel
 
 template <typename TileLeft>
 PTO_INTERNAL constexpr bool GetGemvCtrl()
@@ -115,16 +112,6 @@ PTO_INTERNAL void CheckMadMxValid()
              (TileRight::SFractal == SLayout::ColMajor)) &&
             ((TileRes::Loc == TileType::Acc) && (!TileRes::isRowMajor) && (TileRes::SFractal == SLayout::RowMajor)),
         "TMatmulMX:Non-conforming matrix fractal");
-}
-
-PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
-{
-    PTO_ASSERT(aMatrixRow >= 1 && aMatrixRow <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid aMatrixRow is [1, 4095].");
-    PTO_ASSERT(aMatrixCol >= 1 && aMatrixCol <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(bMatrixCol >= 1 && bMatrixCol <= MMAD_MAX_SUPPORT_LENGTH,
-               "ERROR: The range of valid bMatrixCol is [1, 4095].");
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>

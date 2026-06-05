@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TSUBS_HPP
 
 #include "pto/npu/a5/TBinSOp.hpp"
+#include <pto/common/npu_dedup/subs_common.hpp>
 
 namespace pto {
 
@@ -47,15 +48,7 @@ template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TSUBS_IMPL(DstTile &dst, SrcTile &src0, typename SrcTile::DType src1)
 {
     using T = typename DstTile::DType;
-    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, int8_t> ||
-                      std::is_same_v<T, uint32_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, uint8_t> ||
-                      std::is_same_v<T, half> || std::is_same_v<T, float32_t>,
-                  "TSUBS: Invalid data type");
-    static_assert((DstTile::Loc == TileType::Vec) && (SrcTile::Loc == TileType::Vec),
-                  "TileType of dst and src tiles must be TileType::Vec.");
-    static_assert((DstTile::ValidCol <= DstTile::Cols) && (DstTile::ValidRow <= DstTile::Rows) &&
-                      (SrcTile::ValidCol <= SrcTile::Cols) && (SrcTile::ValidRow <= SrcTile::Rows),
-                  "Number of valid columns and rows must not be greater than number of tile columns and rows.");
+    TSubSCheckBase<DstTile, SrcTile>();
 
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();

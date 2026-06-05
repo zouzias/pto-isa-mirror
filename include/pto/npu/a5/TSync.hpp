@@ -12,17 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TSYNC_HPP
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#include <pto/common/npu_dedup/sync_common.hpp>
 
 namespace pto {
-template <Op OpCode>
-PTO_INTERNAL static constexpr pipe_t GetPipeByOp()
-{
-    if constexpr ((OpCode >= static_cast<Op>(0)) && (OpCode <= Op::OP_COUNT)) {
-        return opPipeList[static_cast<int>(OpCode)];
-    }
-    return PIPE_ALL;
-}
-
 // single pipeline wait, only support MTE3 or ALL pipeline
 template <Op OpCode>
 PTO_INTERNAL void TSYNC_IMPL()
@@ -141,15 +133,8 @@ struct Event {
     }
 };
 
-template <typename T>
-struct is_event : std::false_type {
-};
-
 template <Op SrcOp, Op DstOp, bool AutoToken, event_t EventID>
 struct is_event<Event<SrcOp, DstOp, AutoToken, EventID>> : std::true_type {
 };
-
-template <typename... Ts>
-inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
 } // namespace pto
 #endif
