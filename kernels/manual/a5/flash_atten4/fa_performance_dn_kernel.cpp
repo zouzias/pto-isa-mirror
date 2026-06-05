@@ -17,11 +17,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
 
 #include "pto_macro_dn_matmul.hpp"
-#if VL_HALF_SOLUTION
-#include "pto_macro_fa_dn_softmax_unaligned64.hpp"
+
+#if defined (SOFTMAX_S064_4VSSTB)
+#include "pto_macro_dn_softmax_s064_4vsstb.hpp"
+#elif defined (SOFTMAX_S064_2VSSTB)
+#include "pto_macro_dn_softmax_s064_2vsstb.hpp"
+#elif defined (SOFTMAX_S0128_1VSSTB)
+#include "pto_macro_dn_softmax_s0128_1vsstb.hpp"
 #else
-#include "pto_macro_fa_dn_softmax_aligned128.hpp"
+#error "Softmax macro specialization must be defined for this build (e.g. SOFTMAX_S064_4VSSTB)"
 #endif
+
 #include "pto_macro_fa_dn_gu.hpp"
 
 using namespace std;

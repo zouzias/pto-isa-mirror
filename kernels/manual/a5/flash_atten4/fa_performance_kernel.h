@@ -16,7 +16,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 #define USE_MANUAL 1
-#define VL_HALF_SOLUTION 1
+#define SOFTMAX_S064_4VSSTB
+// #define SOFTMAX_S064_2VSSTB
+// #define SOFTMAX_S0128_1VSSTB
 
 // Shared defaults for FA performance kernels and host driver
 constexpr int kFaCvFifoSize = 8;
