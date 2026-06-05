@@ -107,4 +107,28 @@ TEST_F(TColExpandMulTest, case_fp16_10_64_1_64)
 {
     test_tcolexpandmul<aclFloat16, 10, 64, 1, 64>();
 }
+TEST_F(TColExpandMulTest, case_fp32_6_128_1_128)
+{
+    test_tcolexpandmul<float, 6, 128, 1, 128>();
+}
+TEST_F(TColExpandMulTest, case_fp32_18_32_1_32)
+{
+    test_tcolexpandmul<float, 18, 32, 1, 32>();
+}
+TEST_F(TColExpandMulTest, case_fp16_10_256_1_256)
+{
+    test_tcolexpandmul<aclFloat16, 10, 256, 1, 256>();
+}
+TEST_F(TColExpandMulTest, case_fp16_12_64_1_64)
+{
+    test_tcolexpandmul<aclFloat16, 12, 64, 1, 64>();
+}
+TEST_F(TColExpandMulTest, case_fp32_15_1024_1_1024)
+{
+    test_tcolexpandmul<float, 15, 1024, 1, 1024>();
+}
+TEST_F(TColExpandMulTest, case_fp16_30_1024_1_1024)
+{
+    test_tcolexpandmul<aclFloat16, 30, 1024, 1, 1024>();
+}
 } // namespace TColExpandMulTest

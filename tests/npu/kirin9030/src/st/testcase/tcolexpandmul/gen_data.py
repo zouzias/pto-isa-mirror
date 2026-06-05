@@ -65,7 +65,13 @@ if __name__ == "__main__":
         TcolexpandParams(np.float32, 16, 128, 16, 128, 1, 128),
         TcolexpandParams(np.float32, 32, 32, 32, 32, 1, 32),
         TcolexpandParams(np.float16, 4, 256, 4, 256, 1, 256),
-        TcolexpandParams(np.float16, 10, 64, 10, 64, 1, 64)
+        TcolexpandParams(np.float16, 10, 64, 10, 64, 1, 64),
+        TcolexpandParams(np.float32, 6, 128, 6, 128, 1, 128),
+        TcolexpandParams(np.float32, 18, 32, 18, 32, 1, 32),
+        TcolexpandParams(np.float16, 10, 256, 10, 256, 1, 256),
+        TcolexpandParams(np.float16, 12, 64, 12, 64, 1, 64),
+        TcolexpandParams(np.float32, 15, 1024, 1, 1024, 1, 1024),
+        TcolexpandParams(np.float16, 30, 1024, 1, 1024, 1, 1024),
     ]
 
     for _, param in enumerate(case_params_list):
