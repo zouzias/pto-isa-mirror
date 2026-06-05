@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -27,15 +28,8 @@ def gen_golden_data_tand(case_name, param):
         for j in range(w_valid):
             golden[i, j] = input1[i, j] | input2[0, 0]
 
-    with open("input2.bin", 'wb') as f:
-        dtype_map = {
-            np.int8: 'b',
-            np.uint8: 'B',
-            np.int16: 'h',
-            np.uint16: 'H',
-            np.int32: 'i',
-            np.uint32: 'I'
-        }
+    with open("input2.bin", "wb") as f:
+        dtype_map = {np.int8: "b", np.uint8: "B", np.int16: "h", np.uint16: "H", np.int32: "i", np.uint32: "I"}
         format_char = dtype_map.get(dtype)
         if format_char is not None:
             f.write(struct.pack(format_char, input2[0, 0]))

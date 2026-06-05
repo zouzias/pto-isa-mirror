@@ -429,7 +429,7 @@ extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase092(__gm__ half *outVal
     runTColIdxValMax<half, int16_t, 16, 16, 1, 96, 88>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase093(__gm__ uint16_t *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ uint16_t *src)
+                                                             __gm__ uint16_t *src)
 {
     runTColIdxValMax<uint16_t, int16_t, 4, 4, 1, 48, 34>(outVal, outIdx, src);
 }
@@ -475,42 +475,42 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase108(__gm__ uint32_t *out, __
 // Value + index mode: FP16, 8 cases
 // =============================================================================
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase201(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 64>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase202(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 48>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase203(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 8, 8, 1, 64, 32>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase204(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 12, 8, 1, 64, 48>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase205(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 144>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase206(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 128>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase207(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 2, 2, 1, 144, 112>(outVal, outIdx, src);
 }
 extern "C" __global__ AICORE void launchTCOLIDXVALMAXCase208(__gm__ half *outVal, __gm__ int16_t *outIdx,
-                                                              __gm__ half *src)
+                                                             __gm__ half *src)
 {
     runTColIdxValMax<half, int16_t, 4, 2, 1, 144, 112>(outVal, outIdx, src);
 }
