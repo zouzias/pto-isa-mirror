@@ -73,26 +73,22 @@ __tf__ PTO_INTERNAL void TMovToVecImpl(typename DstTileData::TileDType __out__ d
     __ubuf__ U *dstPtr = (__ubuf__ U *)__cce_get_tile_ptr(dst);
 
     static_assert(sizeof(T) == sizeof(U), "TMOV: src and dst data type is different!");
-    if constexpr (DstTileData::Cols == SrcTileData::Cols || DstTileData::Rows == 1) {
-        unsigned blockLen = (DstTileData::Cols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-        if constexpr (DstTileData::Cols == DstTileData::ValidCol) {
-            pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 0, 0);
-        } else {
-            if (DstTileData::Cols == validCol) {
-                pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 0, 0);
-            } else {
-                blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-                for (int i = 0; i < validRow; i++) {
-                    pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, 0, 0);
-                }
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        RegTensor<T> vreg0;
+        MaskReg pReg;
+        uint32_t sreg;
+        uint16_t repeatTimes = CeilDivision(validCol, nRepeatElem);
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
+            sreg = (uint32_t)validCol;
+            for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                pReg = CreatePredicate<T>(sreg);
+                vlds(vreg0, srcPtr, i * SrcTileData::RowStride + j * nRepeatElem, NORM);
+                vsts(vreg0, dstPtr, i * DstTileData::RowStride + j * nRepeatElem, distValue, pReg);
             }
-        }
-    } else {
-        unsigned blockLen = CeilDivision(validCol * sizeof(T), BLOCK_BYTE_SIZE);
-        unsigned srcGap = SrcTileData::Cols * sizeof(T) / BLOCK_BYTE_SIZE - blockLen;
-        unsigned dstGap = DstTileData::Cols * sizeof(T) / BLOCK_BYTE_SIZE - blockLen;
-        for (int i = 0; i < validRow; i++) {
-            pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, srcGap, dstGap);
         }
     }
 }
@@ -275,8 +271,6 @@ PTO_INTERNAL void TMOV_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src)
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData &dst, SrcTileData &src)
 {
-    static_assert((SrcTileData::Rows == DstTileData::Rows) && ((SrcTileData::Cols == DstTileData::Cols)),
-                  "TMov: The shape of src needs to be the same as that of dst.");
     static_assert((SrcTileData::Loc == TileType::Mat &&
                    (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right ||
                     DstTileData::Loc == TileType::Bias || DstTileData::Loc == TileType::Scaling)) ||
@@ -284,46 +278,52 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData &dst, SrcTileData &src)
                       (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Vec) ||
                       (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc),
                   "TMov: Invalid TileType.");
-    if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        TMovToLeft<DstTileData, SrcTileData>(dst, src);
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        TMovToRight<DstTileData, SrcTileData>(dst, src);
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
-        TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
-        TMovToFb<DstTileData, SrcTileData>(dst.data(), src.data());
-    } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
-        if constexpr ((SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
-                      (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
-            TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
-                dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
-        } else if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) &&
-                             (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor)) {
-            TMovToVecNd2Zz<typename DstTileData::DType, DstTileData, SrcTileData>(
-                dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
-        } else {
-            TMovToVec<DstTileData, SrcTileData>(dst, src);
+    if constexpr (SrcTileData::Loc == TileType::Mat) {
+        static_assert((SrcTileData::Rows == DstTileData::Rows) && ((SrcTileData::Cols == DstTileData::Cols)),
+                      "TMov: The shape of src needs to be the same as that of dst.");
+        if constexpr (DstTileData::Loc == TileType::Bias) {
+            TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
+        } else if constexpr (DstTileData::Loc == TileType::Scaling) {
+            TMovToFb<DstTileData, SrcTileData>(dst.data(), src.data());
+        } else if constexpr (DstTileData::Loc == TileType::Left) {
+            TMovToLeft<DstTileData, SrcTileData>(dst, src);
+        } else if constexpr (DstTileData::Loc == TileType::Right) {
+            TMovToRight<DstTileData, SrcTileData>(dst, src);
         }
-    } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Mat) {
-        if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) &&
-                      (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox)) {
-            TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, src.GetValidRow(),
-                                                       src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
-        } else if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::RowMajor) &&
-                             (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor)) {
-            TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, src.GetValidRow(),
-                                                       src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
-        } else {
-            static_assert(sizeof(typename DstTileData::DType) == 0,
-                          "TMov Vec->Mat: Only support ND->ND or ZZ->ZZ on kirinX90.");
-        }
-    } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
+    } else if constexpr (SrcTileData::Loc == TileType::Acc) {
         CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
         uint16_t m = src.GetValidRow();
         uint16_t n = src.GetValidCol();
         constexpr QuantMode_t quantPre =
             GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
         TMovCcToCb<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst.data(), src.data(), m, n);
+    } else if constexpr (SrcTileData::Loc == TileType::Vec) {
+        if constexpr (DstTileData::Loc == TileType::Vec) {
+            if constexpr ((SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
+                          (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
+                TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
+                    dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
+            } else if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) &&
+                                 (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor)) {
+                TMovToVecNd2Zz<typename DstTileData::DType, DstTileData, SrcTileData>(
+                    dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
+            } else {
+                TMovToVec<DstTileData, SrcTileData>(dst, src);
+            }
+        } else if constexpr (DstTileData::Loc == TileType::Mat) {
+            if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) &&
+                          (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox)) {
+                TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, src.GetValidRow(),
+                                                           src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
+            } else if constexpr ((SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::RowMajor) &&
+                                 (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor)) {
+                TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, src.GetValidRow(),
+                                                           src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
+            } else {
+                static_assert(sizeof(typename DstTileData::DType) == 0,
+                              "TMov Vec->Mat: Only support ND->ND or ZZ->ZZ on kirinX90.");
+            }
+        }
     }
 }
 template <typename DstTileData, typename SrcTileData>
