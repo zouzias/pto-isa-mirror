@@ -17,7 +17,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
 
 #include "pto_macro_dn_matmul.hpp"
-#include "pto_macro_fa_dn_softmax.hpp"
+#if VL_HALF_SOLUTION
+#include "pto_macro_fa_dn_softmax_unaligned64.hpp"
+#else
+#include "pto_macro_fa_dn_softmax_aligned128.hpp"
+#endif
 #include "pto_macro_fa_dn_gu.hpp"
 
 using namespace std;
