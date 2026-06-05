@@ -268,13 +268,15 @@ inline void SYNCALL_SOFT_AIC_IMPL(int32_t *gmWorkspace, int32_t *l1Workspace, in
 }
 
 template <SyncCoreType CoreType = SyncCoreType::Mix>
-inline void SYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace, int32_t usedCores)
+inline void SYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, int32_t *l1Workspace, int32_t usedCores,
+                                  int32_t aicBlocks = 0)
 {
     (void)CoreType;
     (void)gmWorkspace;
     (void)ubWorkspace;
     (void)l1Workspace;
     (void)usedCores;
+    (void)aicBlocks;
 }
 } // namespace pto
 

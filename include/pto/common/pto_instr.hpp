@@ -108,7 +108,8 @@ template <
     std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
                          is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
                      int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0,
+                      int32_t aicBlocks = 0)
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
@@ -116,10 +117,12 @@ PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileDa
         (void)ubWorkspace;
         (void)l1Workspace;
         (void)usedCores;
+        (void)aicBlocks;
         SYNCALL_IMPL<CoreType>();
     } else {
 #ifndef __PTO_AUTO__
-        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores,
+                                        aicBlocks);
 #endif
     }
 #else

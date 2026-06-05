@@ -135,7 +135,7 @@ PTO_INTERNAL void RunMixSyncAllBody(int32_t aicBlocks, int32_t totalParticipants
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t *>(kMixSoftL1Addr);
 #endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants, aicBlocks);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }
@@ -150,7 +150,7 @@ PTO_INTERNAL void RunMixSyncAllBody(int32_t aicBlocks, int32_t totalParticipants
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t *>(kMixSoftL1Addr);
 #endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants, aicBlocks);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }
@@ -165,7 +165,7 @@ PTO_INTERNAL void RunMixSyncAllBody(int32_t aicBlocks, int32_t totalParticipants
         syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kMixSoftUbAddr);
         syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t *>(kMixSoftL1Addr);
 #endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants, aicBlocks);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }

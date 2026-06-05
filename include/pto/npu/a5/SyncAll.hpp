@@ -62,11 +62,13 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIV_RATIO()
 #endif
 }
 
-PTO_INTERNAL int32_t SYNCALL_GET_MIX_PARTICIPANT_IDX()
+PTO_INTERNAL int32_t SYNCALL_GET_MIX_PARTICIPANT_IDX(int32_t aicBlocks = 0)
 {
 #if defined(__DAV_VEC__)
-    return static_cast<int32_t>(SYNCALL_GET_MIX_AIC_BLOCKS() + get_block_idx() * get_subblockdim() + get_subblockid());
+    const int32_t aicCnt = (aicBlocks > 0) ? aicBlocks : SYNCALL_GET_MIX_AIC_BLOCKS();
+    return static_cast<int32_t>(aicCnt + get_block_idx() * get_subblockdim() + get_subblockid());
 #else
+    (void)aicBlocks;
     return static_cast<int32_t>(get_block_idx());
 #endif
 }
@@ -210,7 +212,8 @@ PTO_INTERNAL void SYNCALL_SOFT_AIV_BARRIER(__gm__ int32_t *gmWorkspace, __ubuf__
 
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_t *ubWorkspace,
-                                        __cbuf__ int32_t *l1Workspace, int32_t usedCores = 0)
+                                        __cbuf__ int32_t *l1Workspace, int32_t usedCores = 0,
+                                        int32_t aicBlocks = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
@@ -218,7 +221,7 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ in
 
 #if defined(__DAV_CUBE__)
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX();
+    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX(aicBlocks);
     __gm__ int32_t *localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
 
     const int32_t curValue = SYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
@@ -249,7 +252,7 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ in
 #elif defined(__DAV_VEC__)
     (void)l1Workspace;
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX();
+    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX(aicBlocks);
     const int32_t aicBlockIdx = static_cast<int32_t>(get_block_idx());
 
     if (get_subblockid() == 0) {
