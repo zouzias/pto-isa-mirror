@@ -71,11 +71,12 @@ def gen_golden_data_tquant(case_name, param):
 
 
 class TQuantParams:
-    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd"):
+    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd", suffix=""):
         self.valid_rows = valid_rows
         self.valid_cols = valid_cols
         self.dtype = np.float32
         self.mode = mode
+        self.suffix = suffix
         self.out_dtype_str = {"s8": "int8_sym", "u8": "int8_asym"}[out_dtype_str]
 
         ## convert dtype to string for case name to match that in main.cpp
@@ -83,7 +84,8 @@ class TQuantParams:
 
 
 def generate_case_name(param):
-    return f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}_{param.mode}"
+    suffix = f"_{param.suffix}" if param.suffix else ""
+    return f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}{suffix}_{param.mode}"
 
 
 if __name__ == "__main__":
@@ -103,6 +105,11 @@ if __name__ == "__main__":
         TQuantParams("u8", 128, 128, mode="nd"),
         TQuantParams("u8", 256, 128, mode="nd"),
         TQuantParams("u8", 32, 72, mode="nd"),
+        TQuantParams("s8", 64, 128, mode="nd", suffix="notmp"),
+        TQuantParams("s8", 128, 128, mode="nd", suffix="notmp"),
+        TQuantParams("u8", 64, 128, mode="nd", suffix="notmp"),
+        TQuantParams("u8", 128, 128, mode="nd", suffix="notmp"),
+        TQuantParams("u8", 32, 72, mode="nd", suffix="notmp"),
     ]
 
     for param in case_params_list:
