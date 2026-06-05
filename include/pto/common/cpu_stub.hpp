@@ -75,6 +75,11 @@ static inline int aclrtMallocHost(void **p, size_t sz)
             reinterpret_cast<char *>(dst)[i] = reinterpret_cast<char *>(src)[i]; \
     }
 
+#define aclrtMemset(dst, sz_dst, val, num) \
+    {                                      \
+        memset(dst, val, num);             \
+    }
+
 #define aclrtSynchronizeStream(x) (0)
 #define aclrtFree(x) free(x)
 #define aclrtFreeHost(x) free(x)
