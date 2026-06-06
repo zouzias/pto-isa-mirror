@@ -1368,10 +1368,14 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         if constexpr (DAV_VEC) {
             for (int i = 0; i < pending_sv_consumed; ++i) {
                 sm2pvSync.allocate();
-#if skip_rescale
-                wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
-#endif
             }
+#if skip_rescale
+            const int pending_ss_consumed =
+                pending_consumption_events(num_tiles_s1, SKIP_STATUS_FIFO_SIZE, kFaCvFifoConsSyncPeriod);
+            for (int i = 0; i < pending_ss_consumed; ++i) {
+                wait_intra_block(PIPE_S, FftsBufferFlag::SS_BUF_READY + 1);
+            }
+#endif
         }
 
         const uint64_t tEnd = get_sys_cnt();
