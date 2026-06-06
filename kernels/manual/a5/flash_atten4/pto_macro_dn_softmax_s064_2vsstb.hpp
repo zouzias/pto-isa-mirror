@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_MACRO_FA_SOFTMAX_DN_ALIGNED128_HPP
-#define PTO_MACRO_FA_SOFTMAX_DN_ALIGNED128_HPP
+#ifndef PTO_MACRO_FA_SOFTMAX_DN_HPP
+#define PTO_MACRO_FA_SOFTMAX_DN_HPP
 
 #include <pto/pto-inst.hpp>
 #include "fa_performance_kernel.h"

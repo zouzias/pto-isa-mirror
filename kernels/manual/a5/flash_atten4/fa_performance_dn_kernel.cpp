@@ -25,7 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined (SOFTMAX_S0128_1VSSTB)
 #include "pto_macro_dn_softmax_s0128_1vsstb.hpp"
 #else
-#error "Softmax macro specialization must be defined for this build (e.g. SOFTMAX_S064_4VSSTB)"
+#error "Must define one of SOFTMAX_S064_4VSSTB, SOFTMAX_S064_2VSSTB, or SOFTMAX_S0128_1VSSTB"
 #endif
 
 #include "pto_macro_fa_dn_gu.hpp"
@@ -268,7 +268,7 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
 
     constexpr std::size_t total_bytes =
-        union_bytes + p_nz_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) + out_tile_bytes;
+        union_bytes + p_nz_bytes + (reduce_tile_bytes * (4U + ExpMaxBuffers)) + out_tile_bytes;
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
 
     uint32_t offset = 0;
@@ -281,7 +281,7 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     constexpr std::size_t reduce_tile_bytes = tile_storage_bytes<ReduceTileF_T>();
     constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
     constexpr std::size_t total_bytes =
-        src_bytes + pv_bytes + p_nz_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) + out_tile_bytes;
+        src_bytes + pv_bytes + p_nz_bytes + (reduce_tile_bytes * (4U + ExpMaxBuffers)) + out_tile_bytes;
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
 
     uint32_t offset = 0;
@@ -1007,7 +1007,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr uint32_t outOTileNBuffers = 2;
     constexpr uint32_t qMatTNBuffers = 1;
     constexpr uint32_t kMatTNBuffers = 2;
-    constexpr uint32_t pMatTNBuffers = 2;
+    constexpr uint32_t pMatTNBuffers = qkPreloadNum + 1;
     constexpr uint32_t vMatTNBuffers = 2;
     // These stay at CV_FIFO_SIZE so intermediate-check dumps and delayed GU reduce data keep the 8-slot layout.
     // QK/PV cross-core sync below uses the actual UB ring depths: srcVecTNBuffers and outOTileNBuffers.
