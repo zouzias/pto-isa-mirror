@@ -45,6 +45,17 @@ def nd2nz(nd_fp16):
     nz_fp16 = nd_fp16.reshape(rows, c1, c0).transpose(1, 0, 2).reshape(c1, rows * c0)
     return nz_fp16
 
+def nd2nz_plus_one(nd_array):
+    M, N = nd_array.shape
+    print("nd_array shape:", nd_array.shape)
+    nz_data = nd_array.reshape(M, N//16, 16).transpose(1,0,2)  #NZ layout
+    nzplus_one_array = np.zeros((N//16, M + 1, 16), dtype=nd_array.dtype)
+    for i in range(N//16):
+        for j in range(M):
+            for k in range(16):
+                nzplus_one_array[i][j][k] = nz_data[i][j][k]
+    return nzplus_one_array
+
 
 def gen_case(
     path,
@@ -155,8 +166,8 @@ def gen_case(
     soft = (full_exp).astype(np.float16)
     soft.tofile(os.path.join(path, 'p.bin'))
     nd2nz(copy.deepcopy(soft.T)).tofile(os.path.join(path, 'p_t_nz.bin'))
-    p_nz = nd2nz(soft)
-    p_nz.tofile(os.path.join(path, 'p_nz.bin'))
+    nd2nz_plus_one(copy.deepcopy(soft.T)).tofile(os.path.join(path, 'p_t_nz_plus_one.bin'))
+    nd2nz(copy.deepcopy(soft)).tofile(os.path.join(path, 'p_nz.bin'))
     tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
 
     # generate random V (S1 x HEAD_SIZE) and compute y = soft (S0 x S1) dot V (S1 x HEAD_SIZE)

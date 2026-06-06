@@ -797,23 +797,25 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
 
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
             if constexpr (INTERMEDIATE_CHECK) {
-                constexpr uint32_t NzBufRows = Cube_S1 + 1;
+                constexpr uint32_t RowPlusOne = Cube_S1 + 1;
                 constexpr uint32_t VecChunks = Vec_S0 / 16;
-                __gm__ half *p_ptr_sub =
-                    p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
-                for (uint32_t vec_chunk = 0; vec_chunk < VecChunks; ++vec_chunk) {
-                    using GlobalPTileChunk =
-                        GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, 16>, pto::Stride<1, 1, 1, 16, 1>>;
-                    using TileChunkH = Tile<TileType::Vec, half, Cube_S1, 16, BLayout::RowMajor, Cube_S1, 16>;
-                    size_t gm_offset = static_cast<size_t>(vec_chunk) * static_cast<size_t>(Cube_S1) * 16;
-                    __gm__ half *p_chunk_gm = p_ptr_sub + gm_offset;
-                    GlobalPTileChunk pTileChunk(p_chunk_gm);
-                    TileChunkH chunkTile;
-                    uint64_t nz_buf_byte_offset =
-                        static_cast<uint64_t>(vec_chunk) * static_cast<uint64_t>(NzBufRows) * 16 * sizeof(half);
-                    TASSIGN(chunkTile, (uint64_t)nzConvBuffer.data() + nz_buf_byte_offset);
-                    TSTORE(pTileChunk, chunkTile);
-                }
+                __gm__ half *p_ptr_nz = p_tile_fifo +
+                    static_cast<size_t>(buf_idx) * static_cast<size_t>(kTileFactor) * static_cast<size_t>(Cube_S0) *
+                    static_cast<size_t>(RowPlusOne) +
+                    static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(RowPlusOne) +
+                    static_cast<size_t>(get_subblockid()) * static_cast<size_t>(Vec_S0) *
+                    static_cast<size_t>(RowPlusOne);
+#if defined(SOFTMAX_S064_4VSSTB)
+                copy_ubuf_to_gm_align_v2(p_ptr_nz, nzConvBuffer.data(), 0, VecChunks,
+                    RowPlusOne * 32, 0, RowPlusOne * 32, RowPlusOne * 32);
+#elif defined(SOFTMAX_S064_2VSSTB)
+                constexpr uint32_t HalfRowsPlusOne = Cube_S1 / 2 + 1;
+                copy_ubuf_to_gm_align_v2(p_ptr_nz, nzConvBuffer.data(), 0, VecChunks,
+                    HalfRowsPlusOne * 32, 0, RowPlusOne * 32, HalfRowsPlusOne * 32);
+                copy_ubuf_to_gm_align_v2(p_ptr_nz + Cube_S1 / 2 * 16,
+                    nzConvBuffer.data() + Vec_S0 * HalfRowsPlusOne, 0, VecChunks,
+                    HalfRowsPlusOne * 32, 0, RowPlusOne * 32, HalfRowsPlusOne * 32);
+#endif
                 set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
                 wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
             }
@@ -1112,9 +1114,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // }
 
     constexpr size_t p_fifo_block_stride =
-        static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Tile_S1);
+        static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0) *
+        static_cast<size_t>(kTileFactor) * static_cast<size_t>(NzBufRows);
     constexpr size_t p_max_fifo_block_stride = static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0);
-    constexpr size_t qk_fifo_block_stride = p_fifo_block_stride;
+    constexpr size_t qk_fifo_block_stride =
+        static_cast<size_t>(qkp_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Tile_S1);
     constexpr size_t pv_fifo_block_stride =
         static_cast<size_t>(pv_tile_fifo_size) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
 
