@@ -16,8 +16,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 #define USE_MANUAL 1
-#define SOFTMAX_S064_4VSSTB
-// #define SOFTMAX_S064_2VSSTB
+// #define SOFTMAX_S064_4VSSTB
+#define SOFTMAX_S064_2VSSTB
 // #define SOFTMAX_S0128_1VSSTB
 
 

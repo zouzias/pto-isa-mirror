@@ -2,4 +2,5 @@
 2. And then change the main.cpp to compare the p_fifo data with golden data "p_t_nz_plus_one.bin".
 3. run testcase to check if the p_fifo can compare successfully, "bash run.sh -r sim -v Ascend950PR_9599 -n 0 --cases "128,128,128,128,128,128" --qk-preload 2 --mode 1 -i"
 4. the intermedicate check in step 3 is pass, however, it is failed for testcase "bash run.sh -r sim -v Ascend950PR_9599 -n 0 --cases "128,512,512,128,128,128" --qk-preload 2 --mode 1 -i" when open "#define SOFTMAX_S064_4VSSTB", please help to update and fix the bugs.
+5. Please help to replace line 827~837 to TINSERT API by using the SPLIT_2 mode in a5/TInsert.hpp, you can try to update the TINSERT implementation if the precision is failed. Please run the above testcase to verify, remember to open the "SOFTMAX_S064_2VSSTB"
 

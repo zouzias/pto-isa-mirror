@@ -274,44 +274,60 @@ __tf__ AICORE void TInsertSplitImpl(typename DstTileData::TileDType __out__ dst,
     uint32_t byteIndexCol = isFp4Type ? indexCol / 2 : indexCol;
     uint32_t alignedRow = CeilDivision(validRow, nzRow) * nzRow;
     uint16_t totalBurstNum = static_cast<uint16_t>(CeilDivision(byteValidCol, c0Size));
-    uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
-    uint16_t partBurstNum = totalBurstNum / SplitCount;
-    uint16_t lastBurstNum = totalBurstNum - partBurstNum * (SplitCount - 1);
-    uint32_t srcStrideRows;
-    if constexpr (SrcTileData::Compact == CompactMode::Null) {
-        srcStrideRows = SrcTileData::Rows;
-    } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
-        srcStrideRows = alignedRow + 1;
-    } else {
-        srcStrideRows = alignedRow;
-    }
-    uint16_t srcGap = static_cast<uint16_t>(srcStrideRows - alignedRow);
-    uint16_t dstGap = static_cast<uint16_t>(DstTileData::Rows - alignedRow);
-    uint32_t srcBlockSize = (burstLen + srcGap) * BLOCK_BYTE_SIZE / typeSize;
-    uint32_t dstBlockSize = DstTileData::Rows * c0Size;
 
     uint32_t colBlockOffset = (byteIndexCol / c0Size) * DstTileData::Rows * c0Size;
     uint32_t rowOffset = indexRow * c0Size + (byteIndexCol % c0Size);
     uint32_t dstOffset = colBlockOffset + rowOffset;
-
     __cbuf__ T *dstAddr0 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, partBurstNum, burstLen, srcGap, dstGap);
 
-    if constexpr (SplitCount >= 2) {
-        __ubuf__ T *src1 = srcAddr + partBurstNum * srcBlockSize;
-        __cbuf__ T *dst1 = dstAddr0 + partBurstNum * dstBlockSize;
-        uint16_t burst1Num = (SplitCount == 2) ? lastBurstNum : partBurstNum;
-        copy_ubuf_to_cbuf(dst1, src1, 0, burst1Num, burstLen, srcGap, dstGap);
-    }
+    if constexpr (SplitCount == 2 && SrcTileData::Compact == CompactMode::RowPlusOne) {
+        constexpr uint32_t HalfRows = SrcTileData::ValidRow / 2;
+        constexpr uint32_t HalfRowsPlusOne = HalfRows + 1;
+        uint16_t halfBurstLen = static_cast<uint16_t>((HalfRows * c0Size * typeSize) / BLOCK_BYTE_SIZE);
+        uint16_t halfSrcGap = static_cast<uint16_t>(HalfRowsPlusOne - HalfRows);
+        uint16_t halfDstGap = static_cast<uint16_t>(DstTileData::Rows - HalfRows);
 
-    if constexpr (SplitCount >= 4) {
-        __ubuf__ T *src2 = srcAddr + 2 * partBurstNum * srcBlockSize;
-        __cbuf__ T *dst2 = dstAddr0 + 2 * partBurstNum * dstBlockSize;
-        copy_ubuf_to_cbuf(dst2, src2, 0, partBurstNum, burstLen, srcGap, dstGap);
+        copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, totalBurstNum, halfBurstLen, halfSrcGap, halfDstGap);
 
-        __ubuf__ T *src3 = srcAddr + 3 * partBurstNum * srcBlockSize;
-        __cbuf__ T *dst3 = dstAddr0 + 3 * partBurstNum * dstBlockSize;
-        copy_ubuf_to_cbuf(dst3, src3, 0, lastBurstNum, burstLen, srcGap, dstGap);
+        uint32_t halfSrcOffset = totalBurstNum * HalfRowsPlusOne * c0Size;
+        uint32_t halfDstOffset = HalfRows * c0Size;
+        copy_ubuf_to_cbuf(dstAddr0 + halfDstOffset, srcAddr + halfSrcOffset, 0, totalBurstNum, halfBurstLen,
+                          halfSrcGap, halfDstGap);
+    } else {
+        uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
+        uint16_t partBurstNum = totalBurstNum / SplitCount;
+        uint16_t lastBurstNum = totalBurstNum - partBurstNum * (SplitCount - 1);
+        uint32_t srcStrideRows;
+        if constexpr (SrcTileData::Compact == CompactMode::Null) {
+            srcStrideRows = SrcTileData::Rows;
+        } else if constexpr (SrcTileData::Compact == CompactMode::RowPlusOne) {
+            srcStrideRows = alignedRow + 1;
+        } else {
+            srcStrideRows = alignedRow;
+        }
+        uint16_t srcGap = static_cast<uint16_t>(srcStrideRows - alignedRow);
+        uint16_t dstGap = static_cast<uint16_t>(DstTileData::Rows - alignedRow);
+        uint32_t srcBlockSize = (burstLen + srcGap) * BLOCK_BYTE_SIZE / typeSize;
+        uint32_t dstBlockSize = DstTileData::Rows * c0Size;
+
+        copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, partBurstNum, burstLen, srcGap, dstGap);
+
+        if constexpr (SplitCount >= 2) {
+            __ubuf__ T *src1 = srcAddr + partBurstNum * srcBlockSize;
+            __cbuf__ T *dst1 = dstAddr0 + partBurstNum * dstBlockSize;
+            uint16_t burst1Num = (SplitCount == 2) ? lastBurstNum : partBurstNum;
+            copy_ubuf_to_cbuf(dst1, src1, 0, burst1Num, burstLen, srcGap, dstGap);
+        }
+
+        if constexpr (SplitCount >= 4) {
+            __ubuf__ T *src2 = srcAddr + 2 * partBurstNum * srcBlockSize;
+            __cbuf__ T *dst2 = dstAddr0 + 2 * partBurstNum * dstBlockSize;
+            copy_ubuf_to_cbuf(dst2, src2, 0, partBurstNum, burstLen, srcGap, dstGap);
+
+            __ubuf__ T *src3 = srcAddr + 3 * partBurstNum * srcBlockSize;
+            __cbuf__ T *dst3 = dstAddr0 + 3 * partBurstNum * dstBlockSize;
+            copy_ubuf_to_cbuf(dst3, src3, 0, lastBurstNum, burstLen, srcGap, dstGap);
+        }
     }
 }
 
