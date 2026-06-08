@@ -120,7 +120,7 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     constexpr bool src0eqdst = std::is_same_v<TileDataDst, TileDataSrc0>;
     constexpr bool src1eqdst = std::is_same_v<TileDataDst, TileDataSrc1>;
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
-               "TROWEXPANDDIV: the validShape of src0 or src1 should be equal to dst");
+               "TROWEXPANDDIV: auto mode only supports same-type tiles");
     if constexpr (src0eqdst) {
         unsigned src1ValidCol = src1.GetValidCol();
         PTO_ASSERT(((TileDataSrc1::isRowMajor && src1ValidCol == 32 / sizeof(T)) ||
