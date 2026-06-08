@@ -44,7 +44,7 @@ def gen_golden_data(param):
 
 
 class TTRANSParams:
-    def __init__(self, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col):
+    def __init__(self, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col, dtype_name=None):
         self.dtype = dtype
         self.dst_row = dst_row
         self.dst_col = dst_col
@@ -52,14 +52,17 @@ class TTRANSParams:
         self.src_col = src_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        dtype_str = {
-            np.float32: "float",
-            np.float16: "half",
-            np.int32: "int32",
-            np.int16: "int16",
-            np.int8: "int8",
-            np.uint8: "uint8",
-        }[dtype]
+        if dtype_name is not None:
+            dtype_str = dtype_name
+        else:
+            dtype_str = {
+                np.float32: "float",
+                np.float16: "half",
+                np.int32: "int32",
+                np.int16: "int16",
+                np.int8: "int8",
+                np.uint8: "uint8",
+            }[dtype]
         self.name = f"TTRANSTest.case_{dtype_str}_{dst_row}x{dst_col}_{src_row}x{src_col}_{valid_row}x{valid_col}"
 
 
@@ -119,6 +122,14 @@ if __name__ == "__main__":
         TTRANSParams(np.uint8, 64, 128, 128, 64, 100, 50),
         TTRANSParams(np.float32, 8, 64, 64, 8, 1, 1),
         TTRANSParams(np.float32, 8, 16, 16, 8, 16, 1),
+        TTRANSParams(np.int8, 32, 32, 32, 32, 32, 32, "hif8"),
+        TTRANSParams(np.int8, 64, 64, 64, 64, 22, 63, "hif8"),
+        TTRANSParams(np.int8, 32, 32, 32, 32, 32, 32, "f8e4m3"),
+        TTRANSParams(np.int8, 64, 64, 64, 64, 22, 63, "f8e4m3"),
+        TTRANSParams(np.int8, 32, 32, 32, 32, 32, 32, "f8e5m2"),
+        TTRANSParams(np.int8, 64, 64, 64, 64, 22, 63, "f8e5m2"),
+        TTRANSParams(np.int8, 32, 32, 32, 32, 32, 32, "f8e8m0"),
+        TTRANSParams(np.int8, 64, 64, 64, 64, 22, 63, "f8e8m0"),
     ]
 
     for case in case_list:
