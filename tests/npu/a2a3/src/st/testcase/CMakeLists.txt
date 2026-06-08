@@ -225,6 +225,7 @@ tpushpop_subtile
 syncall
 moe_token_permute_chevron
 moe_token_permute_register
+syncall_mix_chevron
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
