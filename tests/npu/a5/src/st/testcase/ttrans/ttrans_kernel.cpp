@@ -118,3 +118,40 @@ template void LaunchTTRANS<uint8_t, 1024, 32, 32, 1024, 32, 1024>(uint8_t *out, 
 template void LaunchTTRANS<uint8_t, 64, 128, 128, 64, 100, 50>(uint8_t *out, uint8_t *src, void *stream);
 template void LaunchTTRANS<float, 8, 64, 64, 8, 1, 1>(float *out, float *src, void *stream);
 template void LaunchTTRANS<float, 8, 16, 16, 8, 16, 1>(float *out, float *src, void *stream);
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSHiFloat8(int8_t *out, int8_t *src, void *stream)
+{
+    runTTRANS<hifloat8_t, dstTRows, dstTCols, srcTRows, srcTCols>
+        <<<1, nullptr, stream>>>((hifloat8_t *)(out), (hifloat8_t *)(src), vRows, vCols);
+}
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E4M3(int8_t *out, int8_t *src, void *stream)
+{
+    runTTRANS<float8_e4m3_t, dstTRows, dstTCols, srcTRows, srcTCols>
+        <<<1, nullptr, stream>>>((float8_e4m3_t *)(out), (float8_e4m3_t *)(src), vRows, vCols);
+}
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E5M2(int8_t *out, int8_t *src, void *stream)
+{
+    runTTRANS<float8_e5m2_t, dstTRows, dstTCols, srcTRows, srcTCols>
+        <<<1, nullptr, stream>>>((float8_e5m2_t *)(out), (float8_e5m2_t *)(src), vRows, vCols);
+}
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E8M0(int8_t *out, int8_t *src, void *stream)
+{
+    runTTRANS<float8_e8m0_t, dstTRows, dstTCols, srcTRows, srcTCols>
+        <<<1, nullptr, stream>>>((float8_e8m0_t *)(out), (float8_e8m0_t *)(src), vRows, vCols);
+}
+
+template void LaunchTTRANSHiFloat8<32, 32, 32, 32, 32, 32>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSHiFloat8<64, 64, 64, 64, 22, 63>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E4M3<32, 32, 32, 32, 32, 32>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E4M3<64, 64, 64, 64, 22, 63>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E5M2<32, 32, 32, 32, 32, 32>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E5M2<64, 64, 64, 64, 22, 63>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E8M0<32, 32, 32, 32, 32, 32>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTTRANSFloat8E8M0<64, 64, 64, 64, 22, 63>(int8_t *out, int8_t *src, void *stream);
