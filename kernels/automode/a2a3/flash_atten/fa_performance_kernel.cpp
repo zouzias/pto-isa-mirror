@@ -583,7 +583,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     });
             }
         }
-#pragma pto v_loop_barrier // FIXME: this should be fixed in the auto-sync/mem-alloc passes
 
         mb.loop<Range<qkPreloadNum, kTileFactor>>([&](auto ctxOuter, auto inner) {
             int tile_id = ctxOuter.iter;
@@ -620,8 +619,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             });
         });
 
-#pragma pto v_loop_barrier // FIXME: this should be fixed in the auto-sync/mem-alloc passes
-
         TileOutGuT pvVecTile;
 
         for (int tile_id = 0; tile_id < num_tiles_s1 - qkPreloadNum; ++tile_id) {
@@ -643,7 +640,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                 pvPipe, tile_id, num_tiles_s1, o_out_block, o_parts_block, runningOTile, pvVecTile,
                 l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], l2_global_sum);
         }
-        #pragma pto v_loop_barrier 
         mb.loop<Range<qkPreloadNum>, 0, 2>([&](auto ctx) {
             TileOutGuT pvVecTile;
             pvPipe.cons.setTileId(ctx.iter + num_tiles_s1 - qkPreloadNum, -1);
