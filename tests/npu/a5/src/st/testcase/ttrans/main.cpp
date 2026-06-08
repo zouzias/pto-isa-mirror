@@ -42,6 +42,18 @@ void LaunchTTRANS(T *out, T *src, void *stream);
 template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
 void LaunchTTRANSHalf(aclFloat16 *out, aclFloat16 *src, void *stream);
 
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSHiFloat8(int8_t *out, int8_t *src, void *stream);
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E4M3(int8_t *out, int8_t *src, void *stream);
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E5M2(int8_t *out, int8_t *src, void *stream);
+
+template <int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols>
+void LaunchTTRANSFloat8E8M0(int8_t *out, int8_t *src, void *stream);
+
 class TTRANSTest : public testing::Test {
 protected:
     void SetUp() override
@@ -59,7 +71,8 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols, bool isHalf = false>
+template <typename T, int dstTRows, int dstTCols, int srcTRows, int srcTCols, int vRows, int vCols, bool isHalf = false,
+          bool isHif8 = false, bool isF8E4M3 = false, bool isF8E5M2 = false, bool isF8E8M0 = false>
 void test_ttrans()
 {
     size_t srcFileSize = srcTRows * srcTCols * sizeof(T);
@@ -86,6 +99,14 @@ void test_ttrans()
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     if constexpr (isHalf) {
         LaunchTTRANSHalf<dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
+    } else if constexpr (isHif8) {
+        LaunchTTRANSHiFloat8<dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
+    } else if constexpr (isF8E4M3) {
+        LaunchTTRANSFloat8E4M3<dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
+    } else if constexpr (isF8E5M2) {
+        LaunchTTRANSFloat8E5M2<dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
+    } else if constexpr (isF8E8M0) {
+        LaunchTTRANSFloat8E8M0<dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
     } else {
         LaunchTTRANS<T, dstTRows, dstTCols, srcTRows, srcTCols, vRows, vCols>(dstDevice, srcDevice, stream);
     }
@@ -313,4 +334,36 @@ TEST_F(TTRANSTest, case_float_8x64_64x8_1x1)
 TEST_F(TTRANSTest, case_float_8x16_16x8_16x1)
 {
     test_ttrans<float, 8, 16, 16, 8, 16, 1>();
+}
+TEST_F(TTRANSTest, case_hif8_32x32_32x32_32x32)
+{
+    test_ttrans<int8_t, 32, 32, 32, 32, 32, 32, false, true>();
+}
+TEST_F(TTRANSTest, case_hif8_64x64_64x64_22x63)
+{
+    test_ttrans<int8_t, 64, 64, 64, 64, 22, 63, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e4m3_32x32_32x32_32x32)
+{
+    test_ttrans<int8_t, 32, 32, 32, 32, 32, 32, false, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e4m3_64x64_64x64_22x63)
+{
+    test_ttrans<int8_t, 64, 64, 64, 64, 22, 63, false, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e5m2_32x32_32x32_32x32)
+{
+    test_ttrans<int8_t, 32, 32, 32, 32, 32, 32, false, false, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e5m2_64x64_64x64_22x63)
+{
+    test_ttrans<int8_t, 64, 64, 64, 64, 22, 63, false, false, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e8m0_32x32_32x32_32x32)
+{
+    test_ttrans<int8_t, 32, 32, 32, 32, 32, 32, false, false, false, false, true>();
+}
+TEST_F(TTRANSTest, case_f8e8m0_64x64_64x64_22x63)
+{
+    test_ttrans<int8_t, 64, 64, 64, 64, 22, 63, false, false, false, false, true>();
 }
