@@ -10,22 +10,25 @@
 
 pto_mix_st(syncall_mix_chevron)
 
-add_library(syncall_mix_chevron_aiv_kernel SHARED syncall_aiv_kernel.cpp)
-target_compile_options(syncall_mix_chevron_aiv_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17)
-target_include_directories(syncall_mix_chevron_aiv_kernel PRIVATE
-    ${ASCEND_HOME_PATH}/pkg_inc/
-    ${ASCEND_HOME_PATH}/pkg_inc/profiling/
-    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
-)
-target_link_options(syncall_mix_chevron_aiv_kernel PRIVATE --cce-fatobj-link)
+# NOTE: hard and soft SYNCALL kernels must NOT share one .so. A soft kernel in
+# the same fatobj corrupts the hard kernel's FFTS hardware-barrier config and
+# causes hard AIV-only / AIC-only cases to hang. Keep each kernel in its own .so.
+function(pto_syncall_chevron_kernel TARGET SOURCE ARCH)
+    add_library(${TARGET} SHARED ${SOURCE})
+    target_compile_options(${TARGET} PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${ARCH} -DMEMORY_BASE -std=c++17)
+    target_include_directories(${TARGET} PRIVATE
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    target_link_options(${TARGET} PRIVATE --cce-fatobj-link)
+    target_link_libraries(syncall_mix_chevron PRIVATE ${TARGET})
+endfunction()
 
-add_library(syncall_mix_chevron_aic_kernel SHARED syncall_aic_kernel.cpp)
-target_compile_options(syncall_mix_chevron_aic_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube -DMEMORY_BASE -std=c++17)
-target_include_directories(syncall_mix_chevron_aic_kernel PRIVATE
-    ${ASCEND_HOME_PATH}/pkg_inc/
-    ${ASCEND_HOME_PATH}/pkg_inc/profiling/
-    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
-)
-target_link_options(syncall_mix_chevron_aic_kernel PRIVATE --cce-fatobj-link)
-
-target_link_libraries(syncall_mix_chevron PRIVATE syncall_mix_chevron_aiv_kernel syncall_mix_chevron_aic_kernel)
+pto_syncall_chevron_kernel(syncall_mix_chevron_aiv_hard_kernel syncall_aiv_hard_kernel.cpp dav-c220-vec)
+pto_syncall_chevron_kernel(syncall_mix_chevron_aiv_soft_kernel syncall_aiv_soft_kernel.cpp dav-c220-vec)
+# Hard AIC-only is built as a MIX kernel (dav-c220 auto-split, AIC does the work,
+# AIV is an empty stub). AIC-only hard sync needs the MIX FFTS context to barrier
+# correctly; a pure dav-c220-cube chevron launch hangs.
+pto_syncall_chevron_kernel(syncall_mix_chevron_aic_hard_kernel syncall_aic_hard_kernel.cpp dav-c220)
+pto_syncall_chevron_kernel(syncall_mix_chevron_aic_soft_kernel syncall_aic_soft_kernel.cpp dav-c220-cube)

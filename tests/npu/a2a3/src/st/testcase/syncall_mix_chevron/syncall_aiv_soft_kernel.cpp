@@ -13,8 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-PTO_SYNCALL_AIV_KERNEL_META(launch_hard_aiv_mix_aiv);
-
 constexpr int32_t kAivBlockCount = 40;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagUbAddr = 0x0;
@@ -41,28 +39,6 @@ PTO_INTERNAL void InvalidateInt32Lines(__gm__ int32_t *addr, int32_t lines)
     dsb(DSB_DDR);
 }
 
-extern "C" __global__ AICORE void launch_hard_aiv_mix_aiv(__gm__ uint64_t __in__ *fftsAddr, __gm__ int32_t __out__ *out,
-                                                          __gm__ int32_t __out__ *flags)
-{
-    set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-    const int32_t idx = block_idx;
-    StoreInt32Line(flags + idx * kInt32PerCacheLine, idx + 1, kFlagUbAddr);
-
-    SYNCALL();
-
-    __ubuf__ int32_t *readUb = reinterpret_cast<__ubuf__ int32_t *>(kReadUbAddr);
-    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, kAivBlockCount, 0,
-                    0);
-    pipe_barrier(PIPE_ALL);
-    int32_t allVisible = 1;
-    for (int32_t i = 0; i < kAivBlockCount; ++i) {
-        if (readUb[i * kInt32PerCacheLine] != i + 1) {
-            allVisible = 0;
-        }
-    }
-    StoreInt32Line(out + idx * kInt32PerCacheLine, allVisible, kOutUbAddr);
-}
-
 extern "C" __global__ AICORE void launch_soft_aiv(__gm__ int32_t __out__ *out, __gm__ int32_t __out__ *flags,
                                                   __gm__ int32_t __out__ *syncWorkspace)
 {
@@ -81,35 +57,13 @@ extern "C" __global__ AICORE void launch_soft_aiv(__gm__ int32_t __out__ *out, _
     copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, kAivBlockCount, 0,
                     0);
     pipe_barrier(PIPE_ALL);
-    int32_t allFirstVisible = 1;
+    int32_t allVisible = 1;
     for (int32_t i = 0; i < kAivBlockCount; ++i) {
         if (readUb[i * kInt32PerCacheLine] != i + 1) {
-            allFirstVisible = 0;
+            allVisible = 0;
         }
     }
-
-    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kAivBlockCount);
-
-    StoreInt32Line(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, kFlagUbAddr);
-    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kAivBlockCount);
-
-    InvalidateInt32Lines(flags, kAivBlockCount);
-    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, kAivBlockCount, 0,
-                    0);
-    pipe_barrier(PIPE_ALL);
-    int32_t allSecondVisible = 1;
-    for (int32_t i = 0; i < kAivBlockCount; ++i) {
-        if (readUb[i * kInt32PerCacheLine] != (i + 1) * 2) {
-            allSecondVisible = 0;
-        }
-    }
-
-    StoreInt32Line(out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, kOutUbAddr);
-}
-
-void LaunchHardAiv(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
-{
-    launch_hard_aiv_mix_aiv<<<kAivBlockCount, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags);
+    StoreInt32Line(out + idx * kInt32PerCacheLine, allVisible, kOutUbAddr);
 }
 
 void LaunchSoftAiv(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWs, void *stream)

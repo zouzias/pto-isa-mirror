@@ -8,20 +8,27 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+// Hard AIC-only SYNCALL test kernel.
+//
+// AIC-only hard sync reuses the FFTS AIC flag, which only has a meaningful
+// "all AIC cores" barrier semantic when the cores are brought up through a MIX
+// launch (so FFTS knows the participating AIC count). A pure dav-c220-cube
+// chevron launch lacks that configuration and hangs. We therefore compile this
+// kernel as a MIX kernel (dav-c220 auto-split): the AIC side does the real work
+// plus SYNCALL<AICOnly>, while the AIV side is an empty stub that just retires.
+// The chevron launch then provides the MIX FFTS context the AIC barrier needs.
+
 #include <pto/pto-inst.hpp>
 #include "acl/acl.h"
 
 using namespace pto;
 
-PTO_SYNCALL_AIC_KERNEL_META(launch_hard_aic);
-PTO_SYNCALL_AIC_KERNEL_META(launch_soft_aic);
-
 constexpr int32_t kAicBlockCount = 20;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagL1Addr = 0x0;
 constexpr uint64_t kOutL1Addr = 0x1000;
-constexpr uint64_t kSoftSyncL1Addr = 0x2000;
 
+#if defined(__DAV_CUBE__)
 PTO_INTERNAL void StoreInt32LineL1(__gm__ int32_t *dst, int32_t value, uint64_t l1Addr)
 {
     __cbuf__ int32_t *l1 = reinterpret_cast<__cbuf__ int32_t *>(l1Addr);
@@ -43,10 +50,12 @@ PTO_INTERNAL void InvalidateGmLines(__gm__ int32_t *addr, int32_t lines)
     }
     dsb(DSB_DDR);
 }
+#endif
 
 extern "C" __global__ AICORE void launch_hard_aic(__gm__ uint64_t __in__ *fftsAddr, __gm__ int32_t __out__ *out,
                                                   __gm__ int32_t __out__ *flags)
 {
+#if defined(__DAV_CUBE__)
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
     const int32_t idx = block_idx;
 
@@ -64,41 +73,14 @@ extern "C" __global__ AICORE void launch_hard_aic(__gm__ uint64_t __in__ *fftsAd
         }
     }
     StoreInt32LineL1(out + idx * kInt32PerCacheLine, allVisible, kOutL1Addr);
-}
-
-extern "C" __global__ AICORE void launch_soft_aic(__gm__ int32_t __out__ *out, __gm__ int32_t __out__ *flags,
-                                                  __gm__ int32_t __out__ *syncWorkspace)
-{
-    const int32_t idx = block_idx;
-    StoreInt32LineL1(flags + idx * kInt32PerCacheLine, idx + 1, kFlagL1Addr);
-
-    GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
-    Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
-#ifndef __PTO_AUTO__
-    syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t *>(kSoftSyncL1Addr);
+#elif defined(__DAV_VEC__)
+    (void)fftsAddr;
+    (void)out;
+    (void)flags;
 #endif
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::AICOnly>(gmWs, syncL1Tile, kAicBlockCount);
-
-    InvalidateGmLines(flags, kAicBlockCount);
-    int32_t allVisible = 1;
-    for (int32_t i = 0; i < kAicBlockCount; ++i) {
-        __gm__ int32_t *flag = flags + i * kInt32PerCacheLine;
-        dcci(static_cast<__gm__ void *>(flag), SINGLE_CACHE_LINE);
-        dsb(DSB_DDR);
-        if (flag[0] != i + 1) {
-            allVisible = 0;
-        }
-    }
-    StoreInt32LineL1(out + idx * kInt32PerCacheLine, allVisible, kOutL1Addr);
 }
 
 void LaunchHardAic(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
 {
     launch_hard_aic<<<kAicBlockCount, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags);
-}
-
-void LaunchSoftAic(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWs, void *stream)
-{
-    (void)ffts;
-    launch_soft_aic<<<kAicBlockCount, nullptr, stream>>>(out, flags, syncWs);
 }
