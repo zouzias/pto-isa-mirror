@@ -1189,6 +1189,227 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
     }
 }
 
+// headsize = 128 optimization
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
+ __tf__ AICORE void TSOFTMAX_DN_FUSION4(TileDataD2 &x_exp, TileDataS1 &input_x,
+                             TileDataD1 &local_max, TileDataD1 &local_sum,
+                             TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
+                             TileDataD1 &exp_max) {
+
+     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
+     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
+     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
+     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
+     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
+     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
+
+     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+     float keepProb = 1.0;
+
+     unsigned ubM = TileDataD2::Cols;
+     unsigned ubN = TileDataD2::Rows;
+
+     __VEC_SCOPE__{
+
+          __ubuf__ float *src0_ub = (__ubuf__ float *)input_x_Ptr;
+
+          vector_bool preg_108;
+          vector_bool preg_134;
+          preg_134 = pset_b8(PAT_ALL);
+          vector_bool preg_135;
+          preg_135 = pset_b32(PAT_ALL);
+          vector_f32 src_00a, src_01a, src_02a, src_03a;
+          vector_f32 src_00b, src_01b, src_02b, src_03b;
+          vector_f32 max_0a, max_1a, max_2a, max_3a;
+          vector_f32 max_0b, max_1b, max_2b, max_3b;
+          vector_f32 vreg_x_max_f32_a;
+          vector_f32 vreg_x_max_f32_b;
+          vector_f32 vreg_x_f32_1_a;
+          vector_f32 vreg_x_f32_1_b;
+          vector_f32 vreg_x_sum_even;
+          vector_f32 vreg_x_sum_odd;
+          vector_f32 vreg_x_exp_even;
+          vector_f32 vreg_x_exp_odd;
+          vector_f16 vreg_x_exp_f16;
+          vector_f32 vreg_x_sum0;
+          vector_f32 vreg_x_sum1;
+          vector_f32 vreg_x_sum2;
+          vector_f32 vreg_x_sum3;
+          vector_f32 vreg_x_exp_even_1;
+          vector_f32 vreg_x_exp_odd_1;
+          vector_f16 vreg_x_exp_even_f16;
+          vector_f16 vreg_x_exp_odd_f16;
+          vector_f16 vreg_x_exp_even_f16_1;
+          vector_f16 vreg_x_exp_odd_f16_1;
+          vector_f32 vreg_x_sum_1_even;
+          vector_f32 vreg_x_sum_1_odd;
+          vector_f32 vreg_x_sum_even_1;
+          vector_f32 vreg_x_sum_odd_1;
+          vector_f16 vreg_x_exp_f16_1;
+          vector_f32 vreg_x_f32_a;
+          vector_f32 vreg_x_f32_b;
+     
+          __ubuf__ float *src0_ub1 = src0_ub + 128;
+          __ubuf__ float *src0_ub2 = src0_ub + 256;
+          __ubuf__ float *src0_ub3 = src0_ub + 384;
+
+          __ubuf__ float *src0_ub_unroll = src0_ub + 64;
+          __ubuf__ float *src0_ub1_unroll = src0_ub1 + 64;
+          __ubuf__ float *src0_ub2_unroll = src0_ub2 + 64;
+          __ubuf__ float *src0_ub3_unroll = src0_ub3 + 64;
+
+          vbr(max_0a, 0);
+          vbr(max_0b, 0);
+          vbr(max_1a, 0);
+          vbr(max_1b, 0);
+          vbr(max_2a, 0);
+          vbr(max_2b, 0);
+          vbr(max_3a, 0);
+          vbr(max_3b, 0);
+
+          preg_108 = pset_b16(PAT_ALL);
+
+          for (uint16_t iter_m = 0; iter_m < uint16_t(ubN / 4) ; ++iter_m) {
+               vlds(src_00a, src0_ub, 512, NORM, POST_UPDATE);
+               vlds(src_00b, src0_ub_unroll, 512, NORM, POST_UPDATE);
+               vmax(max_0a, max_0a, src_00a, preg_108);
+               vmax(max_0b, max_0b, src_00b, preg_108);
+               
+               vlds(src_01a, src0_ub1, 512, NORM, POST_UPDATE);
+               vlds(src_01b, src0_ub1_unroll, 512, NORM, POST_UPDATE);
+               vmax(max_1a, max_1a, src_01a, preg_108);
+               vmax(max_1b, max_1b, src_01b, preg_108);
+               
+               vlds(src_02a, src0_ub2, 512, NORM, POST_UPDATE);
+               vlds(src_02b, src0_ub2_unroll, 512, NORM, POST_UPDATE);
+               vmax(max_2a, max_2a, src_02a, preg_108);
+               vmax(max_2b, max_2b, src_02b, preg_108);
+               
+               vlds(src_03a, src0_ub3, 512, NORM, POST_UPDATE);
+               vlds(src_03b, src0_ub3_unroll, 512, NORM, POST_UPDATE);
+               vmax(max_3a, max_3a, src_03a, preg_108);
+               vmax(max_3b, max_3b, src_03b, preg_108);
+          }
+
+          if (not init)
+          {
+               vlds(vreg_x_max_f32_a, new_global_max_Ptr, 0, NORM);
+               vlds(vreg_x_max_f32_b, (__ubuf__ float *)(new_global_max_Ptr + 64), 0, NORM);
+               
+               vmax(max_0a, max_0a, max_1a, preg_108);
+               vmax(max_0b, max_0b, max_1b, preg_108);
+               vmax(max_2a, max_2a, max_3a, preg_108);
+               vmax(max_2b, max_2b, max_3b, preg_108);
+               vmax(max_0a, max_0a, max_2a, preg_108);
+               vmax(max_0b, max_0b, max_2b, preg_108);
+               vmuls(max_0a, max_0a, scale, preg_108);
+               vmuls(max_0b, max_0b, scale, preg_108);
+
+               vmax(max_0a, max_0a, vreg_x_max_f32_a, preg_108);
+               vmax(max_0b, max_0b, vreg_x_max_f32_b, preg_108);
+
+               vsts(max_0a, local_max_Ptr, 0, NORM_B16, preg_108);
+               vsts(max_0b, (__ubuf__ float *)(local_max_Ptr + 64), 0, NORM_B16, preg_108);
+
+               vexpdif(vreg_x_max_f32_a, vreg_x_max_f32_a, max_0a, preg_134, PART_ODD);
+               vexpdif(vreg_x_max_f32_b, vreg_x_max_f32_b, max_0b, preg_134, PART_ODD);
+               vsts(vreg_x_max_f32_a, exp_max_Ptr, 0, NORM_B16, preg_108);
+               vsts(vreg_x_max_f32_b, (__ubuf__ float *)(exp_max_Ptr + 64), 0, NORM_B16, preg_108);
+          }
+          else
+          {
+               vmax(max_0a, max_0a, max_1a, preg_108);
+               vmax(max_0b, max_0b, max_1b, preg_108);
+               vmax(max_2a, max_2a, max_3a, preg_108);
+               vmax(max_2b, max_2b, max_3b, preg_108);
+               vmax(max_0a, max_0a, max_2a, preg_108);
+               vmax(max_0b, max_0b, max_2b, preg_108);
+
+               vmuls(max_0a, max_0a, scale, preg_108);
+               vmuls(max_0b, max_0b, scale, preg_108);
+               vsts(max_0a, (__ubuf__ float *)new_global_max_Ptr, 0, NORM_B16, preg_108);
+               vsts(max_0b, (__ubuf__ float *)new_global_max_Ptr + 64, 0, NORM_B16, preg_108);
+          }
+
+        mem_bar(VST_VLD);
+
+        vdup(vreg_x_sum_even, 0, preg_134, MODE_ZEROING);
+        vdup(vreg_x_sum_odd, 0, preg_134, MODE_ZEROING);
+        vdup(vreg_x_sum_even_1, 0, preg_134, MODE_ZEROING);
+        vdup(vreg_x_sum_odd_1, 0, preg_134, MODE_ZEROING);
+        if (init) {
+            vlds(vreg_x_max_f32_a, vreg_x_max_f32_b, ((__ubuf__ float *)new_global_max_Ptr), 0, DINTLV_B32);
+        } else {
+            vlds(vreg_x_max_f32_a, vreg_x_max_f32_b, ((__ubuf__ float *)local_max_Ptr), 0, DINTLV_B32);
+        }
+
+        for (uint16_t i0 = 0; i0 < uint16_t(ubN / 2) ; ++i0) {
+            vld(vreg_x_f32_a, vreg_x_f32_b, ((__ubuf__ float *) input_x_Ptr), vag_b32(128), DINTLV_B32);
+            vld(vreg_x_f32_1_a, vreg_x_f32_1_b, ((__ubuf__ float *) input_x_Ptr + ubN*ubM/2), vag_b32(128), DINTLV_B32);
+
+            vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
+            vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
+            vexpdif(vreg_x_exp_even, vreg_x_f32_a, vreg_x_max_f32_a, preg_134, PART_EVEN);
+            vexpdif(vreg_x_exp_odd, vreg_x_f32_b, vreg_x_max_f32_b, preg_135, PART_EVEN);
+
+            vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
+            vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
+            vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, vreg_x_max_f32_a, preg_134, PART_EVEN);
+            vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, vreg_x_max_f32_b, preg_135, PART_EVEN);
+
+            vmulscvt(vreg_x_exp_even_f16, vreg_x_exp_even, 1.0f, preg_135, PART_EVEN);
+            vmulscvt(vreg_x_exp_odd_f16, vreg_x_exp_odd, 1.0f, preg_135, PART_ODD);
+            vor(vreg_x_exp_f16, vreg_x_exp_even_f16, vreg_x_exp_odd_f16, preg_134);
+
+            vmulscvt(vreg_x_exp_even_f16_1, vreg_x_exp_even_1, 1.0f, preg_135, PART_EVEN);
+            vmulscvt(vreg_x_exp_odd_f16_1, vreg_x_exp_odd_1, 1.0f, preg_135, PART_ODD);
+            vor(vreg_x_exp_f16_1, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1, preg_134);
+
+            // ND output
+            vsts(vreg_x_exp_f16, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_108);
+            vsts(vreg_x_exp_f16_1, ((__ubuf__ half *) x_exp_Ptr + ubN*ubM/2 + i0*128), 0, NORM_B16, preg_108); 
+
+            // NZ+1 output, not faster than direct ND output
+            // vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) nz_buffer_Ptr), 0x410001, preg_108, POST_UPDATE);
+            // vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) nz_buffer_Ptr2), 0x410001, preg_108, POST_UPDATE);
+        
+            vadd(vreg_x_sum_even, vreg_x_exp_even, vreg_x_sum_even, preg_134, MODE_ZEROING);
+            vadd(vreg_x_sum_odd, vreg_x_exp_odd, vreg_x_sum_odd, preg_134, MODE_ZEROING);
+            vadd(vreg_x_sum_even_1, vreg_x_exp_even_1, vreg_x_sum_even_1, preg_134, MODE_ZEROING);
+            vadd(vreg_x_sum_odd_1, vreg_x_exp_odd_1, vreg_x_sum_odd_1, preg_134, MODE_ZEROING);
+          }
+
+        vadd(vreg_x_sum2, vreg_x_sum_even, vreg_x_sum_even_1, preg_134, MODE_ZEROING);
+        vadd(vreg_x_sum3, vreg_x_sum_odd, vreg_x_sum_odd_1, preg_134, MODE_ZEROING);
+        vintlv(vreg_x_sum0, vreg_x_sum1, vreg_x_sum2, vreg_x_sum3);
+        vsts(vreg_x_sum0, ((__ubuf__ float *&) local_sum_Ptr), 0, NORM_B32, preg_134);
+        vsts(vreg_x_sum1, ((__ubuf__ float *&) local_sum_Ptr + 64), 0, NORM_B32, preg_134);
+        if (init){
+            vsts(vreg_x_sum0, ((__ubuf__ float *&) new_global_sum_Ptr), 0, NORM_B32, preg_134);
+            vsts(vreg_x_sum1, ((__ubuf__ float *&) new_global_sum_Ptr + 64), 0, NORM_B32, preg_134);
+        }
+
+        if (not init){
+            mem_bar(VST_VLD);
+            vector_f32 vreg_max0;
+            vector_f32 vreg_max1;
+            vector_f32 vreg_exp_max;
+            vector_f32 vreg_exp;
+            vector_f32 vreg_l0;
+            vector_f32 vreg_l1;
+            for (uint16_t ii = 0; ii < ubM/64; ++ii) {
+               vlds(vreg_exp_max, ((__ubuf__ float *) exp_max_Ptr + ii*64), 0, NORM);
+               vlds(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr + ii*64), 0, NORM);
+               vlds(vreg_l1, ((__ubuf__ float *) local_sum_Ptr + ii*64), 0, NORM);
+               vmul(vreg_l0, vreg_exp_max, vreg_l0, preg_134, MODE_ZEROING); // exp_max * insum
+               vadd(vreg_l0, vreg_l0, vreg_l1, preg_134, MODE_ZEROING); // + x_sum
+               vsts(vreg_l0, ((__ubuf__ float *) new_global_sum_Ptr + ii*64), 0, NORM_B32, preg_134);
+            }
+        }
+    }
+}
+
 // general ND
 template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x,

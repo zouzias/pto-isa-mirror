@@ -99,6 +99,7 @@ __global__ AICORE void runSoftmax_dn_fusion( __gm__ aclFloat16 __out__ *x_exp,
     TSOFTMAX_DN_FUSION<headSize, ReduceTile_F, TileData_H, TileData_F, init, CAUSAL_MASK>(dst5Tile, src0Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
     // TSOFTMAX_DN_FUSION2<headSize, ReduceTile_F, TileData_H, TileData_F, init, CAUSAL_MASK>(dst5Tile, src0Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
     // TSOFTMAX_DN_FUSION3<headSize, ReduceTile_F, TileData_H, TileData_F, init, CAUSAL_MASK>(dst5Tile, src0Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
+    // TSOFTMAX_DN_FUSION4<headSize, ReduceTile_F, TileData_H, TileData_F, init, CAUSAL_MASK>(dst5Tile, src0Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
