@@ -509,6 +509,15 @@ TEST_F(TReduceCcuTest, Float_1024_Sum_4Ranks)
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE(RunReduceCcu(1024, 0));
 }
+// Boundary test: N=8 first triggers hcomm multi-SQE auto-fragmentation
+// for Reduce (3*8+1 = 25 args > CCU_SQE_ARGS_LEN=13 → 2 SQEs).  This is
+// the highest N reachable on the current a5 8-rank hardware; N=12/16
+// below require larger topologies.
+TEST_F(TReduceCcuTest, Float_1024_Sum_8Ranks)
+{
+    SKIP_IF_RANKS_LT(8);
+    ASSERT_TRUE(RunReduceCcu(1024, 0));
+}
 // Boundary test: N=12 exercises Load-slot usage (3*12+1 = 37) below the
 // kCcuMeshMaxRanks=16 ceiling — guards against off-by-one bugs in the
 // per-rank Load packing without hitting the ceiling itself.

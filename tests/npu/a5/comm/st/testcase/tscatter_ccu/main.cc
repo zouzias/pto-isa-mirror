@@ -451,6 +451,17 @@ TEST_F(TScatterCcuTest, Root1_Float_1024)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunScatterCcu(1024, 1));
 }
+// Boundary test: N=8 is the first rank count that triggers hcomm's
+// multi-SQE auto-fragmentation for Scatter (2*8+3 = 19 args, exceeds the
+// CCU_SQE_ARGS_LEN=13 per-SQE limit → ships as 2 SQEs).  Also stresses
+// the rolling-add chain with 7 cumulative `currentSlice_ += sliceStep_`
+// iterations, vs 3 at N=4.  This is the highest N reachable on the
+// current a5 8-rank hardware; N=12/16 below require larger topologies.
+TEST_F(TScatterCcuTest, Float_1024_8Ranks)
+{
+    SKIP_IF_RANKS_LT(8);
+    ASSERT_TRUE(RunScatterCcu(1024, 0));
+}
 // Boundary test: N=12 with the rolling-add packing (2*12+3 = 27 Loads),
 // below the kCcuMeshMaxRanks=16 ceiling.  Also exercises the rolling
 // Address arithmetic with a substantial loop count — catches both the

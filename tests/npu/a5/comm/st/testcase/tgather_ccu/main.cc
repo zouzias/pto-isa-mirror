@@ -458,6 +458,15 @@ TEST_F(TGatherCcuTest, Root1_Float_1024)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunGatherCcu(1024, 1));
 }
+// Boundary test: N=8 first triggers hcomm multi-SQE auto-fragmentation
+// for Gather (3*8+1 = 25 args > CCU_SQE_ARGS_LEN=13 → 2 SQEs).  This is
+// the highest N reachable on the current a5 8-rank hardware; N=12/16
+// below require larger topologies.
+TEST_F(TGatherCcuTest, Float_1024_8Ranks)
+{
+    SKIP_IF_RANKS_LT(8);
+    ASSERT_TRUE(RunGatherCcu(1024, 0));
+}
 // Boundary test: N=12 with full-mesh packing (3*12+1 = 37 Loads), below the
 // kCcuMeshMaxRanks=16 ceiling — guards against off-by-one in peer Load order.
 TEST_F(TGatherCcuTest, Float_1024_12Ranks)

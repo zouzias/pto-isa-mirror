@@ -445,6 +445,15 @@ TEST_F(TBroadcastCcuTest, Float_1024_Root1)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunBroadcastCcu(1024, 1));
 }
+// Boundary test: N=8 first triggers hcomm multi-SQE auto-fragmentation
+// for Broadcast (2*8+2 = 18 args > CCU_SQE_ARGS_LEN=13 → 2 SQEs).  This
+// is the highest N reachable on the current a5 8-rank hardware; N=12/16
+// below require larger topologies.
+TEST_F(TBroadcastCcuTest, Float_1024_Root0_8Ranks)
+{
+    SKIP_IF_RANKS_LT(8);
+    ASSERT_TRUE(RunBroadcastCcu(1024, 0));
+}
 // Boundary test: N=12 with the write-only packing (2*12+2 = 26 Loads); below
 // kCcuMeshMaxRanks=16, catches off-by-one in PackPeerArgsWriteOnly / Load order.
 TEST_F(TBroadcastCcuTest, Float_1024_Root0_12Ranks)
