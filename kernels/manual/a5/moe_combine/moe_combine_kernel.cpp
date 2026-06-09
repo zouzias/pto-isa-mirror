@@ -21,7 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "kernel_launchers.h"
 
 using moe_combine::CombineRouteMetaLayout;
-using moe_combine::HcclDeviceContext;
+using moe_combine::CommDeviceContext;
 using moe_combine::MoeCombineShape;
 using moe_combine::PeerWindowLayout;
 using moe_combine::WorkspaceLayout;
@@ -163,14 +163,14 @@ AICORE inline LocalPeerWindowView MakeLocalPeerWindowView(GM_ADDR peerWindowBase
 }
 
 template <typename T>
-AICORE inline __gm__ T *RemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, uint32_t peerRank)
+AICORE inline __gm__ T *RemotePtr(__gm__ CommDeviceContext *ctx, __gm__ T *localPtr, uint32_t peerRank)
 {
     uint64_t localBase = ctx->windowsIn[ctx->rankId];
     uint64_t offset = reinterpret_cast<uint64_t>(localPtr) - localBase;
     return reinterpret_cast<__gm__ T *>(ctx->windowsIn[peerRank] + offset);
 }
 
-AICORE inline LocalPeerWindowView MakeRemotePeerWindowView(__gm__ HcclDeviceContext *ctx, GM_ADDR localPeerWindowBase,
+AICORE inline LocalPeerWindowView MakeRemotePeerWindowView(__gm__ CommDeviceContext *ctx, GM_ADDR localPeerWindowBase,
                                                            uint32_t peerRank, const PeerWindowLayout &layout)
 {
     GM_ADDR remoteBase = RemotePtr<uint8_t>(ctx, localPeerWindowBase, peerRank);
@@ -299,7 +299,7 @@ struct ReturnContext {
     MoeCombineShape shape;
     LocalRouteMetaView routeMeta;
     LocalPeerWindowView localPeer;
-    __gm__ HcclDeviceContext *ctx;
+    __gm__ CommDeviceContext *ctx;
     GM_ADDR peerWindow;
     __gm__ half *localExpertOutput;
     uint32_t myRank;
@@ -460,7 +460,7 @@ AICORE inline void NotifyCombineOwners(const ReturnContext &ctx, uint32_t blockI
 
 AICORE inline void ReturnExpertRowsToOwners(MoeCombineShape shape, LocalWorkspaceView workspaceView,
                                             LocalRouteMetaView routeMeta, LocalPeerWindowView localPeer,
-                                            __gm__ HcclDeviceContext *ctx, GM_ADDR peerWindow, GM_ADDR expertOutput,
+                                            __gm__ CommDeviceContext *ctx, GM_ADDR peerWindow, GM_ADDR expertOutput,
                                             uint32_t myRank, uint32_t blockId, uint32_t blockNum,
                                             const PeerWindowLayout &peerWindowLayout)
 {
@@ -624,7 +624,7 @@ __global__ AICORE void MoeCombineKernel(MoeCombineShape shape, uint32_t myRank, 
     LocalWorkspaceView workspaceView = MakeLocalWorkspaceView(workspace, workspaceLayout);
     LocalRouteMetaView localRouteMeta = MakeLocalRouteMetaView(routeMeta, routeMetaLayout);
     LocalPeerWindowView localPeer = MakeLocalPeerWindowView(peerWindow, peerWindowLayout);
-    __gm__ HcclDeviceContext *ctx = reinterpret_cast<__gm__ HcclDeviceContext *>(hcclCtx);
+    __gm__ CommDeviceContext *ctx = reinterpret_cast<__gm__ CommDeviceContext *>(hcclCtx);
     uint32_t blockId = static_cast<uint32_t>(get_block_idx());
     uint32_t blockNum = shape.aivBlocks == 0 ? 1 : shape.aivBlocks;
     if (shape.ep == 0 || shape.m == 0 || shape.k == 0 || shape.topK == 0 || shape.expertPerRank == 0 ||
