@@ -88,29 +88,51 @@ python3 scripts/plot_bw_compare.py
 ### Prerequisites
 
 - CANN Toolkit >= 8.5.0 (TGET synchronous instruction); >= 9.0.0 (TGET_ASYNC asynchronous instruction)
-- MPI >= 3.2.1 (e.g. OpenMPI)
+- **MPICH** (recommended; the host side loads `libmpi.so` via `comm_mpi.h` with MPICH-compatible communicator handles)
 - 2 or more Ascend NPUs
+
+#### MPI installation (MPICH recommended)
+
+```bash
+# Ubuntu / Debian
+sudo apt install mpich libmpich-dev
+
+# Or install under $HOME without root — see tests/README.md "Build MPICH from Source"
+export PATH=$HOME/mpich/bin:$PATH
+export MPI_LIB_PATH=$HOME/mpich/lib/libmpi.so
+```
+
+`run.sh` searches common MPICH install paths and sets `MPI_LIB_PATH`. Override with `MPI_SEARCH_DIRS` (space-separated list of `bin/` directories).
+
+> **Note**: This example does **not** support OpenMPI. `comm_mpi.h` hardcodes MPICH `MPI_COMM_WORLD` handle values; OpenMPI uses a different communicator representation and runtime MPI calls may fail. `--allow-run-as-root` is OpenMPI-specific and is not supported by MPICH.
 
 ### Steps
 
 1. Configure your Ascend CANN environment:
 
 ```bash
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source ${ASCEND_HOME_PATH}/bin/setenv.bash
+# or source <workspace>/set_env_new.sh
 ```
 
-2. Run the example (2-NPU by default):
+2. Run the example (2-NPU by default). `run.sh` switches to its own directory automatically; invoke it from the repo root or from this directory:
 
 ```bash
+# Option A: cd into this example first
 cd ${git_clone_path}/kernels/manual/a2a3/tget_bandwidth
-bash run.sh -r npu -v Ascend910B1
+bash run.sh -r npu -v a3
+
+# Option B: from the pto-isa-main repo root
+bash kernels/manual/a2a3/tget_bandwidth/run.sh -r npu -v a3
 ```
 
 Use `-n` to specify the number of ranks (default is 2):
 
 ```bash
-bash run.sh -r npu -v Ascend910B1 -n 2
+bash run.sh -r npu -v a3 -n 2
 ```
+
+`-v a3` matches the ST test scripts and maps internally to `SOC_VERSION=Ascend910B1` for the A2/A3 platform.
 
 On success, the output looks like:
 
@@ -127,4 +149,5 @@ test success
 
 | Date       | Change |
 | ---------- | ------ |
+| 2026-06-01 | Align docs and `run.sh` with MPICH; remove OpenMPI-only `mpirun` flag |
 | 2026-04-02 | Migrated from ST test to standalone performance example |

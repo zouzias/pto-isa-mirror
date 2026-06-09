@@ -144,17 +144,15 @@ void ExpectMxFp8Result(SrcTile &src, DstTile &dst, ExpTile &exp, MaxTile &max, S
             const int flatGroupIdx = row * (src.GetValidCol() / 32) + group;
             EXPECT_EQ(exp.data()[flatGroupIdx], expectedExp);
             EXPECT_FLOAT_EQ(max.data()[flatGroupIdx], maxAbs);
+            if (std::isnan(expectedScaling)) {
+                EXPECT_TRUE(std::isnan(scaling.data()[flatGroupIdx]));
+            } else {
+                EXPECT_FLOAT_EQ(scaling.data()[flatGroupIdx], expectedScaling);
+            }
             for (int inner = 0; inner < 32; ++inner) {
                 const int col = group * 32 + inner;
-                const float actualScaling =
-                    static_cast<float>(scaling.data()[GetTileElementOffset<ScalingTile>(row, col)]);
-                if (std::isnan(expectedScaling)) {
-                    EXPECT_TRUE(std::isnan(actualScaling));
-                } else {
-                    EXPECT_FLOAT_EQ(actualScaling, expectedScaling);
-                }
                 const float value = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
-                const uint8_t expectedByte = EncodeE4M3Fn(value * expectedScaling);
+                const uint8_t expectedByte = pto::cpu_quant::EncodeE4M3Fn<scaleAlg>(value * expectedScaling);
                 EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
             }
         }
@@ -281,8 +279,8 @@ void TestFP8ExactMatch()
             cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::OCP>(maxAbs, expectedExp);
         EXPECT_EQ(expTile.data()[row], expectedExp);
         EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
+        EXPECT_FLOAT_EQ(scaling.data()[row], expectedScaling);
         for (int col = 0; col < 32; ++col) {
-            EXPECT_FLOAT_EQ(scaling.data()[GetTileElementOffset<ScaleTile>(row, col)], expectedScaling);
             const uint8_t expectedByte =
                 EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * expectedScaling);
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
@@ -344,9 +342,9 @@ TEST(TQuantCpuSimTest, MxFp8NvNdMatchesDescaleRceil)
         const float expectedScaling =
             cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::NV>(maxAbs, expectedExp);
         EXPECT_EQ(exp.data()[row], expectedExp);
+        EXPECT_FLOAT_EQ(scaling.data()[row], expectedScaling);
         EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
         for (int col = 0; col < 32; ++col) {
-            EXPECT_FLOAT_EQ(scaling.data()[GetTileElementOffset<SrcTile>(row, col)], expectedScaling);
             const uint8_t expectedByte =
                 EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * expectedScaling);
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
@@ -802,7 +800,7 @@ void TestFp8NzReordersExponentsExactly()
     }
     for (int row = 0; row < 16; ++row) {
         for (int col = 0; col < 64; ++col) {
-            const float scale = scaling.data()[GetTileElementOffset<ScaleTile>(row, col)];
+            const float scale = scaling.data()[row];
             const uint8_t expectedByte = EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * scale);
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
         }

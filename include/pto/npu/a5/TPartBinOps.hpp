@@ -16,133 +16,117 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename T>
-struct Padding {
-    using Type = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t,
-                                    std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint8_t>>;
-
-    PTO_INTERNAL static constexpr Type GetPaddingMin()
-    {
-        if constexpr (std::is_same_v<T, float>) {
-            return (Type)0xff800000UL;
-        } else if constexpr (std::is_same_v<T, half>) {
-            return (Type)0xfc00UL;
-        } else if constexpr (std::is_same_v<T, bfloat16_t>) {
-            return (Type)0xff80UL;
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            return (Type)0x80000000UL;
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            return (Type)0x8000UL;
-        } else if constexpr (std::is_same_v<T, int8_t>) {
-            return (Type)0x80UL;
-        } else {
-            return (Type)0;
-        }
-    }
-
-    PTO_INTERNAL static constexpr Type GetPaddingMax()
-    {
-        if constexpr (std::is_same_v<T, float>) {
-            return (Type)0x7f800000UL;
-        } else if constexpr (std::is_same_v<T, half>) {
-            return (Type)0x7c00UL;
-        } else if constexpr (std::is_same_v<T, bfloat16_t>) {
-            return (Type)0x7f80UL;
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            return (Type)0x7fffffffUL;
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            return (Type)0x7fffUL;
-        } else if constexpr (std::is_same_v<T, int8_t>) {
-            return (Type)0x7fUL;
-        } else {
-            return (Type)(~(Type)0);
-        }
-    }
-
-    static constexpr Type Null = (Type)0;
-    static constexpr Type Zero = (Type)0;
-    static constexpr Type Min = GetPaddingMin();
-    static constexpr Type Max = GetPaddingMax();
-};
-
-template <typename Op, typename DstTileData, typename Src0TileData, typename Src1TileData, unsigned elementsPerRepeat,
-          unsigned src0Stride, unsigned src1Stride, unsigned dstStride>
-__tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
-                                    typename Src0TileData::TileDType __in__ src0,
-                                    typename Src1TileData::TileDType __in__ src1, uint32_t Src0validRow,
-                                    uint32_t Src0validCol, uint32_t Src1validRow, uint32_t Src1validCol,
-                                    uint32_t DstvalidRow, uint32_t DstvalidCol)
+template <typename T, unsigned dstStride, unsigned elementsPerRepeat>
+PTO_INTERNAL void TPartProcRow(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned srcStride, unsigned row,
+                               uint32_t &dstSReg, uint32_t repeatStart, uint32_t repeatEnd)
 {
-    using T = typename DstTileData::DType;
+    constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    MaskReg dstMask;
+    RegTensor<T> dstReg;
+    for (uint16_t i = (uint16_t)repeatStart; i < (uint16_t)repeatEnd; i++) {
+        dstMask = CreatePredicate<T>(dstSReg);
+        vlds(dstReg, srcPtr, row * srcStride + i * elementsPerRepeat, NORM);
+        vsts(dstReg, dstPtr, row * dstStride + i * elementsPerRepeat, distValue, dstMask);
+    }
+}
+
+template <typename Op, typename T, unsigned dstStride, unsigned src0Stride, unsigned src1Stride,
+          unsigned elementsPerRepeat>
+PTO_INTERNAL void TPartProcRow(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T *src1Ptr, __ubuf__ T *srcBigPtr,
+                               unsigned srcBigStride, unsigned row, uint32_t &dstSReg, uint32_t &srcSReg,
+                               uint32_t repeatEnd)
+{
+    constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    MaskReg dstMask, srcMask;
+    RegTensor<T> dstReg, tmpReg, src0Reg, src1Reg;
+    for (uint16_t j = 0; j < (uint16_t)repeatEnd; j++) {
+        dstMask = CreatePredicate<T>(dstSReg);
+        srcMask = CreatePredicate<T>(srcSReg);
+        vlds(src0Reg, src0Ptr, row * src0Stride + j * elementsPerRepeat, NORM);
+        vlds(src1Reg, src1Ptr, row * src1Stride + j * elementsPerRepeat, NORM);
+        Op::BinInstr(tmpReg, src0Reg, src1Reg, srcMask);
+        vlds(dstReg, srcBigPtr, row * srcBigStride + j * elementsPerRepeat, NORM);
+        vmov(dstReg, tmpReg, srcMask, MODE_MERGING);
+        vsts(dstReg, dstPtr, row * dstStride + j * elementsPerRepeat, distValue, dstMask);
+    }
+}
+
+template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
+          unsigned blockSizeElem, unsigned dstRowStride, unsigned src0RowStride, unsigned src1RowStride>
+__tf__ PTO_INTERNAL void TPartOp(typename TileDataDst::TileDType __out__ dst,
+                                 typename TileDataSrc0::TileDType __in__ src0,
+                                 typename TileDataSrc1::TileDType __in__ src1, unsigned src0ValidRow,
+                                 unsigned src0ValidCol, unsigned src1ValidRow, unsigned src1ValidCol,
+                                 unsigned dstValidRow, unsigned dstValidCol, VFImplKind version)
+{
+    using T = typename TileDataDst::DType;
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    if (dstValidRow == src0ValidRow && dstValidRow == src1ValidRow && dstValidCol == src0ValidCol &&
+        dstValidCol == src1ValidCol) {
+        BinaryInstr<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
+            dstPtr, src0Ptr, src1Ptr, dstValidRow, dstValidCol, version);
+        return;
+    }
+    bool src1Bigger = (src0ValidRow < src1ValidRow || src0ValidCol < src1ValidCol);
+    __ubuf__ T *srcBigPtr = src1Bigger ? src1Ptr : src0Ptr;
+    unsigned srcBigStride = src1Bigger ? src1RowStride : src0RowStride;
+    unsigned srcSmallValidRow = min(src0ValidRow, src1ValidRow);
+    unsigned srcSmallValidCol = min(src0ValidCol, src1ValidCol);
+    uint32_t repeatSrcSmall = CeilDivision(srcSmallValidCol, elementsPerRepeat);
+    uint32_t repeatDst = CeilDivision(dstValidCol, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        constexpr auto distValue =
-            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-        MaskReg dstMask, src0Mask, src1Mask;
-        RegTensor<T> src0Reg;
-        RegTensor<T> src1Reg;
-        RegTensor<T> dstReg;
-        uint16_t repeatTimes = CeilDivision(DstvalidCol, elementsPerRepeat);
-        for (uint16_t i = 0; i < (uint16_t)DstvalidRow; ++i) {
-            uint32_t dstSReg = DstvalidCol;
-            uint32_t src0SReg = static_cast<uint32_t>(i < Src0validRow) * Src0validCol;
-            uint32_t src1SReg = static_cast<uint32_t>(i < Src1validRow) * Src1validCol;
-            for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                dstMask = CreatePredicate<T>(dstSReg);
-                src0Mask = CreatePredicate<T>(src0SReg);
-                src1Mask = CreatePredicate<T>(src1SReg);
-                vdup((RegTensor<typename Padding<T>::Type> &)dstReg, Op::PadVal, dstMask, MODE_ZEROING);
-                vlds(src0Reg, src0Ptr + i * src0Stride, j * elementsPerRepeat, NORM);
-                vlds(src1Reg, src1Ptr + i * src1Stride, j * elementsPerRepeat, NORM);
-                Op::BinInstr(dstReg, dstReg, src0Reg, src0Mask);
-                Op::BinInstr(dstReg, dstReg, src1Reg, src1Mask);
-                vsts(dstReg, dstPtr + i * dstStride, j * elementsPerRepeat, distValue, dstMask);
-            }
+        for (uint16_t i = 0; i < (uint16_t)srcSmallValidRow; i++) {
+            uint32_t dstSReg = dstValidCol;
+            uint32_t srcSReg = srcSmallValidCol;
+            TPartProcRow<Op, T, dstRowStride, src0RowStride, src1RowStride, elementsPerRepeat>(
+                dstPtr, src0Ptr, src1Ptr, srcBigPtr, srcBigStride, i, dstSReg, srcSReg, repeatSrcSmall);
+            TPartProcRow<T, dstRowStride, elementsPerRepeat>(dstPtr, srcBigPtr, srcBigStride, i, dstSReg,
+                                                             repeatSrcSmall, repeatDst);
+        }
+        for (uint16_t i = (uint16_t)srcSmallValidRow; i < (uint16_t)dstValidRow; i++) {
+            uint32_t dstSReg = dstValidCol;
+            TPartProcRow<T, dstRowStride, elementsPerRepeat>(dstPtr, srcBigPtr, srcBigStride, i, dstSReg, 0, repeatDst);
         }
     }
 }
 
-template <typename Op, typename DstTileData, typename Src0TileData, typename Src1TileData>
-PTO_INTERNAL void TPartMasterImpl(DstTileData &dst, Src0TileData &src0, Src1TileData &src1, VFImplKind version)
+template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1,
+                               VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using T = typename DstTileData::DType;
-    using S0 = typename Src0TileData::DType;
-    using S1 = typename Src1TileData::DType;
-
-    static_assert(std::is_same_v<T, S0> && std::is_same_v<T, S1>,
-                  "Fix: TPARTMAX/MIN Input and output types should match");
-
-    static_assert(std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, uint16_t> ||
-                      std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
-                      std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, bfloat16_t>,
-                  "Fix: TPARTMAX/MIN Invalid data type.");
-
+    using T = typename TileDataDst::DType;
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-
-    constexpr unsigned DstRowStride = DstTileData::RowStride;
-    constexpr unsigned Src0RowStride = Src0TileData::RowStride;
-    constexpr unsigned Src1RowStride = Src1TileData::RowStride;
-
     unsigned src0ValidRow = src0.GetValidRow();
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
-
-    // dst has to be larger than or equal to both sources
-    bool condDstgeSrc = (src1ValidRow <= dstValidRow && src1ValidCol <= dstValidCol) &&
-                        (src0ValidRow <= dstValidRow && src0ValidCol <= dstValidCol);
-
-    if (condDstgeSrc) { // src0 <= dst && src1 <= dst
-        TCopyPadOp<Op, DstTileData, Src0TileData, Src1TileData, elementsPerRepeat, Src0RowStride, Src1RowStride,
-                   DstRowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow,
-                                 src1ValidCol, dstValidRow, dstValidCol);
-    } // other conditions not supported
+    constexpr unsigned dstRowStride = TileDataDst::RowStride;
+    constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
+    constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
+    PTO_ASSERT(
+        ((dstValidRow == src0ValidRow && dstValidCol == src0ValidCol) ||
+         (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol)) &&
+            max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol,
+        "Fix: TPARTADD/MUL At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
+    if (dstValidRow == 0 || dstValidCol == 0) {
+        return;
+    } else if (src0ValidRow == 0 || src0ValidCol == 0) {
+        TMOV_IMPL(dst, src1);
+    } else if (src1ValidRow == 0 || src1ValidCol == 0) {
+        TMOV_IMPL(dst, src0);
+    } else {
+        TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
+                src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
+                                              src1ValidRow, src1ValidCol, dstValidRow, dstValidCol, version);
+    }
 }
 
 } // namespace pto

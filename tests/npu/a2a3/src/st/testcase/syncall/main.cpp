@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include "acl/acl.h"
 #include "runtime/rt.h"
+#include "syncall_core_config.hpp"
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdio>
@@ -36,14 +37,16 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-void LaunchSyncAll(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
-void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
-void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
-void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
-void LaunchSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
-void LaunchSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
-void LaunchSoftSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
-void LaunchSoftSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
+void LaunchSyncAll(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t totalBlocks, void *stream);
+void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream);
+void LaunchHardSyncAllAIC(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t launchBlocks, void *stream);
+void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream);
+void LaunchSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t aicBlocks, void *stream);
+void LaunchSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t aicBlocks, void *stream);
+void LaunchSoftSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t aicBlocks,
+                            int32_t totalParticipants, void *stream);
+void LaunchSoftSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t aicBlocks,
+                            int32_t totalParticipants, void *stream);
 
 #define EXPECT_ACL_OK(expr)                                             \
     do {                                                                \
@@ -57,12 +60,12 @@ void LaunchSoftSyncAllMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t
         ASSERT_EQ(ret, 0) << #expr << " failed, ret=" << ret; \
     } while (0)
 
-template <size_t blockCount, bool withWorkspace, typename LaunchFn>
-void RunMixCase(LaunchFn launchFn, const char *label)
+template <bool withWorkspace, typename LaunchFn>
+void RunMixCase(size_t blockCount, LaunchFn launchFn, const char *label)
 {
     constexpr size_t int32PerCacheLine = 8;
-    constexpr size_t elementCount = blockCount * int32PerCacheLine;
-    constexpr size_t byteSize = elementCount * sizeof(int32_t);
+    const size_t elementCount = blockCount * int32PerCacheLine;
+    const size_t byteSize = elementCount * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
@@ -142,15 +145,15 @@ void RunMixCase(LaunchFn launchFn, const char *label)
 
 TEST_F(SYNCALLTest, case_aiv_only_all_blocks)
 {
-    constexpr size_t blockCount = 48;
-    constexpr size_t int32PerCacheLine = 8;
-    constexpr size_t elementCount = blockCount * int32PerCacheLine;
-    constexpr size_t byteSize = elementCount * sizeof(int32_t);
-
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    const size_t blockCount = static_cast<size_t>(syncall_cfg::GetCoreConfig().aiv);
+    constexpr size_t int32PerCacheLine = 8;
+    const size_t elementCount = blockCount * int32PerCacheLine;
+    const size_t byteSize = elementCount * sizeof(int32_t);
 
     int32_t *outHost = nullptr;
     int32_t *flagsHost = nullptr;
@@ -172,7 +175,7 @@ TEST_F(SYNCALLTest, case_aiv_only_all_blocks)
     EXPECT_RT_OK(rtGetC2cCtrlAddr(&ffts, &fftsLen));
     ASSERT_NE(ffts, 0UL);
 
-    LaunchSyncAll(reinterpret_cast<uint8_t *>(ffts), outDevice, flagsDevice, stream);
+    LaunchSyncAll(reinterpret_cast<uint8_t *>(ffts), outDevice, flagsDevice, static_cast<int32_t>(blockCount), stream);
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
     EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
     EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -210,15 +213,15 @@ TEST_F(SYNCALLTest, case_aiv_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
 {
-    constexpr size_t blockCount = 48;
-    constexpr size_t int32PerCacheLine = 8;
-    constexpr size_t elementCount = blockCount * int32PerCacheLine;
-    constexpr size_t byteSize = elementCount * sizeof(int32_t);
-
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    const size_t blockCount = static_cast<size_t>(syncall_cfg::GetCoreConfig().aiv);
+    constexpr size_t int32PerCacheLine = 8;
+    const size_t elementCount = blockCount * int32PerCacheLine;
+    const size_t byteSize = elementCount * sizeof(int32_t);
 
     int32_t *outHost = nullptr;
     int32_t *flagsHost = nullptr;
@@ -238,7 +241,7 @@ TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchSoftSyncAll(outDevice, flagsDevice, syncWorkspaceDevice, stream);
+    LaunchSoftSyncAll(outDevice, flagsDevice, syncWorkspaceDevice, static_cast<int32_t>(blockCount), stream);
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
     EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
     EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -277,35 +280,63 @@ TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_mix_1_1_all_blocks)
 {
-    RunMixCase<48, false>(LaunchSyncAllMix11, "mix_1_1");
+    const int32_t aicBlocks = syncall_cfg::GetCoreConfig().aic;
+    const int32_t total = aicBlocks * 2; // 1 cube + 1 vector per cube
+    RunMixCase<false>(
+        static_cast<size_t>(total),
+        [aicBlocks](uint8_t *ffts, int32_t *out, int32_t *flags, void *stream) {
+            LaunchSyncAllMix11(ffts, out, flags, aicBlocks, stream);
+        },
+        "mix_1_1");
 }
 
 TEST_F(SYNCALLTest, case_mix_1_2_all_blocks)
 {
-    RunMixCase<72, false>(LaunchSyncAllMix12, "mix_1_2");
+    const int32_t aicBlocks = syncall_cfg::GetCoreConfig().aic;
+    const int32_t total = aicBlocks * 3; // 1 cube + 2 vectors per cube
+    RunMixCase<false>(
+        static_cast<size_t>(total),
+        [aicBlocks](uint8_t *ffts, int32_t *out, int32_t *flags, void *stream) {
+            LaunchSyncAllMix12(ffts, out, flags, aicBlocks, stream);
+        },
+        "mix_1_2");
 }
 
 TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
 {
-    RunMixCase<48, true>(LaunchSoftSyncAllMix11, "soft_mix_1_1");
+    const int32_t aicBlocks = syncall_cfg::GetCoreConfig().aic;
+    const int32_t total = aicBlocks * 2;
+    RunMixCase<true>(
+        static_cast<size_t>(total),
+        [aicBlocks, total](uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *ws, void *stream) {
+            LaunchSoftSyncAllMix11(ffts, out, flags, ws, aicBlocks, total, stream);
+        },
+        "soft_mix_1_1");
 }
 
 TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 {
-    RunMixCase<72, true>(LaunchSoftSyncAllMix12, "soft_mix_1_2");
+    const int32_t aicBlocks = syncall_cfg::GetCoreConfig().aic;
+    const int32_t total = aicBlocks * 3;
+    RunMixCase<true>(
+        static_cast<size_t>(total),
+        [aicBlocks, total](uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *ws, void *stream) {
+            LaunchSoftSyncAllMix12(ffts, out, flags, ws, aicBlocks, total, stream);
+        },
+        "soft_mix_1_2");
 }
 
 TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
 {
-    constexpr size_t blockCount = 24;
-    constexpr size_t int32PerCacheLine = 8;
-    constexpr size_t elementCount = blockCount * int32PerCacheLine;
-    constexpr size_t byteSize = elementCount * sizeof(int32_t);
-
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    const size_t blockCount = static_cast<size_t>(syncall_cfg::GetCoreConfig().aic);
+    constexpr size_t int32PerCacheLine = 8;
+    const size_t elementCount = blockCount * int32PerCacheLine;
+    const size_t byteSize = elementCount * sizeof(int32_t);
 
     int32_t *outHost = nullptr;
     int32_t *flagsHost = nullptr;
@@ -327,7 +358,8 @@ TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
     EXPECT_RT_OK(rtGetC2cCtrlAddr(&ffts, &fftsLen));
     ASSERT_NE(ffts, 0UL);
 
-    LaunchHardSyncAllAIC(reinterpret_cast<uint8_t *>(ffts), outDevice, flagsDevice, stream);
+    LaunchHardSyncAllAIC(reinterpret_cast<uint8_t *>(ffts), outDevice, flagsDevice, static_cast<int32_t>(blockCount),
+                         stream);
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
     EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
     EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
@@ -365,15 +397,15 @@ TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
 
 TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
 {
-    constexpr size_t blockCount = 24;
-    constexpr size_t int32PerCacheLine = 8;
-    constexpr size_t elementCount = blockCount * int32PerCacheLine;
-    constexpr size_t byteSize = elementCount * sizeof(int32_t);
-
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    const size_t blockCount = static_cast<size_t>(syncall_cfg::GetCoreConfig().aic);
+    constexpr size_t int32PerCacheLine = 8;
+    const size_t elementCount = blockCount * int32PerCacheLine;
+    const size_t byteSize = elementCount * sizeof(int32_t);
 
     int32_t *outHost = nullptr;
     int32_t *flagsHost = nullptr;
@@ -393,7 +425,7 @@ TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchSoftSyncAllAIC(outDevice, flagsDevice, syncWorkspaceDevice, stream);
+    LaunchSoftSyncAllAIC(outDevice, flagsDevice, syncWorkspaceDevice, static_cast<int32_t>(blockCount), stream);
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
     EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
     EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
