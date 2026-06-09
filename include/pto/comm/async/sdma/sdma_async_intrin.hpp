@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_ASYNC_SDMA_SDMA_ASYNC_INTRIN_HPP
 #define PTO_COMM_ASYNC_SDMA_SDMA_ASYNC_INTRIN_HPP
 
-#include "pto/npu/comm/async/sdma/sdma_types.hpp"
+#include "pto/comm/async/sdma/sdma_types.hpp"
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async_common/async_types.hpp"
 #include "pto/pto-inst.hpp"
