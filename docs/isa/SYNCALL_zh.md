@@ -100,6 +100,53 @@ PTO_SYNCALL_AIV_KERNEL_META(MyKernel_mix_aiv);             // AIV kernel ELF
 
 > 历史别名 `PTO_SYNCALL_AIV_KERNEL_META` / `PTO_SYNCALL_MIX_AIC_KERNEL_META` 仍可使用，等价于上述宏。
 
+> **dav-c220 自动拆分**：使用 `--cce-aicore-arch=dav-c220` 编译时，Bisheng 会自动生成 AIC/AIV 子 kernel 及对应 `.ascend.meta`，物理比例为 **1:2**（每个 AIC block 配 2 个 AIV subblock）。此时**无需**手写 `PTO_SYNCALL_MIX_AIC_KERNEL_META`，也**不能**通过 meta 把比例改成 1:1（见下文「MIX 1:1」）。
+
+## 编译与调度指南（A2/A3）
+
+本节以 ST 用例 [`tests/npu/a2a3/src/st/testcase/syncall_mix_chevron/`](../../tests/npu/a2a3/src/st/testcase/syncall_mix_chevron/) 为准，说明不同 `SyncCoreType` / 模式 / AIC:AIV 比例下应采用的**编译 arch**、**Meta** 与 **Host 启动**方式。历史用例 [`syncall/`](../../tests/npu/a2a3/src/st/testcase/syncall/) 仍保留 register-ELF 全路径实现，逻辑等价；新开发优先参考 chevron 目录的分场景写法。
+
+### 场景速查表
+
+| 场景 | 同步模式 | 参与者数（910B4） | 编译 `--cce-aicore-arch` | Kernel Meta | Host 启动 | 参考源文件 |
+|------|---------|-------------------|--------------------------|-------------|-----------|-----------|
+| AIV-only | Hard | 40 AIV | `dav-c220-vec` | `PTO_SYNCALL_AIV_KERNEL_META` | chevron `<<<40>>>` | `syncall_aiv_hard_kernel.cpp` |
+| AIV-only | Soft | 40 AIV | `dav-c220-vec` | 无 | chevron `<<<40>>>` | `syncall_aiv_soft_kernel.cpp` |
+| AIC-only | Hard | 20 AIC | **`dav-c220`**（MIX 自动拆分，AIV 空 stub） | 由 Bisheng 自动生成 | chevron `<<<20>>>` | `syncall_aic_hard_kernel.cpp` |
+| AIC-only | Soft | 20 AIC | `dav-c220-cube` | 无 | chevron `<<<20>>>` | `syncall_aic_soft_kernel.cpp` |
+| MIX 1:2 | Hard / Soft | 60（20 AIC + 40 AIV） | **`dav-c220`**（`pto_mix_st`） | 由 Bisheng 自动生成 | chevron `<<<20>>>` | `syncall_mix_chevron_kernel.cpp` |
+| MIX 1:1 | Soft | 40（20 AIC + 20 AIV） | cube + vec 各编一份 `.o`，链成单个 `.so` | 可选（soft 不依赖 FFTS 上下文） | **双流** chevron：AIC `<<<20>>>` + AIV `<<<20>>>` 各一 stream | `syncall_mix11_soft_kernel.cpp` |
+| MIX 1:1 | Hard | 40（20 AIC + 20 AIV） | cube + vec 各编一份 `.o` | **`PTO_SYNCALL_MIX_AIC_KERNEL_META(..., 1, 1)`** | **register ELF** + `rtKernelLaunchWithHandleV2` | `syncall_mix11_hard_kernel.cpp` |
+
+### 各路径说明
+
+#### 1. Chevron 单 arch 编译（AIV-only / AIC-only soft）
+
+- 编译：单个源文件 + 对应 arch（`dav-c220-vec` 或 `dav-c220-cube`），产出独立 `.so`。
+- 启动：`kernel<<<blockDim, nullptr, stream>>>(...)`，blockDim 等于参与 barrier 的 core 数。
+- Hard AIV-only 须在 kernel 上声明 `PTO_SYNCALL_AIV_KERNEL_META`，使 runtime 按 `KERNEL_TYPE_MIX_AIV_1_0` 调度。
+
+#### 2. Chevron MIX 自动拆分（MIX 1:2、Hard AIC-only）
+
+- 编译：`--cce-aicore-arch=dav-c220`，Bisheng 将同一源文件拆成 AIC/AIV 两份 device 代码并嵌入 meta；CMake 可用 `pto_mix_st(<target>)` 封装。
+- 启动：只需一次 chevron，`<<<AIC block 数>>>`（910B4 为 20）；runtime 按 1:2 拉起 20 AIC + 40 AIV。
+- **Hard AIC-only 特例**：纯 `dav-c220-cube` 无法建立 AIC-only 硬同步所需的 FFTS 上下文，会 hang。须改为 `dav-c220` MIX 编译：AIC 侧执行 `SYNCALL<AICOnly>()`，AIV 侧为空 stub，借助 MIX launch 提供 FFTS 环境。
+
+#### 3. 双 arch 双 stream（MIX 1:1 Soft）
+
+- 原因：ccec/bisheng 路径下 `GetTaskRation()` 恒为 **2**，`dav-c220` 自动拆分物理固定 **1:2**，无法通过 meta 覆盖为 1:1。
+- 编译：同一源文件分别以 `dav-c220-cube`（`-DSYNCALL_MIX_BUILD_AIC`）和 `dav-c220-vec`（`-DSYNCALL_MIX_BUILD_AIV`）各编一份 `.o`，链接为一个 `.so`。
+- 启动：AIC 与 AIV kernel 分别在两个 `aclrtStream` 上 chevron `<<<20>>>`；soft 同步走 GM 轮询，**不依赖**统一 MIX FFTS 上下文，因此双流可行。
+
+#### 4. Register ELF（MIX 1:1 Hard）
+
+- 原因：Hard MIX 同步需要**单一** MIX FFTS 上下文，双流 Hard 不可用；而 chevron 自动拆分在 ccec 下做不到真 1:1（实测输出全 0）。CANN 内置算子的 `KERNEL_TYPE_MIX_AIC_1_1` 仅在 **opc** 编译路径下 `GetTaskRation()==1`；ccec 路径同为 2。
+- 编译：
+  1. cube / vec 各编一份带 `PTO_SYNCALL_MIX_AIC_KERNEL_META(name, 1, 1)` 的 `.o`；
+  2. 再以 `-DSYNCALL_MIX_REGISTER_BUILD` 各编 register 专用 `.o`；
+  3. 用 `make_mix_register_elf.py` 提取嵌套 device ELF，合成紧凑 registration ELF。
+- 启动：`rtRegisterAllKernel` + `rtKernelLaunchWithHandleV2(handle, tilingKey, 20, ...)`，由 runtime 在统一 MIX 上下文中调度 20 AIC + 20 AIV。
+
 ## 模式支持矩阵
 
 ### A2/A3
