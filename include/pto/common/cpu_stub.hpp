@@ -96,7 +96,7 @@ static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
 struct HcclRootInfo {};
 
-struct HcclDeviceContext {
+struct CommDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
 

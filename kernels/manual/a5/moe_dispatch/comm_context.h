@@ -13,15 +13,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 // ============================================================================
-// HcclDeviceContext — device-side RDMA window context
+// CommDeviceContext
 //
-// On MESH topology: HCCL returns this directly from HcclAllocComResourceByTiling.
-// On RING topology: host builds this from HcclOpResParam's remoteRes array.
+// Binary layout matches HcclCombinOpParamA5 returned by
+// HcclAllocComResourceByTiling() on Ascend 910 A5 (DAV_3510).
+// A5 uses HCCL_MTE_MAX_RANK_NUM = 64 for windowsIn/Out arrays,
+// unlike A3 which uses AICPU_MAX_RANK_NUM_V1 = 32.
 // ============================================================================
 
 static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
-struct HcclDeviceContext {
+struct CommDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
 
@@ -30,4 +32,10 @@ struct HcclDeviceContext {
     uint64_t winSize;
     uint64_t windowsIn[HCCL_MAX_RANK_NUM];
     uint64_t windowsOut[HCCL_MAX_RANK_NUM];
+
+    // CCU registers (A5-specific, not used by dispatch kernel)
+    uint64_t xnAddr;
+    uint64_t ckeAddr;
+    uint64_t msAddr;
+    uint64_t msSize;
 };
