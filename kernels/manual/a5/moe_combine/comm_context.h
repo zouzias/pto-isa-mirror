@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef MOE_COMBINE_HCCL_CONTEXT_H_
-#define MOE_COMBINE_HCCL_CONTEXT_H_
+#ifndef MOE_COMBINE_COMM_CONTEXT_H_
+#define MOE_COMBINE_COMM_CONTEXT_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -31,8 +31,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace moe_combine {
 
-struct HcclWindowContext {
-    HcclDeviceContext hostDeviceContext;
+struct CommWindowContext {
+    CommDeviceContext hostDeviceContext;
     HcclComm comm = nullptr;
     void *deviceContext = nullptr;
     void *localWindowBase = nullptr;
@@ -99,7 +99,7 @@ struct Mc2CommConfigV2 {
     Mc2CommTilingInner inner{};
 };
 
-struct HcclSignalInfo {
+struct CommSignalInfo {
     uint64_t resId = 0;
     uint64_t addr = 0;
     uint32_t devId = 0;
@@ -108,7 +108,7 @@ struct HcclSignalInfo {
     uint32_t flag = 0;
 };
 
-struct HcclStreamInfo {
+struct CommStreamInfo {
     int32_t streamIds = 0;
     uint32_t sqIds = 0;
     uint32_t cqIds = 0;
@@ -125,10 +125,10 @@ struct ListCommon {
 struct LocalResInfoV2 {
     uint32_t streamNum = 0;
     uint32_t signalNum = 0;
-    HcclSignalInfo localSignals[kLocalNotifyMaxNum] = {};
-    HcclStreamInfo streamInfo[kLocalStreamMaxNum] = {};
-    HcclStreamInfo mainStreamInfo{};
-    HcclSignalInfo aicpuOpNotify[kAicpuOpNotifyMaxNum] = {};
+    CommSignalInfo localSignals[kLocalNotifyMaxNum] = {};
+    CommStreamInfo streamInfo[kLocalStreamMaxNum] = {};
+    CommStreamInfo mainStreamInfo{};
+    CommSignalInfo aicpuOpNotify[kAicpuOpNotifyMaxNum] = {};
     ListCommon nextTagRes{};
 };
 
@@ -165,7 +165,7 @@ struct AlgoTopoInfo {
     uint64_t serverAndsuperPodRank = 0;
 };
 
-struct HcclOpConfig {
+struct CommOpConfig {
     uint8_t deterministic = 0;
     uint8_t retryEnable = 0;
     uint8_t highPerfEnable = 0;
@@ -179,7 +179,7 @@ struct HcclOpConfig {
     uint32_t multiQpThreshold = 0;
 };
 
-struct HcclMc2WorkSpace {
+struct CommMc2WorkSpace {
     uint64_t workspace = 0;
     uint64_t workspaceSize = 0;
 };
@@ -189,7 +189,7 @@ struct RemoteResPtr {
     uint64_t nextDevicePtr = 0;
 };
 
-struct HcclRankRelationResV2 {
+struct CommRankRelationResV2 {
     uint32_t remoteUsrRankId = 0;
     uint32_t remoteWorldRank = 0;
     uint64_t windowsIn = 0;
@@ -198,7 +198,7 @@ struct HcclRankRelationResV2 {
     ListCommon nextTagRes{};
 };
 
-struct HcclOpResParamHead {
+struct CommOpResParamHead {
     uint32_t localUsrRankId = 0;
     uint32_t rankSize = 0;
     uint64_t winSize = 0;
@@ -209,8 +209,8 @@ struct HcclOpResParamHead {
     uint64_t localWindowsExp = 0;
 };
 
-struct HcclOpResParam {
-    HcclMc2WorkSpace mc2WorkSpace{};
+struct CommOpResParam {
+    CommMc2WorkSpace mc2WorkSpace{};
     uint32_t localUsrRankId = 0;
     uint32_t rankSize = 0;
     uint64_t winSize = 0;
@@ -224,7 +224,7 @@ struct HcclOpResParam {
     uint64_t version = 0;
     LocalResInfoV2 localRes{};
     AlgoTopoInfo topoInfo{};
-    HcclOpConfig config{};
+    CommOpConfig config{};
     uint64_t hostStateInfo = 0;
     uint64_t aicpuStateInfo = 0;
     uint64_t lockAddr = 0;
@@ -306,9 +306,9 @@ inline void BuildMc2Tiling(const char *group, Mc2CommConfigV2 *tiling)
     }
 }
 
-inline bool TryInitDirectA5Path(uint32_t rank, uint32_t rankCount, void *ctxPtr, HcclWindowContext *context)
+inline bool TryInitDirectA5Path(uint32_t rank, uint32_t rankCount, void *ctxPtr, CommWindowContext *context)
 {
-    HcclDeviceContext hostContext{};
+    CommDeviceContext hostContext{};
     if (aclrtMemcpy(&hostContext, sizeof(hostContext), ctxPtr, sizeof(hostContext), ACL_MEMCPY_DEVICE_TO_HOST) !=
         ACL_SUCCESS) {
         return false;
@@ -328,26 +328,26 @@ inline bool TryInitDirectA5Path(uint32_t rank, uint32_t rankCount, void *ctxPtr,
     return true;
 }
 
-inline void InitMeshPath(uint32_t rank, void *ctxPtr, HcclWindowContext *context)
+inline void InitMeshPath(uint32_t rank, void *ctxPtr, CommWindowContext *context)
 {
     context->deviceContext = ctxPtr;
     CheckAcl(aclrtMemcpy(&context->hostDeviceContext, sizeof(context->hostDeviceContext), context->deviceContext,
                          sizeof(context->hostDeviceContext), ACL_MEMCPY_DEVICE_TO_HOST),
-             "Rank " + std::to_string(rank) + ": aclrtMemcpy mesh HcclDeviceContext");
+             "Rank " + std::to_string(rank) + ": aclrtMemcpy mesh CommDeviceContext");
 }
 
-inline void ReadRingParams(uint32_t rank, uint8_t *rawCtx, HcclOpResParamHead *head,
+inline void ReadRingParams(uint32_t rank, uint8_t *rawCtx, CommOpResParamHead *head,
                            std::vector<RemoteResPtr> *remoteRes)
 {
-    const size_t headOffset = offsetof(HcclOpResParam, localUsrRankId);
+    const size_t headOffset = offsetof(CommOpResParam, localUsrRankId);
     CheckAcl(aclrtMemcpy(head, sizeof(*head), rawCtx + headOffset, sizeof(*head), ACL_MEMCPY_DEVICE_TO_HOST),
-             "Rank " + std::to_string(rank) + ": read HcclOpResParam head");
+             "Rank " + std::to_string(rank) + ": read CommOpResParam head");
     if (head->rankSize == 0 || head->rankSize > kMaxMoeCombineRanks) {
         throw std::runtime_error("Rank " + std::to_string(rank) +
                                  ": invalid HCCL rankSize=" + std::to_string(head->rankSize));
     }
 
-    const size_t remoteResOffset = offsetof(HcclOpResParam, remoteRes);
+    const size_t remoteResOffset = offsetof(CommOpResParam, remoteRes);
     const size_t remoteResBytes = static_cast<size_t>(head->rankSize) * sizeof(RemoteResPtr);
     remoteRes->resize(head->rankSize);
     CheckAcl(aclrtMemcpy(remoteRes->data(), remoteResBytes, rawCtx + remoteResOffset, remoteResBytes,
@@ -355,10 +355,10 @@ inline void ReadRingParams(uint32_t rank, uint8_t *rawCtx, HcclOpResParamHead *h
              "Rank " + std::to_string(rank) + ": read HCCL remoteRes");
 }
 
-inline void BuildRingHostContext(uint32_t rank, uint8_t *rawCtx, const HcclOpResParamHead &head,
-                                 const std::vector<RemoteResPtr> &remoteRes, HcclDeviceContext *hostContext)
+inline void BuildRingHostContext(uint32_t rank, uint8_t *rawCtx, const CommOpResParamHead &head,
+                                 const std::vector<RemoteResPtr> &remoteRes, CommDeviceContext *hostContext)
 {
-    *hostContext = HcclDeviceContext{};
+    *hostContext = CommDeviceContext{};
 
     uint64_t workspaceFields[2] = {0, 0};
     aclError workspaceRet = aclrtMemcpy(workspaceFields, sizeof(workspaceFields), rawCtx, sizeof(workspaceFields),
@@ -385,7 +385,7 @@ inline void BuildRingHostContext(uint32_t rank, uint8_t *rawCtx, const HcclOpRes
                                      "].nextDevicePtr is null");
         }
 
-        HcclRankRelationResV2 remoteInfo{};
+        CommRankRelationResV2 remoteInfo{};
         CheckAcl(aclrtMemcpy(&remoteInfo, sizeof(remoteInfo), reinterpret_cast<void *>(devicePtr), sizeof(remoteInfo),
                              ACL_MEMCPY_DEVICE_TO_HOST),
                  "Rank " + std::to_string(rank) + ": read remote rank " + std::to_string(i) + " window info");
@@ -394,15 +394,15 @@ inline void BuildRingHostContext(uint32_t rank, uint8_t *rawCtx, const HcclOpRes
     }
 }
 
-inline void CopyRingContextToDevice(uint32_t rank, HcclWindowContext *context)
+inline void CopyRingContextToDevice(uint32_t rank, CommWindowContext *context)
 {
     void *deviceContext = nullptr;
-    CheckAcl(aclrtMalloc(&deviceContext, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST),
-             "Rank " + std::to_string(rank) + ": aclrtMalloc HcclDeviceContext");
+    CheckAcl(aclrtMalloc(&deviceContext, sizeof(CommDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST),
+             "Rank " + std::to_string(rank) + ": aclrtMalloc CommDeviceContext");
     try {
-        CheckAcl(aclrtMemcpy(deviceContext, sizeof(HcclDeviceContext), &context->hostDeviceContext,
-                             sizeof(HcclDeviceContext), ACL_MEMCPY_HOST_TO_DEVICE),
-                 "Rank " + std::to_string(rank) + ": copy ring HcclDeviceContext to device");
+        CheckAcl(aclrtMemcpy(deviceContext, sizeof(CommDeviceContext), &context->hostDeviceContext,
+                             sizeof(CommDeviceContext), ACL_MEMCPY_HOST_TO_DEVICE),
+                 "Rank " + std::to_string(rank) + ": copy ring CommDeviceContext to device");
     } catch (...) {
         aclrtFree(deviceContext);
         throw;
@@ -468,7 +468,7 @@ inline AllocatedHcclContext AllocateHcclContext(uint32_t myRank, HcclComm comm, 
 }
 
 inline void InitHostDeviceContext(uint32_t myRank, uint32_t rankCount, const AllocatedHcclContext &allocated,
-                                  HcclWindowContext *context)
+                                  CommWindowContext *context)
 {
     if (hccl_runtime_detail::TryInitDirectA5Path(myRank, rankCount, allocated.ctxPtr, context)) {
         if (myRank == 0) {
@@ -483,14 +483,14 @@ inline void InitHostDeviceContext(uint32_t myRank, uint32_t rankCount, const All
         return;
     }
     auto *rawCtx = reinterpret_cast<uint8_t *>(allocated.ctxPtr);
-    hccl_runtime_detail::HcclOpResParamHead head{};
+    hccl_runtime_detail::CommOpResParamHead head{};
     std::vector<hccl_runtime_detail::RemoteResPtr> remoteRes;
     hccl_runtime_detail::ReadRingParams(myRank, rawCtx, &head, &remoteRes);
     hccl_runtime_detail::BuildRingHostContext(myRank, rawCtx, head, remoteRes, &context->hostDeviceContext);
     hccl_runtime_detail::CopyRingContextToDevice(myRank, context);
 }
 
-inline void ValidatePeerWindow(uint32_t myRank, uint32_t rankCount, HcclWindowContext *context)
+inline void ValidatePeerWindow(uint32_t myRank, uint32_t rankCount, CommWindowContext *context)
 {
     if (context->hostDeviceContext.rankId != myRank || context->hostDeviceContext.rankNum != rankCount) {
         throw std::runtime_error("Rank " + std::to_string(myRank) + ": HCCL context rank mismatch, got rankId=" +
@@ -510,15 +510,15 @@ inline void ValidatePeerWindow(uint32_t myRank, uint32_t rankCount, HcclWindowCo
     context->peerWindow = reinterpret_cast<void *>(localWindow + context->peerWindowOffset);
 }
 
-inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, const PeerWindowLayout &layout,
+inline CommWindowContext InitHcclWindowContext(const MoeCombineShape &shape, const PeerWindowLayout &layout,
                                                uint32_t myRank, uint32_t rankCount, const HcclRootInfo *rootInfo,
                                                rtStream_t hcclStream)
 {
     if (rankCount == 0 || rankCount > kMaxMoeCombineRanks) {
-        throw std::invalid_argument("rankCount exceeds HcclDeviceContext capacity");
+        throw std::invalid_argument("rankCount exceeds CommDeviceContext capacity");
     }
 
-    HcclWindowContext context;
+    CommWindowContext context;
     context.peerWindowOffset = kA5WindowHeadGuardBytes;
     context.peerWindowBytes = layout.totalBytes;
     context.comm = hccl_runtime_detail::InitHcclCommWithRetry(myRank, rankCount, rootInfo);
@@ -530,7 +530,7 @@ inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, con
     return context;
 }
 
-inline void DestroyHcclWindowContext(HcclWindowContext *context)
+inline void DestroyHcclWindowContext(CommWindowContext *context)
 {
     if (context == nullptr) {
         return;
@@ -541,9 +541,9 @@ inline void DestroyHcclWindowContext(HcclWindowContext *context)
     if (context->comm != nullptr) {
         HcclCommDestroy(context->comm);
     }
-    *context = HcclWindowContext{};
+    *context = CommWindowContext{};
 }
 
 } // namespace moe_combine
 
-#endif // MOE_COMBINE_HCCL_CONTEXT_H_
+#endif // MOE_COMBINE_COMM_CONTEXT_H_

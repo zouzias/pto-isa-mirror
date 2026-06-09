@@ -23,7 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                      __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                      __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -58,7 +58,7 @@ __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
         set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
@@ -201,7 +201,7 @@ template bool RunPutRing<uint8_t, 512>(int n_ranks, int n_devices, int first_ran
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TPutAtomicAddKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                               __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -223,7 +223,7 @@ __global__ AICORE void TPutAtomicAddKernelImpl(__gm__ T *dst, __gm__ T *src, __g
         TileData stagingTile(1, count);
         TASSIGN(stagingTile, 0x0);
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, 0);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, 0);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT<pto::AtomicType::AtomicAdd>(remoteRecvG, srcG, stagingTile);
@@ -367,7 +367,7 @@ template bool RunPutAtomicAdd<int32_t, 256>(int n_ranks, int n_devices, int firs
 // ============================================================================
 template <typename T, size_t rows, size_t cols>
 __global__ AICORE void TPutKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                        __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                        __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -405,7 +405,7 @@ __global__ AICORE void TPutKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
         set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
@@ -560,7 +560,7 @@ template bool RunPutRing2D<int32_t, 4, 64>(int n_ranks, int n_devices, int first
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TPutLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                                __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                                __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -605,7 +605,7 @@ __global__ AICORE void TPutLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -772,7 +772,7 @@ template bool RunPutRingLargeShape<int32_t, 4096, 64, 128>(int n_ranks, int n_de
 // ============================================================================
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
 __global__ AICORE void TPutMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                              __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                              __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -823,7 +823,7 @@ __global__ AICORE void TPutMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -973,7 +973,7 @@ template bool RunPutRingMultiDim<int32_t, 4, 1, 1, 32, 64, 16>(int n_ranks, int 
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TPutIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                                    __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                                    __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -1023,7 +1023,7 @@ __global__ AICORE void TPutIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src
 
         stagingTile.RowMaskInternal = tile_rows;
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -1195,7 +1195,7 @@ template bool RunPutRingIrregularShape<float, 4095, 32, 128>(int n_ranks, int n_
 // ============================================================================
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TPut2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                               __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -1251,7 +1251,7 @@ __global__ AICORE void TPut2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __g
         stagingTile.RowMaskInternal = tile_rows;
         stagingTile.ColMaskInternal = tile_cols;
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -1440,7 +1440,7 @@ template bool RunPutRing2DSliding<float, 65, 104, 16, 32>(int n_ranks, int n_dev
 // ============================================================================
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                              __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                              __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -1504,7 +1504,7 @@ __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
         pongTile.RowMaskInternal = tile_rows;
         pongTile.ColMaskInternal = tile_cols;
 
-        __gm__ T *remote_recv_shmem = HcclRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T *remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, pingTile, pongTile);
 
