@@ -509,6 +509,16 @@ TEST_F(TReduceCcuTest, Float_1024_Sum_4Ranks)
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE(RunReduceCcu(1024, 0));
 }
+// Boundary test: N=5 is the smallest rank count that crosses the
+// CCU_SQE_ARGS_LEN=13 per-SQE limit for the read-side packing
+// (3*5+1 = 16 args -> 2 SQEs).  Useful when only 5 ranks are available
+// — the multi-SQE auto-fragmentation path can still be exercised without
+// the 8-rank topology that Float_1024_Sum_8Ranks needs.
+TEST_F(TReduceCcuTest, Float_1024_Sum_5Ranks)
+{
+    SKIP_IF_RANKS_LT(5);
+    ASSERT_TRUE(RunReduceCcu(1024, 0));
+}
 // Boundary test: N=8 first triggers hcomm multi-SQE auto-fragmentation
 // for Reduce (3*8+1 = 25 args > CCU_SQE_ARGS_LEN=13 → 2 SQEs).  This is
 // the highest N reachable on the current a5 8-rank hardware; N=12/16
