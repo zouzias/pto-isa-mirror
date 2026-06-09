@@ -283,29 +283,23 @@ struct TPipe {
         {
             using T = typename TileProd::DType;
             constexpr int splitNum = 2;
-            constexpr int ProdM = TileProd::Rows;
-            constexpr int ProdN = TileProd::Cols;
-            constexpr int ConsM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM * splitNum : ProdM;
-            constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
-            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
-            constexpr int gmValidR = ProdM;
-            constexpr int gmValidC = ProdN;
-            constexpr int gmStrideR = ConsN;
+            const int gmValidR = tile.GetValidRow();
+            const int gmValidC = tile.GetValidCol();
+            const int gmStrideR = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? gmValidC * splitNum : gmValidC;
+            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             size_t subAIVOffset = 0;
-            if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
-                subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(T);
-            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
-                // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
-                subAIVOffset = get_subblockid() * ProdN * sizeof(T);
-            } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                // TILE_NO_SPLIT : single writer, no offset needed
+            if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 subAIVOffset = 0;
+            } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                subAIVOffset = get_subblockid() * gmValidR * gmValidC * sizeof(T);
+            } else { // TILE_LEFT_RIGHT
+                subAIVOffset = get_subblockid() * gmValidC * sizeof(T);
             }
-            using GlobalData =
-                GlobalTensor<T, pto::Shape<1, 1, 1, gmValidR, gmValidC>, pto::Stride<1, 1, 1, gmStrideR, 1>>;
+            using GlobalShape = pto::Shape<1, 1, 1, -1, -1>;
+            using GlobalStride = pto::Stride<1, 1, 1, -1, 1>;
+            using GlobalData = GlobalTensor<T, GlobalShape, GlobalStride>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
-            GlobalData globalData(addr);
+            GlobalData globalData(addr, GlobalShape(gmValidR, gmValidC), GlobalStride(gmStrideR));
             TSTORE_IMPL(globalData, tile);
         }
 
