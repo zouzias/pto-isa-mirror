@@ -106,40 +106,13 @@ __tf__ AICORE void TGather_b16_bc(typename TileDataD::TileDType __out__ dst, typ
 }
 
 template <typename TileDataD, typename TileDataS0, typename TileDataS1>
-__tf__ AICORE void TGather_fp8_e4m3(typename TileDataD::TileDType __out__ dst,
-                                    typename TileDataS0::TileDType __in__ src0,
-                                    typename TileDataS1::TileDType __in__ src1, unsigned validCol, unsigned validRow)
+__tf__ AICORE void TGather_b8(typename TileDataD::TileDType __out__ dst,
+                               typename TileDataS0::TileDType __in__ src0,
+                               typename TileDataS1::TileDType __in__ src1, unsigned validCol, unsigned validRow)
 {
     __ubuf__ typename TileDataS0::DType *src0Ptr = (__ubuf__ typename TileDataS0::DType *)__cce_get_tile_ptr(src0);
     __ubuf__ typename TileDataS1::DType *src1Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(src1);
     __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
-    uint16_t elementsPerRepeat = CCE_VL / sizeof(typename TileDataS1::DType);
-    uint16_t innerLoopNum = CeilDivision(validCol, elementsPerRepeat);
-    __VEC_SCOPE__
-    {
-        MaskReg preg;
-        RegTensor<typename TileDataS1::DType> index;
-        RegTensor<typename TileDataD::DType> v_output;
-        for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
-            uint32_t sreg = (uint32_t)(validCol);
-            for (uint16_t j = 0; j < innerLoopNum; ++j) {
-                preg = CreatePredicate<typename TileDataS1::DType>(sreg);
-                vlds(index, src1Ptr, (i * TileDataS1::Cols + j * elementsPerRepeat), NORM);
-                vgather2(v_output, src0Ptr, (vector_u16 &)index, preg);
-                vsts(v_output, dstPtr, (i * TileDataD::Cols + j * elementsPerRepeat), PK_B16, preg);
-            }
-        }
-    }
-}
-
-template <typename TileDataD, typename TileDataS0, typename TileDataS1>
-__tf__ AICORE void TGather_fp8_e5m2(typename TileDataD::TileDType __out__ dst,
-                                    typename TileDataS0::TileDType __in__ src0,
-                                    typename TileDataS1::TileDType __in__ src1, unsigned validCol, unsigned validRow)
-{
-    __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
-    __ubuf__ typename TileDataS0::DType *src0Ptr = (__ubuf__ typename TileDataS0::DType *)__cce_get_tile_ptr(src0);
-    __ubuf__ typename TileDataS1::DType *src1Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(src1);
     uint16_t elementsPerRepeat = CCE_VL / sizeof(typename TileDataS1::DType);
     uint16_t innerLoopNum = CeilDivision(validCol, elementsPerRepeat);
     __VEC_SCOPE__
@@ -173,11 +146,8 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src
         TGather_b16<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
     } else if constexpr (sizeof(typename TileDataS0::DType) == 2 && sizeof(typename TileDataS1::DType) == 4) {
         TGather_b16_bc<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
-    } else if constexpr (std::is_same<typename TileDataS0::DType, float8_e4m3_t>::value) {
-        TGather_fp8_e4m3<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols,
-                                                            kValidRows);
     } else {
-        TGather_fp8_e5m2<TileDataD, TileDataS0, TileDataS1>(dst, src0, src1, kValidCols, kValidRows);
+        TGather_b8<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
     }
 }
 
