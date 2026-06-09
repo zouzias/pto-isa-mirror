@@ -44,7 +44,7 @@ __global__ AICORE void WindowMemCopyOut(__gm__ T *devDst, __gm__ T *winSrc, int 
 }
 
 template <typename T, size_t count>
-__global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, __gm__ CommDeviceContext *hcclCtx,
                                             int nranks, int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -63,7 +63,7 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, _
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, output, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, shape, stride);
     }
 
@@ -205,7 +205,7 @@ template bool RunBroadCast<int32_t, 4096>(int n_ranks, int n_devices, int first_
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TBroadCastLargeShapeKernelImpl(__gm__ T *input, __gm__ T *output,
-                                                      __gm__ HcclDeviceContext *hcclCtx, int nranks, int root)
+                                                      __gm__ CommDeviceContext *hcclCtx, int nranks, int root)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
@@ -226,7 +226,7 @@ __global__ AICORE void TBroadCastLargeShapeKernelImpl(__gm__ T *input, __gm__ T 
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, output, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, fullShape, fullStride);
     }
 
@@ -320,8 +320,8 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
         T actual = output_host[i];
         if (actual != expected) {
             std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                      << ", col=" << (i % cols) << ")"
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                      << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got " << (float)actual
+                      << std::endl;
             is_ok = false;
             break;
         }
@@ -396,7 +396,7 @@ bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int 
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TBroadCastPingPongKernelImpl(__gm__ T *input, __gm__ T *output,
-                                                    __gm__ HcclDeviceContext *hcclCtx, int nranks, int root)
+                                                    __gm__ CommDeviceContext *hcclCtx, int nranks, int root)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunked ping-pong");
@@ -417,7 +417,7 @@ __global__ AICORE void TBroadCastPingPongKernelImpl(__gm__ T *input, __gm__ T *o
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, output, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, fullShape, fullStride);
     }
 
@@ -506,8 +506,8 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
         T actual = output_host[i];
         if (actual != expected) {
             std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                      << ", col=" << (i % cols) << ")"
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                      << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got " << (float)actual
+                      << std::endl;
             is_ok = false;
             break;
         }

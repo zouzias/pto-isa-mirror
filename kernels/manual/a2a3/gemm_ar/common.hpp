@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using AscendC::GlobalTensor;
 #endif
 
-#include "hccl_context.h"
+#include "comm_context.h"
 
 // ============================================================================
 // Device-only wrappers
@@ -27,7 +27,7 @@ using AscendC::GlobalTensor;
 #ifdef MEMORY_BASE
 
 template <typename T>
-AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *CommRemotePtr(__gm__ CommDeviceContext *ctx, __gm__ T *localPtr, int pe)
 {
     uint64_t localBase = ctx->windowsIn[ctx->rankId];
     uint64_t offset = (uint64_t)localPtr - localBase;

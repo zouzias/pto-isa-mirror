@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 // ============================================================================
-// HcclDeviceContext
+// CommDeviceContext
 //
 // Prefix layout of the A5 HCCL combine context returned by
 // HcclAllocComResourceByTiling() in the A5 comm ST path. This sample only
@@ -23,7 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
-struct HcclDeviceContext {
+struct CommDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
 

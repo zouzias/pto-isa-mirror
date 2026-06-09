@@ -24,7 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                      __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                      __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -70,7 +70,7 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, shape, stride);
 
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
@@ -204,7 +204,7 @@ template bool RunGetRing<uint8_t, 512>(int n_ranks, int n_devices, int first_ran
 // ============================================================================
 template <typename T, size_t rows, size_t cols>
 __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                        __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                        __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -253,7 +253,7 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, shape, stride);
 
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
@@ -397,7 +397,7 @@ template bool RunGetRing2D<int32_t, 4, 64>(int n_ranks, int n_devices, int first
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                                __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                                __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -452,7 +452,7 @@ __global__ AICORE void TGetLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
@@ -610,7 +610,7 @@ template bool RunGetRingLargeShape<int32_t, 4096, 64, 128>(int n_ranks, int n_de
 // ============================================================================
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                              __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                              __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -671,7 +671,7 @@ __global__ AICORE void TGetMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
@@ -813,7 +813,7 @@ template bool RunGetRingMultiDim<int32_t, 4, 1, 1, 32, 64, 16>(int n_ranks, int 
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                                    __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                                    __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -873,7 +873,7 @@ __global__ AICORE void TGetIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src
         TASSIGN(resultTile, 0x10000);
 
         // stagingTile starts with tile_rows RowMask — TGET_IMPL reads initial tileValidRow
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
@@ -1037,7 +1037,7 @@ template bool RunGetRingIrregularShape<float, 4095, 32, 128>(int n_ranks, int n_
 // ============================================================================
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TGet2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                               __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -1099,7 +1099,7 @@ __global__ AICORE void TGet2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __g
         TASSIGN(stagingTile, 0x0);
         TASSIGN(resultTile, 0x10000);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
@@ -1279,7 +1279,7 @@ template bool RunGetRing2DSliding<float, 65, 104, 16, 32>(int n_ranks, int n_dev
 // ============================================================================
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TGetPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
-                                              __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                              __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     if (nranks <= 0)
         return;
@@ -1346,7 +1346,7 @@ __global__ AICORE void TGetPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
         TASSIGN(pongTile, tileUBBytes);
         TASSIGN(resultTile, 2 * tileUBBytes);
 
-        __gm__ T *remote_send_shmem = HcclRemotePtr(hcclCtx, send_shmem, next_rank);
+        __gm__ T *remote_send_shmem = CommRemotePtr(hcclCtx, send_shmem, next_rank);
         Global remoteSendG(remote_send_shmem, fullShape, fullStride);
         pto::comm::TGET(recvG, remoteSendG, pingTile, pongTile);
 
