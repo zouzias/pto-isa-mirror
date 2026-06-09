@@ -334,15 +334,19 @@ static bool RegisterAndLaunchGatherCcu(int rankId, int nRanks, uint32_t rootId, 
     AddrPack myPack{g_env.inputVa, myOutputSliceVA, g_env.token};
     std::vector<AddrPack> allPacks(nRanks);
     CommMpiAllgather(&myPack, sizeof(AddrPack), allPacks.data(), sizeof(AddrPack));
-    uint64_t allInputVa[pto::comm::ccu::kMaxGatherRanks]{};
-    uint64_t allOutputVa[pto::comm::ccu::kMaxGatherRanks]{};
-    uint64_t allToken[pto::comm::ccu::kMaxGatherRanks]{};
-    for (int i = 0; i < nRanks && i < static_cast<int>(pto::comm::ccu::kMaxGatherRanks); ++i) {
+    uint64_t allInputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allOutputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allToken[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    for (int i = 0; i < nRanks && i < static_cast<int>(pto::comm::ccu::kCcuMeshMaxRanks); ++i) {
         allInputVa[i] = allPacks[i].inputVa;
         allOutputVa[i] = allPacks[i].outputVa;
         allToken[i] = allPacks[i].token;
     }
-    targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), allInputVa, allOutputVa, allToken);
+    if (!targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), allInputVa, allOutputVa, allToken)) {
+        std::fprintf(stderr, "[TGATHER_CCU] rank=%d SetPeerAddrs FAILED (nRanks=%d > kCcuMeshMaxRanks)\n", rankId,
+                     nRanks);
+        return false;
+    }
 
     HCCL_OK(HcclCcuKernelLaunch(g_env.comm, g_env.threadHandle, kHandle, &targ));
     std::fprintf(stderr, "[TGATHER_CCU] rank=%d KernelLaunch done\n", rankId);
@@ -453,6 +457,20 @@ TEST_F(TGatherCcuTest, Root1_Float_1024)
 {
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunGatherCcu(1024, 1));
+}
+// Boundary test: N=12 with full-mesh packing (3*12+1 = 37 Loads), below the
+// kCcuMeshMaxRanks=16 ceiling — guards against off-by-one in peer Load order.
+TEST_F(TGatherCcuTest, Float_1024_12Ranks)
+{
+    SKIP_IF_RANKS_LT(12);
+    ASSERT_TRUE(RunGatherCcu(1024, 0));
+}
+// Boundary test: N=16 at the ceiling, 3*16+1 = 49 Loads. Catches hcomm
+// Load-slot exhaustion or peer-array sizing regressions.
+TEST_F(TGatherCcuTest, Float_1024_16Ranks)
+{
+    SKIP_IF_RANKS_LT(16);
+    ASSERT_TRUE(RunGatherCcu(1024, 0));
 }
 
 } // namespace

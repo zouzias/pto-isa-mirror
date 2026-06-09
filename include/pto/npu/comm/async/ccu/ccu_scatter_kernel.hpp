@@ -89,32 +89,60 @@ struct CcuScatterKernelArg : public hcomm::CcuKernelArg {
     }
 };
 
-static constexpr uint32_t kMaxScatterRanks = 16;
-
+// Scatter on CCU v100 uses Address rolling-add to derive per-slice source
+// VAs inside the microcode instead of shipping N individual slice VAs:
+//   currentSlice.addr = rootInputBase           (snapshot)
+//   for r in [0..N-1]:
+//       WriteNb(...) / LocalCopyNb(...)         (uses currentSlice)
+//       currentSlice.addr += sliceStep          (roll for next iter)
+// CcuRep v100 exposes ADDITION only — see ccu_datatype_v1.h: Variable and
+// Address both have operator+=(Variable).  The rolling pattern itself is
+// production-validated in hcomm's all-to-all-v mesh1d (look at
+// `src_[rankIdx].addr += xnMaxTransportSize_` after each Write).
+//
+// This collapses the wire-format from the old 3N+1 (per-rank slice array)
+// to 2N+3 (base + step + per-peer output/token + length).  At N=16 that is
+// 35 Loads instead of 49 — buys back 14 hcomm Load slots.
+//
+// CCU v160 will expose a full arithmetic set (sub / mul); once available
+// the entire 2N+3 packing can collapse to constant-size Loads driven by
+// rankId, but that is a separate kernel rewrite.
 struct CcuScatterTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};
     uint64_t outputAddr{0};
     uint64_t length{0};
     uint64_t token{0};
 
+    // Set by SetWritePeers.  rootInputBase is broadcast from root via the
+    // host (every rank carries the same value); only root actually uses it
+    // in DoScatter, peers ignore it.
     uint32_t peerCount{0};
-    uint64_t peerInput[kMaxScatterRanks]{};
-    uint64_t peerOutput[kMaxScatterRanks]{};
-    uint64_t peerToken[kMaxScatterRanks]{};
+    uint64_t rootInputBase{0};
+    uint64_t sliceStep{0};
+    uint64_t peerOutput[kCcuMeshMaxRanks]{};
+    uint64_t peerToken[kCcuMeshMaxRanks]{};
 
     CcuScatterTaskArg() = default;
     CcuScatterTaskArg(uint64_t in, uint64_t out, uint64_t len, uint64_t tok)
         : inputAddr(in), outputAddr(out), length(len), token(tok)
     {}
 
-    void SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs, const uint64_t *tokens)
+    // Write-side packing for Scatter.  Returns false on overflow rather
+    // than silently truncating peer arrays.
+    [[nodiscard]] bool SetWritePeers(uint32_t rankSize, uint64_t inputBase, uint64_t step, const uint64_t *outputs,
+                                     const uint64_t *tokens)
     {
+        if (!EnsurePeerCapacity("SCATTER", rankSize)) {
+            return false;
+        }
         peerCount = rankSize;
-        for (uint32_t i = 0; i < rankSize && i < kMaxScatterRanks; ++i) {
-            peerInput[i] = inputs[i];
+        rootInputBase = inputBase;
+        sliceStep = step;
+        for (uint32_t i = 0; i < rankSize; ++i) {
             peerOutput[i] = outputs[i];
             peerToken[i] = tokens[i];
         }
+        return true;
     }
 };
 
@@ -208,15 +236,19 @@ public:
 
         std::fprintf(stderr,
                      "[CCU_SCATTER/gene] rank=%u published (die=%u, cke=%u, mask=0x%x) "
-                     "input=0x%llx output=0x%llx len=%llu token=0x%llx peerCount=%u gateOnly=%d\n",
+                     "input=0x%llx output=0x%llx len=%llu token=0x%llx peerCount=%u "
+                     "rootInputBase=0x%llx sliceStep=%llu gateOnly=%d\n",
                      rankId_, dieId, ckeId, gateMask_, static_cast<unsigned long long>(tArg->inputAddr),
                      static_cast<unsigned long long>(tArg->outputAddr), static_cast<unsigned long long>(tArg->length),
-                     static_cast<unsigned long long>(tArg->token), tArg->peerCount, static_cast<int>(gateOnly_));
+                     static_cast<unsigned long long>(tArg->token), tArg->peerCount,
+                     static_cast<unsigned long long>(tArg->rootInputBase),
+                     static_cast<unsigned long long>(tArg->sliceStep), static_cast<int>(gateOnly_));
 
         if (gateOnly_) {
             return {};
         }
-        return PackPeerArgs(rankSize_, tArg->peerInput, tArg->peerOutput, tArg->peerToken, tArg->length);
+        return PackScatterArgs(rankSize_, tArg->rootInputBase, tArg->sliceStep, tArg->peerOutput, tArg->peerToken,
+                               tArg->length);
     }
 
 private:
@@ -258,19 +290,23 @@ private:
 
     inline HcclResult InitResourceWithChannels()
     {
+        rootInputBase_ = CreateVariable();
+        sliceStep_ = CreateVariable();
+        currentSlice_ = CreateVariable();
         for (uint32_t peerId = 0; peerId < rankSize_; peerId++) {
-            input_.push_back(CreateVariable());
             output_.push_back(CreateVariable());
             token_.push_back(CreateVariable());
         }
-
         lengthVar_ = CreateVariable();
 
-        // Pre-allocate per-rank source LocalAddrs and destination RemoteAddrs
-        for (uint32_t i = 0; i < rankSize_; i++) {
+        // Per-channel source LocalAddrs (snapshot rolling slice into each) +
+        // per-channel remote destinations.  Sized N-1 because root never
+        // WriteNb's to itself.
+        for (uint32_t i = 0; i + 1 < rankSize_; i++) {
             srcSliceAddrs_.push_back(CreateLocalAddr());
             dstAddrs_.push_back(CreateRemoteAddr());
         }
+        selfSrc_ = CreateLocalAddr();
         selfDst_ = CreateLocalAddr();
 
         gateEvent_ = CreateCompletedEvent();
@@ -287,7 +323,8 @@ private:
 
     inline void LoadArgs()
     {
-        LoadPeerArgs(input_, output_, token_, lengthVar_);
+        // 2N+3 layout — see PackScatterArgs in ccu_mesh_common.hpp.
+        LoadScatterArgs(rootInputBase_, sliceStep_, output_, token_, lengthVar_);
     }
 
     inline void PostSync()
@@ -298,31 +335,44 @@ private:
 
     inline void DoScatter()
     {
-        // input_[r] holds rootInputBase + r * payloadBytes (set by host,
-        // exchanged via host AllGather). Use it as the LOCAL source address for
-        // WriteNb — the VA is in root's device memory.
+        // Rolling source slice: keep a Variable cursor (`currentSlice_`),
+        // snapshot its current value into each per-channel LocalAddr.addr
+        // (Address = Variable, the proven snapshot pattern), then advance
+        // the cursor with Variable += Variable so iteration r+1 sees
+        // `rootInputBase + (r+1) * sliceStep`.
+        //
+        // CcuRep v100 only supplies ADDITION (see ccu_datatype_v1.h —
+        // `enum CcuArithmeticOperatorType { ADDITION, INVALID }`), hence
+        // the cumulative form.  Production reference: hcomm all-to-all-v
+        // mesh1d does `src_[r].addr += xnMaxTransportSize_` between Writes
+        // in the same fashion.
+        currentSlice_ = rootInputBase_;
+
         uint32_t chIdx = 0;
         for (uint32_t r = 0; r < rankSize_; r++) {
-            if (r == rankId_)
-                continue;
-            srcSliceAddrs_[chIdx].addr = input_[r];
-            srcSliceAddrs_[chIdx].token = token_[rankId_];
-            dstAddrs_[chIdx].addr = output_[r];
-            dstAddrs_[chIdx].token = token_[r];
-            opEvent_.SetMask(1u << chIdx);
-            (void)WriteNb(ownChannels_[chIdx], dstAddrs_[chIdx], srcSliceAddrs_[chIdx], lengthVar_, opEvent_);
-            chIdx++;
+            opEvent_.SetMask(1u << r);
+            if (r == rootId_) {
+                selfSrc_.addr = currentSlice_;
+                selfSrc_.token = token_[rootId_];
+                selfDst_.addr = output_[r];
+                selfDst_.token = token_[r];
+                LocalCopyNb(selfDst_, selfSrc_, lengthVar_, opEvent_);
+            } else {
+                srcSliceAddrs_[chIdx].addr = currentSlice_;
+                srcSliceAddrs_[chIdx].token = token_[rootId_];
+                dstAddrs_[chIdx].addr = output_[r];
+                dstAddrs_[chIdx].token = token_[r];
+                (void)WriteNb(ownChannels_[chIdx], dstAddrs_[chIdx], srcSliceAddrs_[chIdx], lengthVar_, opEvent_);
+                chIdx++;
+            }
+            // Advance for next iteration (skip after the last one to avoid a
+            // useless terminal add).
+            if (r + 1 < rankSize_) {
+                currentSlice_ += sliceStep_;
+            }
         }
 
-        // Self copy: root's own slice → root's output
-        srcSliceAddrs_[rankSize_ - 1].addr = input_[rankId_];
-        srcSliceAddrs_[rankSize_ - 1].token = token_[rankId_];
-        selfDst_.addr = output_[rankId_];
-        selfDst_.token = token_[rankId_];
-        opEvent_.SetMask(1u << chIdx);
-        LocalCopyNb(selfDst_, srcSliceAddrs_[rankSize_ - 1], lengthVar_, opEvent_);
-
-        opEvent_.SetMask((1u << (chIdx + 1)) - 1);
+        opEvent_.SetMask((1u << rankSize_) - 1);
         WaitEvent(opEvent_);
 
         ScatterTrace("scatter", rankId_, "DoScatter done");
@@ -337,14 +387,22 @@ private:
     bool gateOnly_{false};
     decltype(std::declval<hcomm::CcuKernelArg>().channels) ownChannels_;
 
-    std::vector<hcomm::CcuRep::Variable> input_;
+    hcomm::CcuRep::Variable rootInputBase_;
+    hcomm::CcuRep::Variable sliceStep_;
     std::vector<hcomm::CcuRep::Variable> output_;
     std::vector<hcomm::CcuRep::Variable> token_;
 
     hcomm::CcuRep::Variable lengthVar_;
 
+    // Rolling source-slice cursor: holds `rootInputBase + r * sliceStep`,
+    // snapshotted into each per-channel LocalAddr.addr (Address = Variable)
+    // before the WriteNb, then advanced by `currentSlice_ += sliceStep_`
+    // (Variable += Variable) for the next iteration.
+    hcomm::CcuRep::Variable currentSlice_;
+
     std::vector<hcomm::CcuRep::LocalAddr> srcSliceAddrs_;
     std::vector<hcomm::CcuRep::RemoteAddr> dstAddrs_;
+    hcomm::CcuRep::LocalAddr selfSrc_;
     hcomm::CcuRep::LocalAddr selfDst_;
 
     hcomm::CcuRep::CompletedEvent gateEvent_;

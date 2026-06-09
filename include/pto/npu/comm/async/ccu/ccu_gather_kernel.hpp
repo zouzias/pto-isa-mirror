@@ -93,8 +93,6 @@ struct CcuGatherKernelArg : public hcomm::CcuKernelArg {
     }
 };
 
-static constexpr uint32_t kMaxGatherRanks = 16;
-
 struct CcuGatherTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};
     uint64_t outputAddr{0};
@@ -102,23 +100,28 @@ struct CcuGatherTaskArg : public hcomm::CcuTaskArg {
     uint64_t token{0};
 
     uint32_t peerCount{0};
-    uint64_t peerInput[kMaxGatherRanks]{};
-    uint64_t peerOutput[kMaxGatherRanks]{};
-    uint64_t peerToken[kMaxGatherRanks]{};
+    uint64_t peerInput[kCcuMeshMaxRanks]{};
+    uint64_t peerOutput[kCcuMeshMaxRanks]{};
+    uint64_t peerToken[kCcuMeshMaxRanks]{};
 
     CcuGatherTaskArg() = default;
     CcuGatherTaskArg(uint64_t in, uint64_t out, uint64_t len, uint64_t tok)
         : inputAddr(in), outputAddr(out), length(len), token(tok)
     {}
 
-    void SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs, const uint64_t *tokens)
+    [[nodiscard]] bool SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs,
+                                    const uint64_t *tokens)
     {
+        if (!EnsurePeerCapacity("GATHER", rankSize)) {
+            return false;
+        }
         peerCount = rankSize;
-        for (uint32_t i = 0; i < rankSize && i < kMaxGatherRanks; ++i) {
+        for (uint32_t i = 0; i < rankSize; ++i) {
             peerInput[i] = inputs[i];
             peerOutput[i] = outputs[i];
             peerToken[i] = tokens[i];
         }
+        return true;
     }
 };
 

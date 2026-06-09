@@ -79,8 +79,10 @@ struct CcuBroadcastKernelArg : public hcomm::CcuKernelArg {
     }
 };
 
-static constexpr uint32_t kMaxBroadcastRanks = 16;
-
+// Broadcast is a pure write-side collective: root WriteNb's its own input
+// to every peer's output and LocalCopyNb's to its own output.  Peer input
+// addresses are never read, so the TaskArg only carries this rank's own
+// input (`ownInputAddr`) plus per-peer (output, token).
 struct CcuBroadcastTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};
     uint64_t outputAddr{0};
@@ -88,23 +90,31 @@ struct CcuBroadcastTaskArg : public hcomm::CcuTaskArg {
     uint64_t token{0};
 
     uint32_t peerCount{0};
-    uint64_t peerInput[kMaxBroadcastRanks]{};
-    uint64_t peerOutput[kMaxBroadcastRanks]{};
-    uint64_t peerToken[kMaxBroadcastRanks]{};
+    uint64_t ownInputAddr{0};
+    uint64_t peerOutput[kCcuMeshMaxRanks]{};
+    uint64_t peerToken[kCcuMeshMaxRanks]{};
 
     CcuBroadcastTaskArg() = default;
     CcuBroadcastTaskArg(uint64_t in, uint64_t out, uint64_t len, uint64_t tok)
-        : inputAddr(in), outputAddr(out), length(len), token(tok)
+        : inputAddr(in), outputAddr(out), length(len), token(tok), ownInputAddr(in)
     {}
 
-    void SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs, const uint64_t *tokens)
+    // Write-only variant: peer input is unused for Broadcast, so we only
+    // store this rank's own input and per-peer (output, token).  Returns
+    // false on overflow rather than silently truncating (callers MUST honor).
+    [[nodiscard]] bool SetWritePeers(uint32_t rankSize, uint64_t ownInput, const uint64_t *outputs,
+                                     const uint64_t *tokens)
     {
+        if (!EnsurePeerCapacity("BROADCAST", rankSize)) {
+            return false;
+        }
         peerCount = rankSize;
-        for (uint32_t i = 0; i < rankSize && i < kMaxBroadcastRanks; ++i) {
-            peerInput[i] = inputs[i];
+        ownInputAddr = ownInput;
+        for (uint32_t i = 0; i < rankSize; ++i) {
             peerOutput[i] = outputs[i];
             peerToken[i] = tokens[i];
         }
+        return true;
     }
 };
 
@@ -203,7 +213,7 @@ public:
         if (gateOnly_) {
             return {};
         }
-        return PackPeerArgs(rankSize_, tArg->peerInput, tArg->peerOutput, tArg->peerToken, tArg->length);
+        return PackPeerArgsWriteOnly(rankSize_, tArg->ownInputAddr, tArg->peerOutput, tArg->peerToken, tArg->length);
     }
 
 private:
@@ -245,8 +255,8 @@ private:
 
     inline HcclResult InitResourceWithChannels()
     {
+        ownInput_ = CreateVariable();
         for (uint32_t peerId = 0; peerId < rankSize_; peerId++) {
-            input_.push_back(CreateVariable());
             output_.push_back(CreateVariable());
             token_.push_back(CreateVariable());
         }
@@ -273,7 +283,8 @@ private:
 
     inline void LoadArgs()
     {
-        LoadPeerArgs(input_, output_, token_, lengthVar_);
+        // Write-only variant: 2*N+2 Loads vs. the 3*N+1 used by Reduce/Gather/Scatter.
+        LoadPeerArgsWriteOnly(ownInput_, output_, token_, lengthVar_);
     }
 
     inline void PostSync()
@@ -284,7 +295,10 @@ private:
 
     inline void DoBroadcast()
     {
-        srcAddr_.addr = input_[rankId_];
+        // Root's source is its own input.  The write-only Load layout gives
+        // us a single `ownInput_` Variable instead of the symmetric peer
+        // input array used by Reduce/Gather/Scatter.
+        srcAddr_.addr = ownInput_;
         srcAddr_.token = token_[rankId_];
 
         uint32_t chIdx = 0;
@@ -318,7 +332,7 @@ private:
     bool gateOnly_{false};
     decltype(std::declval<hcomm::CcuKernelArg>().channels) ownChannels_;
 
-    std::vector<hcomm::CcuRep::Variable> input_;
+    hcomm::CcuRep::Variable ownInput_;
     std::vector<hcomm::CcuRep::Variable> output_;
     std::vector<hcomm::CcuRep::Variable> token_;
 

@@ -90,9 +90,9 @@ struct CcuEnv {
     uint64_t outputVa = 0;
     uint64_t token = 0;
 
-    uint64_t allInputVa[pto::comm::ccu::kMaxReduceRanks]{};
-    uint64_t allOutputVa[pto::comm::ccu::kMaxReduceRanks]{};
-    uint64_t allToken[pto::comm::ccu::kMaxReduceRanks]{};
+    uint64_t allInputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allOutputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allToken[pto::comm::ccu::kCcuMeshMaxRanks]{};
 
     uint64_t mmioAddr = 0;
     uint32_t gateMask = 0;
@@ -161,7 +161,7 @@ void ExchangePeerAddrs()
     AddrPack myPack{g_env.inputVa, g_env.outputVa, g_env.token};
     std::vector<AddrPack> allPacks(g_env.nRanks);
     CommMpiAllgather(&myPack, sizeof(AddrPack), allPacks.data(), sizeof(AddrPack));
-    for (int i = 0; i < g_env.nRanks && i < static_cast<int>(pto::comm::ccu::kMaxReduceRanks); ++i) {
+    for (int i = 0; i < g_env.nRanks && i < static_cast<int>(pto::comm::ccu::kCcuMeshMaxRanks); ++i) {
         g_env.allInputVa[i] = allPacks[i].inputVa;
         g_env.allOutputVa[i] = allPacks[i].outputVa;
         g_env.allToken[i] = allPacks[i].token;
@@ -343,7 +343,11 @@ static bool RegisterAndLaunchReduceCcu(int rankId, int nRanks, uint32_t rootId, 
     std::fprintf(stderr, "[TREDUCE_CCU] rank=%d <- HcclCcuKernelRegisterFinish OK\n", rankId);
 
     pto::comm::ccu::CcuReduceTaskArg targ{g_env.inputVa, g_env.outputVa, payloadSize, g_env.token};
-    targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), g_env.allInputVa, g_env.allOutputVa, g_env.allToken);
+    if (!targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), g_env.allInputVa, g_env.allOutputVa, g_env.allToken)) {
+        std::fprintf(stderr, "[TREDUCE_CCU] rank=%d SetPeerAddrs FAILED (nRanks=%d > kCcuMeshMaxRanks)\n", rankId,
+                     nRanks);
+        return false;
+    }
     std::fprintf(stderr, "[TREDUCE_CCU] rank=%d -> HcclCcuKernelLaunch...\n", rankId);
     HCCL_OK(HcclCcuKernelLaunch(g_env.comm, g_env.threadHandle, kHandle, &targ));
     std::fprintf(stderr, "[TREDUCE_CCU] rank=%d <- HcclCcuKernelLaunch OK\n", rankId);
@@ -503,6 +507,22 @@ TEST_F(TReduceCcuTest, Float_1024_Sum_2Ranks)
 TEST_F(TReduceCcuTest, Float_1024_Sum_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE(RunReduceCcu(1024, 0));
+}
+// Boundary test: N=12 exercises Load-slot usage (3*12+1 = 37) below the
+// kCcuMeshMaxRanks=16 ceiling — guards against off-by-one bugs in the
+// per-rank Load packing without hitting the ceiling itself.
+TEST_F(TReduceCcuTest, Float_1024_Sum_12Ranks)
+{
+    SKIP_IF_RANKS_LT(12);
+    ASSERT_TRUE(RunReduceCcu(1024, 0));
+}
+// Boundary test: N=16 sits exactly at kCcuMeshMaxRanks; 3*16+1 = 49 Loads is
+// the worst-case packing currently allowed. Failing here is the canary for
+// either Load-slot exhaustion in hcomm or a mis-sized peer array.
+TEST_F(TReduceCcuTest, Float_1024_Sum_16Ranks)
+{
+    SKIP_IF_RANKS_LT(16);
     ASSERT_TRUE(RunReduceCcu(1024, 0));
 }
 TEST_F(TReduceCcuTest, Root1_Float_1024_Sum)

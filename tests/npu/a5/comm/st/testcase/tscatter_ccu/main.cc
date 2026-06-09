@@ -289,7 +289,7 @@ bool ResolveGateOnce()
 }
 
 static bool PrepareScatterBuffers(int rankId, int nRanks, uint32_t rootId, size_t numElements, size_t payloadSize,
-                                  uint64_t &outSliceVA)
+                                  uint64_t &rootInputBaseOut)
 {
     if (static_cast<uint32_t>(rankId) == rootId) {
         const size_t totalFloats = static_cast<size_t>(nRanks) * numElements;
@@ -304,19 +304,17 @@ static bool PrepareScatterBuffers(int rankId, int nRanks, uint32_t rootId, size_
     std::vector<float> outZero(numElements, -1.0f);
     ACL_OK(aclrtMemcpy(g_env.outputDev, g_env.outputBufSize, outZero.data(), payloadSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    std::vector<uint64_t> inputSliceVAs(static_cast<size_t>(nRanks), 0ULL);
-    if (static_cast<uint32_t>(rankId) == rootId) {
-        for (int r = 0; r < nRanks; ++r)
-            inputSliceVAs[r] = g_env.inputVa + static_cast<uint64_t>(r) * payloadSize;
-    }
-    CommMpiBcast(inputSliceVAs.data(), static_cast<int>(nRanks * sizeof(uint64_t)), COMM_MPI_CHAR,
-                 static_cast<int>(rootId));
-    outSliceVA = inputSliceVAs[rankId];
+    // Rolling-add scatter only needs root's buffer base — slice VAs are
+    // derived inside the kernel via `currentSlice += sliceStep`.  Broadcast
+    // a single uint64 from root instead of the full N-element slice array.
+    uint64_t rootInputBase = (static_cast<uint32_t>(rankId) == rootId) ? g_env.inputVa : 0ULL;
+    CommMpiBcast(&rootInputBase, static_cast<int>(sizeof(uint64_t)), COMM_MPI_CHAR, static_cast<int>(rootId));
+    rootInputBaseOut = rootInputBase;
     return true;
 }
 
 static bool RegisterAndLaunchScatterCcu(int rankId, int nRanks, uint32_t rootId, size_t payloadSize, uint64_t seq,
-                                        uint64_t myInputSliceVA)
+                                        uint64_t rootInputBase)
 {
     pto::comm::ccu::CcuScatterKernelArg karg(static_cast<uint32_t>(rankId), static_cast<uint32_t>(nRanks), rootId,
                                              payloadSize + seq);
@@ -327,27 +325,29 @@ static bool RegisterAndLaunchScatterCcu(int rankId, int nRanks, uint32_t rootId,
     HCCL_OK(HcclCcuKernelRegister(g_env.comm, &kHandle, &creator, &karg));
     HCCL_OK(HcclCcuKernelRegisterFinish(g_env.comm));
 
-    pto::comm::ccu::CcuScatterTaskArg targ{myInputSliceVA, g_env.outputVa, payloadSize, g_env.token};
+    pto::comm::ccu::CcuScatterTaskArg targ{g_env.inputVa, g_env.outputVa, payloadSize, g_env.token};
 
-    // Exchange (inputSliceVa, outputVa, token) across all ranks at launch time
-    // so the CCU kernel can skip runtime PreSync (NotifyRecord/NotifyWait).
+    // Scatter is write-side: AllGather only (outputVa, token).  Input
+    // slice VAs are NOT exchanged anymore — root's inputBase is broadcast
+    // separately by PrepareScatterBuffers and shipped through targ.SetWritePeers.
     struct AddrPack {
-        uint64_t inputVa;
         uint64_t outputVa;
         uint64_t token;
     };
-    AddrPack myPack{myInputSliceVA, g_env.outputVa, g_env.token};
+    AddrPack myPack{g_env.outputVa, g_env.token};
     std::vector<AddrPack> allPacks(nRanks);
     CommMpiAllgather(&myPack, sizeof(AddrPack), allPacks.data(), sizeof(AddrPack));
-    uint64_t allInputVa[pto::comm::ccu::kMaxScatterRanks]{};
-    uint64_t allOutputVa[pto::comm::ccu::kMaxScatterRanks]{};
-    uint64_t allToken[pto::comm::ccu::kMaxScatterRanks]{};
-    for (int i = 0; i < nRanks && i < static_cast<int>(pto::comm::ccu::kMaxScatterRanks); ++i) {
-        allInputVa[i] = allPacks[i].inputVa;
+    uint64_t allOutputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allToken[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    for (int i = 0; i < nRanks && i < static_cast<int>(pto::comm::ccu::kCcuMeshMaxRanks); ++i) {
         allOutputVa[i] = allPacks[i].outputVa;
         allToken[i] = allPacks[i].token;
     }
-    targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), allInputVa, allOutputVa, allToken);
+    if (!targ.SetWritePeers(static_cast<uint32_t>(nRanks), rootInputBase, payloadSize, allOutputVa, allToken)) {
+        std::fprintf(stderr, "[TSCATTER_CCU] rank=%d SetWritePeers FAILED (nRanks=%d > kCcuMeshMaxRanks)\n", rankId,
+                     nRanks);
+        return false;
+    }
 
     HCCL_OK(HcclCcuKernelLaunch(g_env.comm, g_env.threadHandle, kHandle, &targ));
     std::fprintf(stderr, "[TSCATTER_CCU] rank=%d KernelLaunch done\n", rankId);
@@ -405,12 +405,12 @@ bool RunScatterCcu(size_t numElements, uint32_t rootId)
     const int nRanks = g_env.nRanks;
     const size_t payloadSize = numElements * sizeof(float);
 
-    uint64_t myInputSliceVA = 0;
-    if (!PrepareScatterBuffers(rankId, nRanks, rootId, numElements, payloadSize, myInputSliceVA))
+    uint64_t rootInputBase = 0;
+    if (!PrepareScatterBuffers(rankId, nRanks, rootId, numElements, payloadSize, rootInputBase))
         return false;
 
     uint64_t seq = g_seqNo++;
-    if (!RegisterAndLaunchScatterCcu(rankId, nRanks, rootId, payloadSize, seq, myInputSliceVA))
+    if (!RegisterAndLaunchScatterCcu(rankId, nRanks, rootId, payloadSize, seq, rootInputBase))
         return false;
     if (!TriggerAndSyncScatterCcu(rankId))
         return false;
@@ -450,6 +450,25 @@ TEST_F(TScatterCcuTest, Root1_Float_1024)
 {
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunScatterCcu(1024, 1));
+}
+// Boundary test: N=12 with the rolling-add packing (2*12+3 = 27 Loads),
+// below the kCcuMeshMaxRanks=16 ceiling.  Also exercises the rolling
+// Address arithmetic with a substantial loop count — catches both the
+// PackScatterArgs / LoadScatterArgs Load-order contract and the
+// `currentSlice_ += sliceStep_` cumulative correctness end-to-end.
+TEST_F(TScatterCcuTest, Float_1024_12Ranks)
+{
+    SKIP_IF_RANKS_LT(12);
+    ASSERT_TRUE(RunScatterCcu(1024, 0));
+}
+// Boundary test: N=16 at the ceiling, 2*16+3 = 35 Loads.  Most stressful
+// rolling-add iteration count currently supported; failure here points at
+// either hcomm Load-slot exhaustion or a cumulative-add register-pressure
+// regression.
+TEST_F(TScatterCcuTest, Float_1024_16Ranks)
+{
+    SKIP_IF_RANKS_LT(16);
+    ASSERT_TRUE(RunScatterCcu(1024, 0));
 }
 
 } // namespace

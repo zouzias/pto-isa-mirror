@@ -88,9 +88,11 @@ struct CcuEnv {
     uint64_t outputVa = 0;
     uint64_t token = 0;
 
-    uint64_t allInputVa[pto::comm::ccu::kMaxBroadcastRanks]{};
-    uint64_t allOutputVa[pto::comm::ccu::kMaxBroadcastRanks]{};
-    uint64_t allToken[pto::comm::ccu::kMaxBroadcastRanks]{};
+    // Broadcast is write-only: peer input is dead, so only output / token
+    // need exchanging across ranks.  `inputVa` stays as a per-rank scalar
+    // packed into the TaskArg's ownInputAddr.
+    uint64_t allOutputVa[pto::comm::ccu::kCcuMeshMaxRanks]{};
+    uint64_t allToken[pto::comm::ccu::kCcuMeshMaxRanks]{};
 
     uint64_t mmioAddr = 0;
     uint32_t gateMask = 0;
@@ -146,25 +148,25 @@ bool SetupChannelsForCcu(HcclComm comm, int rankId, int nRanks, std::vector<Chan
     return true;
 }
 
-// TBroadcast: AllGather every rank's (inputVa, outputVa, token) at setup time
-// so the broadcast CCU kernel receives all peer addresses via GeneArgs and can
-// skip the runtime address-exchange PreSync.
+// TBroadcast (write-only): AllGather (outputVa, token) so the CCU kernel
+// receives every peer's write target via GeneArgs and skips the runtime
+// address-exchange PreSync.  inputVa is per-rank scalar (own source), shipped
+// through CcuBroadcastTaskArg::ownInputAddr — not part of the AllGather.
 void ExchangePeerAddrs()
 {
     struct AddrPack {
-        uint64_t inputVa;
         uint64_t outputVa;
         uint64_t token;
     };
-    AddrPack myPack{g_env.inputVa, g_env.outputVa, g_env.token};
+    AddrPack myPack{g_env.outputVa, g_env.token};
     std::vector<AddrPack> allPacks(g_env.nRanks);
     CommMpiAllgather(&myPack, sizeof(AddrPack), allPacks.data(), sizeof(AddrPack));
-    for (int i = 0; i < g_env.nRanks && i < static_cast<int>(pto::comm::ccu::kMaxBroadcastRanks); ++i) {
-        g_env.allInputVa[i] = allPacks[i].inputVa;
+    for (int i = 0; i < g_env.nRanks && i < static_cast<int>(pto::comm::ccu::kCcuMeshMaxRanks); ++i) {
         g_env.allOutputVa[i] = allPacks[i].outputVa;
         g_env.allToken[i] = allPacks[i].token;
     }
-    std::fprintf(stderr, "[TBROADCAST_CCU] rank=%d AllGather done, %d peers exchanged\n", g_env.rankId, g_env.nRanks);
+    std::fprintf(stderr, "[TBROADCAST_CCU] rank=%d AllGather (output,token) done, %d peers exchanged\n", g_env.rankId,
+                 g_env.nRanks);
 }
 
 bool EnsureEnvReady()
@@ -337,7 +339,11 @@ static bool RegisterAndLaunchBroadcastCcu(int rankId, int nRanks, uint32_t rootI
     HCCL_OK(HcclCcuKernelRegisterFinish(g_env.comm));
 
     pto::comm::ccu::CcuBroadcastTaskArg targ{g_env.inputVa, g_env.outputVa, payloadSize, g_env.token};
-    targ.SetPeerAddrs(static_cast<uint32_t>(nRanks), g_env.allInputVa, g_env.allOutputVa, g_env.allToken);
+    if (!targ.SetWritePeers(static_cast<uint32_t>(nRanks), g_env.inputVa, g_env.allOutputVa, g_env.allToken)) {
+        std::fprintf(stderr, "[TBROADCAST_CCU] rank=%d SetWritePeers FAILED (nRanks=%d > kCcuMeshMaxRanks)\n", rankId,
+                     nRanks);
+        return false;
+    }
     HCCL_OK(HcclCcuKernelLaunch(g_env.comm, g_env.threadHandle, kHandle, &targ));
     std::fprintf(stderr, "[TBROADCAST_CCU] rank=%d KernelLaunch done\n", rankId);
     return true;
@@ -438,6 +444,21 @@ TEST_F(TBroadcastCcuTest, Float_1024_Root1)
 {
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunBroadcastCcu(1024, 1));
+}
+// Boundary test: N=12 with the write-only packing (2*12+2 = 26 Loads); below
+// kCcuMeshMaxRanks=16, catches off-by-one in PackPeerArgsWriteOnly / Load order.
+TEST_F(TBroadcastCcuTest, Float_1024_Root0_12Ranks)
+{
+    SKIP_IF_RANKS_LT(12);
+    ASSERT_TRUE(RunBroadcastCcu(1024, 0));
+}
+// Boundary test: N=16 at the ceiling; write-only Load count is 2*16+2 = 34
+// (vs. the 3*16+1 = 49 reduce/gather/scatter use).  Failing here points at
+// hcomm Load-slot exhaustion or output/token array sizing.
+TEST_F(TBroadcastCcuTest, Float_1024_Root0_16Ranks)
+{
+    SKIP_IF_RANKS_LT(16);
+    ASSERT_TRUE(RunBroadcastCcu(1024, 0));
 }
 
 } // namespace

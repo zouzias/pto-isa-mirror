@@ -93,8 +93,6 @@ struct CcuReduceKernelArg : public hcomm::CcuKernelArg {
     }
 };
 
-static constexpr uint32_t kMaxReduceRanks = 16;
-
 struct CcuReduceTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};
     uint64_t outputAddr{0};
@@ -102,23 +100,31 @@ struct CcuReduceTaskArg : public hcomm::CcuTaskArg {
     uint64_t token{0};
 
     uint32_t peerCount{0};
-    uint64_t peerInput[kMaxReduceRanks]{};
-    uint64_t peerOutput[kMaxReduceRanks]{};
-    uint64_t peerToken[kMaxReduceRanks]{};
+    uint64_t peerInput[kCcuMeshMaxRanks]{};
+    uint64_t peerOutput[kCcuMeshMaxRanks]{};
+    uint64_t peerToken[kCcuMeshMaxRanks]{};
 
     CcuReduceTaskArg() = default;
     CcuReduceTaskArg(uint64_t in, uint64_t out, uint64_t len, uint64_t tok)
         : inputAddr(in), outputAddr(out), length(len), token(tok)
     {}
 
-    void SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs, const uint64_t *tokens)
+    // Returns false (with stderr trace) on overflow; callers MUST honor.
+    // Silent truncation would push VA=0 into the peer arrays for the ranks
+    // past the cutoff and cause root to ReadNb against an invalid address.
+    [[nodiscard]] bool SetPeerAddrs(uint32_t rankSize, const uint64_t *inputs, const uint64_t *outputs,
+                                    const uint64_t *tokens)
     {
+        if (!EnsurePeerCapacity("REDUCE", rankSize)) {
+            return false;
+        }
         peerCount = rankSize;
-        for (uint32_t i = 0; i < rankSize && i < kMaxReduceRanks; ++i) {
+        for (uint32_t i = 0; i < rankSize; ++i) {
             peerInput[i] = inputs[i];
             peerOutput[i] = outputs[i];
             peerToken[i] = tokens[i];
         }
+        return true;
     }
 };
 
