@@ -50,7 +50,7 @@ void TExpands_Impl(typename tile_shape::TileDType dst, typename tile_shape::DTyp
 }
 
 template <typename tile_shape>
-PTO_INTERNAL void TEXPANDS_IMPL(tile_shape &dst, typename tile_shape::DType &src)
+PTO_INTERNAL void TEXPANDS_IMPL(tile_shape &dst, typename tile_shape::DType src)
 {
     unsigned row = dst.GetValidRow();
     unsigned col = dst.GetValidCol();

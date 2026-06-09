@@ -16,13 +16,13 @@ from setuptools import setup, find_packages
 def get_include_files():
     include_dir = "include"
     data_files = []
-    
+
     for root, _, files in os.walk(include_dir):
         if files:
             install_dir = os.path.join("share/pto-isa", root)
             file_paths = [os.path.join(root, f) for f in files]
             data_files.append((install_dir, file_paths))
-    
+
     return data_files
 
 setup(
@@ -34,6 +34,7 @@ setup(
     packages=find_packages(exclude=["tests*", "demos*", "scripts*", "kernels*"]),
     data_files=get_include_files(),
     include_package_data=True,
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",

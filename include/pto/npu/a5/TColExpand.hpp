@@ -64,23 +64,23 @@ template <typename T, unsigned DstStride, unsigned elementsPerRepeat>
 PTO_INTERNAL void TColExpandInstr_PostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned dstValidRow,
                                              unsigned dstValidCol)
 {
-    uint16_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
+    int32_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
 
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    int32_t dstAdjust = static_cast<int32_t>(DstStride) * dstValidRow - elementsPerRepeat;
+    __ubuf__ T *dstOffset = dstPtr;
     __VEC_SCOPE__
     {
         RegTensor<T> vreg0;
-        __ubuf__ T *dstOffset;
         MaskReg preg;
-
         for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
             vlds(vreg0, srcPtr, elementsPerRepeat, NORM, POST_UPDATE);
             preg = CreatePredicate<T>(dstValidCol);
-            dstOffset = dstPtr + j * elementsPerRepeat;
             for (uint16_t i = 0; i < (uint16_t)dstValidRow; i++) {
                 vsts(vreg0, dstOffset, (uint32_t)DstStride, distValue, preg, POST_UPDATE);
             }
+            dstOffset -= dstAdjust;
         }
     }
 }

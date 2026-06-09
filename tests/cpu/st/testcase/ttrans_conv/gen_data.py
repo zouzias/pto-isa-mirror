@@ -35,22 +35,22 @@ def golden_NCHW2NC1HWC0(g_info):
 
     c1 = g_info.dst_shape_1
     assert c1 == (c + c0 - 1) // c0
-    
+
     input_arr = np.random.randint(1, 5, size=(n, c, h, w)).astype(g_info.data_type)
     input_arr.tofile("./input.bin")
-    
+
     c1 = (c + c0 - 1) // c0
-    
+
     padded_c = c1 * c0
     padding = padded_c - c
     if padding > 0:
         input_arr = np.pad(input_arr, ((0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
-        
+
     output_arr = input_arr.reshape(n, c1, c0, h, w).transpose(0, 1, 3, 4, 2)
-    
+
     output_arr.tofile("./golden.bin")
     print(f"Golden - {output_arr.shape}")
-    
+
     return input_arr, output_arr
 
 
@@ -69,20 +69,20 @@ def golden_NC1HWC02C1HWN1N0C0(g_info):
     n0 = g_info.dst_shape_4
 
     assert n1 == (n + n0 - 1) // n0
-        
+
     input_arr = np.random.randint(1, 5, size=(n, c1, h, w, c0)).astype(g_info.data_type)
     input_arr.tofile("./input.bin")
-    
+
     padded_c = n1 * n0
     padding = padded_c - n
     if padding > 0:
         input_arr = np.pad(input_arr, ((0, padding), (0, 0), (0, 0), (0, 0), (0, 0)), mode='constant')
-        
+
     output_arr = input_arr.reshape(n1, n0, c1, h, w, c0).transpose(2, 3, 4, 0, 1, 5)
-    
+
     output_arr.tofile("./golden.bin")
     print(f"Golden - {output_arr.shape}")
-    
+
     return input_arr, output_arr
 
 
@@ -103,22 +103,22 @@ def golden_GNCHW2NC1HWC0(g_info):
 
     c1 = g_info.dst_shape_1
     assert c1 == (c + c0 - 1) // c0
-    
+
     input_arr = np.random.randint(1, 5, size=(group_n, n, c, h, w)).astype(g_info.data_type)
     input_arr.tofile("./input.bin")
-    
+
     c1 = (c + c0 - 1) // c0
-    
+
     padded_c = c1 * c0
     padding = padded_c - c
     if padding > 0:
         input_arr = np.pad(input_arr, ((0, 0), (0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
-        
+
     output_arr = input_arr.reshape(group_n, n, c1, c0, h, w).transpose(0, 1, 2, 4, 5, 3)
-    
+
     output_arr.tofile("./golden.bin")
     print(f"Golden - {output_arr.shape}")
-    
+
     return input_arr, output_arr
 
 
@@ -138,20 +138,20 @@ def golden_GNC1HWC02C1HWN1N0C0(g_info):
     n0 = g_info.dst_shape_4
 
     assert n1 == (n + n0 - 1) // n0
-        
+
     input_arr = np.random.randint(1, 5, size=(group_n, n, c1, h, w, c0)).astype(g_info.data_type)
     input_arr.tofile("./input.bin")
-    
+
     padded_c = n1 * n0
     padding = padded_c - n
     if padding > 0:
         input_arr = np.pad(input_arr, ((0, 0), (0, padding), (0, 0), (0, 0), (0, 0), (0, 0)), mode='constant')
-        
+
     output_arr = input_arr.reshape(group_n, n1, n0, c1, h, w, c0).transpose(0, 3, 4, 5, 1, 2, 6)
-    
+
     output_arr.tofile("./golden.bin")
     print(f"Golden - {output_arr.shape}")
-    
+
     return input_arr, output_arr
 
 
@@ -160,8 +160,8 @@ def gen_golden_data(g_info):
     Generates aligned runtime raw binaries for C++ unit test validation suites.
     """
     data_type = g_info.data_type
-    mode = g_info.shape 
-    
+    mode = g_info.shape
+
     # -------------------------------------------------------------
     # MODE 1: NCHW -> NC1HWC0
     # -------------------------------------------------------------
@@ -256,7 +256,7 @@ SUITE_NAME = "TTRANSConvTest"
 
 if __name__ == "__main__":
     print(f"Beginning validation matrix deployment for {len(test_cases_registry)} test scenarios...\n")
-    
+
     for case in test_cases_registry:
         dirname = f"{SUITE_NAME}.{case.case_name}"
         if not os.path.exists(dirname):
@@ -266,5 +266,5 @@ if __name__ == "__main__":
         print(f"Running Transformation Mode [{case.shape}] | Configuration Identifier: {case.case_name}")
         gen_golden_data(case)
         os.chdir(original_dir)
-        
+
     print("\nAll binary test files (input.bin, golden.bin) have been generated successfully.")

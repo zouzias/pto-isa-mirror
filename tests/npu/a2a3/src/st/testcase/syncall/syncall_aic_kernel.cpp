@@ -15,7 +15,6 @@ using namespace pto;
 
 PTO_SYNCALL_AIC_KERNEL_META(RunSoftSyncAllAIC);
 
-constexpr int32_t kBlockCount = 24;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagL1Addr = 0x0;
 constexpr uint64_t kOutL1Addr = 0x1000;
@@ -44,7 +43,7 @@ PTO_INTERNAL void InvalidateGmLines(__gm__ int32_t *addr, int32_t lines)
 }
 
 extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out, __gm__ int32_t __out__ *flags,
-                                                    __gm__ int32_t __out__ *syncWorkspace)
+                                                    __gm__ int32_t __out__ *syncWorkspace, int32_t totalBlocks)
 {
     const int32_t idx = block_idx;
     StoreInt32LineL1(flags + idx * kInt32PerCacheLine, idx + 1, kFlagL1Addr);
@@ -54,11 +53,11 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out,
 #ifndef __PTO_AUTO__
     syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t *>(kSoftSyncL1Addr);
 #endif
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::AICOnly>(gmWs, syncL1Tile, kBlockCount);
+    SYNCALL<SyncAllMode::Soft, SyncCoreType::AICOnly>(gmWs, syncL1Tile, totalBlocks);
 
-    InvalidateGmLines(flags, kBlockCount);
+    InvalidateGmLines(flags, totalBlocks);
     int32_t allVisible = 1;
-    for (int32_t i = 0; i < kBlockCount; ++i) {
+    for (int32_t i = 0; i < totalBlocks; ++i) {
         __gm__ int32_t *flag = flags + i * kInt32PerCacheLine;
         dcci(static_cast<__gm__ void *>(flag), SINGLE_CACHE_LINE);
         dsb(DSB_DDR);
@@ -69,7 +68,7 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out,
     StoreInt32LineL1(out + idx * kInt32PerCacheLine, allVisible, kOutL1Addr);
 }
 
-void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
+void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream)
 {
-    RunSoftSyncAllAIC<<<24, nullptr, stream>>>(out, flags, syncWorkspace);
+    RunSoftSyncAllAIC<<<totalBlocks, nullptr, stream>>>(out, flags, syncWorkspace, totalBlocks);
 }

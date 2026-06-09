@@ -1436,7 +1436,7 @@ template bool RunPutRing2DSliding<float, 65, 104, 16, 32>(int n_ranks, int n_dev
 // Tests TPUT with two staging tiles to overlap TLOAD and TSTORE.
 // Uses the 4-parameter TPUT(dst, src, pingTile, pongTile) overload.
 //   GlobalTensor: (1, 1, 1, total_rows, total_cols)
-//   Tile physical dims: (tile_rows, tile_cols), DYNAMIC ValidRow/ValidCol
+//   Tile logical chunk: (tile_rows, tile_cols); physical cols padded to 32B for Vec RowMajor
 // ============================================================================
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks,
@@ -1447,11 +1447,13 @@ __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
     constexpr size_t total_count = total_rows * total_cols;
     static_assert(total_rows > tile_rows || total_cols > tile_cols,
                   "At least one dimension must exceed tile size to test ping-pong chunking");
+    constexpr size_t tile_cols_phys = ((tile_cols * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+    static_assert(tile_cols_phys >= tile_cols, "aligned tile cols must cover logical tile cols");
 
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
-    using TileData = pto::Tile<pto::TileType::Vec, T, tile_rows, tile_cols, pto::BLayout::RowMajor, -1, -1>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, tile_rows, tile_cols_phys, pto::BLayout::RowMajor, -1, -1>;
 
     ShapeDyn fullShape(1, 1, 1, total_rows, total_cols);
     StrideDyn fullStride(total_count, total_count, total_count, total_cols, 1);
@@ -1464,7 +1466,7 @@ __global__ AICORE void TPutPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
     __gm__ T *send_shmem = shmem_data;
     __gm__ T *recv_shmem = shmem_data + total_count;
 
-    constexpr size_t tileUBBytes = ((tile_rows * tile_cols * sizeof(T) + 1023) / 1024) * 1024;
+    constexpr size_t tileUBBytes = ((tile_rows * tile_cols_phys * sizeof(T) + 1023) / 1024) * 1024;
 
     if (phase == 0) {
         Global sendG(send_shmem, fullShape, fullStride);
@@ -1664,3 +1666,6 @@ template bool RunPutRingPingPong<int32_t, 256, 256, 32, 64>(int n_ranks, int n_d
 // Irregular: float 65x104, tile 16x32 → (4+1)×(3+1)=20 chunks, partial rows+cols
 template bool RunPutRingPingPong<float, 65, 104, 16, 32>(int n_ranks, int n_devices, int first_rank_id,
                                                          int first_device_id);
+// Pypto AllReduce shape: float 7x10, tile 5x7 → 2×2=4 chunks incl. partial col 5x3
+template bool RunPutRingPingPong<float, 7, 10, 5, 7>(int n_ranks, int n_devices, int first_rank_id,
+                                                     int first_device_id);
