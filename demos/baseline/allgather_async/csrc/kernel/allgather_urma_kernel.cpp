@@ -27,7 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/pto_tile.hpp"
 #include "common.hpp"
 #ifdef PTO_URMA_SUPPORTED
-#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
+#include "pto/comm/async/urma/urma_async_intrin.hpp"
 #endif
 
 #include "allgather_urma_kernel.h"

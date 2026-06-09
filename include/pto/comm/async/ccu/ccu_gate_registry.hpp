@@ -27,7 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <mutex>
 #include <unordered_map>
 
-#include "pto/npu/comm/async/ccu/ccu_types.hpp"
+#include "pto/comm/async/ccu/ccu_types.hpp"
 
 namespace pto {
 namespace comm {

@@ -8,14 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
-#define PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
+#ifndef PTO_COMM_ASYNC_URMA_INTRIN_HPP
+#define PTO_COMM_ASYNC_URMA_INTRIN_HPP
 
 #ifdef PTO_URMA_SUPPORTED
 
 #include "pto/common/debug.h"
 #include "pto/comm/async_common/async_types.hpp"
-#include "pto/npu/comm/async/urma/urma_types.hpp"
+#include "pto/comm/async/urma/urma_types.hpp"
 
 namespace pto {
 namespace comm {
@@ -304,4 +304,4 @@ AICORE inline uint64_t UrmaPeerMrBaseAddr(__gm__ uint8_t *urmaWorkspace, uint32_
 } // namespace pto
 
 #endif // PTO_URMA_SUPPORTED
-#endif // PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
+#endif // PTO_COMM_ASYNC_URMA_INTRIN_HPP

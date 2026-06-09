@@ -465,9 +465,8 @@ private:
             return false;
         }
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (MESH)"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (MESH)" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
             COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
                                     << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);
@@ -583,9 +582,8 @@ private:
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(newDevMem);
         ownsDeviceCtx = true;
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (RING)"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (RING)" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         return true;
     }
 };
@@ -709,6 +707,6 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     return perRankFn(rankId, &rootInfo);
 }
 
-// SdmaWorkspaceManager moved to pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
-#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
+// SdmaWorkspaceManager moved to pto/comm/async/sdma/sdma_workspace_manager.hpp
+#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;

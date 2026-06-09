@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
-#define PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
+#ifndef PTO_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
+#define PTO_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
 
 #if defined(__CCE_KT_TEST__)
 #error "urma_workspace_manager.hpp is a host-only header and cannot be included in device code."
@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iostream>
 #include <vector>
 
-#include "pto/npu/comm/async/urma/urma_workspace_helpers.hpp"
+#include "pto/comm/async/urma/urma_workspace_helpers.hpp"
 
 namespace pto {
 namespace comm {
@@ -494,4 +494,4 @@ private:
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
+#endif // PTO_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP

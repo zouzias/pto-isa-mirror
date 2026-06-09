@@ -8,16 +8,16 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
-#define PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
+#ifndef PTO_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
+#define PTO_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
 
 #include <cstdint>
 #include <iostream>
 
 #include "acl/acl.h"
 
-#include "pto/npu/comm/async/urma/urma_types.hpp"
-#include "pto/npu/comm/async/urma/urma_hccp_loader.hpp"
+#include "pto/comm/async/urma/urma_types.hpp"
+#include "pto/comm/async/urma/urma_hccp_loader.hpp"
 
 namespace pto {
 namespace comm {
@@ -253,4 +253,4 @@ inline void PopulateLocalMemInfo(UrmaMemInfo &memInfo, uint32_t tokenId, uint64_
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP
+#endif // PTO_COMM_ASYNC_URMA_WORKSPACE_HELPERS_HPP

@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_ASYNC_SDMA_SDMA_CMO_INTRIN_HPP
 #define PTO_COMM_ASYNC_SDMA_SDMA_CMO_INTRIN_HPP
 
-#include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#include "pto/comm/async/sdma/sdma_async_intrin.hpp"
 
 namespace pto {
 namespace comm {
