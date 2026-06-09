@@ -28,6 +28,8 @@ protected:
 
 void LaunchHardMix12(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
 void LaunchSoftMix12(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWs, void *stream);
+void LaunchHardMix11(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
+void LaunchSoftMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWs, void *stream);
 void LaunchHardAiv(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
 void LaunchSoftAiv(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWs, void *stream);
 void LaunchHardAic(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream);
@@ -146,6 +148,16 @@ TEST_F(SYNCALLMixChevronTest, case_hard_mix_1_2)
 TEST_F(SYNCALLMixChevronTest, case_soft_mix_1_2)
 {
     RunMixCase<60, true>(LaunchSoftMix12, "chevron_soft_mix_1_2");
+}
+
+TEST_F(SYNCALLMixChevronTest, case_hard_mix_1_1)
+{
+    RunMixCase<40, false>(LaunchHardMix11, "chevron_hard_mix_1_1");
+}
+
+TEST_F(SYNCALLMixChevronTest, case_soft_mix_1_1)
+{
+    RunMixCase<40, true>(LaunchSoftMix11, "chevron_soft_mix_1_1");
 }
 
 TEST_F(SYNCALLMixChevronTest, case_hard_aiv_only)

@@ -23,6 +23,13 @@ if __name__ == "__main__":
         os.makedirs(case_name, exist_ok=True)
         golden.tofile(os.path.join(case_name, "golden.bin"))
     for case_name in (
+        "SYNCALLMixChevronTest.case_hard_mix_1_1",
+        "SYNCALLMixChevronTest.case_soft_mix_1_1",
+    ):
+        golden = np.ones(40, dtype=np.int32)
+        os.makedirs(case_name, exist_ok=True)
+        golden.tofile(os.path.join(case_name, "golden.bin"))
+    for case_name in (
         "SYNCALLMixChevronTest.case_hard_aiv_only",
         "SYNCALLMixChevronTest.case_soft_aiv_only",
     ):
