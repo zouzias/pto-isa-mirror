@@ -124,3 +124,11 @@ TEST_F(TCMPTest, case_int32_32x32_32x32_32x32)
 {
     test_tcmp<int32_t, 32, 32, 32, 32, CmpMode::EQ>();
 }
+TEST_F(TCMPTest, case_float_64x64_64x64_64x64)
+{
+    test_tcmp<float, 64, 64, 64, 64, CmpMode::EQ>();
+}
+TEST_F(TCMPTest, case_float_1x512_1x512_1x512)
+{
+    test_tcmp<float, 1, 512, 1, 512, CmpMode::EQ>();
+}

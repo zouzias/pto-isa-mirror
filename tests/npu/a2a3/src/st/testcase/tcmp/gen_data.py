@@ -22,16 +22,19 @@ def gen_golden_data_tcmps(case_name, param):
 
     # Generate random input arrays
     if (dtype == np.float16 or dtype == np.float32):
-        input1 = np.random.uniform(-5, 5, size=[H, W]).astype(dtype)
-        input2 = np.random.uniform(-5, 5, size=[H, W]).astype(dtype)
+        input1 = np.random.uniform(-10, 10, size=[H, W]).astype(dtype)
+        input2 = np.random.uniform(-10, 10, size=[H, W]).astype(dtype)
     else:
         input1 = np.random.randint(-1000, 1000, size=[H, W]).astype(dtype)
         input2 = np.random.randint(-1000, 1000, size=[H, W]).astype(dtype)
 
+    if param.mode in ("CmpMode::EQ", "CmpMode::NE"):
+        input2 = np.where(np.random.choice([True, False], size=(H, W)), input1, input2)
+
     if param.mode == "CmpMode::EQ":
-        golden = (abs(input1 - input2) < 10e-9)
+        golden = np.isclose(input1, input2, rtol=0, atol=1e-9)
     if param.mode == "CmpMode::NE":
-        golden = (abs(input1 - input2) > 10e-9) 
+        golden = ~np.isclose(input1, input2, rtol=0, atol=1e-9)
     if param.mode == "CmpMode::LT":
         golden = (input1 < input2) 
     if param.mode == "CmpMode::GT":
@@ -42,26 +45,16 @@ def gen_golden_data_tcmps(case_name, param):
         golden = (input1 <= input2) 
 
     # Apply valid region constraints
-    output = np.zeros([H, W]).astype(dtype)
-    for h in range(H):
-        for w in range(W):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = np.uint8(output[h][w])
+    output = np.zeros([H, W]).astype(np.uint8)
+    output[:h_valid, :w_valid] = golden[:h_valid, :w_valid]
 
-    func_binar = lambda bits: sum(np.uint8(bit * 2 **(i)) for i, bit in enumerate(np.uint8(bits)))
-    out_uint8 = []
-    golden = golden.astype(np.uint8)
-    bits_per_row = W // 8
-    for row in golden:
-        for i in range(bits_per_row):
-            out_uint8.append(func_binar(row[i*8:i*8+8]))
+    golden = np.packbits(output, axis=1, bitorder='little')
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
-    np.array(out_uint8).astype(np.uint8).tofile("golden.bin")
+    golden.tofile("golden.bin")
 
-    return output, input1, input2, golden
 
 class tcmpParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, cmpMode):
@@ -100,6 +93,8 @@ if __name__ == "__main__":
         tcmpParams(np.float32, 128, 128, 64, 64, 128, 128, "CmpMode::LE"),
         tcmpParams(np.int32, 77, 81, 32, 32, 77, 81, "CmpMode::EQ"),
         tcmpParams(np.int32, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
+        tcmpParams(np.float32, 64, 64, 64, 64, 64, 64, "CmpMode::EQ"),
+        tcmpParams(np.float32, 1, 512, 1, 512, 1, 512, "CmpMode::EQ"),
     ]
 
     for i, param in enumerate(case_params_list):
