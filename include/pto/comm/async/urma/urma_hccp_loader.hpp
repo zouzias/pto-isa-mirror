@@ -8,14 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_URMA_HCCP_LOADER_HPP
-#define PTO_NPU_COMM_ASYNC_URMA_HCCP_LOADER_HPP
+#ifndef PTO_COMM_ASYNC_URMA_HCCP_LOADER_HPP
+#define PTO_COMM_ASYNC_URMA_HCCP_LOADER_HPP
 
 #include <iostream>
 #include <mutex>
 #include <dlfcn.h>
 
-#include "pto/npu/comm/async/urma/urma_hccp_types.hpp"
+#include "pto/comm/async/urma/urma_hccp_types.hpp"
 
 namespace pto {
 namespace comm {
@@ -183,4 +183,4 @@ private:
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_NPU_COMM_ASYNC_URMA_HCCP_LOADER_HPP
+#endif // PTO_COMM_ASYNC_URMA_HCCP_LOADER_HPP

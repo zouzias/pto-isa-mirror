@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_TPREFETCH_ASYNC_HPP
-#define PTO_NPU_TPREFETCH_ASYNC_HPP
+#ifndef PTO_COMM_ASYNC_SDMA_TPREFETCH_ASYNC_IMPL_HPP
+#define PTO_COMM_ASYNC_SDMA_TPREFETCH_ASYNC_IMPL_HPP
 
 // TPREFETCH_ASYNC - L2 cache prefetch via SDMA CMO (opcode = 6).
 //
@@ -17,10 +17,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // from GM/HBM into the on-chip L2 cache so that subsequent TLOADs hit warm
 // lines). It happens to *implement* itself by submitting an SDMA CMO SQE from
 // the AI Core, which means it has to depend on the SDMA infrastructure that
-// also backs TPUT_ASYNC / TGET_ASYNC. We keep the file here, alongside other
-// per-arch compute/memory-access instruction headers, so its placement reflects
-// what users see at the API surface (a memory-access instruction in `pto::`)
-// rather than what the implementation reaches into (the comm SDMA stack).
+// also backs TPUT_ASYNC / TGET_ASYNC. The implementation is arch-neutral (all
+// A2A3/A5 differences live inside the SDMA backend headers), so it is defined
+// once here next to that SDMA stack and included by the thin per-arch wrappers
+// pto/npu/a2a3/TPrefetchAsync.hpp and pto/npu/a5/TPrefetchAsync.hpp, which is
+// what users see at the API surface (a memory-access instruction in `pto::`).
 
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
@@ -56,8 +57,8 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData & /*srcGlobalData*
 #else // !__PTO_AUTO__ -- full manual-mode implementation
 // ---------------------------------------------------------------------------
 
-#include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
-#include "pto/npu/comm/async/sdma/sdma_cmo_intrin.hpp"
+#include "pto/comm/async/sdma/sdma_async_intrin.hpp"
+#include "pto/comm/async/sdma/sdma_cmo_intrin.hpp"
 
 namespace pto {
 
@@ -200,4 +201,4 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData &srcGlobalData, Pr
 
 #endif // __PTO_AUTO__
 
-#endif // PTO_NPU_TPREFETCH_ASYNC_HPP
+#endif // PTO_COMM_ASYNC_SDMA_TPREFETCH_ASYNC_IMPL_HPP
