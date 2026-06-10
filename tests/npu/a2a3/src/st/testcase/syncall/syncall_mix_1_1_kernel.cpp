@@ -20,15 +20,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #endif
 
-constexpr int32_t kMix11HardParticipants = 48;
-constexpr int32_t kMix11SoftParticipants = 48;
 constexpr uint64_t kMix11HardTilingKey = 1101;
+
+// Hard mix participants are derived on-device: aicBlocks == cube launch grid == get_block_num(),
+// total == aicBlocks * (1 + AIV ratio). The ratio is architecture-independent, only the cube
+// count differs between 910B1 (24) and 910B4 (20).
 
 #if defined(SYNCALL_MIX_BUILD_AIC) && !defined(SYNCALL_MIX_REGISTER_BUILD)
 extern "C" __global__ AICORE void RunSoftSyncAllMix11_1102_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
                                                                    __gm__ int32_t __out__ *out,
                                                                    __gm__ int32_t __out__ *flags,
-                                                                   __gm__ int32_t __out__ *syncWorkspace);
+                                                                   __gm__ int32_t __out__ *syncWorkspace,
+                                                                   int32_t aicBlocks, int32_t totalParticipants);
 #endif
 
 #if defined(SYNCALL_MIX_BUILD_AIC)
@@ -39,15 +42,17 @@ extern "C" __global__ AICORE void RunSyncAllMix11_1101_mix_aic(__gm__ uint64_t _
                                                                __gm__ int32_t __out__ *out,
                                                                __gm__ int32_t __out__ *flags)
 {
-    RunMixSyncAllBody<kMix11HardParticipants, false>(fftsAddr, out, flags, nullptr);
+    const int32_t aicBlocks = static_cast<int32_t>(get_block_num());
+    RunMixSyncAllBody<false>(aicBlocks, aicBlocks * (1 + __MIX_CORE_AIV_RATIO__), fftsAddr, out, flags, nullptr);
 }
 
 extern "C" __global__ AICORE void RunSoftSyncAllMix11_1102_mix_aic(__gm__ uint64_t __in__ *fftsAddr,
                                                                    __gm__ int32_t __out__ *out,
                                                                    __gm__ int32_t __out__ *flags,
-                                                                   __gm__ int32_t __out__ *syncWorkspace)
+                                                                   __gm__ int32_t __out__ *syncWorkspace,
+                                                                   int32_t aicBlocks, int32_t totalParticipants)
 {
-    RunMixSyncAllBody<kMix11SoftParticipants, true>(fftsAddr, out, flags, syncWorkspace);
+    RunMixSyncAllBody<true>(aicBlocks, totalParticipants, fftsAddr, out, flags, syncWorkspace);
 }
 
 #endif
@@ -60,15 +65,17 @@ extern "C" __global__ AICORE void RunSyncAllMix11_1101_mix_aiv(__gm__ uint64_t _
                                                                __gm__ int32_t __out__ *out,
                                                                __gm__ int32_t __out__ *flags)
 {
-    RunMixSyncAllBody<kMix11HardParticipants, false>(fftsAddr, out, flags, nullptr);
+    const int32_t aicBlocks = static_cast<int32_t>(get_block_num());
+    RunMixSyncAllBody<false>(aicBlocks, aicBlocks * (1 + __MIX_CORE_AIV_RATIO__), fftsAddr, out, flags, nullptr);
 }
 
 extern "C" __global__ AICORE void RunSoftSyncAllMix11_1102_mix_aiv(__gm__ uint64_t __in__ *fftsAddr,
                                                                    __gm__ int32_t __out__ *out,
                                                                    __gm__ int32_t __out__ *flags,
-                                                                   __gm__ int32_t __out__ *syncWorkspace)
+                                                                   __gm__ int32_t __out__ *syncWorkspace,
+                                                                   int32_t aicBlocks, int32_t totalParticipants)
 {
-    RunMixSyncAllBody<kMix11SoftParticipants, true>(fftsAddr, out, flags, syncWorkspace);
+    RunMixSyncAllBody<true>(aicBlocks, totalParticipants, fftsAddr, out, flags, syncWorkspace);
 }
 
 #endif
@@ -114,7 +121,7 @@ std::vector<char> ReadCurrentSharedObject(const char *path)
 }
 
 void LaunchHardMixKernel(const void *anchor, uint64_t tilingKey, uint8_t *ffts, int32_t *out, int32_t *flags,
-                         void *stream)
+                         int32_t blockDim, void *stream)
 {
     const char *path = GetCurrentSharedObjectPath(anchor);
     static const std::vector<char> kernelBinary = ReadCurrentSharedObject(path);
@@ -135,7 +142,8 @@ void LaunchHardMixKernel(const void *anchor, uint64_t tilingKey, uint8_t *ffts, 
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
     rtTaskCfgInfo_t cfgInfo{};
-    ret = rtKernelLaunchWithHandleV2(handle, tilingKey, 24, &argsInfo, nullptr, stream, &cfgInfo);
+    ret = rtKernelLaunchWithHandleV2(handle, tilingKey, static_cast<uint32_t>(blockDim), &argsInfo, nullptr, stream,
+                                     &cfgInfo);
     if (ret != RT_ERROR_NONE) {
         std::fprintf(stderr, "rtKernelLaunchWithHandleV2 failed for SYNCALL mix 1:1, ret=%d\n", ret);
         std::abort();
@@ -143,20 +151,21 @@ void LaunchHardMixKernel(const void *anchor, uint64_t tilingKey, uint8_t *ffts, 
 }
 } // namespace
 
-void LaunchSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, void *stream)
+void LaunchSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t aicBlocks, void *stream)
 {
     LaunchHardMixKernel(reinterpret_cast<const void *>(&LaunchSyncAllMix11), kMix11HardTilingKey, ffts, out, flags,
-                        stream);
+                        aicBlocks, stream);
 }
 
-void LaunchSoftSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
+void LaunchSoftSyncAllMix11(uint8_t *ffts, int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t aicBlocks,
+                            int32_t totalParticipants, void *stream)
 {
     aclrtStream aivStream;
     (void)aclrtCreateStream(&aivStream);
-    RunSoftSyncAllMix11_1102_mix_aic<<<24, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
-                                                              syncWorkspace);
-    RunSoftSyncAllMix11_1102_mix_aiv<<<24, nullptr, aivStream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
-                                                                 syncWorkspace);
+    RunSoftSyncAllMix11_1102_mix_aic<<<aicBlocks, nullptr, stream>>>(reinterpret_cast<uint64_t *>(ffts), out, flags,
+                                                                     syncWorkspace, aicBlocks, totalParticipants);
+    RunSoftSyncAllMix11_1102_mix_aiv<<<aicBlocks * __MIX_CORE_AIV_RATIO__, nullptr, aivStream>>>(
+        reinterpret_cast<uint64_t *>(ffts), out, flags, syncWorkspace, aicBlocks, totalParticipants);
     (void)aclrtSynchronizeStream(aivStream);
     (void)aclrtDestroyStream(aivStream);
 }

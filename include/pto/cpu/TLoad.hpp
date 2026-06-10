@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <unistd.h>
 #include <cassert>
 #include "pto/cpu/parallel.hpp"
+#include "nz_utils.hpp"
 
 namespace pto {
 template <typename TileData>
@@ -69,21 +70,89 @@ __tf__ PTO_INLINE void LoadPlainMatrix(typename GlobalData::DType __out__ *dst, 
 }
 
 template <typename GlobalData, typename TileData>
-__tf__ PTO_INLINE void LoadPlain(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
-                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                 int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+__tf__ PTO_INLINE void LoadPlainDnClassic(typename GlobalData::DType __out__ *dst,
+                                          typename TileData::TileDType __in__ src, int gShape0, int gShape1,
+                                          int gShape2, int gShape3, int gShape4, int gStride0, int gStride1,
+                                          int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
     int64_t dstStride1 = gShape2;
     int64_t dstStride0 = gShape1 * dstStride1;
 
-    for (uint32_t i = 0; i < gShape0; i++) {
-        int64_t dstAddr0 = i * dstStride0;
-        int64_t srcAddr0 = i * gStride0;
-        for (uint32_t j = 0; j < gShape1; j++) {
-            int64_t dstAddr1 = j * dstStride1;
-            int64_t srcAddr1 = j * gStride1;
-            for (uint32_t k = 0; k < gShape2; k++) {
-                size_t offsetSrcBase = srcAddr0 + srcAddr1 + k * gStride2;
+    for (uint32_t i = 0; i < static_cast<uint32_t>(gShape0); i++) {
+        int64_t dstAddr0 = static_cast<int64_t>(i) * dstStride0;
+        int64_t srcAddr0 = static_cast<int64_t>(i) * gStride0;
+        for (uint32_t j = 0; j < static_cast<uint32_t>(gShape1); j++) {
+            int64_t dstAddr1 = static_cast<int64_t>(j) * dstStride1;
+            int64_t srcAddr1 = static_cast<int64_t>(j) * gStride1;
+            for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
+                size_t offsetSrcBase = srcAddr0 + srcAddr1 + static_cast<int64_t>(k) * gStride2;
+                LoadPlainMatrix<GlobalData, TileData>(dst, src + offsetSrcBase, gShape3, gShape4, gStride3, gStride4,
+                                                      validRow, validCol, dstAddr0 + dstAddr1 + k);
+            }
+        }
+    }
+}
+
+template <typename GlobalData, typename TileData>
+__tf__ PTO_INLINE void LoadPlainDnFlattenRows(typename GlobalData::DType __out__ *dst,
+                                              typename TileData::TileDType __in__ src, int gShape0, int gShape1,
+                                              int gShape2, int gShape3, int gShape4, int gStride0, int gStride1,
+                                              int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+{
+    (void)validRow;
+    (void)validCol;
+    for (uint32_t i = 0; i < static_cast<uint32_t>(gShape0); i++) {
+        const std::size_t srcAddr0 = static_cast<std::size_t>(i) * static_cast<std::size_t>(gStride0);
+        const std::size_t dstAddr0 =
+            static_cast<std::size_t>(i) * static_cast<std::size_t>(gShape1) * gShape2 * gShape3;
+        for (uint32_t j = 0; j < static_cast<uint32_t>(gShape1); j++) {
+            const std::size_t srcAddr1 = static_cast<std::size_t>(j) * static_cast<std::size_t>(gStride1);
+            const std::size_t dstAddr1 = static_cast<std::size_t>(j) * static_cast<std::size_t>(gShape2) * gShape3;
+            for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
+                const std::size_t srcAddr2 = static_cast<std::size_t>(k) * static_cast<std::size_t>(gStride2);
+                const std::size_t dstRowBase = dstAddr0 + dstAddr1 + static_cast<std::size_t>(k) * gShape3;
+                for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
+                    const std::size_t dstBase = c * static_cast<std::size_t>(TileData::Rows) + dstRowBase;
+                    const std::size_t srcBase = srcAddr0 + srcAddr1 + srcAddr2 + c * static_cast<std::size_t>(gStride4);
+                    PTO_CPU_VECTORIZE_LOOP
+                    for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+                        dst[dstBase + r] = src[srcBase + r * static_cast<std::size_t>(gStride3)];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename GlobalData, typename TileData>
+__tf__ PTO_INLINE void LoadPlain(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
+                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
+                                 int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+{
+    if constexpr (!TileData::isRowMajor) {
+        const int64_t flattenedRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * static_cast<int64_t>(gShape3);
+        if (flattenedRows == validRow && gShape4 == validCol) {
+            LoadPlainDnFlattenRows<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4,
+                                                         gStride0, gStride1, gStride2, gStride3, gStride4, validRow,
+                                                         validCol);
+            return;
+        }
+        LoadPlainDnClassic<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                 gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        return;
+    }
+
+    int64_t dstStride1 = gShape2;
+    int64_t dstStride0 = gShape1 * dstStride1;
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(gShape0); i++) {
+        int64_t dstAddr0 = static_cast<int64_t>(i) * dstStride0;
+        int64_t srcAddr0 = static_cast<int64_t>(i) * gStride0;
+        for (uint32_t j = 0; j < static_cast<uint32_t>(gShape1); j++) {
+            int64_t dstAddr1 = static_cast<int64_t>(j) * dstStride1;
+            int64_t srcAddr1 = static_cast<int64_t>(j) * gStride1;
+            for (uint32_t k = 0; k < static_cast<uint32_t>(gShape2); k++) {
+                size_t offsetSrcBase = srcAddr0 + srcAddr1 + static_cast<int64_t>(k) * gStride2;
                 LoadPlainMatrix<GlobalData, TileData>(dst, src + offsetSrcBase, gShape3, gShape4, gStride3, gStride4,
                                                       validRow, validCol, dstAddr0 + dstAddr1 + k);
             }
@@ -117,14 +186,30 @@ __tf__ AICORE void TLoad(typename TileData::TileDType __out__ dst, typename Glob
                          int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
                          int gStride3, int gStride4, int validRow, int validCol)
 {
-    assert((gShape0 * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol && TileData::isRowMajor) ||
-           (gShape0 * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow && !TileData::isRowMajor));
+    if constexpr (GlobalData::layout == pto::Layout::NZ) {
+        assert(validRow == gShape2 * gShape3 && validCol == gShape1 * gShape4);
+    } else {
+        const bool isFlattenRowsColMajor =
+            !TileData::isRowMajor &&
+            static_cast<int64_t>(gShape0) * gShape1 * gShape2 * static_cast<int64_t>(gShape3) == validRow &&
+            gShape4 == validCol;
+        assert((static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol &&
+                TileData::isRowMajor) ||
+               (static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow &&
+                !TileData::isRowMajor) ||
+               isFlattenRowsColMajor);
+    }
 
     // Filling padding
     std::fill(dst, dst + (TileData::Cols * TileData::Rows), getPadValue<TileData>());
 
     // Filling data
-    if (TileData::SFractal == SLayout::NoneBox) {
+    if constexpr (GlobalData::layout == pto::Layout::NZ) {
+        ForEachNZElement<TileData>(validRow, validCol, gShape1, gShape3, gShape4, gStride0, gStride1, gStride2,
+                                   gStride3, gStride4, [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
+                                       dst[tile_idx] = getProperDataPart(src, gd_idx);
+                                   });
+    } else if (TileData::SFractal == SLayout::NoneBox) {
         LoadPlain<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
                                         gStride2, gStride3, gStride4, validRow, validCol);
     } else {
@@ -138,8 +223,9 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData &dst, GlobalData &src)
 {
     static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
                   "Source dtype must be same with dst dtype");
-    static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN,
-                  "Only ND and DN GLobal Tensors are currently supported");
+    static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN ||
+                      GlobalData::layout == pto::Layout::NZ,
+                  "Only ND, DN and NZ GLobal Tensors are currently supported");
     TLoad<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
                                 src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
                                 src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),

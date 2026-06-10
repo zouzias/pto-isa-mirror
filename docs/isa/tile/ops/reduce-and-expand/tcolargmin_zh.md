@@ -1,0 +1,160 @@
+# pto.tcolargmin
+
+`pto.tcolargmin` 属于[归约与扩展](../../reduce-and-expand_zh.md)指令集。
+
+## 概述
+
+返回每一列最小值所在的行索引。value+index 变体可同步返回每列最小值及其行索引。
+
+## 机制
+
+设：
+
+- `R = src.GetValidRow()`
+- `C = src.GetValidCol()`
+
+则对 `0 <= j < C`：
+
+$$ \mathrm{dst}_{0,j} = \underset{0 \le i < R}{\operatorname{argmin}} \; \mathrm{src}_{i,j} $$
+
+输出 tile 只保留一行，因此 `dst[0,j]` 表示“第 `j` 列最小值落在哪一行”。若同一列有多个相同最小值，具体选哪一个索引由实现决定。
+
+value+index 模式同步输出最小值与索引：
+
+$$ \mathrm{dstVal}_{0,j} = \min_{0 \le i < R} \mathrm{src}_{i,j} $$
+
+$$ \mathrm{dstIdx}_{0,j} = \underset{0 \le i < R}{\operatorname{argmin}} \; \mathrm{src}_{i,j} $$
+
+## 语法
+
+同步形式：
+
+```text
+%dst = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>
+%dstVal, %dstIdx = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
+```
+
+### AS Level 1（SSA）
+
+```text
+%dst = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dstVal, %dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
+```
+
+### AS Level 2（DPS）
+
+```text
+pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
+```
+
+## C++ 内建接口
+
+```cpp
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TCOLARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TCOLARGMIN(TileDataOutVal& dstVal, TileDataOutIdx& dstIdx, TileDataIn& src, TileDataTmp& tmp,
+                                WaitEvents&... events);
+```
+
+## 输入
+
+- `src`：源 tile
+- `tmp`：A2A3 路径可能使用的临时 tile
+- `dst`：目标索引 tile
+- value+index 模式下，`dstVal` 为目标值 tile，`dstIdx` 为目标索引 tile
+
+## 预期输出
+
+- `dst[0,j]`：第 `j` 列最小值所在的行索引
+- value+index 模式下，`dstVal[0,j]` 为第 `j` 列最小值，`dstIdx[0,j]` 为其行索引
+
+## 副作用
+
+除产生目标 tile 外，没有额外架构副作用。
+
+## 约束
+
+!!! warning "约束"
+    - `dst` 与 `src` 必须为 `TileType::Vec`
+    - 源元素类型支持：`half`、`float`、`uint16_t`、`uint32_t`
+    - 目标元素类型支持：`uint32_t`、`int32_t`
+    - 运行时要求：
+      - `src.GetValidRow() != 0`
+      - `src.GetValidCol() != 0`
+      - `dst.GetValidRow() == 1`
+      - `dst.GetValidCol() == src.GetValidCol()`
+
+    ### A2A3
+
+    - `src` 必须是非分形布局
+    - `tmp` 的元素类型必须和 `src` 一致
+    - `tmp` 会被用于保存当前最小值及中间索引
+
+    ### A5
+
+    - A5 路径接口仍保留 `tmp`，但当前实现里不实际使用它
+
+    ### value+index 模式
+
+    - `dstVal` 必须为标准 ND 布局的 `TileType::Vec`
+    - `dstVal` 元素类型必须与 `src` 相同
+    - value+index 重载不支持 8-bit 源元素类型
+    - `dstVal.GetValidRow() == 1`
+    - `dstVal.GetValidCol() == dstIdx.GetValidCol()`
+    - `dstVal.GetValidCol() == src.GetValidCol()`
+    - 16-bit 源元素类型要求 `dstIdx` 使用 `uint16_t` 或 `int16_t`
+    - 32-bit 源元素类型要求 `dstIdx` 使用 `uint32_t` 或 `int32_t`
+
+## 异常与非法情形
+
+!!! danger "异常与非法情形"
+    - 非法操作数组合、不支持的数据类型、不合法布局或不支持的 target-profile 模式，会被 verifier 或后端实现拒绝。
+
+## 性能
+
+当前仓内没有把 `tcolargmin` 单列成公开 cost table。它应视为列索引归约路径，而不是普通数值归约。
+
+## 示例
+
+```cpp
+#include <pto/pto-inst.hpp>
+using namespace pto;
+
+void example_auto() {
+  using SrcT = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+  using DstT = Tile<TileType::Vec, uint32_t, 1, 256, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, float, 1, 32, BLayout::RowMajor, -1, -1>;
+  SrcT src(16, 255);
+  DstT dst(1, 255);
+  TmpT tmp(1, 32);
+  TCOLARGMIN(dst, src, tmp);
+}
+```
+
+### value+index
+
+```cpp
+#include <pto/pto-inst.hpp>
+using namespace pto;
+
+void example_auto_value_index() {
+  using SrcT = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+  using DstValT = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
+  using DstIdxT = Tile<TileType::Vec, int32_t, 1, 256, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, float, 1, 32, BLayout::RowMajor, -1, -1>;
+  SrcT src(16, 255);
+  DstValT dstVal(1, 255);
+  DstIdxT dstIdx(1, 255);
+  TmpT tmp(1, 32);
+  TCOLARGMIN(dstVal, dstIdx, src, tmp);
+}
+```
+
+## 相关页面
+
+- 指令集总览：[归约与扩展](../../reduce-and-expand_zh.md)
+- [TCOLMIN](./tcolmin_zh.md)

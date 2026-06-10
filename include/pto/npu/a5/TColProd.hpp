@@ -24,7 +24,7 @@ struct TColProdOp {
 
 template <typename T, typename TileDataOut, typename TileDataIn>
 __tf__ PTO_INTERNAL void TColProd(typename TileDataOut::TileDType __out__ dstData,
-                                  typename TileDataIn::TileDType __in__ srcData, uint16_t validRow, int validCol,
+                                  typename TileDataIn::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
                                   unsigned version)
 {
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
@@ -43,8 +43,8 @@ PTO_INTERNAL void TCOLPROD_IMPL(TileDataOut &dst, TileDataIn &src)
             std::is_same_v<T, uint32_t>,
         "Fix: TCOLPROD input data type supports only int16_t/uint16_t/half/bfloat16_t/int32_t/uint32_t/float.");
 
-    int validCol = src.GetValidCol();
-    int validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
+    unsigned validRow = src.GetValidRow();
     if (validCol == 0 || validRow == 0) {
         return;
     }

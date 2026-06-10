@@ -17,10 +17,77 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 template <typename Op, typename TileData, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned rowStride>
-PTO_INTERNAL void TColExpandBinOps_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
-                                                __ubuf__ typename TileData::DType *src0Ptr,
-                                                __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
-                                                unsigned kValidCols)
+PTO_INTERNAL void TColExpandBinOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
+                                                   __ubuf__ typename TileData::DType *src0Ptr,
+                                                   __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
+                                                   unsigned kValidCols)
+{
+    using T = typename TileData::DType;
+    uint16_t repeatTimesPerRow = CeilDivision(kValidCols, elementsPerRepeat);
+    uint16_t repeatTimes = kValidRows * repeatTimesPerRow;
+
+    __VEC_SCOPE__
+    {
+        RegTensor<T> vreg0;
+        RegTensor<T> vreg1;
+        RegTensor<T> vreg2;
+        MaskReg preg;
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        uint32_t sreg = (uint32_t)(kValidCols);
+        for (uint16_t i = 0; i < (uint16_t)repeatTimes; ++i) {
+            uint16_t repeatIdx = i % repeatTimesPerRow;
+            uint32_t offset = i / repeatTimesPerRow * kValidCols + repeatIdx * elementsPerRepeat;
+            sreg = (uint32_t)(kValidCols);
+            vlds(vreg1, src1Ptr, repeatIdx * elementsPerRepeat, NORM);
+            preg = CreatePredicate<T>(sreg);
+            vlds(vreg0, src0Ptr, offset, NORM);
+            Op::ColExpandBinaryInstr(vreg2, vreg0, vreg1, preg);
+            vsts(vreg2, dstPtr, offset, distValue, preg);
+        }
+    }
+}
+
+template <typename Op, typename TileData, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
+          unsigned rowStride>
+PTO_INTERNAL void TColExpandBinOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstPtr,
+                                                 __ubuf__ typename TileData::DType *src0Ptr,
+                                                 __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
+                                                 unsigned kValidCols)
+{
+    using T = typename TileData::DType;
+    uint16_t repeatTimesPerRow = CeilDivision(kValidCols, elementsPerRepeat);
+    uint16_t repeatTimes = kValidRows * repeatTimesPerRow;
+
+    __VEC_SCOPE__
+    {
+        RegTensor<T> vreg0_PU;
+        RegTensor<T> vreg1_PU;
+        RegTensor<T> vreg2_PU;
+        __ubuf__ T *src0Offset = src0Ptr;
+        __ubuf__ T *dstOffset = dstPtr;
+        MaskReg preg;
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        for (uint16_t i = 0; i < (uint16_t)repeatTimes; ++i) {
+            uint16_t repeatIdx = i % repeatTimesPerRow;
+            uint32_t cols = (uint32_t)(kValidCols - repeatIdx * elementsPerRepeat);
+            uint32_t count = (cols > elementsPerRepeat) ? elementsPerRepeat : cols;
+            preg = CreatePredicate<T>(count);
+            vlds(vreg1_PU, src1Ptr, repeatIdx * elementsPerRepeat, NORM);
+            vlds(vreg0_PU, src0Offset, elementsPerRepeat, NORM, POST_UPDATE);
+            Op::ColExpandBinaryInstr(vreg2_PU, vreg0_PU, vreg1_PU, preg);
+            vsts(vreg2_PU, dstOffset, elementsPerRepeat, distValue, preg, POST_UPDATE);
+        }
+    }
+}
+
+template <typename Op, typename TileData, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
+          unsigned rowStride>
+PTO_INTERNAL void TColExpandBinOps_2D_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
+                                                   __ubuf__ typename TileData::DType *src0Ptr,
+                                                   __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
+                                                   unsigned kValidCols)
 {
     using T = typename TileData::DType;
     uint16_t repeatTimes = CeilDivision(kValidCols, elementsPerRepeat);
@@ -48,10 +115,10 @@ PTO_INTERNAL void TColExpandBinOps_NoPostUpdate(__ubuf__ typename TileData::DTyp
 
 template <typename Op, typename TileData, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned rowStride>
-PTO_INTERNAL void TColExpandBinOps_PostUpdate(__ubuf__ typename TileData::DType *dstPtr,
-                                              __ubuf__ typename TileData::DType *src0Ptr,
-                                              __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
-                                              unsigned kValidCols)
+PTO_INTERNAL void TColExpandBinOps_2D_PostUpdate(__ubuf__ typename TileData::DType *dstPtr,
+                                                 __ubuf__ typename TileData::DType *src0Ptr,
+                                                 __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
+                                                 unsigned kValidCols)
 {
     using T = typename TileData::DType;
     uint16_t repeatTimes = CeilDivision(kValidCols, elementsPerRepeat);
@@ -90,11 +157,13 @@ PTO_INTERNAL void ColExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
                                        __ubuf__ typename TileDataSrc::DType *src1Ptr, unsigned kValidRows,
                                        unsigned kValidCols)
 {
-    if constexpr ((TileData::Cols == TileData::ValidCol || TileData::Rows == 1)) {
-        TColExpandBinOps_PostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
+    constexpr bool isContiguous = (TileData::ValidCol == TileData::Cols) || (TileData::Rows == 1);
+
+    if constexpr (isContiguous) {
+        TColExpandBinOps_2D_PostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
             dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
     } else {
-        TColExpandBinOps_NoPostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
+        TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
             dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
     }
 }

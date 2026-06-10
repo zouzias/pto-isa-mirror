@@ -157,7 +157,7 @@ def gen_golden_data(case_name, param):
 
 
 class TMovParams:
-    def __init__(self, atype, btype, dst_type, m, k, n, base_m=0, base_k=0, base_n=0, 
+    def __init__(self, atype, btype, dst_type, m, k, n, base_m=0, base_k=0, base_n=0,
                  dst_format='ND', s_fractal_size=512, is_v_quant=False,
                  is_s_quant=False, is_relu=False, quant_type=None, scalar=1,
                  index_rows=0, index_cols=0, is_insert=False, dst_row=0, dst_col=0):

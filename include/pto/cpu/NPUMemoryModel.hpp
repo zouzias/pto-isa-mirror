@@ -31,6 +31,8 @@
 #include <cstddef>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 #include <pto/common/pto_tile.hpp>
 
@@ -59,6 +61,8 @@ public:
     using ArchMemorySizes = std::size_t[MemoryRegion::_MAX_REGIONS];
 
 private:
+    static inline constexpr std::size_t kDefaultCpuSimUBScratchSize = 512 * 1024;
+
     // Memory sizes by architecture
     // A2/A3:
     // https://www.hiascend.com/doc_center/source/zh/canncommercial/80RC3/devguide/appdevg/sdpdevg/atlasprogramming_12_0003.html
@@ -77,6 +81,30 @@ private:
         64 * 1024,  // L0B: 64 KB
         256 * 1024  // L0C: 256 KB
     };
+
+    static std::size_t ReadSizeOverride(const char *name, std::size_t fallback)
+    {
+        const char *value = std::getenv(name);
+        if (value == nullptr || *value == '\0') {
+            return fallback;
+        }
+        char *end = nullptr;
+        const unsigned long long parsed = std::strtoull(value, &end, 10);
+        if (end == value || *end != '\0' || parsed == 0) {
+            return fallback;
+        }
+        return static_cast<std::size_t>(parsed);
+    }
+
+    void ApplySizeOverrides()
+    {
+        sizes_[MemoryRegion::UB] =
+            ReadSizeOverride("PTO_CPU_SIM_UB_BYTES", std::max(sizes_[MemoryRegion::UB], kDefaultCpuSimUBScratchSize));
+        sizes_[MemoryRegion::L1] = ReadSizeOverride("PTO_CPU_SIM_L1_BYTES", sizes_[MemoryRegion::L1]);
+        sizes_[MemoryRegion::L0A] = ReadSizeOverride("PTO_CPU_SIM_L0A_BYTES", sizes_[MemoryRegion::L0A]);
+        sizes_[MemoryRegion::L0B] = ReadSizeOverride("PTO_CPU_SIM_L0B_BYTES", sizes_[MemoryRegion::L0B]);
+        sizes_[MemoryRegion::L0C] = ReadSizeOverride("PTO_CPU_SIM_L0C_BYTES", sizes_[MemoryRegion::L0C]);
+    }
 
 public:
     // Each thread gets its own NPUMemoryModel instance, accurately modeling
@@ -111,6 +139,8 @@ public:
                 break;
         }
 
+        ApplySizeOverrides();
+
         for (int i = 0; i < MemoryRegion::_MAX_REGIONS; i++) {
             buffers_[i].resize(sizes_[i], 0);
         }
@@ -126,23 +156,52 @@ public:
         }
     }
 
+    // Number of DType elements a tile addresses from its base.
+    //
+    // A windowed sub-view keeps the full static block shape (Rows x Cols, hence
+    // Numel) but marks only ValidRow x ValidCol valid and may sit at a non-zero
+    // byte offset. The tile addresses memory up to its last valid element, so the
+    // count is the valid-region footprint: equal to Numel for a fully-valid tile,
+    // smaller for a sub-window. Returns Numel when the valid shape is dynamic (not
+    // visible at this static call site) or the layout is unsupported below.
+    template <typename TileDef>
+    static std::size_t TileAccessElems()
+    {
+        // GetTileOffset is defined for non-boxed tiles and the Nz/Zn/Zz boxed
+        // fractal layouts only.
+        constexpr bool layoutSupported = !TileDef::isBoxedLayout || is_Nz_layout<TileDef>::value ||
+                                         is_Zn_layout<TileDef>::value || is_Zz_layout<TileDef>::value;
+        if constexpr (layoutSupported && (TileDef::ValidRow > 0) && (TileDef::ValidCol > 0)) {
+            // Every supported layout maps the valid region's far corner to its
+            // largest element offset, so that offset + 1 is the element count.
+            return GetTileOffset<TileDef>(TileDef::ValidRow - 1, TileDef::ValidCol - 1) + 1;
+        } else {
+            return static_cast<std::size_t>(TileDef::Numel);
+        }
+    }
+
     // Get pointer to memory at offset within a region
     template <typename TileDef>
     TileDef::DType *GetPointer(std::size_t byteOffset)
     {
-        static_assert(is_tile_data_v<TileDef>);
-
+        static_assert(is_tile_data_v<TileDef> || is_conv_tile_v<TileDef>);
+        std::size_t accessElems = 0;
+        if constexpr (is_tile_data_v<TileDef>) {
+            accessElems = TileAccessElems<TileDef>();
+        } else {
+            accessElems = TileDef::bufferSize / sizeof(typename TileDef::DType);
+        }
         if constexpr (TileDef::Loc == TileType::Mat) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L1>(byteOffset, TileDef::Numel);
+            return GetPointer<typename TileDef::DType, MemoryRegion::L1>(byteOffset, accessElems);
         } else if constexpr (TileDef::Loc == TileType::Left) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0A>(byteOffset, TileDef::Numel);
+            return GetPointer<typename TileDef::DType, MemoryRegion::L0A>(byteOffset, accessElems);
         } else if constexpr (TileDef::Loc == TileType::Right) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0B>(byteOffset, TileDef::Numel);
+            return GetPointer<typename TileDef::DType, MemoryRegion::L0B>(byteOffset, accessElems);
         } else if constexpr (TileDef::Loc == TileType::Acc) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0C>(byteOffset, TileDef::Numel);
+            return GetPointer<typename TileDef::DType, MemoryRegion::L0C>(byteOffset, accessElems);
         } else {
             return GetPointer<typename TileDef::DType, MemoryRegion::UB>(byteOffset,
-                                                                         TileDef::Numel); // For Vec and unknown types
+                                                                         accessElems); // For Vec and unknown types
         }
     }
 
@@ -153,13 +212,32 @@ public:
     template <typename TileDef>
     typename TileDef::DType *ResolveAssignedAddress(std::uintptr_t addr)
     {
-        static_assert(is_tile_data_v<TileDef>);
+        static_assert(is_tile_data_v<TileDef> || is_conv_tile_v<TileDef>);
         EnsureInitialized();
 
         if (auto *direct = TryResolveExistingPointer<typename TileDef::DType>(addr)) {
             return direct;
         }
         return GetPointer<TileDef>(static_cast<std::size_t>(addr));
+    }
+
+    template <typename TileDef>
+    std::uintptr_t NormalizeAssignedAddress(std::uintptr_t addr)
+    {
+        static_assert(is_tile_data_v<TileDef>);
+        EnsureInitialized();
+
+        const int region = GetRegionForTile<TileDef>();
+        if (region < 0 || region >= MemoryRegion::_MAX_REGIONS || buffers_[region].empty()) {
+            return addr;
+        }
+
+        const auto begin = reinterpret_cast<std::uintptr_t>(buffers_[region].data());
+        const auto end = begin + buffers_[region].size();
+        if (addr >= begin && addr < end) {
+            return addr - begin;
+        }
+        return addr;
     }
 
     // Get raw buffer bases (for debugging/direct access)
@@ -202,6 +280,28 @@ public:
         return initialized_;
     }
 
+    // Returns true when rawAddr already points into one of this thread's
+    // simulated on-chip memory buffers. This is needed for patterns like:
+    //   TASSIGN(alias_tile, reinterpret_cast<uintptr_t>(base_tile.data()));
+    // where the "address" is not an offset but an actual host pointer into UB/L1/L0.
+    bool ContainsAddress(std::uintptr_t rawAddr) const
+    {
+        if (!initialized_) {
+            return false;
+        }
+        for (const auto &buf : buffers_) {
+            if (buf.empty()) {
+                continue;
+            }
+            const auto begin = reinterpret_cast<std::uintptr_t>(buf.data());
+            const auto end = begin + buf.size();
+            if (rawAddr >= begin && rawAddr < end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Clear all memory (zero-fill)
     void Clear()
     {
@@ -222,6 +322,22 @@ public:
     }
 
 private:
+    template <typename TileDef>
+    static constexpr int GetRegionForTile()
+    {
+        if constexpr (TileDef::Loc == TileType::Mat) {
+            return MemoryRegion::L1;
+        } else if constexpr (TileDef::Loc == TileType::Left) {
+            return MemoryRegion::L0A;
+        } else if constexpr (TileDef::Loc == TileType::Right) {
+            return MemoryRegion::L0B;
+        } else if constexpr (TileDef::Loc == TileType::Acc) {
+            return MemoryRegion::L0C;
+        } else {
+            return MemoryRegion::UB;
+        }
+    }
+
     template <typename T>
     T *TryResolveExistingPointer(std::uintptr_t addr)
     {
@@ -241,7 +357,12 @@ private:
     {
         EnsureInitialized();
 
-        assert(byteOffset + numel * sizeof(T) <= sizes_[region]);
+        if (byteOffset > sizes_[region] || numel > (sizes_[region] - byteOffset) / sizeof(T)) {
+            std::fprintf(stderr,
+                         "PTO CPU sim TASSIGN out of range: region=%d offset=%zu numel=%zu elem_size=%zu size=%zu\n",
+                         static_cast<int>(region), byteOffset, numel, sizeof(T), sizes_[region]);
+            std::abort();
+        }
         return reinterpret_cast<T *>(buffers_[region].data() + byteOffset);
     }
 

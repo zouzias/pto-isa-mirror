@@ -236,7 +236,7 @@ __tf__ AICORE void TGather(typename DstTileData::TileDType __out__ dst, typename
     }
 }
 
-template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern>
+template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, auto gatherType = GatherAxis::GATHER_ROW>
 PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
 {
     using T = typename SrcTileData::DType;
@@ -257,5 +257,11 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     uint16_t cols = src.GetValidCol();
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), rows, cols);
 }
+
+template <typename TileDataD, typename TileDataS, typename TileDataS1, typename TileDataC, typename TileDataTmp,
+          CmpMode cmpMode>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, TileDataS1 &k_value, TileDataC &cdst, TileDataTmp &tmp,
+                               uint32_t offset)
+{}
 } // namespace pto
 #endif
