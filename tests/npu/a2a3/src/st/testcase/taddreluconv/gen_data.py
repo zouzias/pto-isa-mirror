@@ -16,6 +16,20 @@ import numpy as np
 np.random.seed(42)
 
 
+def _make_uniform_gen(low, high):
+    def gen(r, c):
+        return np.random.uniform(low=low, high=high, size=(r, c))
+
+    return gen
+
+
+def _make_int_gen(low, high):
+    def gen(r, c):
+        return np.random.randint(low, high, size=(r, c))
+
+    return gen
+
+
 def gen_golden_data_float2half(param):
     rows = param.row
     cols = param.col
@@ -61,11 +75,11 @@ class TADDRELUCONVParams:
         self.src0_range = src0_range
         self.src1_range = src1_range
         if src0_fn is None:
-            self.src0_fn = lambda r, c: np.random.uniform(low=src0_range[0], high=src0_range[1], size=(r, c))
+            self.src0_fn = _make_uniform_gen(src0_range[0], src0_range[1])
         else:
             self.src0_fn = src0_fn
         if src1_fn is None:
-            self.src1_fn = lambda r, c: np.random.uniform(low=src1_range[0], high=src1_range[1], size=(r, c))
+            self.src1_fn = _make_uniform_gen(src1_range[0], src1_range[1])
         else:
             self.src1_fn = src1_fn
 
@@ -103,21 +117,11 @@ if __name__ == "__main__":
         TADDRELUCONVParams("TADDRELUCONVTest.case14", "f162s8", 8, 64, src0_range=(60, 70), src1_range=(60, 70)),
         # --- int16->int8: basic random ---
         TADDRELUCONVParams(
-            "TADDRELUCONVTest.case15",
-            "s162s8",
-            16,
-            128,
-            src0_fn=lambda r, c: np.random.randint(-50, 50, size=(r, c)),
-            src1_fn=lambda r, c: np.random.randint(-50, 50, size=(r, c)),
+            "TADDRELUCONVTest.case15", "s162s8", 16, 128, src0_fn=_make_int_gen(-50, 50), src1_fn=_make_int_gen(-50, 50)
         ),
         # --- int16->int8: tail-only ---
         TADDRELUCONVParams(
-            "TADDRELUCONVTest.case16",
-            "s162s8",
-            8,
-            64,
-            src0_fn=lambda r, c: np.random.randint(-50, 50, size=(r, c)),
-            src1_fn=lambda r, c: np.random.randint(-50, 50, size=(r, c)),
+            "TADDRELUCONVTest.case16", "s162s8", 8, 64, src0_fn=_make_int_gen(-50, 50), src1_fn=_make_int_gen(-50, 50)
         ),
         # --- int16->int8: all-negative ---
         TADDRELUCONVParams(
@@ -125,17 +129,12 @@ if __name__ == "__main__":
             "s162s8",
             8,
             128,
-            src0_fn=lambda r, c: np.random.randint(-100, -1, size=(r, c)),
-            src1_fn=lambda r, c: np.random.randint(-100, -1, size=(r, c)),
+            src0_fn=_make_int_gen(-100, -1),
+            src1_fn=_make_int_gen(-100, -1),
         ),
         # --- int16->int8: overflow/saturation ---
         TADDRELUCONVParams(
-            "TADDRELUCONVTest.case18",
-            "s162s8",
-            8,
-            64,
-            src0_fn=lambda r, c: np.random.randint(60, 70, size=(r, c)),
-            src1_fn=lambda r, c: np.random.randint(60, 70, size=(r, c)),
+            "TADDRELUCONVTest.case18", "s162s8", 8, 64, src0_fn=_make_int_gen(60, 70), src1_fn=_make_int_gen(60, 70)
         ),
     ]
 

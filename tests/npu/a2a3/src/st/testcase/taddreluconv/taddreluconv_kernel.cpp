@@ -147,7 +147,7 @@ extern "C" __global__ AICORE void launchTADDRELUCONVCase18(__gm__ int8_t *out, _
 }
 
 template <uint32_t caseId>
-void launchTADDRELUCONVTestCase(void *out, void *src0, void *src1, aclrtStream stream)
+void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream stream)
 {
     switch (caseId) {
         case 1: {
@@ -190,6 +190,15 @@ void launchTADDRELUCONVTestCase(void *out, void *src0, void *src1, aclrtStream s
             launchTADDRELUCONVCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
         }
+        default: {
+        }
+    }
+}
+
+template <uint32_t caseId>
+void launchTADDRELUCONVF162S8(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    switch (caseId) {
         case 11: {
             launchTADDRELUCONVCase11<<<1, nullptr, stream>>>((int8_t *)out, (aclFloat16 *)src0, (aclFloat16 *)src1);
             break;
@@ -206,6 +215,15 @@ void launchTADDRELUCONVTestCase(void *out, void *src0, void *src1, aclrtStream s
             launchTADDRELUCONVCase14<<<1, nullptr, stream>>>((int8_t *)out, (aclFloat16 *)src0, (aclFloat16 *)src1);
             break;
         }
+        default: {
+        }
+    }
+}
+
+template <uint32_t caseId>
+void launchTADDRELUCONVS162S8(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    switch (caseId) {
         case 15: {
             launchTADDRELUCONVCase15<<<1, nullptr, stream>>>((int8_t *)out, (int16_t *)src0, (int16_t *)src1);
             break;
@@ -227,6 +245,18 @@ void launchTADDRELUCONVTestCase(void *out, void *src0, void *src1, aclrtStream s
     }
 }
 
+template <uint32_t caseId>
+void launchTADDRELUCONVTestCase(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    if constexpr (caseId >= 1 && caseId <= 10) {
+        launchTADDRELUCONVF322F16<caseId>(out, src0, src1, stream);
+    } else if constexpr (caseId >= 11 && caseId <= 14) {
+        launchTADDRELUCONVF162S8<caseId>(out, src0, src1, stream);
+    } else if constexpr (caseId >= 15 && caseId <= 18) {
+        launchTADDRELUCONVS162S8<caseId>(out, src0, src1, stream);
+    }
+}
+
 template void launchTADDRELUCONVTestCase<1>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVTestCase<2>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVTestCase<3>(void *out, void *src0, void *src1, aclrtStream stream);
@@ -245,3 +275,24 @@ template void launchTADDRELUCONVTestCase<15>(void *out, void *src0, void *src1, 
 template void launchTADDRELUCONVTestCase<16>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVTestCase<17>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVTestCase<18>(void *out, void *src0, void *src1, aclrtStream stream);
+
+template void launchTADDRELUCONVF322F16<1>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<2>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<3>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<4>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<5>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<6>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<7>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<8>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<9>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16<10>(void *out, void *src0, void *src1, aclrtStream stream);
+
+template void launchTADDRELUCONVF162S8<11>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF162S8<12>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF162S8<13>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF162S8<14>(void *out, void *src0, void *src1, aclrtStream stream);
+
+template void launchTADDRELUCONVS162S8<15>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVS162S8<16>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVS162S8<17>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVS162S8<18>(void *out, void *src0, void *src1, aclrtStream stream);
