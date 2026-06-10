@@ -37,6 +37,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/comm/async/ccu/ccu_types.hpp"
 #include "pto/npu/comm/async/ccu/ccu_gate_registry.hpp"
 #include "pto/npu/comm/async/ccu/ccu_reduce_kernel.hpp"
+#include "pto/npu/comm/async/ccu/ccu_reduce_push_kernel.hpp"
 
 #include <gtest/gtest.h>
 #include "../comm_mpi.h"
@@ -481,6 +482,84 @@ bool RunReduceCcuFused(size_t numElements, uint32_t rootId)
     return pass;
 }
 
+// ----------------------------------------------------------------------------
+// Push-mode variant: each non-root rank issues WriteReduceNb (hardware
+// atomic-add) directly to root's output buffer, sidestepping root's N-1
+// serial ReadNb of peer inputs.  Per-rank Load slots become O(1) instead
+// of 3N+1, so multi-SQE auto-fragmentation never triggers regardless of N.
+//
+// See include/pto/npu/comm/async/ccu/ccu_reduce_push_kernel.hpp for the
+// kernel implementation and the seed/PreSync/atomic-add/PostSync sequence
+// rationale.
+// ----------------------------------------------------------------------------
+
+static bool RegisterAndLaunchReducePushCcu(int rankId, int nRanks, uint32_t rootId, size_t payloadSize, uint64_t seq)
+{
+    pto::comm::ccu::CcuReducePushKernelArg karg{
+        static_cast<uint32_t>(rankId),     static_cast<uint32_t>(nRanks), rootId,
+        HcclDataType::HCCL_DATA_TYPE_FP32, HcclReduceOp::HCCL_REDUCE_SUM, payloadSize + seq,
+    };
+    karg.channels = g_env.channels;
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d karg ready, channels=%zu\n", rankId, g_env.channels.size());
+
+    hcomm::KernelCreator creator = pto::comm::ccu::MakeCcuReducePushCreator();
+    CcuKernelHandle kHandle = 0;
+
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d -> HcclCcuKernelRegister...\n", rankId);
+    HCCL_OK(HcclCcuKernelRegister(g_env.comm, &kHandle, &creator, &karg));
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d <- HcclCcuKernelRegister OK handle=%llu\n", rankId,
+                 (unsigned long long)kHandle);
+
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d -> HcclCcuKernelRegisterFinish...\n", rankId);
+    HCCL_OK(HcclCcuKernelRegisterFinish(g_env.comm));
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d <- HcclCcuKernelRegisterFinish OK\n", rankId);
+
+    // Re-use the AllGather state from ExchangePeerAddrs() to obtain root's
+    // (output VA, token).  In a leaner production path the root's pair
+    // alone would be broadcast (HostManaged Bcast), but the AllGather
+    // already runs for the pull-mode tests in this suite so we piggyback.
+    pto::comm::ccu::CcuReducePushTaskArg targ{
+        g_env.inputVa,                  // this rank's input
+        g_env.outputVa,                 // this rank's output  (used on root only)
+        g_env.token,                    // this rank's token   (used on root only)
+        g_env.allOutputVa[rootId],      // root's output       (used on non-root only)
+        g_env.allToken[rootId],         // root's token        (used on non-root only)
+        payloadSize,
+    };
+
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d -> HcclCcuKernelLaunch...\n", rankId);
+    HCCL_OK(HcclCcuKernelLaunch(g_env.comm, g_env.threadHandle, kHandle, &targ));
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d <- HcclCcuKernelLaunch OK\n", rankId);
+    return true;
+}
+
+bool RunReducePushCcu(size_t numElements, uint32_t rootId)
+{
+    CommMpiBarrier();
+    if (!EnsureEnvReady())
+        return false;
+
+    const int rankId = g_env.rankId;
+    const int nRanks = g_env.nRanks;
+    const size_t payloadSize = numElements * sizeof(float);
+
+    if (!PrepareReduceBuffers(rankId, numElements, payloadSize))
+        return false;
+
+    uint64_t seq = g_seqNo++;
+    std::fprintf(stderr, "[TREDUCE_CCU/push] rank=%d RunReducePushCcu seq=%llu elems=%zu root=%u\n", rankId,
+                 (unsigned long long)seq, numElements, rootId);
+
+    if (!RegisterAndLaunchReducePushCcu(rankId, nRanks, rootId, payloadSize, seq))
+        return false;
+    if (!TriggerAndSyncReduceCcu(rankId))  // trigger/sync path is collective-agnostic
+        return false;
+
+    bool pass = VerifyReduceResult(rankId, nRanks, rootId, numElements, payloadSize);
+    CommMpiBarrier();
+    return pass;
+}
+
 // hcomm CCU kernel handles are one-shot per HcclComm.  ResetEnv() destroys
 // and recreates the comm between tests so each test gets fresh CCU resources.
 void ResetEnv()
@@ -561,6 +640,39 @@ TEST_F(TReduceCcuTest, Fused_Float_1024_Sum_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE(RunReduceCcuFused(1024, 0));
+}
+
+// ----------------------------------------------------------------------------
+// Push-mode (WriteReduceNb / hardware atomic-add) variant.  Exercises the
+// alternative Reduce kernel in ccu_reduce_push_kernel.hpp where peers push
+// to root via WQE opcode 0x70 instead of root pulling via ReadNb.
+//
+// Coverage matrix (intentionally parallel to the pull-mode tests above):
+//   2  ranks: smoke + verifies single-peer atomic-add land semantics
+//   4  ranks: 3 concurrent peer pushes at root's HBM
+//   5  ranks: 4 concurrent peer pushes — first non-trivial contention
+//             at the HBM accumulator (push uses O(1) Loads, so unlike
+//             pull this is NOT a multi-SQE boundary)
+// ----------------------------------------------------------------------------
+TEST_F(TReduceCcuTest, Push_Float_1024_Sum_2Ranks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE(RunReducePushCcu(1024, 0));
+}
+TEST_F(TReduceCcuTest, Push_Float_1024_Sum_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE(RunReducePushCcu(1024, 0));
+}
+TEST_F(TReduceCcuTest, Push_Float_1024_Sum_5Ranks)
+{
+    SKIP_IF_RANKS_LT(5);
+    ASSERT_TRUE(RunReducePushCcu(1024, 0));
+}
+TEST_F(TReduceCcuTest, Push_Root1_Float_1024_Sum)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE(RunReducePushCcu(1024, 1));
 }
 
 } // namespace
