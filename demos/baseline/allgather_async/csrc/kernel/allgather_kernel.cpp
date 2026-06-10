@@ -38,7 +38,7 @@ using LocalTile = pto::Tile<pto::TileType::Vec, int32_t, 1, ELEM_COUNT, pto::BLa
 //   block_idx != myRank  -> TPUT_ASYNC to remote rank block_idx
 // ============================================================================
 __global__ AICORE void AllgatherPutAsyncMulticoreKernel(__gm__ int32_t *dataBuf, int nranks,
-                                                        __gm__ HcclDeviceContext *hcclCtx,
+                                                        __gm__ CommDeviceContext *hcclCtx,
                                                         __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     if (nranks < 2)
@@ -67,7 +67,7 @@ __global__ AICORE void AllgatherPutAsyncMulticoreKernel(__gm__ int32_t *dataBuf,
     } else {
         int target = bid;
         GlobalI32 sendG(sendBuf, shape, stride);
-        __gm__ int32_t *remoteSlot = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * ELEM_COUNT;
+        __gm__ int32_t *remoteSlot = CommRemotePtr(hcclCtx, recvBuf, target) + myRank * ELEM_COUNT;
         GlobalI32 remoteG(remoteSlot, shape, stride);
 
         ScratchTile scratchTile;
@@ -93,7 +93,7 @@ __global__ AICORE void AllgatherPutAsyncMulticoreKernel(__gm__ int32_t *dataBuf,
 //   block_idx != myRank  -> TGET_ASYNC from remote rank block_idx
 // ============================================================================
 __global__ AICORE void AllgatherGetAsyncMulticoreKernel(__gm__ int32_t *dataBuf, int nranks,
-                                                        __gm__ HcclDeviceContext *hcclCtx,
+                                                        __gm__ CommDeviceContext *hcclCtx,
                                                         __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     if (nranks < 2)
@@ -121,7 +121,7 @@ __global__ AICORE void AllgatherGetAsyncMulticoreKernel(__gm__ int32_t *dataBuf,
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     } else {
         int srcRank = bid;
-        __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, srcRank);
+        __gm__ int32_t *remoteSend = CommRemotePtr(hcclCtx, sendBuf, srcRank);
         GlobalI32 remoteG(remoteSend, shape, stride);
         GlobalI32 localG(recvBuf + srcRank * ELEM_COUNT, shape, stride);
 
@@ -321,7 +321,7 @@ bool RunAllgatherGetAsyncMC(int nRanks, int firstRankId, int firstDeviceId)
 // Each round is a separate kernel launch. Host-side barrier between rounds
 // ensures all SDMA writes complete before the next round begins.
 // ============================================================================
-__global__ AICORE void RingAllgatherRoundKernel(__gm__ int32_t *dataBuf, int nranks, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void RingAllgatherRoundKernel(__gm__ int32_t *dataBuf, int nranks, __gm__ CommDeviceContext *hcclCtx,
                                                 __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, int elemCount,
                                                 int round)
 {
@@ -360,7 +360,7 @@ __global__ AICORE void RingAllgatherRoundKernel(__gm__ int32_t *dataBuf, int nra
 
     int sendChunkIdx = (myRank - round + nranks) % nranks;
     __gm__ int32_t *srcPtr = (round == 0) ? sendBuf : (recvBuf + sendChunkIdx * elemCount);
-    __gm__ int32_t *remoteDst = HcclRemotePtr(hcclCtx, recvBuf, nextRank) + sendChunkIdx * elemCount;
+    __gm__ int32_t *remoteDst = CommRemotePtr(hcclCtx, recvBuf, nextRank) + sendChunkIdx * elemCount;
 
     GlobalI32 srcG(srcPtr, shape, stride);
     GlobalI32 remoteDstG(remoteDst, shape, stride);

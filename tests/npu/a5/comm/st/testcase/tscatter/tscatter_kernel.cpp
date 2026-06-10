@@ -44,7 +44,7 @@ __global__ AICORE void WindowMemCopyOut(__gm__ T *devDst, __gm__ T *winSrc, int 
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks, int root,
-                                          __gm__ HcclDeviceContext *hcclCtx)
+                                          __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -68,7 +68,7 @@ __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nran
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, dst, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, dst, i);
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
 
@@ -206,7 +206,7 @@ template bool RunScatterWithRoot<float, 256>(int n_ranks, int n_devices, int fir
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TScatterEmptyKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks, int root,
-                                               __gm__ HcclDeviceContext *hcclCtx)
+                                               __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -226,7 +226,7 @@ __global__ AICORE void TScatterEmptyKernelImpl(__gm__ T *src, __gm__ T *dst, int
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, dst, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, dst, i);
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
 
@@ -334,7 +334,7 @@ template bool RunScatterEmpty<float, 256>(int n_ranks, int n_devices, int first_
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TScatterLargeShapeKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks,
-                                                    __gm__ HcclDeviceContext *hcclCtx)
+                                                    __gm__ CommDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
@@ -360,7 +360,7 @@ __global__ AICORE void TScatterLargeShapeKernelImpl(__gm__ T *src, __gm__ T *dst
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, dst, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, dst, i);
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
 
@@ -447,8 +447,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
         T actual = dst_host[i];
         if (actual != expected) {
             std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                      << ", col=" << (i % cols) << ")"
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                      << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got " << (float)actual
+                      << std::endl;
             is_ok = false;
             break;
         }
@@ -506,7 +506,7 @@ bool RunScatterLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int fi
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TScatterPingPongKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks,
-                                                  __gm__ HcclDeviceContext *hcclCtx)
+                                                  __gm__ CommDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunked ping-pong");
@@ -529,7 +529,7 @@ __global__ AICORE void TScatterPingPongKernelImpl(__gm__ T *src, __gm__ T *dst, 
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteDst = HcclRemotePtr(hcclCtx, dst, i);
+        __gm__ T *remoteDst = CommRemotePtr(hcclCtx, dst, i);
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
 
@@ -620,8 +620,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
         T actual = dst_host[i];
         if (actual != expected) {
             std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                      << ", col=" << (i % cols) << ")"
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                      << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got " << (float)actual
+                      << std::endl;
             is_ok = false;
             break;
         }

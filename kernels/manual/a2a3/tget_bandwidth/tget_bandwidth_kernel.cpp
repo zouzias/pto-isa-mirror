@@ -156,7 +156,7 @@ __global__ AICORE void PrepareSendBufferKernel(__gm__ T *src, __gm__ T *shmem, i
 
 template <typename T>
 __global__ AICORE void TGetBandwidthKernel(__gm__ T *output, __gm__ T *shmem, int nranks, int rootRank, int peerRank,
-                                           int elemCount, __gm__ HcclDeviceContext *hcclCtx)
+                                           int elemCount, __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -181,7 +181,7 @@ __global__ AICORE void TGetBandwidthKernel(__gm__ T *output, __gm__ T *shmem, in
         stagingTile.ColMaskInternal =
             (elemCount < static_cast<int>(kTileElems)) ? elemCount : static_cast<int>(kTileElems);
 
-        __gm__ T *remoteSendShmem = HcclRemotePtr(hcclCtx, sendShmem, peerRank);
+        __gm__ T *remoteSendShmem = CommRemotePtr(hcclCtx, sendShmem, peerRank);
         Global recvG(recvShmem, shape, stride);
         Global remoteSendG(remoteSendShmem, shape, stride);
         pto::comm::TGET(recvG, remoteSendG, stagingTile);
@@ -195,7 +195,7 @@ __global__ AICORE void TGetBandwidthKernel(__gm__ T *output, __gm__ T *shmem, in
 template <typename T>
 __global__ AICORE void ProfileTGetBandwidthKernel(__gm__ T *output, __gm__ uint64_t *profileCycles, __gm__ T *shmem,
                                                   int nranks, int rootRank, int peerRank, int elemCount,
-                                                  int warmupIters, int timedIters, __gm__ HcclDeviceContext *hcclCtx)
+                                                  int warmupIters, int timedIters, __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -220,7 +220,7 @@ __global__ AICORE void ProfileTGetBandwidthKernel(__gm__ T *output, __gm__ uint6
         stagingTile.ColMaskInternal =
             (elemCount < static_cast<int>(kTileElems)) ? elemCount : static_cast<int>(kTileElems);
 
-        __gm__ T *remoteSendShmem = HcclRemotePtr(hcclCtx, sendShmem, peerRank);
+        __gm__ T *remoteSendShmem = CommRemotePtr(hcclCtx, sendShmem, peerRank);
         Global recvG(recvShmem, shape, stride);
         Global remoteSendG(remoteSendShmem, shape, stride);
 
@@ -249,7 +249,7 @@ __global__ AICORE void ProfileTGetBandwidthKernel(__gm__ T *output, __gm__ uint6
 
 template <typename T>
 __global__ AICORE void TGetAsyncBandwidthKernel(__gm__ T *output, __gm__ T *shmem, int nranks, int rootRank,
-                                                int peerRank, int elemCount, __gm__ HcclDeviceContext *hcclCtx,
+                                                int peerRank, int elemCount, __gm__ CommDeviceContext *hcclCtx,
                                                 __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -274,7 +274,7 @@ __global__ AICORE void TGetAsyncBandwidthKernel(__gm__ T *output, __gm__ T *shme
         TASSIGN(scratchTile, 0x0);
         pto::comm::AsyncSession session;
         if (pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-            __gm__ T *remoteSendShmem = HcclRemotePtr(hcclCtx, sendShmem, peerRank);
+            __gm__ T *remoteSendShmem = CommRemotePtr(hcclCtx, sendShmem, peerRank);
             Global recvG(recvShmem, shape, stride);
             Global remoteSendG(remoteSendShmem, shape, stride);
             pto::comm::AsyncEvent event = pto::comm::TGET_ASYNC(recvG, remoteSendG, session);
@@ -291,7 +291,7 @@ template <typename T>
 __global__ AICORE void ProfileTGetAsyncBandwidthKernel(__gm__ T *output, __gm__ uint64_t *profileCycles,
                                                        __gm__ T *shmem, int nranks, int rootRank, int peerRank,
                                                        int elemCount, int warmupIters, int timedIters,
-                                                       __gm__ HcclDeviceContext *hcclCtx, __gm__ uint8_t *sdmaWorkspace,
+                                                       __gm__ CommDeviceContext *hcclCtx, __gm__ uint8_t *sdmaWorkspace,
                                                        uint32_t sdmaSyncId)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -316,7 +316,7 @@ __global__ AICORE void ProfileTGetAsyncBandwidthKernel(__gm__ T *output, __gm__ 
         TASSIGN(scratchTile, 0x0);
         pto::comm::AsyncSession session;
         if (pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-            __gm__ T *remoteSendShmem = HcclRemotePtr(hcclCtx, sendShmem, peerRank);
+            __gm__ T *remoteSendShmem = CommRemotePtr(hcclCtx, sendShmem, peerRank);
             Global recvG(recvShmem, shape, stride);
             Global remoteSendG(remoteSendShmem, shape, stride);
 
