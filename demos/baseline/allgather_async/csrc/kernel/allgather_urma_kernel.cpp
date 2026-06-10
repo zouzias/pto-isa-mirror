@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Allgather Async Demo — URMA Engine Kernels
 //
 // Mirrors the 3 SDMA AllGather algorithms in allgather_kernel.cpp, replacing:
-//   HcclDeviceContext + SdmaWorkspaceManager + HcclRemotePtr
+//   CommDeviceContext + SdmaWorkspaceManager + CommRemotePtr
 // with:
 //   UrmaWorkspaceManager + UrmaPeerMrBaseAddr + BuildAsyncSession<DmaEngine::URMA>
 //

@@ -51,14 +51,14 @@ __global__ AICORE void WindowMemRead(__gm__ int32_t *devDst, __gm__ int32_t *win
 // All ranks perform atomic add 1 to rank 0's counter
 // The final counter value should equal n_ranks
 // ============================================================================
-__global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, __gm__ CommDeviceContext *hcclCtx,
                                               int nranks)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
     int target_rank = 0; // All ranks notify rank 0
 
-    // Get remote PE's counter address using HcclRemotePtr
-    __gm__ int32_t *remote_counter = HcclRemotePtr(hcclCtx, shmem_counter, target_rank);
+    // Get remote PE's counter address using CommRemotePtr
+    __gm__ int32_t *remote_counter = CommRemotePtr(hcclCtx, shmem_counter, target_rank);
 
     // Create GlobalTensor pointing to rank 0's counter
     pto::comm::Signal counterSignal(remote_counter);
@@ -75,15 +75,15 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, __g
 // Each rank sets the next rank's signal to its own rank_id + 100
 // Ring notification: rank i -> rank (i+1) % n_ranks
 // ============================================================================
-__global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, __gm__ HcclDeviceContext *hcclCtx, int nranks)
+__global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, __gm__ CommDeviceContext *hcclCtx, int nranks)
 {
     if (nranks <= 0)
         return;
     int my_rank = static_cast<int>(hcclCtx->rankId);
     int next_rank = (my_rank + 1) % nranks;
 
-    // Get remote PE's signal address using HcclRemotePtr
-    __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signals, next_rank);
+    // Get remote PE's signal address using CommRemotePtr
+    __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signals, next_rank);
 
     // Create GlobalTensor pointing to next rank's signal
     pto::comm::Signal nextSignal(remote_signal);
@@ -102,14 +102,14 @@ __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, __gm__ Hc
 // scoreboard[rank_id] = rank_id + 1000
 // ============================================================================
 template <size_t numSlots>
-__global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard, __gm__ CommDeviceContext *hcclCtx,
                                                int nranks)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
     int target_rank = 0;
 
     // Get remote PE's scoreboard base address
-    __gm__ int32_t *remote_scoreboard = HcclRemotePtr(hcclCtx, shmem_scoreboard, target_rank);
+    __gm__ int32_t *remote_scoreboard = CommRemotePtr(hcclCtx, shmem_scoreboard, target_rank);
 
     // Calculate own slot offset in scoreboard
     __gm__ int32_t *my_slot = remote_scoreboard + my_rank;
@@ -129,14 +129,14 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard,
 // Kernel 4: Runtime NotifyOp Test
 // Test runtime-specified NotifyOp version
 // ============================================================================
-__global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, __gm__ CommDeviceContext *hcclCtx,
                                               int nranks)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
     int target_rank = 0;
 
     // Get remote PE's counter address
-    __gm__ int32_t *remote_counter = HcclRemotePtr(hcclCtx, shmem_counter, target_rank);
+    __gm__ int32_t *remote_counter = CommRemotePtr(hcclCtx, shmem_counter, target_rank);
     pto::comm::Signal counterSignal(remote_counter);
 
     // Use runtime-specified NotifyOp (Set operation)

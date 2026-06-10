@@ -13,19 +13,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 // ============================================================================
-// HcclDeviceContext
+// CommDeviceContext
 //
 // Simplified device-side context for TPUT/TGET tests.
 // On MESH topology (A2), HCCL returns HcclCombinOpParamA5 whose first fields
 // match this struct directly (windowsIn[64] already contains per-rank RDMA
 // addresses).
 // On RING topology (A3), we build this struct manually on the host by
-// extracting remote RDMA addresses from HcclOpResParam's remoteRes array.
+// extracting remote RDMA addresses from CommOpResParam's remoteRes array.
 // ============================================================================
 
 static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
-struct HcclDeviceContext {
+struct CommDeviceContext {
     uint64_t workSpace;
     uint64_t workSpaceSize;
 

@@ -45,7 +45,7 @@ __global__ AICORE void WindowMemCopyOut(__gm__ T *devDst, __gm__ T *winSrc, int 
 // Tests the TGATHER collective - root gathers data from all ranks
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ HcclDeviceContext *hcclCtx, int nranks,
+__global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ CommDeviceContext *hcclCtx, int nranks,
                                          int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -70,7 +70,7 @@ __global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ Hc
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteSrc = HcclRemotePtr(hcclCtx, src, i);
+        __gm__ T *remoteSrc = CommRemotePtr(hcclCtx, src, i);
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
 
@@ -240,7 +240,7 @@ template bool RunGatherWithRoot<float, 256>(int n_ranks, int n_devices, int firs
 // Tests TGATHER with zero rows (empty data)
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TGatherEmptyKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TGatherEmptyKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ CommDeviceContext *hcclCtx,
                                               int nranks, int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -261,7 +261,7 @@ __global__ AICORE void TGatherEmptyKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteSrc = HcclRemotePtr(hcclCtx, src, i);
+        __gm__ T *remoteSrc = CommRemotePtr(hcclCtx, src, i);
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
 
@@ -390,7 +390,7 @@ template bool RunGatherEmpty<float, 256>(int n_ranks, int n_devices, int first_r
 // Destination: (1, 1, 1, nranks * total_rows, cols)
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-__global__ AICORE void TGatherLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TGatherLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ CommDeviceContext *hcclCtx,
                                                    int nranks)
 {
     constexpr size_t total_count = total_rows * cols;
@@ -417,7 +417,7 @@ __global__ AICORE void TGatherLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src,
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteSrc = HcclRemotePtr(hcclCtx, src, i);
+        __gm__ T *remoteSrc = CommRemotePtr(hcclCtx, src, i);
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
 
@@ -581,7 +581,7 @@ bool RunGatherLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int fir
 // Uses the 4-parameter TGATHER(pg, dst, ping, pong) overload.
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-__global__ AICORE void TGatherPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ HcclDeviceContext *hcclCtx,
+__global__ AICORE void TGatherPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ CommDeviceContext *hcclCtx,
                                                  int nranks)
 {
     constexpr size_t total_count = total_rows * cols;
@@ -605,7 +605,7 @@ __global__ AICORE void TGatherPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, _
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteSrc = HcclRemotePtr(hcclCtx, src, i);
+        __gm__ T *remoteSrc = CommRemotePtr(hcclCtx, src, i);
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
 

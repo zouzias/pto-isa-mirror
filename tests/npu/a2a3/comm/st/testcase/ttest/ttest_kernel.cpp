@@ -47,12 +47,12 @@ __global__ AICORE void WindowMemRead(__gm__ int32_t *devDst, __gm__ int32_t *win
 // Tests that TTEST returns true when signal matches expected value
 // ============================================================================
 __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result,
-                                       __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                       __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (phase == 0 && my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         pipe_barrier(PIPE_ALL);
@@ -72,12 +72,12 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
 // Tests that TTEST returns false when signal does not match expected value
 // ============================================================================
 __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result,
-                                        __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                        __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (phase == 0 && my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         pipe_barrier(PIPE_ALL);
@@ -98,12 +98,12 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
 // ============================================================================
 template <pto::comm::WaitCmp cmp>
 __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, int32_t signalValue,
-                                          int32_t cmpValue, __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                          int32_t cmpValue, __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (phase == 0 && my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
         pto::comm::TNOTIFY(targetSignal, signalValue, pto::comm::NotifyOp::Set);
         pipe_barrier(PIPE_ALL);
@@ -124,7 +124,7 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
 // ============================================================================
 __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count,
                                                  __gm__ int32_t *final_result, int32_t delay_iters, int32_t max_polls,
-                                                 bool send_signal, __gm__ HcclDeviceContext *hcclCtx)
+                                                 bool send_signal, __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
@@ -132,7 +132,7 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
         for (int32_t i = 0; i < delay_iters; ++i) {
             __asm__ __volatile__("");
         }
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 999, pto::comm::NotifyOp::Set);
@@ -164,12 +164,12 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
 // Tests that TTEST with NE returns true when values differ
 // ============================================================================
 __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result,
-                                     __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                     __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (phase == 0 && my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
         pto::comm::TNOTIFY(targetSignal, 50, pto::comm::NotifyOp::Set);
         pipe_barrier(PIPE_ALL);
@@ -192,7 +192,7 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
 // ============================================================================
 template <int FullCols, int SubRows, int SubCols>
 __global__ AICORE void TTestSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__ int32_t *result,
-                                            __gm__ HcclDeviceContext *hcclCtx, int phase)
+                                            __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
@@ -200,7 +200,7 @@ __global__ AICORE void TTestSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__
     constexpr int startCol = 4;
 
     if (phase == 0 && my_rank == 0) {
-        __gm__ int32_t *remote_matrix = HcclRemotePtr(hcclCtx, shmem_matrix, 1);
+        __gm__ int32_t *remote_matrix = CommRemotePtr(hcclCtx, shmem_matrix, 1);
         for (int r = 0; r < SubRows; ++r) {
             for (int c = 0; c < SubCols; ++c) {
                 __gm__ int32_t *elem = remote_matrix + (startRow + r) * FullCols + (startCol + c);

@@ -104,7 +104,7 @@ struct Mc2ServerCfg {
 // V2 tiling structures (same as A5).
 // init.version=100 routes through HCCL's V2 code path.
 // On MESH: returns HcclCombinOpParamA5 (windowsIn[64] directly usable).
-// On RING:  returns HcclOpResParam (requires remoteRes extraction).
+// On RING:  returns CommOpResParam (requires remoteRes extraction).
 // ============================================================================
 
 static constexpr uint32_t MAX_CC_TILING_NUM = 8U;
@@ -144,13 +144,13 @@ struct Mc2CommConfigV2 {
 };
 
 // ============================================================================
-// HcclOpResParam compat structs — binary-compatible copies of HCCL internal
+// CommOpResParam compat structs — binary-compatible copies of HCCL internal
 // types (from PyPTO hccl_context.h).  Used only on host side to compute
-// offsetof(HcclOpResParam, remoteRes) for RING topology.
+// offsetof(CommOpResParam, remoteRes) for RING topology.
 // ============================================================================
 namespace hccl_compat {
 
-struct HcclSignalInfo {
+struct CommSignalInfo {
     uint64_t resId;
     uint64_t addr;
     uint32_t devId;
@@ -159,7 +159,7 @@ struct HcclSignalInfo {
     uint32_t flag;
 };
 
-struct HcclStreamInfo {
+struct CommStreamInfo {
     int32_t streamIds;
     uint32_t sqIds;
     uint32_t cqIds;
@@ -180,10 +180,10 @@ static constexpr uint32_t COMPAT_AICPU_OP_NOTIFY_MAX_NUM = 2;
 struct LocalResInfoV2 {
     uint32_t streamNum;
     uint32_t signalNum;
-    HcclSignalInfo localSignals[COMPAT_LOCAL_NOTIFY_MAX_NUM];
-    HcclStreamInfo streamInfo[COMPAT_LOCAL_STREAM_MAX_NUM];
-    HcclStreamInfo mainStreamInfo;
-    HcclSignalInfo aicpuOpNotify[COMPAT_AICPU_OP_NOTIFY_MAX_NUM];
+    CommSignalInfo localSignals[COMPAT_LOCAL_NOTIFY_MAX_NUM];
+    CommStreamInfo streamInfo[COMPAT_LOCAL_STREAM_MAX_NUM];
+    CommStreamInfo mainStreamInfo;
+    CommSignalInfo aicpuOpNotify[COMPAT_AICPU_OP_NOTIFY_MAX_NUM];
     ListCommon nextTagRes;
 };
 
@@ -220,7 +220,7 @@ struct AlgoTopoInfo {
     uint64_t serverAndsuperPodRank;
 };
 
-struct HcclOpConfig {
+struct CommOpConfig {
     uint8_t deterministic;
     uint8_t retryEnable;
     uint8_t highPerfEnable;
@@ -253,7 +253,7 @@ struct HcclMC2WorkSpace {
     uint64_t workspaceSize;
 };
 
-struct HcclRankRelationResV2 {
+struct CommRankRelationResV2 {
     uint32_t remoteUsrRankId;
     uint32_t remoteWorldRank;
     uint64_t windowsIn;
@@ -262,7 +262,7 @@ struct HcclRankRelationResV2 {
     ListCommon nextTagRes;
 };
 
-struct HcclOpResParamHead {
+struct CommOpResParamHead {
     uint32_t localUsrRankId;
     uint32_t rankSize;
     uint64_t winSize;
@@ -275,7 +275,7 @@ struct HcclOpResParamHead {
 
 // Full struct layout for offsetof(remoteRes) computation.
 // Array size of remoteRes does not affect the offset calculation.
-struct HcclOpResParam {
+struct CommOpResParam {
     HcclMC2WorkSpace mc2WorkSpace;
     uint32_t localUsrRankId;
     uint32_t rankSize;
@@ -290,7 +290,7 @@ struct HcclOpResParam {
     uint64_t version;
     LocalResInfoV2 localRes;
     AlgoTopoInfo topoInfo;
-    HcclOpConfig config;
+    CommOpConfig config;
     uint64_t hostStateInfo;
     uint64_t aicpuStateInfo;
     uint64_t lockAddr;
@@ -307,7 +307,7 @@ struct HcclOpResParam {
 // on a remote rank.
 // ============================================================================
 template <typename T>
-AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *CommRemotePtr(__gm__ CommDeviceContext *ctx, __gm__ T *localPtr, int pe)
 {
     uint64_t localBase = ctx->windowsIn[ctx->rankId];
     uint64_t offset = (uint64_t)localPtr - localBase;
@@ -342,8 +342,8 @@ struct TestContext {
     int aclStatus{0};
     HcclComm comm{nullptr};
 
-    HcclDeviceContext *deviceCtx{nullptr};
-    HcclDeviceContext hostCtx{};
+    CommDeviceContext *deviceCtx{nullptr};
+    CommDeviceContext hostCtx{};
     bool ownsDeviceCtx{false};
 
     bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo *rootInfo)
@@ -454,10 +454,10 @@ struct TestContext {
     }
 
 private:
-    // MESH: HCCL returns HcclCombinOpParamA5 whose first fields match HcclDeviceContext.
+    // MESH: HCCL returns HcclCombinOpParamA5 whose first fields match CommDeviceContext.
     bool InitMeshPath(int rankId, void *ctxPtr)
     {
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(ctxPtr);
         aclError aRet = aclrtMemcpy(&hostCtx, sizeof(hostCtx), deviceCtx, sizeof(hostCtx), ACL_MEMCPY_DEVICE_TO_HOST);
         COMM_LOG("[INIT] Rank " << rankId << ": MESH path — aclrtMemcpy -> " << static_cast<int>(aRet));
         if (aRet != ACL_SUCCESS) {
@@ -474,20 +474,20 @@ private:
         return true;
     }
 
-    // RING: HCCL returns HcclOpResParam.  We extract RDMA remote window addresses
-    // from remoteRes[i]->HcclRankRelationResV2.windowsIn and build our own
-    // HcclDeviceContext on device.
+    // RING: HCCL returns CommOpResParam.  We extract RDMA remote window addresses
+    // from remoteRes[i]->CommRankRelationResV2.windowsIn and build our own
+    // CommDeviceContext on device.
     bool InitRingPath(int rankId, int nRanks, void *ctxPtr)
     {
         using namespace hccl_compat;
         auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
 
-        // 1. Read HcclOpResParam head (from localUsrRankId through localWindowsExp).
-        HcclOpResParamHead head{};
-        const size_t headOff = offsetof(HcclOpResParam, localUsrRankId);
+        // 1. Read CommOpResParam head (from localUsrRankId through localWindowsExp).
+        CommOpResParamHead head{};
+        const size_t headOff = offsetof(CommOpResParam, localUsrRankId);
         aclError aRet = aclrtMemcpy(&head, sizeof(head), rawCtx + headOff, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet != ACL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": read HcclOpResParam head failed: " << (int)aRet << std::endl;
+            std::cerr << "[ERROR] Rank " << rankId << ": read CommOpResParam head failed: " << (int)aRet << std::endl;
             return false;
         }
 
@@ -501,7 +501,7 @@ private:
         }
 
         // 2. Read remoteRes[0..rankSize-1] (array of device-pointer pairs).
-        const size_t remoteResOff = offsetof(HcclOpResParam, remoteRes);
+        const size_t remoteResOff = offsetof(CommOpResParam, remoteRes);
         const size_t remoteResBytes = head.rankSize * sizeof(RemoteResPtr);
         std::vector<RemoteResPtr> remoteResArr(head.rankSize);
 
@@ -518,7 +518,7 @@ private:
         // 3. Build hostCtx with correct per-rank RDMA window addresses.
         memset(&hostCtx, 0, sizeof(hostCtx));
 
-        // Read mc2WorkSpace (first 16 bytes of HcclOpResParam).
+        // Read mc2WorkSpace (first 16 bytes of CommOpResParam).
         uint64_t wsFields[2] = {0, 0};
         aRet = aclrtMemcpy(wsFields, sizeof(wsFields), rawCtx, sizeof(wsFields), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet == ACL_SUCCESS) {
@@ -547,11 +547,11 @@ private:
             COMM_LOG("[INIT] Rank " << rankId << ": remoteRes[" << i << "].nextDevicePtr=0x" << std::hex << devPtr
                                     << std::dec);
 
-            HcclRankRelationResV2 remoteInfo{};
+            CommRankRelationResV2 remoteInfo{};
             aRet = aclrtMemcpy(&remoteInfo, sizeof(remoteInfo), reinterpret_cast<void *>(devPtr), sizeof(remoteInfo),
                                ACL_MEMCPY_DEVICE_TO_HOST);
             if (aRet != ACL_SUCCESS) {
-                std::cerr << "[ERROR] Rank " << rankId << ": read HcclRankRelationResV2 for rank " << i
+                std::cerr << "[ERROR] Rank " << rankId << ": read CommRankRelationResV2 for rank " << i
                           << " failed: " << (int)aRet << std::endl;
                 return false;
             }
@@ -561,16 +561,16 @@ private:
                                     << std::dec << " (remote, remoteRankId=" << remoteInfo.remoteUsrRankId << ")");
         }
 
-        // 4. Allocate new device memory and copy our correctly-built HcclDeviceContext.
+        // 4. Allocate new device memory and copy our correctly-built CommDeviceContext.
         void *newDevMem = nullptr;
-        aRet = aclrtMalloc(&newDevMem, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
+        aRet = aclrtMalloc(&newDevMem, sizeof(CommDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
         if (aRet != ACL_SUCCESS || newDevMem == nullptr) {
             std::cerr << "[ERROR] Rank " << rankId << ": aclrtMalloc for RING deviceCtx failed: " << (int)aRet
                       << std::endl;
             return false;
         }
 
-        aRet = aclrtMemcpy(newDevMem, sizeof(HcclDeviceContext), &hostCtx, sizeof(HcclDeviceContext),
+        aRet = aclrtMemcpy(newDevMem, sizeof(CommDeviceContext), &hostCtx, sizeof(CommDeviceContext),
                            ACL_MEMCPY_HOST_TO_DEVICE);
         if (aRet != ACL_SUCCESS) {
             std::cerr << "[ERROR] Rank " << rankId << ": copy RING deviceCtx to device failed: " << (int)aRet
@@ -579,7 +579,7 @@ private:
             return false;
         }
 
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(newDevMem);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(newDevMem);
         ownsDeviceCtx = true;
 
         COMM_LOG("[INFO] Rank " << rankId << " hccl init OK (RING)" << " rankId=" << hostCtx.rankId

@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/cpu_stub.hpp"
 
 template <typename T>
-inline T *HcclRemotePtr(HcclDeviceContext *ctx, T *localPtr, int pe)
+inline T *CommRemotePtr(CommDeviceContext *ctx, T *localPtr, int pe)
 {
     if (ctx->rankId == pe) {
         return localPtr;
@@ -41,8 +41,8 @@ struct TestContext {
     int32_t deviceId{-1};
     aclrtStream stream{nullptr};
     int aclStatus{0};
-    HcclDeviceContext *deviceCtx{nullptr};
-    HcclDeviceContext hostCtx{};
+    CommDeviceContext *deviceCtx{nullptr};
+    CommDeviceContext hostCtx{};
 
     bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo *rootInfo)
     {

@@ -116,7 +116,7 @@ struct Mc2CommConfigV2 {
 // Device-side helper: convert a local window pointer to the equivalent address on a remote rank.
 // ============================================================================
 template <typename T>
-AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *CommRemotePtr(__gm__ CommDeviceContext *ctx, __gm__ T *localPtr, int pe)
 {
     uint64_t localBase = ctx->windowsIn[ctx->rankId];
     uint64_t offset = (uint64_t)localPtr - localBase;
@@ -151,8 +151,8 @@ struct TestContext {
     int aclStatus{0};
     HcclComm comm{nullptr};
 
-    HcclDeviceContext *deviceCtx{nullptr};
-    HcclDeviceContext hostCtx{};
+    CommDeviceContext *deviceCtx{nullptr};
+    CommDeviceContext hostCtx{};
 
     bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo *rootInfo)
     {
@@ -239,7 +239,7 @@ struct TestContext {
             return false;
         }
 
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(ctxPtr);
         aclError aRet = aclrtMemcpy(&hostCtx, sizeof(hostCtx), deviceCtx, sizeof(hostCtx), ACL_MEMCPY_DEVICE_TO_HOST);
         COMM_LOG("[INIT] Rank " << rankId << ": aclrtMemcpy(deviceCtx->hostCtx) -> " << static_cast<int>(aRet));
         if (aRet != ACL_SUCCESS) {

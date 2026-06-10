@@ -45,7 +45,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl/hccl_comm.h"
 #include "comm_mpi.h"
 
-#include "hccl_context.h"
+#include "comm_context.h"
 
 #ifndef __CCE_KT_TEST__
 #define __CCE_KT_TEST__
@@ -119,11 +119,11 @@ struct Mc2CommConfigV2 {
 } // namespace gemm_ar_tiling
 
 // ============================================================================
-// HcclOpResParam compat structs for RING topology
+// CommOpResParam compat structs for RING topology
 // ============================================================================
 namespace hccl_compat {
 
-struct HcclSignalInfo {
+struct CommSignalInfo {
     uint64_t resId;
     uint64_t addr;
     uint32_t devId;
@@ -132,7 +132,7 @@ struct HcclSignalInfo {
     uint32_t flag;
 };
 
-struct HcclStreamInfo {
+struct CommStreamInfo {
     int32_t streamIds;
     uint32_t sqIds;
     uint32_t cqIds;
@@ -153,10 +153,10 @@ static constexpr uint32_t COMPAT_AICPU_OP_NOTIFY_MAX_NUM = 2;
 struct LocalResInfoV2 {
     uint32_t streamNum;
     uint32_t signalNum;
-    HcclSignalInfo localSignals[COMPAT_LOCAL_NOTIFY_MAX_NUM];
-    HcclStreamInfo streamInfo[COMPAT_LOCAL_STREAM_MAX_NUM];
-    HcclStreamInfo mainStreamInfo;
-    HcclSignalInfo aicpuOpNotify[COMPAT_AICPU_OP_NOTIFY_MAX_NUM];
+    CommSignalInfo localSignals[COMPAT_LOCAL_NOTIFY_MAX_NUM];
+    CommStreamInfo streamInfo[COMPAT_LOCAL_STREAM_MAX_NUM];
+    CommStreamInfo mainStreamInfo;
+    CommSignalInfo aicpuOpNotify[COMPAT_AICPU_OP_NOTIFY_MAX_NUM];
     ListCommon nextTagRes;
 };
 
@@ -193,7 +193,7 @@ struct AlgoTopoInfo {
     uint64_t serverAndsuperPodRank;
 };
 
-struct HcclOpConfig {
+struct CommOpConfig {
     uint8_t deterministic;
     uint8_t retryEnable;
     uint8_t highPerfEnable;
@@ -226,7 +226,7 @@ struct HcclMC2WorkSpace {
     uint64_t workspaceSize;
 };
 
-struct HcclRankRelationResV2 {
+struct CommRankRelationResV2 {
     uint32_t remoteUsrRankId;
     uint32_t remoteWorldRank;
     uint64_t windowsIn;
@@ -235,7 +235,7 @@ struct HcclRankRelationResV2 {
     ListCommon nextTagRes;
 };
 
-struct HcclOpResParamHead {
+struct CommOpResParamHead {
     uint32_t localUsrRankId;
     uint32_t rankSize;
     uint64_t winSize;
@@ -246,7 +246,7 @@ struct HcclOpResParamHead {
     uint64_t localWindowsExp;
 };
 
-struct HcclOpResParam {
+struct CommOpResParam {
     HcclMC2WorkSpace mc2WorkSpace;
     uint32_t localUsrRankId;
     uint32_t rankSize;
@@ -261,7 +261,7 @@ struct HcclOpResParam {
     uint64_t version;
     LocalResInfoV2 localRes;
     AlgoTopoInfo topoInfo;
-    HcclOpConfig config;
+    CommOpConfig config;
     uint64_t hostStateInfo;
     uint64_t aicpuStateInfo;
     uint64_t lockAddr;
@@ -321,8 +321,8 @@ static PerfStats calcStats(const std::vector<double> &times)
 // ============================================================================
 struct GemmHcclContext {
     HcclComm comm{nullptr};
-    HcclDeviceContext *deviceCtx{nullptr};
-    HcclDeviceContext hostCtx{};
+    CommDeviceContext *deviceCtx{nullptr};
+    CommDeviceContext hostCtx{};
     bool ownsDeviceCtx{false};
 
     bool Init(int rankId, int nRanks, int deviceId, const HcclRootInfo *rootInfo, rtStream_t hcclStream)
@@ -433,28 +433,27 @@ private:
 
     bool InitMeshPath(int rankId, void *ctxPtr)
     {
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(ctxPtr);
         aclError aRet = aclrtMemcpy(&hostCtx, sizeof(hostCtx), deviceCtx, sizeof(hostCtx), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet != ACL_SUCCESS) {
             std::cerr << "[ERROR] Rank " << rankId << ": aclrtMemcpy(deviceCtx) failed: " << (int)aRet << std::endl;
             return false;
         }
         if (rankId == 0) {
-            std::cout << "[INFO] HCCL MESH init OK"
-                      << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
+            std::cout << "[INFO] HCCL MESH init OK" << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
                       << " winSize=" << hostCtx.winSize << std::endl;
         }
         return true;
     }
 
-    bool ReadRingParams(int rankId, uint8_t *rawCtx, hccl_compat::HcclOpResParamHead &head,
+    bool ReadRingParams(int rankId, uint8_t *rawCtx, hccl_compat::CommOpResParamHead &head,
                         std::vector<hccl_compat::RemoteResPtr> &remoteResArr)
     {
         using namespace hccl_compat;
-        const size_t headOff = offsetof(HcclOpResParam, localUsrRankId);
+        const size_t headOff = offsetof(CommOpResParam, localUsrRankId);
         aclError aRet = aclrtMemcpy(&head, sizeof(head), rawCtx + headOff, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet != ACL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": read HcclOpResParam head failed\n";
+            std::cerr << "[ERROR] Rank " << rankId << ": read CommOpResParam head failed\n";
             return false;
         }
 
@@ -463,7 +462,7 @@ private:
             return false;
         }
 
-        const size_t remoteResOff = offsetof(HcclOpResParam, remoteRes);
+        const size_t remoteResOff = offsetof(CommOpResParam, remoteRes);
         const size_t remoteResBytes = head.rankSize * sizeof(RemoteResPtr);
         remoteResArr.resize(head.rankSize);
 
@@ -476,7 +475,7 @@ private:
         return true;
     }
 
-    bool BuildRingHostCtx(int rankId, uint8_t *rawCtx, const hccl_compat::HcclOpResParamHead &head,
+    bool BuildRingHostCtx(int rankId, uint8_t *rawCtx, const hccl_compat::CommOpResParamHead &head,
                           const std::vector<hccl_compat::RemoteResPtr> &remoteResArr)
     {
         using namespace hccl_compat;
@@ -505,7 +504,7 @@ private:
                 return false;
             }
 
-            HcclRankRelationResV2 remoteInfo{};
+            CommRankRelationResV2 remoteInfo{};
             aRet = aclrtMemcpy(&remoteInfo, sizeof(remoteInfo), reinterpret_cast<void *>(devPtr), sizeof(remoteInfo),
                                ACL_MEMCPY_DEVICE_TO_HOST);
             if (aRet != ACL_SUCCESS) {
@@ -521,13 +520,13 @@ private:
     bool CopyHostCtxToDevice(int rankId)
     {
         void *newDevMem = nullptr;
-        aclError aRet = aclrtMalloc(&newDevMem, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
+        aclError aRet = aclrtMalloc(&newDevMem, sizeof(CommDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
         if (aRet != ACL_SUCCESS || newDevMem == nullptr) {
             std::cerr << "[ERROR] Rank " << rankId << ": aclrtMalloc for RING deviceCtx failed\n";
             return false;
         }
 
-        aRet = aclrtMemcpy(newDevMem, sizeof(HcclDeviceContext), &hostCtx, sizeof(HcclDeviceContext),
+        aRet = aclrtMemcpy(newDevMem, sizeof(CommDeviceContext), &hostCtx, sizeof(CommDeviceContext),
                            ACL_MEMCPY_HOST_TO_DEVICE);
         if (aRet != ACL_SUCCESS) {
             aclrtFree(newDevMem);
@@ -535,7 +534,7 @@ private:
             return false;
         }
 
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(newDevMem);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(newDevMem);
         ownsDeviceCtx = true;
         return true;
     }
@@ -544,7 +543,7 @@ private:
     {
         auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
 
-        hccl_compat::HcclOpResParamHead head{};
+        hccl_compat::CommOpResParamHead head{};
         std::vector<hccl_compat::RemoteResPtr> remoteResArr;
         if (!ReadRingParams(rankId, rawCtx, head, remoteResArr))
             return false;
@@ -554,8 +553,7 @@ private:
             return false;
 
         if (rankId == 0) {
-            std::cout << "[INFO] HCCL RING init OK"
-                      << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
+            std::cout << "[INFO] HCCL RING init OK" << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
                       << " winSize=" << hostCtx.winSize << std::endl;
         }
         return true;
@@ -646,30 +644,29 @@ static void PrintTimingDetails(const PerfStats &comp_s, const PerfStats &seq_s, 
         return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0 * 1024.0 * 1024.0)) : 0.0;
     };
 
-    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
     std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
-    std::cout << "    compute:      " << seq_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
-    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    compute:      " << seq_comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us" << "  ("
+              << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
     std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
-    std::cout << "    compute done: " << pipe_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
-              << std::setprecision(1)
+    std::cout << "    compute done: " << pipe_comp_s.avg << " us" << "  (" << std::setprecision(0)
+              << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, " << std::setprecision(1)
               << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0) << "% of pure)"
               << std::endl;
-    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us" << "  ("
+              << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
 
     double speedup = (pipe_s.avg > 0) ? (seq_s.avg / pipe_s.avg) : 0.0;
     double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
     double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
 
     std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
-    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
-              << " (" << std::setprecision(1)
-              << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
+    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us" << " ("
+              << std::setprecision(1) << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0)
+              << "%)" << std::endl;
     std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
     std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)"
               << std::endl;

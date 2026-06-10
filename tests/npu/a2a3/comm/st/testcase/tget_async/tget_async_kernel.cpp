@@ -25,7 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TGetAsyncKernelImpl(__gm__ T *commBuf, int nranks, int root_rank, int elem_offset,
-                                           int elem_count, __gm__ HcclDeviceContext *hcclCtx,
+                                           int elem_count, __gm__ CommDeviceContext *hcclCtx,
                                            __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -62,7 +62,7 @@ __global__ AICORE void TGetAsyncKernelImpl(__gm__ T *commBuf, int nranks, int ro
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T *remoteSendBuf = HcclRemotePtr(hcclCtx, sendBuf, target_rank) + elem_offset;
+            __gm__ T *remoteSendBuf = CommRemotePtr(hcclCtx, sendBuf, target_rank) + elem_offset;
             __gm__ T *localRecvBuf = recvBuf + target_rank * count + elem_offset;
             Global remoteSendG(remoteSendBuf, shape, stride);
             Global localRecvG(localRecvBuf, shape, stride);
@@ -196,7 +196,7 @@ template bool RunGetAsyncRootGet<uint8_t, 512>(int n_ranks, int n_devices, int f
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TGetAsyncConfigKernelImpl(__gm__ T *commBuf, int nranks, int root_rank, int elem_offset,
-                                                 int elem_count, __gm__ HcclDeviceContext *hcclCtx,
+                                                 int elem_count, __gm__ CommDeviceContext *hcclCtx,
                                                  __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
                                                  uint64_t blockBytes, uint64_t commBlockOffset, uint32_t queueNum)
 {
@@ -235,7 +235,7 @@ __global__ AICORE void TGetAsyncConfigKernelImpl(__gm__ T *commBuf, int nranks, 
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T *remoteSendBuf = HcclRemotePtr(hcclCtx, sendBuf, target_rank) + elem_offset;
+            __gm__ T *remoteSendBuf = CommRemotePtr(hcclCtx, sendBuf, target_rank) + elem_offset;
             __gm__ T *localRecvBuf = recvBuf + target_rank * count + elem_offset;
             Global remoteSendG(remoteSendBuf, shape, stride);
             Global localRecvG(localRecvBuf, shape, stride);
@@ -358,7 +358,7 @@ template bool RunGetAsyncWithConfig<float, 2048>(int, int, int, int, uint64_t, u
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TGetAsyncMultiCoreKernelImpl(__gm__ T *commBuf, int nranks, int root_rank, int total_elem_count,
-                                                    __gm__ HcclDeviceContext *hcclCtx, __gm__ uint8_t *sdmaWorkspace,
+                                                    __gm__ CommDeviceContext *hcclCtx, __gm__ uint8_t *sdmaWorkspace,
                                                     uint32_t sdmaSyncId, int multiCoreMode)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -407,7 +407,7 @@ __global__ AICORE void TGetAsyncMultiCoreKernelImpl(__gm__ T *commBuf, int nrank
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T *remoteSendBuf = HcclRemotePtr(hcclCtx, sendBuf, target_rank);
+            __gm__ T *remoteSendBuf = CommRemotePtr(hcclCtx, sendBuf, target_rank);
             __gm__ T *localRecvBuf = recvBuf + target_rank * count;
             Global remoteSendG(remoteSendBuf, shape, stride);
             Global localRecvG(localRecvBuf, shape, stride);
