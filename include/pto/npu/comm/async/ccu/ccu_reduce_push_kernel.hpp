@@ -159,19 +159,27 @@ struct CcuReducePushKernelArg : public hcomm::CcuKernelArg {
 };
 
 // Push-mode TaskArg.  Note the absence of any per-peer arrays — push
-// reduce needs only this rank's own (input, output, length, token) plus
-// root's destination (rootOutputAddr, rootToken).  Total O(1) per rank
+// reduce needs only this rank's own (input, output, token) plus root's
+// destination (rootOutputAddr, rootToken).  Total O(1) per rank
 // regardless of rankSize.
 //
+// CRITICAL: `token` is required on BOTH root and non-root.  CCU's
+// internal memory descriptor for any LocalAddr (source of LocalCopyNb,
+// source of WriteReduceNb) carries a token Xn register; the hardware
+// resolves the local MR by (addr, token).  Setting it to 0 produces a
+// non-existent MR lookup and the DMA hangs forever (manifests as
+// aclrtSynchronizeStream timeout on the CCU stream, error 507057).
+//
 // Layout convention:
-//   - root rank:     rootOutputAddr / rootToken IGNORED (kernel reads
-//                    outputAddr / token to do LocalCopyNb).
-//   - non-root rank: outputAddr / token IGNORED (kernel reads
-//                    rootOutputAddr / rootToken to do WriteReduceNb).
+//   - root rank:     rootOutputAddr / rootToken IGNORED (kernel uses
+//                    outputAddr + token to do LocalCopyNb).
+//   - non-root rank: outputAddr IGNORED (kernel uses
+//                    rootOutputAddr + rootToken for the remote side,
+//                    inputAddr + token for the local source).
 struct CcuReducePushTaskArg : public hcomm::CcuTaskArg {
     uint64_t inputAddr{0};       // this rank's input VA (always used)
     uint64_t outputAddr{0};      // this rank's output VA (root only)
-    uint64_t token{0};           // this rank's HBM token (root only)
+    uint64_t token{0};           // this rank's HBM token (always used — local src/dst)
     uint64_t rootOutputAddr{0};  // root's output VA (non-root only)
     uint64_t rootToken{0};       // root's HBM token (non-root only)
     uint64_t length{0};
@@ -300,12 +308,17 @@ public:
         }
 
         // Args layout MUST match LoadArgs() exactly (ccu-pitfalls #5).
-        // Root:     [inputAddr, outputAddr, length]            (3 entries)
-        // Non-root: [inputAddr, rootOutput, rootToken, length] (4 entries)
+        // Root:     [inputAddr, outputAddr, ownToken, length]                    (4 entries)
+        // Non-root: [inputAddr, ownToken, rootOutputAddr, rootToken, length]     (5 entries)
+        //
+        // `ownToken` is mandatory for both — LocalAddr.token is the local-side
+        // memory descriptor token used by CCU/CTP to resolve the MR; setting
+        // it to 0 produces a non-existent MR lookup and the DMA hangs (CCU
+        // stream times out with ACL error 507057).
         if (rankId_ == rootId_) {
-            return {tArg->inputAddr, tArg->outputAddr, tArg->length};
+            return {tArg->inputAddr, tArg->outputAddr, tArg->token, tArg->length};
         }
-        return {tArg->inputAddr, tArg->rootOutputAddr, tArg->rootToken, tArg->length};
+        return {tArg->inputAddr, tArg->token, tArg->rootOutputAddr, tArg->rootToken, tArg->length};
     }
 
 private:
@@ -348,6 +361,7 @@ private:
     inline HcclResult InitResourceWithChannels()
     {
         inputVar_ = CreateVariable();
+        ownTokenVar_ = CreateVariable();  // both root and non-root need the local-side token
         lengthVar_ = CreateVariable();
 
         if (rankId_ == rootId_) {
@@ -391,12 +405,16 @@ private:
     inline void LoadArgs()
     {
         // Order MUST match GeneArgs return vector (ccu-pitfalls #5).
+        // Root:     4 Loads — [inputAddr, outputAddr, ownToken, length]
+        // Non-root: 5 Loads — [inputAddr, ownToken, rootOutputAddr, rootToken, length]
         if (rankId_ == rootId_) {
             Load(inputVar_);
             Load(outputVar_);
+            Load(ownTokenVar_);
             Load(lengthVar_);
         } else {
             Load(inputVar_);
+            Load(ownTokenVar_);
             Load(rootOutputVar_);
             Load(rootTokenVar_);
             Load(lengthVar_);
@@ -423,13 +441,17 @@ private:
     // for the op to complete BEFORE the PreSync NotifyRecord fires.  The
     // explicit WaitEvent ensures peers see the seeded value at HBM before
     // their atomic adds layer on top.
+    //
+    // Both src and dst use the OWN rank's token — CCU's local memory
+    // descriptor pairs (addr, token) just like the remote side.  See
+    // CcuBroadcastMesh1D::DoBroadcast() for the analogous pattern.
     inline void DoRootSeed()
     {
         localSrc_.addr = inputVar_;
-        localSrc_.token = 0;  // local addrs do not carry a token
+        localSrc_.token = ownTokenVar_;
 
         localDst_.addr = outputVar_;
-        localDst_.token = 0;
+        localDst_.token = ownTokenVar_;
 
         opEvent_.SetMask(1u);
         (void)LocalCopyNb(localDst_, localSrc_, lengthVar_, opEvent_);
@@ -441,10 +463,15 @@ private:
     // Non-root path: WriteReduceNb own input -> root's output buffer with
     // hardware atomic accumulate (WQE opcode 0x70).  N-1 peers issue this
     // concurrently; the HBM-side accumulator at root serializes the adds.
+    //
+    // localSrc.token must be THIS rank's own token (loaded from SQE).
+    // remoteDst.token is ROOT's token (also loaded from SQE).  Setting
+    // either to a constant 0 causes the CCU local/remote MR lookup to
+    // fail and the WaitEvent below hangs the CCU stream.
     inline void DoPeerPush()
     {
         localSrc_.addr = inputVar_;
-        localSrc_.token = 0;
+        localSrc_.token = ownTokenVar_;
 
         remoteDst_.addr = rootOutputVar_;
         remoteDst_.token = rootTokenVar_;
@@ -474,6 +501,7 @@ private:
     // Variables loaded from SQE args.
     hcomm::CcuRep::Variable inputVar_;
     hcomm::CcuRep::Variable outputVar_;       // root only
+    hcomm::CcuRep::Variable ownTokenVar_;     // both root and non-root (local-side token)
     hcomm::CcuRep::Variable rootOutputVar_;   // non-root only
     hcomm::CcuRep::Variable rootTokenVar_;    // non-root only
     hcomm::CcuRep::Variable lengthVar_;
