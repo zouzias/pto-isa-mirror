@@ -48,8 +48,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hcomm/ccu/ccu_kernel_signature.h"
 #include "hcomm/ccu/ccu_task_arg_v1.h"
 
-#include "pto/npu/comm/async/ccu/ccu_gate_registry.hpp"
-#include "pto/npu/comm/async/ccu/ccu_mesh_common.hpp"
+#include "pto/comm/async/ccu/ccu_gate_registry.hpp"
+#include "pto/comm/async/ccu/ccu_mesh_common.hpp"
 
 namespace pto {
 namespace comm {
