@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr int32_t kBlockCount = 48;
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagUbAddr = 0x0;
 constexpr uint64_t kReadUbAddr = 0x1000;
@@ -40,7 +39,7 @@ PTO_INTERNAL void InvalidateInt32Lines(__gm__ int32_t *addr, int32_t lines)
 }
 
 extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __gm__ int32_t __out__ *flags,
-                                                 __gm__ int32_t __out__ *syncWorkspace)
+                                                 __gm__ int32_t __out__ *syncWorkspace, int32_t totalBlocks)
 {
     const int32_t idx = block_idx;
     StoreInt32Line(flags + idx * kInt32PerCacheLine, idx + 1, kFlagUbAddr);
@@ -50,31 +49,31 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
 #ifndef __PTO_AUTO__
     syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t *>(kSoftSyncUbAddr);
 #endif
-    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kBlockCount);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
     __ubuf__ int32_t *readUb = reinterpret_cast<__ubuf__ int32_t *>(kReadUbAddr);
-    InvalidateInt32Lines(flags, kBlockCount);
-    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, kBlockCount, 0, 0);
+    InvalidateInt32Lines(flags, totalBlocks);
+    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, totalBlocks, 0, 0);
     pipe_barrier(PIPE_ALL);
 
     int32_t allFirstVisible = 1;
-    for (int32_t i = 0; i < kBlockCount; ++i) {
+    for (int32_t i = 0; i < totalBlocks; ++i) {
         if (readUb[i * kInt32PerCacheLine] != i + 1) {
             allFirstVisible = 0;
         }
     }
 
-    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kBlockCount);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
     StoreInt32Line(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, kFlagUbAddr);
-    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, kBlockCount);
+    SYNCALL<SyncAllMode::Soft>(gmWs, syncUbTile, totalBlocks);
 
-    InvalidateInt32Lines(flags, kBlockCount);
-    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, kBlockCount, 0, 0);
+    InvalidateInt32Lines(flags, totalBlocks);
+    copy_gm_to_ubuf(static_cast<__ubuf__ void *>(readUb), static_cast<__gm__ void *>(flags), 0, 1, totalBlocks, 0, 0);
     pipe_barrier(PIPE_ALL);
 
     int32_t allSecondVisible = 1;
-    for (int32_t i = 0; i < kBlockCount; ++i) {
+    for (int32_t i = 0; i < totalBlocks; ++i) {
         if (readUb[i * kInt32PerCacheLine] != (i + 1) * 2) {
             allSecondVisible = 0;
         }
@@ -83,7 +82,7 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
     StoreInt32Line(out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, kOutUbAddr);
 }
 
-void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream)
+void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream)
 {
-    RunSoftSyncAll<<<48, nullptr, stream>>>(out, flags, syncWorkspace);
+    RunSoftSyncAll<<<totalBlocks, nullptr, stream>>>(out, flags, syncWorkspace, totalBlocks);
 }

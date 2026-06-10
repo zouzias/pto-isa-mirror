@@ -802,8 +802,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // S0 (rows total), Cube_S0 (per-block rows), S1 (cols), HEAD_SIZE (inner)
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t block_rows = S0 / CUBE_S0;
-    constexpr uint32_t Cube_S1 = CUBE_S1; // per-tile S1 chunk
-    constexpr uint32_t Tile_S1 = TILE_S1; // logical tile along S1
+    constexpr uint32_t Cube_S1 = CUBE_S1;               // per-tile S1 chunk
+    constexpr uint32_t Tile_S1 = TILE_S1;               // logical tile along S1
     static_assert(Tile_S1 % Cube_S1 == 0, "TILE_S1 must be divisible by CUBE_S1");
     constexpr uint32_t kTileFactor = Tile_S1 / Cube_S1; // sub-tiles per TILE_S1
     constexpr uint32_t Cube_HEAD = HEAD_SIZE;

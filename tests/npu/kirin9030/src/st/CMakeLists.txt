@@ -71,9 +71,6 @@ add_link_options(
 )
 if (SOC_VERSION STREQUAL "Kirin9030")
     set(CCE_AICORE_ARCH dav-l311)
-elseif(SOC_VERSION STREQUAL "KirinX90")
-    set(CCE_AICORE_ARCH dav-l300)
-    add_compile_definitions(PTO_TEST_KIRINX90)
 endif()
 
 if(RUN_MODE STREQUAL "npu")
@@ -100,7 +97,7 @@ if(RUN_MODE STREQUAL "npu")
     )
 
     include_directories(
-        ${PROJECT_SOURCE_DIR}/../../../../../include 
+        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/ohos
         ${ASCEND_DRIVER_PATH}/kernel/inc
     )
@@ -112,7 +109,7 @@ else()
     )
 
     include_directories(
-        ${PROJECT_SOURCE_DIR}/../../../../../include 
+        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/include
         ${ASCEND_DRIVER_PATH}/kernel/inc
     )

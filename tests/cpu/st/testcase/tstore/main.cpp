@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
 
@@ -119,20 +120,20 @@ TEST_F(TStoreTest, DN_int8_t_2_1_2_32_32_3_4_3_64_35)
     test_tstore<1, int8_t, 2, 1, 2, 32, 32, 3, 4, 3, 64, 35>();
 }
 
-// TEST_F(TStoreTest, NZ_float_1_1_1_16_8_1_1_2_16_8)
-// {
-//     test_tstore<2, float, 1, 1, 1, 16, 8, 1, 1, 2, 16, 8>();
-// }
+TEST_F(TStoreTest, NZ_float_1_1_1_16_8_1_1_2_16_8)
+{
+    test_tstore<2, float, 1, 1, 1, 16, 8, 1, 1, 2, 16, 8>();
+}
 
-// TEST_F(TStoreTest, NZ_int16_t_2_2_2_16_16_5_3_3_16_16)
-// {
-//     test_tstore<2, int16_t, 2, 2, 2, 16, 16, 5, 3, 3, 16, 16>();
-// }
+TEST_F(TStoreTest, NZ_int16_t_2_2_2_16_16_5_3_3_16_16)
+{
+    test_tstore<2, int16_t, 2, 2, 2, 16, 16, 5, 3, 3, 16, 16>();
+}
 
-// TEST_F(TStoreTest, NZ_int8_t_1_2_1_16_32_2_4_2_16_32)
-// {
-//     test_tstore<2, int8_t, 1, 2, 1, 16, 32, 2, 4, 2, 16, 32>();
-// }
+TEST_F(TStoreTest, NZ_int8_t_1_2_1_16_32_2_4_2_16_32)
+{
+    test_tstore<2, int8_t, 1, 2, 1, 16, 32, 2, 4, 2, 16, 32>();
+}
 
 TEST_F(TStoreTest, ND_int64_1_1_1_2_128_1_1_1_2_128)
 {
@@ -152,4 +153,30 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32)
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, FpVariantStoresTileIntoGlobalTensor)
+{
+    using TileData = pto::Tile<pto::TileType::Vec, float, 2, 8>;
+    using FpTile = pto::Tile<pto::TileType::Vec, float, 1, 8>;
+    using GlobalData = pto::GlobalTensor<float, pto::Shape<1, 1, 1, 2, 8>, pto::Stride<16, 16, 16, 8, 1>>;
+
+    TileData src;
+    FpTile fp;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, fp);
+
+    std::vector<float> buffer(16, 0.0f);
+    GlobalData dst(buffer.data());
+
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+    CpuTileTestUtils::FillAll(fp, 0.5f);
+    pto::TSTORE_FP(dst, src, fp);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(buffer[static_cast<size_t>(r) * src.GetValidCol() + c],
+                                                CpuTileTestUtils::GetValue(src, r, c));
+        }
+    }
 }

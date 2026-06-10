@@ -58,8 +58,8 @@ void test_tsqrt()
     aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
-    aclrtMemset(dstHost, dstfileSize, 0, dstfileSize);
-    aclrtMemcpy(dstDevice, dstfileSize, dstHost, dstfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemset(dstHost, dstFileSize, 0, dstFileSize);
+    aclrtMemcpy(dstDevice, dstFileSize, dstHost, dstFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTSqrt<T, dstRow, dstCol, srcRow, srcCol, validRow, validCol, isInPlace>(dstDevice, srcDevice, stream);
 
@@ -122,4 +122,32 @@ TEST_F(TSQRTTest, case7)
 TEST_F(TSQRTTest, case8)
 {
     test_tsqrt<aclFloat16, 64, 64, 128, 256, 32, 32>();
+}
+TEST_F(TSQRTTest, case9)
+{
+    test_tsqrt<float, 32, 32, 32, 32, 32, 16>();
+}
+TEST_F(TSQRTTest, case10)
+{
+    test_tsqrt<aclFloat16, 32, 32, 32, 32, 32, 16>();
+}
+TEST_F(TSQRTTest, case11)
+{
+    test_tsqrt<float, 64, 64, 64, 64, 32, 64>();
+}
+TEST_F(TSQRTTest, case12)
+{
+    test_tsqrt<aclFloat16, 64, 64, 64, 64, 32, 64>();
+}
+TEST_F(TSQRTTest, case13)
+{
+    test_tsqrt<float, 128, 128, 128, 128, 64, 64>();
+}
+TEST_F(TSQRTTest, case14)
+{
+    test_tsqrt<aclFloat16, 128, 128, 128, 128, 64, 64>();
+}
+TEST_F(TSQRTTest, case15)
+{
+    test_tsqrt<float, 16, 256, 16, 256, 16, 128>();
 }

@@ -283,29 +283,23 @@ struct TPipe {
         {
             using T = typename TileProd::DType;
             constexpr int splitNum = 2;
-            constexpr int ProdM = TileProd::Rows;
-            constexpr int ProdN = TileProd::Cols;
-            constexpr int ConsM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM * splitNum : ProdM;
-            constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
-            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
-            constexpr int gmValidR = ProdM;
-            constexpr int gmValidC = ProdN;
-            constexpr int gmStrideR = ConsN;
+            const int gmValidR = tile.GetValidRow();
+            const int gmValidC = tile.GetValidCol();
+            const int gmStrideR = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? gmValidC * splitNum : gmValidC;
+            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             size_t subAIVOffset = 0;
-            if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
-                subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(T);
-            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
-                // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
-                subAIVOffset = get_subblockid() * ProdN * sizeof(T);
-            } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                // TILE_NO_SPLIT : single writer, no offset needed
+            if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 subAIVOffset = 0;
+            } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                subAIVOffset = get_subblockid() * gmValidR * gmValidC * sizeof(T);
+            } else { // TILE_LEFT_RIGHT
+                subAIVOffset = get_subblockid() * gmValidC * sizeof(T);
             }
-            using GlobalData =
-                GlobalTensor<T, pto::Shape<1, 1, 1, gmValidR, gmValidC>, pto::Stride<1, 1, 1, gmStrideR, 1>>;
+            using GlobalShape = pto::Shape<1, 1, 1, -1, -1>;
+            using GlobalStride = pto::Stride<1, 1, 1, -1, 1>;
+            using GlobalData = GlobalTensor<T, GlobalShape, GlobalStride>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
-            GlobalData globalData(addr);
+            GlobalData globalData(addr, GlobalShape(gmValidR, gmValidC), GlobalStride(gmStrideR));
             TSTORE_IMPL(globalData, tile);
         }
 
@@ -578,8 +572,9 @@ struct TPipe {
         template <typename TileCons, TileSplitAxis Split>
         PTO_INTERNAL bool pop(RingFiFo &fifo, TileCons &tile)
         {
-            static_assert(TileCons::Loc == TileType::Vec || TileCons::Loc == TileType::Mat,
-                          "Fix: TPOP has unsupported tile type!");
+            static_assert(
+                TileCons::Loc == TileType::Vec || TileCons::Loc == TileType::Mat || TileCons::Loc == TileType::Ctrl,
+                "Fix: TPOP has unsupported tile type!");
             if constexpr (TileCons::Loc == TileType::Vec) {
                 if constexpr (is_c2v_ub || is_both) {
                     popTileFromVecFiFo<TileCons, Split>(fifo, tile);
@@ -900,24 +895,23 @@ struct TMPipe {
             if constexpr (isSplitM) {
                 // split M between vectors
                 constexpr uint32_t VecM = ConsM / VEC_CORES;
-                int subblock_base_rows = VecM * static_cast<size_t>(get_subblockid());
-                int row_offset = subblock_base_rows + entryOffset;
+                int row_offset = VecM * static_cast<size_t>(get_subblockid());
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
             } else if constexpr (isSplitN) {
                 // split N between vectors
-                int col_index = ProdN;
+                int col_index = ProdN * static_cast<size_t>(get_subblockid());
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
             } else if constexpr (nonSplit) {
                 // single vector core
                 TileDataCons matTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
+                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase + entryOffset);
                 TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,

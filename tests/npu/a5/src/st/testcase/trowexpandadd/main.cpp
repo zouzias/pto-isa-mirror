@@ -99,6 +99,7 @@ void test_trowexpandadd()
     EXPECT_TRUE(ret);
 }
 
+// 2D_NoPostUpdate
 TEST_F(TRowExpandAddTest, case_fp32_16_32)
 {
     test_trowexpandadd<float, 16, 32, 16, 1, true, false>();
@@ -115,18 +116,22 @@ TEST_F(TRowExpandAddTest, case_fp16_16_128)
 {
     test_trowexpandadd<aclFloat16, 16, 128, 16, 1, true, false>();
 }
+// 2D_NoPostUpdate2
 TEST_F(TRowExpandAddTest, case_fp32_24_64)
 {
     test_trowexpandadd<float, 24, 64, 24, 8, true, true>();
 }
+// 2D_NoPostUpdate
 TEST_F(TRowExpandAddTest, case_fp16_32_64)
 {
     test_trowexpandadd<aclFloat16, 32, 64, 32, 1, false, false>();
 }
+// 2D_NoPostUpdate2
 TEST_F(TRowExpandAddTest, case_fp32_20_64)
 {
     test_trowexpandadd<float, 20, 64, 20, 8, false, true>();
 }
+// 2D_NoPostUpdate
 TEST_F(TRowExpandAddTest, case_int32_16_32)
 {
     test_trowexpandadd<int32_t, 16, 32, 16, 1, true, false>();
