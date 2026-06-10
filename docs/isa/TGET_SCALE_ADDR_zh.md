@@ -16,7 +16,7 @@ Address(`dst`) = Address(`src`) >> `SHIFT_MX_ADDR`
 
 ## 汇编语法
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
+PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
 ### IR Level 1 (SSA)
 

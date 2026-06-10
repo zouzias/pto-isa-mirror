@@ -14,7 +14,7 @@
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 `docs/grammar/PTO-AS.md`.
 
 `TASSIGN` 通常在将 SSA tile 映射到物理存储时由缓冲化/降级引入。
 

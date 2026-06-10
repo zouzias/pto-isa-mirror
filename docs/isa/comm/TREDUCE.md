@@ -19,7 +19,7 @@ where $N$ is the number of ranks and $\oplus$ is the reduction operation (sum, m
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

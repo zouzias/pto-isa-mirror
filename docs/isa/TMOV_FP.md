@@ -19,7 +19,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j};\ \mathrm{fp}
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
+PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

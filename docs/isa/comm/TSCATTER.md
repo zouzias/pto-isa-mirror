@@ -13,11 +13,7 @@ Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure th
 
 The local source tensor has shape $(D_0, D_1, D_2, N \times H, W)$, where $N$ is the number of ranks and each rank receives $H$ rows. After the operation:
 
-$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
-
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

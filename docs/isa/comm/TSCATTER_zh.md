@@ -12,11 +12,7 @@ Scatter 操作：调用方 NPU（根节点）将本地源 tensor 沿 **DIM_3**�
 
 本地源 tensor 的形状为 $(D_0, D_1, D_2, N \times H, W)$，其中 $N$ 为 rank 总数，每个 rank 接收 $H$ 行。操作完成后：
 
-$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
-
-## 汇编语法
-
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in `docs/grammar/PTO-AS.md`.
 
 同步形式：
 

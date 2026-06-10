@@ -12,13 +12,7 @@ Only the root needs to execute `TBROADCAST`. Non-root ranks only need to ensure 
 
 After the operation:
 
-$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in [0, N) $$
-
-where $N$ is the number of ranks and `root` is the calling NPU.
-
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

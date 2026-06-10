@@ -12,13 +12,7 @@
 
 操作完成后：
 
-$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in [0, N) $$
-
-其中 $N$ 为 rank 总数，`root` 为调用方 NPU。
-
-## 汇编语法
-
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in `docs/grammar/PTO-AS.md`.
 
 同步形式：
 

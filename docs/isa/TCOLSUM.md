@@ -19,7 +19,7 @@ $$ \mathrm{dst}_{0,j} = \sum_{i=0}^{R-1} \mathrm{src}_{i,j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
+PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

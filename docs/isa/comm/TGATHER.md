@@ -13,13 +13,7 @@ Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure the
 
 Each rank $r$ has source data of shape $(D_0, D_1, D_2, H, W)$. The gather concatenates all $N$ ranks along DIM_3:
 
-$$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
-
-The destination tensor has shape $(D_0, D_1, D_2, N \times H, W)$.
-
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+$$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in `docs/grammar/PTO-AS.md`.
 
 Synchronous form:
 

@@ -12,13 +12,7 @@ Gather 操作：调用方 NPU（根节点）从并行组中所有 rank 收集数
 
 每个 rank $r$ 的源数据形状为 $(D_0, D_1, D_2, H, W)$。gather 沿 DIM_3 拼接所有 $N$ 个 rank 的数据：
 
-$$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
-
-目标 tensor 的形状为 $(D_0, D_1, D_2, N \times H, W)$。
-
-## 汇编语法
-
-PTO-AS 形式：参见 [PTO-AS 规范](../../assembly/PTO-AS_zh.md)。
+$$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in `docs/grammar/PTO-AS.md`.
 
 同步形式：
 
