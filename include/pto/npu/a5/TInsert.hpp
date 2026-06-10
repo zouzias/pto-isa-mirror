@@ -35,9 +35,9 @@ __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__
                                          uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
 {
     using dstType = typename DstTileData::DType;
-    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<dstType, float>) &&
-                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable =
+        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
@@ -63,7 +63,7 @@ __tf__ PTO_INTERNAL void TInsertAccToVec(typename DstTileData::TileDType __out__
     constexpr bool enableNz2Dn = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Nz = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor);
     constexpr bool channelSplitEnable =
-        enableNz2Nz && (std::is_same_v<dstType, float>) && (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+        enableNz2Nz && (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr uint32_t dstStride = GetTmovAccDstStride<DstTileData, SrcTileData>();
 
     uint32_t dstOffset;
@@ -363,12 +363,12 @@ __tf__ PTO_INTERNAL void TInsertVecToVecNDImpl(typename DstTileData::TileDType _
 
     if (validCol == srcRowStride && validCol == dstRowStride && totalBytes >= BLOCK_BYTE_SIZE) {
         uint16_t burstLen = static_cast<uint16_t>(totalBytes / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 0, 1, burstLen, 0, 0);
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 1, burstLen, 0, 0);
     } else {
         uint16_t srcGap = static_cast<uint16_t>((srcRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
         uint16_t dstGap = static_cast<uint16_t>((dstRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 0, validRow, rowBurstLen, srcGap,
-                          dstGap);
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, validRow, rowBurstLen, srcGap,
+                              dstGap);
     }
 }
 
@@ -385,7 +385,7 @@ __tf__ PTO_INTERNAL void TInsertVecToVecNZImpl(typename DstTileData::TileDType _
     ComputeNZBlockParams<T, DstTileData, SrcTileData>(validRow, validCol, dstRow, burstNum, burstLen, srcGap, dstGap,
                                                       dstOffset, indexRow, indexCol);
     __ubuf__ T *dstStart = dstAddr + dstOffset;
-    copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
+    pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, burstNum, burstLen, srcGap, dstGap);
 }
 
 // vlds+vsts path: strides + indexCol are 32B-aligned, ValidCol may not be.

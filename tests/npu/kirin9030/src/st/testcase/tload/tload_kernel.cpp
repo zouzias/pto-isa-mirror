@@ -112,7 +112,7 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     // Avoid stack dcache miss
     {
 #define INIT_STACK 8192
-        uint64_t stack[INIT_STACK / sizeof(uint64_t)]; // 8KB
+        uint64_t stack[INIT_STACK / sizeof(uint64_t)];              // 8KB
         volatile uint64_t *pStack = stack;
         for (int i = 0; i < INIT_STACK; i += 64 / sizeof(uint64_t)) // cacheline is 64B
         {

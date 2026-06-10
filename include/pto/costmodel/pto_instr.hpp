@@ -27,14 +27,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/perf_sim/costmodel_provider.hpp"
 namespace perf_sim = ::pto::perf_sim;
 #endif
-#if !defined(PTO_COMM_NOT_SUPPORTED)
-#include "pto/comm/pto_comm_inst.hpp"
-#endif
 
 #define TSTORE_FP_IMPL TSTORE_IMPL
 #define TEXTRACT_FP_IMPL TEXTRACT_IMPL
 #define TINSERT_FP_IMPL TINSERT_IMPL
 #define TMOV_FP_IMPL TMOV_IMPL
+#define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
 
 #ifdef __COSTMODEL
 namespace pto::mocker {
@@ -201,68 +199,71 @@ inline void RecordTPopSync(Pipe &pipe, TileCons &tile, int tile_index)
     (void)tile_index;
 }
 
-#define PTO_FIRST_ARG(first, ...) first
 #define PTO_SECOND_ARG(_first, second, ...) second
-#define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
-#define MAP_INSTR_IMPL(API, ...)                                     \
-    do {                                                             \
-        ::pto::mocker::PtoInstrScope _scope(#API);                   \
-        API##_IMPL(__VA_ARGS__);                                     \
-        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
-        ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
+#define PTO_FIRST_ARG(first, ...) first
+#define PTO_INJECT_TILE_CYCLES(...) __VA_OPT__(::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));)
+#define PTO_RECORD_INSTR(API, ...) ::RecordInstrFromFirst(#API __VA_OPT__(, ) __VA_ARGS__)
+#define PTO_INSTR_SCOPE(API, ...) ::pto::mocker::PtoInstrScope _pto_instr_scope(#API)
+#define PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, ...) ::pto::mocker::PtoInstrScope _pto_instr_scope(#API)
+#define PTO_INSTR_SCOPE_ROLES(API, ROLES, ...) ::pto::mocker::PtoInstrScope _pto_instr_scope(#API)
+#define MAP_INSTR_IMPL(API, ...)            \
+    do {                                    \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__);  \
+        API##_IMPL(__VA_ARGS__);            \
+        PTO_INJECT_TILE_CYCLES(__VA_ARGS__) \
+        PTO_RECORD_INSTR(API, __VA_ARGS__); \
     } while (0)
+#define MAP_INSTR_IMPL_OUTS(API, OUT_COUNT, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
 // Template calls use a dedicated macro because the preprocessor does not parse
 // template commas in a generic `_IMPL(...)` wrapper reliably.
-#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...)                    \
-    do {                                                             \
-        ::pto::mocker::PtoInstrScope _scope(#API);                   \
-        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                       \
-        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
-        ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) \
+    do {                                          \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__);        \
+        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);    \
+        PTO_INJECT_TILE_CYCLES(__VA_ARGS__)       \
+        PTO_RECORD_INSTR(API, __VA_ARGS__);       \
     } while (0)
-
-// TPUSH/TPOP special macro: records FFTS sync events for ring buffer
-// First arg is Pipe, second is Tile, third is tile index
-#define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...)                                                  \
-    do {                                                                                                             \
-        ::pto::mocker::PtoInstrScope _scope(#API);                                                                   \
-        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                                                       \
-        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                                 \
-        /* Call RecordTPushSync or RecordTPopSync for FFTS sync */                                                   \
-        if constexpr (IS_TPUSH) {                                                                                    \
-            ::RecordTPushSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_NTH_ARG(__VA_ARGS__, 2), PTO_NTH_ARG(__VA_ARGS__, 3)); \
-        } else {                                                                                                     \
-            ::RecordTPopSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_NTH_ARG(__VA_ARGS__, 2), PTO_NTH_ARG(__VA_ARGS__, 3));  \
-        }                                                                                                            \
-        ::RecordInstrFromFirst(#API, __VA_ARGS__);                                                                   \
-    } while (0)
-
+#define MAP_INSTR_IMPL_T_OUTS(API, TEMPLATE_ARGS, OUT_COUNT, ...) MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, __VA_ARGS__)
+#define MAP_INSTR_IMPL_ROLES(API, ROLES, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
+#define MAP_INSTR_IMPL_T_ROLES(API, TEMPLATE_ARGS, ROLES, ...) MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, __VA_ARGS__)
 // Special macro for TPUSH: includes CV ring buffer FFTS sync recording
 // Args: API, TEMPLATE_ARGS, pipe, tile, [tile_index]
 #define MAP_INSTR_IMPL_T_TPUSH(API, TEMPLATE_ARGS, ...)                            \
     do {                                                                           \
-        ::pto::mocker::PtoInstrScope _scope(#API);                                 \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__);                                         \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                     \
-        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));               \
+        PTO_INJECT_TILE_CYCLES(__VA_ARGS__)                                        \
         ::RecordTPushSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), \
                           PTO_FIRST_ARG(__VA_ARGS__).prod.tileIndex);              \
-        ::RecordInstrFromFirst(#API, __VA_ARGS__);                                 \
+        PTO_RECORD_INSTR(API, __VA_ARGS__);                                        \
     } while (0)
 
 // Special macro for TPOP: includes CV ring buffer FFTS sync recording
 #define MAP_INSTR_IMPL_T_TPOP(API, TEMPLATE_ARGS, ...)                            \
     do {                                                                          \
-        ::pto::mocker::PtoInstrScope _scope(#API);                                \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__);                                        \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                    \
-        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));              \
+        PTO_INJECT_TILE_CYCLES(__VA_ARGS__)                                       \
         ::RecordTPopSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), \
                          PTO_FIRST_ARG(__VA_ARGS__).cons.tileIndex);              \
-        ::RecordInstrFromFirst(#API, __VA_ARGS__);                                \
+        PTO_RECORD_INSTR(API, __VA_ARGS__);                                       \
     } while (0)
+#else
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_OUTS(API, OUT_COUNT, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_OUTS(API, TEMPLATE_ARGS, OUT_COUNT, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_TPUSH(API, TEMPLATE_ARGS, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_TPOP(API, TEMPLATE_ARGS, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_ROLES(API, ROLES, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_ROLES(API, TEMPLATE_ARGS, ROLES, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define PTO_INSTR_SCOPE(API, ...)
+#define PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, ...)
+#define PTO_INSTR_SCOPE_ROLES(API, ROLES, ...)
+#endif
 
-#define PTO_FIRST_ARG(first, ...) first
-#define PTO_SECOND_ARG(_first, second, ...) second
-#define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
+#if !defined(PTO_COMM_NOT_SUPPORTED)
+#include "pto/comm/pto_comm_inst.hpp"
 #endif
 
 namespace pto {
@@ -1589,6 +1590,14 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSCATTER, dst, src, indexes);
+    return {};
+}
+
+template <MaskPattern maskPattern, typename TileDataD, typename TileDataS, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL_T(TSCATTER, PTO_TEMPLATE_ARGS(maskPattern), dst, src);
     return {};
 }
 

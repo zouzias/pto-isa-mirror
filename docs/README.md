@@ -10,6 +10,7 @@ The PTO documentation mainly covers the following areas:
 
 - ISA fundamentals and an overall reading path
 - Instruction indexes and per-instruction reference pages
+- PTO assembly spelling as part of the ISA syntax-and-operands chapter
 - Tile programming model, event synchronization, and performance tuning
 - Getting started, test execution, and documentation build instructions
 
@@ -19,7 +20,7 @@ If you are new to PTO Tile Lib, we recommend reading in the following order:
 
 1. [Getting Started](getting-started.md): set up the environment and run the CPU simulator first
 2. [ISA Overview](PTOISA.md): build an overall understanding of the PTO ISA
-3. [PTO Instruction List](isa/README.md): browse the standard operations by category
+3. [PTO Instruction List](isa/scalar/ops/micro-instruction/README.md): browse the standard operations by category
 4. [Tile Programming Model](coding/Tile.md): understand tile shape, tile mask, and data organization
 5. [Events and Synchronization](coding/Event.md): understand set/wait flag usage and pipeline synchronization
 6. [Performance Optimization](coding/opt.md): understand common bottlenecks and tuning directions
@@ -30,10 +31,14 @@ If you are new to PTO Tile Lib, we recommend reading in the following order:
 
 - [Virtual ISA Manual Entry](PTO-Virtual-ISA-Manual.md): top-level entry for the PTO ISA manual
 - [ISA Overview](PTOISA.md): background, goals, and overall structure of the PTO ISA
-- [PTO Instruction List](isa/README.md): index of PTO standard operations organized by category
+- [PTO Instruction List](isa/scalar/ops/micro-instruction/README.md): index of PTO standard operations organized by category
 - [General Conventions](isa/conventions.md): common naming rules, constraints, and usage conventions
 
-### 2. Programming Model and Development Notes
+### 2. PTO Syntax and Representation
+
+- [Assembly Spelling and Operands](isa/syntax-and-operands/assembly-model.md): canonical PTO-AS spelling and operand syntax inside the PTO ISA manual
+
+### 3. Programming Model and Development Notes
 
 - [Development Documentation Index](coding/README.md): entry for developer-facing PTO Tile Lib documentation
 - [Tile Programming Model](coding/Tile.md): tile shape, tile mask, and data layout
@@ -41,13 +46,13 @@ If you are new to PTO Tile Lib, we recommend reading in the following order:
 - [Performance Optimization](coding/opt.md): performance analysis and tuning guidance
 - [CostModel Backends (stub / fit)](costmodel-backends.md): backend split, formula-fit path, and run guide
 
-### 3. Getting Started, Testing, and Documentation Build
+### 4. Getting Started, Testing, and Documentation Build
 
 - [Getting Started](getting-started.md): environment setup and CPU / NPU execution guide
 - [Test Guide](../tests/README.md): test entry points, scripts, and common commands
 - [Documentation Build Guide](mkdocs/README.md): how to build the docs locally with MkDocs
 
-### 4. Other Related Documents
+### 5. Other Related Documents
 
 - [Machine Documentation](machine/README.md): abstract machine model and related notes
 
@@ -69,7 +74,7 @@ Key entries are listed below:
 
 ## Related Entry Points
 
-- [Root README](../README.md): project overview, quick start, and repository entry page
+- [Root README](isa/scalar/ops/micro-instruction/README.md): project overview, quick start, and repository entry page
 - [kernels Directory Guide](../kernels/README.md): kernel and operator implementation entry point
 - [include Directory Guide](../include/README.md): headers and public interface overview
 - [tests Directory Guide](../tests/README.md): testing and execution entry point
