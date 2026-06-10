@@ -23,8 +23,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl/hccl_comm.h"
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
-#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
-#include "pto/npu/comm/async/urma/urma_workspace_manager.hpp"
+#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
+#include "pto/comm/async/urma/urma_workspace_manager.hpp"
 
 // ============================================================================
 // Debug logging helpers. Enabled by cmake -DDEBUG_MODE=ON (defines COMM_DEBUG).
@@ -247,9 +247,8 @@ struct TestContext {
             return false;
         }
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
             COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
                                     << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);
