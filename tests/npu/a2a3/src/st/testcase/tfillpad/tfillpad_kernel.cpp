@@ -153,7 +153,7 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     int srcOffset = (block_idx) * (shape3 / block_num) * shape4;
     auto srcGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, shape3, shape4, kGTRows, shape4, BLayout::RowMajor, dyn_>(
-            src + srcOffset, gShape0, gShape1, gShape2, kGTRows, shape4);
+            src + srcOffset, gShape0, gShape1, gShape2, shape3, shape4);
     int dstOffset = (block_idx) * (shape3 / block_num) * kTCols_;
     auto dstGlobal =
         getGlobalTensor<T, shape0, shape1, shape2, shape3, kTCols_, kGTRows, kTCols_, BLayout::RowMajor, 0>(
@@ -398,6 +398,14 @@ extern "C" __global__ AICORE void launchTFILLPAD_21(__gm__ uint8_t *out, __gm__ 
         (__gm__ uint8_t *)out, (__gm__ uint8_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+// Case 22: s8, 1x64 tile, 40 valid cols (>32B), pad min->max — catches Handle32BAlignedPad_Byte underflow
+extern "C" __global__ AICORE void launchTFILLPAD_22(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<int8_t, 1, 1, 1, 1, 40, 1, 64, 0, PadValue::Min, PadValue::Max>(
+        (__gm__ int8_t *)out, (__gm__ int8_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 {
@@ -443,6 +451,8 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
         launchTFILLPAD_20<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 15, gLog);
     } else if constexpr (testKey == 21) {
         launchTFILLPAD_21<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 15, gLog);
+    } else if constexpr (testKey == 22) {
+        launchTFILLPAD_22<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 40, gLog);
     }
 }
 
@@ -549,6 +559,8 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
         return get_input_golden_case<uint8_t, 1, 1, 1, 1, 15, 1, 32, PadValue::Min>(input, golden);
     } else if constexpr (testKey == 21) {
         return get_input_golden_case<uint8_t, 1, 1, 1, 1, 15, 1, 32, PadValue::Max>(input, golden);
+    } else if constexpr (testKey == 22) {
+        return get_input_golden_case<int8_t, 1, 1, 1, 1, 40, 1, 64, PadValue::Max>(input, golden);
     }
 
     return 0;
@@ -575,6 +587,7 @@ template void launchTFILLPAD<18>(uint8_t *out, uint8_t *src, uint64_t *gLog, voi
 template void launchTFILLPAD<19>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTFILLPAD<20>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTFILLPAD<21>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template void launchTFILLPAD<22>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -597,3 +610,4 @@ template int get_input_golden<18>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<19>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<20>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<21>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<22>(uint8_t *input, uint8_t *golden);

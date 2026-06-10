@@ -51,7 +51,9 @@ PTO_INTERNAL void Handle32BAlignedPad_Byte(__ubuf__ uint8_t *dstPtr, uint64_t sr
                                            uint64_t /* srcValidCol32B */, uint8_t padValue)
 {
     using T = typename TileDataSrc::DType;
-    uint64_t pad_32B = 32 / sizeof(T) - srcValidCol;
+    constexpr uint64_t elemPer32B = 32 / sizeof(T);
+    uint64_t rem = srcValidCol % elemPer32B;
+    uint64_t pad_32B = rem == 0 ? 0 : elemPer32B - rem;
 #ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
 #else
