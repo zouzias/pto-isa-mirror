@@ -92,29 +92,19 @@ PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src,
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     uint16_t rptTimes = CeilDivision(validCol, elmPerRpt);
-    uint16_t nLoop = (validRow - 1) / 2; // 第一行vlds到dst 故-1
-    bool remain = (validRow - 1) % 2;
 
     __VEC_SCOPE__
     {
-        RegTensor<T> src0VReg;
-        RegTensor<T> src1VReg;
-        RegTensor<T> tmpVReg;
+        RegTensor<T> srcVReg;
         RegTensor<T> dstVReg;
         MaskReg preg;
         uint32_t sReg = validCol;
         for (uint16_t i = 0; i < rptTimes; ++i) {
             preg = CreatePredicate<T>(sReg);
-            vlds(dstVReg, src + i * elmPerRpt, 0, NORM);
-            for (uint16_t j = 0; j < nLoop; ++j) {
-                vlds(src0VReg, src + i * elmPerRpt, (2 * j + 1) * SrcStride, NORM);
-                vlds(src1VReg, src + i * elmPerRpt, (2 * j + 2) * SrcStride, NORM);
-                InstrOp::ReduceInstr(tmpVReg, src0VReg, src1VReg, preg);
-                InstrOp::ReduceInstr(dstVReg, dstVReg, tmpVReg, preg);
-            }
-            if (remain) {
-                vlds(src0VReg, src + i * elmPerRpt, (2 * nLoop + 1) * SrcStride, NORM);
-                InstrOp::ReduceInstr(dstVReg, dstVReg, src0VReg, preg);
+            vbr((RegTensor<typename InstrOp::PadType> &)dstVReg, InstrOp::InitVal);
+            for (uint16_t j = 0; j < (uint16_t)validRow; ++j) {
+                vlds(srcVReg, src + i * elmPerRpt, j * SrcStride, NORM);
+                InstrOp::ReduceInstr(dstVReg, dstVReg, srcVReg, preg);
             }
             vsts(dstVReg, dst + i * elmPerRpt, 0, distValue, preg);
         }
