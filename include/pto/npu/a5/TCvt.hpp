@@ -2814,7 +2814,7 @@ struct is_any_float {
  *   - fp16/bf16 <-> fp16/bf16               : CTRL[48]=(satMode==OFF)
  *   - integer -> float (sizeof src >= dst)  : CTRL[60]=1, CTRL[59]=(satMode==OFF)
  */
-template <typename SrcType, typename DstType>
+template <typename SrcType, typename DstType, SaturationMode SatMode = SaturationMode::OFF>
 struct SaturationCtrlTraits {
 private:
     static constexpr bool dstIsFp32 = std::is_same<DstType, float>::value;
@@ -2837,7 +2837,7 @@ public:
     static constexpr bool useCtrl59 = useCtrl60;
     static constexpr bool useCtrl48 = !dstIsFp32 && fp16Bf16Pair;
     // True iff this conversion needs to inspect/restore any CTRL bit at all.
-    static constexpr bool any = useCtrl60 || useCtrl59 || useCtrl48;
+    static constexpr bool any = (useCtrl60 || useCtrl59 || useCtrl48) && (SatMode == SaturationMode::ON);
 };
 
 /**
@@ -2990,12 +2990,12 @@ PTO_INTERNAL void tcvtDispatchByRound(TileDataD &dst, TileDataS &src, RoundMode 
  *       - CTRL[48]/[60]/[59] are neglected
  *       - Note: vtrc (fp32→fp32) falls into this category
  */
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+template <SaturationMode SatMode, typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVTImpl(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     using SrcType = typename TileDataS::DType;
     using DstType = typename TileDataD::DType;
-    using Traits = SaturationCtrlTraits<SrcType, DstType>;
+    using Traits = SaturationCtrlTraits<SrcType, DstType, SatMode>;
 
     // Save original states of only the CTRL bits this conversion will touch.
     // For conversions that touch nothing (e.g. dst==fp32), the entire CTRL
@@ -3014,15 +3014,38 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
         if constexpr (Traits::useCtrl48) {
             originalSatMode48 = (originalCtrl & (1ULL << SAT_MODE_BIT_48)) != 0;
         }
-        applySaturationCtrlBits<SrcType, DstType>(satMode);
+        applySaturationCtrlBits<SrcType, DstType>(SatMode);
     }
 
     // Execute the conversion with appropriate rounding mode
-    tcvtDispatchByRound(dst, src, mode, satMode);
+    tcvtDispatchByRound(dst, src, mode, SatMode);
 
     // Restore original CTRL bit states (compile-time elided when no bits used)
     if constexpr (Traits::any) {
         restoreSaturationCtrlBits<SrcType, DstType>(originalSatMode60, originalSatMode59, originalSatMode48);
+    }
+}
+
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
+    if (satMode == SaturationMode::ON) {
+        TCVTImpl<SaturationMode::ON>(dst, src, mode);
+    } else {
+        TCVTImpl<SaturationMode::OFF>(dst, src, mode);
+    }
+}
+
+// ============================================================================
+// TCVT_IMPL Overloads with tmp buffer (unused in A5, for API compatibility)
+// ============================================================================
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
+{
+    if (satMode == SaturationMode::ON) {
+        TCVTImpl<SaturationMode::ON>(dst, src, mode);
+    } else {
+        TCVTImpl<SaturationMode::OFF>(dst, src, mode);
     }
 }
 
@@ -3057,20 +3080,11 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
         // INT32→INT16 (int→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
-        TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+        TCVTImpl<SaturationMode::OFF>(dst, src, mode);
     } else {
         // All other conversions: default to ON (native TCVT saturation)
-        TCVT_IMPL(dst, src, mode, SaturationMode::ON);
+        TCVTImpl<SaturationMode::ON>(dst, src, mode);
     }
-}
-
-// ============================================================================
-// TCVT_IMPL Overloads with tmp buffer (unused in A5, for API compatibility)
-// ============================================================================
-template <typename TileDataD, typename TileDataS, typename TmpTileData>
-PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
-{
-    TCVT_IMPL(dst, src, mode, satMode);
 }
 
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
