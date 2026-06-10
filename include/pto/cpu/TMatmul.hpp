@@ -151,9 +151,10 @@ PTO_INTERNAL void CheckBiasValid()
                   "Non-conforming bias fractal");
 }
 
-template <typename TileAcc, typename TileLeft, typename TileRight>
+template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
+    (void)Phase;
     CheckMadValid<TileAcc, TileLeft, TileRight>();
 
     uint16_t m = aMatrix.GetValidRow();
@@ -163,9 +164,10 @@ PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &b
     TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
 }
 
-template <typename TileAcc, typename TileLeft, typename TileRight>
+template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
+    (void)Phase;
     CheckMadValid<TileAcc, TileLeft, TileRight>();
 
     uint16_t m = aMatrix.GetValidRow();
@@ -176,9 +178,24 @@ PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, Tile
                                               k);
 }
 
-template <typename TileAcc, typename TileLeft, typename TileRight, typename TileBias>
+template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight>
+PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
+{
+    (void)Phase;
+    CheckMadValid<TileAcc, TileLeft, TileRight>();
+
+    uint16_t m = aMatrix.GetValidRow();
+    uint16_t k = aMatrix.GetValidCol();
+    uint16_t n = bMatrix.GetValidCol();
+
+    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), cMatrix.data(), aMatrix.data(), bMatrix.data(), m, n, k);
+}
+
+template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight,
+          typename TileBias>
 PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasMatrix)
 {
+    (void)Phase;
     CheckMadValid<TileAcc, TileLeft, TileRight>();
     CheckBiasValid<TileAcc, TileBias>();
 

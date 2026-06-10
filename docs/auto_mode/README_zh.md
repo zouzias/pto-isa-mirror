@@ -28,7 +28,7 @@ __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     TileData src0Tile(kGRows_, kGCols_);
     TileData src1Tile(kGRows_, kGCols_);
     TileData dstTile(kGRows_, kGCols_);
-    
+
     TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
     TASSIGN(src1Tile, 0x4000 + 0x400 * block_idx);
     TASSIGN(dstTile, 0x8000 + 0x400 * block_idx);
@@ -46,7 +46,7 @@ __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
-    
+
     out = dstGlobal.data();
 }
 ```
@@ -61,11 +61,11 @@ __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    
+
     TileData src0Tile(kGRows_, kGCols_);
     TileData src1Tile(kGRows_, kGCols_);
     TileData dstTile(kGRows_, kGCols_);
-    
+
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData src0Global(src0 + offset);
     GlobalData src1Global(src1 + offset);
@@ -75,12 +75,12 @@ __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     TLOAD(src1Tile, src1Global);
     TMUL(dstTile, src0Tile, src1Tile);
     TSTORE(dstGlobal, dstTile);
-    
+
     out = dstGlobal.data();
 }
 ```
 
-## PTO AUTO编译器特性  
+## PTO AUTO编译器特性
 
 ### 不同架构之间的兼容性
 
@@ -97,7 +97,7 @@ Auto模式编译器让程序员避免了这个麻烦。编译器会自动在需�
 在manual模式下，当用户声明定义一个Tile变量后，需要显式调用`TASSIGN`来为这个Tile分配在指定内存空间里的内存地址。
 在auto模式下，用户不需要手动分配内存，只需要定义Tile变量即可；编译器会自动为所有Tile在正确的buffer上分配内存地址。
 
-# PTO AUTO文档
+## PTO AUTO文档
 
 更多PTO AUTO的详细文档如下：
 
