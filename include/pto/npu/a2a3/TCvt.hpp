@@ -1002,24 +1002,32 @@ PTO_INST void TCvtHead(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
 // ============================================================================
 // Saturation Mode Helpers
 // ============================================================================
+
+template <bool NeedSetCtrl>
 PTO_INST bool ApplySatMode(SaturationMode satMode)
 {
-    uint64_t originalCtrl = get_ctrl();
-    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
-    if (satMode == SaturationMode::OFF) {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
-    } else {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+    if constexpr (NeedSetCtrl) {
+        uint64_t originalCtrl = get_ctrl();
+        bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+        if (satMode == SaturationMode::OFF) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+        }
+        return originalSatMode;
     }
-    return originalSatMode;
+    return false;
 }
 
+template <bool NeedSetCtrl>
 PTO_INST void RestoreSatMode(bool originalSatMode)
 {
-    if (originalSatMode) {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-    } else {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+    if constexpr (NeedSetCtrl) {
+        if (originalSatMode) {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+        } else {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+        }
     }
 }
 
@@ -1080,13 +1088,13 @@ PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
 // @param elementsPerRepeat: Number of elements per repeat operation
 // @param dstRepeatStride: Stride between repeats in destination buffer
 // @param srcRepeatStride: Stride between repeats in source buffer
-template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS>
+template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS, bool NeedSetCtrl>
 __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src,
                         RoundMode mode, SaturationMode satMode, unsigned numRepeatPerLine, unsigned numRemainPerLine,
                         unsigned validRow, unsigned elementsPerRepeat, unsigned dstRepeatStride,
                         unsigned srcRepeatStride)
 {
-    bool originalSatMode = ApplySatMode(satMode);
+    bool originalSatMode = ApplySatMode<NeedSetCtrl>(satMode);
 
     __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataS::DType *srcPtr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src);
@@ -1102,19 +1110,19 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
         TCvtTail<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, validRow, numRemainPerLine);
     }
 
-    RestoreSatMode(originalSatMode);
+    RestoreSatMode<NeedSetCtrl>(originalSatMode);
 }
 
 // TCvt overload with explicit TmpTileData parameter.
 // Mirrors TSort32Impl's with-tmp overload: passes a user-supplied scratch tile
 // through to GenCastCallFp16ToInt8_NonSatTorch instead of using TMP_UB_OFFSET.
-template <typename TileDataD, typename TileDataS, typename TmpTileData, unsigned SS, unsigned DS>
+template <typename TileDataD, typename TileDataS, typename TmpTileData, unsigned SS, unsigned DS, bool NeedSetCtrl>
 __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src,
                         typename TmpTileData::TileDType __in__ tmp, RoundMode mode, SaturationMode satMode,
                         unsigned numRepeatPerLine, unsigned numRemainPerLine, unsigned validRow,
                         unsigned elementsPerRepeat, unsigned dstRepeatStride, unsigned srcRepeatStride)
 {
-    bool originalSatMode = ApplySatMode(satMode);
+    bool originalSatMode = ApplySatMode<NeedSetCtrl>(satMode);
 
     __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataS::DType *srcPtr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src);
@@ -1131,7 +1139,7 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
         TCvtTail<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, validRow, numRemainPerLine, tmpPtr);
     }
 
-    RestoreSatMode(originalSatMode);
+    RestoreSatMode<NeedSetCtrl>(originalSatMode);
 }
 
 // ============================================================================
@@ -1189,7 +1197,7 @@ constexpr bool kIsNarrowingCvt =
 // Calculates optimal repeat configuration and delegates to TCvt kernel.
 //
 // This is the main implementation with explicit satMode parameter.
-template <typename TileDataD, typename TileDataS>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
 {
     unsigned dstRepeatStride, srcRepeatStride, elementsPerRepeat;
@@ -1201,19 +1209,20 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     constexpr unsigned DS = TileDataD::RowStride;
     unsigned validRow = dst.GetValidRow();
     if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
-        TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
-                                           validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+        TCvt<TileDataD, TileDataS, SS, DS, NeedSetCtrl>(dst.data(), src.data(), mode, satMode, numRepeatPerLine,
+                                                        numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
+                                                        srcRepeatStride);
     } else {
-        TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
-                                           numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
-                                           srcRepeatStride);
+        TCvt<TileDataD, TileDataS, SS, DS, NeedSetCtrl>(dst.data(), src.data(), mode, SaturationMode::ON,
+                                                        numRepeatPerLine, numRemainPerLine, validRow, elementsPerRepeat,
+                                                        dstRepeatStride, srcRepeatStride);
     }
 }
 
 // TCVT_IMPL overload with explicit TmpTileData and explicit satMode.
 // Mirrors TSORT32_IMPL's with-tmp overload: uses user-supplied scratch tile
 // instead of TMP_UB_OFFSET for conversions that need temporary storage.
-template <typename TileDataD, typename TileDataS, typename TmpTileData>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
 {
     unsigned dstRepeatStride, srcRepeatStride, elementsPerRepeat;
@@ -1224,19 +1233,19 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Ro
     constexpr unsigned SS = TileDataS::RowStride;
     constexpr unsigned DS = TileDataD::RowStride;
     unsigned validRow = dst.GetValidRow();
-    TCvt<TileDataD, TileDataS, TmpTileData, SS, DS>(dst.data(), src.data(), tmp.data(), mode, satMode, numRepeatPerLine,
-                                                    numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
-                                                    srcRepeatStride);
+    TCvt<TileDataD, TileDataS, TmpTileData, SS, DS, NeedSetCtrl>(dst.data(), src.data(), tmp.data(), mode, satMode,
+                                                                 numRepeatPerLine, numRemainPerLine, validRow,
+                                                                 elementsPerRepeat, dstRepeatStride, srcRepeatStride);
 }
 
 // TCVT_IMPL overload with explicit TmpTileData and type-specific default satMode.
-template <typename TileDataD, typename TileDataS, typename TmpTileData>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode)
 {
     if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
-        TCVT_IMPL(dst, src, tmp, mode, SaturationMode::OFF);
+        TCVT_IMPL<NeedSetCtrl>(dst, src, tmp, mode, SaturationMode::OFF);
     } else {
-        TCVT_IMPL(dst, src, tmp, mode, SaturationMode::ON);
+        TCVT_IMPL<NeedSetCtrl>(dst, src, tmp, mode, SaturationMode::ON);
     }
 }
 
@@ -1247,13 +1256,13 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Ro
 // - FP16→UINT8, FP16→INT8: defaults to OFF (PyTorch-compatible truncation)
 // - INT64→INT32, INT32→INT16: defaults to OFF (truncation behavior)
 // - All others: defaults to ON (native TCVT saturation)
-template <typename TileDataD, typename TileDataS>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
-        TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+        TCVT_IMPL<NeedSetCtrl>(dst, src, mode, SaturationMode::OFF);
     } else {
-        TCVT_IMPL(dst, src, mode, SaturationMode::ON);
+        TCVT_IMPL<NeedSetCtrl>(dst, src, mode, SaturationMode::ON);
     }
 }
 } // namespace pto
