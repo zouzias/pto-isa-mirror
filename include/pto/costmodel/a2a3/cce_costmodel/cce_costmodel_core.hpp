@@ -63,10 +63,6 @@ inline int sbitset1(int val, int bit)
     return val | (1 << bit);
 }
 
-inline int get_ctrl(...)
-{
-    return 0;
-}
 inline int get_vms4_sr(...)
 {
     return 0;

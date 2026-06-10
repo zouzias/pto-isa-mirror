@@ -12,7 +12,7 @@ function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
 
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -24,7 +24,7 @@ function(pto_vec_st NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
-    
+
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
@@ -258,7 +258,7 @@ tprefetch_async
 if (AUTO_MODE)
   set(AUTO_MODE_WHITELIST
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
-  # which doesn't work for auto mode. They need to be disabled for auto mode 
+  # which doesn't work for auto mode. They need to be disabled for auto mode
   # until rewritten to adapt to auto mode
     tpushpop_cv
     tpushpop_cv_nosplit
@@ -266,7 +266,7 @@ if (AUTO_MODE)
     tpushpop_vc_nosplit
     tpushpop_dir_both
     tpushpop_subtile
-  # the following case wait to be fix 
+  # the following case wait to be fix
     tcvt
     ttrans
     ttrans_conv

@@ -43,7 +43,7 @@ struct TPipe;
 ## 约束
 
 - **TileData 生产者**：
-    - `TileProd::Loc` 必须是 `TileType::Acc` 或 `TileType::Vec`。
+    - `TileProd::Loc` 必须是 `TileType::Acc`、`TileType::Vec` 或 `TileType::Ctrl`。
     - `Direction::DIR_C2V`：Cube 生产 accumulator tile，供 vector 消费。
     - `Direction::DIR_V2C`：Vector 生产 vector tile，供 cube 消费。
     - `Direction::DIR_BOTH`：同一个 pipe 类型同时支持 C2V 和 V2C 生产者。

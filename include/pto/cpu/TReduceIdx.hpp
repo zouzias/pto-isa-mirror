@@ -7,8 +7,10 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOLREDUCEIDX_CPU_HPP
-#define TCOLREDUCEIDX_CPU_HPP
+#ifndef TREDUCEIDX_CPU_HPP
+#define TREDUCEIDX_CPU_HPP
+
+#include <type_traits>
 
 #include <pto/common/pto_tile.hpp>
 #include "pto/cpu/tile_offsets.hpp"
@@ -24,7 +26,7 @@ template <typename DType, ElementCmp op>
 struct ElementCmpCal {
     static bool apply(const DType &a, const DType &b)
     {
-        static_assert(false, "Unsupport element cmp.");
+        static_assert(op != op, "Unsupported element comparison.");
         return false;
     }
 };
@@ -50,12 +52,12 @@ PTO_INTERNAL void CheckArgTiles()
 {
     using T = typename TileSrc::DType;
     using TIdx = typename TileDst::DType;
-    static_assert(std::is_same_v<T, float> || std::is_same_v<T, half>,
-                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be one of: `half`, `float`");
+    static_assert(std::is_arithmetic_v<T> || std::is_same_v<T, half>,
+                  "TColArgMin(Max) TRowArgMin(Max): The data type of src must be arithmetic.");
     static_assert(std::is_same_v<TIdx, int32_t> || std::is_same_v<TIdx, uint32_t>,
                   "TColArgMin(Max) TRowArgMin(Max): The data type of dstIdx must be one of: `int32_t`, `uint32_t`");
 
-    static_assert(TileDst::Loc == TileType::Vec && TileDst::Loc == TileType::Vec,
+    static_assert(TileDst::Loc == TileType::Vec && TileSrc::Loc == TileType::Vec,
                   "TColArgMin(Max) TRowArgMin(Max): TileType of src and dst tiles must be `TileType::Vec`.");
 }
 
@@ -82,6 +84,24 @@ PTO_INTERNAL void CheckRowArgTiles(TileDst &dstIdx, TileSrc &src)
 
     PTO_ASSERT(src.GetValidRow() != 0 && src.GetValidCol() != 0, "Number of rows and cols of src must be > 0");
     PTO_ASSERT(dstIdx.GetValidRow() == src.GetValidRow(), "Number of rows of src and dst must be the same.");
+}
+
+template <typename TileDstVal, typename TileDstIdx, typename TileSrc>
+PTO_INTERNAL void CheckColArgTiles(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrc &src)
+{
+    CheckColArgTiles(dstIdx, src);
+    static_assert(std::is_same_v<typename TileDstVal::DType, typename TileSrc::DType>,
+                  "TColArgMin(Max): The data type of dstVal and src must match");
+
+    static_assert(TileDstVal::Loc == TileType::Vec,
+                  "TColArgMin(Max): TileType of dstVal tiles must be `TileType::Vec`.");
+    static_assert(TileDstVal::isRowMajor && TileDstVal::SFractal == SLayout::NoneBox,
+                  "TColArgMin(Max): `dstVal` must use standard ND layout: row-major and non-fractal");
+
+    PTO_ASSERT(dstVal.GetValidRow() == dstIdx.GetValidRow(),
+               "Number of rows of dstVal and dstIdx must be the same.");
+    PTO_ASSERT(dstVal.GetValidCol() == dstIdx.GetValidCol(),
+               "Number of cols of dstVal and dstIdx must be the same.");
 }
 
 template <typename TileDstVal, typename TileDstIdx, typename TileSrc>
@@ -125,7 +145,7 @@ PTO_INTERNAL void TColReduceIdxImpl(TileDst &dstIdx, TileSrc &src)
 template <typename TileDstVal, typename TileDstIdx, typename TileSrc, ElementCmp cmp>
 PTO_INTERNAL void TColReduceValImpl(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrc &src)
 {
-    CheckRowArgTiles(dstVal, dstIdx, src);
+    CheckColArgTiles(dstVal, dstIdx, src);
     using T = typename TileSrc::DType;
     using TIdx = typename TileDstIdx::DType;
 

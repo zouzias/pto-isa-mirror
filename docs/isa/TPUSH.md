@@ -43,7 +43,7 @@ struct TPipe;
 ## Constraints
 
 - **TileData producer**:
-    - `TileProd::Loc` must be `TileType::Acc` or `TileType::Vec`.
+    - `TileProd::Loc` must be `TileType::Acc`, `TileType::Vec`, or `TileType::Ctrl`.
     - `Direction::DIR_C2V`: Cube produces an accumulator tile for vector consumption.
     - `Direction::DIR_V2C`: Vector produces a vector tile for cube consumption.
     - `Direction::DIR_BOTH`: both C2V and V2C producers are supported by the same pipe type.
