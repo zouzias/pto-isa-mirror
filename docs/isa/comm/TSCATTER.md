@@ -1,4 +1,4 @@
-﻿# TSCATTER
+# pto.tscatter
 
 ## Introduction
 
@@ -17,12 +17,12 @@ $$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+PTO-AS form: see [Assembly Spelling And Operands](../syntax-and-operands/assembly-model.md).
 
 Synchronous form:
 
 ```text
-tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
+pto.tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
 ```
 Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 

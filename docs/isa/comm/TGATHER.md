@@ -1,4 +1,4 @@
-﻿# TGATHER
+# pto.tgather
 
 ## Introduction
 
@@ -19,12 +19,12 @@ The destination tensor has shape $(D_0, D_1, D_2, N \times H, W)$.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../../assembly/PTO-AS.md).
+PTO-AS form: see [Assembly Spelling And Operands](../syntax-and-operands/assembly-model.md).
 
 Synchronous form:
 
 ```text
-tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
+pto.tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
 ```
 Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
