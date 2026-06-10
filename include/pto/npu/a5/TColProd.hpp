@@ -16,6 +16,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 template <typename T>
 struct TColProdOp {
+    using PadType = T;
+    static constexpr T InitVal = (T)1;
     PTO_INTERNAL static void ReduceInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &pReg)
     {
         vmul(dst, src0, src1, pReg, MODE_ZEROING);
