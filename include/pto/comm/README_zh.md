@@ -18,7 +18,7 @@ comm/
 ├── comm_types.hpp               # 公共类型：ParallelGroup、Signal、Signal2D、
 │                                #   NotifyOp、WaitCmp、ReduceOp、DmaEngine、AsyncEvent
 │
-├── a2a3/                        # A2/A3（Ascend 910B/910C）架构实现
+├── a2a3/                        # A2/A3 架构实现
 │   ├── TPut.hpp                 # TPUT_IMPL  — 远程写（本地 GM → UB → 远端 GM）
 │   ├── TGet.hpp                 # TGET_IMPL  — 远程读（远端 GM → UB → 本地 GM）
 │   ├── TNotify.hpp              # TNOTIFY_IMPL — 发送标志通知
@@ -26,7 +26,7 @@ comm/
 │   ├── TTest.hpp                # TTEST_IMPL — 非阻塞信号检测
 │   ├── TGather.hpp              # TGATHER_IMPL  — root 从所有 rank 收集数据
 │   ├── TScatter.hpp             # TSCATTER_IMPL — root 向所有 rank 分发数据
-│   ├── TBroadCast.hpp           # TBROADCAST_IMPL — root 向所有 rank 广播数据
+│   ├── TBroadcast.hpp           # TBROADCAST_IMPL — root 向所有 rank 广播数据
 │   ├── TReduce.hpp              # TREDUCE_IMPL — root 收集并归约（Sum/Max/Min）
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（仅 SDMA）

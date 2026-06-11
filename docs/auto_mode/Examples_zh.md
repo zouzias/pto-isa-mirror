@@ -15,8 +15,8 @@ using namespace pto;
 
 AICORE void runTAdd(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1) {
     using DynShapeDim5 = Shape<1, 1, 1, 64, 64>;
-    using DynStridDim5 = Stride<1, 1, 1, 64, 1>;
-    using GlobalData = GlobalTensor<float, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, 64, 1>;
+    using GlobalData = GlobalTensor<float, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, float, 64, 64, BLayout::RowMajor, 64, 64>;
     TileData src0Tile(64, 64);
     TileData src1Tile(64, 64);
@@ -47,8 +47,8 @@ using namespace pto;
 
 AICORE void runTAdd(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1) {
     using DynShapeDim5 = Shape<1, 1, 1, 64, 64>;
-    using DynStridDim5 = Stride<1, 1, 1, 64, 1>;
-    using GlobalData = GlobalTensor<float, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, 64, 1>;
+    using GlobalData = GlobalTensor<float, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, float, 64, 64, BLayout::RowMajor, 64, 64>;
     TileData src0Tile(64, 64);
     TileData src1Tile(64, 64);

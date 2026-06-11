@@ -1,4 +1,4 @@
-# 异步通信指令详解（TPUT_ASYNC / TGET_ASYNC / BuildAsyncSession）
+﻿# 异步通信指令详解（TPUT_ASYNC / TGET_ASYNC / BuildAsyncSession）
 
 ## TPUT_ASYNC — 异步远程写
 
@@ -48,7 +48,8 @@ bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
 ### URMA 构建（仅 Ascend950 / NPU_ARCH 3510）
 
 ```cpp
-bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session);
+bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId,  // 目标设备 Rank ID
+    AsyncSession &session);
 ```
 
 ---
@@ -86,9 +87,10 @@ if (!comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, sdmaWorkspace, 
 
 // 批量传输 + 一次 Wait
 comm::AsyncEvent lastEvent;
+const int nranks = 8;  // Added missing declaration
 for (int rank = 0; rank < nranks; ++rank) {
     GT dstG(remoteDst + rank * size, shape, stride);
-    lastEvent = comm::TPUT_ASYNC(dstG, srcG, session);
+    lastEvent = comm::TPUT_ASYNC(dstG, srcG + rank * size 等形式, session);
 }
 (void)lastEvent.Wait(session);  // 等待所有 pending 操作完成
 ```

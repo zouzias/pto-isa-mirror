@@ -1,4 +1,4 @@
-# include/
+﻿# include/
 
 Public C/C++ headers for PTO Tile Lib (primarily header-only, template-based). Upper-layer frameworks or operator code can include these headers to emit PTO ISA Tile-level operations.
 
@@ -21,13 +21,13 @@ Include the unified entry header:
 - [ISA guide](../docs/README.md)
 - [Getting started](../docs/getting-started.md)
 
-## PTO Instruction Implementation Status (CPU / Costmodel / A2 / A3 / A5 / Kirin)
+## PTO Instruction Implementation Status (CPU / Cost Model / A2 / A3 / A5 / Kirin)
 
 This table tracks per-instruction backend availability:
 
 - **CPU**: `__CPU_SIM` (CPU simulation backend). More information about this backend can be found in [docs/coding/cpu_sim.md](../docs/coding/cpu_sim.md)
 - **Costmodel**: `__COSTMODEL` (A2 / A3 cost model backend, including `stub` and `fit` paths; if either path supports an instruction, it is marked as supported).
-- **A2 (Ascend 910B) / A3 (Ascend 910C)**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).
+- **A2 / A3**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).
 - **A5 (Ascend 950)**: uses the `include/pto/npu/a5/` implementation.
 - **Kirin**: uses the `include/pto/npu/kirin9030/` implementation.
 
@@ -43,7 +43,7 @@ This table tracks per-instruction backend availability:
 | [`TAND`](../docs/isa/TAND.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TANDS`](../docs/isa/TANDS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TASSIGN`](../docs/isa/TASSIGN.md) | Yes | TODO | Yes | Yes | Yes | Yes |
-| [`TAXPY`]() | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`指向`]() | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TBROADCAST`](../docs/isa/comm/TBROADCAST.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TCI`](../docs/isa/TCI.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TCMP`](../docs/isa/TCMP.md) | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -62,7 +62,7 @@ This table tracks per-instruction backend availability:
 | [`TCOLMIN`](../docs/isa/TCOLMIN.md) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [`TCOLPROD`](../docs/isa/TCOLPROD.md) | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TCOLSUM`](../docs/isa/TCOLSUM.md) | Yes | Yes | Yes | Yes | Yes | TODO |
-| [`TConcat`](../docs/isa/TCONCAT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
+| [`TCONCAT`](../docs/isa/TCONCAT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TCVT`](../docs/isa/TCVT.md) | Yes | Yes | Yes | Yes | Yes | TODO |
 | [`TDIV`](../docs/isa/TDIV.md) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [`TDIVS`](../docs/isa/TDIVS.md) | Yes | Yes | Yes | Yes | Yes | Yes |

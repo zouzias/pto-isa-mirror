@@ -20,7 +20,7 @@ $$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm
 Synchronous form:
 
 ```text
-%dst = tlrelu %src, %slope : !pto.tile<...>, f32
+%dst = tlrelu %src, 同步形式中的 %slope 统一 %scalar : !pto.tile<...>, f32
 ```
 
 ### AS Level 1 (SSA)
@@ -36,7 +36,7 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>

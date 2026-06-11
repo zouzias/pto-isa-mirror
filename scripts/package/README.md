@@ -8,9 +8,9 @@ Packaging and release scripts/templates for PTO Tile Lib. This directory is used
 - `module/`: Module-level packaging descriptors
 
 Common helpers (`package.py`, `install_common_parser.sh`, install/cleanup
-fragments, etc.) are reused from the CANN engineering cmake repo
-(`https://gitcode.com/cann/cmake`) and pulled in at configure time via
-`cmake/fetch_cann_cmake.cmake`.
+fragments, etc.) are reused from the CANN engineering CMake repo
+(`https://gitcode.com/cann/CMake`) and pulled in at configure time via
+`CMake/fetch_cann_cmake.CMake`.
 
 ## Build and Install
 

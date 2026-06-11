@@ -87,7 +87,7 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr
 
 using namespace pto;
 
@@ -120,7 +120,8 @@ void example_manual(__gm__ T* out) {
 
   GTensor gout(out);
   TileT t;
-  TASSIGN(t, 0x1000);
+  // Note: TASSIGN requires proper header include
+TASSIGN(t, 0x1000);
   TSTORE<TileT, GTensor, AtomicType::AtomicAdd>(gout, t);
 }
 ```

@@ -6,7 +6,7 @@
 
 ## 简介
 
-Tile 的逐元素绝对値。
+Tile 的逐元素绝对值。
 
 ## 数学语义
 
@@ -48,7 +48,7 @@ PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 - **实现检查 (CPU sim)**:
     - `TileData::DType` 必须是以下之一：`int32_t`、`int`、`int16_t`、`half`、`float`。
     - 实现在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
-- **实现检查 (Costmodel)**:
+- **实现检查 (Cost Model)**:
     - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`。
 - **实现检查 (NPU)**:
     - `TileData::DType` 必须是以下之一：`float` 或 `half`。

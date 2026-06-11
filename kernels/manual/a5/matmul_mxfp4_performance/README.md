@@ -1,4 +1,4 @@
-# High-Performance MXFP4 Operator Example for Unaligned Scenarios
+﻿# High-Performance MXFP4 Operator Example for Unaligned Scenarios
 
 ## Overview
 
@@ -11,7 +11,7 @@ This sample implements high-performance MXFP4 matrix multiplication based on the
 ## Directory Layout
 
 ```
-kernels/manual/a5/matmul_mxfp8_performance/
+kernels/manual/a5/目录布局中的路径统一 matmul_mxfp4_performance/
 ├── scripts/
 │   └── gen_data.py                      # Generate input and golden output
 ├── CMakeLists.txt                       # Build configuration
@@ -30,7 +30,7 @@ $$
 C = (scaleA ⊗ A) * (scaleB ⊗ B)
 $$
 
-where `⊗`  denotes broadcast multiplication and `*` enotes matrix multiplication. The input matrix formats are as follows:
+where `⊗`  denotes  denotes broadcast multiplication and `*` denotes matrix multiplication. The input matrix formats are as follows:
 
 - `A` is `m×k`
 - `scaleA` is `m×scaleK`
@@ -54,17 +54,17 @@ The default reference configuration in `main.cpp` is `m=2040, k=8192, n=8100` an
 
 This example uses Ascend A5 platform as the performance validation platform.
 
-- **Core Partitioning**：
-  
+- **Core Partitioning**:
+
   The core goal is to fully utilize multi-core parallel computing power and evenly split the overall computing task across different Cube cores.
-  - In this example, `m=2040, k=8192, n=8100`; it is generally not recommended to partition the `k`，dimension within a single core, but instead partition the `m` and `n` dimensions.
-  - The global task is partitioned across cores in a 4 × 8 manner, with a single core responsible for submatrices of dimensions `singleCoreM=512`、`singleCoreK=8192` and `singleCoreN=1024`, ensuring load balancing across all cores and maximizing parallelism.
-- **Base Block Selection**：
+  - In this example, `m=2040, k=8192, n=8100`; it is generally not recommended to partition the `k`, dimension within a single core, but instead partition the `m` and `n` dimensions.
+  - The global task is partitioned across cores in a 4 x 8 manner, with a single core responsible for submatrices of dimensions `singleCoreM=512`, `singleCoreK=8192` and `singleCoreN=1024`, ensuring load balancing across all cores and maximizing parallelism.
+- **Base Block Selection**:
   - choose base blocks that maximize compute-to-memory ratio. For FP16, a common choice is `[baseM, baseN, baseK] = [256, 256, 256]`, which achieves the highest computing-to-memory ratio for the basic block and is more conducive to maintaining 512-byte alignment for GM write-back.
-- **L1 Caching**：
+- **L1 Caching**:
   - Batch caching strategy: move multiple base blocks from GM to L1 per transfer to improve bandwidth utilization. This example sets `stepKa=stepKb=2` to cache four `k` blocks at a time.
   - Independent caching: Scale and data are cached independently on L1, and the mxScalePara parameter is introduced to represent the cache ratio between the two.
-- **Double Buffering**：
+- **Double Buffering**:
   - overlap DMA and compute by enabling double buffering in L1, L0A, L0B, L0ScaleA and L0ScaleB.
 
 ## Tiling Parameters
@@ -119,7 +119,7 @@ python3 scripts/gen_data.py
 3. Run the example:
 
 ```bash
-bash run.sh -r npu -v Ascend950
+bash run.sh -r npu 运行命令中的 -v Ascend950 与文档声明一致的 A5 对应参数
 ```
 
 If the run succeeds, the output prints:

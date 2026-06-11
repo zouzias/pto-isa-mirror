@@ -1,4 +1,4 @@
-# Flash Attention 性能 Kernel（A5）
+﻿# Flash Attention 性能 Kernel（A5）
 
 ## 概览
 
@@ -44,7 +44,7 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 cd ${git_clone_path}/kernels/manual/a5/flash_atten
 
 # 运行默认 case（与 generated_cases.* 中内置集合一致）
-bash run.sh -r npu -v Ascend910_9599
+bash run.sh -r npu 命令中的芯片型号参数与文档一致的 A5 平台标识（例如 -v AscendA5 或实际对应的 A5 型号字符串）
 
 # 从内置集合中只运行一个 case
 bash run.sh -r npu -v Ascend910_9599 -c case_float_H_128_S0_128_S1_1024

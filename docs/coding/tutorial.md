@@ -80,7 +80,7 @@ PTO-Auto (high level):
 
 PTO-Manual (expert mode):
 
-- You can explicitly bind tile buffer addresses with `TASSIGN`.
+- You can explicitly bound tile buffer addresses with `TASSIGN`.
 - You can express ordering explicitly (events or low-level flags).
 - You can build double-buffer pipelines and overlap load/compute/store.
 
@@ -167,7 +167,7 @@ Some existing device kernels use `set_flag`/`wait_flag` directly. This is more h
 
 On CPU simulation, these are stubs (no-ops).
 
-See also: `tests/cpu/st/testcase/tadd/tadd_kernel.cpp`.
+See also: `tests/cpu/st/test case/tadd/tadd_kernel.cpp`.
 
 ## 5. A slightly bigger pattern: row-wise softmax (Auto style)
 

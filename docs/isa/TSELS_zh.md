@@ -42,7 +42,7 @@ pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dty
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr`：
 
 ```cpp
 template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
@@ -55,7 +55,7 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
     - `sizeof(TileDataDst::DType)` 必须是 `2` 或 `4` 字节。
     - 支持的数据类型为 `half`、`float16_t`、`float` 和 `float32_t`。
     - `dst` 和 `src` 必须使用相同的元素类型。
-    - `dst` 和 `src` 必须是行主序。
+    - `dst` 和 `src` 必须是行优先。
     - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。
 - **实现检查 (A5)**:
     - `sizeof(TileDataDst::DType)` 可以是 `1`、`2` 或 `4` 字节。

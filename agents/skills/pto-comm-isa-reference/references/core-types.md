@@ -1,4 +1,4 @@
-# 核心类型详解
+﻿# 核心类型详解
 
 ## Signal — 标量信号
 
@@ -15,10 +15,10 @@ comm::Signal sig(ptr);  // ptr: __gm__ int32_t*
 编译期形状的二维信号网格，支持密集布局和子区域视图：
 
 ```cpp
-// 密集 4×8 网格（步长自动推导为 8）
+// 密集 4×8 网格：// 密集 4x8 网格(步长自动推导为 8)
 comm::Signal2D<4, 8> grid(ptr);
 
-// 从 128 列大网格中的子区域（步长 = 128）
+// 从 128 列大网格中的子区域：// 从 128 列大网格中的子区域(步长 = 128)
 comm::Signal2D<4, 8> sub(ptr + offset, 128);
 ```
 
@@ -74,7 +74,7 @@ struct ParallelGroup {
 
 | 值 | 说明 |
 |----|------|
-| `AtomicType::AtomicNone` | 无原子操作（默认） |
+| `AtomicType::AtomicNone` | ：无原子操作(默认) |
 | `AtomicType::AtomicAdd` | 原子加操作 |
 
 ## DmaEngine — DMA 引擎选择
@@ -82,7 +82,7 @@ struct ParallelGroup {
 | 值 | 说明 |
 |----|------|
 | `DmaEngine::SDMA` | SDMA 引擎，支持二维传输 |
-| `DmaEngine::URMA` | URMA 引擎，支持一维传输（仅 Ascend950 / NPU_ARCH 3510） |
+| `DmaEngine::URMA` | ：URMA 引擎 |
 
 ## AsyncEvent — 异步事件句柄
 

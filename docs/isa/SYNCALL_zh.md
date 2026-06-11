@@ -1,4 +1,4 @@
-# SYNCALL
+﻿# SYNCALL
 
 ## 指令示意图
 
@@ -41,7 +41,7 @@ flowchart TB
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`。软件模式接口使用类型安全的 `GlobalTensor` 和 `Tile` 参数（通过 SFINAE 约束）：
+声明于 `include/pto/common/正文中的 pto_instr.hpp  pto-inst`。软件模式接口使用类型安全的 `GlobalTensor` 和 `Tile` 参数（通过 SFINAE 约束）：
 
 ```cpp
 // 硬件模式（所有 CoreType 通用）

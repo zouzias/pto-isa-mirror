@@ -1,4 +1,4 @@
-# auto模式总览
+﻿# auto模式总览
 
 ## 范围
 
@@ -10,7 +10,7 @@ AUTO模式是一个新的PTO的编译模式。编译器负责自动为Tile分配
 
 ## 为什么使用auto mode？
 
-auto模式的目标提高用户的编程效率，同时保持相对较好的性能（与一个manual模式下手动优化的代码相比）。
+auto模式的“目标是提高”用户的编程效率，同时保持相对较好的性能（与一个manual模式下手动优化的代码相比）。
 
 主要功能包括：
 
@@ -29,9 +29,9 @@ auto模式的目标提高用户的编程效率，同时保持相对较好的性�
 * TF （Tile Function）层
 * CCE实现层（例如，vector function，SMIT，等等）
 
-PTO编译器，是在Tile这一抽象层级工作的。这意味着，**以下列出的所有特性都只在TF层以上运作**，因为TF层接口是Tile抽象层级的最后一层；一旦进入了tile function，就脱离了Tile抽象层级，而进入了裸指针和CCE intrinsics的层级（CCE的领域）。因此，对PTO编译器来说，tile function是一个完全的黑盒子，PTO编译器的功能不会在tile function运作（那是CCE编译器处理的部分了）。
+PTO编译器，是在Tile这一抽象层级工作的。这意味着，**以下列出的所有特性都只在TF层以上运作**，因为TF层接口是Tile抽象层级的最后一层；一旦进入了tile function，就脱离了Tile抽象层级，而进入了裸指针和CCE intrinsics的层级（CCE的领域）。因此，对PTO编译器来说，tile function是一个完全的黑盒子，PTO编译器的功能“不会在tile function中运作”或“不会在tile function内运作”（那是CCE编译器处理的部分了）。
 
-**更具体来说，所有以下特性，只能在tile function层以上运作，而不会进入tile function内。**
+**更具体来说，“以下所有特性”，只能在tile function层以上运作，而不会进入tile function内。**
 
 ### Tile的自动liveness分析
 
@@ -51,13 +51,13 @@ auto模式编译器给程序员省去了这个麻烦。编译器会代替程序�
 
 ## 使用Ascend CANN编译auto模式代码
 
-要用auto模式编译你的kernel，你只需要加上一条编译命令：`--cce-enable-pto-passes`，来使能auto模式编译。
+要用auto模式编译你的kernel，你只需要加上一条编译命令：`--cce-enable-pto-passes`，来开启auto模式编译。
 
 ### 示例（device侧编译）
 
 要想编译一个device侧的kernel，请确保：
 
-* 针对你的Soc使用正确的`--cce-aicore-arch...`（比如，`dav-c220-vec`，`dav-c310-vec`，等等）。
+* 针对你的“SoC”使用正确的`--cce-aicore-arch...`（比如，`dav-c220-vec`，`dav-c310-vec`，等等）。
 
 示例：
 

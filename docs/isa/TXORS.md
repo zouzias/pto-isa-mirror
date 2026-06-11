@@ -36,11 +36,11 @@ pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/pto-inst.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, TileDataTmp &tmp, WaitEvents &... events);
+PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &声明中的 src0 统一 src, typename TileDataSrc::DType scalar, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints

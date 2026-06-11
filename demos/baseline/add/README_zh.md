@@ -1,4 +1,4 @@
-# 自定义 PyTorch 算子（KERNEL_LAUNCH）示例
+﻿# 自定义 PyTorch 算子（KERNEL_LAUNCH）示例
 
 本示例展示如何实现一个基于 PTO 的自定义 kernel，并通过 `torch_npu` 将其暴露为 PyTorch 算子。
 
@@ -20,7 +20,7 @@ demos/baseline/add/
 
 在 `demos/baseline/add/csrc/kernel/` 下新增 kernel 源码，并将其加入构建。例如要构建 `add_custom.cpp`，需要在 `demos/baseline/add/CMakeLists.txt` 中添加：
 
-```cmake
+```CMake
 ascendc_library(no_workspace_kernel STATIC
     csrc/kernel/add_custom.cpp
 )
@@ -73,7 +73,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y)
 ### 2.3 注册实现
 
 使用 `TORCH_LIBRARY_IMPL` 注册实现。对 NPU 执行而言，`torch_npu` 使用 `PrivateUse1` dispatch key，关于 `PrivateUse1` 的详细介绍请参考 PyTorch 官方文档：
-https://docs.pytorch.org/tutorials/advanced/privateuseone.html
+https://docs.PyTorch.org/tutorials/advanced/privateuseone.html
 
 ```cpp
 TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
@@ -86,7 +86,7 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
 本示例依赖 PTO Tile Lib、PyTorch、`torch_npu` 与 CANN。请参考 `torch_npu` 官方安装指南：
 
-https://gitcode.com/ascend/pytorch#%E5%AE%89%E8%A3%85
+https://gitcode.com/ascend/PyTorch#%E5%AE%89%E8%A3%85
 
 或执行：
 
@@ -98,7 +98,7 @@ python3 -m pip install -r requirements.txt
 
 编辑 `demos/baseline/add/CMakeLists.txt`，把 `SOC_VERSION` 设置为目标芯片（例如 A2/A3 使用 `Ascend910B1`）：
 
-```cmake
+```CMake
 set(SOC_VERSION "Ascendxxxyy" CACHE STRING "system on chip type")
 ```
 
@@ -120,7 +120,7 @@ python3 setup.py bdist_wheel
 
 ```bash
 cd dist
-pip uninstall *.whl
+pip uninstall <具体包名>
 pip install *.whl
 ```
 

@@ -1,5 +1,5 @@
-This file lists some rules and limitations on the implementation of this library for pto-isa developers.
-这篇文档列出一些针对pto-isa库开发者在auto模式下的编程规则和限制。
+﻿This file lists some rules and limitations on the implementation of this library for PTO developers.
+这篇文档列出一些针对PTO库开发者在auto模式下的编程规则和限制。
 
 不遵守这些规则可能导致以下任何后果：
 
@@ -25,7 +25,7 @@ public:
 };
 ```
 
-然而这样会对AUTO编译器产生问题：编译器内的SROA pass无法消除此成员对应的`AllocaInst`指令（以及其对应的`load`和`store`指令），会对后续的内存分配产生不利影响。请尽量避免默认初始化struct/class成员（至少，auto模式下不要）:
+然而这样会对“auto编译器”或“Auto编译器”产生问题：编译器内的SROA pass无法消除此成员对应的`AllocaInst`指令（以及其对应的`load`和`store`指令），会对后续的内存分配产生不利影响。请尽量避免默认初始化struct/class成员（至少，auto模式下不要）:
 
 ```cpp
 #ifdef __PTO_AUTO__
@@ -36,7 +36,7 @@ public:
 #endif
 ```
 
-虽然是用C++，但是我们还是鼓励鼓励尽量使用POD（plain old data）来靠近C语言。
+虽然是用C++，但是我们还是“鼓励尽量使用”或“鼓励开发者尽量使用”POD（plain old data）来靠近C语言。
 
 # 3 - 在tile function以及被其调用的函数内，依然需要开发者手动同步
 

@@ -1,6 +1,6 @@
-# 文档网站（MkDocs）
+﻿# 文档网站（MkDocs）
 
-本仓库可以使用 **MkDocs** 和 **Read the Docs** 主题作为静态文档站点浏览。
+本仓库可以使用 **MkDocs** 和 **Read the Docs** 主题“用于浏览静态文档站点”或“作为静态文档站点使用”。
 
 MkDocs 配置位于 `docs/mkdocs/` 目录下，设置为浏览整个仓库的 markdown 文件（包括 `kernels/`、`tests/` 等目录下的 README 文件）。
 
@@ -40,8 +40,8 @@ python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 你可以将静态站点构建作为 CMake 构建的一部分：
 
 ```bash
-cmake -S docs -B build/docs
-cmake --build build/docs --target pto_docs
+CMake -S docs -B build/docs
+CMake --build build/docs --target pto_docs
 ```
 
 站点将生成在 `build/docs/site/` 目录下。
@@ -49,7 +49,7 @@ cmake --build build/docs --target pto_docs
 本地服务：
 
 ```bash
-cmake --build build/docs --target pto_docs_serve
+CMake --build build/docs --target pto_docs_serve
 ```
 
 ## 注意事项

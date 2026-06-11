@@ -1,4 +1,4 @@
-# 通算重叠（Overlap）详解
+﻿# 通算重叠（Overlap）详解
 
 ## 基本原理
 
@@ -87,7 +87,8 @@ int rows_per_block = (total_rows + num_blocks - 1) / num_blocks;
 int my_start = block_idx * rows_per_block;
 int my_end = min((block_idx + 1) * rows_per_block, total_rows);
 
-while (cur_row < my_end) {
+int cur_row = my_start;
+    while (cur_row < my_end) {
     int flat_transfer = cur_row / ROWS_PER_TILE;
     int row_in_tile = cur_row % ROWS_PER_TILE;
     AgTransferRows(reduced_output, ctx, stride, remote_rank, row_offset, nrows);

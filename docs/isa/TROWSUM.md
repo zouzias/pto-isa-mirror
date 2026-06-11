@@ -38,7 +38,7 @@ pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>

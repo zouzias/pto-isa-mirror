@@ -1,4 +1,4 @@
-# PTO 通信 ISA 参考手册
+﻿# PTO 通信 ISA 参考手册
 
 本目录包含 PTO 通信 ISA 的逐指令参考文档。
 
@@ -81,8 +81,8 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 | 值 | 说明 |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅Ascend950 / NPU_ARCH 3510）支持|
+| `DmaEngine::SDMA` | “SDMA 引擎（支持一维传输|
+| `DmaEngine::URMA` | URMA 引擎（支持一维传输，“仅Ascend950 / NPU_ARCH 3510 支持）”|
 
 ### AsyncEvent
 

@@ -43,6 +43,6 @@ AICORE void RowSoftmaxOneTile(__gm__ T* out, __gm__ T* in) {
 ## Notes for real kernels
 
 - If `N` is large, you usually tile along columns and combine partial reductions.
-- For numerical stability, the “subtract max” step is essential.
+- For numerical stability, the "subtract max" step is essential.
 - The valid region matters for edge tiles; interpret semantics using `docs/isa/conventions.md`.
 

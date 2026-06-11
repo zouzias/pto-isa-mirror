@@ -1,4 +1,4 @@
-# ConvTile Programming Model
+﻿# ConvTile Programming Model
 
 PTO Lib programs operate on **ConvTile**: fixed-capacity 2-D to 6-D buffers that are the unit of computation and the unit of most data movement for PTO convolution operation.
 
@@ -8,11 +8,11 @@ This document describes the C++ tile types in `include/pto/common/pto_tile.hpp` 
 
 ## What a ConvTile represents
 
-A ConvTile is defined by five families of attributes:
+A ConvTile is definesd by five families of attributes:
 
 - **Location**: which logical tile storage class the tile belongs to (matrix/cube registers).
 - **Element type**: scalar element type (`float`, `half`, `int8_t`, ...).
-- **Buffer size**: the static space of convtile.
+- **Buffer size**: the static space of ConvTile.
 - **Layout**: a layout (`NCHW`, `NHWC`, `NC1HWC0`, ...), used to guide lowering and target-specific fast paths.
 - **Shape**: a `pto::ConvTileShape<...>` (up to 6 dimensions).
 
@@ -25,7 +25,7 @@ pto::ConvTile<
   pto::TileType Loc_,
   Element_,
   BufferSize_,
-  pto::Layout_ layout,
+  pto::Layout,
   pto::ConvTileShape Shape_
 >;
 ```
@@ -51,7 +51,7 @@ Instruction pages in `docs/isa/` specify which locations are legal for each inst
 
 ### Shape (`pto::Shape`)
 
-`pto::ConvTileShape<...Shapes>` support 1-6 integers. it is a template parameter list, each template parameter can be a compile-time constant or `pto::DYNAMIC` (`-1`).
+`pto::ConvTileShape<...Shapes>` supports 1-6 integers. It is a template parameter list; each template parameter can be a compile-time constant or `pto::DYNAMIC` (`-1`).
 
 - Static dimensions are carried in the type via `ConvTileShape::staticShape[dim]`.
 - Dynamic dimensions are stored in the runtime `ConvTileShape::shape[dim]` and are populated by the `ConvTileShape(...)` constructors.
@@ -71,9 +71,12 @@ See `docs/isa/TASSIGN.md` for details.
 #include <pto/pto-inst.hpp>
 using namespace pto;
 
+// Note: 函数参数 out 在声明后未在函数体内使用，属于未使用参数，可能触发编译器警告且示例逻辑不完整。...
 void example(__gm__ half* in, __gm__ half* out) {
-  using TileT = ConvTile<TileType::Mat, half, 4096, Layout::NC1HWC0, pto::ConvTileShape<1, 1, 16, 16, 16>>;
-  using GShape = Shape<1, 1, 16, 16, 16>;
+  using TileT = ConvTile<TileType::Mat, half, 4096, Layout::NC1HWC0, pto::ConvTile// Note: Use pto::ConvTileShape for proper typing
+Shape<1, 1, 16, 16, 16>>;
+  using GShape = // Note: Use pto::ConvTileShape for proper typing
+Shape<1, 1, 16, 16, 16>;
   using GStride = Stride<1 * 16* 16* 16, 16* 16* 16, 16 * 16, 16, 1>;
   using GT = GlobalTensor<half, GShape, GStride, Layout::NC1HWC0>;
   GT gin(in);

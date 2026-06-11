@@ -390,7 +390,7 @@ GEMM AllReduce demo completed successfully.
 修改 `gemm_ar_config.h` 中的 `CONFIG_G_M`、`CONFIG_G_K`、`CONFIG_G_N` 即可，所有源文件通过 include 共享配置。也可通过 CMake 参数传入：
 
 ```bash
-cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
+CMake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
 约束：K 必须能被 `G_BASE_K × G_STEP_KA`（默认 64×4=256）整除。`HCCL_BUFFSIZE` 由 `run.sh` 自动计算。

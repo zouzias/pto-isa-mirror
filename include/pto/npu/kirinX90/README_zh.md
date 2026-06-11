@@ -1,4 +1,4 @@
-# include/pto/npu/kirinX90/
+# include/pto/npu/KirinX90/
 
 KirinX90 系列 PTO 指令实现头文件。
 
@@ -10,4 +10,4 @@ KirinX90 系列 PTO 指令实现头文件。
 ## 相关内容
 
 - ISA 语义与示例：`docs/isa/`
-- KirinX90 NPU ST 测试：`tests/npu/Kirin9030/src/st/`，与Kirin9030共用测试用例。
+- KirinX90 NPU ST 测试：`tests/npu/KirinX90/src/st/`，与KirinX90共用测试用例。

@@ -1,4 +1,4 @@
-# Host 侧与构建系统
+﻿# Host 侧与构建系统
 
 ## 标准初始化流程
 
@@ -12,6 +12,8 @@ int main(int argc, char **argv) {
 
     // 2. ACL 初始化
     aclInit(nullptr);
+    int32_t device_count;
+    aclrtGetDeviceCount(&device_count);
     aclrtSetDevice(rank % device_count);
     aclrtStream computeStream, commStream;
     aclrtCreateStream(&computeStream);
@@ -56,7 +58,7 @@ int main(int argc, char **argv) {
 **关键**：每次 kernel 执行前必须清零信号矩阵，否则上次的残留值导致同步错误。
 
 ```cpp
-aclrtMemset(signal_matrix, signal_size, 0, signal_size);
+aclrtMemset(signal_matrix, 0, signal_size); 以匹配标准 API 签名
 aclrtSynchronizeStream(stream);
 ```
 
@@ -73,7 +75,8 @@ void launchCommKernel(uint8_t *data, uint8_t *signal, uint8_t *ctx,
 void launchCommKernel(uint8_t *data, uint8_t *signal, uint8_t *ctx,
                       int rank, int nranks, void *stream)
 {
-    CommKernelEntry<<<COMM_BLOCK_NUM, nullptr, stream>>>(
+    // Note: Use aclrtLaunchKernel or LaunchKernel for Ascend platform
+    CommKernelEntry<<<COMM_BLOCK_NUM, 1, stream>>>(
         data, signal, ctx, rank, nranks, COMM_BLOCK_NUM);
 }
 ```
@@ -82,7 +85,7 @@ void launchCommKernel(uint8_t *data, uint8_t *signal, uint8_t *ctx,
 
 ## CMakeLists.txt 模板
 
-```cmake
+```CMake
 cmake_minimum_required(VERSION 3.16)
 project(my_comm_operator)
 

@@ -1,4 +1,4 @@
-# Error Codes Reference
+﻿# Error Codes Reference
 
 This document summarizes common PTO development failures and practical troubleshooting guidance. The examples are illustrative only: actual diagnostics depend on the compiler toolchain, runtime, and host environment.
 
@@ -21,7 +21,7 @@ error: pto/pto-inst.hpp: No such file or directory
 export PTO_LIB_PATH=/path/to/pto-isa
 
 # Method 2: CMake specify
-cmake -B build -DPTO_ROOT=/path/to/pto-isa
+CMake -B build -DPTO_ROOT=/path/to/pto-isa
 
 # Method 3: Manual include path
 g++ -I/path/to/pto-isa/include src/my_operator.cpp
@@ -136,11 +136,11 @@ error while loading shared libraries: libpto.so: cannot open shared object file
 export LD_LIBRARY_PATH=/path/to/pto/lib:$LD_LIBRARY_PATH
 
 # Method 2: Add to system path
-sudo echo "/path/to/pto/lib" > /etc/ld.so.conf.d/pto.conf
+echo "/path/to/pto/lib" | sudo tee /etc/ld
 sudo ldconfig
 
 # Method 3: Use RPATH
-cmake -B build -DCMAKE_INSTALL_RPATH=/path/to/pto/lib
+CMake -B build -DCMAKE_INSTALL_RPATH=/path/to/pto/lib
 
 # Verify
 ldd ./my_operator
@@ -164,7 +164,7 @@ Error code: -1
 ```cpp
 // Check block_num
 int block_num = get_available_cores();  // Don't exceed available cores
-EXEC_KERNEL_CMD(MyKernel, block_num, ...);
+// EXEC_KERNEL_CMD(MyKernel, block_num, ...);
 
 // Check parameter types
 // ❌ Wrong: passed wrong pointer type

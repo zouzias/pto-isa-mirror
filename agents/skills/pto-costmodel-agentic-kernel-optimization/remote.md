@@ -1,4 +1,4 @@
----
+﻿---
 name: ako4pto-remote-bringup
 description: 用于 AKO4PTO 的远程 Ascend 环境 bring-up。覆盖 SSH 连通、工作区上传、Python 选择、依赖安装、环境自检及 benchmark 验证。
 ---
@@ -94,7 +94,7 @@ ls external/src/pto-dsl external/src/PTOAS external/src/pto-isa external/src/ops
 
 ```bash
 <python_pip> install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
-<python_pip> install -i https://pypi.tuna.tsinghua.edu.cn/simple torch-npu==2.8.0.post2 --extra-index-url https://download.pytorch.org/whl/cpu
+<python_pip> install -i https://pypi.tuna.tsinghua.edu.cn/simple torch-npu==2.8.0.post2 --extra-index-url https://download.PyTorch.org/whl/cpu
 <python_pip> install -i https://pypi.tuna.tsinghua.edu.cn/simple numpy PyYAML mpmath 'pybind11<3' decorator
 ```
 
@@ -118,7 +118,7 @@ ptoas --version
 
 ```bash
 export PATH=<py311_bin>:<ptoas_cli_bin>:$PATH
-export LD_LIBRARY_PATH=<py311_lib>:<mlir__mlir_libs>:<ptoas_cli_lib>:/usr/local/Ascend/cann-*/aarch64-linux/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=<py311_lib>:<mlir__mlir_libs>  <mlir/_mlir_libs> 或 <mlir_mlir_libs>:<ptoas_cli_lib>:/usr/local/Ascend/cann-*/aarch64-linux/lib64:$LD_LIBRARY_PATH
 ```
 
 注意：`mlir/_mlir_libs` 和 `ptoas` CLI 的 `lib` 目录往往都必须放进 `LD_LIBRARY_PATH`。

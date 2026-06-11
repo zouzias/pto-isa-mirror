@@ -1,4 +1,4 @@
-# TPARTARGMAX
+﻿# TPARTARGMAX
 
 
 ## Tile Operation Diagram
@@ -30,7 +30,7 @@ $$
 Synchronous form:
 
 ```text
-%dstVal, %dstIdx = tpartargmax %src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
+%dstVal, %dstIdx = tpartargmax %src0Val, %src1Val, %src0Idx, %src1Idx : 类型签名与 AS Level 1 一致：: (!pto
 ```
 
 ### AS Level 1 (SSA)
@@ -47,7 +47,7 @@ pto.tpartargmax ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>,
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/声明路径或示例代码中的文件名一致（推荐统一为 pto-inst`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
@@ -135,7 +135,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)

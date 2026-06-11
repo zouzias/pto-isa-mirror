@@ -1,6 +1,6 @@
-# PTO 内建接口头文件
+﻿# PTO 内建接口头文件
 
-PTO 内建接口 API（指令定义与函数签名）的权威列表维护在：
+PTO 内建“PTO 内建 API”或“PTO 内建接口”（指令定义与函数签名）的权威列表维护在：
 
 - `include/pto/common/pto_instr.hpp`
 

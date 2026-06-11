@@ -27,12 +27,12 @@ license: CANN Open Software License Agreement Version 2.0
 
 ```
 tests/
-├── cpu/comm/st/testcase/       # CPU 仿真测试
+├── cpu/comm/st/test case/       # CPU 仿真测试
 │   ├── common.hpp
 │   ├── CMakeLists.txt
 │   ├── tgather/
 │   └── tscatter/
-├── npu/a2a3/comm/st/testcase/  # NPU A2A3 测试
+├── npu/a2a3/comm/st/test case/  # NPU A2A3 测试
 │   ├── common.hpp
 │   ├── hccl_context.h
 │   ├── comm_mpi.h
@@ -40,7 +40,7 @@ tests/
 │   ├── tput/ tget/ tnotify/ twait/ ttest/
 │   ├── tgather/ tscatter/ tbroadcast/ treduce/
 │   └── tput_async/ tget_async/
-└── npu/a5/comm/st/testcase/    # NPU A5 测试
+└── npu/a5/comm/st/test case/    # NPU A5 测试
 ```
 
 ---
