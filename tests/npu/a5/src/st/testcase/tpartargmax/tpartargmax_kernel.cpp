@@ -90,6 +90,10 @@ void LaunchTPartArgMax(T *out, T *src0, T *src1, U *outIdx, U *src0Idx, U *src1I
 
 template void LaunchTPartArgMax<float, uint32_t, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64>(
     float *out, float *src0, float *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMax<float, uint32_t, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512>(
+    float *out, float *src0, float *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMax<float, uint32_t, 8, 512, 3, 211, 8, 512, 8, 512, 3, 512, 8, 512>(
+    float *out, float *src0, float *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx, void *stream);
 template void LaunchTPartArgMax<float, int32_t, 2, 24, 2, 24, 2, 8, 4, 32, 3, 24, 2, 16>(
     float *out, float *src0, float *src1, int32_t *outIdx, int32_t *src0Idx, int32_t *src1Idx, void *stream);
 template void LaunchTPartArgMax<float, int32_t, 12, 63, 12, 63, 6, 60, 12, 64, 12, 64, 6, 64>(
@@ -116,3 +120,15 @@ template void LaunchTPartArgMax<float, uint32_t, 8, 7, 0, 7, 8, 7, 8, 8, 1, 8, 8
                                                                                      float *src1, uint32_t *outIdx,
                                                                                      uint32_t *src0Idx,
                                                                                      uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMax<aclFloat16, uint32_t, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMax<aclFloat16, uint32_t, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMax<aclFloat16, uint32_t, 8, 512, 3, 512, 8, 512, 8, 512, 3, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMax<aclFloat16, uint32_t, 8, 512, 8, 211, 8, 512, 8, 512, 8, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
