@@ -20,7 +20,7 @@ __global__ AICORE void runTConcat(__gm__ T __out__ *out, __gm__ T __in__ *src0, 
     using DynShape = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
     using GlobalData = GlobalTensor<T, DynShape, DynStride>;
-    GlobalData dstGlobal(out, pto::Shape(1, 1, 1, vRows, dstTileW),
+    GlobalData dstGlobal(out, pto::Shape(1, 1, 1, vRows, vCols0 + vCols1),
                          pto::Stride(dstTileH * dstTileW, dstTileH * dstTileW, dstTileH * dstTileW, dstTileW, 1));
     GlobalData src0Global(
         src0, pto::Shape(1, 1, 1, vRows, vCols0),
@@ -32,7 +32,7 @@ __global__ AICORE void runTConcat(__gm__ T __out__ *out, __gm__ T __in__ *src0, 
     using TileDataDst = Tile<TileType::Vec, T, dstTileH, dstTileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc0 = Tile<TileType::Vec, T, src0TileH, src0TileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc1 = Tile<TileType::Vec, T, src1TileH, src1TileW, BLayout::RowMajor, -1, -1>;
-    TileDataDst dstTile(vRows, dstTileW);
+    TileDataDst dstTile(vRows, vCols0 + vCols1);
     TileDataSrc0 src0Tile(vRows, vCols0);
     TileDataSrc1 src1Tile(vRows, vCols1);
     TASSIGN(src0Tile, 0x0);
