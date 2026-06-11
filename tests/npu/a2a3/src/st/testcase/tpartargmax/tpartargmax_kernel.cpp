@@ -201,3 +201,24 @@ template void LaunchTPartArgMax<float, uint32_t, 57, 128, 57, 120, 57, 112, 57, 
 template void LaunchTPartArgMax<float, uint32_t, 57, 128, 57, 120, 57, 112, 57, 104, 57, 144, 57, 136, 57, 101, 51, 97>(
     float *outVal, uint32_t *outIdx, float *src0Val, uint32_t *src0Idx, float *src1Val, uint32_t *src1Idx,
     void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 64, 128, 64>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 64>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 57, 128, 64>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 57>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 57, 128, 64>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMaxHalf<uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 57>(
+    aclFloat16 *outVal, uint32_t *outIdx, aclFloat16 *src0Val, uint32_t *src0Idx, aclFloat16 *src1Val,
+    uint32_t *src1Idx, void *stream);
