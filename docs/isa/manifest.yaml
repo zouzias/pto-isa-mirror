@@ -1521,6 +1521,34 @@
         "src1"
       ],
       "notes": []
+    },
+    {
+      "instruction": "TINTERLEAVE",
+      "category": "Data Movement / Layout",
+      "summary_en": "Interleave two source tiles into an alternating even/odd element stream, split into two destination halves.",
+      "summary_zh": "将两个源 Tile 交织为交替的偶/奇元素流，拆分为两个目标半部分。",
+      "diagram_template": "complex",
+      "operands": [
+        "dst0",
+        "dst1",
+        "src0",
+        "src1"
+      ],
+      "notes": []
+    },
+    {
+      "instruction": "TDEINTERLEAVE",
+      "category": "Data Movement / Layout",
+      "summary_en": "De-interleave source tiles back into even-position and odd-position element streams (inverse of TInterleave).",
+      "summary_zh": "将源 Tile 反交织为偶数位置和奇数位置的元素流（TInterleave 的逆操作）。",
+      "diagram_template": "complex",
+      "operands": [
+        "dst0",
+        "dst1",
+        "src0",
+        "src1"
+      ],
+      "notes": [ "Has single-source overload: TDeInterleave(dst1, dst0, src)" ]
     }
   ]
 }
