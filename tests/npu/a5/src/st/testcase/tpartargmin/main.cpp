@@ -158,3 +158,19 @@ TEST_F(TPARTARGMINTest, case_fp32_8x7_0x7_8x7)
 {
     test_tpartargmin<float, uint32_t, 8, 7, 0, 7, 8, 7, 8, 8, 1, 8, 8, 8>();
 }
+TEST_F(TPARTARGMINTest, case_fp16_1x144_1x144_1x144)
+{
+    test_tpartargmin<aclFloat16, uint32_t, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, true>();
+}
+TEST_F(TPARTARGMINTest, case_fp16_8x512_8x512_8x512)
+{
+    test_tpartargmin<aclFloat16, uint32_t, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, true>();
+}
+TEST_F(TPARTARGMINTest, case_fp16_8x512_3x512_8x512)
+{
+    test_tpartargmin<aclFloat16, uint32_t, 8, 512, 3, 512, 8, 512, 8, 512, 3, 512, 8, 512, true>();
+}
+TEST_F(TPARTARGMINTest, case_fp16_8x512_8x211_8x512)
+{
+    test_tpartargmin<aclFloat16, uint32_t, 8, 512, 8, 211, 8, 512, 8, 512, 8, 512, 8, 512, true>();
+}

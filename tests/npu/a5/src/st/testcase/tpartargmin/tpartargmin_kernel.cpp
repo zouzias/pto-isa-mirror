@@ -116,3 +116,15 @@ template void LaunchTPartArgMin<float, uint32_t, 8, 7, 0, 7, 8, 7, 8, 8, 1, 8, 8
                                                                                      float *src1, uint32_t *outIdx,
                                                                                      uint32_t *src0Idx,
                                                                                      uint32_t *src1Idx, void *stream);
+template void LaunchTPartArgMin<aclFloat16, uint32_t, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMin<aclFloat16, uint32_t, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMin<aclFloat16, uint32_t, 8, 512, 3, 512, 8, 512, 8, 512, 3, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
+template void LaunchTPartArgMin<aclFloat16, uint32_t, 8, 512, 8, 211, 8, 512, 8, 512, 8, 512, 8, 512, true>(
+    aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, uint32_t *outIdx, uint32_t *src0Idx, uint32_t *src1Idx,
+    void *stream);
