@@ -257,14 +257,6 @@ set(OPT_IN_TESTCASES
 tprefetch_async
 )
 
-# Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
-# These are excluded from the default "build everything" path so they do not
-# slow down CI. They are still valid TEST_CASE targets for local ST runs.
-set(OPT_IN_TESTCASES
-# Device-side async L2 prefetch: correctness + focused perf comparison
-tprefetch_async
-)
-
 if (AUTO_MODE)
   set(AUTO_MODE_WHITELIST
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
