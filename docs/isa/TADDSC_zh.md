@@ -51,7 +51,8 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 - **实现检查 (A2A3)**:
     - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **实现检查 (A5)**:
+- **// Note: Verify implementation constraints for A5
+实现检查 (A5)**:
     - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **通用约束**:
@@ -65,7 +66,7 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 ## 示例
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例代码 #include <pto/common/pto_instr
 
 using namespace pto;
 

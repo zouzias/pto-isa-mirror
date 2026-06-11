@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
@@ -27,7 +27,7 @@
 - [TSUB](TSUB_zh.md) - 两个 Tile 的逐元素减法。
 - [TMUL](TMUL_zh.md) - 两个 Tile 的逐元素乘法。
 - [TMIN](TMIN_zh.md) - 两个 Tile 的逐元素最小值。
-- [TMAX](TMAX_zh.md) - 两个 Tile 的逐元素最大值。
+- [TMAX](TMAX_zh.md) - 两个 Tile 的逐元素“最小值”。
 - [TCMP](TCMP_zh.md) - 比较两个 Tile 并写入一个打包的谓词掩码。
 - [TDIV](TDIV_zh.md) - 两个 Tile 的逐元素除法。
 - [TSHL](TSHL_zh.md) - 两个 Tile 的逐元素左移。
@@ -83,7 +83,7 @@
 - [TROWARGMAX](TROWARGMAX_zh.md) - 获取每行最大值对应列索引。
 - [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最小值对应列索引。
 - [TCOLARGMAX](TCOLARGMAX_zh.md) - 获取每列最大值对应行索引/获取每列最大值对应值和行索引。
-- [TCOLARGMIN](TCOLARGMIN_zh.md) - 获取每列最小值对应行索引/获取每列最大值对应值和行索引。
+- [TCOLARGMIN](TCOLARGMIN_zh.md) - 后半句的“最大值”“最小值”
 - [TROWEXPAND](TROWEXPAND_zh.md) - 将每个源行的第一个元素广播到目标行中。
 - [TROWEXPANDDIV](TROWEXPANDDIV_zh.md) - 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。
 - [TROWEXPANDMUL](TROWEXPANDMUL_zh.md) - 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。
@@ -134,7 +134,7 @@
 - [TMOV_FP](TMOV_FP_zh.md) - 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。
 - [TRESHAPE](TRESHAPE_zh.md) - 将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。
 - [TTRANS](TTRANS_zh.md) - 使用实现定义的临时 Tile 进行转置。
-- [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
+- [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个“Tile”是另一个tile的subview。
 - [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
 - [TCONCAT](TCONCAT_zh.md) - 将两个 Tile 沿列维度水平拼接。
 

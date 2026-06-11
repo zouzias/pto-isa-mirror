@@ -27,7 +27,7 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 ### AS Level 1（SSA）
 
 ```text
-%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> -> !pto.tile<...>> ->
 !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
 ```
 
@@ -68,7 +68,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
     - `TileType::Mat` 加载还处理 mx 格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ（用于 scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN（用于 scalarB）。
     - 对于 `MX_A_ZZ/MX_B_NN`：`GlobalData::staticShape[3] == 16` 且 `GlobalData::staticShape[4] == 2`。
-    - 对于 `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
+    - 对于 `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
     - 对于 scaleA，`dst.GetValidCol() % 2 == 0`。
     - 对于 scaleB，`dst.GetValidRow() % 2 == 0`。
 
@@ -124,7 +124,7 @@ void example_manual(__gm__ T* in) {
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> -> !pto.tile<...>> ->
 ```
 
 ### 手动模式
@@ -134,7 +134,7 @@ void example_manual(__gm__ T* in) {
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> -> !pto.tile<...>> ->
 ```
 
 ### PTO 汇编形式

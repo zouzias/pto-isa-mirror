@@ -46,7 +46,7 @@ pto.tmatmul ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/声明路径和示例中的 #include 指令一致的名称（例如统一为 pto_instr`:
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>

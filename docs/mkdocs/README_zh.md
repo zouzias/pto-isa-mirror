@@ -67,15 +67,15 @@ python -m pip install -r docs/mkdocs/requirements.txt
 ### 2. 配置并构建
 
 ```bash
-cmake -S docs -B build/docs -DPython3_EXECUTABLE=$PWD/.venv-mkdocs/bin/python
-cmake --build build/docs --target pto_docs
+CMake -S docs -B build/docs -DPython3_EXECUTABLE=$PWD/.venv-mkdocs/bin/python
+CMake --build build/docs --target pto_docs
 ```
 
 Windows（PowerShell）：
 
 ```powershell
-cmake -S docs -B build/docs -DPython3_EXECUTABLE="$PWD\.venv-mkdocs\Scripts\python.exe"
-cmake --build build/docs --target pto_docs
+CMake -S docs -B build/docs -DPython3_EXECUTABLE="$PWD\.venv-mkdocs\Scripts\python.exe"
+CMake --build build/docs --target pto_docs
 ```
 
 构建输出位于 `build/docs/site/`。

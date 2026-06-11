@@ -1,4 +1,4 @@
-# Elementwise (Tile-Tile)
+﻿# Elementwise (Tile-Tile)
 
 This document describes element-wise operations between two tiles.
 
@@ -474,12 +474,12 @@ For detailed instruction documentation, see [isa/TFMOD](../isa/TFMOD.md)
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tfmod %src0, %src1 : !pto.tile<...>
+%dst = pto
 ```
 
 **AS Level 2 (DPS):**
 ```text
-pto.tfmod ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---

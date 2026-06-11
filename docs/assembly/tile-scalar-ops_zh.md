@@ -1,4 +1,4 @@
-# Tile-标量 / Tile-立即数
+﻿# Tile-标量 / Tile-立即数
 
 本文档描述 tile 与标量值或立即常量之间的操作。
 
@@ -153,7 +153,7 @@ pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 **AS Level 1 (SSA)：**
 ```text
-%dst = pto.tfmods %src, %scalar : !pto.tile<...>, f32
+%dst = pto
 ```
 
 **AS Level 2 (DPS)：**
@@ -340,7 +340,7 @@ pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 **AS Level 1 (SSA)：**
 ```text
-%dst = pto.tpows %base, %exp, %tmp : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.tpows %scalar : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**

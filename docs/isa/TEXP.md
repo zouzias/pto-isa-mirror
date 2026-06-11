@@ -38,7 +38,7 @@ pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例代码中的 `#include <pto/pto-inst.hpp>`  `#include <pto/common/pto_instr`:
 
 ```cpp
 template <auto PrecisionType = ExpAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,

@@ -167,7 +167,7 @@ __global__ AICORE void VecAddManual(__gm__ T* out, __gm__ T* in0, __gm__ T* in1)
 
 CPU 仿真下这些通常是 stub（no-op）。
 
-另请参阅：`tests/cpu/st/testcase/tadd/tadd_kernel.cpp`。
+另请参阅：`tests/cpu/st/test case/tadd/tadd_kernel.cpp`。
 
 ## 5. 更大的模式：按行 softmax（Auto 风格）
 

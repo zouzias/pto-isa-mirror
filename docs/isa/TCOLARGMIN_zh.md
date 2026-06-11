@@ -1,4 +1,4 @@
-# TCOLARGMIN
+﻿# TCOLARGMIN
 
 ## 指令示意图
 
@@ -74,7 +74,7 @@ pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &...events)
+PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn); &src, TileDataTmp &tmp, WaitEvents &...events)
 ```
 
 ### 值 + 索引模式（4 参数）

@@ -1,4 +1,4 @@
-# 复杂操作
+﻿# 复杂操作
 
 本文档描述复杂操作，包括排序、聚集、量化和随机数生成。
 
@@ -156,7 +156,7 @@ pto.tpartadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 **AS Level 1 (SSA)：**
 ```text
-%dst = pto.tpartmul %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
+`%dst = pto
 ```
 
 **AS Level 2 (DPS)：**

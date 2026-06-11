@@ -1,8 +1,8 @@
-# Complex
+﻿# Complex
 
 This document describes complex operations including sorting, gathering, quantization, and random number generation.
 
-**Total Operations:** 18
+标题 **Total Operations:** 16
 
 ---
 
@@ -122,7 +122,7 @@ For detailed instruction documentation, see [isa/TRANDOM](../isa/TRANDOM.md)
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.trandom %key, %counter {rounds = 10} : -> !pto.tile<...>
+: (dtype, dtype) -> !pto
 ```
 
 **AS Level 2 (DPS):**
@@ -156,7 +156,7 @@ For detailed instruction documentation, see [isa/TPARTMUL](../isa/TPARTMUL.md)
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tpartmul %src0, %src1 : !pto.tile<...> -> !pto.tile<...>
+类型签名元组形式以匹配输入参数数量：: (!pto
 ```
 
 **AS Level 2 (DPS):**

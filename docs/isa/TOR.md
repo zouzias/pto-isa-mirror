@@ -38,7 +38,7 @@ pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr`:
 
 ```cpp
 template <typename TileData, typename... WaitEvents>

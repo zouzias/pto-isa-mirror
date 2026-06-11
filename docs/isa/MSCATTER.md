@@ -24,7 +24,7 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 Synchronous form:
 
 ```text
-mscatter %src, %mem, %idx : !pto.memref<...>, !pto.tile<...>, !pto.tile<...>
+'!pto
 ```
 
 ### AS Level 1 (SSA)

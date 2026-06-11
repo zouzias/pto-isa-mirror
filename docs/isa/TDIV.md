@@ -77,7 +77,7 @@ PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 ### Auto
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include  #include <pto/common/pto_instr
 
 using namespace pto;
 

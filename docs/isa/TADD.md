@@ -82,7 +82,8 @@ using namespace pto;
 void example_manual() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT src0, src1, dst;
-  TASSIGN(src0, 0x1000);
+  // Note: TASSIGN requires proper header include
+TASSIGN(src0, 0x1000);
   TASSIGN(src1, 0x2000);
   TASSIGN(dst,  0x3000);
   TADD(dst, src0, src1);

@@ -43,7 +43,7 @@ outs(%dst, %executed : !pto.tile_buf<...>, vector<4xi16>)
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/pto-inst.hpp`：
 
 ```cpp
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,

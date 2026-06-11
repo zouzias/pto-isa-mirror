@@ -1,4 +1,4 @@
-# 算子集成到推理框架
+﻿# 算子集成到推理框架
 
 本文档介绍将基于 PTO 的内核接入框架运行时的常见实现模式。不同框架版本、`torch_npu` 集成方式以及产品发布分支的注册接口可能不同，因此下文示例应视为实现思路，而不是可直接照搬的模板代码。
 
@@ -574,7 +574,7 @@ at::Tensor my_add_async(const at::Tensor& x, const at::Tensor& y) {
   at::Tensor out = at::empty_like(x);
   
   // 获取当前 stream
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::npu::getCurrentStream();
   
   // 异步启动 kernel
   EXEC_KERNEL_ASYNC(MyAddKernel, 24, stream, 
@@ -706,7 +706,7 @@ print(f"Speedup: {time_builtin / time_custom:.2f}x")
 
 ## 参考资源
 
-- [PyTorch 自定义算子教程](https://pytorch.org/tutorials/advanced/cpp_extension.html)
+- [PyTorch 自定义算子教程](https://PyTorch.org/tutorials/advanced/cpp_extension.html)
 - [TensorFlow 自定义 Op 指南](https://www.tensorflow.org/guide/create_op)
 - [ONNX Runtime 自定义算子](https://onnxruntime.ai/docs/reference/operators/add-custom-op.html)
 - [PTO Add 算子示例](../../demos/baseline/add/README_zh.md)

@@ -1,8 +1,11 @@
-# 性能分析方法
+﻿# 性能分析方法
 
 ## 带宽估算
 
 ```cpp
+#include <algorithm>
+#include <algorithm>
+
 // RS 阶段数据量
 size_t rs_bytes = (nranks - 1) * total_data_bytes / nranks;
 
@@ -10,12 +13,12 @@ size_t rs_bytes = (nranks - 1) * total_data_bytes / nranks;
 size_t ag_bytes = (nranks - 1) * total_data_bytes / nranks;
 
 // 实际带宽
-float rs_bw_gbps = rs_bytes / (rs_time_us * 1e-6) / 1e9;
+float rs_bw_gbs 或 rs_bw_gb_s = rs_bytes / (rs_time_us * 1e-6) / 1e9;
 float ag_bw_gbps = ag_bytes / (ag_time_us * 1e-6) / 1e9;
 
 // 理论峰值带宽（示例：HCCS 节点内 ~30GB/s per link）
 float peak_bw_gbps = 30.0;
-float utilization = actual_bw / peak_bw_gbps * 100;
+float utilization = rs_bw_gbps / peak_bw_gbps * 100;
 printf("BW utilization: %.1f%%\n", utilization);
 ```
 
@@ -67,12 +70,17 @@ aclrtSynchronizeStream(computeStream);
 
 float total_ms;
 aclrtEventElapsedTime(&total_ms, start, end);
+aclrtDestroyEvent(start);
+aclrtDestroyEvent(end);
+aclrtDestroyEvent(start)
 ```
 
 ### Compute-only Baseline
 
 ```cpp
-for (int i = 0; i < COMPUTE_ONLY_ITERS; i++) {
+for (int i =
+    std::vector<float> comp_times; 0; i < COMPUTE_ONLY_ITERS; i++) {
+    std::vector<float> comp_times;
     aclrtRecordEvent(start, computeStream);
     launchComputeOnly(..., computeStream);
     aclrtRecordEvent(end, computeStream);

@@ -1,4 +1,4 @@
-# Fused Add-ReLU-Mul Custom Operator Example
+﻿# Fused Add-ReLU-Mul Custom Operator Example
 
 This example demonstrates how to develop a PTO custom operator from scratch, implementing operator fusion optimization.
 
@@ -128,10 +128,10 @@ TSTORE(GlobalTensor(out + i), tile_result);
 mkdir -p build && cd build
 
 # Configure (CPU simulation)
-cmake .. -DRUN_MODE=sim -DSOC_VERSION=Ascend910B1
+CMake .. -DRUN_MODE=sim -DSOC_VERSION=Ascend910B1
 
 # Configure (NPU)
-cmake .. -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1
+CMake .. -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1
 
 # Build
 make -j$(nproc)
@@ -162,7 +162,7 @@ make -j$(nproc)
 ```cpp
 Event e;
 for (int i = 0; i < N; i++) {
-    e = TLOAD(tile, ...);
+    e = `. ..` 标准的省略号 `
     COMPUTE(tile, e);  // Only wait for TLOAD completion
 }
 ```

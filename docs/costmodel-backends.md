@@ -54,11 +54,11 @@ When running the `fit` backend (`st_fit` suite), the runner generates formula pa
 
 ## Run Commands
 
-Run one suite/testcase:
+Run one suite/test case:
 
 ```bash
-python3 tests/run_costmodel.py --suite st --testcase tadd --clean --verbose
-python3 tests/run_costmodel.py --suite st_fit --testcase time_predict --clean --verbose
+python3 tests/run_costmodel.py --suite st --test case tadd --clean --verbose
+python3 tests/run_costmodel.py --suite st_fit --test case time_predict --clean --verbose
 ```
 
 Batch run both suites (auto-discovery under `st` + `st_fit`):

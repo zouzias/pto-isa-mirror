@@ -1,4 +1,4 @@
-# TFILLPAD Test Cases and API Usage
+﻿# TFILLPAD Test Cases and API Usage
 
 ## Overview
 
@@ -50,7 +50,7 @@ using MyTile = TileDyn<float, 128, 128, TileType::Vec, PadCustomNeg1>;
 
 ```cpp
 // Template variable syntax
-constexpr PadValue MyPad = PadCustom<-1.0f>;
+constexpr PadValue MyPad = PadValueCustom(-1.0f);
 ```
 
 ### How It Works
@@ -60,7 +60,7 @@ Custom pad values encode the float's bit pattern into the upper 32 bits of a 64-
 ```cpp
 // Internal representation (uint64_t):
 // [63:32] = float bit pattern
-// [31:0]  = CustomBase marker (0x100000000)
+// (0x00000001)以匹配示例编码
 
 // Example: -1.0f has bit pattern 0xBF800000
 // Encoded as: 0xBF80000000000001ULL

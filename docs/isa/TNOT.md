@@ -68,7 +68,7 @@ PTO_INST RecordEvent TNOT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 ## Examples
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例代码 #include <pto/common/pto_instr
 
 using namespace pto;
 

@@ -1,4 +1,4 @@
-# 标量算术操作
+﻿# 标量算术操作
 
 本文档描述来自 MLIR `arith` 方言的标量算术操作。
 
@@ -765,7 +765,7 @@
 %c0 = arith.constant 0 : i32
 %c1 = arith.constant 1 : i64
 %pi = arith.constant 3.14159 : f32
-%true = arith.constant true
+`%true = arith
 ```
 
 ---

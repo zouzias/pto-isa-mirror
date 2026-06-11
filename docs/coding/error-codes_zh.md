@@ -1,4 +1,4 @@
-# 常见错误码说明
+﻿# 常见错误码说明
 
 本文档汇总 PTO 开发中常见的失败现象及排查建议。示例中的报错信息仅用于说明问题类型，实际诊断信息会随编译工具链、运行时环境和宿主系统而变化。
 
@@ -21,7 +21,7 @@ error: pto/pto-inst.hpp: No such file or directory
 export PTO_LIB_PATH=/path/to/pto-isa
 
 # 方法2：CMake 指定
-cmake -B build -DPTO_ROOT=/path/to/pto-isa
+CMake -B build -DPTO_ROOT=/path/to/pto-isa
 
 # 方法3：手动指定包含路径
 g++ -I/path/to/pto-isa/include src/my_operator.cpp
@@ -189,11 +189,11 @@ error while loading shared libraries: libpto.so: cannot open shared object file
 export LD_LIBRARY_PATH=/path/to/pto/lib:$LD_LIBRARY_PATH
 
 # 方法2：添加到系统路径
-sudo echo "/path/to/pto/lib" > /etc/ld.so.conf.d/pto.conf
+使用管道或子 shell 执行
 sudo ldconfig
 
 # 方法3：使用 RPATH
-cmake -B build -DCMAKE_INSTALL_RPATH=/path/to/pto/lib
+CMake -B build -DCMAKE_INSTALL_RPATH=/path/to/pto/lib
 
 # 验证
 ldd ./my_operator

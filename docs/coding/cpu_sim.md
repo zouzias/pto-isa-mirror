@@ -13,7 +13,7 @@ Note, for compatibility with NPU-based programs, some Ascend-specific functions 
 ## CPU_SIM memory model
 Generally, all tiles memory in CPU_SIM is allocated in system memory (contrary to NPU backend where memory is divided into host and device memory, and device itself has several different memory locations). But to make CPU_SIM memory model closer to NPU, it simulates separate memory locations corresponding to NPU architecture.
 
-CPU_SIM memory model allocates following memory locations for each thread: UB, L1, L0A, L0B, L0C. Each of this locations is basically pre-allocated array of the size corresponding to simulating NPU architecture. TASSIGN operation uses one of these arrays to assign some memory chunk from it to the tile. I.e., if TASSIGN is called for the tile with Loc==Mat and offset 10, it will assign memory starting from the L1[10] to that tile.
+CPU_SIM memory model allocates following memory locations for each thread: UB, L1, L0A, L0B, L0C. Each of this locations is basically pre-allocated array of the size corresponding to simulating NPU architecture. TASSIGN operation uses one of these arrays to assign some memory chunk from it to the tile. i.e., if TASSIGN is called for the tile with Loc==Mat and offset 10, it will assign memory starting from the L1[10] to that tile.
 
 Currently A2A3 and A5 architectures supported, specific architecture can be chosen using pto::NPUMemoryModel::Initialize function, that should be called once for each thread (can be omitted, in this case default A2A3 architecture will be used). For more information please refer to **include/pto/cpu/NPUMemoryModel.hpp**
 

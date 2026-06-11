@@ -9,7 +9,7 @@ Common test entry points:
 - Full CPU Simulator run: `python3 tests/run_cpu.py --clean --verbose`
 - GEMM demo: `python3 tests/run_cpu.py --demo gemm --verbose`
 - Flash Attention demo: `python3 tests/run_cpu.py --demo flash_attn --verbose`
-- Single ST testcase: `python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
+- Single ST test case: `python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
 - One-click scripts: `./tests/run_st.sh`, `./tests/run_cpu_tests.sh`
 
 ## Layout
@@ -20,8 +20,8 @@ Common test entry points:
   - `all_cpu_tests.py`: Build and run CPU ST suites in batch
   - `cpu_bfloat16.py`: CPU bfloat16 test script
   - `README.md`: Script usage
-- `cpu/`: CPU-side ST tests (gtest + CMake)
-  - `st/`: CPU compute ST projects and testcase data generation scripts
+- `cpu/`: CPU-side ST tests (GoogleTest + CMake)
+  - `st/`: CPU compute ST projects and test case data generation scripts
   - `comm/st/`: CPU communication ST
 - `npu/`: NPU-side ST tests split by SoC
   - `a2a3/src/st/`: A2/A3 compute ST
@@ -117,13 +117,13 @@ Async instructions depend on the SDMA opapi interface (e.g. `aclnnShmemSdmaStars
 # Include async instruction tests (requires CANN 9.0+)
 ./run_comm_test.sh -a
 
-# Run only the async tput testcase
+# Run only the async tput test case
 ./run_comm_test.sh -t tput_async
 
 # A5 SoC, 2 NPUs
 ./run_comm_test.sh -v a5 -n 2
 
-# Run only the tput testcase
+# Run only the tput test case
 ./run_comm_test.sh -t tput
 
 # Enable debug logging
@@ -146,13 +146,13 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 |------|-------------|---------|
 | `-n` | Number of available NPUs: 2, 4, or 8 | 8 |
 | `-v` | SoC version: `a3` (Ascend910B) or `a5` (Ascend950) | a3 |
-| `-t` | Run specific testcase(s) (repeatable), e.g. `tput`, `treduce` | all |
+| `-t` | Run specific test case(s) (repeatable), e.g. `tput`, `treduce` | all |
 | `-a` | Include async instruction tests (`*_async`), requires CANN 9.0+ | off |
 | `-d` | Enable debug mode with verbose init/sync logging | off |
 
 ### How It Works
 
-The script automatically runs each testcase at each applicable rank count (2 / 4 / 8, up to `-n`), using GTest filters to select only the tests matching the current rank count. For example, with `-n 4` it first runs default tests at 2 ranks, then tests with the `4Ranks` suffix at 4 ranks, skipping 8-rank tests.
+The script automatically runs each test case at each applicable rank count (2 / 4 / 8, up to `-n`), using GTest filters to select only the tests matching the current rank count. For example, with `-n 4` it first runs default tests at 2 ranks, then tests with the `4Ranks` suffix at 4 ranks, skipping 8-rank tests.
 
 ## Suggested Reading
 

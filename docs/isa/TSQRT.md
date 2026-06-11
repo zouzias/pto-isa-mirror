@@ -38,7 +38,7 @@ pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例中的 `#include <pto/pto-inst.hpp>`  `#include <pto/pto_instr`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -103,7 +103,7 @@ void example_manual() {
 
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+`# Optional for tile operands:`  `# Required for tile operands:` 或直接删除该注释
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tsqrt %src : !pto.tile<...> -> !pto.tile<...>

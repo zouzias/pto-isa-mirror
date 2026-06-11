@@ -63,7 +63,7 @@ PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 ### Auto
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr
 
 using namespace pto;
 

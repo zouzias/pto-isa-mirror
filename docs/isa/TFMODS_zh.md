@@ -38,7 +38,7 @@ pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_bu
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/pto-inst.hpp`：
 
 ```cpp
 template <auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
@@ -71,7 +71,7 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
+    - 仅在A5上有效，`PrecisionType`“选项在A3上将被忽略”或“该选项在A3上将被忽略”。
 
 ## 示例
 

@@ -1,4 +1,4 @@
-# TGET_ASYNC
+﻿# TGET_ASYNC
 
 ## 简介
 
@@ -6,7 +6,7 @@
 
 数据流：
 
-`srcGlobalData（远端 GM）` → DMA 引擎 → `dstGlobalData（本地 GM）`
+`srcGlobalData(远端 GM) 和 dstGlobalData(本地 GM)` → DMA 引擎 → `dstGlobalData（本地 GM）`
 
 ## 模板参数
 
@@ -73,7 +73,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 | 参数 | 说明 |
 |---|---|
 | `workspace` | 由主机侧 `UrmaWorkspaceManager` 分配的 GM 指针。|
-| `destRankId` | 此会话通信的远端 PE rank id。对于 `TGET_ASYNC`，这是数据来源的源 rank。|
+| `destRankId` | 此会话通信的远端 PE rank ID。对于 `TGET_ASYNC`，这是数据来源的源 rank。|
 | `session` | 输出的 `AsyncSession` 对象。|
 
 URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作。
@@ -120,7 +120,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 这意味着多次 `TGET_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有 pending 操作完成（类似 shmem 的 quiet 语义）。
 
-wait 成功后，所有已发出的 `dstGlobalData` 读入数据均已全部就绪。
+“`Wait` 成功后”，所有已发出的 `dstGlobalData` 读入数据均已全部就绪。
 
 ## 示例
 

@@ -1,4 +1,4 @@
-# AKO4PTO Task — PTO 算子优化
+﻿# AKO4PTO Task — PTO 算子优化
 
 适用于 **PTO-DSL**（Python）和 **PTO-tile-lib**（C++）两种场景的 PTO 算子优化任务。
 
@@ -22,7 +22,7 @@
 
 | 维度 | PTO-DSL (Python) | PTO-tile-lib (C++) |
 |------|------------------|---------------------|
-| 构建方式 | Python JIT (`wrapper._build()`) | CMake + `make -j16` + Bisheng |
+| 构建方式 | Python JIT (`import pto_kernels; pto_kernels`) | CMake + `make -j16` + Bisheng |
 | 调参方式 | Python 环境变量 / kernel 参数 | C++ 模板参数、`.h` 常量、`.cpp` 内部参数 |
 | Benchmark | Python benchmark 脚本 → `report.json` | 编译二进制 → `report.csv` (duration_us, TFLOPS) |
 | 代码位置 | `workspace/pto-kernels/` 下 `.py` | `workspace/kernel/` 下 `.cpp`/`.hpp` |
@@ -122,7 +122,7 @@ cp -r <source_path> projects/<operator_name>/workspace/<pto-kernels|kernel>/
 | benchmark 命令 | Python benchmark 脚本 | `./fa_performance --npu=0 --cases="..."` |
 | 正确性判定 | `report.json` 中 passes 字段 | "test success" / "test failed" |
 | 性能指标 | `report.json` 中 duration_ms / TFLOPS | `report.csv` 中 duration_us / TFLOPS |
-| 构建命令 | `wrapper._build()` | `cmake + make -j16` |
+| 构建命令 | `wrapper._build()` | `CMake + make -j16` |
 
 ### 6. 打通远程链路
 
@@ -140,7 +140,7 @@ cp -r <source_path> projects/<operator_name>/workspace/<pto-kernels|kernel>/
 1. SSH 连接成功
 2. 远程工作目录已建立
 3. 远程已安装 Bisheng 编译器、CANN、ACL runtime
-4. 至少成功完成一次完整构建（`cmake + make`）
+4. 至少成功完成一次完整构建（`CMake + make`）
 5. 至少成功跑出一份有效结果：构建无错误 + "test success" + `report.csv` 有有效数据
 
 如果以上任一项不满足，本轮应视为"环境打通轮"，优先修环境，不要急着改 kernel。
@@ -186,7 +186,7 @@ python3 bench_<kernel>.py --case "<shape_config>"
 cd workspace/kernel/
 rm -rf build && mkdir build && cd build
 python3 ../scripts/generate_cases.py --cases "<case_config>" --qk-preload <N>
-cmake -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1 ..
+CMake -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1 ..
 make -j16
 
 # Benchmark

@@ -26,7 +26,7 @@
 ## Post-Run
 
 - **Correctness**：pass / fail
-- **Performance**：baseline → pto（写明具体数值和单位）
+- **Performance**：baseline → post（写明具体数值和单位）
 - **Stability**：stable / noisy
 - **Result**：kept / neutral / failure
 

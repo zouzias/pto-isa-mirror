@@ -310,11 +310,11 @@ in `PATH`.
 ### Build Only
 
 ```bash
-cmake -S kernels/manual/a5/moe_combine \
+CMake -S kernels/manual/a5/moe_combine \
       -B /tmp/moe_combine_a5_build \
       -DRUN_MODE=npu \
       -DSOC_VERSION=Ascend950PR_958b
-cmake --build /tmp/moe_combine_a5_build --target moe_combine -j8
+CMake --build /tmp/moe_combine_a5_build --target moe_combine -j8
 ```
 
 ### Quick Verification on A5

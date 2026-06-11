@@ -59,7 +59,7 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
     - Supported element types are `float` and `float32_t`.
     - `dst` and `src` must be vector tiles.
     - `dst` and `src` must be row-major.
-    - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
+    - Runtime: `'dst` and `dst.GetValidCol() == src.GetValidCol() > 0`.
 - **Implementation checks (A5)**:
     - `dst` and `src` must use the same element type.
     - Supported element types are 2-byte or 4-byte types supported by the target implementation (including `half` and `float`).

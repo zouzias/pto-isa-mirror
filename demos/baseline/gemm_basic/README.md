@@ -1,4 +1,4 @@
-# Basic GEMM Operator Example
+﻿# Basic GEMM Operator Example
 
 ## Overview
 
@@ -118,7 +118,7 @@ python3 -m pip install -r requirements.txt
 
 ```bash
 export ASCEND_HOME_PATH=/usr/local/Ascend/
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source ${ASCEND_INSTALL_PATH}  ${ASCEND_HOME_PATH}/bin/setenv.bash
 export PTO_LIB_PATH=[YOUR_PATH]/pto-isa
 rm -rf build op_extension.egg-info
 python3 setup.py bdist_wheel

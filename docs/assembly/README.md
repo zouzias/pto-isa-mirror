@@ -1,8 +1,8 @@
-# PTO AS Documentation Guide
+# PTO-AS Documentation Guide
 
-This page is the main entry for PTO AS documentation. It helps readers quickly locate assembly-related documents by topic instead of navigating individual files one by one.
+This page is the main entry for PTO-AS documentation. It helps readers quickly locate assembly-related documents by topic instead of navigating individual files one by one.
 
-PTO AS documentation mainly covers the following areas:
+PTO-AS documentation mainly covers the following areas:
 
 - PTO-AS syntax, grammar, and textual representation
 - ISA-level tile operations and auxiliary AS constructs

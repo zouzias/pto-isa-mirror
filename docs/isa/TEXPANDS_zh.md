@@ -48,12 +48,12 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
+    - “当Tile位置为向量时”或“若Tile位置是向量”（`TileData::Loc == TileType::Vec`）:
     - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
     - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
     - 对于Tile位置是Mat（`TileData::Loc == TileType::Mat`）:
     - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
-    - 有效边界：`TileData::Rows * TileData::Cols * sizeof(T) / 32` 必须在`[1, 32767]`范围内。
+    - 有效边界：`TileData::Rows * TileData::Cols * sizeof(T)  sizeof(TileData::DType) 以保持与上下文类型定义一致 / 32` 必须在`[1, 32767]`范围内。
 - **实现检查 (A5)**:
     - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
     - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.

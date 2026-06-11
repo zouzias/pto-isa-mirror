@@ -28,7 +28,7 @@ Synchronous form:
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+-> !pto
 !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
 ```
 
@@ -68,7 +68,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` loads are additionally constrained by `TLoadCubeCheck` (e.g., only specific ND/DN/NZ conversions and L1-size limits).
     - `TileType::Mat` loads also handle loads for mx format, which include `MX_A_ZZ/MX_A_ND/MX_A_DN` to ZZ for scalarA and `MX_B_NN/MX_B_ND/MX_B_DN` to NN for scalarB.
     - for `MX_A_ZZ/MX_B_NN`: `GlobalData::staticShape[3] == 16` and `GlobalData::staticShape[4] == 2`.
-    - for `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`: `GlobalData::staticShape[0] == 1` and `GlobalData::staticShape[1] == 1` and `GlobalData::staticShape[4] == 2`.
+    - for `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`: `GlobalData::staticShape[0] == 1` and `GlobalData::staticShape[1] == 1` and `GlobalData::staticShape[4] == 2`.
     - for scaleA, `dst.GetValidCol() % 2 == 0`.
     - for scaleB, `dst.GetValidRow() % 2 == 0`
 
@@ -80,7 +80,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 ### Auto
 
 ```cpp
-#include <pto/pto-inst.hpp>
+正确的包含路径
 
 using namespace pto;
 

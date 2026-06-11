@@ -1,4 +1,4 @@
-# TROWARGMAX
+﻿# TROWARGMAX
 
 ## 指令示意图
 
@@ -123,7 +123,7 @@ void example_auto() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  `DstValT dst;`  `DstValT dstVal;`
   TmpT tmp;
   TROWARGMAX(dst, src, tmp);
   TROWARGMAX(dstVal, dst, src, tmp);

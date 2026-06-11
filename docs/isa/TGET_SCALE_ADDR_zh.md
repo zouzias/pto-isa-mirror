@@ -1,4 +1,4 @@
-# TGET_SCALE_ADDR
+﻿# TGET_SCALE_ADDR
 
 ## Tile Operation Diagram
 
@@ -43,12 +43,12 @@ PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src, aitEven
 ## 示例
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的#include <pto/pto-inst.hpp>#include <pto/pto_instr
 
-> wa
+>
 using namespace pto;
 
-template <typename T, int ARows, int ACols, BRows, BCols> 
+template <typename T, int ARows, int ACols, int BRows, int BCols> 
 void example() {
     using LeftTile = TileLeft<T, ARows, ACols>;
     using RightTile = TileRight<T, BRows, BCols>;

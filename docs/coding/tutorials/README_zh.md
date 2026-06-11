@@ -1,6 +1,6 @@
 # PTO 教程（更多示例）
 
-本目录收集更长、更偏实战的示例讲解，用于补充 `docs/coding/tutorial_zh.md`。
+本目录收集更长、更偏应用的示例讲解，用于补充 `docs/coding/tutorial_zh.md`。
 
 ## 内容
 

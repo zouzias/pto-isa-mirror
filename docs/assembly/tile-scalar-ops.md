@@ -1,4 +1,4 @@
-# Tile-Scalar / Tile-Immediate
+﻿# Tile-Scalar / Tile-Immediate
 
 This document describes operations between tiles and scalar values or immediate constants.
 
@@ -153,7 +153,7 @@ For detailed instruction documentation, see [isa/TFMODS](../isa/TFMODS.md)
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tfmods %src, %scalar : !pto.tile<...>, f32
+'%dst = pto
 ```
 
 **AS Level 2 (DPS):**

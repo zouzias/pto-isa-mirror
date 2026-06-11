@@ -93,7 +93,8 @@ void producer(__gm__ int32_t* remote_flag) {
 // Consumer: wait for data
 void consumer(__gm__ int32_t* local_flag) {
     comm::Signal flag(local_flag);
-    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
+    // Note: Ensure proper headers are included for this API
+comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
     
     // ... consume data ...
 }

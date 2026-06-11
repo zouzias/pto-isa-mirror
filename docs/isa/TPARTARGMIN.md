@@ -1,4 +1,4 @@
-# TPARTARGMIN
+﻿# TPARTARGMIN
 
 
 ## Tile Operation Diagram
@@ -32,7 +32,7 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 Synchronous form:
 
 ```text
-%dstVal, %dstIdx = tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
+%dstVal, %dstIdx = tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx 输入类型签名四元组形式
 ```
 
 ### AS Level 1 (SSA)
@@ -49,7 +49,7 @@ pto.tpartargmin ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>,
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
@@ -137,7 +137,7 @@ void example_manual() {
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
+# Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)

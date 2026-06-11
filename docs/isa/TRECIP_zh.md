@@ -76,6 +76,7 @@ using namespace pto;
 
 void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
+// Note: 变量 x 未初始化即作为源操作数传入 TRECIP，会导致未定义行为或读取垃圾值，不符合代码可执行性...
   TileT x, out;
   TRECIP(out, x);
   TRECIP<RecipAlgorithm::HIGH_PRECISION>(out, x);

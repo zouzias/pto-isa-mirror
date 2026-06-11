@@ -53,7 +53,7 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
       - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
     - For  `TileType::Mat` :
       - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(T) / 32 is [1, 32767]`.
+      - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(TileData::DType) / 32 is [1, 32767]`.
 - **Implementation checks (A5)**:
     - For `TileType::Vec` :
       - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.

@@ -65,7 +65,7 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 ## 示例
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr
 
 using namespace pto;
 

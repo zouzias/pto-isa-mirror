@@ -1,4 +1,4 @@
-# Framework Integration
+﻿# Framework Integration
 
 This document outlines integration patterns for exposing PTO-based kernels to framework runtimes. The exact registration APIs and backend names depend on the framework version, `torch_npu` integration model, and product release, so treat the snippets below as implementation patterns rather than drop-in code.
 
@@ -574,7 +574,7 @@ at::Tensor my_add_async(const at::Tensor& x, const at::Tensor& y) {
   at::Tensor out = at::empty_like(x);
   
   // Get current stream
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::npu::getCurrentStream();
   
   // Launch kernel asynchronously
   EXEC_KERNEL_ASYNC(MyAddKernel, 24, stream, 
@@ -706,7 +706,7 @@ print(f"Speedup: {time_builtin / time_custom:.2f}x")
 
 ## References
 
-- [PyTorch Custom Operators](https://pytorch.org/tutorials/advanced/cpp_extension.html)
+- [PyTorch Custom Operators](https://PyTorch.org/tutorials/advanced/cpp_extension.html)
 - [TensorFlow Custom Ops](https://www.tensorflow.org/guide/create_op)
 - [ONNX Runtime Custom Ops](https://onnxruntime.ai/docs/reference/operators/add-custom-op.html)
 - [Add Operator Example](../../demos/baseline/add/README.md)

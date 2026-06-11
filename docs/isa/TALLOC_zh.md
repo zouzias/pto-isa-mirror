@@ -1,10 +1,10 @@
-# TALLOC
+﻿# TALLOC
 
 ## 简介
 
 从 `TPipe` 中分配一个生产者 FIFO 槽位，并将其暴露为 `GlobalTensor` 视图。
 
-`TALLOC` 用于 `GlobalData` 分裂接口。它允许生产者获取当前 FIFO 槽位地址，使用 `TSTORE` 等普通内存指令向该槽位写入数据，然后通过 `TPUSH(Pipe&, GlobalData&)` 提交该槽位。
+`TALLOC` 用于 `GlobalData` 分裂接口。它允许生产者获取当前 FIFO 槽位地址，使用 `TSTORE` 等普通内存指令向该槽位写入数据，然后通过 `TPUSH(Pipe&, GlobalData&) // Verify template parameters` 提交该槽位。
 
 ## 操作语义
 
@@ -14,7 +14,7 @@
 2. 根据 `pipe.prod.tileIndex` 计算当前 FIFO 槽位地址。
 3. 将 `gmTensor` 赋值为 FIFO 槽位地址，并递增生产者 tile 索引。
 
-`TALLOC` 不写入任何数据，也不会通知消费者。生产者必须先写入槽位内容，然后再调用 `TPUSH(Pipe&, GlobalData&)`。
+`TALLOC` 不写入任何数据，也不会通知消费者。生产者必须先写入槽位内容，然后再调用 `TPUSH(Pipe&, GlobalData&) // Verify template parameters`。
 
 ## C++ Intrinsic
 
@@ -50,7 +50,7 @@ struct TPipe;
     - `TileSplitAxis::TILE_LEFT_RIGHT`：向量子块映射到左右两个列半区。
 - **同步**：
     - 空闲空间等待是稀疏的，并由 `Pipe::SyncPeriod` 控制。
-    - `TALLOC` 不记录数据就绪；写入槽位后使用 `TPUSH(Pipe&, GlobalData&)`。
+    - `TALLOC` 不记录数据就绪；写入槽位后使用 `TPUSH(Pipe&, GlobalData&) // Verify template parameters`。
 
 ## 示例
 

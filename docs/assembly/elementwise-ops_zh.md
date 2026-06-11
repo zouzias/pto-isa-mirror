@@ -1,4 +1,4 @@
-# 逐元素操作（Tile-Tile）
+﻿# 逐元素操作（Tile-Tile）
 
 本文档描述两个 tile 之间的逐元素操作。
 
@@ -474,12 +474,12 @@ pto.trem ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 **AS Level 1 (SSA)：**
 ```text
-%dst = pto.tfmod %src0, %src1 : !pto.tile<...>
+%dst = pto
 ```
 
 **AS Level 2 (DPS)：**
 ```text
-pto.tfmod ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tfmod ins(%src0, %src1 : !pto outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---

@@ -1,4 +1,4 @@
-# TALLOC / TPUSH / TPOP / TFREE
+﻿# TALLOC / TPUSH / TPOP / TFREE
 
 ## Introduction
 
@@ -132,6 +132,7 @@ Pipe pipe(fifoMem, 0x0, 0x0);
 SlotGlobal pushGlobal;
 TALLOC<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, pushGlobal);
 for (int nTile = 0; nTile < RepeatN; ++nTile) {
+    TileAcc<float, RepeatN, VecM, N> accTile;  // Added missing declaration
     StoreGlobal storeGlobal(pushGlobal.data() + nTile * N);
     TSTORE(storeGlobal, accTile);
 }

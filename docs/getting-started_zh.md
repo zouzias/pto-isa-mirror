@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="220" />
 </p>
 
@@ -7,7 +7,7 @@
 本指南帮助您设置和运行 PTO ISA 项目。它涵盖两种主要场景：
 
 1. **CPU 模拟器**（推荐新手）- 跨平台支持 macOS、Linux 和 Windows
-2. **NPU 环境**（高级）- Linux 上的 Ascend A2/A3(910B/910C) 与 CANN toolkit
+2. **NPU 环境**（高级）- Linux 上的 Ascend A2/A3 与 CANN toolkit
 
 请选择符合您需求的部分。大多数用户应该从 CPU 模拟器开始。
 
@@ -48,16 +48,16 @@ CPU 模拟器是最简单的入门方式。它可以在 macOS、Linux 和 Window
 安装依赖项（推荐通过 Homebrew）：
 
   ```bash
-  brew install cmake ninja python
+  brew install CMake ninja python
   ```
 
-如果不使用 Homebrew，请确保 `python3`、`cmake` 和现代的 `clang++` 在 `PATH` 环境变量中。
+如果不使用 Homebrew，请确保 `python3`、`CMake` 和现代的 `clang++` 在 `PATH` 环境变量中。
 
 #### Linux (Ubuntu 20.04+)
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build python3 python3-pip python3-venv git
+sudo apt-get install -y build-essential CMake ninja-build python3 python3-pip python3-venv git
 ```
 
 #### Windows
@@ -101,8 +101,8 @@ cd pto-isa
 **macOS / Linux：**
 
   ```bash
-  python3 -m venv .venv-mkdocs
-  source .venv-mkdocs/bin/activate
+  python3 -m venv .venv
+  source .venv/bin/activate
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -110,8 +110,8 @@ cd pto-isa
 **Windows (PowerShell)：**
 
   ```powershell
-  py -3 -m venv .venv-mkdocs
-  .\.venv-mkdocs\Scripts\Activate.ps1
+  py -3 -m venv .venv
+  .\.venv\Scripts\Activate.ps1
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -129,13 +129,13 @@ python3 tests/run_cpu.py --clean --verbose
 运行单个测试用例：
 
   ```bash
-  python3 tests/run_cpu.py --testcase tadd
+  python3 tests/run_cpu.py --test case tadd
   ```
 
-运行特定的 gtest 用例：
+运行特定的 GoogleTest 用例：
 
   ```bash
-  python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.*'
+  python3 tests/run_cpu.py --test case tadd --gtest_filter 'TADDTest.*'
   ```
 
 构建并运行 GEMM 演示：
@@ -173,7 +173,7 @@ python3 tests/run_cpu.py --clean --verbose
 Windows 特定选项（如需要）：
 
   ```bash
-  python3 tests/run_cpu.py --clean --generator "MinGW Makefiles" --cmake_prefix_path D:\gtest\
+  python3 tests/run_cpu.py --clean --generator "MinGW Makefiles" --cmake_prefix_path D:\GoogleTest\
   ```
 
 设置库路径（Linux）：
@@ -184,7 +184,7 @@ Windows 特定选项（如需要）：
 
 ---
 
-## 第二部分：NPU 环境（Ascend 910B/910C，仅限 Linux）
+## 第二部分：NPU 环境（Ascend A2/A3，仅限 Linux）
 
 本部分适用于需要在 Ascend NPU 硬件或模拟器上运行的用户。它需要 Linux 环境和 Ascend CANN toolkit。
 
@@ -213,12 +213,12 @@ Windows 特定选项（如需要）：
 tar -xf googletest-1.14.0.tar.gz
 cd googletest-1.14.0
 mkdir temp && cd temp
-cmake .. -DCMAKE_CXX_FLAGS="-fPIC"
+CMake .. -DCMAKE_CXX_FLAGS="-fPIC"
 make
 sudo make install
 ```
 
-> **注意：** Python 需要以下包：os、numpy、ctypes、struct、copy、math、enum、ml_dtypes、en_dtypes 等。
+> **注意：** Python 需要以下包：os、numpy、ctypes、struct、copy、math、enum、ml_dtypes 等。
 >
 > 如果您使用不同的标志安装了 GoogleTest（例如 `-D_GLIBCXX_USE_CXX11_ABI=0`），则必须在 `tests/npu/[a2a3|a5]/src/st/CMakeLists.txt` 中添加 `add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)` 进行相应更新。
 
@@ -333,7 +333,7 @@ cd pto-isa
   python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] [-a] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
   ```
 
-注意：`a3` 后端覆盖 A2/A3 系列（`include/pto/npu/a2a3`）；`-a`使能auto模式。
+注意：`a3` 后端覆盖 A2/A3 系列（`include/pto/npu/a2a3`）；`-a` 开启auto模式。
 
   示例：
 

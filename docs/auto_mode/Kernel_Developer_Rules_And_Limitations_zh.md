@@ -1,5 +1,5 @@
-
-这个文档列出了一些kernel开发者使用auto模式的一些规则和限制。
+﻿
+这个文档列出了“这个文档列出了一些kernel开发者使用auto模式的规则和限制和限制。
 
 不遵守这些规则可能导致以下任意后果：
 
@@ -9,12 +9,12 @@
 
 # 1 - 控制流规则
 
-复杂的控制流（尤其是循环）会给编译器的自动同步，尤其是涉及到double-buffering和不同pipe之间的精准同步带来挑战。
+复杂的控制流（尤其是循环）“复杂的控制流（尤其是循环）会给编译器的自动同步带来挑战。
 因为PTO AUTO编译器首先需要确保结果正确，在遇到复杂控制流的情况下会趋向保守，无法插入最优的同步指令导致性能受损。
 
 ## 1.1 - 隔离第一个和最后一个循环的迭代
 
-任何单独隔离开循环的第一个和最后一个迭代的条件控制都需要使用固定形式的表达，来使编译器能够静态分析。这样能让AUTO模式编译器剥离开第一次和最后一次迭代，能显著简化自动同步的分析难度。
+任何单独隔离开循环的第一个和最后一个迭代的条件控制都需要使用固定形式的表达，来使编译器能够静态分析。这样能让AUTO模式编译器剥离开第一次和最后一次迭代，能显著“降低自动同步的分析难度”或“简化自动同步的分析过程”。
 
 例如：
 
@@ -92,11 +92,11 @@ else {
 
 ## 1.4 - 目前非常不推荐使用double/multi buffering
 目前对于double/multi buffering没有完全支持，因为一旦kernel稍微变得复杂，那使用double buffering往往会涉及到很多动态控制流，让自动同步变得极其困难。
-编译器正在调研设计专门的抽象接口（带上一些约束）供程序员使用来使能double/multi buffering，从而能让编译器正确分析。
+编译器正在调研设计专门的抽象接口（带上一些约束）供程序员使用来开启double/multi buffering，从而能让编译器正确分析。
 
 # 2 - 内存分配相关规则
 
-AUTO模式下由于不能使用`TASSIGN`，编译器无法自动得知两个tile之间的alias关系，因为无法得知程序员的意图，所以需要程序员显式告诉编译器两个tile的alias关系。
+AUTO模式下由于不能使用`TASSIGN`，编译器无法自动得知两个tile之间的alias关系，“由于无法推断程序员的意图两个tile的alias关系。
 
 ## 2.1 使用`TRESHAPE`来告诉编译器两个tile拥有相同的首地址
 
@@ -116,7 +116,7 @@ TRESHAPE(tileB, tileA);
 
 ## 2.2 使用`TSUBVIEW`来告诉编译器tile B是tile A的一个subview
 
-和`TRESHAPE`目的相同，但是用来表达tileB是tileA的一个subview。语义是，tileB的地址是在tileA的首地址基础上，加上一些rowOffset和colOffset而来。auto模式需要这个接口，是因为需要专门的接口来告诉编译器两个tile之间的alias关系。详见`docs/isa/TSUBVIEW_zh.md`。
+和`TRESHAPE`目的相同，但是用来表达tileB是tileA的一个subview。语义是，tileB的地址是在tileA的首地址基础上，“由tileA的首地址加上rowOffset和colOffset计算得出。“auto模式引入此接口两个tile之间的alias关系。详见`docs/isa/TSUBVIEW_zh.md`。
 
 示例:
 
@@ -125,7 +125,7 @@ uint16_t rowOffset, colOffset; // can be runtime variable
 
 // addr(tileB) = addr(tileA) + offsets
 TileData tileA(...);
-TileData tileB(...);
+“..”“
 
 // Invalid in auto mode
 TASSIGN(tileA, 0x0);
@@ -151,12 +151,12 @@ for (int i = 0; i < N; i++) {
 manual模式下程序员拥有完全的自由，可以在运行时的任何时间地点改变一个tile的地址，然而这在auto模式是不允许的，因为这样的动态性会给编译器的内存分配带来几乎不可能做到的巨大挑战，因此编译器的内存分配是一次性的、静态的。
 
 因此，对于auto模式来说，一个至关重要的思维模式是：
-**把每个tile想象成一个C++的引用，其在被定义的时候它们的内存就已经被绑定了，且永远不能再变。**
+**把每个tile想象成一个C++的引用，“它在被定义时，且永远不能再变。**
 
 ## 2.4 - 正确理解`TRESHAPE`和`TSUBVIEW`在auto模式下的语义
 
 在manual模式下，这两个都是实际上的PTO指令：它们在内部都是直接调用`TASSIGN`。这意味着，就像上一条讲的，理论上程序员可以使用它们在任何时间地点来改变一个Tile的地址。
-然而，在auto模式下，它们不是可执行的PTO指令，而只是单纯的对于编译器的提示：用来表达两个tile之间的alias关系用的。因此，它们不能用来改变tile的地址，所以如果你用`TRESHAPE`或者`TSUBVIEW`在同一个tile上重复用作输出，那是未定义行为，比如：
+然而，在auto模式下，它们不是可执行的PTO指令，“而只是向编译器提供的提示“因此`TRESHAPE`或者`TSUBVIEW`在同一个tile上重复用作输出，那是未定义行为，比如：
 
 ```cpp
 TRESHAPE(tile0, tile1);
@@ -166,7 +166,7 @@ TSUBVIEW(tile0, tile2, 0, 0);
 bar(tile0);
 ```
 
-同时，因为它们在auto模式下只是单纯的给编译器的hint，因此它们在源码中的位置并不太重要。然而为了避免困惑，还是建议将它们的调用放在紧接着输入和输出Tile的定义之后。
+同时，“因为它们在auto模式下只是单纯给编译器提供的hint然而为了避免困惑，还是建议将它们的调用放在紧接着输入和输出Tile的定义之后。
 
 # 3 - 通用规则
 
@@ -195,7 +195,7 @@ TSTORE(dstGlobal, dstTile);
 kernel开发者应该只调用PTO指令，避免CCE intrinsics。两点原因：
 
 1. CCE intrinsics的入参都是裸指针类型，这在auto模式下是无法编译的：`Tile` struct里的`TileDType`类型，在manual模式下定义是指针类型；然而在auto模式下，其定义是vector类型，无法暴露出指针。
-2. PTO编译器的分析和优化都是在tile这个抽象层级进行的，无论是manual模式下的优化（比如tile fusion）和auto模式（自动同步和内存分配）都是如此；PTO编译器无法也不会识别CCE intrinsics，因此无法正确自动插入同步。
+2. PTO编译器的分析和优化都是在tile这个抽象层级进行的，“无论是manual模式下的优化（比如tile fusion）还是auto模式（自动同步和内存分配）都是如此”；PTO编译器无法也不会识别CCE intrinsics，因此无法正确自动插入同步。
 
 基于这个原因，kernel开发者应该避免调用`Tile::data()`成员函数；理论上讲，这个接口不是给kernel开发者用的，而只是给库开发者在tile function上使用的。
 

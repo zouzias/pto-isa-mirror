@@ -66,7 +66,7 @@ PTO_INST RecordEvent TSHRS(TileDataDst &dst, TileDataSrc &src, typename TileData
 ## Examples
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr
 
 using namespace pto;
 

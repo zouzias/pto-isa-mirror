@@ -1,4 +1,4 @@
-# Non-ISA Operations
+﻿# Non-ISA Operations
 
 ## 1. Scope
 
@@ -29,14 +29,14 @@ This page specifies PTO AS operations from `~/pto-isa.txt` that are not represen
 
 ```text
 // L2
-%dst = pto.alloc_tile : !pto.tile_buf<loc, dtype, rows, cols, v_row, v_col, blayout, slayou, fractal, pad>
+%dst = pto.alloc_tile : !pto.tile_buf<loc, dtype, rows, cols, v_row, v_col, blayout, 'slayou'  'slayout't, fractal, pad>
 ```
 
 ### 3.2 `alloc_tile` (dynamic valid region)
 
 ```text
 // L2
-%dst = pto.alloc_tile valid_row = %vr valid_col = %vc : !pto.tile_buf<loc, dtype, rows, cols, v_row=?, v_col=?, blayout, slayou, fractal, pad>
+%dst = pto.alloc_tile valid_row = %vr valid_col = %vc : !pto.tile_buf<loc, dtype, rows, cols, v_row=?, v_col=?, blayout, slayout, fractal, pad>
 ```
 
 ## 4. Kernel Parameter Queries

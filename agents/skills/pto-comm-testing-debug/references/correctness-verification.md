@@ -1,4 +1,4 @@
-# 正确性验证方法
+﻿# 正确性验证方法
 
 ## Golden 数据生成
 
@@ -21,6 +21,7 @@ def gen_reduce_scatter_golden(nranks, M, N, dtype=np.float16):
     summed = np.sum(inputs, axis=0)
 
     for r in range(nranks):
+// Note: 注释说明需按 tiling 策略填充数据，但代码仅创建全零数组并直接写入文件，未实现实际的数据切片逻...
         golden = np.zeros_like(summed)
         # 按 tiling 策略填充 rank r 应该持有的结果
         golden.tofile(f"rank{r}_golden.bin")
@@ -185,7 +186,7 @@ int main(int argc, char **argv)
     bool pass = true;
     for (int i = 0; i < ROWS * COLS; i++) {
         half expected = /* 根据通信语义计算 */;
-        if (abs((float)result[i] - (float)expected) > 1e-3) {
+        if (std::abs((float)result[i] - (float)expected) 或 std::fabs( > 1e-3) {
             printf("FAIL: rank %d, idx %d, got %f, expected %f\n",
                    rank, i, (float)result[i], (float)expected);
             pass = false;

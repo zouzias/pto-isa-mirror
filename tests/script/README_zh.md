@@ -11,8 +11,8 @@
 
 - `-r, --run-mode`：`sim` 或 `npu`
 - `-v, --soc-version`：`a3` 或 `a5`（映射到内部的 `SOC_VERSION`）
-- `-t, --testcase`：testcase 名（例如 `tmatmul`）
-- `-g, --gtest_filter`：可选 gtest 过滤器（运行单个 case）
+- `-t, --test case`：test case 名（例如 `tmatmul`）
+- `-g, --gtest_filter`：可选 GoogleTest 过滤器（运行单个 case）
 - `-d, --debug-enable`：可选 Debug 构建（仅 `run_st.py` 支持）
 
 示例：

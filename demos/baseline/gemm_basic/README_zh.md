@@ -1,4 +1,4 @@
-# 基础 GEMM 算子示例
+﻿# 基础 GEMM 算子示例
 
 ## 概览
 
@@ -105,21 +105,21 @@ using GlobalDataOut = GlobalTensor<T, NDValidShapeC, NDWholeShapeC>; // C in GM
 
 ### 1. 准备Python环境
 
-创建python虚拟环境并安装需要的python包：
+创建“Python”虚拟环境并安装需要的python包：
 
 ```bash
 python -m venv virEnv
 source virEnv/bin/activate
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt (should be added to directory tree)
 ```
 
 ### 2. 构建 wheel
 
-配置 Ascend CANN 环境、 PTO Tile Lib 路径并构建 wheel：
+配置 Ascend CANN “环境、PTO” Tile Lib 路径并构建 wheel：
 
 ```bash
 export ASCEND_HOME_PATH=/usr/local/Ascend/
-source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
+source ${ASCEND_HOME_PATH}/bin/setenv.bash
 export PTO_LIB_PATH=[YOUR_PATH]/pto-isa
 rm -rf build op_extension.egg-info
 python3 setup.py bdist_wheel

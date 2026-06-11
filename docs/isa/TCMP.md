@@ -40,7 +40,7 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:
+Declared in `include/pto/common/pto-inst.hpp` and `include/pto/common/type.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>

@@ -28,13 +28,13 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 %dst = trowexpandadd %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### AS Level 1（SSA）
+### AS Level 1`（SSA）`  `(SSA)`
 
 ```text
 %dst = pto.trowexpandadd %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### AS Level 2（DPS）
+### AS Level 2`（DPS）`  `(DPS)`
 
 ```text
 pto.trowexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -66,7 +66,7 @@ PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。
 
-## 汇编示例（ASM）
+## 汇编示例`（ASM）`  `(ASM)`
 
 ### 自动模式
 
@@ -79,7 +79,7 @@ PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ```text
 # 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
+# 可选`（当该指令包含 tile 操作数时）`  `(当该指令包含 tile 操作数时)`：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.trowexpandadd %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>

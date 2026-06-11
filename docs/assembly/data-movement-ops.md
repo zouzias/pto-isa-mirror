@@ -1,8 +1,8 @@
-# Data Movement / Layout
+﻿# Data Movement / Layout
 
 This document describes data movement and layout transformation operations.
 
-**Total Operations:** 15
+**Total Operations:** 13
 
 ---
 
@@ -42,7 +42,6 @@ pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) o
 
 ---
 
-### TIMG2COL
 
 **AS Level 1 (SSA):**
 ```text
@@ -148,7 +147,7 @@ For detailed instruction documentation, see [isa/TMOV](../isa/TMOV.md)
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.s2d %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
@@ -205,22 +204,6 @@ For detailed instruction documentation, see [isa/TTRANS](../isa/TTRANS.md)
 **AS Level 2 (DPS):**
 ```text
 pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
----
-
-### TIMG2COL
-
-For detailed instruction documentation, see [isa/TIMG2COL](../isa/TIMG2COL.md)
-
-**AS Level 1 (SSA):**
-```text
-%dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-**AS Level 2 (DPS):**
-```text
-pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---

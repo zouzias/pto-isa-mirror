@@ -77,8 +77,8 @@ allgather_async/
 
 CANN Toolkit version 9.0.0 or above. Available via two methods:
 
-- **Option 1**: Download from the [Ascend Community](https://www.hiascend.com/software/cann/community)
-- **Option 2**: Direct download (preview build): [x86_64](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/20260305000326487/x86_64/Ascend-cann-toolkit_9.0.0_linux-x86_64.run) / [aarch64](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/20260305000326487/aarch64/Ascend-cann-toolkit_9.0.0_linux-aarch64.run)
+- **Option 1**: Download from the [Ascend Community](https://www.hiascend.com/document/detail/zh/canncommercial/900/softwareinst/instg/instg_0000.html?OS=openEuler&InstallType=netyum)
+- **Option 2**: Direct download (preview build): [x86_64](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/20260603000325554/Ascend-cann-toolkit_9.1.0_linux-x86_64.run) / [aarch64](https://ascend.devcloud.huaweicloud.com/artifactory/cann-run-mirror/software/master/20260603000325554/Ascend-cann-toolkit_9.1.0_linux-aarch64.run)
 
 For installation instructions, refer to [Quick Install CANN](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_quick.html?Mode=PmIns&OS=openEuler&Software=cannToolKit).
 
@@ -137,7 +137,7 @@ mpirun --version
 ```bash
 # A2/A3 build (Demos 1-3)
 mkdir -p build && cd build
-cmake .. -DSOC_VERSION=Ascend910B1
+CMake .. -DSOC_VERSION=Ascend910B1
 make -j$(nproc)
 cd ..
 mpirun -n 8 ./build/bin/allgather_demo
@@ -145,7 +145,7 @@ mpirun -n 8 ./build/bin/allgather_demo
 # A5 build (Demos 4-6)
 rm -rf build
 mkdir -p build && cd build
-cmake .. -DSOC_VERSION=Ascend950PR_9599
+CMake .. -DSOC_VERSION=Ascend950PR_9599
 make -j$(nproc)
 cd ..
 mpirun -n 2 ./build/bin/allgather_demo

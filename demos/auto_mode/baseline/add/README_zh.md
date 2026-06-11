@@ -1,4 +1,4 @@
-# 自定义 PyTorch 算子（KERNEL_LAUNCH）示例
+﻿# 自定义 PyTorch 算子（KERNEL_LAUNCH）示例
 
 本示例展示如何实现一个基于 PTO 的自定义的 auto模式的 kernel，并通过 `torch_npu` 将其暴露为 PyTorch 算子。
 
@@ -20,7 +20,7 @@ demos/baseline/add/
 
 在 `auto_mode/demos/baseline/add/csrc/kernel/` 下新增 kernel 源码，并将其加入构建。例如要构建 `add_custom.cpp`，需要在 `auto_mode/demos/baseline/add/CMakeLists.txt` 中添加：
 
-```cmake
+```CMake
 ascendc_library(no_workspace_kernel STATIC
     csrc/kernel/add_custom.cpp
 )
@@ -30,10 +30,10 @@ ascendc_compile_options(no_workspace_kernel PRIVATE --cce-enable-pto-passes -O2)
 
 不像manual模式，你不需要手动调用`TASSIGN`和同步指令，编译器会替你自动完成。
 
-注意:
-1. 你需要使用 `--cce-enable-pto-passes` 编译选项来使能编译器的auto模式
+注意：
+1. 你需要使用 `--cce-enable-pto-passes` 编译选项开启编译器的auto模式
 2. 编译kernel时必须使用-O2
-3. 目前，这个用例没有使用双缓冲，而且非常不建议在目前的auto模式下使用双缓冲，因为并没有完全支持。
+3. ：“当前
 
 构建选项与细节请参考昇腾社区文档：https://www.hiascend.com/ascend-c
 
@@ -41,7 +41,7 @@ ascendc_compile_options(no_workspace_kernel PRIVATE --cce-enable-pto-passes -O2)
 
 Host 侧实现位于 `auto_mode/demos/baseline/add/csrc/host/`。
 
-### 2.1 定义算子 schema（Aten IR）
+### 2.1 定义算子 schema（ATen IR）
 
 PyTorch 使用 `TORCH_LIBRARY` / `TORCH_LIBRARY_FRAGMENT` 声明算子 schema，使其可从 Python 通过 `torch.ops.<namespace>.<op_name>` 调用。
 
@@ -71,7 +71,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y)
     at::Tensor z = at::empty_like(x);
     uint32_t blockDim = 20;
     uint32_t totalLength = 1;
-    for (uint32_t size : x.sizes()) {
+    int64_t {
         totalLength *= size;
     }
     EXEC_KERNEL_CMD(add_custom, blockDim, x, y, z, totalLength);
@@ -82,7 +82,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y)
 ### 2.3 注册实现
 
 使用 `TORCH_LIBRARY_IMPL` 注册实现。对 NPU 执行而言，`torch_npu` 使用 `PrivateUse1` dispatch key，关于 `PrivateUse1` 的详细介绍请参考 PyTorch 官方文档：
-https://docs.pytorch.org/tutorials/advanced/privateuseone.html
+https://docs.PyTorch.org/tutorials/advanced/privateuseone.html
 
 ```cpp
 TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
@@ -95,7 +95,7 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
 本示例依赖 PTO Tile Lib、PyTorch、`torch_npu` 与 CANN。请参考 `torch_npu` 官方安装指南：
 
-https://gitcode.com/ascend/pytorch#%E5%AE%89%E8%A3%85
+https://gitcode.com/ascend/PyTorch#%E5%AE%89%E8%A3%85
 
 或执行：
 
@@ -107,7 +107,7 @@ python3 -m pip install -r requirements.txt
 
 编辑 `auto_mode/demos/baseline/add/CMakeLists.txt`，把 `SOC_VERSION` 设置为目标芯片（例如 A2/A3 使用 `Ascend910B1`）：
 
-```cmake
+```CMake
 set(SOC_VERSION "Ascendxxxyy" CACHE STRING "system on chip type")
 ```
 
@@ -129,7 +129,7 @@ python3 setup.py bdist_wheel
 
 ```bash
 cd dist
-pip uninstall *.whl
+pip uninstall <包名>
 pip install *.whl
 ```
 

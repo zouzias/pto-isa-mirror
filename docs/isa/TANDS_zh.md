@@ -64,7 +64,7 @@ PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileData
 ## 示例
 
 ```cpp
-#include <pto/pto-inst.hpp>
+'pto_instr
 
 using namespace pto;
 

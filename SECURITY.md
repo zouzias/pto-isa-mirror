@@ -24,9 +24,9 @@ This repository contains references to the following public URLs:
 
 | Type       | Open-source URL | File                              | Public URL                                                                                                                                    | Purpose                                      |
 | :--------: | :-------------: | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Dependency | N/A             | cmake/fetch_cann_cmake.cmake      | https://gitcode.com/cann/cmake.git                                                                                                            | Pulls the shared CANN engineering cmake repo |
-| Dependency | N/A             | cmake/third_party/json.cmake      | https://gitcode.com/cann-src-third-party/json/releases/download/v3.11.3/include.zip                                                           | Downloads `json` headers as a build dep      |
-| Dependency | N/A             | cmake/third_party/gtest.cmake     | https://gitcode.com/cann-src-third-party/googletest/releases/download/v1.14.0/googletest-1.14.0.tar.gz                                        | Downloads GoogleTest as a build/test dep     |
+| Dependency | N/A             | CMake/fetch_cann_cmake.CMake      | https://gitcode.com/cann/CMake.git                                                                                                            | Pulls the shared CANN engineering CMake repo |
+| Dependency | N/A             | CMake/third_party/json.CMake      | https://gitcode.com/cann-src-third-party/json/releases/download/v3.11.3/include.zip                                                           | Downloads `json` headers as a build dep      |
+| Dependency | N/A             | CMake/third_party/GoogleTest.CMake     | https://gitcode.com/cann-src-third-party/googletest/releases/download/v1.14.0/googletest-1.14.0.tar.gz                                        | Downloads GoogleTest as a build/test dep     |
 
 ## Appendix
 

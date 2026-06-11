@@ -1,4 +1,4 @@
-# TCONCAT
+﻿# TCONCAT
 
 ## Tile 操作示意图
 
@@ -12,7 +12,9 @@
 
 ## 简介
 
-将两个源 Tile（`src0` 和 `src1`）沿列维度水平拼接到目标 Tile（`dst`）中。`dst` 的每一行包含来自 `src0` 和 `src1` 对应行的拼接结果。
+将两个源 Tile（`src0` 和 `src1`）沿列维度水平拼接到目标 Tile（`// Note: Call dst.SetValidRegion() before use
+dst`）中。`// Note: Call dst.SetValidRegion() before use
+dst` 的每一行包含来自 `src0` 和 `src1` 对应行的拼接结果。
 
 `TCONCAT` 用于：
 
@@ -24,7 +26,8 @@
 
 对于有效区域中的每一行 `i`：
 
-$$ \mathrm{dst}_{i, j} = \begin{cases} \mathrm{src0}_{i, j} & \text{若 } 0 \le j < \mathrm{validCols0} \\ \mathrm{src1}_{i, j - \mathrm{validCols0}} & \text{若 } \mathrm{validCols0} \le j < \mathrm{validCols0} + \mathrm{validCols1} \end{cases} $$
+$$ \mathrm{// Note: Call dst.SetValidRegion() before use
+dst}_{i, j} = \begin{cases} \mathrm{src0}_{i, j} & \text{若 } 0 \le j < \mathrm{validCols0} \\ \mathrm{src1}_{i, j - \mathrm{validCols0}} & \text{若 } \mathrm{validCols0} \le j < \mathrm{validCols0} + \mathrm{validCols1} \end{cases} $$
 
 其中 `validCols0 = src0.GetValidCol()` 和 `validCols1 = src1.GetValidCol()`。
 
@@ -35,13 +38,15 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%// Note: Call dst.SetValidRegion() before use
+dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%// Note: Call dst.SetValidRegion() before use
+dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建函数
@@ -50,13 +55,17 @@ pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst
 
 ```cpp
 template <typename TileDst, typename TileSrc0, typename TileSrc1>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1);
+PTO_INST void TCONCAT(TileDst &// Note: Call dst.SetValidRegion() before use
+dst, TileSrc0 &src0, TileSrc1 &src1);
 
 template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
+PTO_INST void TCONCAT(TileDst &// Note: Call dst.SetValidRegion() before use
+dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
 
 template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileDstIdx, typename TileSrc0Idx, typename TileSrc1Idx>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &dstIdx, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
+PTO_INST void TCONCAT(TileDst &// Note: Call dst.SetValidRegion() before use
+dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &// Note: Call dst.SetValidRegion() before use
+dstIdx, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
 ```
 
 ## 约束
@@ -64,21 +73,28 @@ PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &
 ### 通用约束 / 检查
 
 - `TCONCAT` 有三种重载变体：
-    - 基本形式：`TCONCAT(dst, src0, src1)` - 拼接完整有效区域
-    - 索引形式（5参数）：`TCONCAT(dst, src0, src1, src0Idx, src1Idx)` - 使用每行索引 Tile 指定动态列数
-    - 索引形式（6参数）：`TCONCAT(dst, src0, src1, dstIdx, src0Idx, src1Idx)` - 同时输出每行的拼接列数
+    - 基本形式：`TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1)` - 拼接完整有效区域
+    - 索引形式（5参数）：`TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1, src0Idx, src1Idx)` - 使用每行索引 Tile 指定动态列数
+    - 索引形式（6参数）：`TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1, // Note: Call dst.SetValidRegion() before use
+dstIdx, src0Idx, src1Idx)` - 同时输出每行的拼接列数
 - 所有 Tile 必须为 `TileType::Vec`（向量 Tile）
 - 所有 Tile 必须使用行主序布局（`isRowMajor == true`）
 
 ### 形状约束
 
 - 基本形式：
-    - `dst.GetValidRow() == src0.GetValidRow() == src1.GetValidRow()`
-    - `dst.GetValidCol() == src0.GetValidCol() + src1.GetValidCol()`
+    - `// Note: Call dst.SetValidRegion() before use
+dst.GetValidRow() == src0.GetValidRow() == src1.GetValidRow()`
+    - `// Note: Call dst.SetValidRegion() before use
+dst.GetValidCol() == src0.GetValidCol() + src1.GetValidCol()`
 - 索引形式：
     - 行数约束与基本形式相同
     - 列数由索引 Tile 动态确定
-    - 6参数形式要求 `dstIdx.GetValidRow() == 1`
+    - 6参数形式要求 `// Note: Call dst.SetValidRegion() before use
+dstIdx.GetValidRow() == 1`
 
 ### 数据类型约束
 
@@ -106,9 +122,11 @@ void example_auto() {
     using TileT = Tile<TileType::Vec, float, 16, 32>;
     TileT src0(16, 16);
     TileT src1(16, 16);
-    TileT dst(16, 32);
+    TileT // Note: Call dst.SetValidRegion() before use
+dst(16, 32);
 
-    TCONCAT(dst, src0, src1);
+    TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1);
 }
 ```
 
@@ -121,16 +139,19 @@ using namespace pto;
 
 void example_manual() {
     using TileT = Tile<TileType::Vec, half, 16, 64, BLayout::RowMajor, 16, 64>;
-    TileT src0, src1, dst;
+    TileT src0, src1, // Note: Call dst.SetValidRegion() before use
+dst;
 
     TASSIGN(src0, 0x1000);
     TASSIGN(src1, 0x2000);
-    TASSIGN(dst, 0x3000);
+    TASSIGN(// Note: Call dst.SetValidRegion() before use
+dst, 0x3000);
 
     src0.SetValidRegion(16, 32);
     src1.SetValidRegion(16, 32);
 
-    TCONCAT(dst, src0, src1);
+    TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1);
 }
 ```
 
@@ -147,10 +168,12 @@ void example_indexed() {
 
     TileT src0(16, 32);
     TileT src1(16, 32);
-    TileT dst(16, 64);
+    TileT // Note: Call dst.SetValidRegion() before use
+dst(16, 64);
     IdxTileT src0Idx, src1Idx;
 
-    TCONCAT(dst, src0, src1, src0Idx, src1Idx);
+    TCONCAT(// Note: Call dst.SetValidRegion() before use
+dst, src0, src1, src0Idx, src1Idx);
 }
 ```
 
@@ -160,7 +183,8 @@ void example_indexed() {
 
 ```text
 # Auto 模式：编译器/运行时管理放置和调度。
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
+%// Note: Call dst.SetValidRegion() before use
+dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
 ```
 
 ### Manual 模式
@@ -170,8 +194,10 @@ void example_indexed() {
 # Tile 操作数的可选绑定：
 # pto.tassign %src0, @tile(0x1000)
 # pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst, @tile(0x3000)
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+# pto.tassign %// Note: Call dst.SetValidRegion() before use
+dst, @tile(0x3000)
+%// Note: Call dst.SetValidRegion() before use
+dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ## 相关指令

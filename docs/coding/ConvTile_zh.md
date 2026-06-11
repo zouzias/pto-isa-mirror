@@ -1,4 +1,4 @@
-# ConvTile 编程模型
+﻿# ConvTile 编程模型
 
 PTO Lib 程序可基于 **ConvTile** 编写卷积相关算子。`ConvTile` 是固定容量的 2D 到 6D 缓冲对象，也是 PTO 卷积类操作中的主要计算单元和数据搬运单元。
 
@@ -21,13 +21,7 @@ PTO Lib 程序可基于 **ConvTile** 编写卷积相关算子。`ConvTile` 是�
 `ConvTile` 通过 C++ 模板类型声明：
 
 ```cpp
-pto::ConvTile<
-  pto::TileType Loc_,
-  Element_,
-  BufferSize_,
-  pto::Layout_ layout,
-  pto::ConvTileShape Shape_
->;
+标准模板声明语法
 ```
 
 ### 位置（`TileType`）

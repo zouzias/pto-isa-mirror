@@ -1,4 +1,4 @@
-# Axis Reduce / Expand
+﻿# Axis Reduce / Expand
 
 This document describes row/column reduction and broadcast operations.
 
@@ -136,12 +136,12 @@ For detailed instruction documentation, see [isa/TROWEXPANDDIV](../isa/TROWEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
 ```text
-pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---
@@ -153,12 +153,12 @@ For detailed instruction documentation, see [isa/TROWEXPANDMUL](../isa/TROWEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpandmul %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowexpandmul %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
 ```text
-pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---
@@ -170,12 +170,12 @@ For detailed instruction documentation, see [isa/TROWEXPANDSUB](../isa/TROWEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpandsub %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowexpandsub %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
 ```text
-pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---
@@ -289,7 +289,7 @@ For detailed instruction documentation, see [isa/TCOLEXPANDDIV](../isa/TCOLEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = AS Level 1 和 AS Level 2 代码块中的 pto.tcolexpanddiv 统一 pto %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
@@ -306,7 +306,7 @@ For detailed instruction documentation, see [isa/TCOLEXPANDMUL](../isa/TCOLEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpandmul %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = AS Level 1 和 AS Level 2 代码块中的 pto.tcolexpandmul 统一 pto %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**
@@ -374,7 +374,7 @@ For detailed instruction documentation, see [isa/TCOLEXPANDSUB](../isa/TCOLEXPAN
 
 **AS Level 1 (SSA):**
 ```text
-%dst = pto.tcolexpandsub %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = AS Level 1 和 AS Level 2 代码块中的 pto.tcolexpandsub 统一 pto %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS):**

@@ -38,7 +38,7 @@ pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
+Declared in `示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr` and `include/pto/common/constants.hpp`:
 
 ```cpp
 template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,

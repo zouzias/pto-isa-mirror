@@ -124,7 +124,7 @@ $$
 
 关注 `InitBuffers(...)`：
 
-- L0A 与 L0B 显式做了双缓冲，按 32 KiB 的 ping/pang（`0x0` 与 `0x0 + 32768`）划分。
+- L0A 与 L0B 显式做了双缓冲，按 32 KiB 的 ping/pong（`0x0` 与 `0x0 + 32768`）划分。
 - 因此有一个硬约束：每个 buffer 的 tile footprint 必须 ≤ 32 KiB。
 
 对于 fp16 输入（2 bytes/elem）：
@@ -173,7 +173,7 @@ $$
 实用调优步骤：
 
 - 确保“首轮 warmup”和“末轮 drain”不会把稳态循环串行化。本文件包含“补齐首末同步指令”的逻辑，重构时建议保留。
-- 将计算与搬运按 buffer index（ping/pang）分离，只在真实依赖边界上 `wait_flag`。
+- 将计算与搬运按 buffer index（ping/pong）分离，只在真实依赖边界上 `wait_flag`。
 
 ### 5) 适配新形状时，先重新调 *core tile*
 

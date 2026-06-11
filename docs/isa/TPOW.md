@@ -1,4 +1,4 @@
-# TPOW
+﻿# TPOW
 
 
 ## Tile Operation Diagram
@@ -41,7 +41,7 @@ pto.tpow ins(%base, %exp, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.ti
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `pto/pto-inst`:
 
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile,
@@ -132,8 +132,8 @@ void example_manual() {
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
+# pto.tassign %src, @tile(0x1000)
+# pto.tassign %dst, @tile(0x2000)
 # pto.tassign %arg2, @tile(0x3000)
 %dst = pto.tpow %base, %exp, %tmp : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```

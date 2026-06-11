@@ -1,8 +1,8 @@
-# AllGather + GEMM 通算融合算子示例
+﻿# AllGather + GEMM 通算融合算子示例
 
 ## 概览
 
-本示例演示如何使用 PTO 实现多卡 AllGather + GEMM 融合算子，采用 **M 维切分** 与 **chunk 流式流水线** 设计。在多卡 LLM 推理场景中，每个 rank 持有矩阵 `A` 沿 M 维的一个分片。本实现不等 AllGather 完成就开始计算，而是在 chunk 粒度上重叠通信与计算——通信 kernel 每传输完一个 chunk 即通知计算 kernel 开始处理，从而将通信延迟隐藏在计算之后。
+本示例演示如何使用 PTO 实现多卡 AllGather + GEMM 融合算子，采用 **M 维切分** 与 **chunk 流式流水线** 设计。在多卡 LLM 推理场景中，每个 rank 持有矩阵 `A` 沿 M 维的一个分片。本实现不等 AllGather 完成就开始计算，而是在 chunk 粒度上重叠通信与计算——通信 kernel 每传输完一个 chunk 即通知计算 kernel 开始处理，从而将通信延迟'隐藏在计算中'或'被计算掩盖'。
 
 ## 支持的 AI 处理器
 
@@ -144,7 +144,7 @@ Host 依次下发两个 kernel 后等待二者完成。
 运行前，请先配置 Ascend CANN 环境，确保 `ASCEND_HOME_PATH` 可用：
 
 ```bash
-source <cann-install>/set_env.sh
+source ${CANN_INSTALL_PATH}/set_env
 ```
 
 然后进入示例目录：

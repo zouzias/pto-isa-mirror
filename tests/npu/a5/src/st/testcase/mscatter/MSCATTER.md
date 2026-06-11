@@ -1,4 +1,4 @@
-# MSCATTER
+﻿# MSCATTER
 
 
 ## Tile Operation Diagram
@@ -568,7 +568,7 @@ For `Coalesce::Row` with odd `R`, the index tile must also be expressed as valid
 
 ### Dynamic Runtime Shapes
 
-`Tile<…, -1, -1>` (runtime valid extents) paired with `GlobalTensor<…, Shape<1,1,1,-1,-1>, Stride<1,1,1,-1,-1>>` (runtime table shape/stride). The SIMT kernel sizes itself from `Tile::GetValidRow/Col()` and `GlobalTensor::GetShape(DIM_X)` at dispatch time; padded `Tile::Rows / Cols` remain compile-time so the UB layout / DMA bursts stay statically known.
+`Tile<` (runtime valid extents) paired with `GlobalTensor<…, Shape<1,1,1,-1,-1>, Stride<1,1,1,-1,-1>>` (runtime table shape/stride). The SIMT kernel sizes itself from `Tile::GetValidRow/Col()` and `GlobalTensor::GetShape(DIM_X)` at dispatch time; padded `Tile::Rows / Cols` remain compile-time so the UB layout / DMA bursts stay statically known.
 
 | Case | Mode | Data Type | Runtime Valid Src | Padded Src | Runtime Table | OOB Mode |
 |------|------|-----------|-------------------|------------|----------------|----------|

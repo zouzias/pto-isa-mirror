@@ -16,13 +16,13 @@ Perf-Sim is intended for performance modeling and trend analysis. It does not re
 The FA perf-sim test is located at:
 
 ```text
-tests/costmodel/perf_sim_st/testcase/fa_perf_sim
+tests/costmodel/perf_sim_st/test case/fa_perf_sim
 ```
 
 Build and run:
 
 ```bash
-cmake --build tests/costmodel/perf_sim_st/build --target fa_perf_sim --parallel 4
+CMake --build tests/costmodel/perf_sim_st/build --target fa_perf_sim --parallel 4
 tests/costmodel/perf_sim_st/build/bin/fa_perf_sim
 ```
 
@@ -43,9 +43,9 @@ perf_sim_output/
 
 ### 1. Use the costmodel test tree
 
-Create a test under `tests/costmodel/perf_sim_st/testcase/<case_name>/` and register the target:
+Create a test under `tests/costmodel/perf_sim_st/test case/<case_name>/` and register the target:
 
-```cmake
+```CMake
 pto_costmodel_sim_st(my_perf_sim)
 target_include_directories(my_perf_sim PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../kernels/manual/common/my_kernel
@@ -67,7 +67,7 @@ A typical test entry includes:
 ```cpp
 #include <pto/pto-inst.hpp>
 #include <pto/costmodel/perf_sim/launch.hpp>
-#include <gtest/gtest.h>
+#include <GoogleTest/GoogleTest.h>
 
 #include "my_kernel.cpp"
 ```

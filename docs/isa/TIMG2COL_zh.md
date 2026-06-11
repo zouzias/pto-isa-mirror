@@ -16,13 +16,13 @@
 
 PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
-### AS Level 1（SSA）
+### AS Level 1(SSA)
 
 ```text
 %dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### AS Level 2（DPS）
+### AS Level 2(DPS)
 
 ```text
 pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -45,7 +45,7 @@ PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src, uint16_t posM = 
 
 参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。
 
-## 汇编示例（ASM）
+## 汇编示例(ASM)
 
 ### 自动模式
 
