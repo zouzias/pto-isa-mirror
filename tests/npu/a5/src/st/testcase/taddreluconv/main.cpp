@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <acl/acl.h>
+#include <securec.h>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -69,7 +70,7 @@ bool TADDRELUCONVTestFramework()
     if constexpr (validRow < row || validCol < col) {
         DstT *zeroHost;
         aclrtMallocHost((void **)(&zeroHost), dstByteSize);
-        memset(zeroHost, 0, dstByteSize);
+        memset_s(zeroHost, dstByteSize, 0, dstByteSize);
         aclrtMemcpy(dstDevice, dstByteSize, zeroHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
         aclrtFreeHost(zeroHost);
     }

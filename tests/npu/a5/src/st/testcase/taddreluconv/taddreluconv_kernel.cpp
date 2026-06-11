@@ -253,80 +253,62 @@ template <uint32_t caseId>
 void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream stream)
 {
     switch (caseId) {
-        case 1: {
+        case 1:
             launchTADDRELUCONVCase1<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 2: {
+        case 2:
             launchTADDRELUCONVCase2<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 3: {
+        case 3:
             launchTADDRELUCONVCase3<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 4: {
+        case 4:
             launchTADDRELUCONVCase4<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 5: {
+        case 5:
             launchTADDRELUCONVCase5<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 6: {
+        case 6:
             launchTADDRELUCONVCase6<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 7: {
+        case 7:
             launchTADDRELUCONVCase7<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 8: {
+        case 8:
             launchTADDRELUCONVCase8<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 9: {
+        case 9:
             launchTADDRELUCONVCase9<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 10: {
+        case 10:
             launchTADDRELUCONVCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 19: {
+        case 19:
             launchTADDRELUCONVCase19<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 20: {
+        case 20:
             launchTADDRELUCONVCase20<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 21: {
+        case 21:
             launchTADDRELUCONVCase21<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 22: {
+        case 22:
             launchTADDRELUCONVCase22<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 23: {
+        case 23:
             launchTADDRELUCONVCase23<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 24: {
+        case 24:
             launchTADDRELUCONVCase24<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 25: {
+        case 25:
             launchTADDRELUCONVCase25<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        case 26: {
+        case 26:
             launchTADDRELUCONVCase26<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
-        }
-        default: {
-        }
+        default:
+            break;
     }
 }
 
