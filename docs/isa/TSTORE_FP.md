@@ -66,7 +66,7 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 ### Auto
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例 #include <pto/pto_instr
 
 using namespace pto;
 

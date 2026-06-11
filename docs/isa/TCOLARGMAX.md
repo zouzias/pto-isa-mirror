@@ -1,4 +1,4 @@
-# TCOLARGMAX
+﻿# TCOLARGMAX
 
 ## Tile Operation Diagram
 
@@ -69,7 +69,7 @@ pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr`:
 
 ### Pure Index Mode (3-argument)
 

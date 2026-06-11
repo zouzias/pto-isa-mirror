@@ -88,6 +88,7 @@ using namespace pto;
 
 void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
+// Note: 变量 x 作为源操作数（src）传入 TREMS 函数，但在声明后未进行初始化。直接读取未初始化的局...
   TileT x, out;
   Tile<TileType::Vec, float, 16, 16> tmp;
   TREMS(out, x, 3.0f, tmp);

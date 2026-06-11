@@ -31,6 +31,7 @@ Lowering may introduce internal scratch tiles; the C++ intrinsic requires an exp
 ### AS Level 1 (SSA)
 
 ```text
+// Note: tcolsum requires additional operands
 %dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
 %dst = pto.tcolsum %src, %tmp {isBinary = false} : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
@@ -43,7 +44,7 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_bu
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例代码 #include <pto/common/pto_instr`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
@@ -97,7 +98,7 @@ void example_auto() {
   SrcT src;
   DstT dst;
   TmpT tmp;
-  TCOLSUM(dst, src, tmp, /*isBinary=*/false);
+  Explicit tmp 或 Manual
 }
 ```
 
@@ -128,6 +129,7 @@ void example_manual() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
+// Note: tcolsum requires additional operands
 %dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
@@ -138,6 +140,7 @@ void example_manual() {
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
+// Note: tcolsum requires additional operands
 %dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
 ```
 

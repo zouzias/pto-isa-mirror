@@ -7,7 +7,7 @@
 This guide helps you set up and run the PTO ISA project. It covers two main scenarios:
 
 1. **CPU Simulator** (Recommended for beginners) - Cross-platform support for macOS, Linux, and Windows
-2. **NPU Environment** (Advanced) - Ascend A2/A3(910B/910C) on Linux with CANN toolkit
+2. **NPU Environment** (Advanced) - Ascend A2/A3 on Linux with CANN toolkit
 
 Choose the section that matches your needs. Most users should start with the CPU simulator.
 
@@ -48,16 +48,16 @@ Install Xcode Command Line Tools:
 Install dependencies (recommended via Homebrew):
 
   ```bash
-  brew install cmake ninja python
+  brew install CMake ninja python
   ```
 
-If you don't use Homebrew, ensure `python3`, `cmake`, and a modern `clang++` are on `PATH`.
+If you don't use Homebrew, ensure `python3`, `CMake`, and a modern `clang++` are on `PATH`.
 
 #### Linux (Ubuntu 20.04+)
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build python3 python3-pip python3-venv git
+sudo apt-get install -y build-essential CMake ninja-build python3 python3-pip python3-venv git
 ```
 
 #### Windows
@@ -126,16 +126,16 @@ python3 tests/run_cpu.py --clean --verbose
 
 **Common Options:**
 
-Run a single testcase:
+Run a single test case:
 
   ```bash
-  python3 tests/run_cpu.py --testcase tadd
+  python3 tests/run_cpu.py --test case tadd
   ```
 
-Run a specific gtest case:
+Run a specific GoogleTest case:
 
   ```bash
-  python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.*'
+  python3 tests/run_cpu.py --test case tadd --gtest_filter 'TADDTest.*'
   ```
 
 Build & run the GEMM demo:
@@ -173,7 +173,7 @@ Delete build directory and rebuild:
 Windows-specific (if needed):
 
   ```bash
-  python3 tests/run_cpu.py --clean --generator "MinGW Makefiles" --cmake_prefix_path D:\gtest\
+  python3 tests/run_cpu.py --clean --generator "MinGW Makefiles" --cmake_prefix_path D:\GoogleTest\
   ```
 
 Set library path (Linux):
@@ -184,7 +184,7 @@ Set library path (Linux):
 
 ---
 
-## Part 2: NPU Environment (Ascend 910B/910C, Linux Only)
+## Part 2: NPU Environment (Ascend A2/A3, Linux Only)
 
 This section is for users who need to run on Ascend NPU hardware or simulator. It requires a Linux environment and the Ascend CANN toolkit.
 
@@ -213,12 +213,12 @@ Download [GoogleTest 1.14.0](https://gitcode.com/cann-src-third-party/googletest
 tar -xf googletest-1.14.0.tar.gz
 cd googletest-1.14.0
 mkdir temp && cd temp
-cmake .. -DCMAKE_CXX_FLAGS="-fPIC"
+CMake .. -DCMAKE_CXX_FLAGS="-fPIC"
 make
 sudo make install
 ```
 
-> **Note:** Python requires packages: os, numpy, ctypes, struct, copy, math, enum, ml_dtypes, en_dtypes, etc.
+> **Note:** Python requires packages: os, numpy, ctypes, struct, copy, math, enum, ml_dtypes, etc.
 >
 > If you installed GoogleTest with different flags (e.g., `-D_GLIBCXX_USE_CXX11_ABI=0`), you must update `tests/npu/[a2a3|a5]/src/st/CMakeLists.txt` accordingly by adding `add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)`.
 

@@ -93,8 +93,8 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域.
 - **除零**:
-    - 行为由目标定义；在 A5 上，tile/标量形式映射到乘以倒数，并对 `scalar == 0` 使用 `1/0 -> +inf`。
-- **高精度算法**
+    - 行为由目标定义；在 A5 上，“tile/标量形式”统一“Tile/标量形式”映射到乘以倒数，并对 `scalar == 0` 使用 `1/0 -> +inf`。
+- **高精度算法**: 以保持列表格式统一
     - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
 
 ## 示例
@@ -102,7 +102,7 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr
 
 using namespace pto;
 

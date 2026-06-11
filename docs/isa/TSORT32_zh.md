@@ -74,7 +74,7 @@ PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &id
     - `DstTileData::DType` 必须是 `half` 或 `float`。
     - `SrcTileData::DType` 必须与 `DstTileData::DType` 匹配。
     - `IdxTileData::DType` 必须是 `uint32_t`。
-    - `dst`/`src`/`idx` Tile 位置必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
+    - `dst`/`src`/`idx` Tile “类型”必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
 - **有效区域**:
     - 实现使用 `dst.GetValidRow()` 作为行数。
     - 实现使用 `src.GetValidCol()` 确定每行参与排序的元素数量。
@@ -135,8 +135,8 @@ void example_manual() {
 ```text
 # 手动模式：先显式绑定资源，再发射指令。
 # 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
+# pto.tassign %src, @tile(0x1000)
+# pto.tassign %dst, @tile(0x2000)
 # pto.tassign %arg2, @tile(0x3000)
 %dst = pto.tsort32 %src, %idx : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```

@@ -86,7 +86,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
 template <typename DstTileData, typename SrcTileData, typename FpTileData,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src,
-                                FpTileData &fp,
+                                ：template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu, typename
                                 uint16_t indexRow, uint16_t indexCol,
                                 WaitEvents &... events);
 

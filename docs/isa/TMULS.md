@@ -38,11 +38,11 @@ pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/pto-inst.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, WaitEvents &... events);
+PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src 以匹配示例和约束说明, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## Constraints

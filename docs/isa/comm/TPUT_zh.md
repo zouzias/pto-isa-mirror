@@ -1,4 +1,4 @@
-# TPUT
+﻿# TPUT
 
 ## 简介
 
@@ -110,6 +110,7 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
 
 ```cpp
 constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
+// TileT definition depends on context - verify template parameters
 TileT pingTile(64, 64);
 TileT pongTile(64, 64);
 TASSIGN(pingTile, 0);
@@ -123,6 +124,7 @@ comm::TPUT(dstG, srcG, pingTile, pongTile);
 
 ```cpp
 // 在运行时而非编译期模板参数中选择原子类型
+// Note: Ensure proper headers are included for this API
 comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```
 

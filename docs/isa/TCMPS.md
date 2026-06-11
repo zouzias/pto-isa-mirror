@@ -24,7 +24,7 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 Synchronous form:
 
 ```text
-%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile'<...>''< -> !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
@@ -75,7 +75,8 @@ using namespace pto;
 
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using DstT = Tile<TileType::Vec, // Note: uint8_t support depends on specific ISA version
+uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src;
   DstT dst(16, 2);
   TCMPS(dst, src, 0.0f, CmpMode::GT);
@@ -91,7 +92,8 @@ using namespace pto;
 
 void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using DstT = Tile<TileType::Vec, // Note: uint8_t support depends on specific ISA version
+uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src;
   DstT dst(16, 2);
   TASSIGN(src, 0x1000);

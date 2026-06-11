@@ -36,7 +36,7 @@ pto.SET_IMG2COL_RPT ins(%cfg : !pto.fmatrix_config) outs()
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `示例代码 #include <pto/common/pto_instr`：
 
 ```cpp
 template <typename ConvTileData, typename... WaitEvents>

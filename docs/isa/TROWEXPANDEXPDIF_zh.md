@@ -55,7 +55,7 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 
 ## 约束
 
-- `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
+- `使用逻辑与连接：TileDataDst::DType == TileDataSrc0::DType && TileDataSrc0::DType == TileDataSrc1::DType`
 - `TileDataDst::DType`、`TileDataSrc0::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`。
 - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
 - 模式 1：`src1` 预期提供**每行一个标量**（即，其有效形状必须覆盖 `R` 个值）。
@@ -80,8 +80,7 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 ```text
 # 手动模式：先显式绑定资源，再发射指令。
 # 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
+注释中的 %arg0/%arg1  %src0/%src1
 %dst = pto.trowexpandexpdif %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 

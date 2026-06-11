@@ -1,4 +1,4 @@
-# 控制流操作
+﻿# 控制流操作
 
 本文档描述来自 MLIR `scf`（结构化控制流）方言的结构化控制流操作。
 
@@ -24,7 +24,7 @@ scf.for %iv = %lb to %ub step %step
   scf.yield %new_value : type
 }
 
-scf.for unsigned %iv = %lb to %ub step %step : i32 {
+：scf {
   // 无符号比较
 }
 ```
@@ -341,7 +341,7 @@ scf.for %i = %c0 to %c100 step %c1 {
 ### 模式 2：带累加器的循环
 ```mlir
 %sum = scf.for %i = %c0 to %c100 step %c1 
-    iter_args(%acc = %c0) -> (i32) {
+    iter_args(%acc = %c0_i32) -> (i32) {
   %val = memref.load %array[%i] : memref<?xi32>
   %new_acc = arith.addi %acc, %val : i32
   scf.yield %new_acc : i32
@@ -381,7 +381,7 @@ scf.for %i = %c0 to %M step %c1 {
 ### 模式 6：带多个累加器的循环
 ```mlir
 %sum, %prod = scf.for %i = %c0 to %c100 step %c1 
-    iter_args(%acc_sum = %c0, %acc_prod = %c1) -> (i32, i32) {
+    iter_args(%acc_sum = %c0_i32, %acc_prod = %c1_i32) -> (i32, i32) {
   %val = memref.load %array[%i] : memref<?xi32>
   %new_sum = arith.addi %acc_sum, %val : i32
   %new_prod = arith.muli %acc_prod, %val : i32

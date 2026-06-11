@@ -38,7 +38,7 @@ pto.tsubc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `说明中的路径与示例代码一致的 '<pto/pto-inst`:
 
 ```cpp
 template <typename TileData, typename... WaitEvents>

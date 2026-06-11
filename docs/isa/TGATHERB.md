@@ -24,7 +24,7 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 Synchronous form:
 
 ```text
-%dst = tgatherb %src, %offsets : !pto.tile<...> -> !pto.tile<...>
+%dst = tgatherb %src, %offsets : 类型签名 (!pto
 ```
 
 ### AS Level 1 (SSA)
@@ -65,7 +65,7 @@ PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset
 ### Auto
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr
 
 using namespace pto;
 

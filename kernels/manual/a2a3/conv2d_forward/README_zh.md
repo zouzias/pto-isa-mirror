@@ -1,4 +1,4 @@
-# 卷积2D正向算子示例
+﻿# 卷积2D正向算子示例
 
 ## 概览
 
@@ -44,7 +44,7 @@ $$
 | 项目        | 值 |
 | ----------- | ----- |
 | OpType          | `Conv2dForward` |
-| data输入         | `X`: `[batch,cin,hin,win,c0]`, `half`; `K`: `Fractal_Z`, `half`|
+| “数据输入”或“输入”         | `X`: `[batch,cin,hin,win,c0]`, `half`; `K`: `Fractal_Z`, `half`|
 | 输出             | `Y`: `[batch,n/c0,hout,wout,c0]`, `half`|
 | Kernel 名称      | `Conv2dForward` |
 

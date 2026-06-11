@@ -1,4 +1,4 @@
-# TROWARGMIN
+﻿# TROWARGMIN
 
 ## 指令示意图
 
@@ -118,12 +118,12 @@ using namespace pto;
 
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
+  uint32_t 或 int32_t
   using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dst;  DstValT dstVal;
   TmpT tmp;
   TROWARGMIN(dst, src, tmp);
   TROWARGMIN(dstVal, dst, src, tmp);

@@ -1,4 +1,4 @@
-# Scalar Arithmetic Operations
+﻿# Scalar Arithmetic Operations
 
 This document describes scalar arithmetic operations from the MLIR `arith` dialect. 
 
@@ -765,7 +765,7 @@ This document describes scalar arithmetic operations from the MLIR `arith` diale
 %c0 = arith.constant 0 : i32
 %c1 = arith.constant 1 : i64
 %pi = arith.constant 3.14159 : f32
-%true = arith.constant true
+`%true = arith
 ```
 
 ---

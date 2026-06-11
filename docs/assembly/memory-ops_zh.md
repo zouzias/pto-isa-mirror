@@ -1,4 +1,4 @@
-# 内存操作（GM <-> Tile）
+﻿# 内存操作（GM <-> Tile）
 
 本文档描述全局内存和 tile 之间的内存操作。
 
@@ -33,7 +33,7 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 
 **AS Level 1 (SSA)：**
 ```text
-%dst = pto.tprefetch %src : !pto.global<...> -> !pto.tile<...>
+%dst = pto.tprefetch %src : !pto.global<...> -> !pto.tile<...>  !pto
 ```
 
 **AS Level 2 (DPS)：**

@@ -52,7 +52,7 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
     - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
-    - 运行时： `src`且`dst` tiles 应具有相同的 `validRow/validCol`.
+    - 运行时： `src`且`dst` tiles 应具有相同的 `validRow/validCol 统一 ValidRow/ValidCol`.
 - **实现检查 (A5)**:
     - `TileData::DType` 必须是以下之一： `half`, `float`, `int32_t`.
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
@@ -65,7 +65,7 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 ## 示例
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr
 
 using namespace pto;
 

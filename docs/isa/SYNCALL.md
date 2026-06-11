@@ -1,4 +1,4 @@
-# SYNCALL
+﻿# SYNCALL
 
 ## Instruction Diagram
 
@@ -41,7 +41,7 @@ This semantic does **not** provide additional guarantees on GM or other buffer c
 
 ## C++ Built-in Interface
 
-Declared in `include/pto/common/pto_instr.hpp`. Software-mode interfaces use type-safe `GlobalTensor` and `Tile` parameters (constrained via SFINAE):
+Declared in `include/pto/common/pto-inst.hpp`. Software-mode interfaces use type-safe `GlobalTensor` and `Tile` parameters (constrained via SFINAE):
 
 ```cpp
 // Hardware mode (all CoreType variants)

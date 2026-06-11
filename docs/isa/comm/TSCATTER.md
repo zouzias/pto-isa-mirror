@@ -69,7 +69,7 @@ When `engine == CollEngine::CCU`, the first variadic argument must be a `CcuTrig
     - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` of each rank's destination must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
     - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
 
-> **CCU path**: Unlike the AIV path where only root calls `TSCATTER`, the CCU path requires all ranks to register and launch the CCU kernel via host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. See `tests/npu/a5/comm/st/testcase/tscatter_ccu/` for a complete example.
+> **CCU path**: Unlike the AIV path where only root calls `TSCATTER`, the CCU path requires all ranks to register and launch the CCU kernel via host-side `HcclCcuKernelRegister` / `HcclCcuKernelLaunch`. See `tests/npu/a5/comm/st/test case/tscatter_ccu/` for a complete example.
 
 ## Examples
 

@@ -1,4 +1,4 @@
-# TCOLARGMIN
+﻿# TCOLARGMIN
 
 ## Tile Operation Diagram
 
@@ -75,7 +75,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &...events)
+PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn); &src, TileDataTmp &tmp, WaitEvents &...events)
 ```
 
 ### Value + Index Mode (4-argument)

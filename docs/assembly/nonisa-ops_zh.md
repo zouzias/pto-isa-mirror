@@ -1,4 +1,4 @@
-# 非 ISA 运算
+﻿# 非 ISA 运算
 
 ## 1. 范围
 
@@ -29,14 +29,14 @@
 
 ```text
 // L2
-%dst = pto.alloc_tile : !pto.tile_buf<loc, dtype, rows, cols, v_row, v_col, blayout, slayou, fractal, pad>
+%dst = pto.alloc_tile : !pto.tile_buf<loc, dtype, rows, cols, v_row, v_col, blayout, slayou  slayoutt, fractal, pad>
 ```
 
 ### 3.2 `alloc_tile`（动态有效域）
 
 ```text
 // L2
-%dst = pto.alloc_tile valid_row = %vr valid_col = %vc : !pto.tile_buf<loc, dtype, rows, cols, v_row=?, v_col=?, blayout, slayou, fractal, pad>
+%dst = pto.alloc_tile valid_row = %vr valid_col = %vc : !pto.tile_buf<loc, dtype, rows, cols, v_row=?, v_col=?, blayout, slayout, fractal, pad>
 ```
 
 ## 4. 核参数查询

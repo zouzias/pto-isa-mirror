@@ -1,4 +1,4 @@
-# PTO-AS（PTO 汇编）规范
+﻿# PTO-AS（PTO 汇编）规范
 
 PTO-AS 是 PTO Tile Lib 的一种面向指令的文本汇编格式，设计目标是：
 
@@ -47,7 +47,7 @@ Assembler 将这些类型视为**不透明**类型：它们会被携带到 bytec
 %mask = tcmp %a, %b {cmpMode = #pto.cmp<GT>} : !pto.tile<16x16xf32> -> !pto.tile<16x16xi1>;
 ```
 
-## 4. 指令外指令（Directives）
+## 4. “伪指令”或“汇编指令”（Directives）
 
 PTO-AS 支持一小组非指令 directive，用于声明外部输入与常量。
 

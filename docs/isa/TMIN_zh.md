@@ -38,7 +38,7 @@ pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr`：
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -51,7 +51,7 @@ PTO_INST RecordEvent TMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - `TileData::DType` 必须是以下之一： `int32_t`, `int16_t`, `half`, `float`.
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+    - 静态有效边界： `` `TileData::ValidRow <= TileData::Rows && TileData::ValidCol <= TileData::Cols` ``.
     - 运行时： `src0`, `src1`且`dst` tiles 应具有相同的 `validRow/validCol`.
 - **实现检查 (A5)**:
     - `TileData::DType` 必须是以下之一： `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`.

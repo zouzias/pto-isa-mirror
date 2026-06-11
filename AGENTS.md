@@ -1,4 +1,4 @@
-# AGENTS.md - PTO Tile Library
+﻿# AGENTS.md - PTO Tile Library
 
 This file provides essential information for agentic coding agents working in this repository.
 
@@ -25,7 +25,7 @@ python3 tests/script/build_st.py -r npu -v a3 -t all
 ### Running Single Tests
 ```bash
 # CPU simulator single test
-python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.case_float_64x64_64x64'
+python3 tests/run_cpu.py --test case tadd --gtest_filter 'TADDTest.case_float_64x64_64x64'
 
 # NPU single test (sim or npu)
 python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
@@ -79,7 +79,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 ### Import Organization
 1. System C++ headers (`#include <cstdio>`)
-2. Third-party headers (`#include <gtest/gtest.h>`)
+2. Third-party headers (`#include <GoogleTest/GoogleTest.h>`)
 3. PTO internal headers (`#include <pto/common/type.hpp>`)
 4. Local headers
 
@@ -159,14 +159,14 @@ AICORE inline void SetFlag(uint32_t id) {
 
 ### Test File Structure
 ```cpp
-// Test kernel file: <testcase>_kernel.cpp
+// Test kernel file: <test case>_kernel.cpp
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
-#include <gtest/gtest.h>
+#include <GoogleTest/GoogleTest.h>
 
 using namespace pto;
 
-template <typename T, int ...params>
+模板声明 template <typename T
 AICORE void runTest(__gm__ T __out__ *out, __gm__ T __in__ *src) {
     // Kernel implementation
 }
@@ -181,7 +181,7 @@ template void LaunchTest<float, ...params>(float *out, float * *src, void *strea
 ```
 
 ### CMakeLists.txt Pattern
-```cmake
+```CMake
 # For test cases
 pto_costmodel_sim_st(tadd)
 
@@ -194,7 +194,7 @@ pto_add_kernel(<target_name>)
 - `include/pto/cpu/`: CPU simulator implementations
 - `include/pto/npu/`: NPU implementations (a2a3, a5)
 - `kernels/manual/`: Manual mode kernel implementations
-- `tests/cpu/st/testcase/`: CPU simulator test cases
+- `tests/cpu/st/test case/`: CPU simulator test cases
 - `tests/npu/`: NPU test cases
 - `tests/script/`: Test runner scripts
 - `demos/`: Demo applications

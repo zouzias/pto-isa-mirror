@@ -137,6 +137,7 @@ void example_auto() {
   SrcT src0;
   IdxT idx;
   DstT dst;
+// Note: 示例代码调用 TGATHER 仅传入 3 个参数，但上方声明的 Index-based gather...
   TGATHER(dst, src0, idx);
 }
 ```

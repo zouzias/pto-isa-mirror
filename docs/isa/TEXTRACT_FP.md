@@ -34,7 +34,7 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto
 ```
 
 ### AS Level 2 (DPS)

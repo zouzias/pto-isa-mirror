@@ -70,7 +70,7 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
     - 若 `TileData` 具有静态 `ValidRow`，则 `GetShape(DIM_3)` 必须能被 `ValidRow` 整除。如需支持不足一行的情况，请使用 `DYNAMIC` ValidRow 的 Tile。
     - 若 `TileData` 具有静态 `ValidCol`，则 `GetShape(DIM_4)` 必须能被 `ValidCol` 整除。如需支持不足一列的情况，请使用 `DYNAMIC` ValidCol 的 Tile。
 
-> **CCU 路径**：与 AIV 路径（仅根节点调用 `TBROADCAST`）不同，CCU 路径要求所有 rank 通过宿主侧 `HcclCcuKernelRegister` / `HcclCcuKernelLaunch` 注册并启动 CCU kernel。完整示例参见 `tests/npu/a5/comm/st/testcase/tbroadcast_ccu/`。
+> **CCU 路径**：与 AIV 路径（仅根节点调用 `TBROADCAST`）不同，CCU 路径要求所有 rank 通过宿主侧 `HcclCcuKernelRegister` / `HcclCcuKernelLaunch` 注册并启动 CCU kernel。完整示例参见 `tests/npu/a5/comm/st/test case/tbroadcast_ccu/`。
 
 ## 示例
 

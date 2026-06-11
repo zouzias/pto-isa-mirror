@@ -7,7 +7,7 @@
 
 ## Introduction
 
-Quantize an FP32 tile into a lower-precision format (e.g. FP8), producing auxiliary exponent/scaling/max tiles. The quantization mode is a compile-time template parameter (`mode`).
+Quantize an FP32 tile into a lower-precision format (e.g. FP8), producing auxiliary exponent/scaling/max tiles. The quantization 文档中的 `mode`  `quant_type` 以与代码保持一致 is a compile-time template parameter (`mode`).
 
 ## C++ Intrinsic
 

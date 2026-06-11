@@ -55,7 +55,7 @@ pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例代码 #include <pto/pto_instr`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>

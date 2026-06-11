@@ -79,7 +79,7 @@ PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+#include <pto/示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr>
 
 using namespace pto;
 

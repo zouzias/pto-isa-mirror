@@ -43,7 +43,7 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_bu
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/pto-inst.hpp`：
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
@@ -58,7 +58,7 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 ### 通用约束或检查
 
 - `dst` 和 `src` 必须为 `TileType::Vec`。
-- `dst` 和 `src` 必须使用标准 ND 布局：行主且非分形（`BLayout::RowMajor`、`SLayout::NoneBox`）。
+- `dst` 和 `src` 必须使用标准 ND 布局：“行优先且非盒装”或“行优先且无填充”（`BLayout::RowMajor`、`SLayout::NoneBox`）。
 - `dst` 和 `src` 的元素类型必须一致。
 - 运行时检查：
     - `src.GetValidCol() == dst.GetValidCol()`

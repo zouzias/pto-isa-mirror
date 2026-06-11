@@ -1,6 +1,6 @@
-# PTO AUTO模式
+﻿# PTO AUTO模式
 
-## auto模式是什么
+## AUTO模式是什么
 
 PTO AUTO是一种新的编程模式，主要提供以下两点优势：
 
@@ -9,11 +9,11 @@ PTO AUTO是一种新的编程模式，主要提供以下两点优势：
 
 更具体来说，在AUTO模式下，kernel开发者不用手动为tile分配内存，也不用亲自手写不同pipe间的同步。作为替代，PTO AUTO编译器会帮助kernel开发者在不同buffer上分配内存。而且，编译器也会在PTO指令之间自动插入同步，最大化pipe之间的流水线并行。最后，kernel开发者也不用关心不同昇腾硬件架构之间的区别（尤其是关于CUBE和VECTOR交流和同步的机制）。
 
-注意：auto模式目前仅支持编译器`-O2`选项。
+注意：AUTO模式目前仅支持编译器`-O2`选项。
 
 ## 简单示例
 
-一个简单的示例：逐元素的乘法。这展示了最关键的auto模式与manual模式的区别：
+一个简单的示例：逐元素的乘法。这展示了最关键的AUTO模式与Manual模式的区别：
 
 ### TMUL manual模式
 
@@ -22,8 +22,8 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
-    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData src0Tile(kGRows_, kGCols_);
     TileData src1Tile(kGRows_, kGCols_);
@@ -47,6 +47,7 @@ __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
     
+// Note: 函数返回类型为void，且指针参数out为值传递，末尾的赋值操作无法影响外部变量，属于无效代码。...
     out = dstGlobal.data();
 }
 ```
@@ -58,8 +59,8 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
-    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     
     TileData src0Tile(kGRows_, kGCols_);
@@ -94,8 +95,8 @@ Auto模式编译器让程序员避免了这个麻烦。编译器会自动在需�
 
 ### Tile内存分配
 
-在manual模式下，当用户声明定义一个Tile变量后，需要显式调用`TASSIGN`来为这个Tile分配在指定内存空间里的内存地址。
-在auto模式下，用户不需要手动分配内存，只需要定义Tile变量即可；编译器会自动为所有Tile在正确的buffer上分配内存地址。
+在manual模式下，当用户“声明并定义”或仅保留“定义”一个Tile变量后，需要显式调用`TASSIGN`来为这个Tile分配在指定内存空间里的内存地址。
+在AUTO模式下，用户不需要手动分配内存，只需要定义Tile变量即可；编译器会自动为所有Tile在正确的buffer上分配内存地址。
 
 # PTO AUTO文档
 

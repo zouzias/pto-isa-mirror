@@ -1,4 +1,4 @@
-# TPOWS
+﻿# TPOWS
 
 
 ## Tile Operation Diagram
@@ -41,7 +41,7 @@ pto.tpows ins(%base, %exp, %tmp : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>)
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `正文中的 pto_instr.hpp  pto-inst`:
 
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename TmpTile,

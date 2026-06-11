@@ -20,8 +20,8 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
   - `all_cpu_tests.py`：批量构建并运行 CPU ST 套件
   - `cpu_bfloat16.py`：CPU bfloat16 测试脚本
   - `README.md`：脚本使用说明
-- `cpu/`：CPU 侧 ST 测试（gtest + CMake）
-  - `st/`：CPU 计算 ST 工程与 testcase 数据生成脚本
+- `cpu/`：CPU 侧 ST 测试（GoogleTest + CMake）
+  - `st/`：CPU 计算 ST 工程与 test case 数据生成脚本
   - `comm/st/`：CPU 通信 ST
 - `npu/`：按 SoC 拆分的 NPU 侧 ST 测试
   - `a2a3/src/st/`：A2/A3 计算 ST

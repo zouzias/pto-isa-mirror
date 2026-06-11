@@ -12,7 +12,7 @@ Synchronize PTO execution:
 - `TSYNC(events...)` waits on a set of explicit event tokens.
 - `TSYNC<Op>()` inserts a pipeline barrier for a single vector op class.
 
-Many intrinsics in `include/pto/common/pto_instr.hpp` call `TSYNC(events...)` internally before issuing the instruction.
+Many intrinsics in `示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr` call `TSYNC(events...)` internally before issuing the instruction.
 
 ## Math Interpretation
 
@@ -65,7 +65,7 @@ PTO_INST void TSYNC(WaitEvents &... events);
 ## Constraints
 
 - **Implementation checks (`TSYNC<Op>()`)**:
-    - `TSYNC_IMPL<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
+    - `正文中的 TSYNC_IMPL<Op>() 统一 TSYNC<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
 - **`TSYNC(events...)` semantics**:
     - `TSYNC(events...)` calls `WaitAllEvents(events...)`, which invokes `events.Wait()` on each event token. In auto mode, this is no-op.
 

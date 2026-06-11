@@ -38,7 +38,7 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `示例代码 #include <pto/common/pto_instr`:
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
@@ -88,7 +88,7 @@ void example() {
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign 注释中的 %arg0 和 %arg1 统一 %src0 和 %src1, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tand %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```

@@ -72,7 +72,7 @@ PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+#include <pto/示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr>
 
 using namespace pto;
 
@@ -80,7 +80,7 @@ void example_auto() {
   using A = TileLeft<half, 16, 16>;
   using B = TileRight<half, 16, 16>;
   using Bias = Tile<TileType::Bias, half, 1, 16>;
-  using C = TileAcc<float, 16, 16>;
+  TileAcc<half, 16, 16>；若架构支持隐式类型提升
   A a;
   B b;
   Bias bias;

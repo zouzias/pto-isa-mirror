@@ -1,4 +1,4 @@
-﻿# TCVT
+﻿标准格式：# TCVT
 
 
 ## Tile Operation Diagram
@@ -40,7 +40,7 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
+Declared in `include/pto/common/描述或代码中的文件名一致（建议根据实际项目规范统一为 pto_instr` and `include/pto/common/constants.hpp`:
 
 ```cpp
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>

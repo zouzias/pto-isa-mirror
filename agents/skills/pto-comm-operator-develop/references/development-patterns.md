@@ -1,8 +1,10 @@
-# 开发模式详解
+﻿# 开发模式详解
 
 ## 模式 1：P2P 通信
 
 最基础的模式，使用 TPUT/TGET 在两个 NPU 间传输数据。
+
+> **注意**：以下示例仅展示发送端（TPUT）逻辑，接收端需配合 TGET 使用。
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -19,6 +21,10 @@ __global__ AICORE void P2PSendKernel(__gm__ half *local_data, __gm__ half *remot
 
     ShapeDyn shape(1, 1, 1, 128, 256);
     StrideDyn stride(128 * 256, 128 * 256, 128 * 256, 256, 1);
+
+    // Declare shape and stride parameters
+TensorShape shape(128, 256, 256);
+TensorStride stride(128 * 256, 256, 1);
 
     Global srcG(local_data, shape, stride);
     Global dstG(remote_addr, shape, stride);

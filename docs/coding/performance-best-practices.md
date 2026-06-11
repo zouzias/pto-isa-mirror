@@ -1,4 +1,4 @@
-# Performance Best Practices
+﻿# Performance Best Practices
 
 This document summarizes practical performance-tuning guidance for PTO operators. All numeric examples should be treated as analysis heuristics, not guaranteed hardware values, because achievable performance depends on chip generation, clocking, memory hierarchy, compiler behavior, workload shape, and the surrounding runtime.
 
@@ -18,7 +18,7 @@ Targeted Optimization → Verification → Iteration
 #### Step 1: Ensure Correctness
 ```bash
 # CPU simulation verification
-python3 tests/run_cpu.py --testcase your_op --verbose
+python3 tests/run_cpu.py --test case your_op --verbose
 
 # NPU verification
 python3 tests/script/run_st.py -r npu -v a3 -t your_op
@@ -105,6 +105,7 @@ Insert timing code in critical paths:
 
 ```cpp
 #include <chrono>
+#include <cstdio>
 
 auto start = std::chrono::high_resolution_clock::now();
 
@@ -115,7 +116,7 @@ for (int i = 0; i < N; i++) {
 
 auto end = std::chrono::high_resolution_clock::now();
 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-printf("TLOAD time: %ld us\n", duration.count());
+printf("TLOAD time: %ld  %lld us\n", duration.count());
 ```
 
 ### 2.3 Theoretical Performance Calculation

@@ -7,7 +7,7 @@
 
 ## Introduction
 
-Elementwise floor of two tiles.
+“floor”“modulo”或“floating-point modulo”
 
 ## Math Interpretation
 

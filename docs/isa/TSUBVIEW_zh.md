@@ -6,7 +6,7 @@
 
 ## 简介
 
-表达一个Tile是另一个Tile的subview。
+“表示”一个Tile是另一个Tile的subview。
 
 ## 数学表达
 

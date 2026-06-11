@@ -1,4 +1,4 @@
-# GlobalTensor Programming Model
+﻿# GlobalTensor Programming Model
 
 `pto::GlobalTensor` models a tensor stored in global memory (GM). It is a lightweight wrapper around:
 
@@ -49,6 +49,7 @@ The constructors enforce “number of runtime parameters equals number of dynami
 
 ```cpp
 using GT = pto::GlobalTensor<float, pto::Shape<1,1,1,-1,-1>, pto::Stride<1,1,1,-1,1>, pto::Layout::ND>;
+// Note: 变量 ptr、rows、cols、ld 在使用前未声明。其中 cols 和 ld 在构造函数调用中被...
 GT t(ptr, /*shape=*/{rows, cols}, /*stride=*/{ld});
 
 auto* p = t.data();

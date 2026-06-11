@@ -38,7 +38,7 @@ pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `'#include <pto/common/pto_instr`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
@@ -50,8 +50,8 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
 
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 - Temporary space is required by A3 for calculation, while not used by A5.
-- For A3, 2 source Tile, destination Tile, temporary space must in different memory range without overlapping.
-- For A3, temporary space's `ValidRow` must greater or equal to `dst.GetValidCol() + 1`.
+- For A3, 2 source Tile, destination Tile, temporary space must be in different memory range without overlapping.
+- For A3, temporary space's `ValidRow` must be greater or equal to `dst.GetValidCol() + 1`.
 
 ## Examples
 
