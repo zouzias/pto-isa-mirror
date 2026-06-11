@@ -1,4 +1,4 @@
-/**
+ /**
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
@@ -87,6 +87,38 @@ AICORE void runTScatterMasked(__gm__ T __out__ *out, __gm__ T __in__ *src)
     out = dstGlobal.data();
 }
 
+template <typename T, int kSrcRows_, int kSrcCols_, int kDstRows_, int kDstCols_, MaskPattern maskPattern>
+AICORE void runTScatterMaskedCol(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    using DynShapeSrc = Shape<1, 1, 1, kSrcRows_, kSrcCols_>;
+    using DynStridSrc = Stride<1, 1, 1, kSrcCols_, 1>;
+    using GlobalSrc = GlobalTensor<T, DynShapeSrc, DynStridSrc>;
+
+    using DynShapeDst = Shape<1, 1, 1, kDstRows_, kDstCols_>;
+    using DynStridDst = Stride<1, 1, 1, kDstCols_, 1>;
+    using GlobalDst = GlobalTensor<T, DynShapeDst, DynStridDst>;
+
+    using SrcTileData = Tile<TileType::Vec, T, kSrcRows_, kSrcCols_, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, kDstRows_, kDstCols_, BLayout::RowMajor, -1, -1>;
+
+    SrcTileData srcTile(kSrcRows_, kSrcCols_);
+    DstTileData dstTile(kDstRows_, kDstCols_);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x0 + kSrcRows_ * kSrcCols_ * sizeof(T));
+
+    GlobalSrc srcGlobal(src);
+    GlobalDst dstGlobal(out);
+
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TSCATTER<maskPattern, ScatterAxis::SCATTER_COL>(dstTile, srcTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
 // --- float launchers ---
 
 extern "C" __global__ AICORE void launchTSCATTER_FP0101(__gm__ uint8_t *out, __gm__ uint8_t *src)
@@ -131,6 +163,48 @@ extern "C" __global__ AICORE void launchTSCATTER_FP1111(__gm__ uint8_t *out, __g
         reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
 }
 
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP0101(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_2X_SRC_ROWS, COL_FLOAT_2X_COLS, COL_FLOAT_2X_DST_ROWS, COL_FLOAT_2X_COLS, MaskPattern::P0101>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP1010(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_2X_SRC_ROWS, COL_FLOAT_2X_COLS, COL_FLOAT_2X_DST_ROWS, COL_FLOAT_2X_COLS, MaskPattern::P1010>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP0001(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_4X_SRC_ROWS, COL_FLOAT_4X_COLS, COL_FLOAT_4X_DST_ROWS, COL_FLOAT_4X_COLS, MaskPattern::P0001>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP0010(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_4X_SRC_ROWS, COL_FLOAT_4X_COLS, COL_FLOAT_4X_DST_ROWS, COL_FLOAT_4X_COLS, MaskPattern::P0010>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP0100(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_4X_SRC_ROWS, COL_FLOAT_4X_COLS, COL_FLOAT_4X_DST_ROWS, COL_FLOAT_4X_COLS, MaskPattern::P0100>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP1000(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_4X_SRC_ROWS, COL_FLOAT_4X_COLS, COL_FLOAT_4X_DST_ROWS, COL_FLOAT_4X_COLS, MaskPattern::P1000>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_FP1111(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<float, COL_FLOAT_1X_SRC_ROWS, COL_FLOAT_1X_COLS, COL_FLOAT_1X_DST_ROWS, COL_FLOAT_1X_COLS, MaskPattern::P1111>(
+        reinterpret_cast<__gm__ float *>(out), reinterpret_cast<__gm__ float *>(src));
+}
+
 // --- half launchers ---
 
 extern "C" __global__ AICORE void launchTSCATTER_HP0101(__gm__ uint8_t *out, __gm__ uint8_t *src)
@@ -160,6 +234,48 @@ extern "C" __global__ AICORE void launchTSCATTER_HP0100(__gm__ uint8_t *out, __g
 extern "C" __global__ AICORE void launchTSCATTER_HP1000(__gm__ uint8_t *out, __gm__ uint8_t *src)
 {
     runTScatterMasked<half, HALF_P1000_ROW, HALF_P1000_COL / 4, HALF_P1000_ROW, HALF_P1000_COL, MaskPattern::P1000>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP0101(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_2X_SRC_ROWS, COL_HALF_2X_COLS, COL_HALF_2X_DST_ROWS, COL_HALF_2X_COLS, MaskPattern::P0101>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP1010(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_2X_SRC_ROWS, COL_HALF_2X_COLS, COL_HALF_2X_DST_ROWS, COL_HALF_2X_COLS, MaskPattern::P1010>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP0001(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_4X_SRC_ROWS, COL_HALF_4X_COLS, COL_HALF_4X_DST_ROWS, COL_HALF_4X_COLS, MaskPattern::P0001>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP0010(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_4X_SRC_ROWS, COL_HALF_4X_COLS, COL_HALF_4X_DST_ROWS, COL_HALF_4X_COLS, MaskPattern::P0010>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP0100(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_4X_SRC_ROWS, COL_HALF_4X_COLS, COL_HALF_4X_DST_ROWS, COL_HALF_4X_COLS, MaskPattern::P0100>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP1000(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_4X_SRC_ROWS, COL_HALF_4X_COLS, COL_HALF_4X_DST_ROWS, COL_HALF_4X_COLS, MaskPattern::P1000>(
+        reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
+}
+
+extern "C" __global__ AICORE void launchTSCATTER_COL_HP1111(__gm__ uint8_t *out, __gm__ uint8_t *src)
+{
+    runTScatterMaskedCol<half, COL_HALF_1X_SRC_ROWS, COL_HALF_1X_COLS, COL_HALF_1X_DST_ROWS, COL_HALF_1X_COLS, MaskPattern::P1111>(
         reinterpret_cast<__gm__ half *>(out), reinterpret_cast<__gm__ half *>(src));
 }
 
@@ -252,6 +368,34 @@ void launchTSCATTER_masked(uint8_t *out, uint8_t *src, void *stream)
         launchTSCATTER_I32P1000(out, src);
     } else if constexpr (tilingKey == I32P1111) {
         launchTSCATTER_I32P1111(out, src);
+    } else if constexpr (tilingKey == COL_FP0101) {
+        launchTSCATTER_COL_FP0101(out, src);
+    } else if constexpr (tilingKey == COL_FP1010) {
+        launchTSCATTER_COL_FP1010(out, src);
+    } else if constexpr (tilingKey == COL_FP0001) {
+        launchTSCATTER_COL_FP0001(out, src);
+    } else if constexpr (tilingKey == COL_FP0010) {
+        launchTSCATTER_COL_FP0010(out, src);
+    } else if constexpr (tilingKey == COL_FP0100) {
+        launchTSCATTER_COL_FP0100(out, src);
+    } else if constexpr (tilingKey == COL_FP1000) {
+        launchTSCATTER_COL_FP1000(out, src);
+    } else if constexpr (tilingKey == COL_FP1111) {
+        launchTSCATTER_COL_FP1111(out, src);
+    } else if constexpr (tilingKey == COL_HP0101) {
+        launchTSCATTER_COL_HP0101(out, src);
+    } else if constexpr (tilingKey == COL_HP1010) {
+        launchTSCATTER_COL_HP1010(out, src);
+    } else if constexpr (tilingKey == COL_HP0001) {
+        launchTSCATTER_COL_HP0001(out, src);
+    } else if constexpr (tilingKey == COL_HP0010) {
+        launchTSCATTER_COL_HP0010(out, src);
+    } else if constexpr (tilingKey == COL_HP0100) {
+        launchTSCATTER_COL_HP0100(out, src);
+    } else if constexpr (tilingKey == COL_HP1000) {
+        launchTSCATTER_COL_HP1000(out, src);
+    } else if constexpr (tilingKey == COL_HP1111) {
+        launchTSCATTER_COL_HP1111(out, src);
     }
 }
 
@@ -274,3 +418,17 @@ template void launchTSCATTER_masked<I16P0010>(uint8_t *out, uint8_t *src, void *
 template void launchTSCATTER_masked<U32P0100>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTSCATTER_masked<I32P1000>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTSCATTER_masked<I32P1111>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_FP1111>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTER_masked<COL_HP1111>(uint8_t *out, uint8_t *src, void *stream);
