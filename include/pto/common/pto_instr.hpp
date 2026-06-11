@@ -1909,7 +1909,6 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
 template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
 {
@@ -1926,26 +1925,6 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
     MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
     return {};
 }
-#endif
-
-#ifdef PTO_NPU_ARCH_A2A3
-template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MGATHER_IMPL<CMode>(dst, src, indexes);
-    return {};
-}
-
-template <Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd,
-          typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
-    return {};
-}
-#endif
 
 template <typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
@@ -1955,7 +1934,7 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <Coalesce Mode, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
 {
