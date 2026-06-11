@@ -1,4 +1,4 @@
-# TCOLARGMAX
+﻿# TCOLARGMAX
 
 ## 指令示意图
 
@@ -66,13 +66,13 @@ pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`:
+声明于 `文档中的 pto_instr.hpp  pto-inst`:
 
 ### 纯索引模式（3 参数）
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &...events)
+PTO_INST RecordEvent TCOLARGMAX(TileDataOut &dst, TileDataIn); &src, TileDataTmp &tmp, WaitEvents &...events)
 ```
 
 ### 值 + 索引模式（4 参数）

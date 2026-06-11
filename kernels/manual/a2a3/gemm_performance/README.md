@@ -124,7 +124,7 @@ Checklist:
 
 Look at `InitBuffers(...)`:
 
-- L0A and L0B are explicitly double-buffered with a 32 KiB ping/pang split (`0x0` and `0x0 + 32768`).
+- L0A and L0B are explicitly double-buffered with a 32 KiB ping/pong split (`0x0` and `0x0 + 32768`).
 - This implies an important constraint: the per-buffer tile footprint must be ≤ 32 KiB.
 
 For fp16 inputs (2 bytes/elem):
@@ -173,7 +173,7 @@ If you see:
 Practical tuning steps:
 
 - Make sure the “first-iteration warmup” and “last-iteration drain” do not serialize the steady-state loop. This file already includes “supplement first/last sync instr”; keep them if you refactor.
-- Keep compute and data movement in separate phases per buffer index (ping/pang), and only `wait_flag` at true dependency boundaries.
+- Keep compute and data movement in separate phases per buffer index (ping/pong), and only `wait_flag` at true dependency boundaries.
 
 ### 5) When scaling to new shapes, re-tune the *core tile* first
 

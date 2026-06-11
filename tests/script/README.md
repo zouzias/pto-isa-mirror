@@ -11,8 +11,8 @@ Common arguments:
 
 - `-r, --run-mode`: `sim` or `npu`
 - `-v, --soc-version`: `a3` or `a5` (mapped to an internal `SOC_VERSION`)
-- `-t, --testcase`: testcase name (e.g., `tmatmul`)
-- `-g, --gtest_filter`: optional gtest filter (run a single case)
+- `-t, --test case`: test case name (e.g., `tmatmul`)
+- `-g, --gtest_filter`: optional GoogleTest filter (run a single case)
 - `-d, --debug-enable`: optional debug build (only in `run_st.py`)
 
 Examples:

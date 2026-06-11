@@ -40,8 +40,8 @@ The output is written to `site/` (or a custom directory if you pass `-d`).
 You can build the static site as part of a CMake build:
 
 ```bash
-cmake -S docs -B build/docs
-cmake --build build/docs --target pto_docs
+CMake -S docs -B build/docs
+CMake --build build/docs --target pto_docs
 ```
 
 The site is generated under `build/docs/site/`.
@@ -49,7 +49,7 @@ The site is generated under `build/docs/site/`.
 To serve locally:
 
 ```bash
-cmake --build build/docs --target pto_docs_serve
+CMake --build build/docs --target pto_docs_serve
 ```
 
 ## Notes

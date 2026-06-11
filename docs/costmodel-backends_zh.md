@@ -4,7 +4,7 @@
 
 ## 总览
 
-CostModel 路径通过 `__COSTMODEL` 使能，当前后端分为：
+CostModel 路径通过 `__COSTMODEL` 开启，当前后端分为：
 
 - `stub`：基础 CostModel 指令行为与覆盖验证路径
 - `fit`：基于公式拟合的时延预测路径
@@ -57,8 +57,8 @@ CostModel 路径通过 `__COSTMODEL` 使能，当前后端分为：
 单套件/单用例：
 
 ```bash
-python3 tests/run_costmodel.py --suite st --testcase tadd --clean --verbose
-python3 tests/run_costmodel.py --suite st_fit --testcase time_predict --clean --verbose
+python3 tests/run_costmodel.py --suite st --test case tadd --clean --verbose
+python3 tests/run_costmodel.py --suite st_fit --test case time_predict --clean --verbose
 ```
 
 批量执行（自动覆盖 `st` + `st_fit`）：

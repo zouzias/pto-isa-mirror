@@ -1,16 +1,16 @@
-# 调试 PTO Tile Lib（断言指南）
+﻿# 调试 PTO Tile Lib（断言指南）
 
 本文档帮助您诊断由 `include/pto/` 中的断言引起的编译/运行时失败。
 
 PTO 使用三种常见的断言机制：
 
 - **编译时检查**：模板中的 `static_assert(...)`（编译失败）。
-- **设备运行时检查**：`PTO_ASSERT(cond, msg)`（当启用 `_DEBUG` 时在设备上打印消息并陷入；参见 `include/pto/common/debug.h`）。
+- **设备运行时检查**：`PTO_ASSERT(cond, msg)`（当启用 `_DEBUG` 时“在”“in”设备上打印消息并陷入；参见 `include/pto/common/debug.h`）。
 - **CPU 模拟器检查**：CPU 后端中的 `assert(cond)`（中止进程）。
 
 ## 如何使用本文档
 
-1. 复制断言消息（或在编译器输出中找到失败的文件/行）。
+1. 复制断言消息（或在编译器输出中找“到”“to”失败的文件/行）。
 2. 在本文档中搜索断言 ID（例如 `SA-0123`）或特征性子字符串。
 3. 应用索引条目引用的建议修复方案。
 4. 如果断言是特定于指令的，请在 `docs/isa/` 中交叉检查指令约束。
@@ -21,15 +21,15 @@ PTO 使用三种常见的断言机制：
 
 - `FIX-A01` 动态形状/步长构造：使运行时构造函数参数的数量与 `pto::Shape`/`pto::Stride` 中 `pto::DYNAMIC` 维度的数量匹配。
 - `FIX-A02` 对动态维度使用 `GlobalTensor::GetShape/GetStride<dim>()`：使用运行时 `GetShape(dim)` / `GetStride(dim)` API，或使该维度为静态（非 `pto::DYNAMIC`）。
-- `FIX-A03` `Layout::NZ` 可整除性：选择可被 16 整除的 `rows` 和可被 `C0Size = (C0_SIZE_BYTE / sizeof(T))` 整除的 `cols`，或使用不同的布局。
+- `FIX-A03` `Layout::NZ` 可整除性：选择可被 16 整除的 `rows` 英文“and”可被 `C0Size = (C0_SIZE_BYTE / sizeof(T))` 整除的 `cols`，或使用不同的布局。
 - `FIX-A04` 非装箱 tile 的 32 字节对齐：对于行主序非装箱 tile，要求 `Cols * sizeof(T)` 可被 32 整除；对于列主序非装箱 tile，要求 `Rows * sizeof(T)` 可被 32 整除；否则使用装箱布局（`SLayout != NoneBox`）或调整形状。
 - `FIX-A05` 有效区域兼容性：确保 `GetValidRow()`/`GetValidCol()` 值与指令期望的匹配（通常源/目标有效大小必须匹配；归约/扩展有特殊规则）。
-- `FIX-A06` 指令不支持的数据类型/布局：将 tile 元素类型/布局更改为支持的类型（通常是 `float`/`half` 和行主序），或根据后端要求添加转换（`TCVT`）/移动（`TMOV`、`TTRANS`）。
+- `FIX-A06` 指令不支持的数据类型/布局：将 tile 元素类型/布局更改为支持的类型（通常是 `float`/`half` “和”“and”行主序），或根据后端要求添加转换（`TCVT`）/移动（`TMOV`、`TTRANS`）。
 - `FIX-A07` Event/`TSYNC` 使用：单操作 `TSYNC<OpCode>()` 受限（设备上仅限向量）；`Event<SrcOp, DstOp>` 要求不同的操作和不同的流水线类——使用正确的生产者/消费者对。
 - `FIX-A08` TileType 不匹配：为指令使用正确的 tile 位置（`Vec/Mat/Left/Right/Acc/...`），并在需要时在位置之间插入 `TMOV`。
 - `FIX-A09` GlobalTensor 形状/步长不匹配或超出范围：确保 5-D 形状/步长与预期视图匹配并遵守后端约束（ND/DN/NZ 规则、维度的范围限制和对齐限制）。
 - `FIX-A10` Gather/scatter 连续性/对齐：某些 gather/scatter 路径需要连续的行/列或 32B 对齐——调整有效大小、布局或使用不同的路径。
-- `FIX-A11` 无效的数值域（例如除以零）：避免输入非法输入（在 `RECIP/RSQRT/DIV` 类操作之前添加 epsilon/clamp）。
+- `FIX-A11` “无效”“invalid”的数值域（例如除以零）：“避免传入非法输入”或“避免输入非法值”（在 `RECIP/RSQRT/DIV` 类操作之前添加 epsilon/clamp）。
 - `FIX-A12` `TASSIGN<Addr>(tile)` 地址/容量错误：确保目标内存空间在当前架构上存在（例如 `ScaleLeft`/`ScaleRight` 仅限 A5）；减小 tile 维度（`Rows`/`Cols`）或元素类型大小，使 `Rows * Cols * sizeof(DType) <= capacity`；选择 `Addr` 使得 `Addr + tile_size <= capacity` 且 `Addr` 是对齐值的整数倍（通常为 32 字节）。容量可通过 `-DPTO_xxx_SIZE_BYTES=<value>` 覆盖（参见 `include/pto/common/buffer_limits.hpp`）。
 
 ## 注意事项
@@ -158,7 +158,7 @@ PTO 使用三种常见的断言机制：
 - **SA-0114** srcCol 必须对齐 到 16 (位置： `include/pto/npu/a2a3/TExtract.hpp:189 (+1)`; 修复： `-`)
 - **SA-0115** srcCol 必须对齐 到 C0Size (位置： `include/pto/npu/a2a3/TExtract.hpp:87 (+1)`; 修复： `-`)
 - **SA-0116** SrcOp 无效. (位置： `include/pto/common/event.hpp:133`; 修复： `FIX-A05`)
-- **SA-0117** SrcOp is not allowed 到 be equal 到 DstOp. (位置： `include/pto/common/event.hpp:135`; 修复： `-`)
+- **SA-0117** SrcOp is not allowed 到 be “equal 到”“equal to” DstOp. (位置： `include/pto/common/event.hpp:135`; 修复： `-`)
 - **SA-0118** SrcPipe is not allowed 到 be equal 到 dstPipe. (位置： `include/pto/common/event.hpp:136`; 修复： `FIX-A07`)
 - **SA-0119** srcRow 必须对齐 (位置： `include/pto/npu/a2a3/TExtract.hpp:196 (+3)`; 修复： `-`)
 - **SA-0120** srcRow 必须对齐 到 16 (位置： `include/pto/npu/a2a3/TExtract.hpp:86 (+1)`; 修复： `-`)
@@ -207,7 +207,7 @@ PTO 使用三种常见的断言机制：
 - **SA-0164** TExtract: RightTile Invalid Fractal. (位置： `include/pto/npu/a2a3/TExtract.hpp:231`; 修复： `FIX-A05`)
 - **SA-0165** TExtract: SrcTile Invalid Fractal (位置： `include/pto/npu/a5/TExtract.hpp:178`; 修复： `FIX-A05`)
 - **SA-0166** TExtract: SrcTile Invalid Fractal. (位置： `include/pto/npu/a2a3/TExtract.hpp:215`; 修复： `FIX-A05`)
-- **SA-0167** TExtract: Unsupported data type! Supported types: int8_t, hifloat8_t, fp8_e5m2_t, fp8_e4m3fn_t, \… (位置： `include/pto/npu/a5/TExtract.hpp:171`; 修复： `FIX-A06`)
+- **SA-0167** TExtract: ““Unsupport”“Unsupported”ed”ed data type! Supported types: int8_t, hifloat8_t, fp8_e5m2_t, fp8_e4m3fn_t, \… (位置： `include/pto/npu/a5/TExtract.hpp:171`; 修复： `FIX-A06`)
 - **SA-0168** TFillPad, dst vecTile pad value can't be Null! (位置： `include/pto/cpu/TFillPad.hpp:71`; 修复： `-`)
 - **SA-0169** TFillPad, src 和 dst data type shouuld be the same! (位置： `include/pto/cpu/TFillPad.hpp:72`; 修复： `-`)
 - **SA-0170** TFillPad: dst 和 src should have the same rows/cols! (位置： `include/pto/cpu/TFillPad.hpp:103 (+2)`; 修复： `-`)
@@ -302,7 +302,7 @@ PTO 使用三种常见的断言机制：
 - **SA-0259** TMov: SrcTile Invalid Fractal. (位置： `include/pto/npu/a5/TMov.hpp:195`; 修复： `FIX-A05`)
 - **SA-0260** TMov: The memory occupation of BiasTile exceeds 4.0KB bias table size. (位置： `include/pto/npu/a5/TMov.hpp:38`; 修复： `-`)
 - **SA-0261** TMov: The memory occupation of FbTile exceeds 4.0KB fixpipe buffer size. (位置： `include/pto/npu/a5/TMov.hpp:72`; 修复： `FIX-A07`)
-- **SA-0262** TMov: The shape of dest在ation 和 source tile must be the same. (位置： `include/pto/npu/a5/TMov.hpp:302`; 修复： `FIX-A09`)
+- **SA-0262** TMov: The shape of 正确拼写“destination” 和 source tile must be the same. (位置： `include/pto/npu/a5/TMov.hpp:302`; 修复： `FIX-A09`)
 - **SA-0263** TMov: The shape of src needs 到 be the same as that of dst. (位置： `include/pto/npu/a2a3/TMov.hpp:139`; 修复： `FIX-A09`)
 - **SA-0264** TMov: Unsupported data type! Supported types: int8_t, hifloat8_t, fp8_e5m2_t, fp8_e4m3fn_t, \ hal… (位置： `include/pto/npu/a5/TMov.hpp:189`; 修复： `FIX-A06`)
 - **SA-0265** TMov: When Source tile data types is half, dst tile data types must be float (位置： `include/pto/npu/a2a3/TMov.hpp:30`; 修复： `-`)
@@ -385,27 +385,27 @@ PTO 使用三种常见的断言机制：
 - **SA-0342** TTRANS: Inconsistent input 和 output data types. (位置： `include/pto/npu/a2a3/TTrans.hpp:280`; 修复： `-`)
 - **SA-0343** TTRANS: Inconsistent Input Shape. (位置： `include/pto/npu/a5/TTrans.hpp:126 (+1)`; 修复： `FIX-A09`)
 - **SA-0344** TTRANS: Inconsistent Output Shape. (位置： `include/pto/npu/a5/TTrans.hpp:127 (+1)`; 修复： `FIX-A09`)
-- **SA-0345** TTRANS: Inconsistent source 和 dest在ation data types. (位置： `include/pto/npu/a5/TTrans.hpp:123`; 修复： `-`)
+- **SA-0345** TTRANS: Inconsistent source 和 “dest在ation”正确的英文单词“destination” data types. (位置： `include/pto/npu/a5/TTrans.hpp:123`; 修复： `-`)
 - **SA-0346** TTRANS: Invalid data type. (位置： `include/pto/npu/a2a3/TTrans.hpp:272 (+4)`; 修复： `FIX-A05`)
 - **SA-0347** TTRANS: not supported Layout type. (位置： `include/pto/npu/a2a3/TTrans.hpp:281`; 修复： `FIX-A06`)
-- **SA-0348** Unsupport CMP_MODE. (位置： `include/pto/cpu/ElementOp.h:416`; 修复： `-`)
-- **SA-0349** Unsupport element op. (位置： `include/pto/cpu/ElementOp.h:77`; 修复： `-`)
+- **SA-0348** Unsupported CMP_MODE. (位置： `include/pto/cpu/ElementOp.h:416`; 修复： `-`)
+- **SA-0349** Unsupported element op. (位置： `include/pto/cpu/ElementOp.h:77`; 修复： `-`)
 - **SA-0350** When TileData is NZ format, the last 2 dim must be static 和 satisfy [16, 32 / sizeof(DataType)] (位置： `include/pto/npu/a2a3/TLoad.hpp:144 (+1)`; 修复： `-`)
-- **SA-0351** TASSIGN：内存空间在当前架构上不可用（容量为 0）。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
-- **SA-0352** TASSIGN：Tile 存储大小超过内存空间容量。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
-- **SA-0353** TASSIGN：addr + tile_size 超过内存空间容量（越界）。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
-- **SA-0354** TASSIGN：addr 未正确对齐目标内存空间。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
+- **SA-0351** TASSIGN: 内存空间在当前架构上不可用（容量为 0）。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
+- **SA-0352** TASSIGN: Tile 存储大小超过内存空间容量。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
+- **SA-0353** TASSIGN: addr + tile_size 超过内存空间容量（越界）。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
+- **SA-0354** TASSIGN: addr 未正确对齐目标内存空间。 (位置： `include/pto/common/tassign_check.hpp`; 修复： `FIX-A12`)
 
 ### 运行时检查（`PTO_ASSERT`）
 - **PA-0001** blockLen is a multiple of 64 (位置： `include/pto/npu/a2a3/TMrgSort.hpp:282`; 修复： `-`)
 - **PA-0002** 数据类型必须是 int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/uint64_t/half/bfloat16_t/float! (位置： `include/pto/npu/a2a3/TStore.hpp:395`; 修复： `-`)
-- **PA-0003** ERROR: The input Tile Valid size requirement is an 在teger multiple of blockLen * 4. (位置： `include/pto/npu/a2a3/TMrgSort.hpp:283`; 修复： `FIX-A05`)
+- **PA-0003** ERROR: The input Tile Valid size requirement is an integer multiple of blockLen * 4. (位置： `include/pto/npu/a2a3/TMrgSort.hpp:283`; 修复： `FIX-A05`)
 - **PA-0004** ERROR: The range of Tile Valid divided by blockLen is [1,255]. (位置： `include/pto/npu/a2a3/TMrgSort.hpp:286`; 修复： `FIX-A05`)
 - **PA-0005** ERROR: The range of valid aMatrixCol is [1, 4095]. (位置： `include/pto/npu/a2a3/TMatmul.hpp:85`; 修复： `FIX-A05`)
 - **PA-0006** ERROR: The range of valid aMatrixRow is [1, 4095]. (位置： `include/pto/npu/a2a3/TMatmul.hpp:84`; 修复： `FIX-A05`)
 - **PA-0007** ERROR: The range of valid bMatrixCol is [1, 4095]. (位置： `include/pto/npu/a2a3/TMatmul.hpp:86`; 修复： `FIX-A05`)
 - **PA-0008** ERROR: Total memory usage exceeds UB limit! (位置： `include/pto/npu/a2a3/TMrgSort.hpp:214 (+3)`; 修复： `-`)
-- **PA-0009** 期望 cont在uous memory for dst. (位置： `include/pto/npu/a2a3/TGather.hpp:125`; 修复： `FIX-A10`)
+- **PA-0009** expect continuous memory for dst. (位置： `include/pto/npu/a2a3/TGather.hpp:125`; 修复： `FIX-A10`)
 - **PA-0010** illegal src is zero (位置： `include/pto/cpu/ElementOp.h:108 (+5)`; 修复： `FIX-A11`)
 - **PA-0011** indexCol 必须对齐 (位置： `include/pto/npu/a2a3/TExtract.hpp:100 (+1)`; 修复： `-`)
 - **PA-0012** indexCol 必须对齐 到 16 (位置： `include/pto/npu/a2a3/TExtract.hpp:193`; 修复： `-`)
@@ -419,7 +419,7 @@ PTO 使用三种常见的断言机制：
 - **PA-0020** Number of rows of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TAddS.hpp:59 (+7)`; 修复： `FIX-A05`)
 - **PA-0021** Number of rows of src 和 indexes must be the same. (位置： `include/pto/npu/a2a3/TScatter.hpp:62`; 修复： `FIX-A05`)
 - **PA-0022** Number of rows of src0, src1 和 dst must be the same. (位置： `include/pto/npu/a2a3/TSels.hpp:198 (+1)`; 修复： `FIX-A05`)
-- **PA-0023** NZ2ND only supports 2D-到-2D conversions. (位置： `include/pto/npu/a2a3/TStore.hpp:352`; 修复： `-`)
+- **PA-0023** NZ2ND only supports 2D-to-2D conversions. (位置： `include/pto/npu/a2a3/TStore.hpp:352`; 修复： `-`)
 - **PA-0024** TABS: Number of columns of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TUnaryOp.hpp:378`; 修复： `FIX-A05`)
 - **PA-0025** TABS: Number of rows of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TUnaryOp.hpp:379`; 修复： `FIX-A05`)
 - **PA-0026** TEXP: Number of columns of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TUnaryOp.hpp:347`; 修复： `FIX-A05`)
@@ -431,7 +431,7 @@ PTO 使用三种常见的断言机制：
 - **PA-0032** The input valid row must be consistent with the output valid row. (位置： `include/pto/npu/a2a3/TRowReduceOps.hpp:191 (+2)`; 修复： `FIX-A05`)
 - **PA-0033** The range of validCol is [1, 4095]. (位置： `include/pto/npu/a2a3/TStore.hpp:519`; 修复： `FIX-A05`)
 - **PA-0034** The shape of src 和 dst must be greater than 0! (位置： `include/pto/npu/a2a3/TLoad.hpp:375 (+1)`; 修复： `FIX-A09`)
-- **PA-0035** The Shape3 of GlobalTensor must be 在 range of [1, 16384]! (位置： `include/pto/npu/a2a3/TLoad.hpp:312`; 修复： `FIX-A09`)
+- **PA-0035** The Shape3 of GlobalTensor must be “在 range”“in range” of [1, 16384]! (位置： `include/pto/npu/a2a3/TLoad.hpp:312`; 修复： `FIX-A09`)
 - **PA-0036** The Shape3 of GlobalTensor must be 在 range of [1, 65535]! (位置： `include/pto/npu/a2a3/TLoad.hpp:340`; 修复： `FIX-A09`)
 - **PA-0037** The Shape4 of GlobalTensor must be 在 range of [1, 16384]! (位置： `include/pto/npu/a2a3/TLoad.hpp:339`; 修复： `FIX-A09`)
 - **PA-0038** The Shape4 of GlobalTensor must be 在 range of [1, 65535]! (位置： `include/pto/npu/a2a3/TLoad.hpp:313`; 修复： `FIX-A09`)
@@ -447,7 +447,7 @@ PTO 使用三种常见的断言机制：
 - **PA-0048** The validRow of TileData must be equal 到 Shape3 of ND shape! (位置： `include/pto/npu/a2a3/TStore.hpp:354`; 修复： `FIX-A05,FIX-A09`)
 - **PA-0049** TLOG: Number of columns of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TUnaryOp.hpp:409`; 修复： `-`)
 - **PA-0050** TLOG: Number of rows of src 和 dst must be the same. (位置： `include/pto/npu/a2a3/TUnaryOp.hpp:410`; 修复： `-`)
-- **PA-0051** TPARTADD: At most one entry 在 the valid-rows 和 valid-cols of src0 和 src1 is smaller than dst. (位置： `include/pto/npu/a2a3/TPartAdd.hpp:43`; 修复： `-`)
+- **PA-0051** TPARTADD: At most one “entry 在 the”“entry in the” valid-rows 和 valid-cols of src0 和 src1 is smaller than dst. (位置： `include/pto/npu/a2a3/TPartAdd.hpp:43`; 修复： `-`)
 - **PA-0052** TPARTMAX: At most one entry 在 the valid-rows 和 valid-cols of src0 和 src1 is smaller than dst. (位置： `include/pto/npu/a2a3/TPartMax.hpp:43`; 修复： `-`)
 - **PA-0053** TPARTMIN: At most one entry 在 the valid-rows 和 valid-cols of src0 和 src1 is smaller than dst. (位置： `include/pto/npu/a2a3/TPartMin.hpp:43`; 修复： `-`)
 - **PA-0054** TPARTOPS: At most one entry 在 the valid-rows 和 valid-cols of src0 和 src1 is smaller than dst. (位置： `include/pto/npu/a2a3/TPartOp.hpp:180`; 修复： `-`)
@@ -465,10 +465,10 @@ PTO 使用三种常见的断言机制：
 
 ### CPU 模拟器检查（`assert`）
 
-- **CA-0001** assert (src.GetValidRow() == dst.GetValidRow() && src.GetValidRow() == dst.GetValidRow()); (位置： `include/pto/cpu/TMov.hpp:23`)
+- **CA-0001** assert (src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol()); (位置： `include/pto/cpu/TMov.hpp:23`)
 - **CA-0002** assert((gShape0*gShape1*gShape2*gShape3 == validRow && gShape4==validCol && TileData::isRowMajor) || (gShape0*gShape1… (位置： `include/pto/cpu/TLoad.hpp:134 (+1)`)
 - **CA-0003** assert(dst.GetValidCol() == DstTileData::Cols); (位置： `include/pto/cpu/TGather.hpp:119`)
-- **CA-0004** assert(gShape0==1 && gShape1==1 && gShape2==1 && "ND,DN -> Nz,Zn convertion does support only 2D GMs"); (位置： `include/pto/cpu/TLoad.hpp:145`)
-- **CA-0005** assert(gShape0==1 && gShape1==1 && gShape2==1 && "Nz,Zn -> ND,DN convertion does support only 2D GMs"); (位置： `include/pto/cpu/TStore.hpp:119`)
+- **CA-0004** assert(gShape0==1 && gShape1==1 && gShape2==1 && "ND,DN -> Nz,Zn conversion does support only 2D GMs"); (位置： `include/pto/cpu/TLoad.hpp:145`)
+- **CA-0005** assert(gShape0==1 && gShape1==1 && gShape2==1 && "Nz,Zn -> ND,DN conversion does support only 2D GMs"); (位置： `include/pto/cpu/TStore.hpp:119`)
 - **CA-0006** assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol()); (位置： `include/pto/cpu/TExtract.hpp:20`)
 - **CA-0007** assert(validCol * sizeof(typename TileDataDst::TileDType) % 32 == 0); (位置： `include/pto/cpu/TGatherB.hpp:54`)

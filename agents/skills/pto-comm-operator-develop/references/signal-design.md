@@ -1,4 +1,4 @@
-# 信号与同步设计
+﻿# 信号与同步设计
 
 ## 信号矩阵布局
 
@@ -78,7 +78,7 @@ ReduceScatterPhase(...);
 pipe_barrier(PIPE_ALL);
 
 // 阶段 2：跨 rank barrier
-DeviceBarrier(...);
+'..' 标准的省略号 '
 
 // 阶段 3：AllGather
 AllGatherPhase(...);

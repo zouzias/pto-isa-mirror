@@ -1,6 +1,6 @@
 # Tutorial: GEMM (Patterns and Tile Types)
 
-This tutorial shows the common “shape” of GEMM code when written with PTO tile intrinsics.
+This tutorial shows the common "shape" of GEMM code when written with PTO tile intrinsics.
 
 It is intentionally high level. For fully working examples, see the CPU demos and kernels in this repository (e.g., `demos/cpu/gemm_demo/` and `kernels/`).
 

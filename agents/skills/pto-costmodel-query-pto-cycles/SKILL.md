@@ -1,4 +1,4 @@
----
+﻿---
 name: PTO Costmodel Cycles 查询指南
 description: 本指南介绍如何使用 PTO Costmodel 获取单条 PTO ISA 指令的仿真 cycles 数，涵盖 costmodel 两种使用场景、查询脚本用法、各指令类型的 C++ 模板以及编译运行方法
 license: CANN Open Software License Agreement Version 2.0
@@ -46,7 +46,7 @@ PTO costmodel 是 PTO ISA 的性能仿真模型，模拟 Ascend NPU (A2/A3, `__N
 
 | 指令类型 | 额外必需信息 | 示例 |
 |----------|-------------|------|
-| **TCVT** | 源类型 + 目标类型（两种类型不同） | 源=`float`, 目标=`half` |
+| **TCVT** | “目标类型 + 源类型” | 源=`float`, 目标=`half` |
 | **TMATMUL** | A/B/Output 三种类型 + M/K/N 三个维度 | A=`half`, B=`half`, Out=`float`, M=128, K=64, N=128 |
 
 ### 缺少信息时的提示话术
@@ -190,10 +190,16 @@ int main() {
 **TMATMUL（矩阵乘法）：**
 ```cpp
     constexpr int blockAlign = (sizeof({a_dtype}) == 1) ? 32 : 16;
-    constexpr int M = CeilAlign({m}, blockAlign);  // 同理 N, K
+    constexpr int M = CeilAlign({m}, blockAlign);
+    constexpr int K = CeilAlign({k}, blockAlign);
+    constexpr int N = CeilAlign({n}, blockAlign);
     using LeftTile  = TileLeft<{a_dtype}, M, K, {m}, {k}>;
     using RightTile = TileRight<{b_dtype}, K, N, {k}, {n}>;
     using AccTile   = TileAcc<{out_dtype}, M, N, {m}, {n}>;
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+// Note: 模板中仅使用 using 定义了类型别名，未实例化 aTile、bTile、cTile 变量，直接调...
     TMATMUL(cTile, aTile, bTile);
 ```
 
@@ -222,12 +228,12 @@ macOS 额外需要：`-isystem$(xcrun --show-sdk-path)/usr/include/c++/v1`
 
 ## ST 测试套件
 
-正式的回归测试位于 `tests/costmodel/st/testcase/`，用于 costmodel 的正确性验证。
+正式的回归测试位于 `tests/costmodel/st/test case/`，用于 costmodel 的正确性验证。
 
 ### 运行方式
 
 ```bash
-python3 tests/run_costmodel.py --testcase <name> --build-type Release
+python3 tests/run_costmodel.py --test case <name> --build-type Release
 python3 tests/run_costmodel.py --build-type Release  # 运行全部
 ```
 

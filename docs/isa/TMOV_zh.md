@@ -24,7 +24,13 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
+<<<<<<< HEAD
 PTO AS 设计建议将 `TMOV` 拆分为一系列操作：
+=======
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
+
+PTO-AS 设计建议将 `TMOV` 拆分为一系列操作：
+>>>>>>> 74b32a9a... 修复低错，敏感词
 
 ```text
 %left  = tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
@@ -49,12 +55,13 @@ pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
+声明于 `正文中的 pto_instr.hpp  pto-inst` 和 `include/pto/common/constants.hpp`：
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
+// Note: Verify template parameters match actual API
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 

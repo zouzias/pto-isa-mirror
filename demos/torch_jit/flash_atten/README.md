@@ -17,7 +17,7 @@ Which produces a CSV file containing one row per `(sq, sk, kernel)` configuratio
 - `head_size` — attention head dimension (fixed at 128)  
 - `kernel` — attention implementation (`npu_fused_attention`, `jit_flash`)  
 - `time_us` — average execution time in microseconds over 50 iterations  
-- `tflops` — achieved throughput for the full attention forward pass  
+- `TFLOP/s` — achieved throughput for the full attention forward pass  
 - `flops_total` — total operation count used to compute TFLOP/s  
 
 
@@ -35,7 +35,7 @@ We define:
 - jit_cores = sq / 128
 
 Since larger `sq` launches more parallel JIT cores, raw TFLOP/s naturally increases with `sq`.  
-To compare performance independent of parallelism, we normalize throughput to a fixed 24-core equivalent for the 910 B2.
+To compare performance independent of parallelism, we normalize throughput to a fixed 24-core equivalent for the 910B2.
 
 The normalized throughput is computed as:
 - normalized_jit_tflops = jit_tflops * 24 / jit_cores

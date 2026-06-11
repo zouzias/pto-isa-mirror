@@ -1,4 +1,4 @@
-# Custom PyTorch Operator (KERNEL_LAUNCH) Example
+﻿# Custom PyTorch Operator (KERNEL_LAUNCH) Example
 
 This example shows how to implement a custom PTO-based kernel and expose it as a PyTorch operator via `torch_npu`.
 
@@ -20,7 +20,7 @@ demos/baseline/add/
 
 Add a kernel source file under `demos/baseline/add/csrc/kernel/` and include it in the build. For example, to build `add_custom.cpp`, add it to `demos/baseline/add/CMakeLists.txt`:
 
-```cmake
+```CMake
 ascendc_library(no_workspace_kernel STATIC
     csrc/kernel/add_custom.cpp
 )
@@ -72,7 +72,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y)
 
 ### 2.3 Register the implementation
 
-Register the implementation with `TORCH_LIBRARY_IMPL`. For NPU execution, `torch_npu` uses the `PrivateUse1` dispatch key, please find the detailed introcution of `PrivateUse1` on Pytorch official website [https://docs.pytorch.org/tutorials/advanced/privateuseone.html](https://docs.pytorch.org/tutorials/advanced/privateuseone.html)
+Register the implementation with `TORCH_LIBRARY_IMPL`. For NPU execution, `torch_npu` uses the `PrivateUse1` dispatch key, please find the detailed introduction of `PrivateUse1` on PyTorch official website [https://docs.PyTorch.org/tutorials/advanced/privateuseone.html](https://docs.PyTorch.org/tutorials/advanced/privateuseone.html)
 
 ```cpp
 TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
@@ -85,7 +85,7 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
 This example requires PTO Tile Lib, PyTorch, `torch_npu`, and CANN. Follow the official `torch_npu` installation guide:
 
-https://gitcode.com/ascend/pytorch#%E5%AE%89%E8%A3%85
+https://gitcode.com/ascend/PyTorch#%E5%AE%89%E8%A3%85
 
 or 
 
@@ -97,7 +97,7 @@ python3 -m pip install -r requirements.txt
 
 Edit `demos/baseline/add/CMakeLists.txt` and set `SOC_VERSION` to your target (example: A2A3 uses `Ascend910B1`):
 
-```cmake
+```CMake
 set(SOC_VERSION "Ascendxxxyy" CACHE STRING "system on chip type")
 ```
 
@@ -119,7 +119,7 @@ python3 setup.py bdist_wheel
 
 ```bash
 cd dist
-pip uninstall *.whl
+使用系统命令 rm -f *
 pip install *.whl
 ```
 

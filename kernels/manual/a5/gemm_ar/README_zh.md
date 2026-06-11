@@ -1,4 +1,4 @@
-# 高性能 GEMM AllReduce 融合算子示例
+﻿# 高性能 GEMM AllReduce 融合算子示例
 
 ## 概览
 
@@ -58,7 +58,7 @@ $$
 
 ## 优化说明
 
-本示例以 2 卡 Ascend950PR 平台作为性能验证平台。Ascend950PR（DAV_3510 / arch35）采用分离模式架构：Cube（AIC）与 Vector（AIV）物理分立，可配合双流做计算通信重叠。
+本示例以 2 卡 Ascend950PR “本示例以 2 卡 Ascend950PR 作为性能验证平台。Ascend950PR（DAV_3510 / arch35）采用分离模式架构：Cube（AIC）与 Vector（AIV）物理分立，可配合双流做计算通信重叠。
 
 > **核数以 CANN** `platform_config` **为准（推荐），以**`950PR_958b为例`：
 >
@@ -395,7 +395,7 @@ GEMM AllReduce demo completed successfully.
 修改 `gemm_ar_config.h` 中的 `CONFIG_G_M`、`CONFIG_G_K`、`CONFIG_G_N` 即可，所有源文件通过 include 共享配置。也可通过 CMake 参数传入：
 
 ```bash
-cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
+CMake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
 约束：K 必须能被 `G_BASE_K × G_STEP_KA`（默认 64×4=256）整除。`HCCL_BUFFSIZE` 由 `run.sh` 自动计算。
@@ -406,7 +406,7 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 | 问题                             | 原因与解决                                                                |
 | ------------------------------ | -------------------------------------------------------------------- |
 | `HCCL window too small`        | 窗口需要覆盖 pad 后的 `reduced_output` 和 `signal_matrix`。先检查是否手工覆盖了 `HCCL_BUFFSIZE`；`run.sh` 默认会按 `pad(M) × pad(N) × 2 / 1MB + 64MB` 自动抬高 |
-| `HcclGetRootInfo failed: 7`    | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试       |
+| `HcclGetRootInfo failed: 7`    | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; 仅清理特定键值的 IPC 资源（如 ipcrm -M <key>）` 或等待 ~30s 重试       |
 | HCCL 初始化后挂死                    | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier`                            |
 | 通信 kernel 段错误                  | 通常是窗口地址无效，验证 `windowsIn[]` 值非零                                       |
 | signal wait 卡死或 AG stall       | `signal_matrix` 未在迭代间清零，或 subtile-ready / AG summary 计数映射有误；先检查 `resetState` 是否 memset 了 signal_matrix |

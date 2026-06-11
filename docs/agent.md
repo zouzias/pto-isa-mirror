@@ -21,7 +21,7 @@ This document is a fast, practical orientation for agents working in this repo: 
   - `docs/isa/` (per-instruction reference)
 - Public API headers and backend status table: `include/README.md`
 - Core public headers / backend split: `include/pto/README.md`
-- Build/package entrypoint: `build.sh`, top-level `CMakeLists.txt`, `cmake/`
+- Build/package entrypoint: `build.sh`, top-level `CMakeLists.txt`, `CMake/`
 - Tests entrypoints:
   - CPU simulator tests: `tests/run_cpu.py`, `tests/run_cpu_tests.sh`
   - NPU ST build/run: `tests/script/run_st.py`, `tests/run_st.sh`
@@ -41,8 +41,8 @@ python3 tests/run_cpu.py --clean --verbose
 Useful variants:
 
 ```bash
-python3 tests/run_cpu.py --testcase tadd
-python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.*'
+python3 tests/run_cpu.py --test case tadd
+python3 tests/run_cpu.py --test case tadd --gtest_filter 'TADDTest.*'
 python3 tests/run_cpu.py --demo gemm --verbose
 python3 tests/run_cpu.py --demo flash_attn --verbose
 ```
@@ -58,13 +58,13 @@ Notes:
 NPU ST is built/run via `tests/script/run_st.py`:
 
 ```bash
-python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] [-a] -t <testcase> -g <gtest_filter>
+python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] [-a] -t <test case> -g <gtest_filter>
 ```
 
 Key points:
 
 - `-a` compiles the test case in auto mode instead of manual mode.
-- `-v a3` selects the **A2/A3** implementation under `include/pto/npu/a2a3/` (the test script maps it to a SoC string like `Ascend910B1`).
+- `-v a3` selects the **A2/A3** implementation under `include/pto/npu/a2a3/` (the test script maps it to a SoC string like `Ascend A2`).
 - `-r sim` uses the Ascend simulator libraries under `$ASCEND_HOME_PATH/tools/simulator/<SOC>/lib` and `runtime/lib64/stub`.
 - `-r npu` runs on real hardware.
 

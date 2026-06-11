@@ -1,4 +1,4 @@
-# TCONCAT
+﻿# TCONCAT
 
 ## Tile Operation Diagram
 
@@ -158,14 +158,14 @@ void example_indexed() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
+%dst = pto.tconcat %src0, %src1 : (ASM示例中的源操作数维度16x16以匹配C++示例, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
 ```
 
 ### Manual Mode
 
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+Required
 # pto.tassign %src0, @tile(0x1000)
 # pto.tassign %src1, @tile(0x2000)
 # pto.tassign %dst, @tile(0x3000)

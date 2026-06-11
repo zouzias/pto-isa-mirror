@@ -14,10 +14,10 @@ CPU 仿真支持以下同步通信指令的功能验证：
 ### 运行方式
 
 ```bash
-python3 tests/run_cpu.py --testcase <testcase_name> --gtest_filter '<filter>'
+python3 tests/run_cpu.py --test case <testcase_name> --gtest_filter '<filter>'
 
 # 示例
-python3 tests/run_cpu.py --testcase tgather --gtest_filter 'TGatherTest.*'
+python3 tests/run_cpu.py --test case tgather --gtest_filter 'TGatherTest.*'
 ```
 
 ### CPU 仿真局限性
@@ -51,7 +51,7 @@ python3 tests/script/run_st.py -r npu -v a3 --comm
 ```bash
 cd kernels/manual/a2a3/my_operator
 mkdir -p build && cd build
-cmake .. -DSOC_VERSION=Ascend910C -DRUN_MODE=npu
+CMake .. -DSOC_VERSION=Ascend910C -DRUN_MODE=npu
 make -j
 
 # 运行（8 rank）
@@ -112,7 +112,7 @@ set -e
 source /usr/local/Ascend/ascend-toolkit/latest/set_env.sh
 
 mkdir -p build && cd build
-cmake .. -DSOC_VERSION=${SOC_VERSION:-Ascend910C} -DRUN_MODE=npu
+CMake .. -DSOC_VERSION=${SOC_VERSION:-Ascend910C} -DRUN_MODE=npu
 make -j$(nproc)
 cd ..
 

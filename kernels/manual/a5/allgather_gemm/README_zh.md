@@ -1,8 +1,8 @@
-# AllGather + GEMM 通算融合示例
+﻿# AllGather + GEMM 通算融合示例
 
 ## 概览
 
-本示例演示如何在 Ascend AI Core 上实现 **AllGather + GEMM** 融合算子，采用 **M 维切分** 与 **chunk 流式流水线** 设计。在多卡 LLM 推理场景中，每个 rank 持有矩阵 `A` 在 M 维上的一段本地切片。与“先完成 AllGather，再启动 GEMM”的串行方式不同，本实现将通信与计算按 chunk 粒度重叠执行：通信 kernel 每搬完一个 chunk 并发出就绪信号后，计算 kernel 就可以立即开始处理该 chunk，从而尽可能将通信延迟隐藏在计算之后。
+本示例演示如何在 Ascend AI Core 上实现 **AllGather + GEMM** 融合算子，采用 **M 维切分** 与 **chunk 流式流水线** 设计。在多卡 LLM 推理场景中，每个 rank 持有矩阵 `A` 在 M 维上的一段本地切片。与“先完成 AllGather，再启动 GEMM”的串行方式不同，本实现将通信与计算按 chunk 粒度重叠执行：通信 kernel 每搬完一个 chunk 并发出就绪信号后，计算 kernel 就可以立即开始处理该 chunk，从而尽可能将通信延迟“隐藏在计算中”或“被计算掩盖”。
 
 ## 支持的 AI 处理器
 

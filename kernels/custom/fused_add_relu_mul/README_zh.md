@@ -1,4 +1,4 @@
-# Fused Add-ReLU-Mul 自定义算子示例
+﻿# Fused Add-ReLU-Mul 自定义算子示例
 
 本示例展示如何从零开始开发一个 PTO 自定义算子，实现算子融合优化。
 
@@ -86,7 +86,7 @@ TileT tile_x[2];
 TileT tile_result[2];
 
 // 预加载第一批数据
-load_event[0] = TLOAD(tile_x[0], ...);
+load_event[0] = TLOAD(tile_x[0], '..' 标准的省略号 '.);
 
 for (int tile_idx = 0; tile_idx < num_tiles; tile_idx++) {
     int curr = tile_idx % 2;
@@ -164,10 +164,10 @@ for (int tile_idx = 0; tile_idx < num_tiles; tile_idx++) {
 mkdir -p build && cd build
 
 # 配置（CPU 仿真）
-cmake .. -DRUN_MODE=sim -DSOC_VERSION=Ascend910B1
+CMake .. -DRUN_MODE=sim -DSOC_VERSION=Ascend910B1
 
 # 配置（NPU）
-cmake .. -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1
+CMake .. -DRUN_MODE=npu -DSOC_VERSION=Ascend910B1
 
 # 编译
 make -j$(nproc)

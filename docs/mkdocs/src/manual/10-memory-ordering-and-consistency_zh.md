@@ -1,4 +1,8 @@
+<<<<<<< HEAD:docs/mkdocs/src/manual/10-memory-ordering-and-consistency_zh.md
 # 10. 内存顺序与一致性
+=======
+﻿# 11. 内存顺序与一致性
+>>>>>>> 74b32a9a... 修复低错，敏感词:docs/mkdocs/src/manual/11-memory-ordering-and-consistency_zh.md
 
 ## 10.1 范围
 
@@ -12,7 +16,7 @@
 - 通过内存操作访问的全局内存视图
 - 影响可见性边界的同步状态
 
-后端私有缓存/缓冲属于实现定义，但 MUST 满足架构可见顺序结果。
+后端私有'缓存'属于实现定义，但 MUST 满足架构可见顺序结果。
 
 ## 10.3 一致性基线
 

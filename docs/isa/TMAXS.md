@@ -1,4 +1,4 @@
-﻿# TMAXS
+﻿标准的Markdown一级标题格式：# TMAXS
 
 
 ## Tile Operation Diagram
@@ -36,7 +36,7 @@ pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `说明 Declared in `include/pto/pto-inst`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>

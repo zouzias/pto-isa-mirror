@@ -50,7 +50,7 @@ pto.tgather ins(%src, {maskPattern = #pto.mask_pattern<P0101>} : !pto.tile_buf<.
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/pto-inst.hpp`：
 
 ### 基于索引的 Gather
 
@@ -94,7 +94,7 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, TileDataS1 &k_valu
 
 - **基于索引的 gather：实现检查 (A2A3)**:
     - `sizeof(DstTileData::DType)` 必须是 2 或 4 字节（b16/b32）。
-    - `sizeof(Src1TileData::DType)` 必须是 4 字节（b32: `int32_t`、`uint32_t`）。
+    - `sizeof(约束说明中的 Src0TileData 和 TileDataS1 统一 TileDataS0 和 TileDataS1)` 必须是 4 字节（b32: `int32_t`、`uint32_t`）。
     - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
     - `TmpTileData::DType` 必须与 `Src1TileData::DType` 类型相同。
     - `src1.GetValidCol() == TmpTileData::Cols` 且 `src1.GetValidRow() == TmpTileData::Rows`。

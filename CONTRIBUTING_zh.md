@@ -76,7 +76,7 @@ SIG 成员会对您提交的 Issue 进行评审并反馈修改意见。完成修
         └── ${op_class}/
             └── ${op_name}.hpp                           # 算子实现文件、注释、结构与逻辑
     tests/
-    ├── ${op_class}/src/st/testcase/
+    ├── ${op_class}/src/st/test case/
     │   ├── ${op_name}/
     │   │   ├── ${op_name}.cpp                           # 调用接口文件
     │   │   ├── main.cpp                                 # 测试入口文件

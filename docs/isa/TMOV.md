@@ -49,7 +49,7 @@ pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
+Declared in `示例代码中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr` and `include/pto/common/constants.hpp`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
@@ -138,9 +138,9 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
     - dual-destination modes require `QuantMode_t::NoQuant`
     - dual-destination modes do not support the `nz2dn` path
     - for 32-bit destination types (`float`/`int32_t`), when using `DualModeSplitN` the `ValidCol` (before the split) must be a multiple of `32`
-    - destination stride must be non-zero and `dstStride * sizeof(dstType)` must be a multiple of `32` bytes
+    - destination stride must be non-zero and `dstStride * sizeof(DstType)` must be a multiple of `32` bytes
 - For `TileType::Acc -> TileType::Mat`:
-    - destination stride must be non-zero and `dstStride * sizeof(dstType)` must be a multiple of `32` bytes
+    - destination stride must be non-zero and `dstStride * sizeof(DstType)` must be a multiple of `32` bytes
     - relu/scalar-quant/vector-quant forms are supported through the corresponding overloads
 
 

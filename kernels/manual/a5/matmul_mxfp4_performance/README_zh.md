@@ -1,4 +1,4 @@
-# 非对齐场景下的高性能 MXFP4 算子示例
+﻿# 非对齐场景下的高性能 MXFP4 算子示例
 
 ## 概览
 
@@ -45,8 +45,8 @@ $$
 | 项目        | 值 |
 | ----------- | ----- |
 | OpType          | `MxMatmul` |
-| data输入         | `a`: `m×k`, `float4_e2m1_t`, `ND`; `b`: `n×k`, `float4_e2m1_t`, `DN` |
-| scale输入        | `scaleA`: `m×scaleK`, `float8_e8m0_t`, `ND`; `scaleB`: `n×scaleK`, `float8_e8m0_t`, `DN` |
+| data输入         | `a`: `m×k`, `float4_e2m1_t`, `ND`; `b`: `k×n`, `float4_e2m1_t`, `DN` |
+| scale输入        | `scaleA`: `m×scaleK`, `float8_e8m0_t`, `ND`; scaleB`: `n×scaleK, `float8_e8m0_t`, `DN` |
 | 输出             | `c`: `m×n`, `bfloat16`, `ND` |
 | Kernel 名称      | `MxMatmulPerformance` |
 
@@ -90,7 +90,7 @@ $$
 
 以下数据在 Ascend A5 上测得，覆盖多个不同的矩阵尺寸（fp4 输入 → bfloat16 输出）。
 
-| 参数 | TMATMUL（Cube）占比 | TLOAD 占比 | TEXTRACT 占比 | TSTORE 占比 | 执行时间（ms） |
+| 参数 | `T_MATMUL（Cube）占比 | T_LOAD 占比 | T_EXTRACT 占比 | T_STORE 占比` | 执行时间（ms） |
 | --- | --- | --- | --- | --- | --- |
 | `m=2048` `k=2048` `n=2048` | 44.7% | 46.6% | 22.1% | 25.6% | 0.0425 |
 | `m=2048` `k=4096` `n=4096` | 77.4% | 76.7% | 38.5% | 7.7% | 0.1003 |
@@ -119,7 +119,7 @@ python3 scripts/gen_data.py
 3. 运行示例：
 
 ```bash
-bash run.sh -r npu -v Ascend950
+bash run.sh -r npu 参数 -v Ascend910B 或 -v Ascend910（具体以当前 CANN 版本文档要求为准）
 ```
 
 成功时输出：

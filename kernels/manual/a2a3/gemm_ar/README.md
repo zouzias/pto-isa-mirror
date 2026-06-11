@@ -389,7 +389,7 @@ GEMM AllReduce demo completed successfully.
 Update `CONFIG_G_M`, `CONFIG_G_K`, and `CONFIG_G_N` in `gemm_ar_config.h`. All source files share the configuration through includes. You can also pass them from CMake:
 
 ```bash
-cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
+CMake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
 Constraint: `K` must be divisible by `G_BASE_K x G_STEP_KA` (default `64 x 4 = 256`). `HCCL_BUFFSIZE` is computed automatically by `run.sh`.

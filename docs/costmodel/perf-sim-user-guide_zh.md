@@ -16,13 +16,13 @@ Perf-Sim 的结果用于性能建模和趋势判断，不替代真实硬件 prof
 FA perf-sim 用例位于：
 
 ```text
-tests/costmodel/perf_sim_st/testcase/fa_perf_sim
+tests/costmodel/perf_sim_st/test case/fa_perf_sim
 ```
 
 构建并运行：
 
 ```bash
-cmake --build tests/costmodel/perf_sim_st/build --target fa_perf_sim --parallel 4
+CMake --build tests/costmodel/perf_sim_st/build --target fa_perf_sim --parallel 4
 tests/costmodel/perf_sim_st/build/bin/fa_perf_sim
 ```
 
@@ -43,9 +43,9 @@ perf_sim_output/
 
 ### 1. 使用 costmodel 测试工程
 
-推荐在 `tests/costmodel/perf_sim_st/testcase/<case_name>/` 下新增用例目录，并在对应 `CMakeLists.txt` 中注册 target：
+推荐在 `tests/costmodel/perf_sim_st/test case/<case_name>/` 下新增用例目录，并在对应 `CMakeLists.txt` 中注册 target：
 
-```cmake
+```CMake
 pto_costmodel_sim_st(my_perf_sim)
 target_include_directories(my_perf_sim PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../kernels/manual/common/my_kernel
@@ -67,7 +67,7 @@ PTO_COMM_NOT_SUPPORTED
 ```cpp
 #include <pto/pto-inst.hpp>
 #include <pto/costmodel/perf_sim/launch.hpp>
-#include <gtest/gtest.h>
+#include <GoogleTest/GoogleTest.h>
 
 #include "my_kernel.cpp"
 ```

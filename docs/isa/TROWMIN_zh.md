@@ -37,7 +37,7 @@ pto.trowmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `示例中的 #include <pto/pto-inst.hpp>  #include <pto/common/pto_instr`：
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
@@ -117,7 +117,7 @@ void example_manual() {
 ### 自动模式
 
 ```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
+'# Auto mode: resource placement and scheduling are handled by the compiler/runtime
 %dst = pto.trowmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 

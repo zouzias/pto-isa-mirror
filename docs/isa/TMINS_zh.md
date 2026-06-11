@@ -63,7 +63,7 @@ PTO_INST RecordEvent TMINS(TileDataDst &dst, TileDataSrc &src, typename TileData
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例 #include <pto/common/pto_instr
 
 using namespace pto;
 

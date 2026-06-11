@@ -1,4 +1,4 @@
-# High-Performance GEMM + AllReduce Fusion Example
+﻿# High-Performance GEMM + AllReduce Fusion Example
 
 ## Overview
 
@@ -340,7 +340,7 @@ On **Ascend910B**, measurements showed that increasing `COMM_BLOCK_NUM` from 24 
 
 ## Build and Run
 
-1. Configure the Ascend CANN environment:
+列表编号连续数字（1
 
 ```bash
 export ASCEND_CANN_PATH=/usr/local/Ascend/cann-<version>/set_env.sh
@@ -394,7 +394,7 @@ GEMM AllReduce demo completed successfully.
 Update `CONFIG_G_M`, `CONFIG_G_K`, and `CONFIG_G_N` in `gemm_ar_config.h`. All source files share the configuration through includes. You can also pass them from CMake:
 
 ```bash
-cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
+CMake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
 Constraint: `K` must be divisible by `G_BASE_K x G_STEP_KA` (default `64 x 4 = 256`). `HCCL_BUFFSIZE` is computed automatically by `run.sh`.
@@ -404,7 +404,7 @@ Constraint: `K` must be divisible by `G_BASE_K x G_STEP_KA` (default `64 x 4 = 2
 | Problem | Cause and Fix |
 | --- | --- |
 | `HCCL window too small` | The window must cover the padded `reduced_output` footprint plus `signal_matrix`. Check whether `HCCL_BUFFSIZE` was manually overridden; `run.sh` auto-raises it from `pad(M) x pad(N) x 2 / 1MB + 64MB` |
-| `HcclGetRootInfo failed: 7` | Leftover dirty state from a previous run. Execute `rm -rf /dev/shm/sem.hccl*; ipcrm -a` or wait about 30 seconds and retry |
+| `HcclGetRootInfo failed: 7` | Leftover dirty state from a previous run. Execute `rm -rf /dev/shm/sem.hccl*; ipcrm -S <sem_id>` or wait about 30 seconds and retry |
 | Hangs after HCCL initialization | Usually a rank synchronization problem. Check that all ranks reached `CommMpiBarrier` |
 | Segmentation fault in the communication kernel | Usually caused by an invalid window address. Verify that `windowsIn[]` entries are non-zero |
 | Signal-wait deadlock or AG stall | `signal_matrix` was not cleared between iterations, or the subtile-ready / AG-summary ownership mapping is wrong. Check whether `resetState` calls `memset` on `signal_matrix` |

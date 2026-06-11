@@ -1,6 +1,6 @@
 ---
 name: PTO-COMM 通信算子性能优化指南
-description: PTO-COMM 通信算子性能优化方法论与实战技巧。涵盖通算重叠（Overlap）、乒乓双缓冲、多 Block 负载均衡、同步开销优化、数据布局优化、Tile 大小选择、带宽利用率分析、性能建模与 Profiling 方法等。触发：需要优化 PTO-COMM 通信算子性能、分析通信瓶颈、提升带宽利用率、设计通算重叠策略时。
+description: PTO-COMM 通信算子性能优化方法论应用技巧。涵盖通算重叠（Overlap）、乒乓双缓冲、多 Block 负载均衡、同步开销优化、数据布局优化、Tile 大小选择、带宽利用率分析、性能建模与 Profiling 方法等。触发：需要优化 PTO-COMM 通信算子性能、分析通信瓶颈、提升带宽利用率、设计通算重叠策略时。
 license: CANN Open Software License Agreement Version 2.0
 ---
 

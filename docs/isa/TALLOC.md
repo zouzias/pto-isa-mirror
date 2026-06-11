@@ -1,4 +1,4 @@
-# TALLOC
+﻿# TALLOC
 
 ## Introduction
 
@@ -18,7 +18,7 @@ Allocate a producer FIFO slot from a `TPipe` and expose it as a `GlobalTensor` v
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/pto-inst.hpp`:
 
 ```cpp
 template <typename Pipe, typename GlobalData, TileSplitAxis Split,

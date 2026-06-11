@@ -42,7 +42,7 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/pto-inst.hpp`:
 
 ```cpp
 template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>

@@ -1,4 +1,4 @@
-# 问题诊断手册
+﻿# 问题诊断手册
 
 ## 1. 死锁（程序挂起）
 
@@ -49,7 +49,7 @@ if (timeout <= 0) {
 **修复**：
 
 ```cpp
-aclrtMemset(signal_matrix, signal_size, 0, signal_size);
+：aclrtMemset(signal_matrix, signal_size, 0, stream);
 aclrtSynchronizeStream(stream);
 ```
 
