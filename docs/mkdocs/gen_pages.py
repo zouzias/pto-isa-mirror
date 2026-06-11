@@ -81,6 +81,12 @@ def _should_skip(rel_posix: str) -> bool:
         return True
     if rel_posix == "docs/menu_ops_development.md":
         return True
+    if rel_posix == "README.md":
+        # The repo-root README maps to the site root URL and collides with the
+        # curated homepage index.md (mkdocs drops it with a warning). Skip it
+        # explicitly; inbound links to it are redirected to the homepage by
+        # _rewrite_root_readme_links.
+        return True
     if rel_posix.startswith(".venv"):
         return True
     if "site-packages/" in rel_posix:
@@ -134,8 +140,11 @@ def _rewrite_rel_imgs_for_build(text: str, src_rel: str) -> str:
 
 
 # Matches a relative markdown link that starts with one or more "../" components.
-# Group 1: the "../" prefix (one or more), Group 2: the rest of the target.
-REL_LINK_RE = re.compile(r'\]\((\.\./+)([^)]+)\)')
+# Group 1: the full "../" prefix (every leading "../"), Group 2: the rest of the
+# target.  The prefix must capture *all* leading "../" segments so the depth can
+# be counted correctly; matching only the first one mis-counts deep links such as
+# "../../../../docs/isa/README_zh.md" (4 levels) as a single level.
+REL_LINK_RE = re.compile(r'\]\(((?:\.\./)+)([^)]+)\)')
 
 # Matches repo-relative links into docs/mkdocs/src/ (e.g. mkdocs/src/manual/foo.md).
 # These appear in repo-level docs so they resolve correctly during static browsing,
@@ -503,6 +512,44 @@ def _write_all_pages_index(
 # main
 # ---------------------------------------------------------------------------
 
+# Matches a markdown link target: group1 "](", group2 the target, group3 ")".
+_MD_LINK_TARGET_RE = re.compile(r'(\]\()([^)]+)(\))')
+
+
+def _rewrite_root_readme_links(text: str, rel: str) -> str:
+    """Rewrite links that resolve to the repo-root ``README.md`` so they point
+    at the site homepage (``index.md``).
+
+    The repo-root README is not a site page -- it collides with the curated
+    homepage ``index.md`` and is skipped (see ``_should_skip``).  Repo docs that
+    link to it (e.g. "Project Overview" -> ``../../README.md``) would otherwise
+    dangle on the site.  This runs at *build time* on the mirrored copy only, so
+    the repo source keeps its repo-relative link and plain repo browsing (where
+    the root README does exist) still works.
+    """
+    src_dir = posixpath.dirname(rel)
+    depth = len([p for p in src_dir.split("/") if p])
+    home = ("../" * depth) + "index.md" if depth else "index.md"
+
+    def repl(m: "re.Match[str]") -> str:
+        target = m.group(2)
+        url = target.split("#", 1)[0]
+        anchor = target[len(url):]
+        if not url or url.startswith(("http://", "https://", "mailto:")):
+            return m.group(0)
+        if url.startswith("/"):
+            resolved = url.lstrip("/")
+        elif src_dir:
+            resolved = posixpath.normpath(posixpath.join(src_dir, url))
+        else:
+            resolved = posixpath.normpath(url)
+        if resolved == "README.md":
+            return f"{m.group(1)}{home}{anchor}{m.group(3)}"
+        return m.group(0)
+
+    return _MD_LINK_TARGET_RE.sub(repl, text)
+
+
 def main() -> None:
     copied_md: list[str] = []
 
@@ -553,6 +600,9 @@ def main() -> None:
         if MKDOCS_SRC_LINK_RE.search(text):
             text = MKDOCS_SRC_LINK_RE.sub(r'](/\1)', text)
             text = _rewrite_links_for_build(text, rel)
+        # Redirect links to the repo-root README (skipped from the site) to the
+        # homepage, so they resolve on the site without touching repo source.
+        text = _rewrite_root_readme_links(text, rel)
         with mkdocs_gen_files.open(rel, "w") as f:
             f.write(f"<!-- Generated from `{rel}` -->\n\n")
             f.write(text)
