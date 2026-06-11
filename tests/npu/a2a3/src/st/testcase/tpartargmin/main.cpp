@@ -304,3 +304,31 @@ TEST_F(TPARTARGMINTest, case_float_uint32_same_tile)
 {
     this->Launch<float, uint32_t, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8>();
 }
+TEST_F(TPARTARGMINTest, case_half_uint32_same_size_32k)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_row_diff_32k_0)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 64, 128, 64, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_row_diff_32k_1)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 64, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_col_diff_32k_0)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 57, 128, 64, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_col_diff_32k_1)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 57, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_small_32k_0)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 57, 128, 64, true>();
+}
+TEST_F(TPARTARGMINTest, case_half_uint32_small_32k_1)
+{
+    this->Launch<aclFloat16, uint32_t, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 128, 64, 111, 57, true>();
+}
