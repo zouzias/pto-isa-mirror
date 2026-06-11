@@ -1521,6 +1521,19 @@
         "src1"
       ],
       "notes": []
+    },
+    {
+      "instruction": "TADDReluConv",
+      "category": "Complex",
+      "summary_en": "Fused elementwise add, ReLU clamp, and type conversion: dst = convert(max(0, src0 + src1)).",
+      "summary_zh": "融合逐元素加法、ReLU 限幅和类型转换：dst = convert(max(0, src0 + src1))。",
+      "diagram_template": "elementwise",
+      "operands": [
+        "dst",
+        "src0",
+        "src1"
+      ],
+      "notes": []
     }
   ]
 }
