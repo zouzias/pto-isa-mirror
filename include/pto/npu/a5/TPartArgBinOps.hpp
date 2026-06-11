@@ -20,19 +20,76 @@ PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, 
                                   uint32_t &dstSReg, uint32_t repeatStart, uint32_t repeatEnd)
 {
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     constexpr auto distIndex =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<U, DistVST::DIST_NORM>())>();
-    MaskReg dstMask;
+    MaskReg dstMask, dstIdxMask0, dstIdxMask1;
+    uint32_t dstIdxSreg = dstSReg;
     RegTensor<T> dstValReg;
-    RegTensor<U> dstIdxReg;
+    RegTensor<U> dstIdxReg, dstIdxReg2;
     for (uint16_t i = (uint16_t)repeatStart; i < (uint16_t)repeatEnd; i++) {
         dstMask = CreatePredicate<T>(dstSReg);
         vlds(dstValReg, srcValPtr, row * srcValStride + i * elementsPerRepeat, NORM);
-        vlds(dstIdxReg, srcIdxPtr, row * srcIdxStride + i * elementsPerRepeat, NORM);
         vsts(dstValReg, dstValPtr, row * dstValStride + i * elementsPerRepeat, distValue, dstMask);
-        vsts(dstIdxReg, dstIdxPtr, row * dstIdxStride + i * elementsPerRepeat, distIndex, dstMask);
+        if constexpr (sizeof(T) == sizeof(U)) {
+            vlds(dstIdxReg, srcIdxPtr, row * srcIdxStride + i * elementsPerRepeat, NORM);
+            vsts(dstIdxReg, dstIdxPtr, row * dstIdxStride + i * elementsPerRepeat, distIndex, dstMask);
+        } else {
+            dstIdxMask0 = CreatePredicate<U>(dstIdxSreg);
+            vlds(dstIdxReg, srcIdxPtr, row * srcIdxStride + (i * 2) * elementsPerRepeatIdx, NORM);
+            vsts(dstIdxReg, dstIdxPtr, row * dstIdxStride + (i * 2) * elementsPerRepeatIdx, distIndex, dstIdxMask0);
+            dstIdxMask1 = CreatePredicate<U>(dstIdxSreg);
+            vlds(dstIdxReg2, srcIdxPtr, row * srcIdxStride + (i * 2 + 1) * elementsPerRepeatIdx, NORM);
+            vsts(dstIdxReg2, dstIdxPtr, row * dstIdxStride + (i * 2 + 1) * elementsPerRepeatIdx, distIndex,
+                 dstIdxMask1);
+        }
+    }
+}
+
+template <typename T, typename U, unsigned dstIdxStride, unsigned src0IdxStride, unsigned src1IdxStride>
+PTO_INTERNAL void TPartArgProcRepeatIdx(__ubuf__ U *dstIdxPtr, __ubuf__ U *src0IdxPtr, __ubuf__ U *src1IdxPtr,
+                                        __ubuf__ U *srcBigIdxPtr, unsigned srcBigIdxStride, unsigned row,
+                                        unsigned repeatOffset, uint32_t &dstIdxSreg, uint32_t &srcIdxSreg,
+                                        MaskReg &selMask)
+{
+    constexpr auto distIndex =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<U, DistVST::DIST_NORM>())>();
+    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
+    RegTensor<U> dstIdxRegFinal, dstIdxReg, src0IdxReg, src1IdxReg;
+    RegTensor<U> dstIdxRegFinal2, dstIdxReg2, src0IdxReg2, src1IdxReg2;
+    MaskReg dstIdxMask = CreatePredicate<U>(dstIdxSreg);
+    MaskReg srcIdxMask = CreatePredicate<U>(srcIdxSreg);
+    MaskReg selMask0, selMask1;
+    if constexpr (sizeof(T) == sizeof(U)) {
+        vlds(src0IdxReg, src0IdxPtr, row * src0IdxStride + repeatOffset * elementsPerRepeatIdx, NORM);
+        vlds(src1IdxReg, src1IdxPtr, row * src1IdxStride + repeatOffset * elementsPerRepeatIdx, NORM);
+        vsel(dstIdxReg, src1IdxReg, src0IdxReg, selMask);
+        vlds(dstIdxRegFinal, srcBigIdxPtr, row * srcBigIdxStride + repeatOffset * elementsPerRepeatIdx, NORM);
+        vmov(dstIdxRegFinal, dstIdxReg, srcIdxMask, MODE_MERGING);
+        vsts(dstIdxRegFinal, dstIdxPtr, row * dstIdxStride + repeatOffset * elementsPerRepeatIdx, distIndex,
+             dstIdxMask);
+    } else {
+        punpack(selMask0, selMask, LOWER);
+        vlds(src0IdxReg, src0IdxPtr, row * src0IdxStride + (repeatOffset * 2) * elementsPerRepeatIdx, NORM);
+        vlds(src1IdxReg, src1IdxPtr, row * src1IdxStride + (repeatOffset * 2) * elementsPerRepeatIdx, NORM);
+        vsel(dstIdxReg, src1IdxReg, src0IdxReg, selMask0);
+        vlds(dstIdxRegFinal, srcBigIdxPtr, row * srcBigIdxStride + (repeatOffset * 2) * elementsPerRepeatIdx, NORM);
+        vmov(dstIdxRegFinal, dstIdxReg, srcIdxMask, MODE_MERGING);
+        vsts(dstIdxRegFinal, dstIdxPtr, row * dstIdxStride + (repeatOffset * 2) * elementsPerRepeatIdx, distIndex,
+             dstIdxMask);
+        dstIdxMask = CreatePredicate<U>(dstIdxSreg);
+        srcIdxMask = CreatePredicate<U>(srcIdxSreg);
+        punpack(selMask1, selMask, HIGHER);
+        vlds(src0IdxReg2, src0IdxPtr, row * src0IdxStride + (repeatOffset * 2 + 1) * elementsPerRepeatIdx, NORM);
+        vlds(src1IdxReg2, src1IdxPtr, row * src1IdxStride + (repeatOffset * 2 + 1) * elementsPerRepeatIdx, NORM);
+        vsel(dstIdxReg2, src1IdxReg2, src0IdxReg2, selMask1);
+        vlds(dstIdxRegFinal2, srcBigIdxPtr, row * srcBigIdxStride + (repeatOffset * 2 + 1) * elementsPerRepeatIdx,
+             NORM);
+        vmov(dstIdxRegFinal2, dstIdxReg2, srcIdxMask, MODE_MERGING);
+        vsts(dstIdxRegFinal2, dstIdxPtr, row * dstIdxStride + (repeatOffset * 2 + 1) * elementsPerRepeatIdx, distIndex,
+             dstIdxMask);
     }
 }
 
@@ -45,29 +102,26 @@ PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, 
                                   uint32_t repeatEnd)
 {
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-    constexpr auto distIndex =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<U, DistVST::DIST_NORM>())>();
-    MaskReg dstMask, srcMask, selMask;
-    RegTensor<T> dstValReg, srcBigValReg, src0ValReg, src1ValReg;
-    RegTensor<U> dstIdxReg, srcBigIdxReg, src0IdxReg, src1IdxReg;
+    MaskReg dstMask, srcMask, selMask, selMask0, selMask1, srcIdxMask, dstIdxMask;
+    MaskReg tmp0, tmp1, tmp2, tmp3, zeroMask = pset_b16(PAT_ALLF);
+    RegTensor<T> dstValRegFinal, dstValReg, src0ValReg, src1ValReg;
+    uint32_t srcIdxSreg = srcSReg;
+    uint32_t dstIdxSreg = dstSReg;
     for (uint16_t j = 0; j < (uint16_t)repeatEnd; j++) {
         dstMask = CreatePredicate<T>(dstSReg);
         srcMask = CreatePredicate<T>(srcSReg);
         vlds(src0ValReg, src0ValPtr, row * src0ValStride + j * elementsPerRepeat, NORM);
-        vlds(src0IdxReg, src0IdxPtr, row * src0IdxStride + j * elementsPerRepeat, NORM);
         vlds(src1ValReg, src1ValPtr, row * src1ValStride + j * elementsPerRepeat, NORM);
-        vlds(src1IdxReg, src1IdxPtr, row * src1IdxStride + j * elementsPerRepeat, NORM);
         Op::BinInstr(selMask, src1ValReg, src0ValReg, srcMask);
-        vsel(src0ValReg, src1ValReg, src0ValReg, selMask);
-        vsel(src0IdxReg, src1IdxReg, src0IdxReg, selMask);
-        vlds(dstValReg, srcBigValPtr, row * srcBigValStride + j * elementsPerRepeat, NORM);
-        vlds(dstIdxReg, srcBigIdxPtr, row * srcBigIdxStride + j * elementsPerRepeat, NORM);
-        vmov(dstValReg, src0ValReg, srcMask, MODE_MERGING);
-        vmov(dstIdxReg, src0IdxReg, srcMask, MODE_MERGING);
-        vsts(dstValReg, dstValPtr, row * dstValStride + j * elementsPerRepeat, distValue, dstMask);
-        vsts(dstIdxReg, dstIdxPtr, row * dstIdxStride + j * elementsPerRepeat, distIndex, dstMask);
+        vsel(dstValReg, src1ValReg, src0ValReg, selMask);
+        vlds(dstValRegFinal, srcBigValPtr, row * srcBigValStride + j * elementsPerRepeat, NORM);
+        vmov(dstValRegFinal, dstValReg, srcMask, MODE_MERGING);
+        vsts(dstValRegFinal, dstValPtr, row * dstValStride + j * elementsPerRepeat, distValue, dstMask);
+        TPartArgProcRepeatIdx<T, U, dstIdxStride, src0IdxStride, src1IdxStride>(
+            dstIdxPtr, src0IdxPtr, src1IdxPtr, srcBigIdxPtr, srcBigIdxStride, row, j, dstIdxSreg, srcIdxSreg, selMask);
     }
 }
 
@@ -110,6 +164,7 @@ __tf__ PTO_INTERNAL void TPartArgProc(
         for (uint16_t i = 0; i < (uint16_t)srcSmallValidRow; i++) {
             uint32_t dstSReg = dstValidCol;
             uint32_t srcSReg = srcSmallValidCol;
+            uint32_t srcSRegIdx = srcSmallValidCol;
             TPartArgProcRow<Op, T, U, DstValTileData::RowStride, DstIdxTileData::RowStride, Src0ValTileData::RowStride,
                             Src0IdxTileData::RowStride, Src1ValTileData::RowStride, Src1IdxTileData::RowStride>(
                 dstValPtr, dstIdxPtr, src0ValPtr, src0IdxPtr, src1ValPtr, src1IdxPtr, srcBigValPtr, srcBigIdxPtr,
@@ -141,7 +196,8 @@ PTO_INTERNAL void TPartArgCheck(DstValTileData &dstVal, Src0ValTileData &src0Val
     static_assert(
         std::is_same_v<U, typename Src0IdxTileData::DType> && std::is_same_v<U, typename Src1IdxTileData::DType>,
         "Fix: TPARTARG input index and output index types should match");
-    static_assert((std::is_same_v<T, half> && (std::is_same_v<U, int16_t> || std::is_same_v<U, uint16_t>)) ||
+    static_assert((std::is_same_v<T, half> && (std::is_same_v<U, int16_t> || std::is_same_v<U, uint16_t> ||
+                                               std::is_same_v<U, int32_t> || std::is_same_v<U, uint32_t>)) ||
                       (std::is_same_v<T, float> && (std::is_same_v<U, int32_t> || std::is_same_v<U, uint32_t>)),
                   "Fix: TPARTARG invalid data type");
 

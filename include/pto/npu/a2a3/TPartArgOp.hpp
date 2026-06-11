@@ -46,14 +46,18 @@ PTO_INTERNAL void TPartArgOps(__ubuf__ TVal *dstValPtr, __ubuf__ TIdx *dstIdxPtr
                               __ubuf__ TIdx *srcIdx0Ptr, __ubuf__ TVal *srcVal1Ptr, __ubuf__ TIdx *srcIdx1Ptr,
                               unsigned validRow, unsigned validCol)
 {
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(TVal);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TVal);
+    using TIdxSel = std::conditional_t<sizeof(TIdx) == sizeof(uint32_t), float, TVal>;
     if (validRow == 0 || validCol == 0) {
         return;
     }
     unsigned completeRepeats = validCol / elementsPerRepeat;
     set_mask_norm();
-    set_vector_mask(-1, -1);
+    if constexpr (sizeof(TVal) != sizeof(TIdx)) {
+        set_vector_mask(0, -1);
+    } else {
+        set_vector_mask(-1, -1);
+    }
     for (unsigned i = 0; i < completeRepeats; i++) {
         for (unsigned row = 0; row < validRow; row++) {
             Op::CmpInstr(srcVal0Ptr + row * TileSrcVal0::RowStride + i * elementsPerRepeat,
@@ -62,10 +66,10 @@ PTO_INTERNAL void TPartArgOps(__ubuf__ TVal *dstValPtr, __ubuf__ TIdx *dstIdxPtr
             vsel(dstValPtr + row * TileDstVal::RowStride + i * elementsPerRepeat,
                  srcVal0Ptr + row * TileSrcVal0::RowStride + i * elementsPerRepeat,
                  srcVal1Ptr + row * TileSrcVal1::RowStride + i * elementsPerRepeat, 1, 1, 1, 1, 0, 0, 0);
-            vsel((__ubuf__ TVal *)dstIdxPtr + row * TileDstIdx::RowStride + i * elementsPerRepeat,
-                 (__ubuf__ TVal *)srcIdx0Ptr + row * TileSrcIdx0::RowStride + i * elementsPerRepeat,
-                 (__ubuf__ TVal *)srcIdx1Ptr + row * TileSrcIdx1::RowStride + i * elementsPerRepeat, 1, 1, 1, 1, 0, 0,
-                 0);
+            vsel((__ubuf__ TIdxSel *)dstIdxPtr + row * TileDstIdx::RowStride + i * elementsPerRepeat,
+                 (__ubuf__ TIdxSel *)srcIdx0Ptr + row * TileSrcIdx0::RowStride + i * elementsPerRepeat,
+                 (__ubuf__ TIdxSel *)srcIdx1Ptr + row * TileSrcIdx1::RowStride + i * elementsPerRepeat, 1, 1, 1, 1, 0,
+                 0, 0);
             pipe_barrier(PIPE_V);
         }
     }
@@ -79,10 +83,10 @@ PTO_INTERNAL void TPartArgOps(__ubuf__ TVal *dstValPtr, __ubuf__ TIdx *dstIdxPtr
             vsel(dstValPtr + row * TileDstVal::RowStride + completeRepeats * elementsPerRepeat,
                  srcVal0Ptr + row * TileSrcVal0::RowStride + completeRepeats * elementsPerRepeat,
                  srcVal1Ptr + row * TileSrcVal1::RowStride + completeRepeats * elementsPerRepeat, 1, 1, 1, 1, 0, 0, 0);
-            vsel((__ubuf__ TVal *)dstIdxPtr + row * TileDstIdx::RowStride + completeRepeats * elementsPerRepeat,
-                 (__ubuf__ TVal *)srcIdx0Ptr + row * TileSrcIdx0::RowStride + completeRepeats * elementsPerRepeat,
-                 (__ubuf__ TVal *)srcIdx1Ptr + row * TileSrcIdx1::RowStride + completeRepeats * elementsPerRepeat, 1, 1,
-                 1, 1, 0, 0, 0);
+            vsel((__ubuf__ TIdxSel *)dstIdxPtr + row * TileDstIdx::RowStride + completeRepeats * elementsPerRepeat,
+                 (__ubuf__ TIdxSel *)srcIdx0Ptr + row * TileSrcIdx0::RowStride + completeRepeats * elementsPerRepeat,
+                 (__ubuf__ TIdxSel *)srcIdx1Ptr + row * TileSrcIdx1::RowStride + completeRepeats * elementsPerRepeat, 1,
+                 1, 1, 1, 0, 0, 0);
             pipe_barrier(PIPE_V);
         }
     }
@@ -173,8 +177,10 @@ PTO_INTERNAL bool checkTiles(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrcVal0
         "TPARTARGOPS: dstIdx srcIdx0 srcIdx1 type must be consistent");
     static_assert(std::is_same_v<TVal, float> || std::is_same_v<TVal, half>,
                   "TPARTARGOPS: val type only support float, half.");
-    static_assert(std::is_integral_v<TIdx> && sizeof(TIdx) == sizeof(TVal),
-                  "TPARTARGOPS: idx must be integral and the same size as val");
+    static_assert((std::is_same_v<TVal, float> && (std::is_same_v<TIdx, uint32_t> || std::is_same_v<TIdx, int32_t>)) ||
+                      (std::is_same_v<TVal, half> && (std::is_same_v<TIdx, uint32_t> || std::is_same_v<TIdx, int32_t> ||
+                                                      std::is_same_v<TIdx, uint16_t> || std::is_same_v<TIdx, int16_t>)),
+                  "TPARTARGOPS: idx type must be intergal type.");
     unsigned dstValidRow = dstVal.GetValidRow();
     unsigned dstValidCol = dstVal.GetValidCol();
     unsigned dstIdxValidRow = dstIdx.GetValidRow();

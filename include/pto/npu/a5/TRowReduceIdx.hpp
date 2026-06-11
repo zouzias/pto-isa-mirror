@@ -59,10 +59,10 @@ PTO_INTERNAL void TRowReduceIdxCheck(uint32_t srcValidRows, uint32_t srcValidCol
     using TIdx = typename TileDataOutIdx::DType;
     if constexpr (outputVal) {
         static_assert(
-            (sizeof(TVal) == sizeof(half) && (std::is_same_v<int16_t, TIdx> || std::is_same_v<uint16_t, TIdx>)) ||
+            (sizeof(TVal) == sizeof(half) && (std::is_same_v<int16_t, TIdx> || std::is_same_v<uint16_t, TIdx> ||
+                                              std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>)) ||
                 (sizeof(TVal) == sizeof(float) && (std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>)),
-            "Input and output tile data types must match. "
-            "Fix: Ensure TileDataOutIdx uses the same DType as TileDataIn.");
+            "Dest index tile must use int16_t/uint16_t/int32_t/uint32_t.");
         TRowReduceCheck<TileDataOutVal, TileDataIn, false>(srcValidRows, srcValidCols, dstValValidRow);
     } else {
         static_assert(std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>,
