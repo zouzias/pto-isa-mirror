@@ -151,6 +151,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
 #include "pto/npu/a2a3/TLRelu.hpp"
+#include "pto/npu/a2a3/TAddReluConv.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
 #include "pto/npu/a2a3/TPrelu.hpp"
 #include "pto/npu/a2a3/TInsert.hpp"
