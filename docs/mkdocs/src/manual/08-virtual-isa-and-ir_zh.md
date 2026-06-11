@@ -1,4 +1,8 @@
+<<<<<<< HEAD:docs/mkdocs/src/manual/08-virtual-isa-and-ir_zh.md
 # 8. 虚拟 ISA 与 AS
+=======
+﻿# 9. 虚拟 ISA 与 AS
+>>>>>>> 74b32a9a... 修复低错，敏感词:docs/mkdocs/src/manual/09-virtual-isa-and-ir_zh.md
 
 ## 8.1 范围与规范术语
 
@@ -35,7 +39,7 @@ PTO 采用三层契约：
 
 2. **目标合法性验证器（后端层）**
 - MUST 验证选定后端画像下的 dtype/layout/location/shape 组合。
-- MUST 对不支持组合输出确定性诊断。
+- MUST 对“不支持的组合”输出确定性诊断。
 
 ## 8.5 降层不变量
 

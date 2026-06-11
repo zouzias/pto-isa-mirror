@@ -1,4 +1,4 @@
-# High-Performance MXFP8 Operator Example
+﻿# High-Performance MXFP8 Operator Example
 
 ## Overview
 
@@ -30,7 +30,7 @@ $$
 C = (scaleA ⊗ A) * (scaleB ⊗ B)
 $$
 
-where `⊗`  denotes broadcast multiplication and `*` enotes matrix multiplication. The input matrix formats are as follows:
+where `⊗`  denotes  denotes broadcast multiplication and `*` denotes matrix multiplication. The input matrix formats are as follows:
 
 - `A` is `m×k`
 - `scaleA` is `m×scaleK`
@@ -60,7 +60,7 @@ This example uses Ascend A5 platform as the performance validation platform.
   - In this example, `m = n = k`; it is generally not recommended to partition the `k`，dimension within a single core, but instead partition the `m` and `n` dimensions.
   - The global task is partitioned across cores in a 4 × 8 manner, with a single core responsible for submatrices of dimensions `singleCoreM=1536`, `singleCoreK=6144` and `singleCoreN=768`, ensuring load balancing across all cores and maximizing parallelism.
 - **Base Block Selection**：
-  - choose base blocks that maximize compute-to-memory ratio. For FP16, a common choice is `[baseM, baseN, baseK] = [128, 256, 128]`, which achieves the highest computing-to-memory ratio for the basic block and is more conducive to maintaining 512-byte alignment for GM write-back.
+  - Choose that maximize compute-to-memory ratio. For FP16, a common choice is `[baseM, baseN, baseK] = [128, 256, 128]`, which achieves the highest computing-to-memory ratio for the basic block and is more conducive to maintaining 512-byte alignment for GM write-back.
 - **L1 Caching**：
   - Batch caching strategy: move multiple base blocks from GM to L1 per transfer to improve bandwidth utilization. This example sets `stepKa=stepKb=4` to cache four `k` blocks at a time.
   - Independent caching: Scale and data are cached independently on L1, and the mxScalePara parameter is introduced to represent the cache ratio between the two.
@@ -117,7 +117,7 @@ python3 scripts/gen_data.py
 3. Run the example:
 
 ```bash
-bash run.sh -r npu -v Ascend950
+bash run.sh -r npu 参数对应的A5标识（需与run
 ```
 
 If the run succeeds, the output prints:

@@ -1,4 +1,4 @@
-# Contributing Guide
+﻿# Contributing Guide
 
 We welcome developers to explore PTO Tile Lib and contribute to the project. Before participating in community contributions, please refer to [cann-community](https://gitcode.com/cann/community) to review the community code of conduct, complete the CLA process, and understand the contribution workflow used by the source repositories.
 
@@ -44,7 +44,7 @@ SIG members will review the Issue and provide feedback. After addressing the com
 
 > "The review comments have been addressed. Requesting re-review."
 
-If the requirement is accepted, SIG members will assign a suitable operator category path for you (for example `include/pto/npu/a5`) so that the new operator can be contributed in the appropriate location.
+If the requirement is accepted, SIG members will assign a suitable operator category path for you (for example `├── include/pto/npu/a5`) so that the new operator can be contributed in the appropriate location.
 
 If no consensus is reached during the Issue discussion, it is recommended to request further discussion in the SIG biweekly meeting.
 
@@ -76,13 +76,13 @@ Once the design is confirmed, you can begin local development. For a new operato
         └── ${op_class}/
             └── ${op_name}.hpp                           # operator implementation, comments, structures, logic
     tests/
-    ├── ${op_class}/src/st/testcase/
+    ├── ${op_class}/src/st/test case/
     │   ├── ${op_name}/
     │   │   ├── ${op_name}.cpp                           # interface invocation file
     │   │   ├── main.cpp                                 # test entry file
     │   │   ├── gen_data.py                              # input / expected output generator
     │   │   └── CMakeLists.txt                           # build file
-    │   └── CMakeLists.txt                               # testcase collection build file
+    │   └── CMakeLists.txt                               # test case collection build file
     ├── run_st.sh                                        # ST execution script entry
     └── README.md                                        # test instructions
 ```
@@ -122,7 +122,7 @@ For Windows users, make sure Python and pip are installed first.
 cd /path/to/your/pto-isa
 
 # Example
-cd d:\complianceRepo\CANN\pto-isa
+cd d:/complianceRepo/CANN/pto-isa
 ```
 
 #### Step 3: Install Git hooks

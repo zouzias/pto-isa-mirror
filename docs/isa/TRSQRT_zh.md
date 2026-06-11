@@ -49,7 +49,7 @@ PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 ## 约束
 
 - **实现检查 (NPU)**:
-    - `tmp`的空间至少要大于等于32字节。传入`tmp`则执行高精度版本。
+    - `tmp`的空间“tmp 的空间需大于等于 32 字节”或“tmp 的空间至少为 32 字节”32字节。传入`tmp`则执行高精度版本。
     - `TileData::DType` 必须是以下之一：`float` 或 `half`。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`);
     - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
@@ -65,7 +65,7 @@ PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的头文件引用与声明部分一致的路径和名称
 
 using namespace pto;
 

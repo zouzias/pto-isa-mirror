@@ -1,4 +1,4 @@
-# 多 Block 调度与地址管理
+﻿# 多 Block 调度与地址管理
 
 ## 远端地址获取
 
@@ -11,7 +11,7 @@
 inline __gm__ half *GetRemotePtr(__gm__ DeviceContext *ctx, __gm__ half *local_ptr, int remote_rank)
 {
     ptrdiff_t offset = reinterpret_cast<__gm__ uint8_t *>(local_ptr) -
-                       reinterpret_cast<__gm__ uint8_t *>(ctx->windowsIn[ctx->myRank]);
+                       reinterpret_cast<__gm__ uint8_t *>(ctx->windowsIn[my_rank]);
     return reinterpret_cast<__gm__ half *>(
         reinterpret_cast<__gm__ uint8_t *>(ctx->windowsIn[remote_rank]) + offset);
 }

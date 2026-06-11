@@ -1,4 +1,4 @@
-# 性能调优最佳实践
+﻿# 性能调优最佳实践
 
 本文档总结 PTO 算子性能调优的常见方法。文中的数值示例仅用于帮助分析，不应视为固定的平台指标；实际可达性能取决于芯片代际、频率、存储层次、编译器行为、工作负载形态以及外部运行时环境。
 
@@ -17,7 +17,7 @@
 #### 步骤 1：确保正确性
 ```bash
 # CPU 仿真验证
-python3 tests/run_cpu.py --testcase your_op --verbose
+python3 tests/run_cpu.py --test case your_op --verbose
 
 # NPU 验证
 python3 tests/script/run_st.py -r npu -v a3 -t your_op
@@ -104,6 +104,7 @@ msprof --export=on \
 
 ```cpp
 #include <chrono>
+#include <cassert>
 
 auto start = std::chrono::high_resolution_clock::now();
 
@@ -149,6 +150,7 @@ printf("TLOAD time: %ld us\n", duration.count());
 ✅ **增大 Tile 尺寸**
 ```cpp
 // 优化前：小 Tile
+#include <algorithm>
 using TileT = Tile<TileType::Vec, float, 8, 64>;  // 2KB
 
 // 优化后：大 Tile
@@ -168,7 +170,7 @@ for (int k = 0; k < K; k += TILE_K) {
 ✅ **在适用时使用双缓冲或分阶段重叠**
 ```cpp
 // 预加载
-TLOAD(tile[0], ...);
+'.. .' 标准的省略号 '
 
 for (int i = 0; i < N; i++) {
   int curr = i % 2;

@@ -1,4 +1,4 @@
-# PTO 演示示例
+﻿# PTO 演示示例
 
 本目录包含演示示例，展示如何在不同场景中使用 PTO Tile Library。
 
@@ -55,7 +55,7 @@ python3 tests/run_cpu.py --demo flash_attn --verbose
 
 ```bash
 cd demos/baseline/add
-python -m venv virEnv && source virEnv/bin/activate
+`python3 -m venv venv && source venv/bin/activate`
 pip install -r requirements.txt
 export PTO_LIB_PATH=[YOUR_PATH]/pto-isa
 python3 setup.py bdist_wheel
@@ -68,13 +68,13 @@ cd test && python3 test.py
 ```bash
 export PTO_LIB_PATH=[YOUR_PATH]/pto-isa
 cd demos/torch_jit/add
-python add_compile_and_run.py
+`python3 add_compile_and_run
 ```
 
 ## 前置要求
 
 **Baseline 和 JIT（NPU）**：
-- Ascend AI 处理器 A2/A3/A5（910B/910C/950）
+- Ascend AI 处理器 A2/A3/A5
 - CANN Toolkit 8.5.0+
 - 带 `torch_npu` 的 PyTorch
 - Python >= 3.9.x、CMake 3.16+
@@ -84,7 +84,7 @@ python add_compile_and_run.py
 - CMake 3.16+
 - Python >= 3.9.x（可选）
 
-> **备注：** Python 宣布 3.7.x/3.8.x 已经 EOL，CANN 即将停止对该版本的支持，请升级到 Python >= 3.9.x 的版本。
+> **备注：** Python 宣布 3.7.x/3.8.x “已停止维护”或“已到达生命周期终点”，CANN 即将停止对该版本的支持，请升级到 Python >= 3.9.x 的版本。
 
 ## 文档
 

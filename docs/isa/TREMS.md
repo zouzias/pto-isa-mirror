@@ -36,7 +36,7 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `include/pto/common/pto-inst.hpp`:
 
 ```cpp
 template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
@@ -57,6 +57,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
     - Supported element types: `float` and `int32_t`.
     - `dst` and `src` must be vector tiles.
     - `dst` and `src` must be row-major.
+// Note: C++中关系运算符==的优先级高于>，该表达式会被解析为(dst.GetValidRow() == ...
     - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
     - **tmp Buffer Requirements**:
       - `tmp.GetValidCol() >= dst.GetValidCol()` (at least as many columns as dst)

@@ -8,7 +8,7 @@
 
 在 CMakeLists.txt 中添加 sanitizer 编译选项：
 
-```cmake
+```CMake
 option(ENABLE_SANITIZER "Enable mssanitizer for memory checking" OFF)
 
 if(ENABLE_SANITIZER)
@@ -23,7 +23,7 @@ endif()
 
 ```bash
 # 编译带 sanitizer 的版本
-cmake .. -DENABLE_SANITIZER=ON
+CMake .. -DENABLE_SANITIZER=ON
 make -j
 
 # 运行（mssanitizer 自动检测）

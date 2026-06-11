@@ -36,7 +36,7 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/正文中的 pto_instr.hpp  pto-inst`：
 
 ```cpp
 template <typename TileData, typename... WaitEvents>

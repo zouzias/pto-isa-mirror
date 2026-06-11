@@ -68,7 +68,7 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr
 
 using namespace pto;
 

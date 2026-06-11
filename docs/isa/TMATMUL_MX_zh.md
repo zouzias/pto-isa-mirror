@@ -88,7 +88,7 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 - **实现检查 (A5)**:
     - `m/k/n` 取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()`、`bMatrix.GetValidCol()`。
-    - 静态合法性检查通过 `CheckMadMxValid<...>()`（类型、形状、分形和缩放 tile 合法性）。
+    - 静态合法性检查通过 `CheckMadMxValid<...>()`（类型、形状、“分块”和缩放 tile 合法性）。
 - **偏置形式**:
     - `TileBias::DType` 必须是 `float` 且 `TileBias::Loc == TileType::Bias`，`TileBias::Rows == 1`（A5 通过 `static_assert` 检查）。
 

@@ -50,8 +50,13 @@ PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 ## Constraints
 
 - **Implementation checks**:
+<<<<<<< HEAD
     - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType` (compile-time).
     - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`, `int16`, `int32`, `uint16`, `uint32`.
+=======
+    - `标准的 C++ 类型检查语法` (compile-time).
+    - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
+>>>>>>> 74b32a9a... 修复低错，敏感词
     - Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
     - Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
     - Mode 2: `src1` is expected to provide **32 bytes data per row**.

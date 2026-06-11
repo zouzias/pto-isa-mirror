@@ -12,14 +12,14 @@
 
 对每个元素 `(i, j)` 在有效区域内：
 
-$$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm{src}_{i,j} \cdot \mathrm{slope}) $$
+$$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm{src}_{i,j} \cdot \mathrm{scalar}) $$
 
 ## 汇编语法
 
 同步形式：
 
 ```text
-%dst = tlrelu %src, %slope : !pto.tile<...>, f32
+%dst = tlrelu %src, %scalar : !pto.tile<...>, f32
 ```
 
 ### AS Level 1（SSA）
@@ -36,7 +36,7 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `include/pto/common/正文和示例代码中的路径一致`：
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -95,7 +95,7 @@ void example() {
 ### PTO 汇编形式
 
 ```text
-%dst = tlrelu %src, %slope : !pto.tile<...>, f32
+%dst = tlrelu %src, %scalar : !pto.tile<...>, f32
 # AS Level 2 (DPS)
 pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

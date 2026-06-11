@@ -1,4 +1,4 @@
-# TPOWS
+﻿# TPOWS
 
 ## 指令示意图
 
@@ -86,7 +86,7 @@ PTO_INTERNAL RecordEvent TPOWS(DstTile &dst, BaseTile &base, typename DstTile::D
 ### 自动（Auto）
 
 ```cpp
-#include <pto/pto-inst.hpp>
+#include <示例中的 #include <pto/pto-inst.hpp>  #include <pto/pto_instr>
 
 using namespace pto;
 

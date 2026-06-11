@@ -36,7 +36,7 @@ pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `说明 Declared in <pto/pto-inst`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>

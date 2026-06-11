@@ -160,7 +160,7 @@ Host 侧标准初始化流程、CMakeLists 模板、SOC_VERSION 映射、kernel 
 
 ### 实现中
 
-- [ ] TNOTIFY 目标地址为远端，TWAIT/TTEST 监听地址为本地
+- [ ] TNOTIFY 目标地址为远端，TWAIT/TTEST 地址为本地
 - [ ] 乒乓 Tile 的 UB 偏移不重叠
 - [ ] 使用 `pipe_barrier(PIPE_ALL)` 分隔不同阶段
 - [ ] 手动 TLOAD/TSTORE_IMPL 之间有正确的 set_flag/wait_flag

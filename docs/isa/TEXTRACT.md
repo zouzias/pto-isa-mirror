@@ -38,7 +38,7 @@ pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in `说明文字对应路径；若实际为 pto_instr`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
@@ -115,8 +115,10 @@ void example_manual() {
   using DstT = TileLeft<float, 16, 16>;
   SrcT src;
   DstT dst;
-  TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
+  // Note: TASSIGN requires proper header include
+TASSIGN(src, 0x1000);
+  // Note: TASSIGN requires proper header include
+TASSIGN(dst, 0x2000);
   TEXTRACT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```

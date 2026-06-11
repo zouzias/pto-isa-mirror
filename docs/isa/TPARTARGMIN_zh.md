@@ -1,4 +1,4 @@
-# TPARTARGMIN
+﻿# TPARTARGMIN
 
 ## 指令示意图
 
@@ -127,7 +127,7 @@ void example_manual() {
 ### 自动模式
 
 ```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
+# 自动模式: 由编译器/运行时负责资源放置与调度
 %dstVal, %dstIdx = pto.tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
 ```
 

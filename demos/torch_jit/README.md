@@ -1,4 +1,4 @@
-## Demo of jit-compile cpp source and use in pytorch
+## Demo of jit-compile C++ source and use in PyTorch
 
 ```bash
 export PTO_LIB_PATH=... # remember to set pto-isa source dir

@@ -18,7 +18,7 @@ comm/
 ├── comm_types.hpp               # Shared types: ParallelGroup, Signal, Signal2D,
 │                                #   NotifyOp, WaitCmp, ReduceOp, DmaEngine, AsyncEvent
 │
-├── a2a3/                        # A2/A3 (Ascend 910B/910C) architecture implementations
+├── a2a3/                        # A2/A3 architecture implementations
 │   ├── TPut.hpp                 # TPUT_IMPL  — remote write (local GM → UB → remote GM)
 │   ├── TGet.hpp                 # TGET_IMPL  — remote read  (remote GM → UB → local GM)
 │   ├── TNotify.hpp              # TNOTIFY_IMPL — send flag notification
@@ -26,7 +26,7 @@ comm/
 │   ├── TTest.hpp                # TTEST_IMPL — non-blocking signal test
 │   ├── TGather.hpp              # TGATHER_IMPL  — root collects from all ranks
 │   ├── TScatter.hpp             # TSCATTER_IMPL — root distributes to all ranks
-│   ├── TBroadCast.hpp           # TBROADCAST_IMPL — root broadcasts to all ranks
+│   ├── TBroadcast.hpp           # TBROADCAST_IMPL — root broadcasts to all ranks
 │   ├── TReduce.hpp              # TREDUCE_IMPL — root gathers and reduces (Sum/Max/Min)
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA only)

@@ -36,7 +36,7 @@ pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`：
+声明于 `声明处对应路径；反之则修改示例代码`：
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,

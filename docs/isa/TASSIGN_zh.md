@@ -36,7 +36,7 @@ pto.tassign ins(%tile, %addr : !pto.tile_buf<...>, dtype)
 
 ## C++ 内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`。
+声明于 `include/pto/common/正文中的 pto_instr.hpp  pto-inst`。
 
 ### 形式 1：运行时地址
 

@@ -1,4 +1,4 @@
-# 工作区说明
+﻿# 工作区说明
 
 `workspace/` 用于存放当前算子项目实际修改的 PTO 代码副本。
 
@@ -13,7 +13,7 @@
 将原始代码复制到：
 
 ```bash
-workspace/pto-kernels
+行内代码格式（如 `workspace/pto-kernels`）或纯文本展示；若需保留代码块
 ```
 
 示例：

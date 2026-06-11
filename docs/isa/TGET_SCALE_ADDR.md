@@ -30,7 +30,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src, aitEvents&... events);
+PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -45,7 +45,6 @@ Enforced by `TGET_SCALE_ADDR_IMPL`:
 ```cpp
 #include <pto/pto-inst.hpp>
 
-> wa
 using namespace pto;
 
 template <typename T, int ARows, int ACols, BRows, BCols> 

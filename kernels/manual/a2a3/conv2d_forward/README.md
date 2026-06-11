@@ -1,4 +1,4 @@
-# 2D Convolution Forward Operator Example
+﻿# 2D Convolution Forward Operator Example
 
 ## Overview
 
@@ -93,7 +93,7 @@ This example uses the 24-core A3 platform for performance verification.
 
 ## Measured Performance (Reference)
 
-The following data was measured on Ascend A3 (24 cores), covering multiple input/output matrix sizes (fp16 input → fp32 output).
+The following data was measured on Ascend A3 (24 cores), covering multiple input/output matrix sizes (float；若为fp16).
 
 | Parameters | TMATMUL (Cube) % | TLOAD % | TEXTRACT % | TSTORE % | Execution Time (ms) |
 | :--- | :---: | :---: | :---: | :---: | :---: |

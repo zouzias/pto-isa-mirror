@@ -1,4 +1,4 @@
-# TROWARGMIN
+﻿# TROWARGMIN
 
 
 ## Tile Operation Diagram
@@ -117,7 +117,7 @@ void example_auto() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dst;  DstValT dstVal; 以正确声明变量
   TmpT tmp;
   TROWARGMIN(dst, src, tmp);
   TROWARGMIN(dstVal, dst, src, tmp);
@@ -141,6 +141,7 @@ void example_manual() {
   TmpT tmp;
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
+// Note: 变量 dstVal 在使用前未声明，导致编译失败。...
   TASSIGN(dstVal, 0x3000);
   TASSIGN(tmp, 0x4000);
   TROWARGMIN(dst, src, tmp);

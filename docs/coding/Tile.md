@@ -1,4 +1,4 @@
-# Tile Programming Model
+﻿# Tile Programming Model
 
 PTO Tile Lib programs operate on **Tiles**: fixed-capacity 2-D buffers that are the unit of computation and the unit of most data movement for PTO instructions.
 
@@ -170,5 +170,6 @@ using TileT = pto::Tile<pto::TileType::Vec, float, 128, 256,
                         pto::BLayout::RowMajor,
                         pto::DYNAMIC /*row_valid*/, 127 /*col_valid*/>;
 
+// Note: 变量 m 在构造函数调用中直接使用，但在此代码片段中未进行声明或定义，违反变量使用前必须定义的原则，...
 TileT t(/*row_valid_runtime=*/m);
 ```

@@ -112,6 +112,7 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
 
 ```cpp
 constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
+// Note: Ping-pong 示例及 Runtime Atomic Type 示例中直接使用了未定义的 Til...
 TileT pingTile(64, 64);
 TileT pongTile(64, 64);
 TASSIGN(pingTile, 0);

@@ -105,7 +105,7 @@ license: CANN Open Software License Agreement Version 2.0
 | 指令类型 | 目标文件 | 插入位置 |
 |----------|----------|----------|
 | TPOW (Elementwise) | `elementwise-ops.md` | TFMOD 后 |
-| TPOWS (Tile-Scalar) | `tile-scalar-ops.md` | TSU BSC 后 |
+| TPOWS (Tile-Scalar) | `tile-scalar-ops.md` | TSUBSC 后 |
 | TROWSUM (Axis) | `axis-ops.md` | 最后一个 Axis 指令后 |
 | TLOAD (Memory) | `memory-ops.md` | 最后一个 Memory 指令后 |
 | TMATMUL (Matrix) | `matrix-ops.md` | 最后一个 Matrix 指令后 |
