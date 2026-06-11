@@ -165,6 +165,7 @@ set(ALL_TESTCASES
     tmov_mx
     tmul
     tlrelu
+    taddreluconv
     tdiv
     tcmps
     tmov_acc2vec
