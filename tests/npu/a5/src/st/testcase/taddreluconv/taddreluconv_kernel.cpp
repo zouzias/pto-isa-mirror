@@ -250,7 +250,7 @@ extern "C" __global__ AICORE void launchTADDRELUCONVCase38(__gm__ int8_t *out, _
 }
 
 template <uint32_t caseId>
-void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream stream)
+void launchTADDRELUCONVF322F16Cases1To10(void *out, void *src0, void *src1, aclrtStream stream)
 {
     switch (caseId) {
         case 1:
@@ -283,6 +283,15 @@ void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream st
         case 10:
             launchTADDRELUCONVCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
+        default:
+            break;
+    }
+}
+
+template <uint32_t caseId>
+void launchTADDRELUCONVF322F16Cases19To26(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    switch (caseId) {
         case 19:
             launchTADDRELUCONVCase19<<<1, nullptr, stream>>>((aclFloat16 *)out, (float *)src0, (float *)src1);
             break;
@@ -309,6 +318,16 @@ void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream st
             break;
         default:
             break;
+    }
+}
+
+template <uint32_t caseId>
+void launchTADDRELUCONVF322F16(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    if constexpr (caseId >= 1 && caseId <= 10) {
+        launchTADDRELUCONVF322F16Cases1To10<caseId>(out, src0, src1, stream);
+    } else if constexpr (caseId >= 19 && caseId <= 26) {
+        launchTADDRELUCONVF322F16Cases19To26<caseId>(out, src0, src1, stream);
     }
 }
 
@@ -479,6 +498,26 @@ template void launchTADDRELUCONVF322F16<23>(void *out, void *src0, void *src1, a
 template void launchTADDRELUCONVF322F16<24>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVF322F16<25>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVF322F16<26>(void *out, void *src0, void *src1, aclrtStream stream);
+
+template void launchTADDRELUCONVF322F16Cases1To10<1>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<2>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<3>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<4>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<5>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<6>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<7>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<8>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<9>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases1To10<10>(void *out, void *src0, void *src1, aclrtStream stream);
+
+template void launchTADDRELUCONVF322F16Cases19To26<19>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<20>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<21>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<22>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<23>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<24>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<25>(void *out, void *src0, void *src1, aclrtStream stream);
+template void launchTADDRELUCONVF322F16Cases19To26<26>(void *out, void *src0, void *src1, aclrtStream stream);
 
 template void launchTADDRELUCONVF162S8<11>(void *out, void *src0, void *src1, aclrtStream stream);
 template void launchTADDRELUCONVF162S8<12>(void *out, void *src0, void *src1, aclrtStream stream);
