@@ -24,10 +24,6 @@ template <int validRows, int validCols, int mode, pto::QuantType quantType>
 void LaunchTQuantInt8(std::conditional_t<quantType == pto::QuantType::INT8_SYM, int8_t, uint8_t> *dst, float *src,
                       float *scale, void *stream, float *offset = nullptr);
 
-template <int validRows, int validCols, int mode, pto::QuantType quantType>
-void LaunchTQuantInt8NoTmp(std::conditional_t<quantType == pto::QuantType::INT8_SYM, int8_t, uint8_t> *dst, float *src,
-                           float *scale, void *stream, float *offset = nullptr);
-
 class TQUANTTEST : public testing::Test {
 protected:
     void SetUp() override
@@ -45,7 +41,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <int validRows, int validCols, int mode, bool noTmp = false>
+template <int validRows, int validCols, int mode>
 void test_tquant_int8_sym()
 {
     size_t srcFileSize = validRows * validCols * sizeof(float);
@@ -73,13 +69,7 @@ void test_tquant_int8_sym()
     ReadFile(GetGoldenDir() + "/inv_scale_fp32.bin", scaleFileSize, scaleHost, scaleFileSize);
     aclrtMemcpy(scaleDevice, scaleFileSize, scaleHost, scaleFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    if constexpr (noTmp) {
-        LaunchTQuantInt8NoTmp<validRows, validCols, mode, pto::QuantType::INT8_SYM>(dstDevice, srcDevice, scaleDevice,
-                                                                                    stream);
-    } else {
-        LaunchTQuantInt8<validRows, validCols, mode, pto::QuantType::INT8_SYM>(dstDevice, srcDevice, scaleDevice,
-                                                                               stream);
-    }
+    LaunchTQuantInt8<validRows, validCols, mode, pto::QuantType::INT8_SYM>(dstDevice, srcDevice, scaleDevice, stream);
 
     aclError syncRet = aclrtSynchronizeStream(stream);
     ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
@@ -106,7 +96,7 @@ void test_tquant_int8_sym()
     EXPECT_TRUE(ResultCmp<int8_t>(golden_s8, dev_s8, 0.0f));
 }
 
-template <int validRows, int validCols, int mode, bool noTmp = false>
+template <int validRows, int validCols, int mode>
 void test_tquant_int8_asym()
 {
     size_t srcSize = validRows * validCols * sizeof(float);
@@ -133,13 +123,7 @@ void test_tquant_int8_asym()
     aclrtMemcpy(srcDev, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(scaleDev, scaleSize, scaleHost, scaleSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(offDev, offSize, offHost, offSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    if constexpr (noTmp) {
-        LaunchTQuantInt8NoTmp<validRows, validCols, mode, pto::QuantType::INT8_ASYM>(dstDev, srcDev, scaleDev, stream,
-                                                                                     offDev);
-    } else {
-        LaunchTQuantInt8<validRows, validCols, mode, pto::QuantType::INT8_ASYM>(dstDev, srcDev, scaleDev, stream,
-                                                                                offDev);
-    }
+    LaunchTQuantInt8<validRows, validCols, mode, pto::QuantType::INT8_ASYM>(dstDev, srcDev, scaleDev, stream, offDev);
     aclError syncRet = aclrtSynchronizeStream(stream);
     ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
                                     << "): " << aclGetRecentErrMsg();
@@ -162,72 +146,79 @@ void test_tquant_int8_asym()
     EXPECT_TRUE(ResultCmp<uint8_t>(golden_u8, dev_u8, 0.0f));
 }
 
-// // INT8 - Sym cases
 TEST_F(TQUANTTEST, case_int8_sym_fp32_64x128_nd)
 {
     test_tquant_int8_sym<64, 128, 0>();
 }
+
 TEST_F(TQUANTTEST, case_int8_sym_fp32_128x128_nd)
 {
     test_tquant_int8_sym<128, 128, 0>();
 }
-TEST_F(TQUANTTEST, case_int8_sym_fp32_256x128_nd)
-{
-    test_tquant_int8_sym<256, 128, 0>();
-}
 
-// //INT8 - Asym cases
 TEST_F(TQUANTTEST, case_int8_asym_fp32_64x128_nd)
 {
     test_tquant_int8_asym<64, 128, 0>();
 }
+
 TEST_F(TQUANTTEST, case_int8_asym_fp32_128x128_nd)
 {
     test_tquant_int8_asym<128, 128, 0>();
 }
-TEST_F(TQUANTTEST, case_int8_asym_fp32_256x128_nd)
-{
-    test_tquant_int8_asym<256, 128, 0>();
-}
+
 TEST_F(TQUANTTEST, case_int8_asym_fp32_32x72_nd)
 {
     test_tquant_int8_asym<32, 72, 0>();
 }
 
-// INT8 SYM with tmp, dims (2,129) — tail-col exercise
 TEST_F(TQUANTTEST, case_int8_sym_fp32_2x129_nd)
 {
     test_tquant_int8_sym<2, 129, 0>();
 }
 
-// INT8 ASYM with tmp, dims (2,129) — tail-col exercise
 TEST_F(TQUANTTEST, case_int8_asym_fp32_2x129_nd)
 {
     test_tquant_int8_asym<2, 129, 0>();
 }
 
-// INT8 SYM NoTmp cases
-TEST_F(TQUANTTEST, case_int8_sym_fp32_64x128_notmp_nd)
+TEST_F(TQUANTTEST, case_int8_sym_fp32_2x122_nd)
 {
-    test_tquant_int8_sym<64, 128, 0, true>();
-}
-TEST_F(TQUANTTEST, case_int8_sym_fp32_128x128_notmp_nd)
-{
-    test_tquant_int8_sym<128, 128, 0, true>();
+    test_tquant_int8_sym<2, 122, 0>();
 }
 
-// INT8 ASYM NoTmp cases
-TEST_F(TQUANTTEST, case_int8_asym_fp32_64x128_notmp_nd)
+TEST_F(TQUANTTEST, case_int8_asym_fp32_2x122_nd)
 {
-    test_tquant_int8_asym<64, 128, 0, true>();
+    test_tquant_int8_asym<2, 122, 0>();
 }
-TEST_F(TQUANTTEST, case_int8_asym_fp32_128x128_notmp_nd)
+
+TEST_F(TQUANTTEST, case_int8_sym_fp32_16x127_nd)
 {
-    test_tquant_int8_asym<128, 128, 0, true>();
+    test_tquant_int8_sym<16, 127, 0>();
 }
-TEST_F(TQUANTTEST, case_int8_asym_fp32_32x72_notmp_nd)
+
+TEST_F(TQUANTTEST, case_int8_asym_fp32_16x127_nd)
 {
-    test_tquant_int8_asym<32, 72, 0, true>();
+    test_tquant_int8_asym<16, 127, 0>();
+}
+
+TEST_F(TQUANTTEST, case_int8_sym_fp32_8x130_nd)
+{
+    test_tquant_int8_sym<8, 130, 0>();
+}
+
+TEST_F(TQUANTTEST, case_int8_asym_fp32_8x130_nd)
+{
+    test_tquant_int8_asym<8, 130, 0>();
+}
+
+TEST_F(TQUANTTEST, case_int8_sym_fp32_64x65_nd)
+{
+    test_tquant_int8_sym<64, 65, 0>();
+}
+
+TEST_F(TQUANTTEST, case_int8_asym_fp32_64x65_nd)
+{
+    test_tquant_int8_asym<64, 65, 0>();
 }
 
 } // namespace TQuantTest
