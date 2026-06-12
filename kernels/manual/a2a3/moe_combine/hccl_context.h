@@ -415,25 +415,18 @@ inline bool InitHcclRootInfo(HcclRootInfo *rootInfo)
     return hccl_runtime_detail::InitHcclRootInfoWithRetry(rootInfo);
 }
 
-inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, const PeerWindowLayout &layout,
-                                               uint32_t myRank, uint32_t rankCount, const HcclRootInfo *rootInfo,
-                                               rtStream_t hcclStream)
-{
-    if (rankCount == 0 || rankCount > kMaxMoeCombineRanks) {
-        throw std::invalid_argument("rankCount exceeds HcclDeviceContext capacity");
-    }
-
-    HcclWindowContext context;
-    context.peerWindowOffset = 0;
-    context.peerWindowBytes = layout.totalBytes;
-    context.comm = hccl_runtime_detail::InitHcclCommWithRetry(myRank, rankCount, rootInfo);
-
-    char group[hccl_runtime_detail::kTilingGroupNameSize] = {};
-    hccl_runtime_detail::CheckHccl(HcclGetCommName(context.comm, group),
-                                   "Rank " + std::to_string(myRank) + ": HcclGetCommName");
-
+struct AllocatedHcclResource {
+    void *ctxPtr = nullptr;
     CommTopo topo = 0;
-    hccl_runtime_detail::CheckHccl(HcomGetL0TopoTypeEx(group, &topo, kCommIsNotSetDevice),
+};
+
+inline AllocatedHcclResource AllocateHcclResource(uint32_t myRank, HcclComm comm, rtStream_t hcclStream)
+{
+    AllocatedHcclResource allocated;
+    char group[hccl_runtime_detail::kTilingGroupNameSize] = {};
+    hccl_runtime_detail::CheckHccl(HcclGetCommName(comm, group),
+                                   "Rank " + std::to_string(myRank) + ": HcclGetCommName");
+    hccl_runtime_detail::CheckHccl(HcomGetL0TopoTypeEx(group, &allocated.topo, kCommIsNotSetDevice),
                                    "Rank " + std::to_string(myRank) + ": HcomGetL0TopoTypeEx");
 
     HcclComm commHandle = nullptr;
@@ -442,42 +435,65 @@ inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, con
 
     hccl_runtime_detail::Mc2CommConfigV2 tiling{};
     hccl_runtime_detail::BuildMc2Tiling(group, &tiling);
-    void *ctxPtr = nullptr;
-    hccl_runtime_detail::CheckHccl(HcclAllocComResourceByTiling(commHandle, hcclStream, &tiling, &ctxPtr),
+    hccl_runtime_detail::CheckHccl(HcclAllocComResourceByTiling(commHandle, hcclStream, &tiling, &allocated.ctxPtr),
                                    "Rank " + std::to_string(myRank) + ": HcclAllocComResourceByTiling");
-    if (ctxPtr == nullptr) {
+    if (allocated.ctxPtr == nullptr) {
         throw std::runtime_error("Rank " + std::to_string(myRank) + ": HCCL context pointer is null");
     }
+    return allocated;
+}
 
+inline void PopulateHcclContext(uint32_t myRank, void *ctxPtr, CommTopo topo, HcclWindowContext *context)
+{
     if (topo == kCommTopoMesh) {
-        hccl_runtime_detail::InitMeshPath(myRank, ctxPtr, &context);
-    } else {
-        auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
-        hccl_runtime_detail::HcclOpResParamHead head{};
-        std::vector<hccl_runtime_detail::RemoteResPtr> remoteRes;
-        hccl_runtime_detail::ReadRingParams(myRank, rawCtx, &head, &remoteRes);
-        hccl_runtime_detail::BuildRingHostContext(myRank, rawCtx, head, remoteRes, &context.hostDeviceContext);
-        hccl_runtime_detail::CopyRingContextToDevice(myRank, &context);
+        hccl_runtime_detail::InitMeshPath(myRank, ctxPtr, context);
+        return;
     }
+    auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
+    hccl_runtime_detail::HcclOpResParamHead head{};
+    std::vector<hccl_runtime_detail::RemoteResPtr> remoteRes;
+    hccl_runtime_detail::ReadRingParams(myRank, rawCtx, &head, &remoteRes);
+    hccl_runtime_detail::BuildRingHostContext(myRank, rawCtx, head, remoteRes, &context->hostDeviceContext);
+    hccl_runtime_detail::CopyRingContextToDevice(myRank, context);
+}
 
-    if (context.hostDeviceContext.rankId != myRank || context.hostDeviceContext.rankNum != rankCount) {
+inline void FinalizeWindowContext(uint32_t myRank, uint32_t rankCount, HcclWindowContext *context)
+{
+    if (context->hostDeviceContext.rankId != myRank || context->hostDeviceContext.rankNum != rankCount) {
         throw std::runtime_error("Rank " + std::to_string(myRank) + ": HCCL context rank mismatch, got rankId=" +
-                                 std::to_string(context.hostDeviceContext.rankId) +
-                                 " rankNum=" + std::to_string(context.hostDeviceContext.rankNum));
+                                 std::to_string(context->hostDeviceContext.rankId) +
+                                 " rankNum=" + std::to_string(context->hostDeviceContext.rankNum));
     }
-    if (context.peerWindowOffset + context.peerWindowBytes > context.hostDeviceContext.winSize) {
+    if (context->peerWindowOffset + context->peerWindowBytes > context->hostDeviceContext.winSize) {
         throw std::runtime_error("Rank " + std::to_string(myRank) + ": peer window exceeds HCCL winSize, need " +
-                                 std::to_string(context.peerWindowOffset + context.peerWindowBytes) +
-                                 " bytes, winSize=" + std::to_string(context.hostDeviceContext.winSize));
+                                 std::to_string(context->peerWindowOffset + context->peerWindowBytes) +
+                                 " bytes, winSize=" + std::to_string(context->hostDeviceContext.winSize));
     }
-    uint64_t localWindow = context.hostDeviceContext.windowsIn[myRank];
+    uint64_t localWindow = context->hostDeviceContext.windowsIn[myRank];
     if (localWindow == 0) {
         throw std::runtime_error("Rank " + std::to_string(myRank) + ": local HCCL window is null");
     }
-    context.localWindowBase = reinterpret_cast<void *>(localWindow);
-    context.peerWindow = reinterpret_cast<void *>(localWindow + context.peerWindowOffset);
+    context->localWindowBase = reinterpret_cast<void *>(localWindow);
+    context->peerWindow = reinterpret_cast<void *>(localWindow + context->peerWindowOffset);
+}
 
+inline HcclWindowContext InitHcclWindowContext(const MoeCombineShape &shape, const PeerWindowLayout &layout,
+                                               uint32_t myRank, uint32_t rankCount, const HcclRootInfo *rootInfo,
+                                               rtStream_t hcclStream)
+{
+    if (rankCount == 0 || rankCount > kMaxMoeCombineRanks) {
+        throw std::invalid_argument("rankCount exceeds HcclDeviceContext capacity");
+    }
     (void)shape;
+
+    HcclWindowContext context;
+    context.peerWindowOffset = 0;
+    context.peerWindowBytes = layout.totalBytes;
+    context.comm = hccl_runtime_detail::InitHcclCommWithRetry(myRank, rankCount, rootInfo);
+
+    AllocatedHcclResource allocated = AllocateHcclResource(myRank, context.comm, hcclStream);
+    PopulateHcclContext(myRank, allocated.ctxPtr, allocated.topo, &context);
+    FinalizeWindowContext(myRank, rankCount, &context);
     return context;
 }
 
