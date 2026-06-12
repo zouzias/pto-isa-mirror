@@ -27,12 +27,6 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-if(DEFINED ENV{ASCEND_DRIVER_PATH})
-    set(ASCEND_DRIVER_PATH $ENV{ASCEND_DRIVER_PATH})
-else()
-    set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
-endif()
-
 add_compile_options(
     -D_FORTIFY_SOURCE=2
     -O2 -std=c++17
@@ -70,7 +64,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_HOME_PATH}/include/hccl
-    ${ASCEND_DRIVER_PATH}/kernel/inc
+    ${ASCEND_HOME_PATH}/aarch64-linux/include/driver
 )
 
 set(KERNEL_INCLUDE_DIRS

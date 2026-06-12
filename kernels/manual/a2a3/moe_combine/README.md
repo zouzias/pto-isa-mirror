@@ -32,7 +32,8 @@ kernels/manual/a2a3/moe_combine/
 ├── kernel_launchers.h       # Host-side kernel launcher declaration
 ├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
 ├── main.cpp                 # Host orchestration: MPI, ACL, HCCL window, fixture, verify, profiling
-├── golden.h                 # CPU golden route construction and output verification
+├── golden.h                 # CPU golden data structures and public interface declarations
+├── golden.cpp               # CPU golden route construction and output verification implementation
 ├── hccl_context.h           # HCCL window bootstrap and peer-window address exchange
 ├── comm_mpi.h               # MPI dynamic loading wrapper
 ├── DESIGN.md                # Split-from-dispatch design notes
@@ -271,19 +272,22 @@ Each AIV block owns a contiguous token shard. For each token and each column til
 
 ## Measured Performance
 
-Latest validation in this workspace used 2 ranks on Atlas 910B1 with
-`M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24`, `warmup=3`, and `iters=5`.
+This project runs directly on A2/A3 machines (Atlas 910B1). The run script prints a profile block like this:
 
-| Metric | Value |
+```text
+[PROFILE] CombineTile
+  M=64 K=7168 ranks=2 topK=8 expertPerPe=2 warmup=3 measured=5 samples=5
+  prepare_fixture: avg=... us max=... us
+  combine_e2e: avg=... us max=... us
+  verify=PASS
+```
+
+Key metrics:
+
+| Metric | Meaning |
 | --- | --- |
-| `workspace` | `2304 bytes` |
-| `routeMeta` | `2432 bytes` |
-| `peerWindow` | `7340160 bytes` |
-| `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
-| Verification | `verify=PASS` |
-
-`combine_e2e` measures only the combine kernel launch through stream sync. It excludes clear, fixture preparation,
-verification, and MPI barriers outside the kernel launch window.
+| `combine_e2e` | Combine kernel launch to stream sync; excludes clear, fixture, verify, and MPI barriers outside the kernel launch window |
+| `verify=PASS` | Device `outputC` matches CPU golden |
 
 ## Build and Run
 
@@ -291,12 +295,10 @@ verification, and MPI barriers outside the kernel launch window.
 
 ```bash
 source /usr/local/Ascend/cann-8.5.0/set_env.sh
-export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
-export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
-export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
 ```
 
-Load the CANN and MPI environment before invoking `run.sh`.
+Load the CANN environment before invoking `run.sh`. Configure MPI in the shell before running if `mpirun` is not already
+in `PATH`.
 
 ### Build Only
 

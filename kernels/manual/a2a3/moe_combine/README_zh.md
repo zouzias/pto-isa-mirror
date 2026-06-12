@@ -32,7 +32,8 @@ kernels/manual/a2a3/moe_combine/
 ├── kernel_launchers.h       # Host 侧 kernel launcher 声明
 ├── moe_combine_kernel.cpp   # PTO AIV kernel: return + wait + weighted restore
 ├── main.cpp                 # Host 编排: MPI, ACL, HCCL window, fixture, verify, profile
-├── golden.h                 # CPU golden 路由构造和输出校验
+├── golden.h                 # CPU golden 数据结构和公开接口声明
+├── golden.cpp               # CPU golden 路由构造和输出校验实现
 ├── hccl_context.h           # HCCL window 初始化和 peer-window 地址交换
 ├── comm_mpi.h               # MPI 动态加载封装
 ├── DESIGN.md                # 从 dispatch 拆分的设计说明
@@ -268,19 +269,22 @@ Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等�
 
 ## 实测性能
 
-最近一次在本工作区使用 2 ranks Atlas 910B1 验证，参数为
-`M=64, K=7168, topK=8, expertPerPe=2, aivBlocks=24`，`warmup=3`，`iters=5`。
+本工程可直接在 A2/A3 机器（Atlas 910B1）上运行。脚本会输出如下 profile：
 
-| 指标 | 值 |
+```text
+[PROFILE] CombineTile
+  M=64 K=7168 ranks=2 topK=8 expertPerPe=2 warmup=3 measured=5 samples=5
+  prepare_fixture: avg=... us max=... us
+  combine_e2e: avg=... us max=... us
+  verify=PASS
+```
+
+关键指标含义：
+
+| 指标 | 含义 |
 | --- | --- |
-| `workspace` | `2304 bytes` |
-| `routeMeta` | `2432 bytes` |
-| `peerWindow` | `7340160 bytes` |
-| `combine_e2e` | `avg=637.7 us`, `max=1894.1 us` |
-| 校验 | `verify=PASS` |
-
-`combine_e2e` 只统计 combine kernel launch 到 stream sync 这一段，不包含 clear、fixture 准备、verify，
-也不包含 kernel launch 窗口之外的 MPI barrier。
+| `combine_e2e` | combine kernel launch 到 stream sync；不包含 clear、fixture、verify，也不包含 kernel launch 窗口之外的 MPI barrier |
+| `verify=PASS` | device `outputC` 与 CPU golden 一致 |
 
 ## 构建与运行
 
@@ -288,12 +292,9 @@ Host 会在每轮迭代前清零 `combineDoneSignal`，因此 kernel 固定等�
 
 ```bash
 source /usr/local/Ascend/cann-8.5.0/set_env.sh
-export PATH=/home/ntlab/miniconda3/envs/ltr_pto/bin:$PATH
-export LD_LIBRARY_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib:$LD_LIBRARY_PATH
-export MPI_LIB_PATH=/home/ntlab/miniconda3/envs/ltr_pto/lib/libmpi.so
 ```
 
-执行 `run.sh` 前需要先在 shell 中加载 CANN 和 MPI 环境。
+执行 `run.sh` 前需要先在 shell 中加载 CANN 环境。如果 shell 中没有 `mpirun`，请先配置 MPI 环境。
 
 ### 仅编译
 

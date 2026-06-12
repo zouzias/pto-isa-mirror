@@ -476,32 +476,31 @@ void ValidateRouteMetaCumsum(const MoeCombineShape &shape, const CpuGoldenData &
     }
 }
 
-void CopyRouteMetaToDevice(const MoeCombineShape &shape, const CombineRouteMetaLayout &routeMetaLayout,
-                           RuntimeState *state)
+void CopyRouteMetaToDevice(const MoeCombineShape &shape, const CombineRouteMetaLayout &layout, RuntimeState *state)
 {
     ValidateRouteMetaCumsum(shape, state->golden, state->rank);
     auto *routeMetaBase = reinterpret_cast<uint8_t *>(state->buffers.routeMeta);
-    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.cumsumPerExpert,
-                         BytesOfI32Vector(state->golden.cumsumPerExpert.size()), state->golden.cumsumPerExpert.data(),
-                         BytesOfI32Vector(state->golden.cumsumPerExpert.size()), ACL_MEMCPY_HOST_TO_DEVICE),
+    CheckAcl(aclrtMemcpy(routeMetaBase + layout.cumsumPerExpert, BytesOfI32Vector(state->golden.cumsumPerExpert.size()),
+                         state->golden.cumsumPerExpert.data(), BytesOfI32Vector(state->golden.cumsumPerExpert.size()),
+                         ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture cumsumPerExpert");
-    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.dispatchOffset,
-                         BytesOfI32Vector(state->golden.dispatchOffset.size()), state->golden.dispatchOffset.data(),
-                         BytesOfI32Vector(state->golden.dispatchOffset.size()), ACL_MEMCPY_HOST_TO_DEVICE),
+    CheckAcl(aclrtMemcpy(routeMetaBase + layout.dispatchOffset, BytesOfI32Vector(state->golden.dispatchOffset.size()),
+                         state->golden.dispatchOffset.data(), BytesOfI32Vector(state->golden.dispatchOffset.size()),
+                         ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture dispatchOffset");
     CheckAcl(
-        aclrtMemcpy(routeMetaBase + routeMetaLayout.prevSumBeforeRank,
-                    BytesOfI32Vector(state->golden.prevSumBeforeRank.size()), state->golden.prevSumBeforeRank.data(),
-                    BytesOfI32Vector(state->golden.prevSumBeforeRank.size()), ACL_MEMCPY_HOST_TO_DEVICE),
+        aclrtMemcpy(routeMetaBase + layout.prevSumBeforeRank, BytesOfI32Vector(state->golden.prevSumBeforeRank.size()),
+                    state->golden.prevSumBeforeRank.data(), BytesOfI32Vector(state->golden.prevSumBeforeRank.size()),
+                    ACL_MEMCPY_HOST_TO_DEVICE),
         "rank " + std::to_string(state->rank) + " copy fixture prevSumBeforeRank");
     CheckAcl(
-        aclrtMemcpy(routeMetaBase + routeMetaLayout.peerTokenPerExpert,
+        aclrtMemcpy(routeMetaBase + layout.peerTokenPerExpert,
                     BytesOfI32Vector(state->golden.peerTokenPerExpert.size()), state->golden.peerTokenPerExpert.data(),
                     BytesOfI32Vector(state->golden.peerTokenPerExpert.size()), ACL_MEMCPY_HOST_TO_DEVICE),
         "rank " + std::to_string(state->rank) + " copy fixture peerTokenPerExpert");
-    CheckAcl(aclrtMemcpy(routeMetaBase + routeMetaLayout.expandedRowIdx,
-                         BytesOfI32Vector(state->golden.expandedRowIdx.size()), state->golden.expandedRowIdx.data(),
-                         BytesOfI32Vector(state->golden.expandedRowIdx.size()), ACL_MEMCPY_HOST_TO_DEVICE),
+    CheckAcl(aclrtMemcpy(routeMetaBase + layout.expandedRowIdx, BytesOfI32Vector(state->golden.expandedRowIdx.size()),
+                         state->golden.expandedRowIdx.data(), BytesOfI32Vector(state->golden.expandedRowIdx.size()),
+                         ACL_MEMCPY_HOST_TO_DEVICE),
              "rank " + std::to_string(state->rank) + " copy fixture expandedRowIdx");
 }
 
