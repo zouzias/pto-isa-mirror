@@ -1,0 +1,3 @@
+display_name: PTO A5 VF 优化
+short_description: 基于正确性优先和证据驱动轮次优化 A5 CCE/PTO 向量算子。
+default_prompt: 使用该 skill 优化目标 A5 CCE/PTO/DSL 向量算子：每轮一个 hypothesis，必须 golden validation，可结合 costmodel、trace 或 profiler 证据，并记录结构化性能日志。
