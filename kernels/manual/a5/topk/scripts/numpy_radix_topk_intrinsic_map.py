@@ -569,6 +569,102 @@ def vcvt_u32_to_u16(src_vb32: np.ndarray, pred256: np.ndarray | None = None) -> 
 
 
 # --------------------------------------------------------------------------- #
+# Vb32Hist256 — logical 256-bin u32 cumulative-histogram register.             #
+#                                                                            #
+# Physically backed by 4 × VL_B32 (= 4 × 64 u32) registers in the layout      #
+# produced by `vcvt PART_{EVEN,ODD}` over `chistv2 Bin_N{0,1}` outputs:       #
+#                                                                            #
+#     n0_even -> bin counts at byte values   0,  2, ..., 126                 #
+#     n0_odd  -> bin counts at byte values   1,  3, ..., 127                 #
+#     n1_even -> bin counts at byte values 128,130, ..., 254                 #
+#     n1_odd  -> bin counts at byte values 129,131, ..., 255                 #
+#                                                                            #
+# Together they form the 256-bin cumulative histogram **in bin order** when   #
+# viewed via `.as_contiguous()` (conceptually an `np.lib.stride_tricks.as_    #
+# strided` view that interleaves n0_even/n0_odd over the low 128 bins and    #
+# n1_even/n1_odd over the high 128 bins). Storing the register to a 256-u32  #
+# UB region via `vsts_hist256` auto-emits the two `vsts INTLV_B32` ops that   #
+# realise the same interleaving in UB memory.                                 #
+#                                                                            #
+# The user-facing accumulation API (`chist_accumulate`) hides the per-repeat #
+# chistv2(N0) + chistv2(N1) + vcvt(EVEN,ODD)×2 + vadd×4 chain entirely.       #
+# --------------------------------------------------------------------------- #
+@dataclass
+class Vb32Hist256:
+    """Logical 256-bin u32 register (4 physical VL_B32 regs in INTLV_B32 layout)."""
+    n0_even: np.ndarray  # VL_B32 u32, bins   0..126 even-positioned
+    n0_odd:  np.ndarray  # VL_B32 u32, bins   1..127 odd-positioned
+    n1_even: np.ndarray  # VL_B32 u32, bins 128..254 even-positioned
+    n1_odd:  np.ndarray  # VL_B32 u32, bins 129..255 odd-positioned
+
+    @classmethod
+    def zero(cls) -> "Vb32Hist256":
+        """vbr×4 zero-init of the four physical accumulator registers."""
+        z = lambda: np.zeros(VL_B32, dtype=np.uint32)  # noqa: E731
+        return cls(z(), z(), z(), z())
+
+    def as_contiguous(self) -> np.ndarray:
+        """Logical 256-u32 view in bin order — `bin[b]` = cumulative count for byte value `b`.
+
+        Equivalent (semantically) to an `np.lib.stride_tricks.as_strided` view over the four
+        physical registers that interleaves the {even, odd} pairs across each 128-bin half.
+        This method is for verification / inspection; the in-UB equivalent is `vsts_hist256`,
+        which writes the same logical layout into UB via two `vsts INTLV_B32` ops.
+        """
+        out = np.zeros(2 * VL_B16, dtype=np.uint32)
+        # Low half: bins 0..127, INTLV(n0_even, n0_odd)
+        out[0:2 * VL_B32:2] = self.n0_even
+        out[1:2 * VL_B32:2] = self.n0_odd
+        # High half: bins 128..255, INTLV(n1_even, n1_odd)
+        out[2 * VL_B32 + 0:4 * VL_B32:2] = self.n1_even
+        out[2 * VL_B32 + 1:4 * VL_B32:2] = self.n1_odd
+        return out
+
+
+def chist_accumulate(acc: Vb32Hist256, src_u8_vec: np.ndarray,
+                     pred256: np.ndarray) -> Vb32Hist256:
+    """Per-repeat 256-bin cumulative histogram accumulation into a `Vb32Hist256` register.
+
+    Wraps the underlying SIMD chain:
+        chistv2(N0)   → vcvt(EVEN,ODD)  → vadd(acc.n0_even / acc.n0_odd)
+        chistv2(N1)   → vcvt(EVEN,ODD)  → vadd(acc.n1_even / acc.n1_odd)
+    Returns a new `Vb32Hist256` representing the updated register; the four physical
+    VL_B32 registers are mutated in functional style (one CCE `vadd MODE_MERGING`
+    per slot, full b32 predicate). One call per `vlds`-loaded source repeat.
+    """
+    preg_all_b16 = pset_b16_all()
+    preg_all_b32 = pset_b32_all()
+    vb16_n0 = chistv2(src_u8_vec, pred256, bin_part=0)  # u16[128] bins   0..127
+    vb16_n1 = chistv2(src_u8_vec, pred256, bin_part=1)  # u16[128] bins 128..255
+    return Vb32Hist256(
+        n0_even=vadd_u32(acc.n0_even, vcvt_b16_to_b32(vb16_n0, preg_all_b16, "EVEN"),
+                         preg_all_b32, "merging"),
+        n0_odd =vadd_u32(acc.n0_odd,  vcvt_b16_to_b32(vb16_n0, preg_all_b16, "ODD"),
+                         preg_all_b32, "merging"),
+        n1_even=vadd_u32(acc.n1_even, vcvt_b16_to_b32(vb16_n1, preg_all_b16, "EVEN"),
+                         preg_all_b32, "merging"),
+        n1_odd =vadd_u32(acc.n1_odd,  vcvt_b16_to_b32(vb16_n1, preg_all_b16, "ODD"),
+                         preg_all_b32, "merging"),
+    )
+
+
+def vsts_hist256(ub_dst_u32: np.ndarray, off_u32: int, acc: Vb32Hist256,
+                 pred256: np.ndarray | None = None) -> None:
+    """Store a logical 256-bin register to a contiguous 256-u32 UB region.
+
+    Auto-emits the two `vsts INTLV_B32` ops that interleave each {even, odd} pair:
+        vsts INTLV_B32 (n0_even, n0_odd) -> ub[off + 0 ..   2*VL_B32)        # bins   0..127
+        vsts INTLV_B32 (n1_even, n1_odd) -> ub[off + 2*VL_B32 .. 4*VL_B32)   # bins 128..255
+
+    `pred256` defaults to full-true (b32 stride); pass a partial predicate to mask
+    the tail. The `.as_contiguous()` Python view of `acc` matches the layout that
+    ends up in UB after this call.
+    """
+    vsts_intlv_b32(ub_dst_u32, off_u32 + 0,            acc.n0_even, acc.n0_odd, pred256)
+    vsts_intlv_b32(ub_dst_u32, off_u32 + 2 * VL_B32,   acc.n1_even, acc.n1_odd, pred256)
+
+
+# --------------------------------------------------------------------------- #
 # SIMD-register-level THISTOGRAM — mirrors pto::THistogram<isMSB> 1:1.         #
 # --------------------------------------------------------------------------- #
 def t_histogram_simd(in_tile_u16: np.ndarray, valid_rows: int, valid_cols: int,
@@ -576,8 +672,9 @@ def t_histogram_simd(in_tile_u16: np.ndarray, valid_rows: int, valid_cols: int,
     """Transliteration of `pto::THistogram<TileDst, TileSrc, TileIdx, isMSB>`.
 
     Inputs are UB tiles already populated by TLOAD (MTE2). The vector pipe walks the tile in
-    VL_B8-wide repeats, building four u32 accumulator registers per row (N0/N1 x even/odd) and
-    finally interleaving them back into a 256-lane uint32 histogram in UB.
+    VL_B8-wide repeats; per repeat we update a logical 256-bin `Vb32Hist256` register
+    (4 × VL_B32 physical regs in INTLV_B32 layout). The final `vsts_hist256` auto-emits the
+    two `vsts INTLV_B32` ops that lay the 256 bins contiguously into the output UB tile.
 
     Returns a (valid_rows, 256) uint32 array; when valid_rows==1, the row vector is returned.
     """
@@ -586,29 +683,19 @@ def t_histogram_simd(in_tile_u16: np.ndarray, valid_rows: int, valid_cols: int,
     row_stride_u16 = in_tile_u16.shape[-1]
     flat_u16 = in_tile_u16.reshape(-1)
 
-    # `preg_all_b16` / `preg_all_b32` are full-true 256-bool predicates used by vcvt / vadd / vsts.
-    preg_all_b16 = pset_b16_all()
-    preg_all_b32 = pset_b32_all()
-
-    # `vbr(vb16_BIN_N0, 0)` / `vbr(vb16_BIN_N1, 0)` outside the row loop — the per-chistv2 reset
-    # at the end of histogram_b8i_b32o keeps them zeroed for every repeat.
     for r in range(valid_rows):
         # vlds(vb8_idx, idxPtr, 1, BRC_B8, POST_UPDATE) — broadcast one filter byte (row r).
         vb8_idx = vlds_brc_b8(idx_filter_u8, r)
 
-        # vbr(<accumulators>, 0): zero the four u32 partial-sum VL registers for this row.
-        vb32_n0_even_inc = vbr(elem_bytes=4, value=0, dtype=np.uint32)
-        vb32_n0_odd_inc  = vbr(elem_bytes=4, value=0, dtype=np.uint32)
-        vb32_n1_even_inc = vbr(elem_bytes=4, value=0, dtype=np.uint32)
-        vb32_n1_odd_inc  = vbr(elem_bytes=4, value=0, dtype=np.uint32)
-
-        sreg_even = valid_cols   # CreatePredicate source register for N0 (BYTE_LSB half)
-        sreg_odd  = valid_cols   # CreatePredicate source register for N1 (BYTE_MSB half)
+        # Vb32Hist256.zero(): vbr×4 zero-init of the four physical accumulator registers
+        # (n0_even, n0_odd, n1_even, n1_odd). The chistv2 scratch u16 regs are reset
+        # internally by every `chist_accumulate` call (one chistv2 per Bin_N{0,1} per repeat).
+        hist_acc = Vb32Hist256.zero()
 
         for c in range(repeat_times_per_row):
             consumed = c * VL_B8
-            preg_b8_0 = create_predicate_b8(sreg_even - consumed)  # CreatePredicate<uint8_t>(sreg_even) -> 256 bools
-            preg_b8_1 = create_predicate_b8(sreg_odd  - consumed)  # CreatePredicate<uint8_t>(sreg_odd)  -> 256 bools
+            # CreatePredicate<uint8_t>(sreg): 256-bool, first `valid_cols - consumed` byte lanes True.
+            preg_b8 = create_predicate_b8(valid_cols - consumed)
 
             # vlds DINTLV_B8 on uint16 source → (LSB byte vec, MSB byte vec), each VL_B8 lanes.
             elem_off = r * row_stride_u16 + consumed
@@ -616,37 +703,18 @@ def t_histogram_simd(in_tile_u16: np.ndarray, valid_rows: int, valid_cols: int,
 
             if is_msb:
                 # MSB pass (BYTE_1): histogram the MSB byte under the lane-active predicate.
-                src_for_hist = vb8_src_MSB
-                pred0 = preg_b8_0
-                pred1 = preg_b8_1
+                src_for_hist, pred = vb8_src_MSB, preg_b8
             else:
                 # LSB pass (BYTE_0): vcmp_eq filter — keep lanes where MSB == filter byte.
-                pred_filter = vcmp_eq_b8(vb8_src_MSB, vb8_idx, preg_b8_0)
+                pred = vcmp_eq_b8(vb8_src_MSB, vb8_idx, preg_b8)
                 src_for_hist = vb8_src_LSB
-                pred0 = pred_filter
-                pred1 = pred_filter
 
-            # ---- histogram_b8i_b32o: cumulative-128 × 2 → vcvt widen → vadd accumulate ----
-            vb16_BIN_N0 = chistv2(src_for_hist, pred0, bin_part=0)   # u16[128], bins   0..127
-            vb16_BIN_N1 = chistv2(src_for_hist, pred1, bin_part=1)   # u16[128], bins 128..255
-            # vcvt u16 → u32 splits each 128-lane u16 into two 64-lane u32 registers.
-            vb32_n0_even = vcvt_b16_to_b32(vb16_BIN_N0, preg_all_b16, "EVEN")
-            vb32_n0_odd  = vcvt_b16_to_b32(vb16_BIN_N0, preg_all_b16, "ODD")
-            vb32_n1_even = vcvt_b16_to_b32(vb16_BIN_N1, preg_all_b16, "EVEN")
-            vb32_n1_odd  = vcvt_b16_to_b32(vb16_BIN_N1, preg_all_b16, "ODD")
-            # vadd MODE_ZEROING under the full b32 predicate → elementwise u32 accumulate.
-            vb32_n0_even_inc = vadd_u32(vb32_n0_even_inc, vb32_n0_even, preg_all_b32, mode="zeroing")
-            vb32_n0_odd_inc  = vadd_u32(vb32_n0_odd_inc,  vb32_n0_odd,  preg_all_b32, mode="zeroing")
-            vb32_n1_even_inc = vadd_u32(vb32_n1_even_inc, vb32_n1_even, preg_all_b32, mode="zeroing")
-            vb32_n1_odd_inc  = vadd_u32(vb32_n1_odd_inc,  vb32_n1_odd,  preg_all_b32, mode="zeroing")
-            # vbr(vb16_BIN_N0, 0) / vbr(vb16_BIN_N1, 0): reset the chistv2 scratch u16 regs
-            # so the next repeat's chistv2 produces *just* that repeat's cumulative counts.
+            # One call hides chistv2(N0)+chistv2(N1) + vcvt(EVEN,ODD)×2 + vadd×4.
+            hist_acc = chist_accumulate(hist_acc, src_for_hist, pred)
 
-        # vsts INTLV_B32: store this row's 256 bins.
-        #   dstPtr            <-- (n0_even, n0_odd) at lane offset 0,   stride 256*r u32 (handled via row idx)
-        #   dstPtr + 128 elem <-- (n1_even, n1_odd) at lane offset 128, stride 256*r u32
-        vsts_intlv_b32(bin_count[r], 0,            vb32_n0_even_inc, vb32_n0_odd_inc, preg_all_b32)
-        vsts_intlv_b32(bin_count[r], 2 * VL_B32,   vb32_n1_even_inc, vb32_n1_odd_inc, preg_all_b32)
+        # vsts_hist256 auto-emits the two vsts INTLV_B32 ops to lay the 256 bins
+        # contiguously into bin_count[r] (offsets 0 and 2*VL_B32).
+        vsts_hist256(bin_count[r], 0, hist_acc)
 
     return bin_count[0] if valid_rows == 1 else bin_count
 
