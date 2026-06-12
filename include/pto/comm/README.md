@@ -82,4 +82,4 @@ comm/
 
 - ISA semantics and examples: `docs/isa/`
 - CPU simulation stubs: `pto/cpu/comm/`
-- NPU async backends: `pto/npu/comm/async/`
+- NPU async backends: `pto/comm/async/`

@@ -36,7 +36,7 @@ __global__ AICORE void WindowMemCopyIn(__gm__ T *winDst, __gm__ T *devSrc, int c
 // ============================================================================
 template <typename T, size_t count, pto::comm::ReduceOp op>
 __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root,
-                                         __gm__ HcclDeviceContext *hcclCtx)
+                                         __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -56,7 +56,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
+        __gm__ T *remoteInput = CommRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -224,7 +224,7 @@ template bool RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(int n_rank
 // ============================================================================
 template <typename T, size_t count, pto::comm::ReduceOp op>
 __global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root,
-                                              __gm__ HcclDeviceContext *hcclCtx)
+                                              __gm__ CommDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -241,7 +241,7 @@ __global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output,
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
+        __gm__ T *remoteInput = CommRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -385,7 +385,7 @@ bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int f
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *output, int nranks,
-                                                   __gm__ HcclDeviceContext *hcclCtx)
+                                                   __gm__ CommDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
@@ -408,7 +408,7 @@ __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *ou
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
+        __gm__ T *remoteInput = CommRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -488,8 +488,8 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
             T actual = output_host[i];
             if (actual != expected) {
                 std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                          << ", col=" << (i % cols) << ")"
-                          << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                          << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got "
+                          << (float)actual << std::endl;
                 is_ok = false;
                 break;
             }
@@ -570,7 +570,7 @@ bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 __global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *output, int nranks,
-                                                 __gm__ HcclDeviceContext *hcclCtx)
+                                                 __gm__ CommDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunked ping-pong");
@@ -592,7 +592,7 @@ __global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *outp
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
+        __gm__ T *remoteInput = CommRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -673,8 +673,8 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
             T actual = output_host[i];
             if (actual != expected) {
                 std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
-                          << ", col=" << (i % cols) << ")"
-                          << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                          << ", col=" << (i % cols) << ")" << ": expected " << (float)expected << ", got "
+                          << (float)actual << std::endl;
                 is_ok = false;
                 break;
             }

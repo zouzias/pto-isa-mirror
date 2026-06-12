@@ -28,7 +28,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *commBuf, int nranks, int root_rank, int elem_offset,
-                                           int elem_count, __gm__ HcclDeviceContext *hcclCtx,
+                                           int elem_count, __gm__ CommDeviceContext *hcclCtx,
                                            __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -66,7 +66,7 @@ __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *commBuf, int nranks, int ro
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T *remoteRecvBuf = HcclRemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
+            __gm__ T *remoteRecvBuf = CommRemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
             Global remoteRecvG(remoteRecvBuf, shape, stride);
             lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
         }

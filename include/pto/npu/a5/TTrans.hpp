@@ -203,44 +203,44 @@ PTO_INTERNAL void TTransB8ColWise(__ubuf__ typename TileDataDst::DType *dstPtr,
                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileDataSrc::DType;
-    if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
-        constexpr uint32_t sregLower = elementsPerRepeat >> 1;
-        uint16_t repeatTimes = CeilDivision(numRows, sregLower);
-        uint32_t tailEleNum = numRows % sregLower;
-        if (tailEleNum == 0) {
-            tailEleNum = sregLower;
-        }
-        uint32_t fullEleNum = sregLower;
-        uint16_t lastRepeat = repeatTimes - 1;
-        __VEC_SCOPE__
-        {
-            RegTensor<uint16_t> vreg0;
-            RegTensor<T> vreg1;
-            MaskReg pregFull = CreatePredicate<uint16_t>(fullEleNum);
-            MaskReg pregTail = CreatePredicate<uint16_t>(tailEleNum);
-            constexpr auto distValue =
-                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_PK_B16>())>();
-            for (uint16_t col = 0; col < (uint16_t)numCols; ++col) {
-                for (uint16_t chunk = 0; chunk < lastRepeat; ++chunk) {
-                    vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(numRows - 1), pregFull);
-                    vmuls(vreg0, vreg0, srcStride, pregFull);
-                    vadds(vreg0, vreg0, col, pregFull);
-                    vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcPtr, (RegTensor<uint16_t> &)vreg0,
-                             pregFull);
-                    vsts(vreg1, dstPtr, (col * dstStride + chunk * sregLower), distValue, pregFull);
-                }
-                vci((RegTensor<int16_t> &)vreg0, (int16_t)(lastRepeat * sregLower), INC_ORDER);
-                vmins(vreg0, vreg0, (uint16_t)(numRows - 1), pregTail);
-                vmuls(vreg0, vreg0, srcStride, pregTail);
-                vadds(vreg0, vreg0, col, pregTail);
-                vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcPtr, (RegTensor<uint16_t> &)vreg0,
-                         pregTail);
-                vsts(vreg1, dstPtr, (col * dstStride + lastRepeat * sregLower), distValue, pregTail);
+    using WorkT =
+        std::conditional_t<sizeof(T) == 1 && !std::is_same_v<T, uint8_t> && !std::is_same_v<T, int8_t>, uint8_t, T>;
+    __ubuf__ WorkT *srcWorkPtr = (__ubuf__ WorkT *)srcPtr;
+    __ubuf__ WorkT *dstWorkPtr = (__ubuf__ WorkT *)dstPtr;
+    constexpr uint32_t sregLower = elementsPerRepeat >> 1;
+    uint16_t repeatTimes = CeilDivision(numRows, sregLower);
+    uint32_t tailEleNum = numRows % sregLower;
+    if (tailEleNum == 0) {
+        tailEleNum = sregLower;
+    }
+    uint32_t fullEleNum = sregLower;
+    uint16_t lastRepeat = repeatTimes - 1;
+    __VEC_SCOPE__
+    {
+        RegTensor<uint16_t> vreg0;
+        RegTensor<WorkT> vreg1;
+        MaskReg pregFull = CreatePredicate<uint16_t>(fullEleNum);
+        MaskReg pregTail = CreatePredicate<uint16_t>(tailEleNum);
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<WorkT, DistVST::DIST_PK_B16>())>();
+        for (uint16_t col = 0; col < (uint16_t)numCols; ++col) {
+            for (uint16_t chunk = 0; chunk < lastRepeat; ++chunk) {
+                vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
+                vmins(vreg0, vreg0, (uint16_t)(numRows - 1), pregFull);
+                vmuls(vreg0, vreg0, srcStride, pregFull);
+                vadds(vreg0, vreg0, col, pregFull);
+                vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcWorkPtr, (RegTensor<uint16_t> &)vreg0,
+                         pregFull);
+                vsts(vreg1, dstWorkPtr, (col * dstStride + chunk * sregLower), distValue, pregFull);
             }
+            vci((RegTensor<int16_t> &)vreg0, (int16_t)(lastRepeat * sregLower), INC_ORDER);
+            vmins(vreg0, vreg0, (uint16_t)(numRows - 1), pregTail);
+            vmuls(vreg0, vreg0, srcStride, pregTail);
+            vadds(vreg0, vreg0, col, pregTail);
+            vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcWorkPtr, (RegTensor<uint16_t> &)vreg0,
+                     pregTail);
+            vsts(vreg1, dstWorkPtr, (col * dstStride + lastRepeat * sregLower), distValue, pregTail);
         }
-    } else {
-        static_assert(sizeof(T) == 1, "Fix: TTRANS has invalid b8 data type.");
     }
 }
 
@@ -250,41 +250,41 @@ PTO_INTERNAL void TTransB8RowWise(__ubuf__ typename TileDataDst::DType *dstPtr,
                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileDataSrc::DType;
+    using WorkT =
+        std::conditional_t<sizeof(T) == 1 && !std::is_same_v<T, uint8_t> && !std::is_same_v<T, int8_t>, uint8_t, T>;
+    __ubuf__ WorkT *srcWorkPtr = (__ubuf__ WorkT *)srcPtr;
+    __ubuf__ WorkT *dstWorkPtr = (__ubuf__ WorkT *)dstPtr;
 
-    if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
-        constexpr uint32_t sregLower = elementsPerRepeat >> 1;
-        uint16_t repeatTimes = CeilDivision(numCols, sregLower);
-        uint32_t tailEleNum = numCols % sregLower;
-        if (tailEleNum == 0) {
-            tailEleNum = sregLower;
-        }
-        uint32_t fullEleNum = sregLower;
-        uint16_t lastRepeat = repeatTimes - 1;
-        __VEC_SCOPE__
-        {
-            RegTensor<uint16_t> vreg0;
-            RegTensor<T> vreg1;
-            MaskReg pregFull = CreatePredicate<uint16_t>(fullEleNum);
-            MaskReg pregTail = CreatePredicate<uint16_t>(tailEleNum);
-            for (uint16_t row = 0; row < (uint16_t)numRows; ++row) {
-                for (uint16_t chunk = 0; chunk < lastRepeat; ++chunk) {
-                    vlds(vreg1, srcPtr, (row * srcStride + chunk * sregLower), UNPK_B8);
-                    vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(numCols - 1), pregFull);
-                    vmuls(vreg0, vreg0, dstStride, pregFull);
-                    vadds(vreg0, vreg0, row, pregFull);
-                    vscatter(vreg1, dstPtr, (RegTensor<uint16_t> &)vreg0, pregFull);
-                }
-                vlds(vreg1, srcPtr, (row * srcStride + lastRepeat * sregLower), UNPK_B8);
-                vci((RegTensor<int16_t> &)vreg0, (int16_t)(lastRepeat * sregLower), INC_ORDER);
-                vmins(vreg0, vreg0, (uint16_t)(numCols - 1), pregTail);
-                vmuls(vreg0, vreg0, dstStride, pregTail);
-                vadds(vreg0, vreg0, row, pregTail);
-                vscatter(vreg1, dstPtr, (RegTensor<uint16_t> &)vreg0, pregTail);
+    constexpr uint32_t sregLower = elementsPerRepeat >> 1;
+    uint16_t repeatTimes = CeilDivision(numCols, sregLower);
+    uint32_t tailEleNum = numCols % sregLower;
+    if (tailEleNum == 0) {
+        tailEleNum = sregLower;
+    }
+    uint32_t fullEleNum = sregLower;
+    uint16_t lastRepeat = repeatTimes - 1;
+    __VEC_SCOPE__
+    {
+        RegTensor<uint16_t> vreg0;
+        RegTensor<WorkT> vreg1;
+        MaskReg pregFull = CreatePredicate<uint16_t>(fullEleNum);
+        MaskReg pregTail = CreatePredicate<uint16_t>(tailEleNum);
+        for (uint16_t row = 0; row < (uint16_t)numRows; ++row) {
+            for (uint16_t chunk = 0; chunk < lastRepeat; ++chunk) {
+                vlds(vreg1, srcWorkPtr, (row * srcStride + chunk * sregLower), UNPK_B8);
+                vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
+                vmins(vreg0, vreg0, (uint16_t)(numCols - 1), pregFull);
+                vmuls(vreg0, vreg0, dstStride, pregFull);
+                vadds(vreg0, vreg0, row, pregFull);
+                vscatter(vreg1, dstWorkPtr, (RegTensor<uint16_t> &)vreg0, pregFull);
             }
+            vlds(vreg1, srcWorkPtr, (row * srcStride + lastRepeat * sregLower), UNPK_B8);
+            vci((RegTensor<int16_t> &)vreg0, (int16_t)(lastRepeat * sregLower), INC_ORDER);
+            vmins(vreg0, vreg0, (uint16_t)(numCols - 1), pregTail);
+            vmuls(vreg0, vreg0, dstStride, pregTail);
+            vadds(vreg0, vreg0, row, pregTail);
+            vscatter(vreg1, dstWorkPtr, (RegTensor<uint16_t> &)vreg0, pregTail);
         }
-    } else {
-        static_assert(sizeof(T) == 1, "Fix: TTRANS has invalid b8 data type.");
     }
 }
 

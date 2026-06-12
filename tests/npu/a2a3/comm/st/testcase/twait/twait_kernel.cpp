@@ -54,12 +54,12 @@ __global__ AICORE void WindowMemRead(__gm__ int32_t *devDst, __gm__ int32_t *win
 // Rank 0 sends signal to rank 1, rank 1 waits for the signal
 // Tests blocking wait functionality
 // ============================================================================
-__global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal, __gm__ HcclDeviceContext *hcclCtx)
+__global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal, __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
@@ -77,12 +77,12 @@ __global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal, __gm__ Hcc
 // Tests EQ, NE, GT, GE, LT, LE comparisons
 // ============================================================================
 __global__ AICORE void TWaitCompareKernel(__gm__ int32_t *shmem_signal, int32_t notifyValue,
-                                          __gm__ HcclDeviceContext *hcclCtx)
+                                          __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, notifyValue, pto::comm::NotifyOp::Set);
@@ -101,11 +101,11 @@ __global__ AICORE void TWaitCompareKernel(__gm__ int32_t *shmem_signal, int32_t 
 // Multiple ranks atomically add to rank 0's counter, rank 0 waits for threshold
 // ============================================================================
 __global__ AICORE void TWaitAtomicKernel(__gm__ int32_t *shmem_counter, int threshold, int iters,
-                                         __gm__ HcclDeviceContext *hcclCtx)
+                                         __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
-    __gm__ int32_t *remote_counter = HcclRemotePtr(hcclCtx, shmem_counter, 0);
+    __gm__ int32_t *remote_counter = CommRemotePtr(hcclCtx, shmem_counter, 0);
     pto::comm::Signal counterSignal(remote_counter);
 
     if (my_rank != 0) {
@@ -126,12 +126,12 @@ __global__ AICORE void TWaitAtomicKernel(__gm__ int32_t *shmem_counter, int thre
 // Rank 0 sets a 2D signal matrix for rank 1, rank 1 waits on the matrix
 // ============================================================================
 template <int Rows, int Cols>
-__global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix, __gm__ HcclDeviceContext *hcclCtx)
+__global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix, __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t *remote_matrix = HcclRemotePtr(hcclCtx, shmem_matrix, 1);
+        __gm__ int32_t *remote_matrix = CommRemotePtr(hcclCtx, shmem_matrix, 1);
         for (int r = 0; r < Rows; ++r) {
             for (int c = 0; c < Cols; ++c) {
                 __gm__ int32_t *remote_elem = remote_matrix + r * Cols + c;
@@ -153,7 +153,7 @@ __global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix, __gm__ Hc
 // Rank 1 uses Signal2D with stride to wait on just that sub-region
 // ============================================================================
 template <int FullCols, int SubRows, int SubCols>
-__global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__ HcclDeviceContext *hcclCtx)
+__global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__ CommDeviceContext *hcclCtx)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
@@ -161,7 +161,7 @@ __global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__
     constexpr int startCol = 4;
 
     if (my_rank == 0) {
-        __gm__ int32_t *remote_matrix = HcclRemotePtr(hcclCtx, shmem_matrix, 1);
+        __gm__ int32_t *remote_matrix = CommRemotePtr(hcclCtx, shmem_matrix, 1);
         for (int r = 0; r < SubRows; ++r) {
             for (int c = 0; c < SubCols; ++c) {
                 __gm__ int32_t *elem = remote_matrix + (startRow + r) * FullCols + (startCol + c);
@@ -182,12 +182,12 @@ __global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__
 // Kernel 5: TWAIT Multi-Phase
 // Rank 0 updates signal in phases, rank 1 waits in phases
 // ============================================================================
-__global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal, __gm__ HcclDeviceContext *hcclCtx, int phase)
+__global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal, __gm__ CommDeviceContext *hcclCtx, int phase)
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t *remote_signal = HcclRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         if (phase == 0) {

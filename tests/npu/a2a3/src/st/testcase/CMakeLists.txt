@@ -192,6 +192,7 @@ tcolexpand
 ttri
 tnot
 trelu
+taddreluconv
 tands
 tors
 tshls

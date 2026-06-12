@@ -17,8 +17,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
 Synchronous form:
 
 ```text
@@ -57,6 +55,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` loads support: ND->ND, DN->DN, NZ->NZ, plus ND->NZ and DN->ZN.
     - For ND->NZ or DN->ZN: `GlobalData::staticShape[0..2] == 1` and `TileData::SFractalSize == 512`.
     - For `int64_t/uint64_t`, only ND->ND or DN->DN are supported.
+    - `TileData::Rows` range: `1 <= Rows <= 4095`.
 - **Implementation checks (A5)**:
     - `sizeof(TileData::DType)` must be `1`, `2`, `4`, or `8` bytes, and must match `sizeof(GlobalData::DType)`.
     - For `int64_t/uint64_t`, `TileData::PadVal` must be `PadValue::Null` or `PadValue::Zero`.

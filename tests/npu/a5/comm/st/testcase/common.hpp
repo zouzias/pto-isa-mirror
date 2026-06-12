@@ -23,8 +23,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl/hccl_comm.h"
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
-#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
-#include "pto/npu/comm/async/urma/urma_workspace_manager.hpp"
+#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
+#include "pto/comm/async/urma/urma_workspace_manager.hpp"
 
 // ============================================================================
 // Debug logging helpers. Enabled by cmake -DDEBUG_MODE=ON (defines COMM_DEBUG).
@@ -116,7 +116,7 @@ struct Mc2CommConfigV2 {
 // Device-side helper: convert a local window pointer to the equivalent address on a remote rank.
 // ============================================================================
 template <typename T>
-AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *CommRemotePtr(__gm__ CommDeviceContext *ctx, __gm__ T *localPtr, int pe)
 {
     uint64_t localBase = ctx->windowsIn[ctx->rankId];
     uint64_t offset = (uint64_t)localPtr - localBase;
@@ -151,8 +151,8 @@ struct TestContext {
     int aclStatus{0};
     HcclComm comm{nullptr};
 
-    HcclDeviceContext *deviceCtx{nullptr};
-    HcclDeviceContext hostCtx{};
+    CommDeviceContext *deviceCtx{nullptr};
+    CommDeviceContext hostCtx{};
 
     bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo *rootInfo)
     {
@@ -239,7 +239,7 @@ struct TestContext {
             return false;
         }
 
-        deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
+        deviceCtx = reinterpret_cast<CommDeviceContext *>(ctxPtr);
         aclError aRet = aclrtMemcpy(&hostCtx, sizeof(hostCtx), deviceCtx, sizeof(hostCtx), ACL_MEMCPY_DEVICE_TO_HOST);
         COMM_LOG("[INIT] Rank " << rankId << ": aclrtMemcpy(deviceCtx->hostCtx) -> " << static_cast<int>(aRet));
         if (aRet != ACL_SUCCESS) {
@@ -247,9 +247,8 @@ struct TestContext {
             return false;
         }
 
-        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK"
-                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                                << " winSize=" << hostCtx.winSize);
+        COMM_LOG("[INFO] Rank " << rankId << " hccl init OK" << " rankId=" << hostCtx.rankId
+                                << " rankNum=" << hostCtx.rankNum << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
             COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
                                     << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);

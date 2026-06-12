@@ -2784,17 +2784,6 @@ __tf__ PTO_INTERNAL OP_NAME(TCVT)
 // used by other targets is intentionally absent here so all branching folds
 // away under `if constexpr`.
 
-// Type trait helpers for cleaner type checking
-template <typename T>
-struct is_fp16_or_bf16 {
-    static constexpr bool value = std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value;
-};
-
-template <typename T>
-struct is_any_float {
-    static constexpr bool value = std::is_floating_point<T>::value || is_fp16_or_bf16<T>::value;
-};
-
 /**
  * Compile-time traits describing which CTRL bits a given (SrcType, DstType)
  * conversion needs to touch. By exposing this as `static constexpr bool`
@@ -2814,16 +2803,16 @@ struct is_any_float {
  *   - fp16/bf16 <-> fp16/bf16               : CTRL[48]=(satMode==OFF)
  *   - integer -> float (sizeof src >= dst)  : CTRL[60]=1, CTRL[59]=(satMode==OFF)
  */
-template <typename SrcType, typename DstType>
+template <typename SrcType, typename DstType, SaturationMode SatMode, bool NeedSetCtrl>
 struct SaturationCtrlTraits {
 private:
-    static constexpr bool dstIsFp32 = std::is_same<DstType, float>::value;
-    static constexpr bool srcIsFloat = is_any_float<SrcType>::value;
-    static constexpr bool dstIsFloat = is_any_float<DstType>::value;
-    static constexpr bool srcIsInt = std::is_integral<SrcType>::value;
-    static constexpr bool dstIsInt = std::is_integral<DstType>::value;
-    static constexpr bool srcIsFp16Bf16 = is_fp16_or_bf16<SrcType>::value;
-    static constexpr bool dstIsFp16Bf16 = is_fp16_or_bf16<DstType>::value;
+    static constexpr bool dstIsFp32 = caps::IsFP32<DstType>();
+    static constexpr bool srcIsFloat = caps::IsFloatingPoint<SrcType>();
+    static constexpr bool dstIsFloat = caps::IsFloatingPoint<DstType>();
+    static constexpr bool srcIsInt = caps::IsInteger<SrcType>();
+    static constexpr bool dstIsInt = caps::IsInteger<DstType>();
+    static constexpr bool srcIsFp16Bf16 = caps::IsFP16<SrcType>() || caps::IsBF16<SrcType>();
+    static constexpr bool dstIsFp16Bf16 = caps::IsFP16<DstType>() || caps::IsBF16<DstType>();
 
     static constexpr bool floatToInt = srcIsFloat && dstIsInt;
     static constexpr bool intToIntNarrow = srcIsInt && dstIsInt && (sizeof(SrcType) >= sizeof(DstType));
@@ -2837,72 +2826,80 @@ public:
     static constexpr bool useCtrl59 = useCtrl60;
     static constexpr bool useCtrl48 = !dstIsFp32 && fp16Bf16Pair;
     // True iff this conversion needs to inspect/restore any CTRL bit at all.
-    static constexpr bool any = useCtrl60 || useCtrl59 || useCtrl48;
+    static constexpr bool any = (useCtrl60 || useCtrl59 || useCtrl48) && (NeedSetCtrl);
+
+    bool originalCtrl60 = false;
+    bool originalCtrl59 = false;
+    bool originalCtrl48 = false;
+
+    /**
+     * Apply saturation control bits for a (SrcType, DstType) conversion.
+     *
+     * All `useCtrl*` checks are compile-time, so for instantiations where the
+     * conversion does not touch a given bit the corresponding code is dropped
+     * entirely — no scalar test, no register access.
+     */
+    PTO_INTERNAL SaturationCtrlTraits()
+    {
+        if constexpr (any) {
+            uint64_t originalCtrl = get_ctrl();
+            if constexpr (useCtrl60) {
+                // CTRL[60] is always set to 1 whenever this conversion uses it.
+                originalCtrl60 = (originalCtrl & (1ULL << SAT_MODE_BIT_60)) != 0;
+                set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
+            }
+            if constexpr (useCtrl59) {
+                // CTRL[59] = 1 for OFF, 0 for ON (inverted).
+                originalCtrl59 = (originalCtrl & (1ULL << SAT_MODE_BIT_59)) != 0;
+                if constexpr (SatMode == SaturationMode::OFF) {
+                    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
+                } else {
+                    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
+                }
+            }
+            if constexpr (useCtrl48) {
+                // CTRL[48] = 1 for non-saturation, 0 for saturation.
+                originalCtrl48 = (originalCtrl & (1ULL << SAT_MODE_BIT_48)) != 0;
+                if constexpr (SatMode == SaturationMode::OFF) {
+                    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));
+                } else {
+                    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));
+                }
+            }
+        }
+    }
+
+    /**
+     * Restore the original CTRL bit states that this conversion touched. Bits
+     * that were never written are not restored (compile-time eliminated).
+     */
+    PTO_INTERNAL ~SaturationCtrlTraits()
+    {
+        if constexpr (any) {
+            if constexpr (useCtrl60) {
+                if (originalCtrl60) {
+                    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
+                } else {
+                    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));
+                }
+            }
+            if constexpr (useCtrl59) {
+                if (originalCtrl59) {
+                    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
+                } else {
+                    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
+                }
+            }
+            if constexpr (useCtrl48) {
+                if (originalCtrl48) {
+                    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));
+                } else {
+                    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));
+                }
+            }
+        }
+    }
 };
-
-/**
- * Apply saturation control bits for a (SrcType, DstType) conversion.
- *
- * All `useCtrl*` checks are compile-time, so for instantiations where the
- * conversion does not touch a given bit the corresponding code is dropped
- * entirely — no scalar test, no register access.
- */
-template <typename SrcType, typename DstType>
-PTO_INTERNAL void applySaturationCtrlBits(SaturationMode satMode)
-{
-    using Traits = SaturationCtrlTraits<SrcType, DstType>;
-    if constexpr (Traits::useCtrl60) {
-        // CTRL[60] is always set to 1 whenever this conversion uses it.
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
-    }
-    if constexpr (Traits::useCtrl59) {
-        // CTRL[59] = 1 for OFF, 0 for ON (inverted).
-        if (satMode == SaturationMode::OFF) {
-            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
-        }
-    }
-    if constexpr (Traits::useCtrl48) {
-        // CTRL[48] = 1 for non-saturation, 0 for saturation.
-        if (satMode == SaturationMode::OFF) {
-            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));
-        }
-    }
-}
-
-/**
- * Restore the original CTRL bit states that this conversion touched. Bits
- * that were never written are not restored (compile-time eliminated).
- */
-template <typename SrcType, typename DstType>
-PTO_INTERNAL void restoreSaturationCtrlBits(bool originalCtrl60, bool originalCtrl59, bool originalCtrl48)
-{
-    using Traits = SaturationCtrlTraits<SrcType, DstType>;
-    if constexpr (Traits::useCtrl60) {
-        if (originalCtrl60) {
-            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));
-        }
-    }
-    if constexpr (Traits::useCtrl59) {
-        if (originalCtrl59) {
-            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
-        }
-    }
-    if constexpr (Traits::useCtrl48) {
-        if (originalCtrl48) {
-            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));
-        }
-    }
-}
 
 // ============================================================================
 // High-Level Tile Conversion Interface with explicit SaturationMode
@@ -2939,7 +2936,7 @@ PTO_INTERNAL void tcvtDispatchByRound(TileDataD &dst, TileDataS &src, RoundMode 
             tcvtDispatch<RoundZType>(dst, src, satMode);
             return;
         case RoundMode::CAST_ODD:
-            if constexpr (std::is_same<DstType, half>::value && std::is_same<SrcType, float>::value) {
+            if constexpr (caps::IsFP16<DstType>() && caps::IsFP32<SrcType>()) {
                 tcvtDispatch<RoundOType>(dst, src, satMode);
                 return;
             }
@@ -2950,7 +2947,7 @@ PTO_INTERNAL void tcvtDispatchByRound(TileDataD &dst, TileDataS &src, RoundMode 
     // PyTorch-compatible default rounding (also matches a2a3 per-(src,dst) defaults):
     //   float -> integer : truncate toward zero (RoundZType)
     //   everything else  : round-to-nearest-even (RoundRType)
-    if constexpr (is_any_float<SrcType>::value && std::is_integral<DstType>::value) {
+    if constexpr (caps::IsFloatingPoint<SrcType>() && caps::IsInteger<DstType>()) {
         tcvtDispatch<RoundZType>(dst, src, satMode);
     } else {
         tcvtDispatch<RoundRType>(dst, src, satMode);
@@ -2990,39 +2987,36 @@ PTO_INTERNAL void tcvtDispatchByRound(TileDataD &dst, TileDataS &src, RoundMode 
  *       - CTRL[48]/[60]/[59] are neglected
  *       - Note: vtrc (fp32→fp32) falls into this category
  */
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+template <bool NeedSetCtrl, SaturationMode SatMode, typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVTImpl(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     using SrcType = typename TileDataS::DType;
     using DstType = typename TileDataD::DType;
-    using Traits = SaturationCtrlTraits<SrcType, DstType>;
 
-    // Save original states of only the CTRL bits this conversion will touch.
-    // For conversions that touch nothing (e.g. dst==fp32), the entire CTRL
-    // save/restore epilogue compiles to nothing.
-    bool originalSatMode60 = false;
-    bool originalSatMode59 = false;
-    bool originalSatMode48 = false;
-    if constexpr (Traits::any) {
-        uint64_t originalCtrl = get_ctrl();
-        if constexpr (Traits::useCtrl60) {
-            originalSatMode60 = (originalCtrl & (1ULL << SAT_MODE_BIT_60)) != 0;
-        }
-        if constexpr (Traits::useCtrl59) {
-            originalSatMode59 = (originalCtrl & (1ULL << SAT_MODE_BIT_59)) != 0;
-        }
-        if constexpr (Traits::useCtrl48) {
-            originalSatMode48 = (originalCtrl & (1ULL << SAT_MODE_BIT_48)) != 0;
-        }
-        applySaturationCtrlBits<SrcType, DstType>(satMode);
+    SaturationCtrlTraits<SrcType, DstType, SatMode, NeedSetCtrl> ctrlGuard;
+    tcvtDispatchByRound(dst, src, mode, SatMode);
+}
+
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
+    if (satMode == SaturationMode::ON) {
+        TCVTImpl<NeedSetCtrl, SaturationMode::ON>(dst, src, mode);
+    } else {
+        TCVTImpl<NeedSetCtrl, SaturationMode::OFF>(dst, src, mode);
     }
+}
 
-    // Execute the conversion with appropriate rounding mode
-    tcvtDispatchByRound(dst, src, mode, satMode);
-
-    // Restore original CTRL bit states (compile-time elided when no bits used)
-    if constexpr (Traits::any) {
-        restoreSaturationCtrlBits<SrcType, DstType>(originalSatMode60, originalSatMode59, originalSatMode48);
+// ============================================================================
+// TCVT_IMPL Overloads with tmp buffer (unused in A5, for API compatibility)
+// ============================================================================
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
+{
+    if (satMode == SaturationMode::ON) {
+        TCVTImpl<NeedSetCtrl, SaturationMode::ON>(dst, src, mode);
+    } else {
+        TCVTImpl<NeedSetCtrl, SaturationMode::OFF>(dst, src, mode);
     }
 }
 
@@ -3034,7 +3028,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
 // - FP32/FP16→INT16: defaults to OFF (truncation behavior)
 // - INT64→INT32, INT32→INT16: defaults to OFF (truncation behavior)
 // - All others: defaults to ON (native TCVT saturation)
-template <typename TileDataD, typename TileDataS>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     // Conversions that default to OFF for PyTorch compatibility or truncation behavior
@@ -3057,26 +3051,17 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
         // INT32→INT16 (int→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
-        TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+        TCVTImpl<NeedSetCtrl, SaturationMode::OFF>(dst, src, mode);
     } else {
         // All other conversions: default to ON (native TCVT saturation)
-        TCVT_IMPL(dst, src, mode, SaturationMode::ON);
+        TCVTImpl<NeedSetCtrl, SaturationMode::ON>(dst, src, mode);
     }
 }
 
-// ============================================================================
-// TCVT_IMPL Overloads with tmp buffer (unused in A5, for API compatibility)
-// ============================================================================
-template <typename TileDataD, typename TileDataS, typename TmpTileData>
-PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
-{
-    TCVT_IMPL(dst, src, mode, satMode);
-}
-
-template <typename TileDataD, typename TileDataS, typename TmpTileData>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode)
 {
-    TCVT_IMPL(dst, src, mode);
+    TCVT_IMPL<NeedSetCtrl>(dst, src, mode);
 }
 
 } // namespace pto

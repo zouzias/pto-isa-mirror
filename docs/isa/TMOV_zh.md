@@ -24,8 +24,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
-
 PTO AS 设计建议将 `TMOV` 拆分为一系列操作：
 
 ```text

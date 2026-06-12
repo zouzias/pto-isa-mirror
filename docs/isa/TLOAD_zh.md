@@ -16,8 +16,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
-
 同步形式：
 
 ```text
@@ -57,6 +55,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` 加载支持：ND->ND、DN->DN、NZ->NZ，以及 ND->NZ 和 DN->ZN。
     - 对于 ND->NZ 或 DN->ZN：`GlobalData::staticShape[0..2] == 1` 且 `TileData::SFractalSize == 512`。
     - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
+    - `TileData::Rows` 取值范围：`1 <= Rows <= 4095`。
 - **实现检查 (A5)**:
     - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，且必须匹配 `sizeof(GlobalData::DType)`。
     - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
