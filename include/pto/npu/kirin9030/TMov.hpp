@@ -29,7 +29,7 @@ __tf__ PTO_INTERNAL void TMovToBt(typename DstTile::TileDType __out__ dst, typen
     static_assert(DstTile::Cols * sizeof(DstType) % BIAS_TABLE_UNIT == 0,
                   "TMov: When TileType is Bias, col * sizeof(Dtype) must be aligned to 64.");
     static_assert(DstTile::Cols * sizeof(DstType) <= PTO_BIAS_SIZE_BYTES,
-                  "TMov: The memory occupation of BiasTile exceeds 4.0KB bias table size.");
+                  "TMov: The memory occupation of BiasTile exceeds 1.0KB bias table size.");
 
     __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
     uint64_t dstAddrP = (uint64_t)dst;
