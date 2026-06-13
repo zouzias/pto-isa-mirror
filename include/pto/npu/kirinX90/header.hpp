@@ -33,6 +33,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/kirin9030/TSync.hpp"
+#include "pto/npu/kirin9030/TRem.hpp"
+#include "pto/npu/kirin9030/TRemS.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
