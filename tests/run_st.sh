@@ -267,6 +267,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case1_float32_2_4_2_2_2
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case7_uint16_4_8_2_2_3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case10_uint8_9_18_2_2_4
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_32x64_32x64_32x64
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_32x128_32x128_32x128
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
@@ -585,6 +587,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int32_single_src_16x128_16x128
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_half_single_src_16x256_16x256
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int8_single_src_8x512_8x512
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_64x128_64x128_64x128
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
