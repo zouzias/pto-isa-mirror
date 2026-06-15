@@ -11,9 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_MACRO_FA_GU_HPP
 #define PTO_MACRO_FA_GU_HPP
 
-#include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
-#include <pto/common/pto_tile.hpp>
+#include <pto/pto-inst.hpp>
 
 namespace pto {
 
