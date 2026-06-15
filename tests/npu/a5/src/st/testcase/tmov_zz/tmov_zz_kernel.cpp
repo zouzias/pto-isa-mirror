@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-#define PTO_CEIL(x, y) ((((x) + (y)-1) / (y)) * (y))
+#define PTO_CEIL(x, y) ((((x) + (y) - 1) / (y)) * (y))
 
 namespace TMovZZTest {
 
@@ -338,8 +338,5 @@ void LaunchTMovZZ_e8m0(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *st
 {
     launchTMovZZKernel_e8m0<validRows, validCols><<<1, nullptr, stream>>>(dstFp8Nz, src, dstE8Zz);
 }
-
-template void LaunchTMovZZ_e8m0<64, 128>(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
-template void LaunchTMovZZ_e8m0<32, 64>(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
 
 } // namespace TMovZZTest
