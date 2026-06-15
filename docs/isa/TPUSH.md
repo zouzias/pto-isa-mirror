@@ -4,7 +4,7 @@
 
 Push a producer tile into a `TPipe` FIFO for Cube-Vector communication.
 
-This page describes all `TPUSH` overloads for pushing data into a `TPipe` FIFO: the TileData overload with explicit `TileSplitAxis`, the simplified TileData overload (reversed parameters, no Split), the GlobalTensor overload, and the TConfig-based overload.
+This page describes both the TileData overload and the `GlobalTensor` overload for pushing data into a `TPipe` FIFO.
 
 ## Operation Semantics
 
@@ -65,12 +65,6 @@ struct TPipe;
     - `TileSplitAxis::TILE_NO_SPLIT`: No sub-vector offset is applied.
     - `TileSplitAxis::TILE_UP_DOWN`: Data is split into row halves. For C2V direction (L0C→UB path), this mode only supports b32 data type, and `validRows` must be a power of 2; for V2C direction (UB→L1 path), `validCols` must be a multiple of 32 bytes.
     - `TileSplitAxis::TILE_LEFT_RIGHT`: Data is split into two column halves. For C2V direction (L0C→UB path), this mode only supports b32 data type, and `validCols` must be a multiple of 32; for V2C direction (UB→L1 path), `validCols` must be a multiple of 32 bytes.
-- **Simplified TileData overload**:
-    - `TPUSH(TileData&, Pipe&)` uses `TileSplitAxis::TILE_NO_SPLIT` semantics internally.
-    - `TileData::Loc` must be `TileType::Acc` or `TileType::Vec`.
-- **TConfig overload**:
-    - `TConfig` is a configuration type that determines push behavior (implementation-defined).
-    - `TileProd::Loc` must be `TileType::Acc`, `TileType::Vec`, or `TileType::Ctrl`.
 - **Synchronization**:
     - Free-space waits are sparse and controlled by `Pipe::SyncPeriod`.
     - Data-ready record is emitted for each `TPUSH`.
