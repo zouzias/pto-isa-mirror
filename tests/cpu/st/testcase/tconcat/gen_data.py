@@ -43,27 +43,41 @@ def gen_golden_data(case_name, param):
 
 
 class TConcatParams:
-    def __init__(self, dtype, dst_h, dst_w, src0_h, src0_w, src1_h, src1_w, valid_row, valid_col0, valid_col1):
+    def __init__(self, dtype, valid_row, valid_col0, valid_col1, idxtype='none', idx_tiles='none', dst_h=None,
+                 dst_w=None, src0_h=None, src0_w=None, src1_h=None, src1_w=None, dst_idx_h=None, dst_idx_w=None,
+                 src0_idx_h=None, src0_idx_w=None, src1_idx_h=None, src1_idx_w=None):
         self.dtype = dtype
-        self.dst_tile_row = dst_h
-        self.dst_tile_col = dst_w
-        self.src0_tile_row = src0_h
-        self.src0_tile_col = src0_w
-        self.src1_tile_row = src1_h
-        self.src1_tile_col = src1_w
         self.valid_row = valid_row
         self.valid_col0 = valid_col0
         self.valid_col1 = valid_col1
+        self.dst_tile_row = self._default_if_none(dst_h, valid_row)
+        self.dst_tile_col = self._default_if_none(dst_w, valid_col0 + valid_col1)
+        self.src0_tile_row = self._default_if_none(src0_h, valid_row)
+        self.src0_tile_col = self._default_if_none(src0_w, valid_col0)
+        self.src1_tile_row = self._default_if_none(src1_h, valid_row)
+        self.src1_tile_col = self._default_if_none(src1_w, valid_col1)
+
+        self.dst_idx_row = self._default_if_none(dst_idx_h, 1)
+        self.dst_idx_col = self._default_if_none(dst_idx_w, self.dst_tile_col)
+        self.src0_idx_row = self._default_if_none(src0_idx_h, 1)
+        self.src0_idx_col = self._default_if_none(src0_idx_w, valid_col0)
+        self.src1_idx_row = self._default_if_none(src1_idx_h, 1)
+        self.src1_idx_col = self._default_if_none(src1_idx_w, valid_col1)
+
+    @staticmethod
+    def _default_if_none(value, default):
+        return default if value is None else value
 
 
 def generate_case_name(param):
-    dtype_str = {
+    types_dict = {
         np.float32: 'float',
         np.float16: 'half',
         np.int8: 'int8',
         np.int32: 'int32',
         np.int16: 'int16'
-    }[param.dtype]
+    }
+    dtype_str = types_dict.get(param.dtype)
     return f"TCONCATTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.src1_tile_row}x{param.src1_tile_col}_\
 {param.valid_row}x{param.valid_col0}_{param.valid_row}x{param.valid_col1}"
@@ -79,14 +93,14 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TConcatParams(np.float32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.int32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.float16, 16, 256, 16, 128, 16, 128, 16, 128, 128),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 32, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 128, 128),
-        TConcatParams(np.float16, 16, 128, 16, 64, 16, 64, 16, 63, 64),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 31, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 127, 128),
+        TConcatParams(np.float32, 64, 64, 64),
+        TConcatParams(np.int32, 64, 64, 64),
+        TConcatParams(np.float16, 16, 128, 128),
+        TConcatParams(np.float32, 16, 32, 32),
+        TConcatParams(np.int16, 32, 128, 128),
+        TConcatParams(np.float16, 16, 63, 64, dst_w=128),
+        TConcatParams(np.float32, 16, 31, 32, dst_w=64),
+        TConcatParams(np.int16, 32, 127, 128, dst_w=256),
     ]
 
     for param in case_params_list:
