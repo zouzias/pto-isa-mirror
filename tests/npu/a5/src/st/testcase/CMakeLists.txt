@@ -141,6 +141,7 @@ set(ALL_TESTCASES
     tgather
     tcvt
     tsub
+    tsubreluconv
     trem
     tfmod
     tprelu
@@ -156,7 +157,6 @@ set(ALL_TESTCASES
     tshrs
     tadd
     taddreluconv
-    tadddeqrelu
     tpartadd
     tpartmul
     tfillpad
