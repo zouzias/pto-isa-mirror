@@ -515,6 +515,7 @@ PTO_INTERNAL void AbsReduceMax_b16_ND_2D(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr,
     (void)validCols; // padded source makes validCols implicit; retained for API symmetry
 }
 
+// Assumptions: Input is float, data is continuous and 1D, and the usual assumptions about M (divisible by 64)
 // Computing scalar focus and exponent for F32 -> b8 e4m3 quantization
 template <bool unroll = false>
 PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float *maxPtr, __ubuf__ uint8_t *expPtr,
@@ -2271,7 +2272,178 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(typename TileDataOut::TileDType __out__
     }
 }
 
-// TQuant Interface for FP32/FP16/BF16->INT4/8/16
+// Missing stuff and TODOS:
+// 1) Dynamic vs static predicate implementation
+// 2) Testing on board to assure this case does not fail
+// 3) Loop peeling is more efficient than using vbr, but just get the correctness first then use loop peeling
+// Assumptions:
+// 1) validRows is divisible by 32 (grpSize)
+template <typename T, uint32_t StaticCols>
+PTO_INTERNAL void AbsReduceMax_DN(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned validRows, unsigned validCols)
+{
+    constexpr uint32_t grpSize = 32;
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+    uint32_t num_vls_per_row = CeilDivision(validCols, elementsPerVL);
+    uint32_t num_grps_per_row = CeilDivision(validCols, grpSize);
+    constexpr uint32_t num_vls_inner_loop = 4; 
+    uint32_t inner_loop_iters = CeilDivision(grpSize, num_vls_inner_loop);
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    RegTensor<T> vreg_0, vreg_1, vreg_2, vreg_3;
+    RegTensor<T> vreg_max, vreg_max_0, vreg_max_1, vreg_max_2, vreg_max_3;
+    uint32_t preg_cols = validCols;
+    for (uint32_t i = 0; i < num_vls_per_row; ++i){
+        uint32_t vl_start = i * elementsPerVL;
+        MaskReg preg = CreatePredicate<T>(preg_cols); // cost of dynamic predicate is amortized across inner loop iters
+        vbr(vreg_max_0, (T)0);
+        vbr(vreg_max_1, (T)0);
+        vbr(vreg_max_2, (T)0);
+        vbr(vreg_max_3, (T)0);
+        for (uint32_t j = 0; j < num_grps_per_row; ++j){
+            uint32_t grp_start = j * grpSize * StaticCols;
+            for (uint32_t k = 0; k < inner_loop_iters; ++k){
+                uint32_t inner_start = k * StaticCols;
+                uint32_t offset = vl_start + grp_start + inner_start;
+                vlds(vreg_0, srcPtr, offset, NORM);
+                vlds(vreg_1, srcPtr, offset + StaticCols, NORM);
+                vlds(vreg_2, srcPtr, offset + 2 * StaticCols, NORM);
+                vlds(vreg_3, srcPtr, offset + 3 * StaticCols, NORM);
+                vabs(vreg_0, vreg_0, preg);
+                vabs(vreg_1, vreg_1, preg);
+                vabs(vreg_2, vreg_2, preg);
+                vabs(vreg_3, vreg_3, preg); //TODO: NEED to typecast it to an allowed type
+                vmax(vreg_max_0, vreg_0, vreg_max_0, preg, MODE_ZEROING);
+                vmax(vreg_max_1, vreg_1, vreg_max_1, preg, MODE_ZEROING);
+                vmax(vreg_max_2, vreg_2, vreg_max_2, preg, MODE_ZEROING);
+                vmax(vreg_max_3, vreg_3, vreg_max_3, preg, MODE_ZEROING);
+            }
+            vmax(vreg_max_0, vreg_max_0, vreg_max_1, preg, MODE_ZEROING);
+            vmax(vreg_max_2, vreg_max_2, vreg_max_3, preg, MODE_ZEROING);
+            vmax(vreg_max, vreg_max_0, vreg_max_2, preg, MODE_ZEROING);
+            vsts(vreg_max, maxPtr + j * StaticCols + i * elementsPerVL, 0, distValue, preg);
+        }
+    }
+}
+
+// fp16 & bf16
+template <typename T, uint32_t StaticCols>
+PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(__ubuf__ T *srcPtr, __ubuf__ T *scalingPtr, __ubuf__ uint8_t *dstPtr,
+                                            unsigned validRows, unsigned validCols)
+{
+    constexpr uint32_t grpSize = 32;
+    constexpr uint32_t b16ElementsPerVL = REPEAT_BYTE / sizeof(T); //B16 elements per VL
+    uint32_t num_vls_per_row = CeilDivision(validCols, b16ElementsPerVL);
+    uint32_t num_grps_per_row = CeilDivision(validCols, grpSize);
+    constexpr uint32_t num_vls_inner_loop = 1; 
+    uint32_t inner_loop_iters = CeilDivision(grpSize, num_vls_inner_loop);
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    uint32_t preg_cols = validCols;
+    RegTensor<T> vb16_scaling;
+    RegTensor<T> vb16_input; 
+    vector_f8e4m3 vb8_out;
+    for (uint32_t i = 0; i < num_vls_per_row; ++i){
+        uint32_t vl_start = i * b16ElementsPerVL;
+        MaskReg preg = CreatePredicate<T>(preg_cols);
+        for (uint32_t j = 0; j < num_grps_per_row; ++j){
+            uint32_t grp_start = j * grpSize * StaticCols;
+            vlds(vb16_scaling, scalingPtr, vl_start + j * StaticCols, NORM);
+            for (uint32_t k = 0; k < inner_loop_iters; ++k){
+                uint32_t inner_start = k * num_vls_inner_loop * StaticCols;
+                uint32_t offset = vl_start + grp_start + inner_start;
+                vlds(vb16_input, srcPtr, offset, NORM);
+                vmul(vb16_input, vb16_input, vb16_scaling, preg, MODE_ZEROING);
+                vcvt(vb8_out, vb16_input, preg, ROUND_R, RS_ENABLE, PART_EVEN);
+                vsts((vector_u8 &)vb8_out, dstPtr, vl_start + (j+k) * StaticCols, PK_B16, preg);
+            }
+        }
+    }
+}
+
+// fp32
+template <uint32_t StaticCols>
+PTO_INTERNAL void calcQuantizedFP8Values_DN_float(__ubuf__ float *srcPtr, __ubuf__ float *scalingPtr, __ubuf__ uint8_t *dstPtr,
+                                            unsigned validRows, unsigned validCols)
+{
+    constexpr uint32_t grpSize = 32;
+    constexpr uint32_t b32ElementsPerVL = REPEAT_BYTE / sizeof(float); //B32 elements per VL
+    uint32_t num_vls_per_row = CeilDivision(validCols, b32ElementsPerVL);
+    uint32_t num_grps_per_row = CeilDivision(validCols, grpSize);
+    constexpr uint32_t num_vls_inner_loop = 1; 
+    uint32_t inner_loop_iters = CeilDivision(grpSize, num_vls_inner_loop);
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    uint32_t preg_cols = validCols;
+    RegTensor<float> vf32_scaling;
+    RegTensor<float> vf32_input; 
+    vector_f8e4m3 vb8_out;
+    for (uint32_t i = 0; i < num_vls_per_row; ++i){
+        uint32_t vl_start = i * b32ElementsPerVL;
+        MaskReg preg = CreatePredicate<float>(preg_cols);
+        for (uint32_t j = 0; j < num_grps_per_row; ++j){
+            uint32_t grp_start = j * grpSize * StaticCols;
+            vlds(vf32_scaling, scalingPtr, vl_start + j * StaticCols, NORM);
+            for (uint32_t k = 0; k < inner_loop_iters; ++k){
+                uint32_t inner_start = k * num_vls_inner_loop * StaticCols;
+                uint32_t offset = vl_start + grp_start + inner_start;
+                vlds(vf32_input, srcPtr, offset, NORM);
+                vmul(vf32_input, vf32_input, vf32_scaling, preg, MODE_ZEROING);
+                vcvt(vb8_out, vf32_input, preg, ROUND_R, RS_ENABLE, PART_P0);
+                vsts((vector_u8 &)vb8_out, dstPtr, vl_start + (j+k)*StaticCols, PK4_B32, preg);
+            }
+        }
+    }
+}
+
+template <QuantScaleAlg scale_alg, typename T, unsigned StaticCols>
+PTO_INTERNAL void TQuant_MXFP8_DN(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr, __ubuf__ uint8_t *dstPtr,
+                        __ubuf__ T *maxPtr, __ubuf__ T *scalingPtr, unsigned validRows, unsigned validCols)
+{
+    AbsReduceMax_DN<T, StaticCols>(srcPtr, maxPtr, validRows, validCols);
+    mem_bar(VST_VLD);
+    constexpr uint32_t elementsPerVL = REPEAT_BYTE / sizeof(T);
+    ExtractB8ExponentAndScaling_2D<T>(maxPtr, expPtr, scalingPtr, validRows, validCols, StaticCols);
+    mem_bar(VST_VLD);
+    if constexpr (std::is_same<T, float>::value)
+        calcQuantizedFP8Values_DN_float<StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+    else
+        calcQuantizedFP8Values_DN_B16<T, StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+}
+
+template <QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+          typename TileDataMax, typename TileDataScaling, typename TileDataExpDn>
+__tf__ PTO_INTERNAL void TQuant_MXFP8_Impl_DN(typename TileDataOut::TileDType __out__ dst,
+                                               typename TileDataExp::TileDType __out__ exp,
+                                               typename TileDataMax::TileDType __out__ max,
+                                               typename TileDataScaling::TileDType __out__ scaling,
+                                               typename TileDataExpDn::TileDType __out__ expDn,
+                                               typename TileDataSrc::TileDType __in__ src, unsigned validRows,
+                                               unsigned validCols)
+{
+    using T = typename TileDataSrc::DType;
+    using ExpT = typename TileDataExp::DType;
+    using OutT = typename TileDataOut::DType;
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    __ubuf__ ExpT *expPtr = (__ubuf__ ExpT *)__cce_get_tile_ptr(exp);
+    __ubuf__ OutT *dstPtr = (__ubuf__ OutT *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
+    __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
+    __ubuf__ uint8_t *expDnPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(expDn);
+
+    set_ctrl(static_cast<uint64_t>(1) << 50);
+    __VEC_SCOPE__
+    {
+        ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
+        mem_bar(VST_VLD);
+        if constexpr (std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value || std::is_same<T, float>::value) {
+            TQuant_MXFP8_DN<scale_alg, T, TileDataSrc::Cols>(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr,
+                                        scalingPtr, validRows, validCols);
+        } else {
+            static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value || std::is_same<T, float>::value,
+                          "Fix: MXFP8 DN mode currently supports bf16/fp16/fp32 source only.");
+        }
+    }
+}
 template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara>
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara *offset = nullptr)
 {
@@ -2375,6 +2547,38 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
         }
         TRESHAPE_IMPL(*exp, flatExp);
     }
+}
+
+template <QuantType quant_type, QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc,
+          typename TileDataExp, typename TileDataMax, typename TileDataScaling, typename TileDataExpDn>
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                              TileDataScaling *scaling, TileDataExpDn *expDn)
+{
+    using T = typename TileDataSrc::DType;
+    static_assert(quant_type == QuantType::MXFP8, "Fix: DN mode overload supports MXFP8 only.");
+    static_assert(std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+                  "Fix: MXFP8 DN input has to be bfloat16 or float16 (half)");
+
+    constexpr int expN = TileDataExp::Rows * TileDataExp::Cols;
+    FlatTile1D<TileDataExp> flatExp(1, expN);
+    TRESHAPE_IMPL(flatExp, *exp);
+    constexpr int maxN = TileDataMax::Rows * TileDataMax::Cols;
+    FlatTile1D<TileDataMax> flatMax(1, maxN);
+    TRESHAPE_IMPL(flatMax, *max);
+    constexpr int scalN = TileDataScaling::Rows * TileDataScaling::Cols;
+    FlatTile1D<TileDataScaling> flatScaling(1, scalN);
+    TRESHAPE_IMPL(flatScaling, *scaling);
+    constexpr int expDnN = TileDataExpDn::Rows * TileDataExpDn::Cols;
+    FlatTile1D<TileDataExpDn> flatExpDn(1, expDnN);
+    TRESHAPE_IMPL(flatExpDn, *expDn);
+
+    TQuant_MXFP8_Impl_DN<scale_alg, TileDataOut, TileDataSrc, FlatTile1D<TileDataExp>, FlatTile1D<TileDataMax>,
+                          FlatTile1D<TileDataScaling>, FlatTile1D<TileDataExpDn>>(
+        dst.data(), flatExp.data(), flatMax.data(), flatScaling.data(), flatExpDn.data(), src.data(),
+        src.GetValidRow(), src.GetValidCol());
+
+    TRESHAPE_IMPL(*exp, flatExp);
+    TRESHAPE_IMPL(*expDn, flatExpDn);
 }
 } // namespace pto
 #endif // TQUANT_HPP

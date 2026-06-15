@@ -362,7 +362,7 @@ __tf__ PTO_INTERNAL void TMovNdTo2Zz(typename DstTileData::TileDType __out__ dst
                   "TMov ND->ZZ: Destination Mat tile must use ColMajor + RowMajor fractal layout.");
 
     const uint32_t srcBytes = validRow * validCol * sizeof(uint8_t);
-    const uint32_t rowBlockCount = (validRow + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint32_t rowBlockCount = (validRow + 15) / 16;
     const uint32_t P = validCol / 2;
     const uint32_t tmpBytes =
         (BLOCK_SIZE / sizeof(uint16_t) + rowBlockCount * P + BLOCK_SIZE / sizeof(uint16_t)) * sizeof(uint16_t);
@@ -374,6 +374,89 @@ __tf__ PTO_INTERNAL void TMovNdTo2Zz(typename DstTileData::TileDType __out__ dst
     __VEC_SCOPE__
     {
         GenerateB8IndicesZZToUB<DstTileData, SrcTileData>(dstPtr, srcPtr, tmpPtr, validRow, validCol);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void GenerateB8IndicesDN2ZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_t *src, __ubuf__ uint8_t *tmp,
+                                             uint16_t hatM, unsigned srcCols)
+{
+    const uint16_t P = hatM / 2;
+    const uint16_t colBlockCount = (srcCols + 15) / 16;
+    const uint16_t N_blk = colBlockCount * P;
+    const uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t);
+    constexpr uint16_t blkElem = BLOCK_SIZE / sizeof(uint16_t);
+    constexpr uint16_t blksPerVL = REPEAT_BYTE / BLOCK_SIZE;
+    __ubuf__ uint16_t *srcPtr_b16 = (__ubuf__ uint16_t *)src;
+    __ubuf__ uint16_t *dstPtr_b16 = (__ubuf__ uint16_t *)dst;
+    __ubuf__ uint16_t *basePtr = (__ubuf__ uint16_t *)tmp;
+    __ubuf__ uint16_t *offsetBuf = basePtr + blkElem;
+
+    vector_u16 vb16_base;
+    MaskReg preg_blk = pset_b16(PAT_VL16);
+    vci((vector_s16 &)vb16_base, 0, INC_ORDER);
+    vmuls(vb16_base, vb16_base, P, preg_blk, MODE_ZEROING);
+    vsts(vb16_base, basePtr, 0, NORM_B16, preg_blk);
+
+    __ubuf__ uint16_t *offWr = offsetBuf;
+    vector_u16 vb16_off;
+    vector_align ureg_align;
+    for (uint16_t cb = 0; cb < colBlockCount; ++cb) {
+        vci((vector_s16 &)vb16_off, (int16_t)(cb * 16 * P), INC_ORDER);
+        vstus(ureg_align, (uint32_t)P, vb16_off, offWr, POST_UPDATE);
+    }
+    vstus(ureg_align, (uint32_t)blkElem, vb16_off, offWr, POST_UPDATE);
+    vstas(ureg_align, offWr, 0, POST_UPDATE);
+    mem_bar(VST_VLD);
+
+    ZeroSourcePaddingB16(srcPtr_b16, srcCols * P, colBlockCount * 16 * P);
+
+    __ubuf__ uint16_t *offRd = offsetBuf;
+    const uint16_t fullIters = N_blk / blksPerVL;
+    const uint16_t tailBlks = N_blk % blksPerVL;
+    vector_u16 vb16_base_blk, vb16_blk_off, vb16_idx, vb16_gathered;
+    vlds(vb16_base_blk, basePtr, 0, BLK);
+    MaskReg preg_full = pset_b16(PAT_ALL);
+    for (uint16_t i = 0; i < fullIters; ++i) {
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_full, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_full);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_full, POST_UPDATE);
+    }
+    if (tailBlks > 0) {
+        uint32_t tailCount = (uint32_t)tailBlks * blkElem;
+        MaskReg preg_tail = CreatePredicate<uint16_t>(tailCount);
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_tail, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_tail);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_tail, POST_UPDATE);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, typename TmpTileData>
+__tf__ PTO_INTERNAL void TMovDnTo2Zz(typename DstTileData::TileDType __out__ dst,
+                                     typename SrcTileData::TileDType __in__ src,
+                                     typename TmpTileData::TileDType __in__ tmp, uint32_t validRow, uint32_t validCol)
+{
+    CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
+    static_assert(!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox),
+                  "TMov DN->ZZ: Source tile must be ColMajor (DN) with NoneBox layout.");
+    static_assert(DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
+                  "TMov DN->ZZ: Destination tile must use RowMajor + RowMajor fractal layout.");
+
+    const uint16_t hatM = (uint16_t)validRow;
+    const uint16_t P = hatM / 2;
+    const uint32_t colBlockCount = (validCol + 15) / 16;
+    const uint32_t tmpBytes =
+        (BLOCK_SIZE / sizeof(uint16_t) + colBlockCount * P + BLOCK_SIZE / sizeof(uint16_t)) * sizeof(uint16_t);
+
+    __ubuf__ uint8_t *srcPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(src);
+    __ubuf__ uint8_t *dstPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(dst);
+    __ubuf__ uint8_t *tmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
+
+    __VEC_SCOPE__
+    {
+        GenerateB8IndicesDN2ZZToUB<DstTileData, SrcTileData>(dstPtr, srcPtr, tmpPtr, hatM, validCol);
     }
 }
 
@@ -615,8 +698,16 @@ template <typename DstTileData, typename SrcTileData, typename TmpTileData,
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &tmp)
 {
     CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
-    TMovNdTo2Zz<DstTileData, SrcTileData, TmpTileData>(dst.data(), src.data(), tmp.data(), dst.GetValidRow(),
-                                                       dst.GetValidCol());
+    if constexpr (SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) {
+        TMovNdTo2Zz<DstTileData, SrcTileData, TmpTileData>(dst.data(), src.data(), tmp.data(), dst.GetValidRow(),
+                                                           dst.GetValidCol());
+    } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) {
+        TMovDnTo2Zz<DstTileData, SrcTileData, TmpTileData>(dst.data(), src.data(), tmp.data(), src.GetValidRow(),
+                                                           src.GetValidCol());
+    } else {
+        static_assert(SrcTileData::isRowMajor || !SrcTileData::isRowMajor,
+                      "TMov 3-arg: Source tile must be RowMajor (ND) or ColMajor (DN) with NoneBox layout.");
+    }
 }
 
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
