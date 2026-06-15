@@ -26,6 +26,9 @@ def gen_golden_data(case_name, param):
     # Generate input arrays
     input1_valid = np.random.uniform(-1000, 1000, size=(v_valid_row, v_valid_col0)).astype(dtype)
     input2_valid = np.random.uniform(-1000, 1000, size=(v_valid_row, v_valid_col1)).astype(dtype)
+    if (param.idx_type != 'none'):
+        input1_idx_valid = np.random.uniform(0, v_valid_col0, size=(v_valid_row, 1)).astype(dtype)
+        input2_idx_valid = np.random.uniform(0, v_valid_col1, size=(v_valid_row, 1)).astype(dtype)
     input1 = np.zeros([src0_tile_row, src0_tile_col]).astype(dtype)
     input2 = np.zeros([src1_tile_row, src1_tile_col]).astype(dtype)
     input1[0:v_valid_row, 0:v_valid_col0] = input1_valid
@@ -43,27 +46,37 @@ def gen_golden_data(case_name, param):
 
 
 class TConcatParams:
-    def __init__(self, dtype, dst_h, dst_w, src0_h, src0_w, src1_h, src1_w, valid_row, valid_col0, valid_col1):
+    def __init__(self, dtype, valid_row, valid_col0, valid_col1, idxtype='none', idx_tiles='none', dst_h=None, dst_w=None,
+                 src0_h=None, src0_w=None, src1_h=None, src1_w=None, dst_idx_h=None, dstidx_w=None, src0idx_h=None,
+                 src0idx_w=None, src1idx_h=None, src1idx_w=None):
         self.dtype = dtype
-        self.dst_tile_row = dst_h
-        self.dst_tile_col = dst_w
-        self.src0_tile_row = src0_h
-        self.src0_tile_col = src0_w
-        self.src1_tile_row = src1_h
-        self.src1_tile_col = src1_w
         self.valid_row = valid_row
         self.valid_col0 = valid_col0
         self.valid_col1 = valid_col1
+        self.dst_tile_row = valid_row if dst_h is None else dst_h
+        self.dst_tile_col = valid_col0 + valid_col1 if dst_w is None else dst_w
+        self.src0_tile_row = valid_row if src0_h is None else src0_h
+        self.src0_tile_col = valid_col0 if src0_w is None else src0_w
+        self.src1_tile_row = valid_row if src1_h is None else src1_h
+        self.src1_tile_col = valid_col1 if src1_w is None else src1_w
+
+        self.dst_idx_row = 1 if dst_idx_h is None else dst_idx_h
+        self.dst_idx_col = dst_tile_col if dst_idx_w is None else dst_idx_w
+        self.src0_idx_row = 1 if src0_idx_h is None else src0_idx_h
+        self.src0_idx_col = valid_col0 if src0_idx_w is None else src0_idx_w
+        self.src1_idx_row = 1 if src1_idx_h is None else src1_idx_h
+        self.src1_idx_col = valid_col1 if src1_idx_w is None else src1_idx_w
 
 
 def generate_case_name(param):
-    dtype_str = {
+    types_dict = {
         np.float32: 'float',
         np.float16: 'half',
         np.int8: 'int8',
         np.int32: 'int32',
         np.int16: 'int16'
-    }[param.dtype]
+    }
+    dtype_str = types_dict[param.dtype]
     return f"TCONCATTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.src1_tile_row}x{param.src1_tile_col}_\
 {param.valid_row}x{param.valid_col0}_{param.valid_row}x{param.valid_col1}"
@@ -79,14 +92,14 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TConcatParams(np.float32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.int32, 64, 128, 64, 64, 64, 64, 64, 64, 64),
-        TConcatParams(np.float16, 16, 256, 16, 128, 16, 128, 16, 128, 128),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 32, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 128, 128),
-        TConcatParams(np.float16, 16, 128, 16, 64, 16, 64, 16, 63, 64),
-        TConcatParams(np.float32, 16, 64, 16, 32, 16, 32, 16, 31, 32),
-        TConcatParams(np.int16, 32, 256, 32, 128, 32, 128, 32, 127, 128),
+        TConcatParams(np.float32, 64, 64, 64),
+        TConcatParams(np.int32, 64, 64, 64),
+        TConcatParams(np.float16, 16, 128, 128),
+        TConcatParams(np.float32, 16, 32, 32),
+        TConcatParams(np.int16, 32, 128, 128),
+        TConcatParams(np.float16, 16, 63, 64, dst_w=128),
+        TConcatParams(np.float32, 16, 31, 32, dst_w=64),
+        TConcatParams(np.int16, 32, 127, 128, dst_w=256),
     ]
 
     for param in case_params_list:
