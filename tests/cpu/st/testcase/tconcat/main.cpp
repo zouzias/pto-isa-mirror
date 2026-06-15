@@ -32,21 +32,27 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-          int vCols0, int vCols1>
+struct TilesSize {
+    int dstH;
+    int dstW;
+    int src0H;
+    int src0W;
+    int src1H;
+    int src1W;
+    int vRows;
+    int vCols0;
+    int vCols1;
+};
+
+template <typename T, TilesSize sizes>
 void LaunchTConcat(T *out, T *src0, T *src1, void *stream);
 
-template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols0,
-          int vCols1>
-void LaunchTConcatHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
-
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-          int vCols0, int vCols1>
+template <typename T, TilesSize sizes>
 void test_tconcat()
 {
-    size_t fileSizeDst = dstTileH * dstTileW * sizeof(T);
-    size_t fileSizeSrc0 = src0TileH * src0TileW * sizeof(T);
-    size_t fileSizeSrc1 = src1TileH * src1TileW * sizeof(T);
+    size_t fileSizeDst = sizes.dstH * sizes.dstW * sizeof(T);
+    size_t fileSizeSrc0 = sizes.src0H * sizes.src0W * sizeof(T);
+    size_t fileSizeSrc1 = sizes.src1H * sizes.src1W * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -60,7 +66,7 @@ void test_tconcat()
     aclrtMallocHost((void **)(&src0Host), fileSizeSrc0);
     aclrtMallocHost((void **)(&src1Host), fileSizeSrc1);
 
-    std::fill(dstHost, dstHost + dstTileH * dstTileW, 0u);
+    std::fill(dstHost, dstHost + sizes.dstH * sizes.dstW, 0u);
 
     aclrtMalloc((void **)&dstDevice, fileSizeDst, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src0Device, fileSizeSrc0, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -72,13 +78,7 @@ void test_tconcat()
     aclrtMemcpy(src0Device, fileSizeSrc0, src0Host, fileSizeSrc0, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSizeSrc1, src1Host, fileSizeSrc1, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(dstDevice, fileSizeDst, dstHost, fileSizeDst, ACL_MEMCPY_HOST_TO_DEVICE);
-    if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchTConcatHalf<dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols0, vCols1>(
-            dstDevice, src0Device, src1Device, stream);
-    } else {
-        LaunchTConcat<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols0, vCols1>(
-            dstDevice, src0Device, src1Device, stream);
-    }
+    LaunchTConcat<T, sizes>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSizeDst, dstDevice, fileSizeDst, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -107,40 +107,40 @@ void test_tconcat()
 
 TEST_F(TCONCATTest, case_float_64x128_64x64_64x64_64x64_64x64)
 {
-    test_tconcat<float, 64, 128, 64, 64, 64, 64, 64, 64, 64>();
+    test_tconcat<float, TilesSize {64, 128, 64, 64, 64, 64, 64, 64, 64}>();
 }
 
 TEST_F(TCONCATTest, case_int32_64x128_64x64_64x64_64x64_64x64)
 {
-    test_tconcat<int32_t, 64, 128, 64, 64, 64, 64, 64, 64, 64>();
+    test_tconcat<int32_t, TilesSize {64, 128, 64, 64, 64, 64, 64, 64, 64}>();
 }
 
 TEST_F(TCONCATTest, case_half_16x256_16x128_16x128_16x128_16x128)
 {
-    test_tconcat<aclFloat16, 16, 256, 16, 128, 16, 128, 16, 128, 128>();
+    test_tconcat<aclFloat16, TilesSize {16, 256, 16, 128, 16, 128, 16, 128, 128}>();
 }
 
 TEST_F(TCONCATTest, case_float_16x64_16x32_16x32_16x32_16x32)
 {
-    test_tconcat<float, 16, 64, 16, 32, 16, 32, 16, 32, 32>();
+    test_tconcat<float, TilesSize {16, 64, 16, 32, 16, 32, 16, 32, 32}>();
 }
 
 TEST_F(TCONCATTest, case_int16_32x256_32x128_32x128_32x128_32x128)
 {
-    test_tconcat<int16_t, 32, 256, 32, 128, 32, 128, 32, 128, 128>();
+    test_tconcat<int16_t, TilesSize {32, 256, 32, 128, 32, 128, 32, 128, 128}>();
 }
 
 TEST_F(TCONCATTest, case_half_16x128_16x64_16x64_16x63_16x64)
 {
-    test_tconcat<aclFloat16, 16, 128, 16, 64, 16, 64, 16, 63, 64>();
+    test_tconcat<aclFloat16, TilesSize {16, 128, 16, 64, 16, 64, 16, 63, 64}>();
 }
 
 TEST_F(TCONCATTest, case_float_16x64_16x32_16x32_16x31_16x32)
 {
-    test_tconcat<float, 16, 64, 16, 32, 16, 32, 16, 31, 32>();
+    test_tconcat<float, TilesSize {16, 64, 16, 32, 16, 32, 16, 31, 32}>();
 }
 
 TEST_F(TCONCATTest, case_int16_32x256_32x128_32x128_32x127_32x128)
 {
-    test_tconcat<int16_t, 32, 256, 32, 128, 32, 128, 32, 127, 128>();
+    test_tconcat<int16_t, TilesSize {32, 256, 32, 128, 32, 128, 32, 127, 128}>();
 }
