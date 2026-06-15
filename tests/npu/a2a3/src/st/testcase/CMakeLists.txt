@@ -224,6 +224,7 @@ tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_subtile
 syncall
+tpairreducesum
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
