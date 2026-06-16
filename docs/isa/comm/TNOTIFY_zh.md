@@ -99,3 +99,36 @@ void consumer(__gm__ int32_t* local_flag) {
 }
 ```
 
+### 连续多次通知同一地址（需保证时序）
+
+向**同一个** 远端地址连续多次发送标志通知时，必须保证消费者**先读到前一个值**，
+生产者再用下一个值覆盖它。`Set` 是直接覆盖写、`TWAIT(EQ)` 是精确匹配，如果生产者
+抢先把下一个值写进去，消费者的 `TWAIT` 就永远等不到前一个值而挂死。
+
+做法：消费者收到标志通知后需要回复ack，生产者在第一次发送标志通知之后等待消费者回复的ack，收到之后再发送下一次标志通知：
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+// 生产者：向同一地址发两次，用 ack 卡住时序
+void producer(__gm__ int32_t* remote_flag, __gm__ int32_t* local_ack) {
+    comm::Signal flag(remote_flag);
+    comm::Signal ack(local_ack);
+
+    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);   // 第一轮
+    comm::TWAIT(ack, 1, comm::WaitCmp::EQ);        // 等消费者读完第一轮
+    comm::TNOTIFY(flag, 2, comm::NotifyOp::Set);   // 第二轮（此时才安全）
+}
+
+// 消费者：读完每个值，第一轮后回 ack
+void consumer(__gm__ int32_t* local_flag, __gm__ int32_t* remote_ack) {
+    comm::Signal flag(local_flag);
+    comm::Signal ack(remote_ack);
+
+    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);       // 第一轮
+    comm::TNOTIFY(ack, 1, comm::NotifyOp::Set);    // 告诉生产者第一轮已消费
+    comm::TWAIT(flag, 2, comm::WaitCmp::EQ);       // 第二轮
+}
+```
