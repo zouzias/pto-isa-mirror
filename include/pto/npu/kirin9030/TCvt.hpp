@@ -20,4 +20,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/utils.hpp"
 #include "pto/common/arch/register/tcvt_common.hpp"
 
+namespace pto {
+
+// Define architecture (uses RS_ENABLE workaround)
+#define ARCH_KIRIN9030
+
+// Include common implementation
+#include <pto/common/arch/register/tcvt_common.hpp>
+
+// Undefine architecture macros
+#undef ARCH_KIRIN9030
+#undef ARCH_RS_SAT
+#undef ARCH_HAS_FP8
+#undef ARCH_HAS_BFLOAT16
+
+} // namespace pto
+
 #endif // TCVT_HPP
