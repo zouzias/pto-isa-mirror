@@ -48,5 +48,15 @@ PTO_INTERNAL void CheckTMovAccToMat()
                       (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
                   "Only support nz2nz, nz2nd or nz2dn.");
 }
+
+PTO_INTERNAL void SetLoop3Para()
+{
+    constexpr uint16_t ndNum = 1;
+    constexpr uint16_t dstNdStride = 0;
+    constexpr uint16_t srcNdStride = 0;
+    constexpr uint64_t loop3Para = static_cast<uint64_t>(dstNdStride) << 32 | static_cast<uint64_t>(srcNdStride) << 16 |
+                                   static_cast<uint64_t>(ndNum);
+    set_loop3_para(loop3Para);
+}
 } // namespace pto
 #endif
