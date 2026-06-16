@@ -57,6 +57,17 @@ TEST(TNotify, RuntimeOp_Set)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunNotifyRuntimeOp(2, 2, 0, 0));
 }
+
+// ============================================================================
+// Two Set notifications to the same cell with a reverse ack between them, so
+// the consumer reads value 1 before the producer overwrites it with value 2.
+// ============================================================================
+TEST(TNotify, DoubleSet_2Ranks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE(RunNotifyDoubleSet(2, 2, 0, 0));
+}
+
 int main(int argc, char **argv)
 {
     CommMpiInit(&argc, &argv);

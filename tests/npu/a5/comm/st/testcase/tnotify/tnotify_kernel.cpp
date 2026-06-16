@@ -147,6 +147,41 @@ __global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, __g
 }
 
 // ============================================================================
+// Kernel 5: Two Set notifications on the same cell, gated by a reverse ack
+// Producer (rank 0) Sets value 1, waits for the consumer's ack, then Sets value
+// 2 on the SAME cell. The ack guarantees the consumer read value 1 before it is
+// overwritten by value 2 — without it the producer could overwrite before the
+// consumer's first TWAIT(EQ 1) observes 1, hanging the consumer.
+// ============================================================================
+__global__ AICORE void TNotifyDoubleSetKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *ack_signal,
+                                                   __gm__ CommDeviceContext *hcclCtx)
+{
+    int my_rank = static_cast<int>(hcclCtx->rankId);
+
+    if (my_rank == 0) {
+        // Producer: send two values to the same cell, gated by an ack.
+        __gm__ int32_t *remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
+        pto::comm::Signal flag(remote_signal);
+        pto::comm::Signal ack(ack_signal);
+
+        pto::comm::TNOTIFY(flag, 1, pto::comm::NotifyOp::Set);   // round 1
+        pto::comm::TWAIT(ack, 1, pto::comm::WaitCmp::EQ);        // wait until consumer read round 1
+        pto::comm::TNOTIFY(flag, 2, pto::comm::NotifyOp::Set);   // round 2 (now safe)
+    } else if (my_rank == 1) {
+        // Consumer: read each value, ack after round 1.
+        __gm__ int32_t *remote_ack = CommRemotePtr(hcclCtx, ack_signal, 0);
+        pto::comm::Signal flag(shmem_signal);
+        pto::comm::Signal ack(remote_ack);
+
+        pto::comm::TWAIT(flag, 1, pto::comm::WaitCmp::EQ);       // round 1
+        pto::comm::TNOTIFY(ack, 1, pto::comm::NotifyOp::Set);    // tell producer round 1 is consumed
+        pto::comm::TWAIT(flag, 2, pto::comm::WaitCmp::EQ);       // round 2
+    }
+
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
 // Host-side Test Implementation
 // ============================================================================
 
@@ -384,6 +419,62 @@ bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first
     return ctx.Finalize() && is_ok;
 }
 
+bool RunNotifyDoubleSetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
+                                   const HcclRootInfo *rootInfo)
+{
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+        return false;
+
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+
+    int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+    int32_t *ack_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+
+    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_signal, 0, 1);
+    WindowMemInit<<<1, nullptr, ctx.stream>>>(ack_signal, 0, 1);
+    aclrtSynchronizeStream(ctx.stream);
+
+    HcclHostBarrier(ctx.comm, ctx.stream);
+
+    TNotifyDoubleSetKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, ack_signal, ctx.deviceCtx);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+
+    HcclHostBarrier(ctx.comm, ctx.stream);
+
+    bool is_ok = (ctx.aclStatus == 0);
+
+    // rank 1 completing both TWAITs (no hang) proves it observed 1 then 2.
+    // Read back the final signal value to confirm it ended at 2.
+    if (rank_id == 1) {
+        int32_t *result_dev = nullptr;
+        aclrtMalloc(reinterpret_cast<void **>(&result_dev), sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
+        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_signal, 1);
+        aclrtSynchronizeStream(ctx.stream);
+
+        int32_t result = 0;
+        aclrtMemcpy(&result, sizeof(int32_t), result_dev, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtFree(result_dev);
+
+        if (result != 2) {
+            std::cerr << "DoubleSet gated test failed! Expected final signal 2, Got: " << result << std::endl;
+            is_ok = false;
+        }
+#if ENABLE_DEBUG_PRINT
+        else {
+            std::cout << "\n================================================================" << std::endl;
+            std::cout << "[DEBUG] Rank 1: TNOTIFY DoubleSet (gated by reverse ack) SUCCESSFUL!" << std::endl;
+            std::cout << "Observed round1=1 then round2=2 (final signal = " << result << ")" << std::endl;
+            std::cout << "================================================================\n" << std::endl;
+        }
+#endif
+    }
+
+    return ctx.Finalize() && is_ok;
+}
+
 // ============================================================================
 // Multi-process Launcher Functions
 // ============================================================================
@@ -418,6 +509,14 @@ bool RunNotifyRuntimeOp(int n_ranks, int n_devices, int first_rank_id, int first
     return ForkAndRunWithHcclRootInfo(
         n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
             return RunNotifyRuntimeOpKernel(rankId, n_ranks, n_devices, first_device_id, rootInfo);
+        });
+}
+
+bool RunNotifyDoubleSet(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return ForkAndRunWithHcclRootInfo(
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunNotifyDoubleSetKernel(rankId, n_ranks, n_devices, first_device_id, rootInfo);
         });
 }
 
