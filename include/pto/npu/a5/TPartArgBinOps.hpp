@@ -97,7 +97,8 @@ PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, 
             vsts(dstIdxRegFinal, dstIdxPtr, row * dstIdxStride + (j * 2) * elementsPerRepeatIdx, distIndex, dstIdxMask);
             srcIdxMask = CreatePredicate<U>(srcIdxSreg);
             dstIdxMask = CreatePredicate<U>(dstIdxSreg);
-            //punpack(selMask1, selMask, LOWER);
+            pintlv_b32(tmp0, tmp1, selMask, zeroMask);
+            pdintlv_b32(tmp2, selMask1, tmp1, zeroMask);
             vlds(src0IdxReg2, src0IdxPtr, row * src0IdxStride + (j * 2 + 1) * elementsPerRepeatIdx, NORM);
             vlds(src1IdxReg2, src1IdxPtr, row * src1IdxStride + (j * 2 + 1) * elementsPerRepeatIdx, NORM);
             vsel(dstIdxReg2, src0IdxReg2, src0IdxReg2, selMask1);
