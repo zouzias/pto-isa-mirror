@@ -26,3 +26,7 @@ bool RunNotifyScoreboard(int n_ranks, int n_devices, int first_rank_id, int firs
 
 // Test runtime-specified NotifyOp (Set operation)
 bool RunNotifyRuntimeOp(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+// Test two Set notifications to the same cell, gated by a reverse ack so the
+// consumer reads value 1 before the producer overwrites it with value 2.
+bool RunNotifyDoubleSet(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

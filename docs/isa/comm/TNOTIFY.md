@@ -1,4 +1,4 @@
-﻿# TNOTIFY
+# TNOTIFY
 
 ## Introduction
 
@@ -94,5 +94,44 @@ void consumer(__gm__ int32_t* local_flag) {
     comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
     
     // ... consume data ...
+}
+```
+
+### Multiple Notifications to the Same Address (Ordering Required)
+
+When sending multiple flag notifications to the **same** remote address in
+sequence, you must ensure the consumer has read the **previous value** before
+the producer overwrites it with the next one. `Set` is a direct overwrite store
+and `TWAIT(EQ)` is an exact-value match, so if the producer writes the next
+value first, the consumer's `TWAIT` will never observe the previous value and
+will hang.
+
+Approach: after receiving a flag notification, the consumer replies with an ack;
+the producer waits for the consumer's ack after sending the first flag
+notification, and only sends the next flag notification after receiving it:
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+// Producer: send two values to the same address, gated by an ack
+void producer(__gm__ int32_t* remote_flag, __gm__ int32_t* local_ack) {
+    comm::Signal flag(remote_flag);
+    comm::Signal ack(local_ack);
+
+    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);   // round 1
+    comm::TWAIT(ack, 1, comm::WaitCmp::EQ);        // wait until consumer read round 1
+    comm::TNOTIFY(flag, 2, comm::NotifyOp::Set);   // round 2 (now safe)
+}
+
+// Consumer: read each value, ack after round 1
+void consumer(__gm__ int32_t* local_flag, __gm__ int32_t* remote_ack) {
+    comm::Signal flag(local_flag);
+    comm::Signal ack(remote_ack);
+
+    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);       // round 1
+    comm::TNOTIFY(ack, 1, comm::NotifyOp::Set);    // tell producer round 1 is consumed
+    comm::TWAIT(flag, 2, comm::WaitCmp::EQ);       // round 2
 }
 ```
