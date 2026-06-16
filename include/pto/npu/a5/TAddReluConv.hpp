@@ -114,7 +114,7 @@ PTO_INTERNAL void TAddReluConvCheck(const TileDataDst &dst, const TileDataSrc0 &
     using DT = typename TileDataDst::DType;
     using ST = typename TileDataSrc0::DType;
     static_assert(std::is_same<ST, typename TileDataSrc1::DType>::value,
-                  "Fix: TADDRELUCONV src0 and src1 must have the same element type.");
+                  "Fix: TADDRELUCONV on A5 requires src0 and src1 to have the same element type.");
     static_assert((std::is_same<ST, float>::value && std::is_same<DT, half>::value) ||
                       (std::is_same<ST, half>::value && std::is_same<DT, int8_t>::value) ||
                       (std::is_same<ST, int16_t>::value && std::is_same<DT, int8_t>::value),
@@ -124,12 +124,12 @@ PTO_INTERNAL void TAddReluConvCheck(const TileDataDst &dst, const TileDataSrc0 &
     static_assert(
         TileDataDst::Loc == TileType::Vec && TileDataSrc0::Loc == TileType::Vec && TileDataSrc1::Loc == TileType::Vec,
         "Fix: TADDRELUCONV tiles must live in TileType::Vec.");
-    unsigned validRow = dst.GetValidRow();
-    unsigned validCol = dst.GetValidCol();
-    PTO_ASSERT(validRow > 0 && validCol > 0, "Fix: TADDRELUCONV valid rows and columns must be greater than 0.");
-    PTO_ASSERT(src0.GetValidRow() == validRow && src0.GetValidCol() == validCol,
+    unsigned validRows = dst.GetValidRow();
+    unsigned validCols = dst.GetValidCol();
+    PTO_ASSERT(validRows > 0 && validCols > 0, "Fix: TADDRELUCONV valid rows and columns must be greater than 0.");
+    PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
                "Fix: TADDRELUCONV input tile src0 valid shape mismatch with output tile dst shape.");
-    PTO_ASSERT(src1.GetValidRow() == validRow && src1.GetValidCol() == validCol,
+    PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
                "Fix: TADDRELUCONV input tile src1 valid shape mismatch with output tile dst shape.");
 }
 
@@ -145,8 +145,10 @@ PTO_INTERNAL void TADDRELUCONV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDa
     constexpr unsigned SS0 = TileDataSrc0::RowStride;
     constexpr unsigned SS1 = TileDataSrc1::RowStride;
 
-    TAddReluConv<TileDataDst, TileDataSrc0, DS, SS0, SS1>(dst.data(), src0.data(), src1.data(), dst.GetValidRow(),
-                                                          dst.GetValidCol());
+    const unsigned validRows = dst.GetValidRow();
+    const unsigned validCols = dst.GetValidCol();
+
+    TAddReluConv<TileDataDst, TileDataSrc0, DS, SS0, SS1>(dst.data(), src0.data(), src1.data(), validRows, validCols);
 }
 } // namespace pto
 #endif
