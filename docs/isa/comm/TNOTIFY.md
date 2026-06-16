@@ -1,4 +1,4 @@
-﻿# TNOTIFY
+# TNOTIFY
 
 ## Introduction
 
@@ -40,6 +40,8 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 - **Operation semantics**:
     - `NotifyOp::Set`: Direct store to remote memory.
     - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
+- **Ordering constraints**:
+    - When sending multiple `Set` notifications to the same remote address, the consumer must have read the previous value before the producer writes the next one. Otherwise `TWAIT(EQ)` may block forever because the previous value was overwritten. Use a reverse ack to enforce ordering (see examples).
 
 ## Examples
 
@@ -94,5 +96,59 @@ void consumer(__gm__ int32_t* local_flag) {
     comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
     
     // ... consume data ...
+}
+```
+
+### Multiple Notifications to the Same Address (Reverse Ack for Ordering)
+
+**Wrong** — producer sends two Set notifications back-to-back without waiting:
+
+```text
+Producer                      Consumer
+  │  TNOTIFY(flag, 1, Set)      │
+  │ ──────────────────────────> │
+  │  TNOTIFY(flag, 2, Set)      │   consumer hasn't called TWAIT yet
+  │ ──────────────────────────> │   flag overwritten to 2
+  │                              │   TWAIT(flag, 1, EQ) → hangs forever!
+```
+
+**Correct** — producer waits for a reverse ack before sending the next notification:
+
+```text
+Producer                      Consumer
+  │  TNOTIFY(flag, 1, Set)      │
+  │ ──────────────────────────> │
+  │                              │   TWAIT(flag, 1, EQ) ✓
+  │                              │   TNOTIFY(ack, 1, Set)
+  │  <────────────────────────  │
+  │  TWAIT(ack, 1, EQ) ✓        │
+  │  TNOTIFY(flag, 2, Set)      │
+  │ ──────────────────────────> │
+  │                              │   TWAIT(flag, 2, EQ) ✓
+```
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+// Producer: send two values to the same address, gated by an ack
+void producer(__gm__ int32_t* remote_flag, __gm__ int32_t* local_ack) {
+    comm::Signal flag(remote_flag);
+    comm::Signal ack(local_ack);
+
+    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);   // round 1
+    comm::TWAIT(ack, 1, comm::WaitCmp::EQ);        // wait until consumer read round 1
+    comm::TNOTIFY(flag, 2, comm::NotifyOp::Set);   // round 2 (now safe)
+}
+
+// Consumer: read each value, ack after round 1
+void consumer(__gm__ int32_t* local_flag, __gm__ int32_t* remote_ack) {
+    comm::Signal flag(local_flag);
+    comm::Signal ack(remote_ack);
+
+    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);       // round 1
+    comm::TNOTIFY(ack, 1, comm::NotifyOp::Set);    // tell producer round 1 is consumed
+    comm::TWAIT(flag, 2, comm::WaitCmp::EQ);       // round 2
 }
 ```
