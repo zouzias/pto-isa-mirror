@@ -754,12 +754,12 @@ __tf__ PTO_INTERNAL OP_NAME(TEXTRACT)
                                                             VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     using RegT = TExtractRegT<T>;
-    __ubuf__ RegT *dstAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(dst);
     __ubuf__ RegT *srcAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(src);
+    __ubuf__ RegT *dstAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(dst);
     constexpr uint32_t dstRowStride = DstTileData::RowStride;
     constexpr uint32_t srcRowStride = SrcTileData::RowStride;
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(RegT);
     constexpr int32_t kStaticValidCol = DstTileData::ValidCol;
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(RegT);
     constexpr bool kSingleChunkStatic =
         (kStaticValidCol > 0) && (static_cast<uint32_t>(kStaticValidCol) <= elementsPerRepeat);
 

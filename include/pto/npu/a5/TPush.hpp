@@ -84,8 +84,8 @@ struct TPipe {
 
         PTO_INTERNAL void setTileId(int tIndex, int subIndex)
         {
-            tileIndex = tIndex;
             subTileIndex = subIndex;
+            tileIndex = tIndex;
         }
 
         PTO_INTERNAL int getTileId() const

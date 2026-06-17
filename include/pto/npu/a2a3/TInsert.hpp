@@ -37,11 +37,11 @@ __tf__ AICORE void TInsertVecToVecNDUnaligned(typename DstTileData::TileDType __
         uint32_t alignedElems = alignedBytes / sizeof(T);
         __ubuf__ uint16_t *srcTail = (__ubuf__ uint16_t *)(srcAddr + alignedElems);
         __ubuf__ uint16_t *dstTail = (__ubuf__ uint16_t *)(dstStart + alignedElems);
-        uint64_t tailU16 = static_cast<uint64_t>(tailBytes / sizeof(uint16_t));
-        constexpr uint16_t srcRptU16 = static_cast<uint16_t>(srcRowStride * sizeof(T) / BLOCK_BYTE_SIZE);
-        constexpr uint16_t dstRptU16 = static_cast<uint16_t>(dstRowStride * sizeof(T) / BLOCK_BYTE_SIZE);
         constexpr uint32_t srcStrideU16 = srcRowStride * sizeof(T) / sizeof(uint16_t);
         constexpr uint32_t dstStrideU16 = dstRowStride * sizeof(T) / sizeof(uint16_t);
+        constexpr uint16_t srcRptU16 = static_cast<uint16_t>(srcRowStride * sizeof(T) / BLOCK_BYTE_SIZE);
+        constexpr uint16_t dstRptU16 = static_cast<uint16_t>(dstRowStride * sizeof(T) / BLOCK_BYTE_SIZE);
+        uint64_t tailU16 = static_cast<uint64_t>(tailBytes / sizeof(uint16_t));
         set_mask_count();
         set_vector_mask(0, tailU16);
         uint16_t remainRows = validRow;
@@ -154,10 +154,10 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQ
                                uint16_t indexCol = 0)
 {
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
-    PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
-               "The sum of indexRow and srcRow should be less than dstRow!");
     PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
                "The sum of indexCol and srcCol should be less than dstCol!");
+    PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
+               "The sum of indexRow and srcRow should be less than dstRow!");
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
     TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),

@@ -238,8 +238,8 @@ __tf__ PTO_INTERNAL void TFillPad_Inplace(typename TileDataDst::TileDType __out_
     uint64_t srcValidCol32B = (sizeof(T) == 1) ?
                                   CeilDivision(CeilDivision(srcValidCol, 2), elements_per_block) * elements_per_block :
                                   CeilDivision(srcValidCol, elements_per_block) * elements_per_block;
-    uint64_t padOffset = srcValidCol32B;
     uint64_t padCols = copyDstCols - srcValidCol32B;
+    uint64_t padOffset = srcValidCol32B;
 
     // handle 32B-aligned padding (was inlined previously)
     if constexpr (TileDataDst::PadVal != TileDataSrc::PadVal) {
@@ -253,18 +253,11 @@ __tf__ PTO_INTERNAL void TFillPad_Inplace(typename TileDataDst::TileDType __out_
     }
 
     uint64_t dupPadValue = sizeof(T) == 1 ? ((uint64_t)padValue) << 8 | ((uint64_t)padValue) : padValue;
-
-    // pad right for single row
     PadRightSingleRow<TileDataDst, TileDataSrc>(dstPtr, padOffset, padCols, dupPadValue);
-
-    // pad right for remaining rows (if any)
     if constexpr (TileDataSrc::Rows > 1) {
         PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
     }
-
-    // pad bottom rows
     PadBottomRows<TileDataDst, TileDataSrc>(dstPtr, srcValidRow, dstValidRow, copyDstCols, dupPadValue);
-
     set_mask_norm(); // restore to norm mode
     set_vector_mask(-1, -1);
 } // end of tf
@@ -275,9 +268,9 @@ PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
     static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
                   "Fix: TFillPad Dst vecTile Rows/Cols must be greater or equal to src vecTile.");
 
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataSrc::DType);
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned srcStride = TileDataSrc::RowStride;
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataSrc::DType);
     uint64_t validDstRow = dst.GetValidRow();
     uint64_t validDstCol = dst.GetValidCol();
     uint64_t validSrcRow = src.GetValidRow();
@@ -340,15 +333,15 @@ __tf__ PTO_INTERNAL void TFillPad(typename TileData::TileDType __out__ dst, uint
             uint16_t repeat = alignedValidCol / elementsPerBlock;
             uint16_t repeatGap = TileData::Rows - blockLen;
             int64_t repeatConfig =
-                (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
                 (static_cast<uint64_t>(repeatGap) << 32) | // [46:32] is the repeat gap between two consecutive repeats
+                (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
                 static_cast<uint64_t>(repeat);             // [14:0] is the repeat times
             pto_create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
         }
     } else {
-        uint16_t blockLen = TileData::Rows - dstValidRow; // unit is 32B
         uint16_t repeat = alignedValidCol / elementsPerBlock;
         uint16_t repeatGap = dstValidRow;
+        uint16_t blockLen = TileData::Rows - dstValidRow; // unit is 32B
 
         int64_t repeatConfig =
             (static_cast<uint64_t>(blockLen) << 16) |  // [30:16] is the block number of each repeat
