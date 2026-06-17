@@ -45,7 +45,7 @@ enum class AccMode
     AccFinalSum,    // explicitly final, all slices accumulate
 };
 
-#define LAST_LOOP(x, n) ((x) == ((n)-1))
+#define LAST_LOOP(x, n) ((x) == ((n) - 1))
 #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
 
 // Memory constraints (L0 ping-pong is 32 KiB per buffer in this implementation).

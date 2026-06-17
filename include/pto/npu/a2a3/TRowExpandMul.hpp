@@ -46,7 +46,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
-    #ifndef __PTO_AUTO__
+#ifndef __PTO_AUTO__
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     if (src0eqdst && src1eqdst) {
@@ -69,7 +69,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         TRowExpandBin<RowExpandMulOp<T>, TileDataDst, TileDataSrc1, TileDataSrc0>(dst.data(), src1.data(), src0.data(),
                                                                                   validRow, validCol);
     }
-    #else
+#else
     constexpr bool src0eqdst = std::is_same_v<TileDataDst, TileDataSrc0>;
     constexpr bool src1eqdst = std::is_same_v<TileDataDst, TileDataSrc1>;
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
@@ -89,7 +89,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         TRowExpandBin<RowExpandMulOp<T>, TileDataDst, TileDataSrc1, TileDataSrc0>(dst.data(), src1.data(), src0.data(),
                                                                                   validRow, validCol);
     }
-    #endif
+#endif
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
@@ -109,7 +109,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
-    #ifndef __PTO_AUTO__
+#ifndef __PTO_AUTO__
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
@@ -125,7 +125,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         TRowExpandBin<RowExpandMulOp<T>, TileDataDst, TileDataSrc1, TileDataSrc0, TileDataTmp>(
             dst.data(), src1.data(), src0.data(), tmp.data(), validRow, validCol);
     }
-    #else
+#else
     constexpr bool src0eqdst = std::is_same_v<TileDataDst, TileDataSrc0>;
     constexpr bool src1eqdst = std::is_same_v<TileDataDst, TileDataSrc1>;
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
@@ -141,7 +141,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
         TRowExpandBin<RowExpandMulOp<T>, TileDataDst, TileDataSrc1, TileDataSrc0, TileDataTmp>(
             dst.data(), src1.data(), src0.data(), tmp.data(), validRow, validCol);
     }
-    #endif
+#endif
 }
 } // namespace pto
 #endif

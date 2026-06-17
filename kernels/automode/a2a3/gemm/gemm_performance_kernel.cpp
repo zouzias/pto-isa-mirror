@@ -127,9 +127,9 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
                     if (first) {
                         TMATMUL<AccPhase::Partial>(cTile, aTile[inner_buf], bTile[inner_buf]);
-                    } else if (last){
+                    } else if (last) {
                         TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile[inner_buf], bTile[inner_buf]);
-                    }else {
+                    } else {
                         TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile[inner_buf], bTile[inner_buf]);
                     }
                 });

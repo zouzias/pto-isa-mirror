@@ -43,7 +43,7 @@ enum class AccMode
     InitFinalSum,   // explicitly final, first slice initializes
     AccPartialSum,  // explicitly partial, all slices accumulate
     AccFinalSum,    // explicitly final, all slices accumulate
-}; 
+};
 
 #define LAST_LOOP(x, n) ((x) == ((n) - 1))
 #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
@@ -147,7 +147,6 @@ AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, Ti
     RightTile bl0Tiles;
 
     for (uint64_t k = 0; k < kSegments; k++) {
-
         // TEXTRACT slices the current Cube_K panel into L0A/L0B.
         TEXTRACT(al0Tiles, aMatTile, 0, k * Cube_K);
         TEXTRACT(bl0Tiles, bMatTile, k * Cube_K, 0);

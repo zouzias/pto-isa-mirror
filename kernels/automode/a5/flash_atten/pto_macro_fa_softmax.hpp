@@ -49,7 +49,8 @@ AICORE inline void softmax_opt_fa_init_impl(TileDataD2 __out__ &x_exp, TileDataS
                                             ReduceTileD1 __out__ &local_max, ReduceTileD1 __out__ &local_sum,
                                             ReduceTileD1 __out__ &new_global_max, ReduceTileD1 __out__ &new_global_sum,
                                             ReduceTileD1 __out__ &exp_max, TileDataS1 __out__ &tmp_float,
-                                            TileDataS1 __out__ &p_tile_f32, TileDataS1 &triu, int s0_index, int s1_index)
+                                            TileDataS1 __out__ &p_tile_f32, TileDataS1 &triu, int s0_index,
+                                            int s1_index)
 {
     (void)local_max;
     (void)exp_max;

@@ -104,16 +104,15 @@ PTO_INTERNAL void MrgsortSingleRow(DstTileData &dstTile, SrcTileData &srcTile)
     // sort tail block
     if (blockLen < valid_col) {
         SortTailBlock<DstTileData, SrcTileData, SrcTileData, T, valid_col, dtopk>(srcTile, srcTile, tmpTile, blockLen);
-    } 
+    }
 
     SrcTileData tmpMovTile(1, dtopk);
     TRESHAPE(tmpMovTile, srcTile);
     TMOV(dstTile, tmpMovTile);
-    
 }
 
-template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile, int kTRows_, int kTCols_,
-          int validRow, int validCol, int topk>
+template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile, int kTRows_,
+          int kTCols_, int validRow, int validCol, int topk>
 PTO_INTERNAL void MrgsortSingleTile(DstTileData &dstTile, SrcTileData &srcTile)
 {
     DstRowTile rowSrcTile(1, validCol);
@@ -123,13 +122,13 @@ PTO_INTERNAL void MrgsortSingleTile(DstTileData &dstTile, SrcTileData &srcTile)
     MrgsortSingleRow<DstRowTile, SrcRowTile, 1, kTCols_, 1, validCol, topk>(rowDstTile, rowSrcTile);
 }
 
-template <typename T, typename DstTileData, typename SrcTileData, typename IdxTileData, 
-    typename DstRowTile, typename SrcRowTile, typename IdxRowTile, int kTRows_, int kTCols_, int validRow, int validCol>
+template <typename T, typename DstTileData, typename SrcTileData, typename IdxTileData, typename DstRowTile,
+          typename SrcRowTile, typename IdxRowTile, int kTRows_, int kTCols_, int validRow, int validCol>
 PTO_INTERNAL void SortEachGroup(DstTileData &dst, SrcTileData &src, IdxTileData &inIdx)
 {
     using indexT = uint32_t;
     constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
-    
+
     DstRowTile dstRowTile(1, validCol * 2 * TYPE_COEF);
     SrcRowTile srcRowTile(1, validCol);
     IdxRowTile tmpTile(1, validCol);
@@ -140,7 +139,8 @@ PTO_INTERNAL void SortEachGroup(DstTileData &dst, SrcTileData &src, IdxTileData 
     TSORT32(dstRowTile, srcRowTile, inIdx, tmpTile);
 }
 
-template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile, bool isIndex>
+template <typename T, typename DstTileData, typename SrcTileData, typename DstRowTile, typename SrcRowTile,
+          bool isIndex>
 PTO_INTERNAL void ExtractDataOrIndex(DstTileData &dstTile, SrcTileData &srcTile)
 {
     for (size_t i = 0; i < srcTile.GetValidRow(); ++i) {
@@ -184,14 +184,13 @@ AICORE inline void ProcessSingleRow(GlobalData &srcGlobal, DstDataGlobalData &ds
     using IdxRowTile = Tile<TileType::Vec, indexT, 1, validCol, BLayout::RowMajor, -1, -1>;
     using DstIdxRowTile = Tile<TileType::Vec, indexT, 1, dstCols, BLayout::RowMajor, -1, -1>;
 
-
     TLOAD(srcTile, srcGlobal);
 
-    SortEachGroup<T, DstTileData, SrcTileData, IndexTileData, DstRowTileData, SrcRowTileData, IdxRowTile, 
-        SINGLE_LOOP_ROW, validCol, SINGLE_LOOP_ROW, validCol>(sort32DstTile, srcTile, indexTile);
+    SortEachGroup<T, DstTileData, SrcTileData, IndexTileData, DstRowTileData, SrcRowTileData, IdxRowTile,
+                  SINGLE_LOOP_ROW, validCol, SINGLE_LOOP_ROW, validCol>(sort32DstTile, srcTile, indexTile);
 
-    MrgsortSingleTile<T, DstTileData, DstTileData, DstRowTileData, DstRowTileData, SINGLE_LOOP_ROW, dstCols, SINGLE_LOOP_ROW,
-                      dstCols, topk * 2 * TYPE_COEF>(mrgDstTile, sort32DstTile);
+    MrgsortSingleTile<T, DstTileData, DstTileData, DstRowTileData, DstRowTileData, SINGLE_LOOP_ROW, dstCols,
+                      SINGLE_LOOP_ROW, dstCols, topk * 2 * TYPE_COEF>(mrgDstTile, sort32DstTile);
 
     ExtractDataOrIndex<T, DstDataTileData, DstTileData, DstRowTileData, DstRowTileData, 0>(dTile, mrgDstTile);
     ExtractDataOrIndex<T, DstIndexTileData, DstTileData, IdxRowTile, DstRowTileData, 1>(iTile, mrgDstTile);
@@ -203,10 +202,9 @@ AICORE inline void ProcessSingleRow(GlobalData &srcGlobal, DstDataGlobalData &ds
 template <typename T, typename GlobalData, typename DstDataGlobalData, typename DstIdxGlobalData, typename DstTileData,
           typename DstDataTileData, typename DstIndexTileData, typename SrcTileData, typename IndexTileData,
           int dstCols, int Cols, int validCol, int topk>
-AICORE inline void ProcessIteration(__gm__ T *out, __gm__ T *src, __gm__ uint32_t *index, uint32_t i, 
-                                    DstTileData &sort32DstTile, SrcTileData &srcTile, 
-                                    IndexTileData &indexTile, DstTileData &mrgDstTile, 
-                                    DstDataTileData &dTile, DstIndexTileData &iTile)
+AICORE inline void ProcessIteration(__gm__ T *out, __gm__ T *src, __gm__ uint32_t *index, uint32_t i,
+                                    DstTileData &sort32DstTile, SrcTileData &srcTile, IndexTileData &indexTile,
+                                    DstTileData &mrgDstTile, DstDataTileData &dTile, DstIndexTileData &iTile)
 {
     using SingleRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
     constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
@@ -253,7 +251,8 @@ AICORE inline void runTOPK(__gm__ T *origOut, __gm__ uint32_t *origIndex, __gm__
     using SingleRowTileData = Tile<TileType::Vec, T, 1, dstCols, BLayout::RowMajor, -1, -1>;
     using IndexTileData = Tile<TileType::Vec, indexT, 1, validCol, BLayout::RowMajor, 1, validCol>;
     using DstDataTileData = Tile<TileType::Vec, T, SINGLE_LOOP_ROW, dstCols, BLayout::RowMajor, SINGLE_LOOP_ROW, topk>;
-    using DstIndexTileData = Tile<TileType::Vec, indexT, SINGLE_LOOP_ROW, validCol, BLayout::RowMajor, SINGLE_LOOP_ROW, topk>;
+    using DstIndexTileData =
+        Tile<TileType::Vec, indexT, SINGLE_LOOP_ROW, validCol, BLayout::RowMajor, SINGLE_LOOP_ROW, topk>;
 
     IndexTileData indexTile;
 
@@ -261,7 +260,7 @@ AICORE inline void runTOPK(__gm__ T *origOut, __gm__ uint32_t *origIndex, __gm__
 
     constexpr uint32_t loopNum = validRow / SINGLE_LOOP_ROW;
     MultiBuffered<BUFFER_NUM> double_buffer;
-    double_buffer.loop<Range<loopNum>>([&](auto context){
+    double_buffer.loop<Range<loopNum>>([&](auto context) {
         int iter = context.iter;
 
         DstTileData sort32DstTile;

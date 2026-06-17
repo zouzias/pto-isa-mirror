@@ -250,12 +250,12 @@ AICORE inline void compute_pv(PPipe &pPipe, PVPipe &pvPipe, int tile_id, int sub
     } // end if DAV_CUBE
 }
 
-template <typename QKPipe, typename PPipe, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, 
+template <typename QKPipe, typename PPipe, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1,
           bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, typename TileDataF_T, typename TileDataH_T, typename ReduceTileF_T>
-AICORE inline void compute_p(QKPipe &qkPipe, PPipe &pPipe, int tile_id, int row_slice, __gm__ float *exp_max_ififo, 
-                             __gm__ float *global_sum_out, __gm__ float *exp_max_out, TileDataF_T &qkVecTile, 
+AICORE inline void compute_p(QKPipe &qkPipe, PPipe &pPipe, int tile_id, int row_slice, __gm__ float *exp_max_ififo,
+                             __gm__ float *global_sum_out, __gm__ float *exp_max_out, TileDataF_T &qkVecTile,
                              TileDataH_T &x_expT, TileDataF_T &input_reduce_tmp, ReduceTileF_T &m1_local_max,
-                             ReduceTileF_T &l1_local_sum, ReduceTileF_T &m2_global_max, ReduceTileF_T &l2_global_sum, 
+                             ReduceTileF_T &l1_local_sum, ReduceTileF_T &m2_global_max, ReduceTileF_T &l2_global_sum,
                              ReduceTileF_T &l1_exp_max_ififo, TileDataF_T &triu, int blk_idx)
 {
     constexpr uint32_t Cube_S0 = CUBE_S0;
@@ -338,9 +338,9 @@ AICORE inline void compute_p(QKPipe &qkPipe, PPipe &pPipe, int tile_id, int row_
     }
 }
 
-template <typename PVPipe, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int TILE_S1, int PV_CV_FIFO, 
-          int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, Phase GU_Phase,
-          typename TileOutT, typename ReduceTileF_T>
+template <typename PVPipe, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int TILE_S1, int PV_CV_FIFO,
+          int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, Phase GU_Phase, typename TileOutT,
+          typename ReduceTileF_T>
 AICORE inline void compute_gu(PVPipe &pvPipe, int tile_id, int num_tiles, __gm__ float *o_out,
                               __gm__ float *o_parts_out, TileOutT &runningOTile, TileOutT &pvVecTile,
                               ReduceTileF_T &l1_exp_max_ififo, ReduceTileF_T &l2_global_sum)
@@ -358,12 +358,12 @@ AICORE inline void compute_gu(PVPipe &pvPipe, int tile_id, int num_tiles, __gm__
         pvPipe.cons.setWaitStatus(true);
         pvPipe.cons.setFreeStatus(should_notify_consume);
         pvPipe.cons.setEntryOffset(subblock_base_rows * HEAD_SIZE * sizeof(float));
-  
+
         if (tile_id == 0) {
             TPOP(runningOTile, pvPipe);
-        
+
             if constexpr (CAUSAL_MASK) {
-                if (tile_id == num_tiles - 1){
+                if (tile_id == num_tiles - 1) {
                     pto_macro_fa_gu_single_and_last_tile(runningOTile, l2_global_sum);
                 }
             }
@@ -381,7 +381,6 @@ AICORE inline void compute_gu(PVPipe &pvPipe, int tile_id, int num_tiles, __gm__
                                             pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
             GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
             TSTORE(outGlobal, runningOTile);
-        
         }
     }
 }
@@ -546,7 +545,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         // QK pre-computation (tile_id based)
         // nested double-buffered loop:
         // if the inner loops iteration > 1, the inner loop gets unrolled
-        // otherwise we unroll the outerloop    
+        // otherwise we unroll the outerloop
         MultiBuffered<kMatTNBuffers> mb;
         using InnerMultiBuffered = MultiBuffered<kMatTNBuffers>::NestedLoopInvoker<Range<kTileFactor>>;
         mb.loop<Range<qkPreloadNum, kTileFactor>>([&](auto ctxOuter, InnerMultiBuffered inner) {
@@ -579,7 +578,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                         pPipe.cons.setTileId(tile_id, sub_tile);
                         pvPipe.prod.setTileId(tile_id, sub_tile);
                         compute_pv<PPipe, PVPipe, S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, INTERMEDIATE_CHECK,
-                                   CAUSAL_MASK>(pPipe, pvPipe, tile_id, sub_tile, v, pMatTile, vMatTile, pvAccTile, block_idx);
+                                   CAUSAL_MASK>(pPipe, pvPipe, tile_id, sub_tile, v, pMatTile, vMatTile, pvAccTile,
+                                                block_idx);
                     });
             }
         }
@@ -622,7 +622,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         TileOutGuT pvVecTile;
 
         for (int tile_id = 0; tile_id < num_tiles_s1 - qkPreloadNum; ++tile_id) {
-            
             mb.loop<Range<kTileFactor>>([&](auto ctx) {
                 TileDataF_T qkVecTile;
                 TileDataH_T x_expT;
@@ -633,7 +632,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     exp_max_block, qkVecTile, x_expT, input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max,
                     l2_global_sum, l1_exp_max_ififo[(tile_id + qkPreloadNum) % qkp_tile_fifo_size], triu, block_idx);
             });
-            
+
             pvPipe.cons.setTileId(tile_id, -1);
             compute_gu<PVPipe, S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                        INTERMEDIATE_CHECK, CAUSAL_MASK, Phase::Main>(

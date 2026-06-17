@@ -228,7 +228,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 
         using GlobalVT =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-        
+
         GlobalVT vLoad((__gm__ half *)(v + s1_index * HEAD_SIZE));
         TLOAD(vMatTile, vLoad);
 
@@ -262,7 +262,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 #else
         const AccMode accMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, accMode);
-#endif   
+#endif
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 || next_will_be_skipped) {
             if (should_wait_consume) {
                 pv2guSync.allocate(); // wait for update consume data
@@ -326,7 +326,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         using GlobalDataQK_Sub =
             GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataF_Sub = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
-        
+
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
             __gm__ float *qk_ptr_sub =
                 qk_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
@@ -336,7 +336,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             TSUBVIEW(qkVecSub, qkVecTile, 0, sub_col * Cube_S1);
             TLOAD(qkVecSub, qkGlobalSub);
         }
-        
 
         if (row_slice == static_cast<int>(kTileFactor) - 1 && should_notify_consume) {
             qk2smSync.free(); // notify for SM consume data
@@ -356,7 +355,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         TSUBVIEW(m2_global_max_slice, m2_global_max, row_slice * Vec_S0, 0);
         TSUBVIEW(l2_global_sum_slice, l2_global_sum, row_slice * Vec_S0, 0);
         TSUBVIEW(l1_exp_max_slice, l1_exp_max_ififo, row_slice * Vec_S0, 0);
-        
+
         // Extract current slice state from full-length reduce tiles
         if (initFlag) {
             pto_macro_fa_softmax<true, HEAD_SIZE, CAUSAL_MASK>(
@@ -367,12 +366,12 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice, m2_global_max_slice, l2_global_sum_slice,
                 l1_exp_max_slice, input_reduce_tmp, qkVecTile, triu, s0_index, s1_index);
         }
-        
+
         const bool should_wait_sv_consumed = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
         if (row_slice == 0 && should_wait_sv_consumed) {
             sm2pvSync.allocate(); // wait for SV consume data
         }
-        
+
         using GlobalPTileHalfSub =
             GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
@@ -403,11 +402,10 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 TSTORE(pMaxGlobal, l1_exp_max_rowmajor);
             }
         }
-        
+
         if (row_slice == static_cast<int>(kTileFactor) - 1) {
             sm2pvSync.record(); // notify softmax produce data
         }
-        
     }
 }
 
@@ -441,27 +439,24 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
 
         if (tile_id == 0) {
             TLOAD(runningOTile, pvGlobalVec);
-            
+
             if constexpr (CAUSAL_MASK) {
                 if (tile_id == num_tiles - 1)
                     pto_macro_fa_gu_single_and_last_tile(runningOTile, l2_global_sum);
             }
         } else {
             TLOAD(pvVecTile, pvGlobalVec);
-            
 
             if (tile_id < num_tiles - 1) {
                 pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max_ififo);
             } else {
                 pto_macro_fa_gu_last<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max_ififo, l2_global_sum);
             }
-            
         }
 
         if (should_notify_consume) {
             pv2guSync.free(); // notify update consume data
         }
-        
     }
 }
 
@@ -615,7 +610,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         // nested double-buffered loop:
         // if the inner loops iteration > 1, the inner loop gets unrolled
         // otherwise we unroll the outerloop
-        
+
         MultiBuffered<kMatTNBuffers> mb;
         using InnerMultiBuffered = MultiBuffered<kMatTNBuffers>::NestedLoopInvoker<Range<kTileFactor>>;
         mb.loop<Range<qkPreloadNum, kTileFactor>>([&](auto ctxOuter, InnerMultiBuffered inner) {
@@ -653,7 +648,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     });
             }
         }
-        #pragma pto v_loop_barrier 
+#pragma pto v_loop_barrier
 
         mb.loop<Range<qkPreloadNum, kTileFactor>>([&](auto ctxOuter, auto inner) {
             int tile_id = ctxOuter.iter;
@@ -691,13 +686,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
 #pragma pto v_loop_barrier // FIXME: this should be fixed in the auto-sync/mem-alloc passes
 
-
         TileOutGuT pvVecTile;
 
         for (int tile_id = 0; tile_id < num_tiles_s1 - qkPreloadNum; ++tile_id) {
-            
             mb.loop<Range<kTileFactor>>([&](auto ctx) {
-            // for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
+                // for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
                 TileDataF_T qkVecTile;
                 TileDataH_T x_expT;
                 compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
@@ -707,14 +700,14 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     m2_global_max, l2_global_sum, l1_exp_max_ififo[(tile_id + qkPreloadNum) % qkp_tile_fifo_size], triu,
                     qk2smSync, sm2pvSync, block_idx);
             });
-            
-            #pragma pto v_loop_barrier
+
+#pragma pto v_loop_barrier
             compute_gu<S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                        INTERMEDIATE_CHECK, CAUSAL_MASK, Phase::Main>(
                 tile_id, num_tiles_s1, pv_tile_fifo_block, o_out_block, o_parts_block, runningOTile, pvVecTile,
                 l1_exp_max_ififo[tile_id % qkp_tile_fifo_size], l2_global_sum, pv2guSync);
         }
-        
+
         mb.loop<Range<qkPreloadNum>>([&](auto ctx) {
             TileOutGuT pvVecTile;
             compute_gu<S0, HEAD_SIZE, S1, CUBE_S0, Tile_S1, pv_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
@@ -727,9 +720,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     }
 
     if constexpr (DAV_VEC) {
-        const size_t subblock_base_rows = static_cast<size_t>(CUBE_S0 / VEC_CORES) * static_cast<size_t>(get_subblockid());
-        using GlobalOutT =
-            GlobalTensor<float, pto::Shape<1, 1, 1, CUBE_S0 / VEC_CORES, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+        const size_t subblock_base_rows =
+            static_cast<size_t>(CUBE_S0 / VEC_CORES) * static_cast<size_t>(get_subblockid());
+        using GlobalOutT = GlobalTensor<float, pto::Shape<1, 1, 1, CUBE_S0 / VEC_CORES, HEAD_SIZE>,
+                                        pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
         GlobalOutT outGlobal((__gm__ float *)(o_out_block + subblock_base_rows * HEAD_SIZE));
         TSTORE(outGlobal, runningOTile);
     }
