@@ -62,9 +62,9 @@ PTO_INTERNAL void TMULS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
     PTO_ASSERT((dstValidRow != 0 && dstValidCol != 0) &&
-        (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol()), 
-        "TMULS: dstTile validRow/validCol must be consistent with of src.");
-     TMulS<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), scalar, dstValidRow, dstValidCol);
+                   (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol()),
+               "TMULS: dstTile validRow/validCol must be consistent with of src.");
+    TMulS<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), scalar, dstValidRow, dstValidCol);
 }
 } // namespace pto
 
