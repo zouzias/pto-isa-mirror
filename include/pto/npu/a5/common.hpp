@@ -76,10 +76,12 @@ template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
     QuantMode_t quantPre = QuantMode_t::NoQuant;
-    if constexpr (std::is_same<DstType, half>::value) {
-        quantPre = QuantMode_t::F322F16;
-    } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
-        quantPre = QuantMode_t::F322BF16;
+    if constexpr (std::is_same<SrcType, float>::value) {
+        if constexpr (std::is_same<DstType, half>::value) {
+            quantPre = QuantMode_t::F322F16;
+        } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
+            quantPre = QuantMode_t::F322BF16;
+        }
     }
     return quantPre;
 }
