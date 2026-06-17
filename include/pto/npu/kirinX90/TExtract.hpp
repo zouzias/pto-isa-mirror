@@ -11,9 +11,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TEXTRACT_HPP
 #define TEXTRACT_HPP
 #include "common.hpp"
-#include "pto/common/arch/memory/textract_common.hpp"
 
 namespace pto {
+
+template <typename DstTileData, typename SrcTileData>
+AICORE void TExtractToLeft(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol);
+template <typename DstTileData, typename SrcTileData>
+AICORE void TExtractToRight(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol);
+template <typename DstTileData, typename SrcTileData, typename DstType, typename SrcType>
+PTO_INTERNAL void CheckTExtract();
 
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
