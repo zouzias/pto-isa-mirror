@@ -32,29 +32,29 @@ struct IsMGatherNDTile {
     static constexpr bool value = Tile::isRowMajor && (Tile::SFractal == SLayout::NoneBox);
 };
 
-template <typename Tile>
-struct IsMGatherNZTile {
-    static constexpr bool value =
-        !Tile::isRowMajor && (Tile::SFractal == SLayout::RowMajor) && (Tile::SFractalSize == TileConfig::fractalABSize);
-};
-
 template <GatherOOB Oob>
 AICORE PTO_INLINE uint32_t mgather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
 {
     if constexpr (Oob == GatherOOB::Undefined) {
         doRead = 1u;
         return idx;
+    }  else if constexpr (Oob == GatherOOB::Wrap) {
+        doRead = 1u;
+        return idx % cap;
     } else if constexpr (Oob == GatherOOB::Clamp) {
         doRead = 1u;
         return (idx >= cap) ? (cap - 1u) : idx;
-    } else if constexpr (Oob == GatherOOB::Wrap) {
-        doRead = 1u;
-        return idx % cap;
     } else {
         doRead = (idx < cap) ? 1u : 0u;
         return idx;
     }
 }
+
+template <typename Tile>
+struct IsMGatherNZTile {
+    static constexpr bool value =
+        !Tile::isRowMajor && (Tile::SFractal == SLayout::RowMajor) && (Tile::SFractalSize == TileConfig::fractalABSize);
+};
 
 template <typename T>
 AICORE PTO_INLINE void MGatherRowDma(__ubuf__ T *dst, __gm__ T *src, uint32_t lenBytes)
@@ -86,13 +86,13 @@ AICORE PTO_INLINE uint64_t MGatherNZGmOffset(uint32_t logicalRow, uint32_t logic
                                              int gStride0, int gStride1, int gStride2, int gStride3, int gStride4)
 {
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
-    constexpr uint32_t kFRow = FRACTAL_NZ_ROW;
     const uint32_t blockColCombined = logicalCol / kC0;
     const uint32_t colInBlock = logicalCol - blockColCombined * kC0;
+    constexpr uint32_t kFRow = FRACTAL_NZ_ROW;
     const uint32_t blockRow = logicalRow / kFRow;
-    const uint32_t rowInBlock = logicalRow - blockRow * kFRow;
     const uint32_t blockColOuter0 = (gShape0 == 1) ? 0u : (blockColCombined / (uint32_t)gShape1);
     const uint32_t blockColOuter1 = (gShape0 == 1) ? blockColCombined : (blockColCombined - blockColOuter0 * gShape1);
+    const uint32_t rowInBlock = logicalRow - blockRow * kFRow;
     return (uint64_t)blockColOuter0 * (uint64_t)gStride0 + (uint64_t)blockColOuter1 * (uint64_t)gStride1 +
            (uint64_t)blockRow * (uint64_t)gStride2 + (uint64_t)rowInBlock * (uint64_t)gStride3 +
            (uint64_t)colInBlock * (uint64_t)gStride4;
@@ -297,10 +297,10 @@ __tf__ AICORE void MGatherGm2L1RowImpl(typename DstTile::TileDType __out__ dst, 
 {
 #if defined(__DAV_CUBE__)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
-    constexpr uint32_t kTileRows = DstTile::Rows;
-    constexpr uint32_t kTileCols = DstTile::Cols;
     __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
-
+    constexpr uint32_t kTileCols = DstTile::Cols;
+    constexpr uint32_t kTileRows = DstTile::Rows;
+    
     if constexpr (Oob == GatherOOB::Zero) {
         constexpr uint32_t kColBlocks = kTileCols / kC0;
         int64_t repeatConfig = (static_cast<int64_t>(kTileRows) << 16) | static_cast<int64_t>(kColBlocks);
@@ -308,8 +308,8 @@ __tf__ AICORE void MGatherGm2L1RowImpl(typename DstTile::TileDType __out__ dst, 
     }
 
     for (uint32_t r = 0; r < validRow; r++) {
-        uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
         uint32_t doRead;
+        uint32_t rawIdx = static_cast<uint32_t>(idxPtr[r]);
         uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableRows, doRead);
         if (doRead) {
             __gm__ T *srcRow = tablePtr + static_cast<uint64_t>(safeIdx) * tableRowStride;
@@ -330,8 +330,8 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
 {
 #if defined(__DAV_CUBE__)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
-    constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileCols = DstTile::Cols;
+    constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileNumel = kTileRows * kTileCols;
     __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
 
@@ -341,8 +341,8 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
     for (uint32_t r = 0; r < validRow; r++) {
         const uint32_t idxRowOff = r * idxRowStride;
         for (uint32_t c = 0; c < validCol; c++) {
-            uint32_t rawIdx = static_cast<uint32_t>(idxPtr[idxRowOff + c]);
             uint32_t doRead;
+            uint32_t rawIdx = static_cast<uint32_t>(idxPtr[idxRowOff + c]);
             uint32_t safeIdx = mgather_remap<Oob>(rawIdx, tableSize, doRead);
             if (doRead) {
                 const uint32_t blockCol = c / kC0;
@@ -354,8 +354,8 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
             }
         }
     }
-    constexpr uint32_t kCacheLineBytes = 64;
     const uint32_t totalBytes = kTileNumel * sizeof(T);
+    constexpr uint32_t kCacheLineBytes = 64;
     const uint32_t numLines = (totalBytes + kCacheLineBytes - 1) / kCacheLineBytes;
     __gm__ uint8_t *flushPtr = reinterpret_cast<__gm__ uint8_t *>(scratchPtr);
     for (uint32_t i = 0; i < numLines; i++) {

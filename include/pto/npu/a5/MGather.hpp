@@ -295,12 +295,12 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
                                         uint32_t validCol, uint32_t tableSize, uint32_t idxRowStride)
 {
 #if defined(__DAV_CUBE__)
+    __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileNumel = kTileRows * kTileCols;
-    __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
-
+    
     for (uint32_t i = 0; i < kTileNumel; i++) {
         scratchPtr[i] = static_cast<T>(0);
     }
@@ -310,7 +310,7 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
             uint32_t rawIdx = static_cast<uint32_t>(idxPtr[idxRowOff + c]);
             uint32_t doRead;
             uint32_t safeIdx = gather_remap_l1<Oob>(rawIdx, tableSize, doRead);
-            if (doRead) {
+            if (doRead == 1) {
                 const uint32_t blockCol = c / kC0;
                 const uint32_t colInBlock = c - blockCol * kC0;
                 const uint64_t off =
