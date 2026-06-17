@@ -61,3 +61,9 @@ template void LaunchTAbs<float, 64, 64, 64, 64, true>(float *out, float *src, vo
 template void LaunchTAbs<float, 64, 64, 64, 64, false>(float *out, float *src, void *stream);
 template void LaunchTAbs<aclFloat16, 64, 64, 64, 64, true>(aclFloat16 *out, aclFloat16 *src, void *stream);
 template void LaunchTAbs<aclFloat16, 64, 64, 64, 64, false>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTAbs<int8_t, 64, 64, 64, 64, true>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTAbs<int8_t, 64, 64, 64, 64, false>(int8_t *out, int8_t *src, void *stream);
+template void LaunchTAbs<int16_t, 64, 64, 64, 64, true>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTAbs<int16_t, 64, 64, 64, 64, false>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTAbs<int32_t, 64, 64, 64, 64, true>(int32_t *out, int32_t *src, void *stream);
+template void LaunchTAbs<int32_t, 64, 64, 64, 64, false>(int32_t *out, int32_t *src, void *stream);

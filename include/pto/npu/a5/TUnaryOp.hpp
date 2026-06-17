@@ -308,7 +308,13 @@ __tf__ PTO_INTERNAL OP_NAME(TABS)
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TABS_IMPL(DstTile &dst, SrcTile &src)
 {
-    TUnaryCheck<DstTile, SrcTile>();
+    TUnaryCheck<DstTile, SrcTile, false>();
+    static_assert(
+        std::is_same_v<typename DstTile::DType, float32_t> || std::is_same_v<typename DstTile::DType, float> ||
+            std::is_same_v<typename DstTile::DType, float16_t> || std::is_same_v<typename DstTile::DType, half> ||
+            std::is_same_v<typename DstTile::DType, int8_t> || std::is_same_v<typename DstTile::DType, int16_t> ||
+            std::is_same_v<typename DstTile::DType, int32_t>,
+        "TABS: Invalid data type.");
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
     PTO_ASSERT(dstValidCol == src.GetValidCol(), "TABS: Number of columns of src and dst must be the same.");
