@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/fifo.hpp"
+#include "pto/common/fixpipe.hpp"
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/pto_instr_impl.hpp"
 #if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
@@ -897,6 +898,22 @@ PTO_INST RecordEvent SETFMATRIX(ConvTileData &src, WaitEvents &...events)
 {
     TSYNC(events...);
     SETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+    return {};
+}
+
+template <typename OutType, typename... WaitEvents>
+PTO_INST RecordEvent SET_QUANT_SCALAR(float preQuantScalar, WaitEvents &...events)
+{
+    TSYNC(events...);
+    SET_QUANT_SCALAR_IMPL<OutType>(preQuantScalar);
+    return {};
+}
+
+template <typename FpTileData, typename... WaitEvents>
+PTO_INST RecordEvent SET_QUANT_VECTOR(FpTileData &fpTile, WaitEvents &...events)
+{
+    TSYNC(events...);
+    SET_QUANT_VECTOR_IMPL<FpTileData>(fpTile);
     return {};
 }
 
@@ -2218,6 +2235,14 @@ PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...even
 {
     TSYNC(events...);
     TPUSH_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    return {};
+}
+
+template <typename Pipe, typename TileProd, typename TConfig, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TPUSH_IMPL<Pipe, TileProd, TConfig>(pipe, tile);
     return {};
 }
 
