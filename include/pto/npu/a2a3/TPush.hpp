@@ -684,8 +684,8 @@ struct TMPipe {
                     pushVec2CtrlFiFo(fifo, tile);
                 }
             }
-        } // end of store
-    };    // end of Producer
+        }
+    };
 
     struct Consumer {
         int tile_id = 0;
