@@ -12,11 +12,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <gtest/gtest.h>
 #include <acl/acl.h>
 
-using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTADDDEQRELUTestCase(void *out, void *src0, void *src1, aclrtStream stream);
+void dispatchTADDDEQRELUTestCase(void *out, void *src0, void *src1, aclrtStream stream);
 
 class TADDDEQRELUTest : public testing::Test {
 protected:
@@ -27,7 +26,7 @@ protected:
     {}
 };
 
-std::string GetGoldenDir()
+static std::string goldenDirPath()
 {
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
@@ -37,7 +36,7 @@ std::string GetGoldenDir()
 }
 
 template <uint32_t caseId, int row, int validRow, int col, int validCol, int toleranceX1000 = 2>
-bool TADDDEQRELUTestFramework()
+bool runTAddDeqReluTest()
 {
     float tolerance = static_cast<float>(toleranceX1000) / 1000.0f;
 
@@ -64,17 +63,17 @@ bool TADDDEQRELUTestFramework()
     aclrtMalloc((void **)&src0Device, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input0.bin", srcByteSize, src0Host, srcByteSize);
-    ReadFile(GetGoldenDir() + "/input1.bin", srcByteSize, src1Host, srcByteSize);
+    ReadFile(goldenDirPath() + "/input0.bin", srcByteSize, src0Host, srcByteSize);
+    ReadFile(goldenDirPath() + "/input1.bin", srcByteSize, src1Host, srcByteSize);
 
     aclrtMemcpy(src0Device, srcByteSize, src0Host, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, srcByteSize, src1Host, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchTADDDEQRELUTestCase<caseId>(dstDevice, src0Device, src1Device, stream);
+    dispatchTADDDEQRELUTestCase<caseId>(dstDevice, src0Device, src1Device, stream);
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstByteSize);
+    WriteFile(goldenDirPath() + "/output.bin", dstHost, dstByteSize);
 
     aclrtFree(dstDevice);
     aclrtFree(src0Device);
@@ -88,28 +87,70 @@ bool TADDDEQRELUTestFramework()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<aclFloat16> golden(row * col);
-    std::vector<aclFloat16> devFinal(row * col);
-    ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
-    ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
+    std::vector<aclFloat16> goldenData(row * col);
+    std::vector<aclFloat16> deviceOutput(row * col);
+    ReadFile(goldenDirPath() + "/golden.bin", dstByteSize, goldenData.data(), dstByteSize);
+    ReadFile(goldenDirPath() + "/output.bin", dstByteSize, deviceOutput.data(), dstByteSize);
 
-    return ResultCmp<aclFloat16>(golden, devFinal, tolerance);
+    return ResultCmp<aclFloat16>(goldenData, deviceOutput, tolerance);
 }
 
-#define TEST_CASE(N, R, VR, C, VC, ...)                                    \
-    TEST_F(TADDDEQRELUTest, case##N)                                       \
-    {                                                                      \
-        bool ret = TADDDEQRELUTestFramework<N, R, VR, C, VC>(__VA_ARGS__); \
-        EXPECT_TRUE(ret);                                                  \
-    }
+TEST_F(TADDDEQRELUTest, case1)
+{
+    bool ret = runTAddDeqReluTest<1, 32, 32, 64, 64>();
+    EXPECT_TRUE(ret);
+}
 
-TEST_CASE(1, 32, 32, 64, 64)
-TEST_CASE(2, 64, 64, 64, 64)
-TEST_CASE(3, 1, 1, 2048, 2048)
-TEST_CASE(4, 64, 64, 128, 128)
-TEST_CASE(5, 32, 31, 128, 128)
-TEST_CASE(6, 32, 32, 128, 127)
-TEST_CASE(7, 16, 16, 64, 64)
-TEST_CASE(8, 32, 32, 64, 64)
-TEST_CASE(9, 16, 16, 128, 128)
-TEST_CASE(10, 16, 16, 128, 128)
+TEST_F(TADDDEQRELUTest, case2)
+{
+    bool ret = runTAddDeqReluTest<2, 64, 64, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case3)
+{
+    bool ret = runTAddDeqReluTest<3, 1, 1, 2048, 2048>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case4)
+{
+    bool ret = runTAddDeqReluTest<4, 64, 64, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case5)
+{
+    bool ret = runTAddDeqReluTest<5, 32, 31, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case6)
+{
+    bool ret = runTAddDeqReluTest<6, 32, 32, 128, 127>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case7)
+{
+    bool ret = runTAddDeqReluTest<7, 16, 16, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case8)
+{
+    bool ret = runTAddDeqReluTest<8, 32, 32, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case9)
+{
+    bool ret = runTAddDeqReluTest<9, 16, 16, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDDEQRELUTest, case10)
+{
+    bool ret = runTAddDeqReluTest<10, 16, 16, 128, 128>();
+    EXPECT_TRUE(ret);
+}
