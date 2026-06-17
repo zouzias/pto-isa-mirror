@@ -4,7 +4,7 @@
 
 Push a producer tile into a `TPipe` FIFO for Cube-Vector communication.
 
-This page describes both the TileData overload and the `GlobalTensor` overload for pushing data into a `TPipe` FIFO.
+This page describes all `TPUSH` overloads for pushing data into a `TPipe` FIFO: the TileData overload with explicit `TileSplitAxis`, the simplified TileData overload (reversed parameters, no Split), the GlobalTensor overload, and the TConfig-based overload.
 
 ## Operation Semantics
 
@@ -20,6 +20,10 @@ The producer tile index is incremented after the FIFO slot address is computed.
 
 For the `GlobalData` overload, `TPUSH` only records data-ready synchronization for a slot that was already allocated by `TALLOC`. It does not store tile data by itself.
 
+For the simplified `TileData` overload `TPUSH(TileData&, Pipe&)`, this is a convenience overload that delegates to the `TileSplitAxis::TILE_NO_SPLIT` variant. The tile parameter order is reversed (tile first, pipe second) and no explicit `TileSplitAxis` is required.
+
+For the `TConfig` overload `TPUSH(Pipe&, TileProd&, TConfig)`, the `TConfig` template parameter replaces `TileSplitAxis` with a configuration type that controls push behavior (implementation-defined).
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -32,6 +36,9 @@ PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events);
 template <typename Pipe, typename GlobalData, TileSplitAxis Split,
           std::enable_if_t<is_global_data_v<GlobalData>, int> = 0, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
+
+template <typename Pipe, typename TileProd, typename TConfig, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events);
 ```
 
 `Pipe` is typically an `TPipe` declared in `TPush.hpp`:
@@ -60,6 +67,12 @@ struct TPipe;
     - `TileSplitAxis::TILE_NO_SPLIT`: No sub-vector offset is applied.
     - `TileSplitAxis::TILE_UP_DOWN`: Data is split into row halves. For C2V direction (L0C→UB path), this mode only supports b32 data type, and `validRows` must be a power of 2; for V2C direction (UB→L1 path), `validCols` must be a multiple of 32 bytes.
     - `TileSplitAxis::TILE_LEFT_RIGHT`: Data is split into two column halves. For C2V direction (L0C→UB path), this mode only supports b32 data type, and `validCols` must be a multiple of 32; for V2C direction (UB→L1 path), `validCols` must be a multiple of 32 bytes.
+- **Simplified TileData overload**:
+    - `TPUSH(TileData&, Pipe&)` uses `TileSplitAxis::TILE_NO_SPLIT` semantics internally.
+    - `TileData::Loc` must be `TileType::Acc` or `TileType::Vec`.
+- **TConfig overload**:
+    - `TConfig` is a configuration type that determines push behavior (implementation-defined).
+    - `TileProd::Loc` must be `TileType::Acc`, `TileType::Vec`, or `TileType::Ctrl`.
 - **Synchronization**:
     - Free-space waits are sparse and controlled by `Pipe::SyncPeriod`.
     - Data-ready record is emitted for each `TPUSH`.

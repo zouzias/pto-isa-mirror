@@ -219,6 +219,7 @@ tinsert_vec
 mgather
 mscatter
 tpushpop_cv
+tpushpop_fixpipe
 tpushpop_vc
 tpushpop_cv_nosplit
 tpushpop_vc_nosplit
@@ -246,6 +247,7 @@ if (AUTO_MODE)
   # which doesn't work for auto mode. They need to be disabled for auto mode 
   # until rewritten to adapt to auto mode
     tpushpop_cv
+    tpushpop_fixpipe
     tpushpop_vc
     tpushpop_cv_nosplit
     tpushpop_vc_nosplit
