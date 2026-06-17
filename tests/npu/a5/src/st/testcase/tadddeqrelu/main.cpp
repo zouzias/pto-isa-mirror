@@ -5,7 +5,7 @@ CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the software repository for the full text of the License.
+See LICENSE in the root of the software repository for the full text of the License.
 */
 
 #include "test_common.h"
@@ -19,7 +19,6 @@ template <uint32_t caseId>
 void launchTADDDEQRELUTestCase(void *out, void *src0, void *src1, aclrtStream stream);
 
 class TADDDEQRELUTest : public testing::Test {
-public:
 protected:
     void SetUp() override
     {}
@@ -32,7 +31,7 @@ std::string GetGoldenDir()
 {
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
+    const std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
@@ -50,20 +49,20 @@ bool TADDDEQRELUTestFramework()
 
     size_t srcByteSize = row * col * sizeof(int32_t);
     size_t dstByteSize = row * col * sizeof(aclFloat16);
+    aclFloat16 *dstHost;
+    aclFloat16 *dstDevice;
     int32_t *src0Host;
     int32_t *src1Host;
-    aclFloat16 *dstHost;
     int32_t *src0Device;
     int32_t *src1Device;
-    aclFloat16 *dstDevice;
 
+    aclrtMallocHost((void **)(&dstHost), dstByteSize);
     aclrtMallocHost((void **)(&src0Host), srcByteSize);
     aclrtMallocHost((void **)(&src1Host), srcByteSize);
-    aclrtMallocHost((void **)(&dstHost), dstByteSize);
 
+    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src0Device, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input0.bin", srcByteSize, src0Host, srcByteSize);
     ReadFile(GetGoldenDir() + "/input1.bin", srcByteSize, src1Host, srcByteSize);
@@ -77,13 +76,13 @@ bool TADDDEQRELUTestFramework()
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstByteSize);
 
+    aclrtFree(dstDevice);
     aclrtFree(src0Device);
     aclrtFree(src1Device);
-    aclrtFree(dstDevice);
 
+    aclrtFreeHost(dstHost);
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
-    aclrtFreeHost(dstHost);
 
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);

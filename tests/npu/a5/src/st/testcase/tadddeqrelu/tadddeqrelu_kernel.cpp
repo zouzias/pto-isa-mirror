@@ -5,7 +5,7 @@ CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the software repository for the full text of the License.
+See LICENSE in the root of the software repository for the full text of the License.
 */
 
 #include <pto/pto-inst.hpp>
@@ -20,26 +20,26 @@ PTO_INTERNAL void runTADDDEQRELU(__gm__ half *out, __gm__ int32_t *src0, __gm__ 
 {
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
-    using SrcGlobal = GlobalTensor<int32_t, DynDim2Shape, DynDim2Stride>;
     using DstGlobal = GlobalTensor<half, DynDim2Shape, DynDim2Stride>;
+    using SrcGlobal = GlobalTensor<int32_t, DynDim2Shape, DynDim2Stride>;
 
+    DstGlobal dstGlobal(out, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
     SrcGlobal src0Global(src0, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
     SrcGlobal src1Global(src1, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
-    DstGlobal dstGlobal(out, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
 
-    using SrcTileData = Tile<TileType::Vec, int32_t, row, col, BLayout::RowMajor, -1, -1>;
     using DstTileData = Tile<TileType::Vec, half, row, col, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, int32_t, row, col, BLayout::RowMajor, -1, -1>;
     using TmpTileData = Tile<TileType::Vec, int32_t, row, col, BLayout::RowMajor, -1, -1>;
 
+    DstTileData dstTile(validRow, validCol);
     SrcTileData src0Tile(validRow, validCol);
     SrcTileData src1Tile(validRow, validCol);
-    DstTileData dstTile(validRow, validCol);
     TmpTileData tmpTile(validRow, validCol);
 
+    TASSIGN(dstTile, 0x18000);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, 0x8000);
     TASSIGN(tmpTile, 0x10000);
-    TASSIGN(dstTile, 0x18000);
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
