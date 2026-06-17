@@ -179,8 +179,8 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
             reinterpret_cast<__cbuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src), sid, ndNum, nValue,
             dValueb32, srcNdMatrixStride, srcDValueb32, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
-        uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint64_t);
-        uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint64_t);
+        uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint16_t);
+        uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint16_t);
         copy_gm_to_cbuf_multi_nd2nz_b16(
             reinterpret_cast<__cbuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src), sid, ndNum, nValue,
             dValueb64, srcNdMatrixStride, srcDValueb64, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
