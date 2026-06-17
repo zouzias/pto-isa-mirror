@@ -228,6 +228,7 @@ tfusedmuladd
 tmuladddst
 tsubrelu
 tfusedmuladdrelu
+tadddeqrelu
 syncall
 tpairreducesum
 )
