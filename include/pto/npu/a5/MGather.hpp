@@ -611,7 +611,7 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, IdxSrc &indices
         MGatherCheckGm2L1<Coalesce::Elem, Oob, TileDst, GlobalTable, IdxSrc>();
         static_assert(
             std::is_same_v<typename GlobalScratch::DType, __gm__ T>,
-            "MGATHER A5 GM->L1 scratch must be a GM GlobalTensor with element type matching the destination.");
+            "MGATHER A5 GM->L1 scratch need GM GlobalTensor with element type matching the destination");
 
         using TIdx = std::conditional_t<std::is_same_v<typename IdxSrc::DType, __gm__ uint32_t>, uint32_t, int32_t>;
         __gm__ const T *tablePtr = reinterpret_cast<__gm__ const T *>(table.data());
