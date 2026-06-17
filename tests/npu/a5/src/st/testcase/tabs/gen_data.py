@@ -20,24 +20,12 @@ def gen_golden_data(case_name, param):
     H, W = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
-    # Generate random input arrays
-    input1 = np.random.random(size=(H,W)).astype(dtype)
-
-    # Perform the operation
-    golden = np.abs(input1)
-
-    # Apply valid region constraints
-    output = np.zeros([H, W]).astype(dtype)
-    for h in range(H):
-        for w in range(W):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
-
-    # Save the input and golden data to binary files
+    input1 = np.random.random(size=(H, W)).astype(dtype)
+    golden = np.zeros([H, W]).astype(dtype)
+    golden[:h_valid, :w_valid] = np.abs(input1[:h_valid, :w_valid])
     input1.tofile("input1.bin")
     golden.tofile("golden.bin")
 
-    return output, input1, golden
 
 class tunaryParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place = False):
@@ -58,7 +46,9 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TABSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
+    str_inplace = '_InPlace' if param.in_place else ''
+    return f"TABSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}"\
+        f"_{param.valid_row}x{param.valid_col}{str_inplace}"
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -74,6 +64,12 @@ if __name__ == "__main__":
         tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.int8, 64, 64, 64, 64, 64, 64, True),
+        tunaryParams(np.int8, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.int16, 64, 64, 64, 64, 64, 64, True),
+        tunaryParams(np.int16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.int32, 64, 64, 64, 64, 64, 64, True),
+        tunaryParams(np.int32, 64, 64, 64, 64, 64, 64, False),
     ]
 
     for i, param in enumerate(case_params_list):

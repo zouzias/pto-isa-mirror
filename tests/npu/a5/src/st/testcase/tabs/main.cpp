@@ -89,19 +89,43 @@ void test_tabs()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TABSTest, case_float_64x64_64x64_64x64_inPlace_True)
+TEST_F(TABSTest, case_float_64x64_64x64_64x64_InPlace)
 {
     test_tabs<float, 64, 64, 64, 64, true>();
 }
-TEST_F(TABSTest, case_float_64x64_64x64_64x64_inPlace_False)
+TEST_F(TABSTest, case_float_64x64_64x64_64x64)
 {
     test_tabs<float, 64, 64, 64, 64, false>();
 }
-TEST_F(TABSTest, case_half_64x64_64x64_64x64_inPlace_True)
+TEST_F(TABSTest, case_half_64x64_64x64_64x64_InPlace)
 {
     test_tabs<aclFloat16, 64, 64, 64, 64, true>();
 }
-TEST_F(TABSTest, case_half_64x64_64x64_64x64_inPlace_False)
+TEST_F(TABSTest, case_half_64x64_64x64_64x64)
 {
     test_tabs<aclFloat16, 64, 64, 64, 64, false>();
+}
+TEST_F(TABSTest, case_int8_64x64_64x64_64x64_InPlace)
+{
+    test_tabs<int8_t, 64, 64, 64, 64, true>();
+}
+TEST_F(TABSTest, case_int8_64x64_64x64_64x64)
+{
+    test_tabs<int8_t, 64, 64, 64, 64, false>();
+}
+TEST_F(TABSTest, case_int16_64x64_64x64_64x64_InPlace)
+{
+    test_tabs<int16_t, 64, 64, 64, 64, true>();
+}
+TEST_F(TABSTest, case_int16_64x64_64x64_64x64)
+{
+    test_tabs<int16_t, 64, 64, 64, 64, false>();
+}
+TEST_F(TABSTest, case_int32_64x64_64x64_64x64_InPlace)
+{
+    test_tabs<int32_t, 64, 64, 64, 64, true>();
+}
+TEST_F(TABSTest, case_int32_64x64_64x64_64x64)
+{
+    test_tabs<int32_t, 64, 64, 64, 64, false>();
 }
