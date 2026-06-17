@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/utils.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_tile.hpp>
 #include <pto/common/arch_cce_intrinsic.hpp>
 #include "common.hpp"
 #include "utils.hpp"
