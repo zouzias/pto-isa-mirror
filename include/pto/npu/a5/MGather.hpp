@@ -47,12 +47,12 @@ constexpr uint32_t MAX_THREADS = WARP_SIZE * MAX_WARPS;
 template <GatherOOB Oob>
 __simt_callee__ AICORE PTO_INLINE uint32_t gather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
 {
-    if constexpr (Oob == GatherOOB::Undefined) {
-        doRead = 1u;
-        return idx;
-    } else if constexpr (Oob == GatherOOB::Clamp) {
+    if constexpr (Oob == GatherOOB::Clamp) {
         doRead = 1u;
         return (idx >= cap) ? (cap - 1u) : idx;
+    } else if constexpr (Oob == GatherOOB::Undefined) {
+        doRead = 1u;
+        return idx;
     } else if constexpr (Oob == GatherOOB::Wrap) {
         doRead = 1u;
         return idx % cap;
