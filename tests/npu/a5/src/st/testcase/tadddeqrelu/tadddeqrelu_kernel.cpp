@@ -40,12 +40,12 @@ PTO_INTERNAL void runTADDDEQRELU(__gm__ half *out, __gm__ int32_t *src0, __gm__ 
     TASSIGN(src1Tile, 0x8000);
     TASSIGN(tmpTile, 0x10000);
 
-    TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+    TLOAD(src0Tile, src0Global);
 
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
 #endif
     TADDDEQRELU(dstTile, src0Tile, src1Tile, deqScale, tmpTile);
 #ifndef __PTO_AUTO__
@@ -57,52 +57,52 @@ PTO_INTERNAL void runTADDDEQRELU(__gm__ half *out, __gm__ int32_t *src0, __gm__ 
 }
 
 extern "C" __global__ AICORE void launchTADDDEQRELUCase1(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<32, 32, 64, 64>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase2(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<64, 64, 64, 64>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase3(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<1, 1, 2048, 2048>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase4(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<64, 64, 128, 128>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase5(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<32, 31, 128, 128>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase6(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<32, 32, 128, 127>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase7(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<16, 16, 64, 64>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase8(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<32, 32, 64, 64>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase9(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                          __gm__ int32_t *src1, float deqScale)
+                                                         __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<16, 16, 128, 128>((__gm__ half *)out, src0, src1, deqScale);
 }
 extern "C" __global__ AICORE void launchTADDDEQRELUCase10(__gm__ aclFloat16 *out, __gm__ int32_t *src0,
-                                                           __gm__ int32_t *src1, float deqScale)
+                                                          __gm__ int32_t *src1, float deqScale)
 {
     runTADDDEQRELU<16, 16, 128, 128>((__gm__ half *)out, src0, src1, deqScale);
 }
@@ -117,43 +117,53 @@ void dispatchTADDDEQRELUTestCase(void *out, void *src0, void *src1, aclrtStream 
     float deqScale = deqScaleArr[caseId - 1];
     switch (caseId) {
         case 1: {
-            launchTADDDEQRELUCase1<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase1<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 2: {
-            launchTADDDEQRELUCase2<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase2<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 3: {
-            launchTADDDEQRELUCase3<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase3<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 4: {
-            launchTADDDEQRELUCase4<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase4<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 5: {
-            launchTADDDEQRELUCase5<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase5<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 6: {
-            launchTADDDEQRELUCase6<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase6<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 7: {
-            launchTADDDEQRELUCase7<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase7<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 8: {
-            launchTADDDEQRELUCase8<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase8<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 9: {
-            launchTADDDEQRELUCase9<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase9<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                           deqScale);
             break;
         }
         case 10: {
-            launchTADDDEQRELUCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, deqScale);
+            launchTADDDEQRELUCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
+                                                            deqScale);
             break;
         }
         default: {
