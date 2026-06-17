@@ -685,7 +685,7 @@ struct TMPipe {
                 }
             }
         } // end of store
-    }; // end of Producer
+    };    // end of Producer
 
     struct Consumer {
         int tile_id = 0;
@@ -850,12 +850,12 @@ struct TMPipe {
         cons.free();
     }
 
-    template <int M = LocalFiFoDepth, typename std::enable_if<M == 0, int>::type = 0> 
-    PTO_INTERNAL explicit TMPipe(__gm__ typename TileDataCons::DType *gmFiFoBase) : fifo(gmFiFoBase), prod(), cons() 
-    { 
-        cons.free(); 
+    template <int M = LocalFiFoDepth, typename std::enable_if<M == 0, int>::type = 0>
+    PTO_INTERNAL explicit TMPipe(__gm__ typename TileDataCons::DType *gmFiFoBase) : fifo(gmFiFoBase), prod(), cons()
+    {
+        cons.free();
     }
-    
+
     // Destructor for TPipe
     PTO_INTERNAL ~TMPipe()
     {
