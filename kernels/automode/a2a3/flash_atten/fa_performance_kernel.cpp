@@ -247,7 +247,7 @@ AICORE inline void compute_pv(PPipe &pPipe, PVPipe &pvPipe, int tile_id, int sub
             pvPipe.prod.setEntryOffset(0);
             TPUSH(pvAccTile, pvPipe);
         } // end loop
-    }     // end if DAV_CUBE
+    }
 }
 
 template <typename QKPipe, typename PPipe, int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1,
