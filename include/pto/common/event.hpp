@@ -109,6 +109,7 @@ enum class Op : uint16_t
     SET_IMG2COL_PADDING,
     TCONCAT,
     TDEQUANT,
+    TADDDEQRELU,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };
 
@@ -204,10 +205,12 @@ constexpr pipe_t opPipeList[] = {
     PIPE_S /* SET_IMG2COL_PADDING */,
     PIPE_V /* TCONCAT */,
     PIPE_V /* TDEQUANT */,
+    PIPE_V /* TADDDEQRELU */,
     PIPE_ALL /* OP_COUNT */,
 };
 
-struct RecordEvent {};
+struct RecordEvent {
+};
 
 template <pipe_t SrcPipe, pipe_t DstPipe>
 class EventIdCounter {
@@ -257,7 +260,7 @@ private:
 };
 
 template <typename... WaitEvents>
-PTO_INTERNAL void WaitAllEvents(WaitEvents &...events)
+PTO_INTERNAL void WaitAllEvents(WaitEvents &... events)
 {
     (events.Wait(), ...);
 }
