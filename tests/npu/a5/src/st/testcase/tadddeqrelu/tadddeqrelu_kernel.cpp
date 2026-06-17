@@ -111,63 +111,29 @@ static const float deqScaleArr[] = {
     0.5f, 0.0625f, 0.25f, 0.0625f, 0.5f, 0.5f, 0.5f, 0.00001f, 0.001f, 100.0f,
 };
 
+#define DISPATCH_CASE(N)                                                                                      \
+    case N:                                                                                                   \
+        launchTADDDEQRELUCase##N<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1, \
+                                                         deqScale);                                           \
+        break;
+
 template <uint32_t caseId>
 void dispatchTADDDEQRELUTestCase(void *out, void *src0, void *src1, aclrtStream stream)
 {
     float deqScale = deqScaleArr[caseId - 1];
     switch (caseId) {
-        case 1: {
-            launchTADDDEQRELUCase1<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
+        DISPATCH_CASE(1)
+        DISPATCH_CASE(2)
+        DISPATCH_CASE(3)
+        DISPATCH_CASE(4)
+        DISPATCH_CASE(5)
+        DISPATCH_CASE(6)
+        DISPATCH_CASE(7)
+        DISPATCH_CASE(8)
+        DISPATCH_CASE(9)
+        DISPATCH_CASE(10)
+        default:
             break;
-        }
-        case 2: {
-            launchTADDDEQRELUCase2<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 3: {
-            launchTADDDEQRELUCase3<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 4: {
-            launchTADDDEQRELUCase4<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 5: {
-            launchTADDDEQRELUCase5<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 6: {
-            launchTADDDEQRELUCase6<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 7: {
-            launchTADDDEQRELUCase7<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 8: {
-            launchTADDDEQRELUCase8<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 9: {
-            launchTADDDEQRELUCase9<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                           deqScale);
-            break;
-        }
-        case 10: {
-            launchTADDDEQRELUCase10<<<1, nullptr, stream>>>((aclFloat16 *)out, (int32_t *)src0, (int32_t *)src1,
-                                                            deqScale);
-            break;
-        }
-        default: {
-        }
     }
 }
 
