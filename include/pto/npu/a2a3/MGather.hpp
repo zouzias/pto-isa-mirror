@@ -35,15 +35,15 @@ struct IsMGatherNDTile {
 template <GatherOOB Oob>
 AICORE PTO_INLINE uint32_t mgather_remap(uint32_t idx, uint32_t cap, uint32_t &doRead)
 {
-    if constexpr (Oob == GatherOOB::Undefined) {
-        doRead = 1u;
-        return idx;
-    } else if constexpr (Oob == GatherOOB::Clamp) {
+    if constexpr (Oob == GatherOOB::Clamp) {
         doRead = 1u;
         return (idx >= cap) ? (cap - 1u) : idx;
     } else if constexpr (Oob == GatherOOB::Wrap) {
         doRead = 1u;
         return idx % cap;
+    } else if constexpr (Oob == GatherOOB::Undefined) {
+        doRead = 1u;
+        return idx;
     } else {
         doRead = (idx < cap) ? 1u : 0u;
         return idx;
@@ -298,8 +298,8 @@ __tf__ AICORE void MGatherGm2L1RowImpl(typename DstTile::TileDType __out__ dst, 
 #if defined(__DAV_CUBE__)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
-    constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileRows = DstTile::Rows;
+    constexpr uint32_t kTileCols = DstTile::Cols;
 
     if constexpr (Oob == GatherOOB::Zero) {
         constexpr uint32_t kColBlocks = kTileCols / kC0;

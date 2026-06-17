@@ -300,7 +300,7 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(typename DstTile::TileDType __out__ dst,
     constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileNumel = kTileRows * kTileCols;
-    
+
     for (uint32_t i = 0; i < kTileNumel; i++) {
         scratchPtr[i] = static_cast<T>(0);
     }
@@ -612,9 +612,9 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, IdxSrc &indices
         static_assert(std::is_same_v<typename GlobalScratch::DType, __gm__ T>,
                       "MGATHER A5 GM->L1 scratch need GM GlobalTensor with element type matching the destination");
 
-        using TIdx = std::conditional_t<std::is_same_v<typename IdxSrc::DType, __gm__ uint32_t>, uint32_t, int32_t>;
+        using TIdx1 = std::conditional_t<std::is_same_v<typename IdxSrc::DType, __gm__ uint32_t>, uint32_t, int32_t>;
         __gm__ const T *tablePtr = reinterpret_cast<__gm__ const T *>(table.data());
-        __gm__ const TIdx *idxPtr = reinterpret_cast<__gm__ const TIdx *>(indices.data());
+        __gm__ const TIdx1 *idxPtr = reinterpret_cast<__gm__ const TIdx1 *>(indices.data());
         __gm__ T *scratchPtr = reinterpret_cast<__gm__ T *>(scratch.data());
 
         const uint32_t validRow = dst.GetValidRow();
@@ -626,8 +626,8 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, IdxSrc &indices
         const uint32_t idxRowStride = static_cast<uint32_t>(indices.GetStride(GlobalTensorDim::DIM_3));
 
         constexpr uint8_t kSimtSyncId = 2;
-        MGatherGm2L1ElemSimtImpl<Oob, T, TIdx, TileDst, kSimtSyncId>(dst.data(), tablePtr, idxPtr, scratchPtr, validRow,
-                                                                     validCol, tableSize, idxRowStride);
+        MGatherGm2L1ElemSimtImpl<Oob, T, TIdx1, TileDst, kSimtSyncId>(dst.data(), tablePtr, idxPtr, scratchPtr,
+                                                                      validRow, validCol, tableSize, idxRowStride);
     }
 }
 
