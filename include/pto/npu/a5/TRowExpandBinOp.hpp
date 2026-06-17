@@ -55,7 +55,7 @@ PTO_INTERNAL void TRowExpandBinOps_1D_NoPostUpdate(__ubuf__ typename TileData::D
 
 template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem>
-PTO_INTERNAL void TRowExpandBinOps_1D_NoPostUpdate2(__ubuf__ typename TileData::DType *dstPtr,
+PTO_INTERNAL void TRowExpandBinOps_1D_NoPostUpdate32B(__ubuf__ typename TileData::DType *dstPtr,
                                                     __ubuf__ typename TileDataSrc0::DType *src0Ptr,
                                                     __ubuf__ typename TileDataSrc1::DType *src1Ptr, unsigned kValidRows,
                                                     unsigned kValidCols)
@@ -122,7 +122,7 @@ PTO_INTERNAL void TRowExpandBinOps_2D_NoPostUpdate(__ubuf__ typename TileData::D
 
 template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem>
-PTO_INTERNAL void TRowExpandBinOps_2D_NoPostUpdate2(__ubuf__ typename TileData::DType *dstPtr,
+PTO_INTERNAL void TRowExpandBinOps_2D_NoPostUpdate32B(__ubuf__ typename TileData::DType *dstPtr,
                                                     __ubuf__ typename TileDataSrc0::DType *src0Ptr,
                                                     __ubuf__ typename TileDataSrc1::DType *src1Ptr, unsigned kValidRows,
                                                     unsigned kValidCols)
@@ -163,10 +163,10 @@ PTO_INTERNAL void RowExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
 
     if constexpr (TileDataSrc1::isRowMajor) {
         if constexpr (TileData::Cols < elementsPerRepeat && isContiguous) {
-            TRowExpandBinOps_1D_NoPostUpdate2<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat,
+            TRowExpandBinOps_1D_NoPostUpdate32B<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat,
                                               blockSizeElem>(dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
         } else {
-            TRowExpandBinOps_2D_NoPostUpdate2<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat,
+            TRowExpandBinOps_2D_NoPostUpdate32B<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat,
                                               blockSizeElem>(dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
         }
     } else {
