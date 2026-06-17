@@ -706,14 +706,11 @@ int main(int argc, char **argv)
     };
 
     std::vector<CaseEntry> cases = {
-#define TFA_CASE_ENTRY(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                              \
-     {                                                                                                                 \
-         "case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() {                                                           \
-             run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
-                                                                                               "_S0_" #S0 "_S1_" #S1); \
-         }                                                                                                             \
-     }                                                                                                                 \
-     ,
+#define TFA_CASE_ENTRY(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                           \
+    {"case_float_H_" #HEAD "_S0_" #S0 "_S1_" #S1, []() {                                                           \
+         run_case<float, S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK>("case_float_H_" #HEAD   \
+                                                                                           "_S0_" #S0 "_S1_" #S1); \
+     }},
         TFA_FOR_EACH_CASE(TFA_CASE_ENTRY)
 #undef TFA_CASE_ENTRY
     };
