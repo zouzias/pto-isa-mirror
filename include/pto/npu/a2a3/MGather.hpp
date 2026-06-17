@@ -38,12 +38,12 @@ AICORE PTO_INLINE uint32_t mgather_remap(uint32_t idx, uint32_t cap, uint32_t &d
     if constexpr (Oob == GatherOOB::Undefined) {
         doRead = 1u;
         return idx;
-    }  else if constexpr (Oob == GatherOOB::Wrap) {
-        doRead = 1u;
-        return idx % cap;
     } else if constexpr (Oob == GatherOOB::Clamp) {
         doRead = 1u;
         return (idx >= cap) ? (cap - 1u) : idx;
+    } else if constexpr (Oob == GatherOOB::Wrap) {
+        doRead = 1u;
+        return idx % cap;
     } else {
         doRead = (idx < cap) ? 1u : 0u;
         return idx;
@@ -300,7 +300,7 @@ __tf__ AICORE void MGatherGm2L1RowImpl(typename DstTile::TileDType __out__ dst, 
     __cbuf__ T *dstPtr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
     constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileRows = DstTile::Rows;
-    
+
     if constexpr (Oob == GatherOOB::Zero) {
         constexpr uint32_t kColBlocks = kTileCols / kC0;
         int64_t repeatConfig = (static_cast<int64_t>(kTileRows) << 16) | static_cast<int64_t>(kColBlocks);
