@@ -20,15 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-#ifndef PTO_GATHER_EXEC_ENUM_DEFINED
-#define PTO_GATHER_EXEC_ENUM_DEFINED
-enum class GatherExec : uint8_t
-{
-    Scalar = 0,
-    Simt = 1
-};
-#endif
-
 template <typename T>
 struct IsValidGatherDType {
     static constexpr bool value =
