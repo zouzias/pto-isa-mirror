@@ -2145,7 +2145,7 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TADDDEQRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, float deqScale,
-                                 TileDataTmp &tmp, WaitEvents &... events)
+                                 TileDataTmp &tmp, WaitEvents &...events)
 {
     TSYNC(events...);
     TADDDEQRELU_IMPL(dst, src0, src1, deqScale, tmp);
