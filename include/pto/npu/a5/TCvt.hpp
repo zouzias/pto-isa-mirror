@@ -20,28 +20,4 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/utils.hpp"
 #include "pto/common/arch/register/tcvt_common.hpp"
 
-namespace pto {
-
-// Import rounding type definitions
-using __cce_simd::RoundAType;
-using __cce_simd::RoundCType;
-using __cce_simd::RoundFType;
-using __cce_simd::RoundOType;
-using __cce_simd::RoundRType;
-using __cce_simd::RoundZType;
-
-// Define architecture
-#define ARCH_A5
-
-// Include common implementation
-#include <pto/common/arch/register/tcvt_common.hpp>
-
-// Undefine architecture macros to avoid pollution
-#undef ARCH_A5
-#undef ARCH_RS_SAT
-#undef ARCH_HAS_FP8
-#undef ARCH_HAS_BFLOAT16
-
-} // namespace pto
-
 #endif // TCVT_HPP
