@@ -19,8 +19,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define HP0101 11
 #define HP1010 12
 #define HP0001 13
+#define HP0010 14
 #define HP0100 15
 #define HP1000 16
+#define HP1111 17
 
 #define U16P0101 21
 #define U16P1010 22

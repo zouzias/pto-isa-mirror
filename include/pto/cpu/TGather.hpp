@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/constants.hpp>
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -115,6 +116,23 @@ PTO_INTERNAL void TGather(typename DstTileData::TileDType dst, typename SrcTileD
     }
 }
 
+// Column-wise (reduce) gather: keep one row out of every `factor` source rows selected by the
+// mask pattern. Shape (R x C) -> (R/factor x C); output row r maps to source row factor*r + offset
+// (offset derived from the mask, identical to the NPU GetStrideByMask mapping).
+template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern>
+PTO_INTERNAL void TGatherCol(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src,
+                             unsigned dstValidRow, unsigned validCol)
+{
+    for (unsigned r = 0; r < dstValidRow; r++) {
+        const unsigned srcRow = static_cast<unsigned>(GetStrideByMask<maskPattern, 1>(static_cast<int>(r)));
+        for (unsigned c = 0; c < validCol; c++) {
+            const size_t didx = GetTileElementOffset<DstTileData>(r, c);
+            const size_t sidx = GetTileElementOffset<SrcTileData>(srcRow, c);
+            dst[didx] = static_cast<typename DstTileData::DType>(src[sidx]);
+        }
+    }
+}
+
 template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, auto gatherType = GatherAxis::GATHER_ROW>
 PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
 {
@@ -124,8 +142,15 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
                   "TGATHER: expect vec TileType");
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "TGATHER: expect row major");
     static_assert((sizeof(typename DstTileData::DType) == sizeof(T)), "TGATHER: expect same type size for dst and src");
-    assert(dst.GetValidCol() == DstTileData::Cols);
-    TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+    if constexpr (gatherType == GatherAxis::GATHER_COL) {
+        // (R x C) -> (R/factor x C): columns are preserved, rows are reduced by the mask factor.
+        assert(dst.GetValidCol() == src.GetValidCol());
+        assert(src.GetValidRow() == dst.GetValidRow() * static_cast<unsigned>(GetTimesByMask<maskPattern>()));
+        TGatherCol<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
+    } else {
+        assert(dst.GetValidCol() == DstTileData::Cols);
+        TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+    }
 }
 
 } // namespace pto

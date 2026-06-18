@@ -81,6 +81,32 @@ class TGatherParams1D(TGatherParamsBase):
         self.dst_col = dst_col
 
 
+class TGatherParamsCol(TGatherParamsBase):
+    def __init__(self, name, src_type, src_row, col, pattern):
+        super().__init__(name)
+        self.src_type = src_type
+        self.src_row = src_row
+        self.col = col
+        self.pattern = pattern
+
+
+# Column-wise (reduce) gather: dst row r <- src row factor*r + offset
+def col_row_map(pattern):
+    if pattern == P0101:
+        return 2, 0
+    if pattern == P1010:
+        return 2, 1
+    if pattern == P0001:
+        return 4, 0
+    if pattern == P0010:
+        return 4, 1
+    if pattern == P0100:
+        return 4, 2
+    if pattern == P1000:
+        return 4, 3
+    return 1, 0  # P1111
+
+
 def gather1d(src, indices):
     output = np.zeros_like(indices, dtype=src.dtype)
     for i in range(indices.shape[0]):
@@ -126,6 +152,17 @@ def gen_golden_data(param: TGatherParamsBase):
         indices.tofile("./src1.bin")
         golden = gather1d(src_data, indices)
         golden.tofile("./golden.bin")
+    elif isinstance(param, TGatherParamsCol):
+        factor, off = col_row_map(param.pattern)
+        src_row = param.src_row
+        col = param.col
+        dst_row = src_row // factor
+        x1_gm = np.random.randint(1, 100, [src_row, col]).astype(param.src_type)
+        x1_gm.tofile("./x1_gm.bin")
+        golden = np.zeros([dst_row, col], dtype=param.src_type)
+        for r in range(dst_row):
+            golden[r, :] = x1_gm[factor * r + off, :]
+        golden.flatten().tofile("./golden.bin")
 
 
 if __name__ == "__main__":
@@ -170,6 +207,22 @@ if __name__ == "__main__":
         TGatherParams1D("TGATHERTest.case_1D_int32_32x512_16x256", np.int32, 32, 512, 16, 256),
         TGatherParams1D("TGATHERTest.case_1D_half_16x1024_16x128", np.float16, 16, 1024, 16, 128),
         TGatherParams1D("TGATHERTest.case_1D_int16_32x256_32x64", np.int16, 32, 256, 32, 64),
+
+        # Column-wise (reduce) gather: (R x C) -> (R/factor x C)
+        TGatherParamsCol("TGATHERTest.case_col_float_P0101", np.float32, 8, 64, P0101),
+        TGatherParamsCol("TGATHERTest.case_col_float_P1010", np.float32, 8, 64, P1010),
+        TGatherParamsCol("TGATHERTest.case_col_float_P0001", np.float32, 16, 64, P0001),
+        TGatherParamsCol("TGATHERTest.case_col_float_P0010", np.float32, 16, 64, P0010),
+        TGatherParamsCol("TGATHERTest.case_col_float_P0100", np.float32, 16, 64, P0100),
+        TGatherParamsCol("TGATHERTest.case_col_float_P1000", np.float32, 16, 64, P1000),
+        TGatherParamsCol("TGATHERTest.case_col_float_P1111", np.float32, 8, 64, P1111),
+        TGatherParamsCol("TGATHERTest.case_col_half_P0101", np.half, 8, 64, P0101),
+        TGatherParamsCol("TGATHERTest.case_col_half_P1010", np.half, 8, 64, P1010),
+        TGatherParamsCol("TGATHERTest.case_col_half_P0001", np.half, 16, 64, P0001),
+        TGatherParamsCol("TGATHERTest.case_col_half_P0010", np.half, 16, 64, P0010),
+        TGatherParamsCol("TGATHERTest.case_col_half_P0100", np.half, 16, 64, P0100),
+        TGatherParamsCol("TGATHERTest.case_col_half_P1000", np.half, 16, 64, P1000),
+        TGatherParamsCol("TGATHERTest.case_col_half_P1111", np.half, 8, 64, P1111),
     ]
 
     for case in case_params_list:

@@ -221,6 +221,90 @@ template void launchTGATHER_demo<U32P0100>(uint8_t *out, uint8_t *src, void *str
 template void launchTGATHER_demo<I32P1000>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTGATHER_demo<I32P1111>(uint8_t *out, uint8_t *src, void *stream);
 
+// ===== Column-wise (reduce) gather: (R x C) -> (R/factor x C) =====
+template <typename T, int SrcRow, int Col, int DstRow, MaskPattern maskPattern>
+AICORE void runTGATHERCol(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    using SrcShape = Shape<1, 1, 1, SrcRow, Col>;
+    using SrcStrideT = Stride<1, 1, 1, Col, 1>;
+    using GSrc = GlobalTensor<T, SrcShape, SrcStrideT>;
+    using DstShape = Shape<1, 1, 1, DstRow, Col>;
+    using DstStrideT = Stride<1, 1, 1, Col, 1>;
+    using GDst = GlobalTensor<T, DstShape, DstStrideT>;
+
+    using SrcTileData = Tile<TileType::Vec, T, SrcRow, Col, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, DstRow, Col, BLayout::RowMajor, -1, -1>;
+    SrcTileData srcTile(SrcRow, Col);
+    DstTileData dstTile(DstRow, Col);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x0 + SrcRow * Col * sizeof(T));
+
+    GSrc srcGlobal(src);
+    GDst dstGlobal(out);
+
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TGATHER<DstTileData, SrcTileData, maskPattern, GatherAxis::GATHER_COL>(dstTile, srcTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
+template <int32_t tilingKey>
+void launchTGATHERCol_demo(uint8_t *out, uint8_t *src, void *stream)
+{
+    auto *o = reinterpret_cast<__gm__ float *>(out);
+    auto *s = reinterpret_cast<__gm__ float *>(src);
+    auto *oh = reinterpret_cast<__gm__ half *>(out);
+    auto *sh = reinterpret_cast<__gm__ half *>(src);
+    if constexpr (tilingKey == FP0101) {
+        runTGATHERCol<float, 8, 64, 4, MaskPattern::P0101>(o, s);
+    } else if constexpr (tilingKey == FP1010) {
+        runTGATHERCol<float, 8, 64, 4, MaskPattern::P1010>(o, s);
+    } else if constexpr (tilingKey == FP0001) {
+        runTGATHERCol<float, 16, 64, 4, MaskPattern::P0001>(o, s);
+    } else if constexpr (tilingKey == FP0010) {
+        runTGATHERCol<float, 16, 64, 4, MaskPattern::P0010>(o, s);
+    } else if constexpr (tilingKey == FP0100) {
+        runTGATHERCol<float, 16, 64, 4, MaskPattern::P0100>(o, s);
+    } else if constexpr (tilingKey == FP1000) {
+        runTGATHERCol<float, 16, 64, 4, MaskPattern::P1000>(o, s);
+    } else if constexpr (tilingKey == FP1111) {
+        runTGATHERCol<float, 8, 64, 8, MaskPattern::P1111>(o, s);
+    } else if constexpr (tilingKey == HP0101) {
+        runTGATHERCol<half, 8, 64, 4, MaskPattern::P0101>(oh, sh);
+    } else if constexpr (tilingKey == HP1010) {
+        runTGATHERCol<half, 8, 64, 4, MaskPattern::P1010>(oh, sh);
+    } else if constexpr (tilingKey == HP0001) {
+        runTGATHERCol<half, 16, 64, 4, MaskPattern::P0001>(oh, sh);
+    } else if constexpr (tilingKey == HP0010) {
+        runTGATHERCol<half, 16, 64, 4, MaskPattern::P0010>(oh, sh);
+    } else if constexpr (tilingKey == HP0100) {
+        runTGATHERCol<half, 16, 64, 4, MaskPattern::P0100>(oh, sh);
+    } else if constexpr (tilingKey == HP1000) {
+        runTGATHERCol<half, 16, 64, 4, MaskPattern::P1000>(oh, sh);
+    } else if constexpr (tilingKey == HP1111) {
+        runTGATHERCol<half, 8, 64, 8, MaskPattern::P1111>(oh, sh);
+    }
+}
+
+template void launchTGATHERCol_demo<FP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<FP1111>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTGATHERCol_demo<HP1111>(uint8_t *out, uint8_t *src, void *stream);
+
 template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
           int kTCols_>
 inline AICORE void runTGather1D(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)

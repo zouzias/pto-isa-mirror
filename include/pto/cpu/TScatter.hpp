@@ -65,6 +65,30 @@ PTO_INTERNAL void TScatter(typename DstTileData::TileDType dst, typename SrcTile
     }
 }
 
+// Column-wise (expand) scatter: inverse of the column-wise gather. Scatter each source row to
+// dst row factor*r + offset (offset derived from the mask), zeroing the rows that are not selected.
+// Shape (R x C) -> (factor*R x C); columns are preserved.
+template <MaskPattern maskPattern, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TScatterCol(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src,
+                              unsigned srcValidRow, unsigned validCol)
+{
+    constexpr unsigned times = static_cast<unsigned>(GetTimesByMask<maskPattern>());
+    for (unsigned r = 0; r < srcValidRow * times; r++) {
+        for (unsigned c = 0; c < validCol; c++) {
+            const size_t didx = GetTileElementOffset<DstTileData>(r, c);
+            dst[didx] = static_cast<typename DstTileData::DType>(0);
+        }
+    }
+    for (unsigned r = 0; r < srcValidRow; r++) {
+        const unsigned dstRow = static_cast<unsigned>(GetStrideByMask<maskPattern, 1>(static_cast<int>(r)));
+        for (unsigned c = 0; c < validCol; c++) {
+            const size_t sidx = GetTileElementOffset<SrcTileData>(r, c);
+            const size_t didx = GetTileElementOffset<DstTileData>(dstRow, c);
+            dst[didx] = static_cast<typename DstTileData::DType>(src[sidx]);
+        }
+    }
+}
+
 template <MaskPattern maskPattern, auto ScatterType = ScatterAxis::SCATTER_ROW, typename DstTileData,
           typename SrcTileData>
 PTO_INTERNAL void TSCATTER_IMPL(DstTileData &dst, SrcTileData &src)
@@ -80,8 +104,16 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTileData &dst, SrcTileData &src)
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "TSCATTER: expect row major");
     static_assert((sizeof(typename DstTileData::DType) == sizeof(T)),
                   "TSCATTER: expect same type size for dst and src");
-    assert(src.GetValidCol() == SrcTileData::Cols);
-    TScatter<maskPattern, DstTileData, SrcTileData>(dst.data(), src.data(), src.GetValidRow(), dst.GetValidCol());
+    if constexpr (ScatterType == ScatterAxis::SCATTER_COL) {
+        // (R x C) -> (factor*R x C): columns are preserved, rows are expanded by the mask factor.
+        assert(src.GetValidCol() == dst.GetValidCol());
+        assert(dst.GetValidRow() == src.GetValidRow() * static_cast<unsigned>(GetTimesByMask<maskPattern>()));
+        TScatterCol<maskPattern, DstTileData, SrcTileData>(dst.data(), src.data(), src.GetValidRow(),
+                                                           src.GetValidCol());
+    } else {
+        assert(src.GetValidCol() == SrcTileData::Cols);
+        TScatter<maskPattern, DstTileData, SrcTileData>(dst.data(), src.data(), src.GetValidRow(), dst.GetValidCol());
+    }
 }
 
 } // namespace pto
