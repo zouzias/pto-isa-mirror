@@ -222,6 +222,11 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubrelu -g TSUBRELUTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 -g MGATHERTest.case_row_float_16x16_64rows
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 -g MGATHERTest.case_row_int32_16x8_32rows
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 -g MGATHERTest.case_row_float_16x16_64rows
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 -g MGATHERTest.case_row_uint16_16x32_48rows
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 -g MGATHERTest.case_elem_bfloat16_16x16_256size
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
@@ -366,6 +371,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubrelu
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1
     if [ "$IS_AUTO_MODE" = "false" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter
@@ -602,6 +608,15 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_row_int32_16x8_32rows
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_int32_16x8_128size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_bfloat16_16x16_256size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_half_zero_16x16_64size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_row_float_16x16_64rows
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int8_16x32_512size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_float_clamp_16x16_64size
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
@@ -740,6 +755,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1
   fi
 fi
 
