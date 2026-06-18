@@ -278,6 +278,7 @@ if (AUTO_MODE)
     tquant
     texpands_mat
     mscatter
+    mgather_gm2l1
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
