@@ -64,8 +64,8 @@ PTO_INTERNAL void TRowExpandOp(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, std
         cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
             const auto s0 = static_cast<T>(load_row_scalar(src0, r));
             for (std::size_t c = 0; c < cols; ++c) {
-                const std::size_t idxDst = GetTileElementOffset<TileDst>(r, c);
                 const std::size_t idxSrc1 = GetTileElementOffset<TileSrc1>(r, c);
+                const std::size_t idxDst = GetTileElementOffset<TileDst>(r, c);
                 ElementOpCal<T, TileOperation>::apply(dst.data()[idxDst], s0, src1.data()[idxSrc1]);
             }
         });
