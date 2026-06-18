@@ -20,6 +20,9 @@ using namespace PtoTestCommon;
 template <int32_t tilingKey>
 void launchTGATHER_demo(uint8_t *out, uint8_t *src, void *stream);
 
+template <int32_t tilingKey>
+void launchTGATHERCol_demo(uint8_t *out, uint8_t *src, void *stream);
+
 constexpr int HALF_SIZE = 2;
 constexpr int QUARTER_SIZE = 4;
 class TGATHERTest : public testing::Test {
@@ -187,6 +190,105 @@ TEST_F(TGATHERTest, case1_I32_P1000)
 TEST_F(TGATHERTest, case1_I32_P1111)
 {
     test_gather<int32_t, I32P1111, FLOAT_P1111_ROW, FLOAT_P1111_COL>();
+}
+
+// ===== Column-wise (reduce) gather: (R x C) -> (R/factor x C) =====
+template <typename T, int32_t KEY, uint32_t SRC_ROW, uint32_t COL, uint32_t DST_ROW>
+void test_gather_col()
+{
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    size_t srcSize = SRC_ROW * COL * sizeof(T);
+    size_t dstSize = DST_ROW * COL * sizeof(T);
+
+    uint8_t *dstHost, *srcHost;
+    uint8_t *dstDevice, *srcDevice;
+    aclrtMallocHost((void **)(&dstHost), dstSize);
+    aclrtMallocHost((void **)(&srcHost), srcSize);
+    aclrtMalloc((void **)&dstDevice, srcSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", srcSize, srcHost, srcSize);
+    aclrtMemcpy(srcDevice, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    launchTGATHERCol_demo<KEY>(dstDevice, srcDevice, stream);
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstSize, dstDevice, dstSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, dstSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(DST_ROW * COL);
+    std::vector<T> devFinal(DST_ROW * COL);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstSize, golden.data(), dstSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", dstSize, devFinal.data(), dstSize);
+    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TGATHERTest, case_col_float_P0101)
+{
+    test_gather_col<float, FP0101, 8, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P1010)
+{
+    test_gather_col<float, FP1010, 8, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P0001)
+{
+    test_gather_col<float, FP0001, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P0010)
+{
+    test_gather_col<float, FP0010, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P0100)
+{
+    test_gather_col<float, FP0100, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P1000)
+{
+    test_gather_col<float, FP1000, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_float_P1111)
+{
+    test_gather_col<float, FP1111, 8, 64, 8>();
+}
+TEST_F(TGATHERTest, case_col_half_P0101)
+{
+    test_gather_col<uint16_t, HP0101, 8, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P1010)
+{
+    test_gather_col<uint16_t, HP1010, 8, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P0001)
+{
+    test_gather_col<uint16_t, HP0001, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P0010)
+{
+    test_gather_col<uint16_t, HP0010, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P0100)
+{
+    test_gather_col<uint16_t, HP0100, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P1000)
+{
+    test_gather_col<uint16_t, HP1000, 16, 64, 4>();
+}
+TEST_F(TGATHERTest, case_col_half_P1111)
+{
+    test_gather_col<uint16_t, HP1111, 8, 64, 8>();
 }
 
 // Gather 1D tests

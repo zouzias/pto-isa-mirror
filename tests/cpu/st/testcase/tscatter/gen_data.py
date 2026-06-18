@@ -127,6 +127,52 @@ def gen_masked_scatter_golden(param: TScatterParamsMasked):
     os.chdir(original_dir)
 
 
+class TScatterParamsCol:
+    def __init__(self, name, src_type, src_row, col, pattern):
+        self.testname = name
+        self.src_type = src_type
+        self.src_row = src_row
+        self.col = col
+        self.pattern = pattern
+
+
+def col_row_map(pattern):
+    if pattern == P0101:
+        return 2, 0
+    if pattern == P1010:
+        return 2, 1
+    if pattern == P0001:
+        return 4, 0
+    if pattern == P0010:
+        return 4, 1
+    if pattern == P0100:
+        return 4, 2
+    if pattern == P1000:
+        return 4, 3
+    return 1, 0  # P1111
+
+
+# Column-wise (expand) scatter: dst row factor*r + offset <- src row r, other rows zero
+def gen_col_scatter_golden(param: TScatterParamsCol):
+    original_dir = os.getcwd()
+    os.makedirs(param.testname, exist_ok=True)
+    os.chdir(param.testname)
+
+    factor, off = col_row_map(param.pattern)
+    src_row = param.src_row
+    col = param.col
+    dst_row = src_row * factor
+
+    src = np.random.randint(1, 100, [src_row, col]).astype(param.src_type)
+    dst = np.zeros([dst_row, col], dtype=param.src_type)
+    for r in range(src_row):
+        dst[factor * r + off, :] = src[r, :]
+
+    src.tofile("./x1_gm.bin")
+    dst.tofile("./golden.bin")
+    os.chdir(original_dir)
+
+
 if __name__ == "__main__":
     gen_case("TSCATTERTest.case_float_16x16_16x16_16x16", 16, 16)
 
@@ -177,3 +223,25 @@ if __name__ == "__main__":
 
     for case in masked_cases:
         gen_masked_scatter_golden(case)
+
+    col_cases = [
+        # float
+        TScatterParamsCol("TSCATTERTest.case_col_float_P0101", np.float32, 4, 64, P0101),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P1010", np.float32, 4, 64, P1010),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P0001", np.float32, 4, 64, P0001),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P0010", np.float32, 4, 64, P0010),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P0100", np.float32, 4, 64, P0100),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P1000", np.float32, 4, 64, P1000),
+        TScatterParamsCol("TSCATTERTest.case_col_float_P1111", np.float32, 8, 64, P1111),
+        # half
+        TScatterParamsCol("TSCATTERTest.case_col_half_P0101", np.float16, 4, 64, P0101),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P1010", np.float16, 4, 64, P1010),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P0001", np.float16, 4, 64, P0001),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P0010", np.float16, 4, 64, P0010),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P0100", np.float16, 4, 64, P0100),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P1000", np.float16, 4, 64, P1000),
+        TScatterParamsCol("TSCATTERTest.case_col_half_P1111", np.float16, 8, 64, P1111),
+    ]
+
+    for case in col_cases:
+        gen_col_scatter_golden(case)

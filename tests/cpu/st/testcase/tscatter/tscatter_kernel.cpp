@@ -274,3 +274,87 @@ template void launchTSCATTER_masked<I16P0010>(uint8_t *out, uint8_t *src, void *
 template void launchTSCATTER_masked<U32P0100>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTSCATTER_masked<I32P1000>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTSCATTER_masked<I32P1111>(uint8_t *out, uint8_t *src, void *stream);
+
+// ===== Column-wise (expand) scatter: (R x C) -> (factor*R x C) =====
+template <typename T, int SrcRow, int Col, int DstRow, MaskPattern maskPattern>
+AICORE void runTScatterMaskedCol(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    using DynShapeSrc = Shape<1, 1, 1, SrcRow, Col>;
+    using DynStridSrc = Stride<1, 1, 1, Col, 1>;
+    using GlobalSrc = GlobalTensor<T, DynShapeSrc, DynStridSrc>;
+    using DynShapeDst = Shape<1, 1, 1, DstRow, Col>;
+    using DynStridDst = Stride<1, 1, 1, Col, 1>;
+    using GlobalDst = GlobalTensor<T, DynShapeDst, DynStridDst>;
+
+    using SrcTileData = Tile<TileType::Vec, T, SrcRow, Col, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, DstRow, Col, BLayout::RowMajor, -1, -1>;
+    SrcTileData srcTile(SrcRow, Col);
+    DstTileData dstTile(DstRow, Col);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x0 + SrcRow * Col * sizeof(T));
+
+    GlobalSrc srcGlobal(src);
+    GlobalDst dstGlobal(out);
+
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TSCATTER<maskPattern, ScatterAxis::SCATTER_COL>(dstTile, srcTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
+template <int32_t tilingKey>
+void launchTSCATTERCol_demo(uint8_t *out, uint8_t *src, void *stream)
+{
+    auto *o = reinterpret_cast<__gm__ float *>(out);
+    auto *s = reinterpret_cast<__gm__ float *>(src);
+    auto *oh = reinterpret_cast<__gm__ half *>(out);
+    auto *sh = reinterpret_cast<__gm__ half *>(src);
+    if constexpr (tilingKey == FP0101) {
+        runTScatterMaskedCol<float, 4, 64, 8, MaskPattern::P0101>(o, s);
+    } else if constexpr (tilingKey == FP1010) {
+        runTScatterMaskedCol<float, 4, 64, 8, MaskPattern::P1010>(o, s);
+    } else if constexpr (tilingKey == FP0001) {
+        runTScatterMaskedCol<float, 4, 64, 16, MaskPattern::P0001>(o, s);
+    } else if constexpr (tilingKey == FP0010) {
+        runTScatterMaskedCol<float, 4, 64, 16, MaskPattern::P0010>(o, s);
+    } else if constexpr (tilingKey == FP0100) {
+        runTScatterMaskedCol<float, 4, 64, 16, MaskPattern::P0100>(o, s);
+    } else if constexpr (tilingKey == FP1000) {
+        runTScatterMaskedCol<float, 4, 64, 16, MaskPattern::P1000>(o, s);
+    } else if constexpr (tilingKey == FP1111) {
+        runTScatterMaskedCol<float, 8, 64, 8, MaskPattern::P1111>(o, s);
+    } else if constexpr (tilingKey == HP0101) {
+        runTScatterMaskedCol<half, 4, 64, 8, MaskPattern::P0101>(oh, sh);
+    } else if constexpr (tilingKey == HP1010) {
+        runTScatterMaskedCol<half, 4, 64, 8, MaskPattern::P1010>(oh, sh);
+    } else if constexpr (tilingKey == HP0001) {
+        runTScatterMaskedCol<half, 4, 64, 16, MaskPattern::P0001>(oh, sh);
+    } else if constexpr (tilingKey == HP0010) {
+        runTScatterMaskedCol<half, 4, 64, 16, MaskPattern::P0010>(oh, sh);
+    } else if constexpr (tilingKey == HP0100) {
+        runTScatterMaskedCol<half, 4, 64, 16, MaskPattern::P0100>(oh, sh);
+    } else if constexpr (tilingKey == HP1000) {
+        runTScatterMaskedCol<half, 4, 64, 16, MaskPattern::P1000>(oh, sh);
+    } else if constexpr (tilingKey == HP1111) {
+        runTScatterMaskedCol<half, 8, 64, 8, MaskPattern::P1111>(oh, sh);
+    }
+}
+
+template void launchTSCATTERCol_demo<FP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<FP1111>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP0101>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP1010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP0001>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP0010>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP0100>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP1000>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTSCATTERCol_demo<HP1111>(uint8_t *out, uint8_t *src, void *stream);
