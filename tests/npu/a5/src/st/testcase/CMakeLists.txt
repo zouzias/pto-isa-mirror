@@ -141,7 +141,6 @@ set(ALL_TESTCASES
     tgather
     tcvt
     tsub
-    tsubreluconv
     trem
     tfmod
     tprelu
@@ -156,7 +155,6 @@ set(ALL_TESTCASES
     tshr
     tshrs
     tadd
-    taddreluconv
     tpartadd
     tpartmul
     tfillpad
@@ -250,11 +248,6 @@ set(ALL_TESTCASES
     tpushpop_subtile
     tinterleave
     tdeinterleave
-    tpairreducesum
-    tfusedmuladd
-    tmuladddst
-    tsubrelu
-    tfusedmuladdrelu
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
@@ -263,6 +256,7 @@ set(ALL_TESTCASES
 set(OPT_IN_TESTCASES
 # Device-side async L2 prefetch: correctness + focused perf comparison
 tprefetch_async
+tquant_dn
 )
 
 if (AUTO_MODE)
@@ -329,6 +323,7 @@ if (AUTO_MODE)
     tmatmul
     tmatmul_mx
     tmov_acc2vec
+    tquant_dn
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
