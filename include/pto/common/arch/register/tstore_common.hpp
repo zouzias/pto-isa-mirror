@@ -268,7 +268,9 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TStoreInstr(typename GlobalData::DType *dst, __ubuf__ typename TileData::DType *src, uint32_t nBurst,
                               uint32_t lenBurst, uint64_t burstDstStride, uint32_t burstSrcStride)
 {
-    pto_copy_ubuf_to_gm_align_v2(dst, src, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
+    using LoadT = LoadTypeBySize_t<typename TileData::DType>;
+    pto_copy_ubuf_to_gm_align_v2(reinterpret_cast<__gm__ LoadT *>(dst), reinterpret_cast<__ubuf__ LoadT *>(src), 0,
+                                 nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
 }
 
 template <typename GlobalData, typename TileData>
