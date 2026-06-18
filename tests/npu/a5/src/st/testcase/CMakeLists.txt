@@ -148,6 +148,7 @@ set(ALL_TESTCASES
     tor
     tands
     tors
+    txor
     txors
     tshl
     tshls
