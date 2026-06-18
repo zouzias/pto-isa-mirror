@@ -221,6 +221,7 @@ set(ALL_TESTCASES
     tnot
     trelu
     tquant
+    tquant_dn
     tdequant
     trandom
     mgather
@@ -281,6 +282,7 @@ if (AUTO_MODE)
     ttrans_conv
     tci
     tquant
+    tquant_dn
     texpands_mat
     tinsert
     tscatter
