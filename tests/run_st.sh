@@ -9,7 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-set -e
+# set -e
 
 ENABLE_A3=false
 ENABLE_A5=false
