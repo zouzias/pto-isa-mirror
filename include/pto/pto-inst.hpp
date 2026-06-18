@@ -24,10 +24,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_macro.hpp>
 #include <pto/common/arch_capability.hpp>
 #include <pto/common/pto_tile.hpp>
-#if defined(__COSTMODEL)
-#include "pto/costmodel/pto_instr.hpp"
-#else
 #include "pto/common/pto_instr.hpp"
-#endif
 #endif
 #endif

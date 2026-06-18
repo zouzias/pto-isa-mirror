@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 
 namespace pto::perf_sim {
 

@@ -33,6 +33,7 @@ endfunction()
 find_package(Threads REQUIRED)
 
 set(ALL_TESTCASES
+    tadd_fit
     time_predict
     tadds_fit
     tmatmul_fit

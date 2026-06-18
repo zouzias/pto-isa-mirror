@@ -66,4 +66,32 @@ set(CMAKE_CPP_COMPILE_OPTIONS
     "SHELL:-include stddef.h"
 )
 
+if (APPLE)
+    execute_process(
+        COMMAND xcrun --show-sdk-path
+        OUTPUT_VARIABLE APPLE_SDK_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if (APPLE_SDK_PATH)
+        include_directories(SYSTEM "${APPLE_SDK_PATH}/usr/include/c++/v1")
+    endif()
+
+    if (GTest_FOUND)
+        get_target_property(_gtest_lib GTest::gtest IMPORTED_LOCATION)
+        if (NOT _gtest_lib)
+            get_target_property(_gtest_lib GTest::gtest IMPORTED_LOCATION_RELEASE)
+        endif()
+        if (NOT _gtest_lib)
+            get_target_property(_gtest_lib GTest::gtest LOCATION)
+        endif()
+        if (_gtest_lib)
+            get_filename_component(_gtest_lib_dir "${_gtest_lib}" DIRECTORY)
+            list(APPEND CMAKE_BUILD_RPATH "${_gtest_lib_dir}")
+            list(APPEND CMAKE_INSTALL_RPATH "${_gtest_lib_dir}")
+        endif()
+        unset(_gtest_lib)
+        unset(_gtest_lib_dir)
+    endif()
+endif()
+
 add_subdirectory(testcase)
