@@ -26,6 +26,19 @@ TESTCASES=()
 
 # 测试命令的固定参数
 TEST_ARGS="--clean --verbose"
+
+# 默认编译器：仅当 CC/CXX 未设置时使用 Apple 自带 clang。
+# run_costmodel.py 的 _auto_detect_compilers 会按 PATH 优先级选编译器，在本机容易选中
+# 无法链接（ld: library not found for -lSystem）的 Homebrew LLVM，因此显式锁定 Apple clang。
+# 需要覆盖时：CC=<cxx> CXX=<cxx> bash tests/run_costmodel_tests.sh
+export CC="${CC:-/usr/bin/clang}"
+export CXX="${CXX:-/usr/bin/clang++}"
+if [ -z "${CXXFLAGS:-}" ] && [ "${CXX}" = "/usr/bin/clang++" ] && command -v xcrun >/dev/null 2>&1; then
+    SDKROOT_PATH="$(xcrun --show-sdk-path 2>/dev/null || true)"
+    if [ -n "${SDKROOT_PATH}" ] && [ -d "${SDKROOT_PATH}/usr/include/c++/v1" ]; then
+        export CXXFLAGS="-isystem ${SDKROOT_PATH}/usr/include/c++/v1"
+    fi
+fi
 # ==================================================================
 
 RED='\033[0;31m'

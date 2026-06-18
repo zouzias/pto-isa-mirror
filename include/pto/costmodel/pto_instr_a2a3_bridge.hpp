@@ -1,0 +1,275 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef PTO_COSTMODEL_INSTR_A2A3_BRIDGE_HPP
+#define PTO_COSTMODEL_INSTR_A2A3_BRIDGE_HPP
+
+#define TADD_IMPL PTO_COSTMODEL_A2A3_TADD_IMPL
+#define TABS_IMPL PTO_COSTMODEL_A2A3_TABS_IMPL
+#define TAND_IMPL PTO_COSTMODEL_A2A3_TAND_IMPL
+#define TOR_IMPL PTO_COSTMODEL_A2A3_TOR_IMPL
+#define TSUB_IMPL PTO_COSTMODEL_A2A3_TSUB_IMPL
+#define TSUBVIEW_IMPL PTO_COSTMODEL_A2A3_TSUBVIEW_IMPL
+#define TMUL_IMPL PTO_COSTMODEL_A2A3_TMUL_IMPL
+#define TMIN_IMPL PTO_COSTMODEL_A2A3_TMIN_IMPL
+#define TMAX_IMPL PTO_COSTMODEL_A2A3_TMAX_IMPL
+#define TEXPANDS_IMPL PTO_COSTMODEL_A2A3_TEXPANDS_IMPL
+#define TLOAD_IMPL PTO_COSTMODEL_A2A3_TLOAD_IMPL
+#define TPREFETCH_IMPL PTO_COSTMODEL_A2A3_TPREFETCH_IMPL
+#define TCMPS_IMPL PTO_COSTMODEL_A2A3_TCMPS_IMPL
+#define TCMP_IMPL PTO_COSTMODEL_A2A3_TCMP_IMPL
+#define TCONCAT_IMPL PTO_COSTMODEL_A2A3_TCONCAT_IMPL
+#define TDIV_IMPL PTO_COSTMODEL_A2A3_TDIV_IMPL
+#define TSHL_IMPL PTO_COSTMODEL_A2A3_TSHL_IMPL
+#define TSHR_IMPL PTO_COSTMODEL_A2A3_TSHR_IMPL
+#define TXOR_IMPL PTO_COSTMODEL_A2A3_TXOR_IMPL
+#define TLOG_IMPL PTO_COSTMODEL_A2A3_TLOG_IMPL
+#define TDIVS_IMPL PTO_COSTMODEL_A2A3_TDIVS_IMPL
+#define TPRELU_IMPL PTO_COSTMODEL_A2A3_TPRELU_IMPL
+#define TADDC_IMPL PTO_COSTMODEL_A2A3_TADDC_IMPL
+#define TSUBC_IMPL PTO_COSTMODEL_A2A3_TSUBC_IMPL
+#define TMATMUL_IMPL PTO_COSTMODEL_A2A3_TMATMUL_IMPL
+#define TMATMUL_ACC_IMPL PTO_COSTMODEL_A2A3_TMATMUL_ACC_IMPL
+#define TMATMUL_BIAS_IMPL PTO_COSTMODEL_A2A3_TMATMUL_BIAS_IMPL
+#define TGEMV_IMPL PTO_COSTMODEL_A2A3_TGEMV_IMPL
+#define TGEMV_ACC_IMPL PTO_COSTMODEL_A2A3_TGEMV_ACC_IMPL
+#define TGEMV_BIAS_IMPL PTO_COSTMODEL_A2A3_TGEMV_BIAS_IMPL
+#define TMRGSORT_IMPL PTO_COSTMODEL_A2A3_TMRGSORT_IMPL
+#define TEXTRACT_IMPL PTO_COSTMODEL_A2A3_TEXTRACT_IMPL
+#define TIMG2COL_IMPL PTO_COSTMODEL_A2A3_TIMG2COL_IMPL
+#define SETFMATRIX_IMPL PTO_COSTMODEL_A2A3_SETFMATRIX_IMPL
+#define SET_IMG2COL_RPT_IMPL PTO_COSTMODEL_A2A3_SET_IMG2COL_RPT_IMPL
+#define SET_IMG2COL_PADDING_IMPL PTO_COSTMODEL_A2A3_SET_IMG2COL_PADDING_IMPL
+#define TINSERT_IMPL PTO_COSTMODEL_A2A3_TINSERT_IMPL
+#define TSORT32_IMPL PTO_COSTMODEL_A2A3_TSORT32_IMPL
+#define TGATHER_IMPL PTO_COSTMODEL_A2A3_TGATHER_IMPL
+#define TCI_IMPL PTO_COSTMODEL_A2A3_TCI_IMPL
+#define TTRI_IMPL PTO_COSTMODEL_A2A3_TTRI_IMPL
+#define TCVT_IMPL PTO_COSTMODEL_A2A3_TCVT_IMPL
+#define TMOV_IMPL PTO_COSTMODEL_A2A3_TMOV_IMPL
+#define TROWSUM_IMPL PTO_COSTMODEL_A2A3_TROWSUM_IMPL
+#define TCOLSUM_IMPL PTO_COSTMODEL_A2A3_TCOLSUM_IMPL
+#define TCOLMAX_IMPL PTO_COSTMODEL_A2A3_TCOLMAX_IMPL
+#define TROWMAX_IMPL PTO_COSTMODEL_A2A3_TROWMAX_IMPL
+#define TROWMIN_IMPL PTO_COSTMODEL_A2A3_TROWMIN_IMPL
+#define TSELS_IMPL PTO_COSTMODEL_A2A3_TSELS_IMPL
+#define TSEL_IMPL PTO_COSTMODEL_A2A3_TSEL_IMPL
+#define TTRANS_IMPL PTO_COSTMODEL_A2A3_TTRANS_IMPL
+#define TMINS_IMPL PTO_COSTMODEL_A2A3_TMINS_IMPL
+#define TROWEXPAND_IMPL PTO_COSTMODEL_A2A3_TROWEXPAND_IMPL
+#define TROWEXPANDDIV_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDDIV_IMPL
+#define TROWEXPANDMUL_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDMUL_IMPL
+#define TROWEXPANDSUB_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDSUB_IMPL
+#define TROWEXPANDADD_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDADD_IMPL
+#define TROWEXPANDMAX_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDMAX_IMPL
+#define TROWEXPANDMIN_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDMIN_IMPL
+#define TROWEXPANDEXPDIF_IMPL PTO_COSTMODEL_A2A3_TROWEXPANDEXPDIF_IMPL
+#define TRSQRT_IMPL PTO_COSTMODEL_A2A3_TRSQRT_IMPL
+#define TSQRT_IMPL PTO_COSTMODEL_A2A3_TSQRT_IMPL
+#define TEXP_IMPL PTO_COSTMODEL_A2A3_TEXP_IMPL
+#define TNOT_IMPL PTO_COSTMODEL_A2A3_TNOT_IMPL
+#define TRELU_IMPL PTO_COSTMODEL_A2A3_TRELU_IMPL
+#define TGATHERB_IMPL PTO_COSTMODEL_A2A3_TGATHERB_IMPL
+#define TADDS_IMPL PTO_COSTMODEL_A2A3_TADDS_IMPL
+#define TAXPY_IMPL PTO_COSTMODEL_A2A3_TAXPY_IMPL
+#define TSUBS_IMPL PTO_COSTMODEL_A2A3_TSUBS_IMPL
+#define TMULS_IMPL PTO_COSTMODEL_A2A3_TMULS_IMPL
+#define TMAXS_IMPL PTO_COSTMODEL_A2A3_TMAXS_IMPL
+#define TLRELU_IMPL PTO_COSTMODEL_A2A3_TLRELU_IMPL
+#define TCOLMIN_IMPL PTO_COSTMODEL_A2A3_TCOLMIN_IMPL
+#define TSCATTER_IMPL PTO_COSTMODEL_A2A3_TSCATTER_IMPL
+#define TCOLEXPAND_IMPL PTO_COSTMODEL_A2A3_TCOLEXPAND_IMPL
+#define TNEG_IMPL PTO_COSTMODEL_A2A3_TNEG_IMPL
+#define TCOLEXPANDDIV_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDDIV_IMPL
+#define TCOLEXPANDMUL_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDMUL_IMPL
+#define TCOLEXPANDADD_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDADD_IMPL
+#define TCOLEXPANDMAX_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDMAX_IMPL
+#define TCOLEXPANDMIN_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDMIN_IMPL
+#define TCOLEXPANDSUB_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDSUB_IMPL
+#define TCOLEXPANDEXPDIF_IMPL PTO_COSTMODEL_A2A3_TCOLEXPANDEXPDIF_IMPL
+#define TDEQUANT_IMPL PTO_COSTMODEL_A2A3_TDEQUANT_IMPL
+#define TREM_IMPL PTO_COSTMODEL_A2A3_TREM_IMPL
+#define TFMOD_IMPL PTO_COSTMODEL_A2A3_TFMOD_IMPL
+#define TSTORE_IMPL PTO_COSTMODEL_A2A3_TSTORE_IMPL
+#define TPUSH_IMPL PTO_COSTMODEL_A2A3_TPUSH_IMPL
+#define TPOP_IMPL PTO_COSTMODEL_A2A3_TPOP_IMPL
+#define TFREE_IMPL PTO_COSTMODEL_A2A3_TFREE_IMPL
+#define TALLOC_IMPL PTO_COSTMODEL_A2A3_TALLOC_IMPL
+#include "pto/npu/a2a3/TAdd.hpp"
+#include "pto/npu/a2a3/TUnaryOp.hpp"
+#include "pto/npu/a2a3/TAnd.hpp"
+#include "pto/npu/a2a3/TOr.hpp"
+#include "pto/npu/a2a3/TSub.hpp"
+#include "pto/npu/a2a3/TSubView.hpp"
+#include "pto/npu/a2a3/TMul.hpp"
+#include "pto/npu/a2a3/TMin.hpp"
+#include "pto/npu/a2a3/TMax.hpp"
+#include "pto/npu/a2a3/TExpandS.hpp"
+#include "pto/npu/a2a3/TLoad.hpp"
+#include "pto/npu/a2a3/TPrefetch.hpp"
+#include "pto/npu/a2a3/TCmps.hpp"
+#include "pto/npu/a2a3/TCmp.hpp"
+#include "pto/npu/a2a3/TConcat.hpp"
+#include "pto/npu/a2a3/TDiv.hpp"
+#include "pto/npu/a2a3/TShl.hpp"
+#include "pto/npu/a2a3/TShr.hpp"
+#include "pto/npu/a2a3/TXor.hpp"
+#include "pto/npu/a2a3/TDivS.hpp"
+#include "pto/npu/a2a3/TPrelu.hpp"
+#include "pto/npu/a2a3/TFusedMulAdd.hpp"
+#include "pto/npu/a2a3/TMatmul.hpp"
+#include "pto/npu/a2a3/TMrgSort.hpp"
+#include "pto/npu/a2a3/TExtract.hpp"
+#include "pto/npu/a2a3/TImg2col.hpp"
+#include "pto/npu/a2a3/SetFmatrix.hpp"
+#include "pto/npu/a2a3/SetImg2colRpt.hpp"
+#include "pto/npu/a2a3/SetImg2colPadding.hpp"
+#include "pto/npu/a2a3/TInsert.hpp"
+#include "pto/npu/a2a3/TSort32.hpp"
+#include "pto/npu/a2a3/TGather.hpp"
+#include "pto/npu/a2a3/TCI.hpp"
+#include "pto/npu/a2a3/TTri.hpp"
+#include "pto/npu/a2a3/TCvt.hpp"
+#include "pto/npu/a2a3/TMov.hpp"
+#include "pto/npu/a2a3/TRowSum.hpp"
+#include "pto/npu/a2a3/TColSum.hpp"
+#include "pto/npu/a2a3/TColMax.hpp"
+#include "pto/npu/a2a3/TRowMax.hpp"
+#include "pto/npu/a2a3/TRowMin.hpp"
+#include "pto/npu/a2a3/TSels.hpp"
+#include "pto/npu/a2a3/TSel.hpp"
+#include "pto/npu/a2a3/TTrans.hpp"
+#include "pto/npu/a2a3/TMins.hpp"
+#include "pto/npu/a2a3/TRowExpand.hpp"
+#include "pto/npu/a2a3/TRowExpandDiv.hpp"
+#include "pto/npu/a2a3/TRowExpandMul.hpp"
+#include "pto/npu/a2a3/TRowExpandSub.hpp"
+#include "pto/npu/a2a3/TRowExpandAdd.hpp"
+#include "pto/npu/a2a3/TRowExpandMax.hpp"
+#include "pto/npu/a2a3/TRowExpandMin.hpp"
+#include "pto/npu/a2a3/TRowExpandExpdif.hpp"
+#include "pto/npu/a2a3/TGatherB.hpp"
+#include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TAxpy.hpp"
+#include "pto/npu/a2a3/TSubS.hpp"
+#include "pto/npu/a2a3/TMulS.hpp"
+#include "pto/npu/a2a3/TMaxS.hpp"
+#include "pto/npu/a2a3/TLRelu.hpp"
+#include "pto/npu/a2a3/TColMin.hpp"
+#include "pto/npu/a2a3/TScatter.hpp"
+#include "pto/npu/a2a3/TColExpand.hpp"
+#include "pto/npu/a2a3/TColExpandDiv.hpp"
+#include "pto/npu/a2a3/TColExpandMul.hpp"
+#include "pto/npu/a2a3/TColExpandAdd.hpp"
+#include "pto/npu/a2a3/TColExpandMax.hpp"
+#include "pto/npu/a2a3/TColExpandMin.hpp"
+#include "pto/npu/a2a3/TColExpandSub.hpp"
+#include "pto/npu/a2a3/TColExpandExpdif.hpp"
+#include "pto/npu/a2a3/TDequant.hpp"
+#include "pto/npu/a2a3/TRem.hpp"
+#include "pto/npu/a2a3/TFmod.hpp"
+#include "pto/npu/a2a3/TStore.hpp"
+#include "pto/npu/a2a3/TPush.hpp"
+#include "pto/npu/a2a3/TPop.hpp"
+#include "pto/npu/a2a3/TFree.hpp"
+#include "pto/npu/a2a3/TAlloc.hpp"
+#undef TADD_IMPL
+#undef TABS_IMPL
+#undef TAND_IMPL
+#undef TOR_IMPL
+#undef TSUB_IMPL
+#undef TSUBVIEW_IMPL
+#undef TMUL_IMPL
+#undef TMIN_IMPL
+#undef TMAX_IMPL
+#undef TEXPANDS_IMPL
+#undef TLOAD_IMPL
+#undef TPREFETCH_IMPL
+#undef TCMPS_IMPL
+#undef TCMP_IMPL
+#undef TCONCAT_IMPL
+#undef TDIV_IMPL
+#undef TSHL_IMPL
+#undef TSHR_IMPL
+#undef TXOR_IMPL
+#undef TLOG_IMPL
+#undef TDIVS_IMPL
+#undef TPRELU_IMPL
+#undef TADDC_IMPL
+#undef TSUBC_IMPL
+#undef TMATMUL_IMPL
+#undef TMATMUL_ACC_IMPL
+#undef TMATMUL_BIAS_IMPL
+#undef TGEMV_IMPL
+#undef TGEMV_ACC_IMPL
+#undef TGEMV_BIAS_IMPL
+#undef TMRGSORT_IMPL
+#undef TEXTRACT_IMPL
+#undef TIMG2COL_IMPL
+#undef SETFMATRIX_IMPL
+#undef SET_IMG2COL_RPT_IMPL
+#undef SET_IMG2COL_PADDING_IMPL
+#undef TINSERT_IMPL
+#undef TSORT32_IMPL
+#undef TGATHER_IMPL
+#undef TCI_IMPL
+#undef TTRI_IMPL
+#undef TCVT_IMPL
+#undef TMOV_IMPL
+#undef TROWSUM_IMPL
+#undef TCOLSUM_IMPL
+#undef TCOLMAX_IMPL
+#undef TROWMAX_IMPL
+#undef TROWMIN_IMPL
+#undef TSELS_IMPL
+#undef TSEL_IMPL
+#undef TTRANS_IMPL
+#undef TMINS_IMPL
+#undef TROWEXPAND_IMPL
+#undef TROWEXPANDDIV_IMPL
+#undef TROWEXPANDMUL_IMPL
+#undef TROWEXPANDSUB_IMPL
+#undef TROWEXPANDADD_IMPL
+#undef TROWEXPANDMAX_IMPL
+#undef TROWEXPANDMIN_IMPL
+#undef TROWEXPANDEXPDIF_IMPL
+#undef TRSQRT_IMPL
+#undef TSQRT_IMPL
+#undef TEXP_IMPL
+#undef TNOT_IMPL
+#undef TRELU_IMPL
+#undef TGATHERB_IMPL
+#undef TADDS_IMPL
+#undef TAXPY_IMPL
+#undef TSUBS_IMPL
+#undef TMULS_IMPL
+#undef TMAXS_IMPL
+#undef TLRELU_IMPL
+#undef TCOLMIN_IMPL
+#undef TSCATTER_IMPL
+#undef TCOLEXPAND_IMPL
+#undef TNEG_IMPL
+#undef TCOLEXPANDDIV_IMPL
+#undef TCOLEXPANDMUL_IMPL
+#undef TCOLEXPANDADD_IMPL
+#undef TCOLEXPANDMAX_IMPL
+#undef TCOLEXPANDMIN_IMPL
+#undef TCOLEXPANDSUB_IMPL
+#undef TCOLEXPANDEXPDIF_IMPL
+#undef TDEQUANT_IMPL
+#undef TREM_IMPL
+#undef TFMOD_IMPL
+#undef TSTORE_IMPL
+#undef TPUSH_IMPL
+#undef TPOP_IMPL
+#undef TFREE_IMPL
+#undef TALLOC_IMPL
+
+#endif // PTO_COSTMODEL_INSTR_A2A3_BRIDGE_HPP

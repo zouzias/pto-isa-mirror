@@ -8,22 +8,12 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_INST_HPP
-#define PTO_INST_HPP
+#ifndef PTO_COSTMODEL_INSTR_IMPL_HPP
+#define PTO_COSTMODEL_INSTR_IMPL_HPP
 
-#include <pto/common/type.hpp>
-#include <pto/common/kernel_meta.hpp>
-#if defined(__CPU_SIM)
-#include "pto/common/cpu_stub.hpp"
-#elif defined(__COSTMODEL)
-#include "pto/costmodel/runtime_stub.hpp"
-#endif
-#include <pto/common/memory.hpp>
+#include "pto/costmodel/pto_instr_a2a3_bridge.hpp"
+#include "pto/costmodel/pto_instr_record.hpp"
+#include "pto/costmodel/pto_instr_basic_impl.hpp"
+#include "pto/costmodel/pto_instr_template_impl.hpp"
 
-#if defined(__CPU_SIM) || defined(__CCE_AICORE__) || defined(__COSTMODEL)
-#include <pto/common/arch_macro.hpp>
-#include <pto/common/arch_capability.hpp>
-#include <pto/common/pto_tile.hpp>
-#include "pto/common/pto_instr.hpp"
-#endif
-#endif
+#endif // PTO_COSTMODEL_INSTR_IMPL_HPP
