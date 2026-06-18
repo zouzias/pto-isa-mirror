@@ -11,10 +11,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TMOV_HPP
 #define TMOV_HPP
 #include "common.hpp"
+#include <pto/common/constants.hpp>
+#include <pto/common/utils.hpp>
 #include "TExtract.hpp"
 #include "TPartAdd.hpp"
 
+using namespace pto;
+
 namespace pto {
+using pto::C0_SIZE_BYTE;
+using pto::BLOCK_BYTE_SIZE;
+using pto::REPEAT_BYTE;
+using pto::REPEAT_MAX;
+using pto::REPEAT_STRIDE_MAX;
+using pto::FRACTAL_NZ_ROW;
+using pto::FIXP_BURST_UNIT_LEN;
 template <typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src)
 {

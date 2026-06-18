@@ -23,7 +23,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto_macro_fa_dn_gu.hpp"
 
 using namespace std;
-using namespace pto;
 
 // -----------------------------------------------------------------------------
 // UB Path Mode Configuration
