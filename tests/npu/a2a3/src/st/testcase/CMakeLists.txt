@@ -275,6 +275,7 @@ if (AUTO_MODE)
     tci
     tquant
     texpands_mat
+    mscatter
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
