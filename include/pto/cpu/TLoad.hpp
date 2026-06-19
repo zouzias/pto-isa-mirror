@@ -313,7 +313,7 @@ PTO_INTERNAL void CheckConvTileData(TileData &dst, GlobalData &src)
         (GlobalData::layout == pto::Layout::NC1HWC0 && TileData::layout == pto::Layout::NC1HWC0) ||
         (GlobalData::layout == pto::Layout::FRACTAL_Z && TileData::layout == pto::Layout::FRACTAL_Z) ||
         (GlobalData::layout == pto::Layout::NDC1HWC0 && TileData::layout == pto::Layout::NDC1HWC0);
-    static_assert(isSameLayout == true, "Fix: Src Dst layout must be NC1HWC0, NDC1HWC0 or FRACTAL_Z!");
+    static_assert(isSameLayout == true, "Fix: Src and Dst layout must be the same in case of NC1HWC0, NDC1HWC0 or FRACTAL_Z!");
 }
 
 template <typename TileData, typename GlobalData>
