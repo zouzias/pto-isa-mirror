@@ -290,6 +290,43 @@ if (AUTO_MODE)
     tmatmul
     tmatmul_mx
     tmov_zz
+    thistogram
+    tsubreluconv
+    tsubrelu
+    taddreluconv
+    tcolgather
+    tshrs
+    tcolscatter
+    tdequant
+    tci
+    tcolargmax
+    tcolargmin
+    tcolsum
+    tcolprod
+    tcvt
+    textract
+    textract_acc2vec
+    tfillpad
+    tgather
+    tgatherb
+    tload_mix
+    tload_mx_ND_DN
+    tload_mx_gmtensor
+    tload_shape2d
+    tmov
+    tpartadd
+    tpartmul
+    tpartmax
+    tpartmin
+    ttrans
+    ttrans_conv
+    tscatter
+    tquant
+    tinsert
+    tinsert_acc2vec
+    tmov_zz
+    tmatmul
+    tmatmul_mx
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
