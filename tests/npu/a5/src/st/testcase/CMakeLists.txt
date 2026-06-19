@@ -149,7 +149,6 @@ set(ALL_TESTCASES
     tor
     tands
     tors
-    txor
     txors
     tshl
     tshls
@@ -328,6 +327,7 @@ if (AUTO_MODE)
     tmatmul
     tmatmul_mx
     tmov_acc2vec
+    txor
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
