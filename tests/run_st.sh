@@ -427,7 +427,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tand -g TANDTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tands -g TANDSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tors -g TORSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t txors -g TXORSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tshls -g TSHLSTest.case_int16_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmps -g TCMPSTest.case_float_8x64_8x64_8x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpandadd -g TColExpandAddTest.case_fp32_16_128_1_128
@@ -509,6 +508,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx -g TMATMULMXTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txor -g TXORTest.case1
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t txors -g TXORSTest.case1
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ -g TLOADSCALETest.4_3_3_16_2_4_10_5_16_2_192_10_scale_ZZ2ZZ
@@ -636,7 +636,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tand
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tands
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tors
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t txors
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tshls
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmps
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpandadd
@@ -697,6 +696,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txor
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t txors
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ

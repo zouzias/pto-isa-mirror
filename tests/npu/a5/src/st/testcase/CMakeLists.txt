@@ -326,6 +326,7 @@ if (AUTO_MODE)
     tmatmul_mx
     tmov_acc2vec
     txor
+    txors
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
