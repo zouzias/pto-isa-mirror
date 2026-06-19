@@ -507,6 +507,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp8e4_2
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul -g TMATMULTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx -g TMATMULMXTest.case1
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ -g TLOADSCALETest.4_3_3_16_2_4_10_5_16_2_192_10_scale_ZZ2ZZ
@@ -516,7 +517,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmins -g TMINSTest.case_float_60x128_64x64_60x60
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmins -g TMINSTest.case_float_16x200_20x512_16x200
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmins -g TMINSTest.case_float_1x3600_2x4096_1x3600
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_vect -g TMOVTest.vect_copy_case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_mx -g TMOVMXTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
@@ -695,13 +695,13 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_zz
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmax
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmins
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_vect
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_mx
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort
