@@ -225,6 +225,29 @@ __tf__ PTO_INTERNAL void TLoad5HD(typename TileData::TileDType __out__ dst, type
 }
 
 template <typename TileData, typename GlobalData>
+__tf__ PTO_INTERNAL void TLoad6HD(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+                                  int srcG, int srcN, int srcC1, int srcH, int srcW, int gStride5, int gStride0,
+                                  int gStride1, int gStride2, int gStride3, int gStride4, int dstG, int dstN, int dstC1,
+                                  int dstH, int dstW)
+{
+    __cbuf__ typename TileData::DType *dstAddr = dst;
+    typename GlobalData::DType *srcAddr = src;
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+
+    // Assuming we are still doing 2D-Linear collapse at the end (Burst load)
+    // We iterate through the new 6th dimension (Group/G)
+    for (uint32_t g = 0; g < dstG; g++) {
+        // Calculate the base pointer for the current Group
+        int64_t groupOffsetSrc = g * gStride5;
+        int64_t groupOffsetDst = g * dstN * dstH * dstW * dstC1 * c0ElemCount;
+
+        // Call the 5D loader for this slice of the 6D tensor
+        TLoad5HD<TileData, GlobalData>(dst + groupOffsetDst, src + groupOffsetSrc, srcN, srcC1, srcH, srcW, gStride0,
+                                       gStride1, gStride2, gStride3, gStride4, dstN, dstC1, dstH, dstW);
+    }
+}
+
+template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadFractalZ(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
                                        int srcShape0, int srcShape1, int srcShape2, int srcShape3, int srcShape4,
                                        int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
@@ -288,8 +311,10 @@ PTO_INTERNAL void CheckConvTileData(TileData &dst, GlobalData &src)
 
     constexpr bool isSameLayout =
         (GlobalData::layout == pto::Layout::NC1HWC0 && TileData::layout == pto::Layout::NC1HWC0) ||
-        (GlobalData::layout == pto::Layout::FRACTAL_Z && TileData::layout == pto::Layout::FRACTAL_Z);
-    static_assert(isSameLayout == true, "Fix: Src Dst layout must be NC1HWC0 or FRACTAL_Z!");
+        (GlobalData::layout == pto::Layout::FRACTAL_Z && TileData::layout == pto::Layout::FRACTAL_Z) ||
+        (GlobalData::layout == pto::Layout::NDC1HWC0 && TileData::layout == pto::Layout::NDC1HWC0);
+    static_assert(isSameLayout == true,
+                  "Fix: Src and Dst layout must be the same in case of NC1HWC0, NDC1HWC0 or FRACTAL_Z!");
 }
 
 template <typename TileData, typename GlobalData>
@@ -306,6 +331,16 @@ PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData &dst, GlobalData &src)
                                             src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1),
                                             src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
                                             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+    } else if constexpr (GlobalData::layout == pto::Layout::NDC1HWC0) {
+        // Layout is NDC1HWC0:
+        // dst dim0=N, dim1=D, dim2=C1, dim3=H, dim4=W (C0 is implicit in the tile type)
+        TLoad6HD<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+                                       src.GetShape(3), src.GetShape(4), // src sizes: N, D, C1, H, W
+                                       src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+                                       src.GetStride(4), 0, // src strides
+                                       dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3),
+                                       dst.GetShape(4) // dst sizes: N, D, C1, H, W
+        );
     }
 }
 
