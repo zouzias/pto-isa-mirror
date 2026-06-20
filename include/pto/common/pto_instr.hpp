@@ -127,6 +127,65 @@ PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileDa
 #endif
 }
 
+template <typename GlobalData>
+PTO_INST SoftSyncLocalState SOFT_SYNC_INIT(GlobalData &gmWorkspace, const SoftSyncDomainDesc &desc)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    return SOFT_SYNC_INIT_IMPL(gmWorkspace.data(), desc);
+#else
+    (void)gmWorkspace;
+    (void)desc;
+    PTO_STATIC_ASSERT(sizeof(GlobalData) == 0, "SOFT_SYNC_INIT is not supported on this backend.");
+    return SoftSyncLocalState{0, 0};
+#endif
+}
+
+template <SoftSyncDirection Dir, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData>, int> = 0>
+PTO_INST void SOFT_SYNC_NOTIFY(GlobalData &gmWorkspace, const SoftSyncDomainDesc &desc, SoftSyncLocalState &state,
+                               TileData &localWorkspace)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    SOFT_SYNC_NOTIFY_IMPL<Dir>(gmWorkspace.data(), desc, state, localWorkspace.data());
+#else
+    (void)gmWorkspace;
+    (void)desc;
+    (void)state;
+    (void)localWorkspace;
+    PTO_STATIC_ASSERT(Dir != Dir, "SOFT_SYNC_NOTIFY is not supported on this backend.");
+#endif
+}
+
+template <SoftSyncDirection Dir, typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData>, int> = 0>
+PTO_INST void SOFT_SYNC_WAIT(GlobalData &gmWorkspace, const SoftSyncDomainDesc &desc, SoftSyncLocalState &state,
+                             TileData &localWorkspace)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    SOFT_SYNC_WAIT_IMPL<Dir>(gmWorkspace.data(), desc, state, localWorkspace.data());
+#else
+    (void)gmWorkspace;
+    (void)desc;
+    (void)state;
+    (void)localWorkspace;
+    PTO_STATIC_ASSERT(Dir != Dir, "SOFT_SYNC_WAIT is not supported on this backend.");
+#endif
+}
+
+template <typename GlobalData, typename TileData,
+          std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData>, int> = 0>
+PTO_INST void SOFT_SYNC_RESET(GlobalData &gmWorkspace, const SoftSyncDomainDesc &desc, TileData &localWorkspace)
+{
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+    SOFT_SYNC_RESET_IMPL(gmWorkspace.data(), desc, localWorkspace.data());
+#else
+    (void)gmWorkspace;
+    (void)desc;
+    (void)localWorkspace;
+    PTO_STATIC_ASSERT(sizeof(GlobalData) == 0, "SOFT_SYNC_RESET is not supported on this backend.");
+#endif
+}
+
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &...events)
 {

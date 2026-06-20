@@ -106,6 +106,237 @@ PTO_INTERNAL int32_t SYNCALL_SOFT_GM_LOAD(__gm__ int32_t *src)
     return src[0];
 }
 
+PTO_INTERNAL int32_t SOFT_SYNC_DEV_LOAD(__gm__ int32_t *src)
+{
+#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+    return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t *>(src), 0));
+#else
+    return src[0];
+#endif
+}
+
+PTO_INTERNAL void SOFT_SYNC_DEV_STORE(__gm__ int32_t *dst, int32_t value)
+{
+#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+    st_dev(static_cast<uint32_t>(value), reinterpret_cast<__gm__ uint32_t *>(dst), 0);
+    dsb(DSB_DDR);
+#else
+    dst[0] = value;
+#endif
+}
+
+PTO_INTERNAL int32_t SOFT_SYNC_GROUP_LOCAL_INDEX(const SoftSyncCoreRange &range)
+{
+    if (range.coreCount <= 0 || range.worldCoreCount <= 0) {
+        return -1;
+    }
+    const int32_t phyCore = static_cast<int32_t>(get_coreid());
+    int32_t local = (phyCore - range.startPhyCore + range.worldCoreCount) % range.worldCoreCount;
+    return (local < range.coreCount) ? local : -1;
+}
+
+PTO_INTERNAL int32_t SOFT_SYNC_GROUP_COUNT(const SoftSyncCoreRange &range)
+{
+    return (range.coreCount > 0) ? range.coreCount : 0;
+}
+
+PTO_INTERNAL int32_t SOFT_SYNC_DOMAIN_STRIDE(const SoftSyncDomainDesc &desc)
+{
+    const int32_t maxCount =
+        (desc.vecGroup.coreCount > desc.cubeGroup.coreCount) ? desc.vecGroup.coreCount : desc.cubeGroup.coreCount;
+    return (maxCount + 1) * SYNCALL_SOFT_SLOT_INT32;
+}
+
+template <SoftSyncDirection Dir>
+PTO_INTERNAL __gm__ int32_t *SOFT_SYNC_CHANNEL_BASE(__gm__ int32_t *workspace, const SoftSyncDomainDesc &desc)
+{
+    constexpr int32_t channelIdx = (Dir == SoftSyncDirection::VToC) ? 0 : 1;
+    return workspace + desc.workspaceOffset + channelIdx * SOFT_SYNC_DOMAIN_STRIDE(desc);
+}
+
+template <SoftSyncDirection Dir>
+PTO_INTERNAL const SoftSyncCoreRange &SOFT_SYNC_PRODUCER_GROUP(const SoftSyncDomainDesc &desc)
+{
+    if constexpr (Dir == SoftSyncDirection::VToC) {
+        return desc.vecGroup;
+    } else {
+        return desc.cubeGroup;
+    }
+}
+
+template <SoftSyncDirection Dir>
+PTO_INTERNAL const SoftSyncCoreRange &SOFT_SYNC_CONSUMER_GROUP(const SoftSyncDomainDesc &desc)
+{
+    if constexpr (Dir == SoftSyncDirection::VToC) {
+        return desc.cubeGroup;
+    } else {
+        return desc.vecGroup;
+    }
+}
+
+template <SoftSyncDirection Dir>
+PTO_INTERNAL int32_t &SOFT_SYNC_EPOCH(SoftSyncLocalState &state)
+{
+    if constexpr (Dir == SoftSyncDirection::VToC) {
+        return state.v2cEpoch;
+    } else {
+        return state.c2vEpoch;
+    }
+}
+
+PTO_INTERNAL void SOFT_SYNC_STORE_SLOT(__gm__ int32_t *dst, __ubuf__ int32_t *ubWorkspace, int32_t value)
+{
+    (void)ubWorkspace;
+    SOFT_SYNC_DEV_STORE(dst, value);
+}
+
+PTO_INTERNAL void SOFT_SYNC_STORE_SLOT(__gm__ int32_t *dst, __cbuf__ int32_t *l1Workspace, int32_t value)
+{
+    (void)l1Workspace;
+    SOFT_SYNC_DEV_STORE(dst, value);
+}
+
+PTO_INTERNAL void SOFT_SYNC_WAIT_SLOT(__gm__ int32_t *slot, int32_t expect)
+{
+    int32_t pollCount = 0;
+    while (SOFT_SYNC_DEV_LOAD(slot) < expect) {
+        ++pollCount;
+        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false);
+            break;
+        }
+    }
+}
+
+PTO_INTERNAL __gm__ int32_t *SOFT_SYNC_DOORBELL_SLOT(__gm__ int32_t *channel, const SoftSyncCoreRange &producer)
+{
+    return channel + SOFT_SYNC_GROUP_COUNT(producer) * SYNCALL_SOFT_SLOT_INT32;
+}
+
+PTO_INTERNAL void SOFT_SYNC_A3_AGGREGATE(__gm__ int32_t *channel, const SoftSyncCoreRange &producer,
+                                         __ubuf__ int32_t *ubWorkspace, int32_t epoch)
+{
+#if defined(__DAV_VEC__)
+    const int32_t producerCount = SOFT_SYNC_GROUP_COUNT(producer);
+    __gm__ int32_t *doorbell = SOFT_SYNC_DOORBELL_SLOT(channel, producer);
+
+    int32_t pollCount = 0;
+    while (SOFT_SYNC_DEV_LOAD(doorbell) < epoch) {
+        copy_gm_to_ubuf(static_cast<__ubuf__ void *>(ubWorkspace), static_cast<__gm__ void *>(channel), 0, 1,
+                        producerCount, 0, 0);
+        pipe_barrier(PIPE_ALL);
+
+        int32_t readyCount = 0;
+        for (int32_t i = 0; i < producerCount; ++i) {
+            if (ubWorkspace[i * SYNCALL_SOFT_SLOT_INT32] >= epoch) {
+                ++readyCount;
+            }
+        }
+        if (readyCount >= producerCount) {
+            SOFT_SYNC_DEV_STORE(doorbell, epoch);
+            break;
+        }
+
+        ++pollCount;
+        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false);
+            break;
+        }
+    }
+#else
+    (void)channel;
+    (void)producer;
+    (void)ubWorkspace;
+    (void)epoch;
+#endif
+}
+
+template <SoftSyncDirection Dir, typename LocalWorkspace>
+PTO_INTERNAL void SOFT_SYNC_NOTIFY_IMPL(__gm__ int32_t *workspace, const SoftSyncDomainDesc &desc,
+                                        SoftSyncLocalState &state, LocalWorkspace localWorkspace)
+{
+#ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+    const SoftSyncCoreRange &producer = SOFT_SYNC_PRODUCER_GROUP<Dir>(desc);
+    const int32_t localIdx = SOFT_SYNC_GROUP_LOCAL_INDEX(producer);
+    PTO_CPU_ASSERT(localIdx >= 0, "SOFT_SYNC_NOTIFY called by a core outside producer group");
+    if (localIdx < 0) {
+        return;
+    }
+
+    int32_t &epoch = SOFT_SYNC_EPOCH<Dir>(state);
+    ++epoch;
+    __gm__ int32_t *channel = SOFT_SYNC_CHANNEL_BASE<Dir>(workspace, desc);
+    SOFT_SYNC_STORE_SLOT(channel + localIdx * SYNCALL_SOFT_SLOT_INT32, localWorkspace, epoch);
+
+#if defined(__DAV_VEC__)
+    if constexpr (Dir == SoftSyncDirection::VToC) {
+        if (localIdx == 0) {
+            SOFT_SYNC_A3_AGGREGATE(channel, producer, localWorkspace, epoch);
+        }
+    }
+#endif
+    pipe_barrier(PIPE_ALL);
+#endif
+}
+
+template <SoftSyncDirection Dir, typename LocalWorkspace>
+PTO_INTERNAL void SOFT_SYNC_WAIT_IMPL(__gm__ int32_t *workspace, const SoftSyncDomainDesc &desc,
+                                      SoftSyncLocalState &state, LocalWorkspace localWorkspace)
+{
+#ifndef __PTO_AUTO__
+    (void)localWorkspace;
+    pipe_barrier(PIPE_ALL);
+    int32_t &epoch = SOFT_SYNC_EPOCH<Dir>(state);
+    ++epoch;
+    const SoftSyncCoreRange &producer = SOFT_SYNC_PRODUCER_GROUP<Dir>(desc);
+    const SoftSyncCoreRange &consumer = SOFT_SYNC_CONSUMER_GROUP<Dir>(desc);
+    const int32_t consumerIdx = SOFT_SYNC_GROUP_LOCAL_INDEX(consumer);
+    PTO_CPU_ASSERT(consumerIdx >= 0, "SOFT_SYNC_WAIT called by a core outside consumer group");
+    if (consumerIdx < 0) {
+        return;
+    }
+
+    __gm__ int32_t *channel = SOFT_SYNC_CHANNEL_BASE<Dir>(workspace, desc);
+#if defined(__DAV_VEC__)
+    if constexpr (Dir == SoftSyncDirection::CToV) {
+        if (consumerIdx == 0) {
+            SOFT_SYNC_A3_AGGREGATE(channel, producer, localWorkspace, epoch);
+        }
+    }
+#endif
+    SOFT_SYNC_WAIT_SLOT(SOFT_SYNC_DOORBELL_SLOT(channel, producer), epoch);
+    pipe_barrier(PIPE_ALL);
+#endif
+}
+
+PTO_INTERNAL SoftSyncLocalState SOFT_SYNC_INIT_IMPL(__gm__ int32_t *workspace, const SoftSyncDomainDesc &desc)
+{
+    (void)workspace;
+    (void)desc;
+    return SoftSyncLocalState{0, 0};
+}
+
+template <typename LocalWorkspace>
+PTO_INTERNAL void SOFT_SYNC_RESET_IMPL(__gm__ int32_t *workspace, const SoftSyncDomainDesc &desc,
+                                       LocalWorkspace localWorkspace)
+{
+#ifndef __PTO_AUTO__
+    const int32_t domainStride = SOFT_SYNC_DOMAIN_STRIDE(desc);
+    __gm__ int32_t *base = workspace + desc.workspaceOffset;
+    for (int32_t i = 0; i < SOFT_SYNC_CHANNEL_COUNT * domainStride; i += SYNCALL_SOFT_SLOT_INT32) {
+        SOFT_SYNC_STORE_SLOT(base + i, localWorkspace, 0);
+    }
+    pipe_barrier(PIPE_ALL);
+#endif
+}
+
 PTO_INTERNAL void SYNCALL_SOFT_AIC_STORE_SLOT(__gm__ int32_t *dst, __cbuf__ int32_t *l1Workspace, int32_t value)
 {
     constexpr int64_t repeatConfig = (static_cast<int64_t>(1) << 16) | 1;

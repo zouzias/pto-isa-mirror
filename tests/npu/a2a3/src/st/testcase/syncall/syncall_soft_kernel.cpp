@@ -26,6 +26,15 @@ PTO_INTERNAL void StoreInt32Line(__gm__ int32_t *dst, int32_t value, uint64_t ub
     pipe_barrier(PIPE_ALL);
     copy_ubuf_to_gm(static_cast<__gm__ void *>(dst), static_cast<__ubuf__ void *>(ub), 0, 1, 1, 0, 0);
     pipe_barrier(PIPE_ALL);
+    dcci(static_cast<__gm__ void *>(dst), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+}
+
+PTO_INTERNAL int32_t LoadInt32Line(__gm__ int32_t *src)
+{
+    dcci(static_cast<__gm__ void *>(src), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+    return src[0];
 }
 
 PTO_INTERNAL void InvalidateInt32Lines(__gm__ int32_t *addr, int32_t lines)
@@ -85,4 +94,43 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
 void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream)
 {
     RunSoftSyncAll<<<totalBlocks, nullptr, stream>>>(out, flags, syncWorkspace, totalBlocks);
+}
+
+extern "C" __global__ AICORE void RunVcSoftVecAllDoneProducer(__gm__ int32_t __out__ *payload,
+                                                              __gm__ int32_t __out__ *syncFlags,
+                                                              int32_t vecParticipants, int32_t seq)
+{
+    const int32_t idx = block_idx;
+    StoreInt32Line(payload + idx * kInt32PerCacheLine, seq * 1000 + idx, kFlagUbAddr);
+    StoreInt32Line(syncFlags + idx * kInt32PerCacheLine, seq, kSoftSyncUbAddr);
+
+    if (idx == 0) {
+        int32_t pollCount = 0;
+        while (true) {
+            int32_t readyCount = 0;
+            for (int32_t i = 0; i < vecParticipants; ++i) {
+                if (LoadInt32Line(syncFlags + i * kInt32PerCacheLine) >= seq) {
+                    ++readyCount;
+                }
+            }
+            if (readyCount >= vecParticipants) {
+                break;
+            }
+            ++pollCount;
+            if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+                pipe_barrier(PIPE_ALL);
+            }
+            if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+                PTO_CPU_ASSERT(false, "VC soft sync vec aggregation timeout - possible deadlock");
+                break;
+            }
+        }
+        StoreInt32Line(syncFlags + vecParticipants * kInt32PerCacheLine, seq, kOutUbAddr);
+    }
+}
+
+void LaunchVcSoftVecAllDoneProducer(int32_t *payload, int32_t *syncFlags, int32_t vecParticipants, int32_t seq,
+                                    void *stream)
+{
+    RunVcSoftVecAllDoneProducer<<<vecParticipants, nullptr, stream>>>(payload, syncFlags, vecParticipants, seq);
 }

@@ -36,6 +36,7 @@ function(pto_syncall_chevron_kernel TARGET SOURCE)
 endfunction()
 
 pto_syncall_chevron_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp)
+pto_syncall_chevron_kernel(syncall_domain_mix_1_2_kernel syncall_domain_mix_1_2_kernel.cpp)
 pto_syncall_chevron_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp)
 
 # register-ELF path for hard MIX 1:1 only (true 1:1 cannot use dav-c220 auto-split on ccec).

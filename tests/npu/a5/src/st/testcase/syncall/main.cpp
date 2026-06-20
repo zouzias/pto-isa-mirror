@@ -39,7 +39,12 @@ void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int
 void LaunchHardSyncAll(int32_t *out, int32_t *flags, int32_t totalBlocks, void *stream);
 void LaunchSoftSyncAllMix11(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
 void LaunchSoftSyncAllMix12(int32_t *out, int32_t *flags, int32_t *syncWorkspace, void *stream);
+void LaunchSoftSyncDomainMix12(int32_t *out, int32_t *syncWorkspace, void *stream);
 void LaunchHardSyncAllAIC(int32_t *out, void *stream);
+void LaunchVcSoftAtomicVecProducer(int32_t *payload, int32_t *syncState, int32_t vecParticipants, int32_t seq,
+                                   void *stream);
+void LaunchVcSoftAtomicCubeWaitConsumer(int32_t *out, int32_t *payload, int32_t *syncState, int32_t aicBlocks,
+                                        int32_t vecParticipants, int32_t seq, void *stream);
 
 #define EXPECT_ACL_OK(expr)                                             \
     do {                                                                \
@@ -239,6 +244,64 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     EXPECT_ACL_OK(aclFinalize());
 }
 
+TEST_F(SYNCALLTest, case_soft_sync_domain_mix_1_2)
+{
+    constexpr int32_t blockCount = 54;
+    constexpr size_t int32PerCacheLine = 8;
+    constexpr size_t outElementCount = blockCount * int32PerCacheLine;
+    constexpr size_t workspaceElementCount = 2048;
+    constexpr size_t outByteSize = outElementCount * sizeof(int32_t);
+    constexpr size_t workspaceByteSize = workspaceElementCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t *outHost = nullptr;
+    int32_t *workspaceHost = nullptr;
+    int32_t *outDevice = nullptr;
+    int32_t *workspaceDevice = nullptr;
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void **>(&outHost), outByteSize));
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void **>(&workspaceHost), workspaceByteSize));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&outDevice), outByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(
+        aclrtMalloc(reinterpret_cast<void **>(&workspaceDevice), workspaceByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    std::fill_n(outHost, outElementCount, 0);
+    std::fill_n(workspaceHost, workspaceElementCount, 0);
+    EXPECT_ACL_OK(aclrtMemcpy(outDevice, outByteSize, outHost, outByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(
+        aclrtMemcpy(workspaceDevice, workspaceByteSize, workspaceHost, workspaceByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    LaunchSoftSyncDomainMix12(outDevice, workspaceDevice, stream);
+    EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
+    EXPECT_ACL_OK(aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    ASSERT_TRUE(WriteFile(GetGoldenDir() + "/output.bin", outHost, outByteSize));
+
+    bool ret = true;
+    for (int32_t i = 0; i < blockCount; ++i) {
+        int32_t expect = (i < 18) ? 1 : 10;
+        if (i < 3) {
+            expect |= 4;
+        }
+        const int32_t actual = outHost[i * int32PerCacheLine];
+        ret &= actual == expect;
+        if (actual != expect) {
+            std::printf("domain status[%d]=%d expect=%d\n", i, actual, expect);
+        }
+    }
+    EXPECT_TRUE(ret);
+
+    EXPECT_ACL_OK(aclrtFree(outDevice));
+    EXPECT_ACL_OK(aclrtFree(workspaceDevice));
+    EXPECT_ACL_OK(aclrtFreeHost(outHost));
+    EXPECT_ACL_OK(aclrtFreeHost(workspaceHost));
+    EXPECT_ACL_OK(aclrtDestroyStream(stream));
+    EXPECT_ACL_OK(aclrtResetDevice(0));
+    EXPECT_ACL_OK(aclFinalize());
+}
+
 TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
 {
     constexpr int32_t blockCount = 36;
@@ -323,6 +386,104 @@ TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
 
     EXPECT_ACL_OK(aclrtFree(outDevice));
+    EXPECT_ACL_OK(aclrtDestroyStream(stream));
+    EXPECT_ACL_OK(aclrtResetDevice(0));
+    EXPECT_ACL_OK(aclFinalize());
+}
+
+TEST_F(SYNCALLTest, case_vc_soft_atomic_vec_all_done_then_cube_1_2_seven_blocks)
+{
+    constexpr int32_t aicBlocks = 7;
+    constexpr int32_t vecParticipants = aicBlocks * 2;
+    constexpr size_t int32PerCacheLine = 8;
+    constexpr size_t outElementCount = aicBlocks * int32PerCacheLine;
+    constexpr size_t payloadElementCount = vecParticipants * int32PerCacheLine;
+    constexpr size_t syncStateElementCount = 2 * int32PerCacheLine;
+    constexpr size_t outByteSize = outElementCount * sizeof(int32_t);
+    constexpr size_t payloadByteSize = payloadElementCount * sizeof(int32_t);
+    constexpr size_t syncStateByteSize = syncStateElementCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t *outHost = nullptr;
+    int32_t *payloadHost = nullptr;
+    int32_t *syncStateHost = nullptr;
+    int32_t *outDevice = nullptr;
+    int32_t *payloadDevice = nullptr;
+    int32_t *syncStateDevice = nullptr;
+
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void **>(&outHost), outByteSize));
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void **>(&payloadHost), payloadByteSize));
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void **>(&syncStateHost), syncStateByteSize));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&outDevice), outByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void **>(&payloadDevice), payloadByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(
+        aclrtMalloc(reinterpret_cast<void **>(&syncStateDevice), syncStateByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    std::fill_n(outHost, outElementCount, 0);
+    std::fill_n(payloadHost, payloadElementCount, 0);
+    std::fill_n(syncStateHost, syncStateElementCount, 0);
+    EXPECT_ACL_OK(aclrtMemcpy(outDevice, outByteSize, outHost, outByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(aclrtMemcpy(payloadDevice, payloadByteSize, payloadHost, payloadByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(
+        aclrtMemcpy(syncStateDevice, syncStateByteSize, syncStateHost, syncStateByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    auto runRound = [&](int32_t seq) {
+        std::fill_n(outHost, outElementCount, 0);
+        EXPECT_ACL_OK(aclrtMemcpy(outDevice, outByteSize, outHost, outByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+        LaunchVcSoftAtomicVecProducer(payloadDevice, syncStateDevice, vecParticipants, seq, stream);
+        EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
+        LaunchVcSoftAtomicCubeWaitConsumer(outDevice, payloadDevice, syncStateDevice, aicBlocks, vecParticipants, seq,
+                                           stream);
+        EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
+    };
+
+    runRound(1);
+    runRound(2);
+
+    EXPECT_ACL_OK(aclrtMemcpy(outHost, outByteSize, outDevice, outByteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    EXPECT_ACL_OK(aclrtMemcpy(payloadHost, payloadByteSize, payloadDevice, payloadByteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    EXPECT_ACL_OK(
+        aclrtMemcpy(syncStateHost, syncStateByteSize, syncStateDevice, syncStateByteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+    ASSERT_TRUE(WriteFile(GetGoldenDir() + "/output.bin", outHost, outByteSize));
+
+    std::vector<int32_t> golden(aicBlocks);
+    std::vector<int32_t> devFinal(aicBlocks);
+    for (int32_t i = 0; i < aicBlocks; ++i) {
+        golden[i] = 1;
+        devFinal[i] = outHost[i * int32PerCacheLine];
+    }
+
+    bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
+    for (int32_t i = 0; i < vecParticipants; ++i) {
+        ret &= payloadHost[i * int32PerCacheLine] == 200 + i;
+    }
+    ret &= syncStateHost[0] == 2 * vecParticipants;
+    ret &= syncStateHost[int32PerCacheLine] == 2;
+
+    if (!ret) {
+        std::printf("vc_atomic out:");
+        for (int32_t i = 0; i < aicBlocks; ++i) {
+            std::printf(" %d", outHost[i * int32PerCacheLine]);
+        }
+        std::printf("\nvc_atomic payload:");
+        for (int32_t i = 0; i < vecParticipants; ++i) {
+            std::printf(" %d", payloadHost[i * int32PerCacheLine]);
+        }
+        std::printf("\nvc_atomic counter=%d doorbell=%d\n", syncStateHost[0], syncStateHost[int32PerCacheLine]);
+    }
+    EXPECT_TRUE(ret);
+
+    EXPECT_ACL_OK(aclrtFree(outDevice));
+    EXPECT_ACL_OK(aclrtFree(payloadDevice));
+    EXPECT_ACL_OK(aclrtFree(syncStateDevice));
+    EXPECT_ACL_OK(aclrtFreeHost(outHost));
+    EXPECT_ACL_OK(aclrtFreeHost(payloadHost));
+    EXPECT_ACL_OK(aclrtFreeHost(syncStateHost));
     EXPECT_ACL_OK(aclrtDestroyStream(stream));
     EXPECT_ACL_OK(aclrtResetDevice(0));
     EXPECT_ACL_OK(aclFinalize());

@@ -28,6 +28,38 @@ PTO_INTERNAL void StoreInt32Line(__gm__ int32_t *dst, int32_t value, uint64_t ub
     pipe_barrier(PIPE_ALL);
 }
 
+PTO_INTERNAL int32_t LoadInt32Line(__gm__ int32_t *src)
+{
+    dcci(static_cast<__gm__ void *>(src), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+    return src[0];
+}
+
+PTO_INTERNAL void AtomicAddCounterLine(__gm__ int32_t *counter, uint64_t ubAddr)
+{
+    using CounterTile = Tile<TileType::Vec, int32_t, 1, kInt32PerCacheLine, BLayout::RowMajor, 1, kInt32PerCacheLine>;
+    using CounterShape = pto::Shape<1, 1, 1, 1, kInt32PerCacheLine>;
+    using CounterStride = pto::Stride<1, 1, 1, kInt32PerCacheLine, 1>;
+    using CounterGlobal = GlobalTensor<int32_t, CounterShape, CounterStride>;
+
+    CounterTile addTile;
+#ifndef __PTO_AUTO__
+    addTile.data() = reinterpret_cast<__ubuf__ int32_t *>(ubAddr);
+#endif
+    __ubuf__ int32_t *ub = reinterpret_cast<__ubuf__ int32_t *>(ubAddr);
+    for (int32_t i = 0; i < kInt32PerCacheLine; ++i) {
+        ub[i] = 0;
+    }
+    ub[0] = 1;
+    pipe_barrier(PIPE_ALL);
+
+    CounterGlobal counterGlobal(counter);
+    TSTORE_IMPL<CounterTile, CounterGlobal, AtomicType::AtomicAdd>(counterGlobal, addTile);
+    pipe_barrier(PIPE_ALL);
+    dcci(static_cast<__gm__ void *>(counter), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+}
+
 PTO_INTERNAL void InvalidateInt32Lines(__gm__ int32_t *addr, int32_t lines)
 {
     for (int32_t i = 0; i < lines; ++i) {
@@ -85,4 +117,39 @@ extern "C" __global__ AICORE void RunSoftSyncAll(__gm__ int32_t __out__ *out, __
 void LaunchSoftSyncAll(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream)
 {
     RunSoftSyncAll<<<totalBlocks, nullptr, stream>>>(out, flags, syncWorkspace, totalBlocks);
+}
+
+extern "C" __global__ AICORE void RunVcSoftAtomicVecProducer(__gm__ int32_t __out__ *payload,
+                                                             __gm__ int32_t __out__ *syncState, int32_t vecParticipants,
+                                                             int32_t seq)
+{
+    const int32_t idx = static_cast<int32_t>(get_block_idx());
+    __gm__ int32_t *counter = syncState;
+    __gm__ int32_t *doorbell = syncState + kInt32PerCacheLine;
+
+    const int32_t targetCount = seq * vecParticipants;
+
+    StoreInt32Line(payload + idx * kInt32PerCacheLine, seq * 100 + idx, kFlagUbAddr);
+    AtomicAddCounterLine(counter, kSoftSyncUbAddr);
+
+    if (idx == 0) {
+        int32_t poll = 0;
+        while (LoadInt32Line(counter) < targetCount) {
+            ++poll;
+            if (poll > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+                __asm__ __volatile__("");
+            }
+            if (poll > SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+                PTO_CPU_ASSERT(false, "A5 VC atomic soft sync producer timeout");
+                break;
+            }
+        }
+        StoreInt32Line(doorbell, seq, kOutUbAddr);
+    }
+}
+
+void LaunchVcSoftAtomicVecProducer(int32_t *payload, int32_t *syncState, int32_t vecParticipants, int32_t seq,
+                                   void *stream)
+{
+    RunVcSoftAtomicVecProducer<<<vecParticipants, nullptr, stream>>>(payload, syncState, vecParticipants, seq);
 }

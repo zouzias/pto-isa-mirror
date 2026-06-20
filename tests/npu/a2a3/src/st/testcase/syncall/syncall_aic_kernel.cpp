@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 PTO_SYNCALL_AIC_KERNEL_META(RunSoftSyncAllAIC);
+PTO_SYNCALL_AIC_KERNEL_META(RunVcSoftCubeWaitConsumer);
 
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagL1Addr = 0x0;
@@ -40,6 +41,42 @@ PTO_INTERNAL void InvalidateGmLines(__gm__ int32_t *addr, int32_t lines)
         __asm__ __volatile__("");
     }
     dsb(DSB_DDR);
+}
+
+PTO_INTERNAL int32_t LoadInt32LineL1(__gm__ int32_t *src)
+{
+    dcci(static_cast<__gm__ void *>(src), SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+    return src[0];
+}
+
+PTO_INTERNAL void WaitInt32LineAtLeast(__gm__ int32_t *src, int32_t value)
+{
+    int32_t pollCount = 0;
+    while (LoadInt32LineL1(src) < value) {
+        ++pollCount;
+        if (pollCount > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false, "VC soft sync cube wait timeout - possible deadlock");
+            break;
+        }
+    }
+    pipe_barrier(PIPE_ALL);
+}
+
+PTO_INTERNAL int32_t CheckVcSoftPayload(__gm__ int32_t *payload, __gm__ int32_t *syncFlags, int32_t vecParticipants,
+                                        int32_t seq)
+{
+    int32_t allVisible = 1;
+    for (int32_t i = 0; i < vecParticipants; ++i) {
+        if (LoadInt32LineL1(syncFlags + i * kInt32PerCacheLine) < seq ||
+            LoadInt32LineL1(payload + i * kInt32PerCacheLine) != seq * 1000 + i) {
+            allVisible = 0;
+        }
+    }
+    return allVisible;
 }
 
 extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out, __gm__ int32_t __out__ *flags,
@@ -71,4 +108,20 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(__gm__ int32_t __out__ *out,
 void LaunchSoftSyncAllAIC(int32_t *out, int32_t *flags, int32_t *syncWorkspace, int32_t totalBlocks, void *stream)
 {
     RunSoftSyncAllAIC<<<totalBlocks, nullptr, stream>>>(out, flags, syncWorkspace, totalBlocks);
+}
+
+extern "C" __global__ AICORE void RunVcSoftCubeWaitConsumer(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *payload,
+                                                            __gm__ int32_t __in__ *syncFlags, int32_t vecParticipants,
+                                                            int32_t seq)
+{
+    __gm__ int32_t *allVecReady = syncFlags + vecParticipants * kInt32PerCacheLine;
+    WaitInt32LineAtLeast(allVecReady, seq);
+    const int32_t ok = CheckVcSoftPayload(payload, syncFlags, vecParticipants, seq);
+    StoreInt32LineL1(out + block_idx * kInt32PerCacheLine, ok, kOutL1Addr);
+}
+
+void LaunchVcSoftCubeWaitConsumer(int32_t *out, int32_t *payload, int32_t *syncFlags, int32_t aicBlocks,
+                                  int32_t vecParticipants, int32_t seq, void *stream)
+{
+    RunVcSoftCubeWaitConsumer<<<aicBlocks, nullptr, stream>>>(out, payload, syncFlags, vecParticipants, seq);
 }

@@ -233,6 +233,11 @@ inline uint32_t get_subblockid()
     return pto::cpu_sim::execution_context.subblock_id;
 }
 
+inline uint32_t get_coreid()
+{
+    return get_block_idx();
+}
+
 inline uint32_t get_subblockdim()
 {
     if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
@@ -290,6 +295,43 @@ inline void SYNCALL_SOFT_MIX_IMPL(int32_t *gmWorkspace, int32_t *ubWorkspace, in
     (void)ubWorkspace;
     (void)l1Workspace;
     (void)usedCores;
+}
+
+inline SoftSyncLocalState SOFT_SYNC_INIT_IMPL(int32_t *gmWorkspace, const SoftSyncDomainDesc &desc)
+{
+    (void)gmWorkspace;
+    (void)desc;
+    return SoftSyncLocalState{0, 0};
+}
+
+template <SoftSyncDirection Dir, typename LocalWorkspace>
+inline void SOFT_SYNC_NOTIFY_IMPL(int32_t *gmWorkspace, const SoftSyncDomainDesc &desc, SoftSyncLocalState &state,
+                                  LocalWorkspace localWorkspace)
+{
+    (void)Dir;
+    (void)gmWorkspace;
+    (void)desc;
+    (void)state;
+    (void)localWorkspace;
+}
+
+template <SoftSyncDirection Dir, typename LocalWorkspace>
+inline void SOFT_SYNC_WAIT_IMPL(int32_t *gmWorkspace, const SoftSyncDomainDesc &desc, SoftSyncLocalState &state,
+                                LocalWorkspace localWorkspace)
+{
+    (void)Dir;
+    (void)gmWorkspace;
+    (void)desc;
+    (void)state;
+    (void)localWorkspace;
+}
+
+template <typename LocalWorkspace>
+inline void SOFT_SYNC_RESET_IMPL(int32_t *gmWorkspace, const SoftSyncDomainDesc &desc, LocalWorkspace localWorkspace)
+{
+    (void)gmWorkspace;
+    (void)desc;
+    (void)localWorkspace;
 }
 } // namespace pto
 
