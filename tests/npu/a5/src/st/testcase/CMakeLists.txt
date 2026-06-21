@@ -328,6 +328,7 @@ if (AUTO_MODE)
     txor
     txors
     mgather_gm2l1
+    tcmp
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})

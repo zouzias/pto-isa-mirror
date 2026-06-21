@@ -517,6 +517,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int8_16x32_512size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_float_clamp_16x16_64size
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ -g TLOADSCALETest.4_3_3_16_2_4_10_5_16_2_192_10_scale_ZZ2ZZ
@@ -554,7 +555,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsqrt -g TSQRTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore -g TStoreTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case7
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd_tdiv -g TADD_TDIVTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul_tadds -g TMUL_TADDSTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsub_texp -g TSUB_TEXPTest.case_float_64x64_64x64
@@ -697,6 +697,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txor
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txors
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ
@@ -730,7 +731,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsqrt
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore_acc2gm
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd_tdiv
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul_tadds
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsub_texp
