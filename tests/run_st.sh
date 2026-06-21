@@ -518,6 +518,9 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_float_clamp_16x16_64size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ -g TLOADSCALETest.4_3_3_16_2_4_10_5_16_2_192_10_scale_ZZ2ZZ
@@ -613,10 +616,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave -g TDEINTERLEAVETest.case_int8_single_src_8x512_8x512
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_64x128_64x128_64x128
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
-
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatdstidx
@@ -698,6 +697,9 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txors
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ
@@ -752,9 +754,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst
   fi
 fi
 
