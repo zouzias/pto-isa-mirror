@@ -327,6 +327,7 @@ if (AUTO_MODE)
     tmov_acc2vec
     txor
     txors
+    mgather_gm2l1
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})
