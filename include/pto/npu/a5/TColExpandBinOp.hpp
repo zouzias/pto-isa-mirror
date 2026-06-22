@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -165,55 +165,6 @@ PTO_INTERNAL void ColExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
     } else {
         TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
             dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
-    }
-}
-
-template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned rowStride>
-__tf__ PTO_INTERNAL OP_NAME(TCOLEXPAND)
-    OP_TYPE(broadcast) void TColExpandOp(typename TileData::TileDType __out__ dst,
-                                         typename TileDataSrc0::TileDType __in__ src0,
-                                         typename TileDataSrc1::TileDType __in__ src1, unsigned validRow,
-                                         unsigned validCol, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
-{
-    using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
-
-    ColExpandBinaryInstr<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
-        dstPtr, src0Ptr, src1Ptr, validRow, validCol);
-}
-
-template <typename Op, typename Op2, typename TileData, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void TCOLEXPANDOP_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
-{
-    static_assert(
-        std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
-            std::is_same_v<typename TileData::DType, float> || std::is_same_v<typename TileData::DType, int16_t> ||
-            std::is_same_v<typename TileData::DType, uint16_t> || std::is_same_v<typename TileData::DType, half> ||
-            std::is_same_v<typename TileData::DType, bfloat16_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
-            std::is_same_v<typename TileData::DType, int8_t>,
-        "Fix: TCOLEXPANDOP Invalid data type.");
-    static_assert(TileData::isRowMajor, "Fix: TCOLEXPANDOP not supported Layout type");
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileData::DType);
-    constexpr unsigned rowStride = TileData::RowStride;
-    unsigned validRow = dst.GetValidRow();
-    unsigned validCol = dst.GetValidCol();
-    unsigned src0ValidRow = src0.GetValidRow();
-    unsigned src0ValidCol = src0.GetValidCol();
-    unsigned src1ValidRow = src1.GetValidRow();
-    unsigned src1ValidCol = src1.GetValidCol();
-    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
-    bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
-
-    if (src0eqdst) {
-        TColExpandOp<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
-            dst.data(), src0.data(), src1.data(), validRow, validCol);
-    } else {
-        TColExpandOp<Op2, TileData, TileDataSrc1, TileDataSrc0, elementsPerRepeat, blockSizeElem, rowStride>(
-            dst.data(), src1.data(), src0.data(), validRow, validCol);
     }
 }
 
