@@ -109,7 +109,7 @@ TEST_F(TSORT32Test, test1)
 
 TEST_F(TSORT32Test, test2)
 {
-    bool res = TSort32Test<int32_t, uint32_t, 7, 32, 7, 32, 7, 32>();
+    bool res = TSort32Test<float, uint32_t, 7, 32, 7, 32, 7, 32>();
     EXPECT_TRUE(res);
 }
 
