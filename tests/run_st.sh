@@ -86,6 +86,7 @@ checkopts "$@"
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubreluconv -g TSUBRELUCONVTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taddreluconv -g TADDRELUCONVTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather -g TCOLGATHERTest.case_mask_half_16x64_16x64_P1111
@@ -140,7 +141,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels -g TSELSTest.case_uint16_uint8_2x16_2x32_2x16_2x16
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels -g TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsort32 -g TSort32Test.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tand -g TANDTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tor -g TORTest.case2
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
@@ -281,7 +281,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics      
+      # besides, auto-sync doesn't work with CCE intrisics
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv -g TPushPopCvTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc -g TPushPopVcTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
@@ -551,7 +551,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64 
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_acc2mat_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
