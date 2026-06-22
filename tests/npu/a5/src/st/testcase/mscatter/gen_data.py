@@ -394,6 +394,24 @@ add("MSCATTERTest.case_row_dyn_int32_3x16_8rows", lambda n: case_row(n, np.int32
 add("MSCATTERTest.case_row_dyn_half_4x32_16rows", lambda n: case_row(n, np.float16, 4, 32, 16))
 
 
+def case_elem_loop(name, dtype, n_calls, cols, table_total):
+    rng = np.random.default_rng(hash(name) & 0xFFFFFFFF)
+    n = n_calls * cols
+    src = make_src(dtype, n).reshape(n_calls, cols)
+    idx = make_idx_random(rng, (n_calls, cols), 0, table_total)
+    golden = np.zeros(table_total, dtype=dtype)
+    for i in range(n_calls):
+        for c in range(cols):
+            golden[int(idx[i, c])] = src[i, c]
+    return src.reshape(n), idx.reshape(n), golden
+
+
+add(
+    "MSCATTERTest.case_elem_loop_90x96_15300_last_fp16",
+    lambda n: case_elem_loop(n, np.float16, 90, 96, 15300),
+)
+
+
 if __name__ == "__main__":
     for name, gen in CASES:
         src, idx, golden = gen(name)

@@ -188,6 +188,8 @@ DECLARE_LAUNCH(elem2d_dyn_half_8x16_in_8x16_4x32, aclFloat16, int32_t)
 DECLARE_LAUNCH(row_dyn_int32_3x16_8rows, int32_t, int32_t)
 DECLARE_LAUNCH(row_dyn_half_4x32_16rows, aclFloat16, int32_t)
 
+DECLARE_LAUNCH(elem_loop_90x96_15300_last_fp16, aclFloat16, int32_t)
+
 // --- Row coalesce: 1-D index `[1, R]` --------------------------------------------------------------------
 
 ROW_TEST(row_float_random_8x32_64rows, float, int32_t, 8, 32, 64)
@@ -272,3 +274,12 @@ ELEM2D_DYN_TEST(elem2d_dyn_float_3x3_in_3x8_64size, float, int32_t, 3, 3, 1, 64)
 ELEM2D_DYN_TEST(elem2d_dyn_half_8x16_in_8x16_4x32, aclFloat16, int32_t, 8, 16, 4, 32)
 ROW_TEST(row_dyn_int32_3x16_8rows, int32_t, int32_t, 3, 16, 8)
 ROW_TEST(row_dyn_half_4x32_16rows, aclFloat16, int32_t, 4, 32, 16)
+
+#define ELEM_LOOP_TEST(NAME, THOST, TIDX, NCALLS, COLS, TS)                                           \
+    TEST_F(MSCATTERTest, case_##NAME)                                                                  \
+    {                                                                                                  \
+        run_mscatter_test<THOST, TIDX>((size_t)NCALLS * COLS, (size_t)NCALLS * COLS, (size_t)TS,      \
+                                       Launch_##NAME);                                                 \
+    }
+
+ELEM_LOOP_TEST(elem_loop_90x96_15300_last_fp16, aclFloat16, int32_t, 90, 96, 15300)
