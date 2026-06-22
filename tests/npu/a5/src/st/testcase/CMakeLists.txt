@@ -27,6 +27,7 @@ function(pto_vec_st NAME)
     
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/x86_64-linux/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
     )
 
@@ -56,6 +57,7 @@ function(pto_cube_st NAME)
 
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/x86_64-linux/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
     )
 
@@ -86,6 +88,7 @@ function(pto_mix_st NAME)
 
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/x86_64-linux/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
     )
 
