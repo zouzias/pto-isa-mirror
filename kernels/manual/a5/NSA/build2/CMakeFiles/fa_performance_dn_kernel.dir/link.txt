@@ -1,0 +1,1 @@
+bisheng -fPIC -s -Wl,-z,relro -Wl,-z,now --cce-fatobj-link -shared -Wl,-soname,libfa_performance_dn_kernel.so -o lib/libfa_performance_dn_kernel.so CMakeFiles/fa_performance_dn_kernel.dir/fa_performance_dn_kernel.cpp.o 

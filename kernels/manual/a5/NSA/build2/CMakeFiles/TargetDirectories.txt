@@ -1,0 +1,4 @@
+/home/jyc304691735/Projects/pto-isa/kernels/manual/a5/flash_atten/build2/CMakeFiles/fa_performance_dn_kernel.dir
+/home/jyc304691735/Projects/pto-isa/kernels/manual/a5/flash_atten/build2/CMakeFiles/fa_performance_dn.dir
+/home/jyc304691735/Projects/pto-isa/kernels/manual/a5/flash_atten/build2/CMakeFiles/edit_cache.dir
+/home/jyc304691735/Projects/pto-isa/kernels/manual/a5/flash_atten/build2/CMakeFiles/rebuild_cache.dir
