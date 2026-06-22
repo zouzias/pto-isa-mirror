@@ -20,8 +20,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{convert}\!\left(\max\!\left(0,\;\mathrm{src0}_{i
 
 ## 汇编语法
 
-PTO-AS 形式: 详见 [PTO-AS 规范](../assembly/PTO-AS_zh.md).
-
 同步形式:
 
 ```text

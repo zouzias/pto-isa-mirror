@@ -21,8 +21,6 @@ where `convert` narrows the result from the source type to the destination type 
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
 Synchronous form:
 
 ```text
