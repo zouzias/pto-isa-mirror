@@ -4,7 +4,7 @@
 
 将生产者 tile 推入FIFO中，用于 Cube-Vector之间的数据传输和核间同步。
 
-本指令支持两类数据的推送，分别为Tile类型的数据和GlobalTensor类型的数据。所以分别设计了基于`Tile` 重载和 `GlobalTensor` 重载。
+本指令支持多类数据的推送，包括基于 `TileSplitAxis` 的 Tile 重载、简化版 Tile 重载（参数顺序相反、无需 Split）、GlobalTensor 重载以及基于 TConfig 的重载。
 
 ## 操作语义
 
@@ -19,6 +19,8 @@
 生产者 tile 索引会在 FIFO 槽位地址计算完成后递增。
 
 对于 `GlobalData` 类型接口，`TPUSH` 只为已经由 `TALLOC` 分配的槽位记录数据就绪同步。它本身不会存储 tile 数据。
+
+对于 `TConfig` 重载 `TPUSH(Pipe&, TileProd&, TConfig)`，`TConfig` 模板参数用于配置L0C->GM/UB的 fixpipe 参数。
 
 ## C++ Intrinsic
 
@@ -63,6 +65,12 @@ struct TPipe;
     - `TileSplitAxis::TILE_NO_SPLIT`：不做切分。
     - `TileSplitAxis::TILE_UP_DOWN`：将数据按照上下切分。当Cube->Vector方向且L0C->UB通路时，该切分模式仅支持数据类型为b32，且srcTile的validRows必须2的整数倍；当Vector->Cube方向且UB->L1通路时，该切分模式下validCols必须是32bytes的整数倍。
     - `TileSplitAxis::TILE_LEFT_RIGHT`：将数据按照左右切分成两个列半区。当Cube->Vector方向且L0C->UB通路时，该切分模式仅支持数据类型为b32，且srcTile的validCols必须为32的整数倍。当Vector->Cube方向且UB->L1通路时，该切分模式下validCols必须是32bytes的整数倍。
+- **简化版 TileData 接口**：
+    - `TPUSH(TileData&, Pipe&)` 内部使用 `TileSplitAxis::TILE_NO_SPLIT` 语义。
+    - `TileData::Loc` 必须为 `TileType::Acc` 或 `TileType::Vec`。
+- **TConfig 接口**：
+    - `TConfig` 是决定推送行为的配置类型（实现定义）。
+    - `TileProd::Loc` 必须为 `TileType::Acc`、`TileType::Vec` 或 `TileType::Ctrl`。
 - **同步**：
     - 空闲空间等待是稀疏的，并由 `Pipe::SyncPeriod` 控制。
     - 每次 `TPUSH` 都会发出数据就绪记录。
