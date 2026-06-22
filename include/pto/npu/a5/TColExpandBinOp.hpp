@@ -181,8 +181,28 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLEXPAND)
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
 
-    ColExpandBinaryInstr<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
-        dstPtr, src0Ptr, src1Ptr, validRow, validCol);
+    switch (version) {
+        case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
+        case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
+            TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
+                dstPtr, src0Ptr, src1Ptr, validRow, validCol);
+            break;
+        case VFImplKind::VFIMPL_1D_POST_UPDATE:
+        case VFImplKind::VFIMPL_2D_POST_UPDATE:
+        case VFImplKind::VFIMPL_DEFAULT:
+        default: {
+            constexpr bool isContiguous = (TileData::ValidCol == TileData::Cols) || (TileData::Rows == 1);
+
+            if constexpr (isContiguous) {
+                TColExpandBinOps_2D_PostUpdate<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
+                    dstPtr, src0Ptr, src1Ptr, validRow, validCol);
+            } else {
+                TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem,
+                                                 rowStride>(dstPtr, src0Ptr, src1Ptr, validRow, validCol);
+            }
+            break;
+        }
+    }
 }
 
 template <typename Op, typename Op2, typename TileData, typename TileDataSrc0, typename TileDataSrc1>
