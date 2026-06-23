@@ -10,13 +10,27 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef HEADER_HPP
 #define HEADER_HPP
+#ifndef bfloat16_t
 #define bfloat16_t half
+#endif
+#ifndef float8_e4m3_t
 #define float8_e4m3_t int8_t
+#endif
+#ifndef float8_e5m2_t
 #define float8_e5m2_t int8_t
+#endif
+#ifndef hifloat8_t
 #define hifloat8_t int8_t
+#endif
+#ifndef float8_e8m0_t
 #define float8_e8m0_t int8_t
+#endif
+#ifndef float4_e2m1x2_t
 #define float4_e2m1x2_t int64_t
+#endif
+#ifndef float4_e1m2x2_t
 #define float4_e1m2x2_t int64_t
+#endif
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
@@ -127,11 +141,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // TFree to be evaluated
 #include "pto/npu/a5/TColReduceIdx.hpp"
 
+#ifdef bfloat16_t
 #undef bfloat16_t
+#endif
+#ifdef float8_e4m3_t
 #undef float8_e4m3_t
+#endif
+#ifdef float8_e5m2_t
 #undef float8_e5m2_t
+#endif
+#ifdef hifloat8_t
 #undef hifloat8_t
+#endif
+#ifdef float8_e8m0_t
 #undef float8_e8m0_t
+#endif
+#ifdef float4_e2m1x2_t
 #undef float4_e2m1x2_t
+#endif
+#ifdef float4_e1m2x2_t
 #undef float4_e1m2x2_t
+#endif
 #endif

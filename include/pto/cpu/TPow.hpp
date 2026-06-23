@@ -22,11 +22,12 @@ template <typename T>
 inline T integer_pow(T base, int64_t exponent)
 {
     static_assert(std::is_integral_v<T>, "integer_pow requires an integral type.");
+    int64_t num2 = 2;
     if (exponent == 0 || base == 1)
         return 1;
     if (exponent < 0) {
         if (base == -1) {
-            return exponent % 2 == 0 ? 1 : -1;
+            return exponent % num2 == 0 ? 1 : -1;
         }
         return 0;
     }
