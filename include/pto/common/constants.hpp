@@ -315,7 +315,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
     static constexpr auto value = uint32_t(0xffffffffUL);
 };
 
-#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030))
+#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030)) && (!defined(PTO_NPU_ARCH_ASCEND5162A))
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);

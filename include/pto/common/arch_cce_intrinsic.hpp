@@ -20,7 +20,7 @@ PTO_INTERNAL void pto_copy_ubuf_to_ubuf(__ubuf__ void *dst, __ubuf__ void *src, 
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)
     copy_ubuf_to_ubuf(dst, src, 0, nBurst, lenBurst, srcGap, dstGap);
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_A5)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_ASCEND5162A)
     copy_ubuf_to_ubuf(dst, src, nBurst, lenBurst, srcGap, dstGap);
 #endif
 }
@@ -37,7 +37,7 @@ PTO_INTERNAL void pto_load_cbuf_to_cb(__cb__ T *dst, __cbuf__ T *src, uint16_t b
     load_cbuf_to_cb(dst, src, baseIdx, repeat, srcStride, dstStride, false, addr_cal_mode_t(0));
 #endif
 }
-#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <bool Transpose, typename T>
 PTO_INTERNAL void pto_load_cbuf_to_cb(__cb__ T *dst, __cbuf__ T *src, uint16_t mStartPosition, uint16_t kStartPosition,
                                       uint8_t mStep, uint8_t kStep, uint16_t srcStride, uint16_t dstStride)
@@ -57,7 +57,7 @@ PTO_INTERNAL void pto_vgatherb(__ubuf__ T *dst, __ubuf__ uint32_t *src, uint32_t
 template <typename T, typename U, typename S>
 PTO_INTERNAL void pto_vgatherb(T &dstReg, __ubuf__ U *base, S &idxReg, vector_bool &mask)
 {
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
     vgatherb(dstReg, base, idxReg);
 #else
     vgatherb(dstReg, base, idxReg, mask);
@@ -68,7 +68,7 @@ PTO_INTERNAL void pto_vgatherb(T &dstReg, __ubuf__ U *base, S &idxReg, vector_bo
 template <typename T, typename U>
 PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, U value)
 {
-#if defined(PTO_NPU_ARCH_KIRIN9030)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
     if constexpr (std::is_integral_v<U>) {
         set_l0_set_value_ui(value);
     } else if (std::is_same_v<U, half>) {
@@ -84,20 +84,20 @@ PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T *dst, int64_t repeatConfig, 
 #endif
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T, typename U, typename S>
 PTO_INTERNAL void pto_vexpdif(T &dst, U &src0, U &src1, vector_bool mask, S part)
 {
 #if defined(PTO_NPU_ARCH_A5)
     vexpdif(dst, src0, src1, mask, part);
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
     vsub(dst, src0, src1, mask, MODE_ZEROING);
     vexp(dst, dst, mask, MODE_ZEROING);
 #endif
 }
 #endif
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T>
 PTO_INTERNAL void pto_copy_gm_to_ubuf_align_v2(__ubuf__ T *dst, __gm__ T *src, uint8_t sid, uint32_t nBurst,
                                                uint32_t lenBurst, uint8_t leftPaddingCount, uint8_t rightPaddingCount,
@@ -107,7 +107,7 @@ PTO_INTERNAL void pto_copy_gm_to_ubuf_align_v2(__ubuf__ T *dst, __gm__ T *src, u
 #if defined(PTO_NPU_ARCH_A5)
     copy_gm_to_ubuf_align_v2(dst, src, sid, nBurst, lenBurst, leftPaddingCount, rightPaddingCount, constantPaddingCtl,
                              l2CacheCtl, burstSrcStride, burstDstStride);
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
     copy_gm_to_ubuf_align_v2(dst, src, sid, nBurst, lenBurst, leftPaddingCount, rightPaddingCount, constantPaddingCtl,
                              burstSrcStride, burstDstStride);
 #endif
