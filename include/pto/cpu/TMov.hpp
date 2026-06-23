@@ -17,9 +17,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
-template <typename DstTileData, typename SrcTileData>
+template <typename DstTileData, typename SrcTileData, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
+    (void)Phase;
     assert(src.GetValidRow() == dst.GetValidRow() && src.GetValidRow() == dst.GetValidRow());
     for (size_t c = 0; c < src.GetValidCol(); c++) {
         size_t subTileSrcC = c / SrcTileData::InnerCols;
@@ -50,9 +51,10 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     }
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
+    (void)Phase;
     TMOV_IMPL(dst, src);
     if constexpr (reluMode == ReluPreMode::NormalRelu) {
         const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
@@ -68,39 +70,48 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     }
 }
 
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
+    (void)Phase;
     (void)mode;
     TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
 }
 
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
+    (void)Phase;
     (void)fp;
     TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
 }
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
-          ReluPreMode reluMode = ReluPreMode::NoRelu>
+          ReluPreMode reluMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
+    (void)Phase;
     (void)mode;
     (void)fp;
     TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar)
 {
+    (void)Phase;
     (void)preQuantScalar;
     TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
 }
 
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar)
 {
+    (void)Phase;
     (void)mode;
     (void)preQuantScalar;
     TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
