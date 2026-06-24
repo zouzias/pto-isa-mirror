@@ -87,10 +87,10 @@ def compute_ub_usage_nd(cube_s0: int, cube_s1: int, head_size: int, tile_s1: int
     }
 
 
-def compute_l1_usage_dn(cube_s0: int, cube_s1: int, head_size: int) -> dict:
+def compute_l1_usage_dn(cube_s0: int, cube_s1: int, head_size: int, use_ub_to_l1: bool = False) -> dict:
     q_mat_tn_buffers = 1
     k_mat_tn_buffers = 2
-    p_mat_tn_buffers = 2
+    p_mat_tn_buffers = 3 if use_ub_to_l1 else 2
     v_mat_tn_buffers = 2
 
     tile_mat_q_bytes = head_size * cube_s0 * 2
@@ -170,10 +170,17 @@ def main():
     parser.add_argument(
         "--cv_fifo_size",
         type=int,
-        default=4,
-        help="CV FIFO size (default: 4)"
+        default=8,
+        help="CV FIFO size (default: 8)"
+    )
+    parser.add_argument(
+        "--fifo_mode",
+        type=int,
+        default=1,
+        help="FIFO_MODE: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY"
     )
     args = parser.parse_args()
+    use_ub_to_l1 = (args.fifo_mode == 1)
 
     cases_path = Path(args.cases)
     if not cases_path.exists():
@@ -205,7 +212,7 @@ def main():
             l1_result = compute_l1_usage_nd(cube_s0, cube_s1, head_size, qk_preload)
             ub_result = compute_ub_usage_nd(cube_s0, cube_s1, head_size, tile_s1, args.cv_fifo_size)
         else:
-            l1_result = compute_l1_usage_dn(cube_s0, cube_s1, head_size)
+            l1_result = compute_l1_usage_dn(cube_s0, cube_s1, head_size, use_ub_to_l1)
             ub_result = compute_ub_usage_dn(cube_s0, cube_s1, head_size, tile_s1, args.cv_fifo_size)
 
         ub_ok = ub_result["fits_in_ub"]

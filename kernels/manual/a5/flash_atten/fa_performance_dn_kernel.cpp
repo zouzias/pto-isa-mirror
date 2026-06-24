@@ -951,7 +951,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     constexpr uint32_t outOTileNBuffers = 2;
     constexpr uint32_t qMatTNBuffers = 1;
     constexpr uint32_t kMatTNBuffers = 2;
+#if USE_UB_TO_L1_PATH
+    constexpr uint32_t pMatTNBuffers = 3;
+#else
     constexpr uint32_t pMatTNBuffers = 2;
+#endif
     constexpr uint32_t vMatTNBuffers = 2;
     constexpr uint32_t qkp_tile_fifo_size = CV_FIFO_SIZE;
     constexpr uint32_t pv_tile_fifo_size = CV_FIFO_SIZE;
@@ -960,9 +964,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     static_assert((qkPreloadNum > 1) || (kTileFactor == 1), "qkPreloadNum must be > 1 unless kTileFactor == 1");
 
 #if USE_UB_TO_L1_PATH
-    static_assert(qkPreloadNum <= pMatTNBuffers,
-                  "USE_UB_TO_L1_PATH requires qkPreloadNum <= pMatTNBuffers (2) to avoid buffer races. "
-                  "Use --qk-preload 2 when running with UB mode enabled.");
+    static_assert(qkPreloadNum + 1 <= pMatTNBuffers,
+                  "USE_UB_TO_L1_PATH requires qkPreloadNum + 1 <= pMatTNBuffers to avoid L1 buffer races "
+                  "between concurrent TINSERT (preload) and TMATMUL (current PV). "
+                  "With qkPreloadNum=2, pMatTNBuffers must be >= 3. "
+                  "Use --qk-preload 2 and ensure sufficient L1 space when running with UB mode enabled.");
 #endif
 
     // Define tile types for first QK matmul

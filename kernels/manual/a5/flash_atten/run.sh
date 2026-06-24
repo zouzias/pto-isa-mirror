@@ -108,9 +108,9 @@ python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_AR
 
 # Validate buffer usage for all generated cases
 if [[ -n "${MODE_DN:-}" ]]; then
-    python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json
+    python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json --fifo_mode "${FIFO_MODE}" --cv_fifo_size 8
 else
-    python3 ../scripts/validate_buffer_usage.py --mode nd --cases generated_cases.json
+    python3 ../scripts/validate_buffer_usage.py --mode nd --cases generated_cases.json --fifo_mode "${FIFO_MODE}" --cv_fifo_size 8
 fi
 
 CMAKE_EXTRA=()

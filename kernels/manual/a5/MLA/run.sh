@@ -102,7 +102,7 @@ echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
 echo "[RUN.SH] DN_MODE=${MODE_DN:-1}"
 
 python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json
+python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json --fifo_mode "${FIFO_MODE}"
 
 CMAKE_EXTRA=()
 if [[ -n "${DEBUG_BUILD:-}" ]]; then

@@ -22,11 +22,11 @@ MAX_UB_BYTES = 256 * 1024
 MAX_L1_BYTES = 512 * 1024
 
 
-def compute_l1_usage_dn(cube_s0: int, cube_s1: int, head_size: int, kv_latent_dim: int) -> dict:
+def compute_l1_usage_dn(cube_s0: int, cube_s1: int, head_size: int, kv_latent_dim: int, use_ub_to_l1: bool = False) -> dict:
     q_mat_tn_buffers = 1
     c_kv_mat_tn_buffers = 2
     w_uv_mat_tn_buffers = 1
-    p_mat_tn_buffers = 2
+    p_mat_tn_buffers = 3 if use_ub_to_l1 else 2
     v_mat_tn_buffers = 2
 
     tile_mat_q_bytes = kv_latent_dim * cube_s0 * 2
@@ -92,8 +92,10 @@ def main():
     parser = argparse.ArgumentParser(description="Validate buffer usage for MLA cases")
     parser.add_argument("--mode", choices=["dn"], default="dn")
     parser.add_argument("--cases", required=True)
-    parser.add_argument("--cv_fifo_size", type=int, default=4)
+    parser.add_argument("--cv_fifo_size", type=int, default=8)
+    parser.add_argument("--fifo_mode", type=int, default=1, help="FIFO_MODE: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY")
     args = parser.parse_args()
+    use_ub_to_l1 = (args.fifo_mode == 1)
 
     cases_path = Path(args.cases)
     if not cases_path.exists():
@@ -121,7 +123,7 @@ def main():
         kv_latent_dim = case["kv_latent_dim"]
         tile_s1 = case["tile_s1"]
 
-        l1_result = compute_l1_usage_dn(cube_s0, cube_s1, head_size, kv_latent_dim)
+        l1_result = compute_l1_usage_dn(cube_s0, cube_s1, head_size, kv_latent_dim, use_ub_to_l1)
         ub_result = compute_ub_usage_dn(cube_s0, cube_s1, head_size, tile_s1, args.cv_fifo_size)
 
         ub_ok = ub_result["fits_in_ub"]
