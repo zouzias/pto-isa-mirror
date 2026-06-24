@@ -18,7 +18,7 @@ comm/
 ├── comm_types.hpp               # 公共类型：ParallelGroup、Signal、Signal2D、
 │                                #   NotifyOp、WaitCmp、ReduceOp、DmaEngine、AsyncEvent
 │
-├── a2a3/                        # A2/A3（Ascend 910B/910C）架构实现
+├── a2a3/                        # A2/A3 架构实现
 │   ├── TPut.hpp                 # TPUT_IMPL  — 远程写（本地 GM → UB → 远端 GM）
 │   ├── TGet.hpp                 # TGET_IMPL  — 远程读（远端 GM → UB → 本地 GM）
 │   ├── TNotify.hpp              # TNOTIFY_IMPL — 发送标志通知
@@ -32,7 +32,7 @@ comm/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（仅 SDMA）
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（仅 SDMA）
 │
-├── a5/                          # A5（Ascend 950）架构实现
+├── a5/                          # A5 架构实现
 │   ├── T*.hpp                   # 同步指令（include a2a3/ 对应文件）
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA）

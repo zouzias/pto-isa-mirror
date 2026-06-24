@@ -54,8 +54,8 @@ The implementation defines topk representations. Load input data and index in GM
 ```cpp
     // data
     using DynShapeDim5 = Shape<1, 1, 1, singleLoopRow, validCol>;
-    using DynStridDim5 = Stride<singleLoopRow * Cols, singleLoopRow * Cols, singleLoopRow * Cols, Cols, 1>;
-    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<singleLoopRow * Cols, singleLoopRow * Cols, singleLoopRow * Cols, Cols, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
 
     // index
     using IndexShapeDim5 = Shape<1, 1, 1, 1, validCol>;
@@ -71,7 +71,7 @@ The implementation defines topk representations. Load input data and index in GM
 
 ### Pipeline scheduling
 
-This example overlaps data movement and compute using double buffering in UB to improve utilization. In each iteration, two sets of operation are performed, TLOAD->TSORT32->TMRGSORT(include MRGSORT and MOV operation)->TSTORE. The pipeline dependence in each set is `MTE2->V->MTE1->V->MTE3`. TLOAD in the second set can be performed before TSTORE in the first set is finished, so as others. Extra dependence `V->MTE2` is added to ensure that TLOAD in next iteration is performed after VEC operation is done in corresponding set.
+This example overlaps data movement and compute using double buffering in UB to improve utilization. In each iteration, two sets of operations are performed, TLOAD->TSORT32->TMRGSORT(include MRGSORT and MOV operation)->TSTORE. The pipeline dependence in each set is `MTE2->V->MTE1->V->MTE3`. TLOAD in the second set can be performed before TSTORE in the first set is finished, so as others. Extra dependence `V->MTE2` is added to ensure that TLOAD in next iteration is performed after VEC operation is done in corresponding set.
 
 ## Measured Performance (Reference)
 

@@ -77,13 +77,13 @@
     **Description:** Final softmax probability for element \((i,j)\).
 
     **Notes**
-    - scale $s = \frac{1}{\sqrt{\mathbb{HEAD\_SIZE}}}$
+    - scale $s = \frac{1}{\sqrt{\mathrm{HEAD\_SIZE}}}$
     - The recurrence ensures numerical stability by rescaling prior sums whenever the global max increases.  
     - The kernel stores $e_{ij}$ (`x_exp`) for the PV matmul, while $\text{exp\_max}_i$ and ${S_i}$ are kept for GU accumulation. 
 
     <!-- Embedded SVG diagram -->
     <div>
-    <img src="fa_flows.svg" alt="FA Computation Flowg" />
+    <img src="fa_flows.svg" alt="FA Computation Flow" />
     </div>
 
   - **Tensor shape progression:**
@@ -122,7 +122,7 @@
         The kernel stores per-tile `l1_exp_max` factors and `l2_global_sum` which are later used by GU reduction o_running accumulation, and compute the final O in the last stage.
 
     - Optimizations & tradeoffs:
-      - Use TROWMAX/TROWSUM call with a static tile size to allow most effiecnt implementon for 128/256/512/1024 reduce axis, pls consider to do a TFILLPAD (PAD_MIN/-INF) to convert dynamic valid rows/cols to static for handling dynamic input (e.g. S0 seqlen)
+      - Use TROWMAX/TROWSUM call with a static tile size to allow most efficient implementon for 128/256/512/1024 reduce axis, pls consider to do a TFILLPAD (PAD_MIN/-INF) to convert dynamic valid rows/cols to static for handling dynamic input (e.g. S0 seqlen)
       - Use TROWEXPANDSUB inplace computation (dst==src) to mininize buffer allocation
       - Carefully interleaving 1d reduced tile compute and 2d compute to reuse pipe barrier bubble within vector unit
 
@@ -174,7 +174,7 @@
       4. GU (compute_gu) running on vector cores consumes pv_part and accumulates into `runningOTile`.
 
   - **Intra Cube Core and Vector Core pipelines:**
-    - The matmul_macro_pto and assign_running_acc_tile provided the leftTile/rightTile/AccTile double buffering pipeline mechanism for cube core level pipeline accross different perload sequence of compute_qk and compute_pv calls
+    - The matmul_macro_pto and assign_running_acc_tile provided the leftTile/rightTile/AccTile double buffering pipeline mechanism for cube core level pipeline across different perload sequence of compute_qk and compute_pv calls
     - Inputs k_tile, p_tile (intermediate between CV), v_tile matTiles are double buffered to provide smooth pipeline
     - Compute_p qk_tile input and p_tile output are double buffered, and expT has multi-preload-buffer to allow preload result late forwarding
 
@@ -184,12 +184,12 @@
     - The design is allow out-of-order execution for Reordering the pipeline stage schedule below.
 
   - **Reorder the pipeline stage execution schedule to resolve datadpenency**
-    - Lets look at an example for Head=128 S0=128 and S1=512 case, for CUBE_S1=128 tiling, there are totally 4 loops each with compute_qk->compute_p->compute_pv->compute_gu, and there is data depenency between stage in the loop. compute_qk & compute_pv stages are executed in cube core, and compute_pv & compute_gu stages are executed in vector core.
+    - Lets look at an example for Head=128 S0=128 and S1=512 case, for CUBE_S1=128 tiling, there are totally 4 loops each with compute_qk->compute_p->compute_pv->compute_gu, and there is data dependency between stage in the loop. compute_qk & compute_pv stages are executed in cube core, and compute_pv & compute_gu stages are executed in vector core.
     Without software pipelining (pre-executing qk, p, and later pv) the execution would be fully in sequence below:
     <div>
     <img src="fa_pipeline_preload0_generated.svg" alt="Inter CV FIFOs and intra stage ping/pong" />
     </div>
-    With pre-execution of qk, p (and later pv) would resolve the data depenency and keep the vector compute resoruce fully busy, in theory below showing the intra-core (tload,tcompute,tstore) and inter-CV-stage pipeline 
+    With pre-execution of qk, p (and later pv) would resolve the data dependency and keep the vector compute resource fully busy, in theory below showing the intra-core (tload,tcompute,tstore) and inter-CV-stage pipeline 
     <div>
     <img src="fa_pipeline_preload2_generated.svg" alt="Inter CV FIFOs and intra stage ping/pong" />
     </div>    
@@ -213,4 +213,7 @@
   - Purpose: enable fine-grained per-element dumps of intermediate tensors (QK, P, PV, o_part snapshots) so you can compare per-tile and per-element values against a reference (golden) implementation to track precision/regression issues.
 
   - How to enable:
-    - At compile/instantiation time set the template boolean `INTERMEDIATE_CHECK=true` for the kernel entry used by your test. For example, either call the kernel wrapper / instantiation with the true flag:    
+    - At compile/instantiation time set the template boolean `INTERMEDIATE_CHECK=true` for the kernel entry used by your test. For example, either call the kernel wrapper / instantiation with the true flag:
+```
+my_kernel_wrapper(..., true /* INTERMEDIATE_CHECK */);
+```
