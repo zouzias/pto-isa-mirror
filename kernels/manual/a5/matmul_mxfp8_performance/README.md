@@ -30,7 +30,7 @@ $$
 C = (scaleA ⊗ A) * (scaleB ⊗ B)
 $$
 
-where `⊗`  denotes broadcast multiplication and `*` enotes matrix multiplication. The input matrix formats are as follows:
+where `⊗`  denotes broadcast multiplication and `*` denotes matrix multiplication. The input matrix formats are as follows:
 
 - `A` is `m×k`
 - `scaleA` is `m×scaleK`

@@ -167,9 +167,7 @@ This example shows how PTO communication primitives can be fused with compute ke
 
 ## 🖥️ Platform Support
 
-- Ascend A2 (Ascend 910B)
-- Ascend A3 (Ascend 910C)
-- Ascend A5 (Ascend 950)
+- Ascend A2/A3/A5
 - CPU (x86_64 / AArch64)
 
 For more details, see [include/README.md](include/README.md).
@@ -187,7 +185,7 @@ Planned future features:
 | **Collective communication extension** | Add asynchronous communication instructions for Ccu and Roce, and add the TPREFECTH (AIV direct-drive) communication instruction. | Communication ISA extension | 2026 Q2 |
 | **System scheduling extension** | PTO ISA support for SPMD/MPMD programming schedules. | ISA extension | Planned |
 | **Micro-instructions** | Support expressing high-performance operators through micro-instructions, together with a foundational high-performance micro-instruction library. | ISA extension / operator development | 2026 Q2 |
-| **Base instructions** | Further optimize A5 instruction performance, add Pooling-related base instructions, and enhance convolution, quantization, and Fixpipe instruction capabilities. | ISA extension | 2026 Q2 |
+| **Base instructions** | Further optimize A5 instruction performance, add Pooling-related base instructions, and enhance convolution, quantization, and FIXPIPE instruction capabilities. | ISA extension | 2026 Q2 |
 | **CostModel** | Support CostModel performance simulation for A5 instructions. | Toolchain / performance modeling | 2026 Q2 |
 | **CPU-SIM** | Keep CPU-SIM built in sync with instruction enhancements. | CPU simulation | 2026 Q2 |
 
