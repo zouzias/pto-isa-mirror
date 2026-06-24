@@ -66,6 +66,14 @@ inline void CheckValidConvShape(DstTileData &dst, SrcTileData &src)
                 dst.GetShape(1) * dst.GetShape(2) >= src.GetShape(1) &&                                 // N1*N0
                 dst.GetShape(3) == src.GetShape(5),                                                     // C0
             "Shape mismatch: GNC1HWC0 to FRACTAL_Z");
+    } else if constexpr (src_layout == Layout::NCDHW && dst_layout == Layout::FRACTAL_Z_3D) {
+        // NCDHW (N, C, D, H, W) -> FRACTAL_Z_3D (D, C1, H, W, N1, N0, C0)
+        // Note: Assuming Dst shape maps dimensions G*C1 as outer
+        size_t dstC1 = dst.GetShape(0) / (src.GetShape(2) * src.GetShape(3) * src.GetShape(4));
+        PTO_ASSERT(dstC1 == (src.GetShape(0) + C0 - 1) / C0 &&                 // C1, H, W, G
+                       dst.GetShape(1) * dst.GetShape(2) >= src.GetShape(1) && // N1*N0
+                       dst.GetShape(3) == src.GetShape(5),                     // C0
+                   "Shape mismatch: GNC1HWC0 to FRACTAL_Z");
     }
 }
 
@@ -251,6 +259,68 @@ inline void TTRANS_GNC1HWC02C1HWN1N0C0(DstTileData &dst, SrcTileData &src)
 }
 
 template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_NCDHW2DC1HWN1N0C0(DstTileData &dst, SrcTileData &src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    const auto *src_ptr = reinterpret_cast<const SrcDType *>(src.data());
+    auto *dst_ptr = reinterpret_cast<DstDType *>(dst.data());
+
+    // Shape extraction
+    const int64_t N = src.GetShape(0);
+    const int64_t C = src.GetShape(1);
+    const int64_t D = src.GetShape(2);
+    const int64_t H = src.GetShape(3);
+    const int64_t W = src.GetShape(4);
+
+    const int64_t C0 = dst.GetShape(3); // Assuming index 3 is C0
+    const int64_t N0 = dst.GetShape(2);
+    const int64_t N1 = dst.GetShape(1);
+    const int64_t C1 = (C + C0 - 1) / C0;
+
+    // Zero out destination
+    size_t Size = dst.GetShape(0) * N1 * N0 * C0;
+    std::fill(dst.data(), dst.data() + Size, 0);
+
+    const size_t HW = H * W;
+    const size_t DHW = D * HW;
+    const size_t CDHW = C * DHW;
+    const size_t C0_N0 = C0 * N0;
+    const size_t C0_N0_N1 = C0_N0 * N1;
+    const size_t C1HW = C1 * H * W;
+
+    for (int64_t n = 0; n < N; ++n) {
+        const size_t n1 = n / N0;
+        const size_t n0 = n % N0;
+        const size_t dst_base_n = n1 * C0_N0 + n0 * C0;
+        const size_t src_base_n = n * CDHW;
+        for (int64_t c = 0; c < C; ++c) {
+            const size_t c1 = c / C0;
+            const size_t c0 = c % C0;
+            const size_t src_base_c = src_base_n + c * DHW;
+            const size_t dst_base_c1 = c1 * HW;
+            for (int64_t d = 0; d < D; ++d) {
+                const size_t src_base_d = src_base_c + d * HW;
+                const size_t dst_base_d = d * C1HW + dst_base_c1;
+                for (int64_t h = 0; h < H; ++h) {
+                    for (int64_t w = 0; w < W; ++w) {
+                        const size_t base_w = h * W + w;
+                        // Offset in NCDHW source
+                        size_t src_offset = src_base_d + base_w;
+
+                        // Base for fractal block
+                        size_t dst_base = (dst_base_d + base_w) * C0_N0_N1 + dst_base_n + c0;
+
+                        dst_ptr[dst_base] = src_ptr[src_offset];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
 void TTrans_Impl(typename DstTileData::TileDType dst, typename SrcTileData::TileDType src, unsigned validRow,
                  unsigned validCol)
 {
@@ -299,6 +369,8 @@ PTO_INTERNAL void TTRANS_CONV_IMPL(DstTileData &dst, SrcTileData &src)
         TTRANS_GNCHW2NC1HWC0(dst, src);
     } else if constexpr (src_layout == Layout::GNC1HWC0 && dst_layout == Layout::FRACTAL_Z) {
         TTRANS_GNC1HWC02C1HWN1N0C0(dst, src);
+    } else if constexpr (src_layout == Layout::NCDHW && dst_layout == Layout::FRACTAL_Z_3D) {
+        TTRANS_NCDHW2DC1HWN1N0C0(dst, src);
     }
 }
 
