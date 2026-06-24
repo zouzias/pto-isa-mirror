@@ -38,7 +38,7 @@ struct TPipe {
     static_assert(is_c2v || is_v2c || is_both || is_v2c_ctrl,
                   "Fix: TPipe only supports C2V or V2C or Both or V2C_CTRL communication on A2A3.");
     // get rid of codechecker warnings
-    static constexpr uint32_t SyncPeriod = SlotNum;
+    static constexpr uint32_t SyncPeriod = (SlotNum <= 2) ? SlotNum : SlotNum / 2;
     static constexpr uint8_t FlagIDPlusOne = FlagID + 1;
     static constexpr uint8_t FlagIDPlusTwo = FlagID + 2;
     static constexpr uint8_t FlagIDPlusThree = FlagID + 3;
@@ -504,16 +504,22 @@ struct TPipe {
     // Initial TPUSH calls skip allocate() via shouldWaitFree (tileIndex < SlotNum, or 0 for depth 1).
     PTO_INTERNAL ~TPipe()
     {
-        uint32_t numPushWait = 0;
         const uint32_t numPopFree = prod.tileIndex / SyncPeriod;
-        if (prod.tileIndex >= SyncPeriod) {
-            numPushWait = prod.tileIndex / SyncPeriod;
-            if ((prod.tileIndex % SyncPeriod) == 0) {
-                --numPushWait;
+        uint32_t numPushWait = 0;
+        if constexpr (SlotNum == 1) {
+            numPushWait = (prod.tileIndex > 0) ? prod.tileIndex - 1 : 0;
+        } else {
+            if (prod.tileIndex > SlotNum) {
+                constexpr uint32_t firstAligned =
+                    (SlotNum % SyncPeriod == 0) ? SlotNum : ((SlotNum / SyncPeriod) + 1) * SyncPeriod;
+                const uint32_t lastAligned = ((prod.tileIndex - 1) / SyncPeriod) * SyncPeriod;
+                if (lastAligned >= firstAligned) {
+                    numPushWait = (lastAligned - firstAligned) / SyncPeriod + 1;
+                }
             }
         }
-        const uint32_t drainCounts = (numPopFree > numPushWait) ? (numPopFree - numPushWait) : 0;
-        for (uint32_t i = 0; i < drainCounts; ++i) {
+        const uint32_t drainCount = (numPopFree > numPushWait) ? (numPopFree - numPushWait) : 0;
+        for (uint32_t i = 0; i < drainCount; ++i) {
             prod.allocate();
         }
     }
@@ -714,7 +720,11 @@ struct TMPipe {
                 __gm__ T *addrSub = addr + sub_col * ConsM * ConsN;
                 GlobalDataSub globalDataSub((__gm__ T *)(addrSub));
                 uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * ConsN * sizeof(T));
+#ifdef __PTO_AUTO__
+                __cce_alias(subTile.data(), tile.data(), col_byte_offset);
+#else
                 TASSIGN_IMPL(subTile, (uint64_t)tile.data() + col_byte_offset);
+#endif
                 TSTORE_IMPL(globalDataSub, subTile);
             }
         }
@@ -753,8 +763,8 @@ struct TMPipe {
                     pushVec2CtrlFiFo(fifo, tile);
                 }
             }
-        } // end of store
-    }; // end of Producer
+        }
+    };
 
     struct Consumer {
         int tile_id = 0;
@@ -837,20 +847,24 @@ struct TMPipe {
             constexpr int kTileFactor = ConsN / ProdN;
             size_t entryBase = static_cast<size_t>(bufIndex) * kTileFactor * ProdM * ProdN * sizeof(T);
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset);
-
+#ifndef __PTO_AUTO__
             if constexpr (DataFiFo::useLocalFiFo) {
                 uint64_t localTileBase = fifo.localFiFoBase + (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) *
                                                                   ConsM * ConsN * sizeof(T);
                 TASSIGN_IMPL(tile, localTileBase);
             }
-
+#endif
             Tile<TileType::Vec, T, ConsM, ConsN, BLayout::RowMajor, ConsM, ProdN> tileSub;
             using GlobalDataSub = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             for (int sub_col = 0; sub_col < kTileFactor; ++sub_col) {
                 __gm__ T *addrSub = addr + sub_col * ProdM * ProdN;
                 GlobalDataSub globalTensorSub(addrSub);
                 uint64_t col_byte_offset = sub_col * ProdN * sizeof(T);
+#ifdef __PTO_AUTO__
+                __cce_alias(tileSub.data(), tile.data(), col_byte_offset);
+#else
                 TASSIGN_IMPL(tileSub, (uint64_t)tile.data() + col_byte_offset);
+#endif
                 TLOAD_IMPL(tileSub, globalTensorSub);
             }
         }
@@ -862,12 +876,13 @@ struct TMPipe {
             uint32_t bufIndex = static_cast<uint32_t>(tile_id % fifo.fifoDepth);
             size_t entryBase = bufIndex * ConsM * ProdN * sizeof(T);
             GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
-
+#ifndef __PTO_AUTO__
             if constexpr (DataFiFo::useLocalFiFo) {
                 uint64_t tileBase = fifo.localFiFoBase +
                                     (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
                 TASSIGN_IMPL(tile, tileBase);
             }
+#endif
             TLOAD_IMPL(tile, globalTensor);
         }
 
@@ -910,6 +925,12 @@ struct TMPipe {
     template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
     PTO_INTERNAL explicit TMPipe(__gm__ typename TileDataCons::DType *gmFiFoBase, uint32_t localFiFoBase)
         : fifo(gmFiFoBase, localFiFoBase), prod(), cons()
+    {
+        cons.free();
+    }
+
+    template <int M = LocalFiFoDepth, typename std::enable_if<M == 0, int>::type = 0>
+    PTO_INTERNAL explicit TMPipe(__gm__ typename TileDataCons::DType *gmFiFoBase) : fifo(gmFiFoBase), prod(), cons()
     {
         cons.free();
     }

@@ -12,8 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_FIFO_HPP
 #include <type_traits>
 
-using namespace std;
-
 namespace pto {
 
 enum TileSplitAxis : uint8_t
@@ -93,6 +91,10 @@ struct DataFIFO<DataType, FifoType, Depth, Period, LocalDepth,
     static constexpr bool useLocalFiFo = (localFiFoDepth > 0);
 
     PTO_INTERNAL DataFIFO(__gm__ DataType *ptr, uint32_t localBase) : fifoBase(ptr), localFiFoBase(localBase)
+    {}
+
+    template <int M = LocalDepth, typename std::enable_if<M == 0, int>::type = 0>
+    PTO_INTERNAL DataFIFO(__gm__ DataType *ptr) : fifoBase(ptr)
     {}
 
     __gm__ DataType *getBasePtr()
