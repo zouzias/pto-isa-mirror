@@ -49,7 +49,7 @@ development styles (you can write SPMD-Auto, SPMD-Manual, MPMD-Auto, or MPMD-Man
 In SPMD, all participating cores run the same entry function, and each core selects its own data region using its
 runtime identity (for example `block_idx`).
 
-When sub-block decomposition exists, a stable “virtual id” can be constructed:
+When sub-block decomposition exists, a stable “virtual ID” can be constructed:
 
 ```cpp
 auto cid = get_block_idx();
@@ -63,7 +63,7 @@ SPMD is a good fit for regular tensor tiling (GEMM, softmax-by-rows, elementwise
 In MPMD, different cores (or groups of cores) may execute **different tile programs** as part of the same overall
 tile graph. Conceptually, the **Device Machine scheduler** chooses which “program” a core runs.
 
-One portable way to express this is to pass a scheduler-provided **task id** into the kernel entry function and
+One portable way to express this is to pass a scheduler-provided **task ID** into the kernel entry function and
 dispatch based on it:
 
 ```cpp

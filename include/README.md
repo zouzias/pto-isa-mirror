@@ -27,8 +27,8 @@ This table tracks per-instruction backend availability:
 
 - **CPU**: `__CPU_SIM` (CPU simulation backend). More information about this backend can be found in [docs/coding/cpu_sim.md](../docs/coding/cpu_sim.md)
 - **Costmodel**: `__COSTMODEL` (A2 / A3 cost model backend, including `stub` and `fit` paths; if either path supports an instruction, it is marked as supported).
-- **A2 (Ascend 910B) / A3 (Ascend 910C)**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).
-- **A5 (Ascend 950)**: uses the `include/pto/npu/a5/` implementation.
+- **A2 / A3**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).
+- **A5**: uses the `include/pto/npu/a5/` implementation.
 - **Kirin**: uses the `include/pto/npu/kirin9030/` implementation.
 
 | Instruction | CPU | Costmodel | A2 | A3 | A5 | Kirin |
@@ -62,7 +62,7 @@ This table tracks per-instruction backend availability:
 | [`TCOLMIN`](../docs/isa/TCOLMIN.md) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [`TCOLPROD`](../docs/isa/TCOLPROD.md) | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TCOLSUM`](../docs/isa/TCOLSUM.md) | Yes | Yes | Yes | Yes | Yes | TODO |
-| [`TConcat`](../docs/isa/TCONCAT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
+| [`TCONCAT`](../docs/isa/TCONCAT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TCVT`](../docs/isa/TCVT.md) | Yes | Yes | Yes | Yes | Yes | TODO |
 | [`TDIV`](../docs/isa/TDIV.md) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [`TDIVS`](../docs/isa/TDIVS.md) | Yes | Yes | Yes | Yes | Yes | Yes |

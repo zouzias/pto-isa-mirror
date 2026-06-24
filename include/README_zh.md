@@ -27,8 +27,8 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 
 - **CPU**：`__CPU_SIM`（CPU 仿真后端）。
 - **Costmodel**：`__COSTMODEL`（A2 / A3 性能仿真后端，包含 `stub` 与 `fit` 两条路径；任一路径支持即记为支持）。
-- **A2（Ascend 910B）/ A3（Ascend 910C）**：当前共享 `include/pto/npu/a2a3/` 的实现（因此两列状态相同）。
-- **A5（Ascend 950）**：使用 `include/pto/npu/a5/` 的实现。
+- **A2 / A3**：当前共享 `include/pto/npu/a2a3/` 的实现（因此两列状态相同）。
+- **A5**：使用 `include/pto/npu/a5/` 的实现。
 - **Kirin**：使用 `include/pto/npu/kirin9030/` 的实现。
 
 | 指令 | CPU | Costmodel | A2 | A3 | A5 | Kirin |
@@ -62,7 +62,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TCOLMIN`](../docs/isa/TCOLMIN_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TCOLPROD`](../docs/isa/TCOLPROD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TCOLSUM`](../docs/isa/TCOLSUM_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
-| [`TConcat`](../docs/isa/TCONCAT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
+| [`TCONCAT`](../docs/isa/TCONCAT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TCVT`](../docs/isa/TCVT_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
 | [`TDIV`](../docs/isa/TDIV_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TDIVS`](../docs/isa/TDIVS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |

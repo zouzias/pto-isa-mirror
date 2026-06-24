@@ -11,9 +11,9 @@ Not following these rules can lead to any of the following consequences:
 
 Complex control flow (especially inside loops) often makes it difficult to optimize the precise cross-pipe parallelization and double-buffering. Since PTO AUTO compiler is required to maintain program correctness, it may generate the sync operations more conservatively leading to performance degradation.  
 
-## 1.1 - Guards for First and Last Iteraions
+## 1.1 - Guards for First and Last Iterations
 
-Any condition that guards the first and last iteraion of a loop should be expressed in a form that can be statically evaluated. That makes it possible for the PTO AUTO compiler to automatically peel peel the first and last iteration of the loop which results in simplifying the auto synchronization substantially.  Here is an example:
+Any condition that guards the first and last iteration of a loop should be expressed in a form that can be statically evaluated. That makes it possible for the PTO AUTO compiler to automatically peel the first and last iteration of the loop which results in simplifying the auto synchronization substantially.  Here is an example:
 
 ```cpp
 for (int tile_id = 0; tile_id < total_tiles; tile_id++) {
@@ -89,7 +89,7 @@ else {
 
 ## 1.4 - It's strongly recommended NOT to use double/multi buffering at the moment
 For now, the double/multi buffering in auto mode isn't fully supported, because once the kernels becomes complicated, using double buffering always
-involves complex control flows, imposing huges challenges for compilers to do auto-sync.
+involves complex control flows, imposing huge challenges for compilers to do auto-sync.
 Auto mode compiler team is trying to design a dedicated abstraction/interface (with some constraints) to kernel developers, to enable double buffering,
 while the compiler can correctly analyze the code and do proper auto sync.
 
@@ -155,11 +155,11 @@ In manual mode, they are both actual PTO instructions that (re)assign an address
 
 * `TRESHAPE`:
 
-    The semantic of the `TRESHAPE` instruction is slightly different in the AUTO mode compared to the Manual Mode. In Manual Mode, ``TRESHAPE`` it assigns the address of the ``source`` tile to the ``destination`` tile at the point of execution of the ``TRESHAPE`` instruction. However, in the AUTO mode, `TRESHAPE` acts as a mechanism to bind the source and destination tile to the same address. This binding is valid across the entire scope in which the source and destination tiles are defined.
+    The semantic of the `TRESHAPE` instruction is slightly different in the AUTO mode compared to the Manual Mode. In Manual Mode, ``TRESHAPE`` assigns the address of the ``source`` tile to the ``destination`` tile at the point of execution of the ``TRESHAPE`` instruction. However, in the AUTO mode, `TRESHAPE` acts as a mechanism to bind the source and destination tile to the same address. This binding is valid across the entire scope in which the source and destination tiles are defined.
 
 * `TSUBVIEW`:
 
-    The `TSUBVIEW` instruction allows users obtain a subtile from a larger tile. In the AUTO mode, the compiler calculates the relative offset of the subtile and add it to the automatically allocated address of the base tile.
+    The `TSUBVIEW` instruction allows users to obtain a subtile from a larger tile. In the AUTO mode, the compiler calculates the relative offset of the subtile and adds it to the automatically allocated address of the base tile.
 
 Note that since in the AUTO mode is that the address of a tile cannot change throughout its scope, a tile cannot be used as the destination for multiple `TRESHAPE` or `TSUBVIEW` instructions. For example, the following example is invalid in the AUTO mode and the actual behavior is undefined.  
 
@@ -171,7 +171,7 @@ TSUBVIEW(tile0, tile2, 0, 0);
 bar(tile0);
 ```
 
-As a good practice, it is highly recommended that the ``TSUBVIEW`` and ``TRESHAPE`` instructions are placed right the declaration of the destination tiles.
+As a good practice, it is highly recommended that the ``TSUBVIEW`` and ``TRESHAPE`` instructions are placed right after the declaration of the destination tiles.
 
 # 3 - General rules
 

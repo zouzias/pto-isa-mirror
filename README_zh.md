@@ -167,9 +167,7 @@ Ascend 910B2 多核对比，基线为 `torch_npu`：
 
 ## 🖥️ 平台支持
 
-- Ascend A2（Ascend 910B）
-- Ascend A3（Ascend 910C）
-- Ascend A5（Ascend 950）
+- Ascend A2/A3/A5
 - CPU（x86_64 / AArch64）
 
 更多细节请参考 [include/README_zh.md](include/README_zh.md)。
@@ -184,10 +182,10 @@ Ascend 910B2 多核对比，基线为 `torch_npu`：
 | **PTO Tile Fusion** | BiSheng 编译器支持：自动融合 tile 操作。 | 编译器 / 工具链 | 持续演进 |
 | **PTO-AS** | PTO ISA 的字节码（Byte Code）支持。 | 编译器 / 工具链 | 持续演进 |
 | **卷积扩展** | PTO ISA 对卷积 kernel 的支持。 | ISA 扩展 | 持续演进 |
-| **集合通信扩展** | 新增支持 Ccu 及 Roce 异步通信指令，新增 TPREFECTH（AIV 直驱）通信指令。 | 通信 ISA 扩展 | 2026 Q2 |
+| **集合通信扩展** | 新增支持 CCU 及 RoCE 异步通信指令，新增 TPREFETCH（AIV 直驱）通信指令。 | 通信 ISA 扩展 | 2026 Q2 |
 | **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 | 规划中 |
 | **微指令** | 支持用户通过微指令表达高性能算子，同时提供基础的高性能微指令库。 | ISA 扩展 / 算子开发 | 2026 Q2 |
-| **基础指令** | 进一步优化 A5 指令性能，新增 Pooling 相关基础指令，并增强卷积、量化、Fixpipe 类指令能力。 | ISA 扩展 | 2026 Q2 |
+| **基础指令** | 进一步优化 A5 指令性能，新增 Pooling 相关基础指令，并增强卷积、量化、FIXPIPE 类指令能力。 | ISA 扩展 | 2026 Q2 |
 | **CostModel** | 支持 A5 指令的 CostModel 性能仿真。 | 工具链 / 性能建模 | 2026 Q2 |
 | **CPU-SIM** | CPU-SIM 随指令增强同步构建。 | CPU 仿真 | 2026 Q2 |
 
