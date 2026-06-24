@@ -7,7 +7,7 @@ PTO AUTO is a programming mode for PTO that provides two major benefits:
 * Simpify developing efficient PTO code while providing kernel developers with the mechanisms that are necessary to implement their optimizations.
 * Compatibility across different generations of the Ascend architecture.
 
-More specifically, in PTO AUTO, the kernel developer does not need to explicitly specify tile memory addresses or synchronization between different pipes. Instead the PTO AUTO compiler automatically allocates optimal memory addressess for the tiles in different chip buffers. Moreover, the compiler automatically synchronizes the PTO tile operations in order to maximize parallelism among different pipes. Finally, the kernel developer does not need to be concerned with the minor differences between various generations of the Ascend architecture (particulary in terms of the way Cube and Vector computations are coordinated).
+More specifically, in PTO AUTO, the kernel developer does not need to explicitly specify tile memory addresses or synchronization between different pipes. Instead the PTO AUTO compiler automatically allocates optimal memory addresses for the tiles in different chip buffers. Moreover, the compiler automatically synchronizes the PTO tile operations in order to maximize parallelism among different pipes. Finally, the kernel developer does not need to be concerned with the minor differences between various generations of the Ascend architecture (particularly in terms of the way Cube and Vector computations are coordinated).
 
 Note: auto mode currently only supports the compiler `-O2` option.
 
@@ -22,8 +22,8 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
-    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData src0Tile(kGRows_, kGCols_);
     TileData src1Tile(kGRows_, kGCols_);
@@ -58,8 +58,8 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 __global__ AICORE void runTMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim5 = Stride<1, 1, 1, kGCols_, 1>;
-    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using DynStrideDim5 = Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     
     TileData src0Tile(kGRows_, kGCols_);

@@ -62,7 +62,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TCOLMIN`](../docs/isa/TCOLMIN_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TCOLPROD`](../docs/isa/TCOLPROD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TCOLSUM`](../docs/isa/TCOLSUM_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
-| [`TConcat`](../docs/isa/TCONCAT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
+| [`TCONCAT`](../docs/isa/TCONCAT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TCVT`](../docs/isa/TCVT_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
 | [`TDIV`](../docs/isa/TDIV_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TDIVS`](../docs/isa/TDIVS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |

@@ -41,7 +41,7 @@ ascendc_compile_options(no_workspace_kernel PRIVATE --cce-enable-pto-passes -O2)
 
 Host 侧实现位于 `auto_mode/demos/baseline/add/csrc/host/`。
 
-### 2.1 定义算子 schema（Aten IR）
+### 2.1 定义算子 schema（ATen IR）
 
 PyTorch 使用 `TORCH_LIBRARY` / `TORCH_LIBRARY_FRAGMENT` 声明算子 schema，使其可从 Python 通过 `torch.ops.<namespace>.<op_name>` 调用。
 
@@ -129,7 +129,7 @@ python3 setup.py bdist_wheel
 
 ```bash
 cd dist
-pip uninstall *.whl
+pip uninstall <包名>
 pip install *.whl
 ```
 
