@@ -18,7 +18,7 @@ comm/
 ├── comm_types.hpp               # Shared types: ParallelGroup, Signal, Signal2D,
 │                                #   NotifyOp, WaitCmp, ReduceOp, DmaEngine, AsyncEvent
 │
-├── a2a3/                        # A2/A3 (Ascend 910B/910C) architecture implementations
+├── a2a3/                        # A2/A3 architecture implementations
 │   ├── TPut.hpp                 # TPUT_IMPL  — remote write (local GM → UB → remote GM)
 │   ├── TGet.hpp                 # TGET_IMPL  — remote read  (remote GM → UB → local GM)
 │   ├── TNotify.hpp              # TNOTIFY_IMPL — send flag notification
@@ -32,7 +32,7 @@ comm/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA only)
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA only)
 │
-├── a5/                          # A5 (Ascend 950) architecture implementations
+├── a5/                          # A5 architecture implementations
 │   ├── T*.hpp                   # Sync instructions (include a2a3/ counterparts)
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA)

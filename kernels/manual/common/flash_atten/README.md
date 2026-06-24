@@ -327,7 +327,7 @@ Sim vs NPU comparison (Seq = 2K):
 
     <!-- Embedded SVG diagram -->
     <div>
-    <img src="fa_flows.svg" alt="FA Computation Flowg" />
+    <img src="fa_flows.svg" alt="FA Computation Flow" />
     </div>
 
   - **Tensor shape progression:**
@@ -366,8 +366,8 @@ Sim vs NPU comparison (Seq = 2K):
         The kernel stores per-tile `l1_exp_max` factors and `l2_global_sum` which are later used by GU reduction o_running accumulation, and compute the final O in the last stage.
 
     - Optimizations & tradeoffs:
-      - Use TROWMAX/TROWSUM call with a static tile size to allow most effiecnt implementon for 128/256/512/1024 reduce axis, pls consider to do a TFILLPAD (PAD_MIN/-INF) to convert dynamic valid rows/cols to static for handling dynamic input (e.g. S0 seqlen)
-      - Use TROWEXPANDSUB inplace computation (dst==src) to mininize buffer allocation
+      - Use TROWMAX/TROWSUM call with a static tile size to allow most efficient implementation for 128/256/512/1024 reduce axis, pls consider to do a TFILLPAD (PAD_MIN/-INF) to convert dynamic valid rows/cols to static for handling dynamic input (e.g. S0 seqlen)
+      - Use TROWEXPANDSUB inplace computation (dst==src) to minimize buffer allocation
       - Carefully interleaving 1d reduced tile compute and 2d compute to reuse pipe barrier bubble within vector unit
 
     - Vector tile UB allocation and reuse (allocate_vec_tile_buffers)
@@ -398,7 +398,7 @@ Sim vs NPU comparison (Seq = 2K):
       - `compute_gu` is vector-core driven and performs per-tile accumulation using `TGU_ND` / `TGU_LAST_ND` macro kernel. The last tile triggers final division by `l2_global_sum`.
     - Optimizations & tradeoffs:
       - Keep `runningOTile` accumulator assigned.
-      - Use TROWEXPANDMUL and TROWEXPANDDIV inplace computation (dst==src) to mininize buffer allocation
+      - Use TROWEXPANDMUL and TROWEXPANDDIV inplace computation (dst==src) to minimize buffer allocation
 
   ### 3. Pipeline orchestration & cube/vector parallelism 
 
@@ -427,8 +427,8 @@ Sim vs NPU comparison (Seq = 2K):
     - Ping‑pong AccTile assignment for accumulators is done via `assign_running_acc_tile()` to avoid write-after-read hazards when overlapping producers/consumers.
     - The design is allow out-of-order execution for Reordering the pipeline stage schedule below.
 
-  - **Reorder the pipeline stage execution schedule to resolve datadpenency**
-    - Lets look at an example for Head=128 S0=128 and S1=1024 case, for CUBE_S1=128 tiling, there are totally 4 loops each with compute_qk->compute_p->compute_pv->compute_gu, and there is data depenency between stage in the loop. compute_qk & compute_pv stages are executed in cube core, and compute_pv & compute_gu stages are executed in vector core.
+  - **Reorder the pipeline stage execution schedule to resolve data dependency**
+    - Lets look at an example for Head=128 S0=128 and S1=1024 case, for CUBE_S1=128 tiling, there are totally 4 loops each with compute_qk->compute_p->compute_pv->compute_gu, and there is data dependency between stage in the loop. compute_qk & compute_pv stages are executed in cube core, and compute_pv & compute_gu stages are executed in vector core.
 
 
     In theory, without software pipelining (pre-executing qk, p, and later pv) the execution would be fully in sequential below:
@@ -437,7 +437,7 @@ Sim vs NPU comparison (Seq = 2K):
     <img src="fa_pipeline_preload0_generated.svg" alt="CV Seqential execution" />
     </div>
 
-    With pre-execution of qk, p (and later pv) would resolve the data depenency and keep the vector compute resoruce fully busy, below showing the intra-core (tload,tcompute,tstore) and inter-CV-stage pipeline
+    With pre-execution of qk, p (and later pv) would resolve the data dependency and keep the vector compute resource fully busy, below showing the intra-core (tload,tcompute,tstore) and inter-CV-stage pipeline
     
     QK pre-execution = 2 (Theory)
     

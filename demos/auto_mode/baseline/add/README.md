@@ -81,7 +81,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y)
 
 ### 2.3 Register the implementation
 
-Register the implementation with `TORCH_LIBRARY_IMPL`. For NPU execution, `torch_npu` uses the `PrivateUse1` dispatch key, please find the detailed introcution of `PrivateUse1` on Pytorch official website [https://docs.pytorch.org/tutorials/advanced/privateuseone.html](https://docs.pytorch.org/tutorials/advanced/privateuseone.html)
+Register the implementation with `TORCH_LIBRARY_IMPL`. For NPU execution, `torch_npu` uses the `PrivateUse1` dispatch key, please find the detailed introduction of `PrivateUse1` on Pytorch official website [https://docs.pytorch.org/tutorials/advanced/privateuseone.html](https://docs.pytorch.org/tutorials/advanced/privateuseone.html)
 
 ```cpp
 TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
