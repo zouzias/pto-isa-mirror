@@ -241,6 +241,53 @@ AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
     out = dstGlobal.data();
 }
 
+template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
+          int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
+AICORE inline void RunTLoadSplitBatchND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
+{
+    constexpr int batch = gShape0;
+    constexpr int m = gShape3;
+    constexpr int kTile = gShape4;
+    constexpr int wholeK = gWholeShape4;
+    constexpr int srcBatchStride = gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4;
+    constexpr int secondLoadOffsetBytes = m * BLOCK_BYTE_SIZE;
+
+    using SrcSliceShape = pto::Shape<1, gShape1, gShape2, gShape3, gShape4>;
+    using SrcSliceStride = pto::Stride<srcBatchStride, gWholeShape2 * gWholeShape3 * gWholeShape4,
+                                      gWholeShape3 * gWholeShape4, wholeK, 1>;
+    using SrcSliceGlobal = GlobalTensor<T, SrcSliceShape, SrcSliceStride, Layout::ND>;
+
+    using DstShape = pto::Shape<gShape0, gShape1, gShape2, gShape3, gShape4>;
+    using DstStride = pto::Stride<gShape1 * gShape2 * gShape3 * gShape4, gShape2 * gShape3 * gShape4,
+                                  gShape3 * gShape4, gShape4, 1>;
+    using DstGlobal = GlobalTensor<T, DstShape, DstStride, Layout::ND>;
+
+    // Keep one L1 container tile for both batches, then fill it with two m-row loads.
+    using BatchTile = Tile<TileType::Mat, T, 2 * m, kTile, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 512>;
+
+    BatchTile dstTile(2 * m, kTile);
+    BatchTile batch0Tile(m, kTile);
+    BatchTile batch1Tile(m, kTile);
+
+    TASSIGN(dstTile, 0x0);
+    TASSIGN(batch0Tile, 0x0);
+    // Second load lands at the next m-row slice, i.e. m * 32B from the tile base.
+    TASSIGN(batch1Tile, secondLoadOffsetBytes);
+
+    SrcSliceGlobal srcBatch0(src);
+    SrcSliceGlobal srcBatch1(src + srcBatchStride);
+    DstGlobal dstGlobal(out);
+
+    TLOAD(batch0Tile, srcBatch0);
+    TLOAD(batch1Tile, srcBatch1);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE_MAT2GM(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
 template <typename T, int dstN, int dstC1, int dstH, int dstW, int dstC0, int gWholeShape0, int gWholeShape1,
           int gWholeShape2, int gWholeShape3, int gWholeShape4>
 AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
@@ -434,6 +481,9 @@ __global__ AICORE void TLoadKernel(__gm__ T *out, __gm__ T *src)
     } else if constexpr (format == 8) { // format = 8: NDC1HWC02NDC1HWC0
         RunTLoad6HD<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
                     gWholeShape3, gWholeShape4>(out, src);
+    } else if constexpr (format == 9) { // format = 9: split ND2NZ stitch with second load offset M * 32B
+        RunTLoadSplitBatchND2NZ<T, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1,
+                                gWholeShape2, gWholeShape3, gWholeShape4>(out, src);
     }
 }
 
@@ -525,3 +575,5 @@ template void LaunchTLoad<8, uint16_t, 1, 1, 10, 16, 2, 2, 2, 256, 16, 100>(uint
 template void LaunchTLoad<8, uint16_t, 1, 1, 1, 1, 8192, 2, 8, 16, 16, 8192>(uint16_t *out, uint16_t *src,
                                                                              void *stream);
 template void LaunchTLoad<8, float, 1, 1, 1, 112, 112, 2, 2, 3, 224, 224>(float *out, float *src, void *stream);
+template void LaunchTLoad<9, uint16_t, 2, 1, 1, 64, 64, 2, 1, 1, 64, 1024>(uint16_t *out, uint16_t *src,
+                                                                            void *stream);

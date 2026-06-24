@@ -49,6 +49,7 @@ void TestTload()
     // format = 6: FRACTALZ2FRACTALZ
     // format = 7: FRACTALZ4D2FRACTALZ4D
     // format = 8: NDC1HWC02NDC1HWC0
+    // format = 9: split ND2NZ stitch with second load offset M * 32B
     size_t srcDataSize = static_cast<size_t>(gWholeShape0) * static_cast<size_t>(gWholeShape1) *
                          static_cast<size_t>(gWholeShape2) * static_cast<size_t>(gWholeShape3) *
                          static_cast<size_t>(gWholeShape4) * sizeof(DataType);
@@ -375,4 +376,9 @@ TEST_F(TLoadGM2L1Test, NDC1HWC02NDC1HWC0_bfloat16_1_1_1_1_8192_2_8_16_16_8192)
 TEST_F(TLoadGM2L1Test, NDC1HWC02NDC1HWC0_float_1_1_1_112_112_2_2_3_224_224)
 {
     TestTload<8, float, 1, 1, 1, 112, 112, 2, 2, 3, 224, 224>();
+}
+
+TEST_F(TLoadGM2L1Test, SplitND2NZ_bfloat16_t_2_1_1_64_64_2_1_1_64_1024)
+{
+    TestTload<9, uint16_t, 2, 1, 1, 64, 64, 2, 1, 1, 64, 1024>();
 }

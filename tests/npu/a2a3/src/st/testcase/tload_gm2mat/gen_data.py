@@ -68,6 +68,23 @@ def gen_golden_data(case_name, gInfo):
                    0:gShape3] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3]
         output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape4,
             gShape3Align // c0_size, c0_size).transpose(0, 1, 2, 4, 3, 5)
+    elif gInfo.format == "ND2NZ_SPLIT_BM":
+        input_arr = np.zeros((gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type)
+        # Deterministic diagonal pattern for split-load debug: each batch has unique diagonal labels
+        # in the first K-tile region. This makes wrong NZ stitch regions easy to identify.
+        for b in range(gShape0):
+            for m in range(gShape3):
+                if m < gShape4:
+                    input_arr[b, 0, 0, m, m] = np.array(1 + b * gShape3 + m, dtype=data_type)
+        c0_size = 32 // np.dtype(data_type).itemsize
+        gShape4Align = (gShape4 + c0_size - 1) // c0_size * c0_size
+        output_arr = np.zeros(
+            shape=(gShape0, gShape1, gShape2, gShape3, gShape4Align), dtype=data_type)
+        # Expected stitched tensor is [B, M, Ktile], with Ktile taken from a larger K-whole source.
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3,
+                   0:gShape4] = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+        output_arr = output_arr.reshape(gShape0, gShape1, gShape2, gShape3,
+            gShape4Align // c0_size, c0_size).transpose(4, 0, 1, 2, 3, 5)
 
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
@@ -152,6 +169,8 @@ if __name__ == "__main__":
         "TLoadGM2L1Test.NDC1HWC02NDC1HWC0_bfloat16_1_1_10_16_2_2_2_256_16_100", # cut N D C1 W
         "TLoadGM2L1Test.NDC1HWC02NDC1HWC0_bfloat16_1_1_1_1_8192_2_8_16_16_8192", # cut N D C1 H
         "TLoadGM2L1Test.NDC1HWC02NDC1HWC0_float_1_1_1_112_112_2_2_3_224_224", # cut N D C1 H W
+
+        "TLoadGM2L1Test.SplitND2NZ_bfloat16_t_2_1_1_64_64_2_1_1_64_1024",
     ]
 
     case_params_list = [
@@ -215,6 +234,8 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.float16, "NDC1HWC02NDC1HWC0", 1, 1, 10, 16, 2, 2, 2, 256, 16, 100),
         GlobalTensorInfo(np.float16, "NDC1HWC02NDC1HWC0", 1, 1, 1, 1, 8192, 2, 8, 16, 16, 8192),
         GlobalTensorInfo(np.float32, "NDC1HWC02NDC1HWC0", 1, 1, 1, 112, 112, 2, 2, 3, 224, 224),
+
+        GlobalTensorInfo(np.float16, "ND2NZ_SPLIT_BM", 2, 1, 1, 64, 64, 2, 1, 1, 64, 1024),
 
     ]
 
