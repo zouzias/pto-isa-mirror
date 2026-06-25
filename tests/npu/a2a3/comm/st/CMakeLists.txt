@@ -60,7 +60,9 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
-set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-enable")
+# Manual mode is the default in the current bisheng toolchain; the legacy driver
+# flag --cce-pto-enable has been removed (auto mode is now --cce-enable-pto-passes).
+# Do NOT enable PTO auto passes here: comm/tput is a manual-mode test.
 
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
