@@ -381,7 +381,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
                 return;
             }
         }
-        using GlobalDataQ = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, KV_LATENT_DIM>,
+        using GlobalDataQ = GlobalTensor<half, pto::Shape<1, 1, 1, KV_LATENT_DIM, Cube_S0>,
                                          pto::Stride<1, 1, 1, 1, KV_LATENT_DIM>, Layout::DN>;
         using GlobalDataCKV =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, KV_LATENT_DIM>, pto::Stride<1, 1, 1, KV_LATENT_DIM, 1>>;
