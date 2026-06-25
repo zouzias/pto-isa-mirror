@@ -94,7 +94,7 @@ __simt_callee__ AICORE PTO_INLINE bool last_owner_find_elem(__ubuf__ const TIdx 
                                                             uint32_t targetSlot, uint32_t cap, uint32_t totalElems,
                                                             uint32_t validCols, uint32_t &winnerR, uint32_t &winnerC)
 {
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t k = 0u; k < totalElems; ++k) {
         const uint32_t j = totalElems - 1u - k;
         const uint32_t r = (validCols == 1u) ? j : (j / validCols);
@@ -115,7 +115,7 @@ __simt_callee__ AICORE PTO_INLINE bool last_owner_find_row(__ubuf__ const TIdx *
                                                            uint32_t targetSlot, uint32_t cap, uint32_t numRows,
                                                            uint32_t &winnerRow)
 {
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t k = 0u; k < numRows; ++k) {
         const uint32_t row = numRows - 1u - k;
         uint32_t doW;
@@ -155,7 +155,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t rowWarp = ty % kRowWarps;
     const uint32_t colSeg = ty / kRowWarps;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t row = rowWarp; row < validRows; row += kRowWarps) {
         const uint32_t rawIdx = static_cast<uint32_t>(indices[row]);
         uint32_t doWrite;
@@ -163,7 +163,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
         if constexpr (Atomic != ScatterAtomicOp::None) {
             if (doWrite) {
                 __gm__ T *dstRow = table + safeIdx * validCols;
-#pragma unroll(4)
+#pragma unroll 4
                 for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < validCols; col += kColStride) {
                     scatter_apply<Atomic>(&dstRow[col], src[tile_offset_2d<TileSrc>(row, col)]);
                 }
@@ -171,7 +171,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
         } else {
             if (doWrite) {
                 __gm__ T *dstRow = table + safeIdx * validCols;
-#pragma unroll(4)
+#pragma unroll 4
                 for (uint32_t col = colSeg * mscatter_cfg::WARP_SIZE + tx; col < validCols; col += kColStride) {
                     dstRow[col] = src[tile_offset_2d<TileSrc>(row, col)];
                 }
@@ -197,12 +197,12 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t tid = threadIdx.y * mscatter_cfg::WARP_SIZE + threadIdx.x;
     const uint32_t totalThreads = mscatter_cfg::MAX_THREADS;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t s = tid; s < tableRows; s += totalThreads) {
         uint32_t winnerRow = 0u;
         if (last_owner_find_row<Oob, TIdx>(indices, s, tableRows, validRows, winnerRow)) {
             __gm__ T *dstRow = table + s * validCols;
-#pragma unroll(4)
+#pragma unroll 4
             for (uint32_t col = 0u; col < validCols; ++col) {
                 dstRow[col] = src[tile_offset_2d<TileSrc>(winnerRow, col)];
             }
@@ -232,7 +232,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 
     const uint32_t tid = threadIdx.y * mscatter_cfg::WARP_SIZE + threadIdx.x;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t i = tid; i < totalElems; i += kLaunchThreads) {
         const uint32_t r = (validCols == 1u) ? i : (i / validCols);
         const uint32_t c = (validCols == 1u) ? 0u : (i - r * validCols);
@@ -271,7 +271,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t tid = threadIdx.y * mscatter_cfg::WARP_SIZE + threadIdx.x;
     const uint32_t totalThreads = mscatter_cfg::MAX_THREADS;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t s = tid; s < tableSize; s += totalThreads) {
         uint32_t winnerR = 0u;
         uint32_t winnerC = 0u;
