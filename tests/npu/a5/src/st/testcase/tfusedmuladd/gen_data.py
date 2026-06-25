@@ -14,6 +14,7 @@ import os
 import numpy as np
 import math
 
+
 def check_golden_data(golden, threshold=0.1):
     total = golden.size
     infcnt = np.sum(np.isinf(golden))
@@ -47,8 +48,8 @@ def gen_golden_data(case_name, param):
     dst.tofile("input_dst.bin")
 
     # Perform the operation
-    dst[0:h_valid, 0:w_valid] = np.maximum(input0[0:h_valid, 0:w_valid] * dst[0:h_valid, 0:w_valid] +\
-        input1[0:h_valid, 0:w_valid], 0)
+    dst[0:h_valid, 0:w_valid] = input0[0:h_valid, 0:w_valid] * dst[0:h_valid, 0:w_valid] +\
+        input1[0:h_valid, 0:w_valid]
     check_golden_data(dst)
 
     # Save the input and golden data to binary files
@@ -77,7 +78,7 @@ class TestParams:
             np.uint16: 'uint16',
             np.uint8: 'uint8'
         }[dtype]
-        self.name = f"TFUSEDMULADDRELUTest.case_{dtype_str}_{dst_tile_row}x{dst_tile_col}_\
+        self.name = f"TFUSEDMULADDTest.case_{dtype_str}_{dst_tile_row}x{dst_tile_col}_\
 {src0_tile_row}x{src0_tile_col}_{src1_tile_row}x{src1_tile_col}_\
 {valid_row}x{valid_col}"
 
@@ -91,10 +92,16 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_list = [
+        TestParams(np.float32, 1, 8, 1, 8, 1, 8, 1, 8),
         TestParams(np.float32, 64, 64, 64, 64, 64, 64, 64, 64),
         TestParams(np.float32, 32, 128, 32, 192, 32, 256, 32, 127),
+        TestParams(np.float32, 1, 21840, 1, 21840, 1, 21840, 1, 21840),
+        TestParams(np.float32, 2730, 8, 2730, 8, 2730, 8, 2730, 8),
+        TestParams(np.float16, 1, 16, 1, 16, 1, 16, 1, 16),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 32, 128, 32, 192, 32, 256, 32, 127),
+        TestParams(np.float16, 2730, 16, 2730, 16, 2730, 16, 2730, 16),
+        TestParams(np.float16, 1, 43680, 1, 43680, 1, 43680, 1, 43680),
     ]
 
     for param in case_list:
