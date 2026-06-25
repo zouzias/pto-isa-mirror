@@ -102,13 +102,13 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t rowWarp = ty % kRowWarps;
     const uint32_t colSeg = ty / kRowWarps;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t row = rowWarp; row < validRows; row += kRowWarps) {
         const uint32_t rawIdx = static_cast<uint32_t>(indices[row]);
         uint32_t doRead;
         const uint32_t safeIdx = gather_remap<Oob>(rawIdx, tableRows, doRead);
         __gm__ const T *srcRow = table + safeIdx * validCols;
-#pragma unroll(4)
+#pragma unroll 4
         for (uint32_t col = colSeg * mgather_cfg::WARP_SIZE + tx; col < validCols; col += kColStride) {
             const T val = doRead ? srcRow[col] : static_cast<T>(0);
             dst[tile_offset_2d<TileDst>(row, col)] = val;
@@ -140,7 +140,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
     const uint32_t ty = threadIdx.y;
     const uint32_t tid = ty * mgather_cfg::WARP_SIZE + tx;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t i = tid; i < totalElems; i += kLaunchThreads) {
         const uint32_t r = (validCols == 1u) ? i : (i / validCols);
         const uint32_t c = (validCols == 1u) ? 0u : (i - r * validCols);
@@ -359,7 +359,7 @@ AICORE __simt_vf__ LAUNCH_BOUND(1024) PTO_INLINE
 
     const uint32_t tid = threadIdx.y * mgather_cfg::WARP_SIZE + threadIdx.x;
 
-#pragma unroll(1)
+#pragma unroll 1
     for (uint32_t off = tid; off < kTileNumel; off += kLaunchThreads) {
         const uint32_t blockCol = off / kBlockSpan;
         const uint32_t rem = off - blockCol * kBlockSpan;
