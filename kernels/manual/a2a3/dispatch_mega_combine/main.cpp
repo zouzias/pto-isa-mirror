@@ -408,10 +408,10 @@ void PrintPerfSummary(const CaseConfig &cfg, uint32_t launch_block_dim, int warm
               << " routed_tokens=" << cfg.routed_tokens_all_ranks
               << " remote_routed_tokens=" << cfg.remote_routed_tokens_all_ranks
               << " compute_flops=" << cfg.compute_flops_all_ranks << " comm_bytes=" << cfg.comm_bytes_all_ranks << '\n';
-    std::cout << "  kernel(syscnt max rank per iter): avg=" << kernel_stats.avg << " us"
-              << " min=" << kernel_stats.min << " us"
-              << " max=" << kernel_stats.max << " us"
-              << " std=" << kernel_stats.stddev << " us\n";
+    std::cout << "  kernel(syscnt max rank per iter): avg=" << kernel_stats.avg << " us";
+    std::cout << " min=" << kernel_stats.min << " us";
+    std::cout << " max=" << kernel_stats.max << " us";
+    std::cout << " std=" << kernel_stats.stddev << " us\n";
     std::cout << "    input_tokens/s=" << ToTokensPerSecond(cfg.input_tokens_all_ranks, kernel_stats.avg)
               << " routed_tokens/s=" << ToTokensPerSecond(cfg.routed_tokens_all_ranks, kernel_stats.avg)
               << " eq_compute=" << ToTflops(cfg.compute_flops_all_ranks, kernel_stats.avg) << " TFLOPS"
