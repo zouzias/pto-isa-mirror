@@ -460,6 +460,8 @@ struct UrmaTestContext {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             aclrtFree(devBuf);
             devBuf = nullptr;
+            HcclCommDestroy(comm);
+            comm = nullptr;
             return false;
         }
         return true;

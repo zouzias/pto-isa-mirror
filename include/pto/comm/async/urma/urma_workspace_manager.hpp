@@ -247,7 +247,7 @@ private:
             return false;
         }
         RegedBufferEntity symLocalBuf{};
-        if (SelectSymmetricLocalBuffer(hostEntity, symLocalBuf) && symLocalBuf.type == REGED_BUFFER_RMA) {
+        if (SelectSymmetricLocalBuffer(hostEntity, peer, symLocalBuf) && symLocalBuf.type == REGED_BUFFER_RMA) {
             localTokenId = symLocalBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
         }
 
@@ -295,7 +295,7 @@ private:
         mem.rmtJettyType = 1;
         mem.targetHint = 0;
         mem.tpn = sq.contextInfo.ubJfs.tpID;
-        mem.tid = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
+        mem.tid = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId >> kUrmaTokenIdTidShift;
         mem.rmtTokenValue = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenValue;
         mem.len = symRmaSize;
         mem.addr = symRmaAddr;
@@ -492,14 +492,15 @@ private:
         return false;
     }
 
-    bool ReadRegedBufferEntityAt(RegedBufferEntity *array, uint32_t count, uint32_t index, RegedBufferEntity &out) const
+    bool ReadRegedBufferEntityAt(RegedBufferEntity *array, uint32_t count, uint32_t index, uint32_t peer,
+                                 RegedBufferEntity &out) const
     {
         if (array == nullptr || index >= count) {
             return false;
         }
         const void *ptr = reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(array) +
                                                          static_cast<uintptr_t>(index) * sizeof(RegedBufferEntity));
-        return CopyChannelSubStruct(ptr, &out, sizeof(RegedBufferEntity), index, "RegedBufferEntity");
+        return CopyChannelSubStruct(ptr, &out, sizeof(RegedBufferEntity), peer, "RegedBufferEntity");
     }
 
     bool SelectSymmetricRemoteBuffer(ChannelHandle handle, uint32_t peer, const ChannelEntity &entity,
@@ -520,20 +521,18 @@ private:
         bool found = false;
         for (uint32_t i = 0; i < entity.remoteBufferNum; ++i) {
             RegedBufferEntity buf{};
-            if (!ReadRegedBufferEntityAt(entity.remoteBufferAddr, entity.remoteBufferNum, i, buf)) {
+            if (!ReadRegedBufferEntityAt(entity.remoteBufferAddr, entity.remoteBufferNum, i, peer, buf)) {
                 continue;
             }
             if (buf.type != REGED_BUFFER_RMA) {
                 continue;
             }
-            if (buf.bufferInfo.rma.addr != rmaAddr && buf.bufferInfo.rma.size != symmetricSize_) {
+            if (buf.bufferInfo.rma.addr != rmaAddr || buf.bufferInfo.rma.size != symmetricSize_) {
                 continue;
             }
             selected = buf;
             found = true;
-            if (buf.bufferInfo.rma.addr == rmaAddr) {
-                break;
-            }
+            break;
         }
         if (!found) {
             std::cerr << "[URMA] peer=" << peer << " no RegedBufferEntity matches " << kUrmaSymMemTag << std::endl;
@@ -542,14 +541,14 @@ private:
         return true;
     }
 
-    bool SelectSymmetricLocalBuffer(const ChannelEntity &entity, RegedBufferEntity &selected) const
+    bool SelectSymmetricLocalBuffer(const ChannelEntity &entity, uint32_t peer, RegedBufferEntity &selected) const
     {
         if (entity.localBufferAddr == nullptr || entity.localBufferNum == 0) {
             return false;
         }
         for (uint32_t i = 0; i < entity.localBufferNum; ++i) {
             RegedBufferEntity buf{};
-            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, buf)) {
+            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, peer, buf)) {
                 continue;
             }
             if (buf.type == REGED_BUFFER_RMA && buf.bufferInfo.rma.size == symmetricSize_) {
@@ -559,7 +558,7 @@ private:
         }
         for (uint32_t i = 0; i < entity.localBufferNum; ++i) {
             RegedBufferEntity buf{};
-            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, buf)) {
+            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, peer, buf)) {
                 continue;
             }
             if (buf.type == REGED_BUFFER_RMA) {

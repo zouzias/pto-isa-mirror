@@ -23,9 +23,7 @@ namespace urma {
 constexpr uint32_t kUrmaPollCqThreshold = 10;
 constexpr uint32_t kUrmaMaxPollTimes = 1000000;
 constexpr uint32_t kNumCqePerPollCq = 100;
-constexpr uint32_t kMaxSgeNumShift = 2;
 constexpr uint32_t kUrmaTokenIdTidShift = 8;
-constexpr uint32_t kUrmaWqeNumPerSqe = 4;
 constexpr uint64_t kCacheLineSize = 64;
 
 // UB 协议单 WQE 最大传输量，对齐设备 max_read/write_size（现网 A5 典型值）
