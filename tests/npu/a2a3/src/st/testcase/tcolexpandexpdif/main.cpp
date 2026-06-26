@@ -82,10 +82,22 @@ void test_tcolexpandexpdif()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<float> golden(outputFileSize);
-    std::vector<float> devFinal(outputFileSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
-    ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
+    size_t outputElementCount = dstRow * dstCol;
+    std::vector<float> golden(outputElementCount);
+    std::vector<float> devFinal(outputElementCount);
+    if constexpr (std::is_same_v<T, aclFloat16>) {
+        std::vector<uint16_t> goldenRaw(outputElementCount);
+        std::vector<uint16_t> devRaw(outputElementCount);
+        ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, goldenRaw.data(), outputFileSize);
+        ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devRaw.data(), outputFileSize);
+        for (size_t i = 0; i < outputElementCount; i++) {
+            golden[i] = aclFloat16ToFloat(*(aclFloat16 *)&goldenRaw[i]);
+            devFinal[i] = aclFloat16ToFloat(*(aclFloat16 *)&devRaw[i]);
+        }
+    } else {
+        ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
+        ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
+    }
     bool ret = ResultCmp(golden, devFinal, 0.001f);
 
     EXPECT_TRUE(ret);
