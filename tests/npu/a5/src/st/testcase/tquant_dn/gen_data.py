@@ -73,21 +73,15 @@ def fp32_to_e4m3(x):
 
 
 def nd2nz_mxfp8(data_fp8, m, n):
-    padded_rows16 = ((m + 15) // 16) * 16
-    virtual_row = padded_rows16 + 1
+    # Stock ND->NZ for 1-byte data: [M,N] -> [n_groups, padded_m, 32]. No virtual_row+1
+    # (the +1 is a UB-internal stride; the GM NZ layout is plain [n_groups, padded_m, 32]).
+    padded_m = ((m + 15) // 16) * 16
+    n_groups = ((n + 31) // 32) * 32 // 32
     padded_cols = ((n + 31) // 32) * 32
-    n_col_groups = padded_cols // 32
-    nz = np.zeros(virtual_row * padded_cols, dtype=np.int8)
-    data_flat = data_fp8.reshape(-1) if data_fp8.ndim > 1 else data_fp8
-    for cg in range(n_col_groups):
-        for r in range(padded_rows16):
-            src_idx = r * padded_cols + cg * 32
-            dst_idx = cg * virtual_row * 32 + r * 32
-            if r < m:
-                nz[dst_idx : dst_idx + 32] = data_flat[src_idx : src_idx + 32]
-            else:
-                nz[dst_idx : dst_idx + 32] = 0
-    return nz
+    reshaped = data_fp8.reshape(m, n_groups, 32) if data_fp8.ndim == 1 else data_fp8.reshape(m, n_groups, 32)
+    padded = np.zeros((padded_m, n_groups, 32), dtype=data_fp8.dtype)
+    padded[:m, :, :] = reshaped
+    return np.transpose(padded, [1, 0, 2]).reshape(-1)
 
 
 def pack_e8_dn(e8m0, hat_m, n, padded_cols):
@@ -100,8 +94,13 @@ def pack_e8_dn(e8m0, hat_m, n, padded_cols):
 
 
 def dn2zz_e8m0(e8m0_dn, hat_m, n):
-    # Row-major (ND) input -> ZZ is currently a flattened identity in this ST.
-    return e8m0_dn[: hat_m * n].copy()
+    # DN->ZZ = transpose(E_DN[M̂,N]) then ND->ZZ on the [N,M̂] tile.
+    # ND->ZZ: reshape [N, M̂] -> [N/16, 16, M̂/2, 2] -> transpose [0,2,1,3] -> flat.
+    et = e8m0_dn.reshape(hat_m, n).T.copy()
+    rb = n // 16
+    p = hat_m // 2
+    zz = et.reshape(rb, 16, p, 2).transpose(0, 2, 1, 3).reshape(-1).astype(np.uint8)
+    return zz
 
 
 def quant_bf16_to_mxfp8_dn(src_bf16_fp32, m, n_pad):
@@ -310,7 +309,7 @@ def _gen_src(m, n_pad):
     return base * group_max_repeated * 10000.0
 
 
-def _write_golden(out_dir, input_bytes, fp8_nd, e8_dn, group_max_bytes):
+def _write_golden(out_dir, input_bytes, fp8_nd, e8_dn, group_max_bytes, fp8_nz=None, e8_zz=None):
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "input.bin"), "wb") as f:
         f.write(input_bytes)
@@ -320,6 +319,12 @@ def _write_golden(out_dir, input_bytes, fp8_nd, e8_dn, group_max_bytes):
         f.write(e8_dn.tobytes())
     with open(os.path.join(out_dir, "golden_group_max.bin"), "wb") as f:
         f.write(group_max_bytes)
+    if fp8_nz is not None:
+        with open(os.path.join(out_dir, "golden_fp8_nz.bin"), "wb") as f:
+            f.write(fp8_nz.tobytes())
+    if e8_zz is not None:
+        with open(os.path.join(out_dir, "golden_e8_zz.bin"), "wb") as f:
+            f.write(e8_zz.tobytes())
 
 
 def gen_golden_data(case_name, m, n):
@@ -328,30 +333,31 @@ def gen_golden_data(case_name, m, n):
     bf16_bits = fp32_to_bf16_bits(src).reshape(m, n_pad)
     src_bf16_fp32 = bf16_bits_to_fp32(bf16_bits.flatten()).reshape(m, n_pad)
 
-    fp8_nd, e8_dn, _, _ = quant_bf16_to_mxfp8_dn(src_bf16_fp32, m, n_pad)
+    fp8_nd, e8_dn, fp8_nz, e8_zz = quant_bf16_to_mxfp8_dn(src_bf16_fp32, m, n_pad)
 
     group_max = get_group_max_dn(src_bf16_fp32, group_size=32)
     golden_group_max_bf16 = fp32_to_bf16_bits(group_max)
 
     out_dir = os.path.join(GOLDEN_DIR, case_name)
-    _write_golden(out_dir, bf16_bits.reshape(-1).tobytes(), fp8_nd, e8_dn, golden_group_max_bf16.reshape(-1).tobytes())
+    _write_golden(out_dir, bf16_bits.reshape(-1).tobytes(), fp8_nd, e8_dn,
+                 golden_group_max_bf16.reshape(-1).tobytes(), fp8_nz, e8_zz)
 
 
 def gen_golden_data_fp32(case_name, m, n):
     n_pad = n
     src = _gen_src(m, n_pad)
 
-    fp8_nd, e8_dn, _, _ = quant_bf16_to_mxfp8_dn(src, m, n_pad)
+    fp8_nd, e8_dn, fp8_nz, e8_zz = quant_bf16_to_mxfp8_dn(src, m, n_pad)
 
     group_max = get_group_max_dn(src, group_size=32)
     golden_group_max_f32 = group_max.astype(np.float32).view(np.uint32)
 
     out_dir = os.path.join(GOLDEN_DIR, case_name)
     input_bytes = src.astype(np.float32).view(np.uint32).reshape(-1).tobytes()
-    _write_golden(out_dir, input_bytes, fp8_nd, e8_dn, golden_group_max_f32.reshape(-1).tobytes())
+    _write_golden(out_dir, input_bytes, fp8_nd, e8_dn, golden_group_max_f32.reshape(-1).tobytes(), fp8_nz, e8_zz)
 
 
-def _write_golden_mxfp4(out_dir, input_bytes, fp4_nd, e8_dn, group_max_bytes):
+def _write_golden_mxfp4(out_dir, input_bytes, fp4_nd, e8_dn, fp4_nz, group_max_bytes):
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "input.bin"), "wb") as f:
         f.write(input_bytes)
@@ -359,6 +365,8 @@ def _write_golden_mxfp4(out_dir, input_bytes, fp4_nd, e8_dn, group_max_bytes):
         f.write(fp4_nd.tobytes())
     with open(os.path.join(out_dir, "golden_e8_dn.bin"), "wb") as f:
         f.write(e8_dn.tobytes())
+    with open(os.path.join(out_dir, "golden_fp4_nz.bin"), "wb") as f:
+        f.write(fp4_nz.tobytes())
     with open(os.path.join(out_dir, "golden_group_max.bin"), "wb") as f:
         f.write(group_max_bytes)
 
@@ -370,11 +378,15 @@ def gen_golden_data_mxfp4_bf16(case_name, m, n):
     src_bf16_fp32 = bf16_bits_to_fp32(bf16_bits.flatten()).reshape(m, n_pad)
 
     fp4_nd, e8_dn, group_max = quant_bf16_to_mxfp4_dn(src_bf16_fp32, m, n_pad)
+    fp4_padded = np.zeros((m, n_pad // 2), dtype=np.uint8)
+    fp4_padded[:, :n_pad // 2] = fp4_nd.reshape(m, n_pad // 2)
+    fp4_nz = nd2nz_mxfp8(fp4_padded, m, n_pad // 2)
     golden_group_max_bf16 = fp32_to_bf16_bits(group_max)
 
     out_dir = os.path.join(GOLDEN_DIR, case_name)
     _write_golden_mxfp4(
-        out_dir, bf16_bits.reshape(-1).tobytes(), fp4_nd, e8_dn, golden_group_max_bf16.reshape(-1).tobytes()
+        out_dir, bf16_bits.reshape(-1).tobytes(), fp4_nd, e8_dn, fp4_nz,
+        golden_group_max_bf16.reshape(-1).tobytes()
     )
 
 
@@ -400,13 +412,17 @@ def gen_golden_data_mxfp4_fp16(case_name, m, n):
     src_fp16_bits = src.view(np.uint16)
 
     fp4_nd, e8_dn, group_max = quant_fp16_to_mxfp4_dn(src, m, n_pad)
+    fp4_padded = np.zeros((m, n_pad // 2), dtype=np.uint8)
+    fp4_padded[:, :n_pad // 2] = fp4_nd.reshape(m, n_pad // 2)
+    fp4_nz = nd2nz_mxfp8(fp4_padded, m, n_pad // 2)
     # DN reduces fp16 abs directly and stores the max as fp16 bits (kernel MaxTile
     # is half when T=half), so the golden group_max is fp16 bits too.
     golden_group_max_fp16 = group_max.view(np.uint16)
 
     out_dir = os.path.join(GOLDEN_DIR, case_name)
     _write_golden_mxfp4(
-        out_dir, src_fp16_bits.reshape(-1).tobytes(), fp4_nd, e8_dn, golden_group_max_fp16.reshape(-1).tobytes()
+        out_dir, src_fp16_bits.reshape(-1).tobytes(), fp4_nd, e8_dn, fp4_nz,
+        golden_group_max_fp16.reshape(-1).tobytes()
     )
 
 
