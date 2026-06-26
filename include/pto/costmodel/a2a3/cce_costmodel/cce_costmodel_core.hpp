@@ -83,13 +83,16 @@ inline const ::pto::mocker::evaluator::ArchConfig &CurrentArch()
 
 inline uint64_t EstimateBandwidthCycles(uint64_t bytes, ::pto::mocker::evaluator::PipeKey key)
 {
-    const auto &arch = CurrentArch();
-    const double bandwidth = arch.bandwidth[key];
+    namespace ev = ::pto::mocker::evaluator;
+    // Apply Hill-bandwidth env (PTO_BW_MODE) once; default is the legacy flat model
+    // (K=0 => hill=peak, totals=0 => no cap), so behaviour is unchanged unless overridden.
+    ev::ApplyHillBandwidthFromEnv();
+    const double bandwidth = ev::gHillBandwidth.BwEff(key, bytes, ev::gActiveCoreCount);
     if (bandwidth <= 0.0) {
         return 0;
     }
-    return static_cast<uint64_t>((static_cast<long double>(bytes) / ::pto::mocker::evaluator::kBytesPerGb) /
-                                 static_cast<long double>(bandwidth) * arch.frequency_hz);
+    return static_cast<uint64_t>((static_cast<long double>(bytes) / ev::kBytesPerGb) /
+                                 static_cast<long double>(bandwidth) * CurrentArch().frequency_hz);
 }
 
 inline void FlushPipeTail(::pto::mocker::evaluator::PipeKey pipe)
@@ -135,10 +138,27 @@ inline uint64_t EstimateLinearCycles(::pto::mocker::evaluator::PipeKey pipe, uin
                                      uint64_t slope = 2, uint64_t tail = 0)
 {
     uint64_t cycles = slope * repeat;
-    if (::pto::mocker::IsPipeQueueEmpty(pipe)) {
-        cycles += head;
+    if (pipe == ::pto::mocker::evaluator::PipeKey::VECTOR) {
+        // Vector stream model: cycles = lat + (repeat-1)*thru.
+        //  - thru (= slope): incremental time per extra repeat; small because it bakes in the overlap
+        //    with the predecessor. So the per-instruction output is summable (the inter-instruction
+        //    overlap is already in the cost, not the timeline).
+        //  - lat (= head+tail): the instruction's startup latency. Paid at stream start (pipe queue
+        //    empty == first vec op since the last sync/core boundary); back-to-back vec ops in the
+        //    same stream overlap their lat away and pay only thru. (head/tail split is unmeasured:
+        //    single-op data fixes only head+tail+slope*repeat, see cce_costmodel_vector_compute.hpp.)
+        // No deferred tail for vec (folded into the stream-start charge) => no tail-loss/attribution
+        // problem at stream end.
+        if (::pto::mocker::IsPipeQueueEmpty(pipe)) {
+            cycles += head + tail;
+        }
+        ::pto::mocker::SetLastCceTail(pipe, 0);
+    } else {
+        if (::pto::mocker::IsPipeQueueEmpty(pipe)) {
+            cycles += head;
+        }
+        ::pto::mocker::SetLastCceTail(pipe, tail);
     }
-    ::pto::mocker::SetLastCceTail(pipe, tail);
     return cycles;
 }
 
@@ -150,6 +170,20 @@ inline uint64_t EstimateLinearCycles(uint64_t repeat, uint64_t head = 6, uint64_
 inline uint64_t EstimateConstCycles(uint64_t cycles = 1)
 {
     return cycles;
+}
+
+// Vector ALU ops (vadd/vsub/vmul/vdiv/vmax/vmin/vand/vor) pay a one-time dispatch
+// floor when the effective byte count is not aligned to one vector repeat (256B;
+// fp32 <=> cols % 64 != 0): the hardware enters count-mask dispatch (~15-19 cyc,
+// independent of op/repeat). The floor is orthogonal to the op's slope/head/tail
+// and is added only while the mocker has recorded a count-mode mask (see
+// set_vector_mask / set_mask_count in cce_costmodel_sync.hpp). Single global
+// constant: per-op measured floor_needed medians 12-18 cyc (std < 3) across the
+// binary ALU set, so 16 fits all within tolerance.
+inline constexpr uint64_t kCountModeFloorCycles = 16;
+inline uint64_t EstimateCountModeFloor()
+{
+    return ::pto::mocker::IsVectorCountMode() ? kCountModeFloorCycles : 0;
 }
 
 inline uint64_t CeilDiv(uint64_t x, uint64_t y)
@@ -164,12 +198,15 @@ inline uint64_t ExtractBits(uint64_t value, uint32_t shift, uint64_t mask)
     return (value >> shift) & mask;
 }
 
-// Temporary common latency model for vconv_*; the detailed behavior is not fully understood yet.
+// Common latency model for vconv_* (fp32->fp16 cast).
+// 910B3 标定 (fp32, TCVT, dav-2201): measured = 0.90·repeat + 27 (R²=0.99, rep 1-128).
+// Was the uncalibrated placeholder (slope=2, head=14, tail=18) -> ~1.9x over at rep128
+// (mock 273 vs real 141). slope 2->1; fixed head+tail kept ~27 (split unmeasured).
 inline uint64_t EstimateVconvCycles(uint64_t repeat)
 {
     constexpr uint64_t kConvHeadCycles = 14;
-    constexpr uint64_t kConvSlope = 2;
-    constexpr uint64_t kConvTailCycles = 18;
+    constexpr uint64_t kConvSlope = 1;
+    constexpr uint64_t kConvTailCycles = 13;
     return EstimateLinearCycles(repeat, kConvHeadCycles, kConvSlope, kConvTailCycles);
 }
 

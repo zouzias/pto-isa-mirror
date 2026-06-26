@@ -47,7 +47,7 @@ inline uint64_t GetCurrentPtoInstrCycles()
     }
 
     if (trace.active_pto_stack.size() == 1) {
-        FlushAllPendingTails();
+        FlushAllPendingTailsExceptVector();
     }
 
     if (trace.active_pto_stack.empty()) {
