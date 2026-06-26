@@ -133,6 +133,18 @@ using SetExecutionContextHookFn = void (*)(uint32_t block_idx, uint32_t subblock
 using GetExecutionContextHookFn = void (*)(uint32_t *block_idx, uint32_t *subblock_id, uint32_t *subblock_dim);
 using GetSharedStorageHookFn = void *(*)(std::string key, size_t size);
 using GetTaskCookieHookFn = uint64_t (*)();
+using GetSubblockIdInjectedHookFn = uint32_t (*)();
+using GetPipeSharedStateInjectedHookFn = void *(*)(uint64_t pipe_key, size_t size);
+
+inline GetSubblockIdInjectedHookFn injected_subblock_id_hook = nullptr;
+inline GetPipeSharedStateInjectedHookFn injected_pipe_shared_state_hook = nullptr;
+
+inline GetPipeSharedStateInjectedHookFn ResolvePipeSharedStateHook()
+{
+    static auto hook =
+        reinterpret_cast<GetPipeSharedStateInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_pipe_shared_state"));
+    return hook;
+}
 
 inline SetExecutionContextHookFn ResolveSetExecutionContextHook()
 {
@@ -160,6 +172,12 @@ inline GetTaskCookieHookFn ResolveTaskCookieHook()
     return hook;
 }
 
+inline GetSubblockIdInjectedHookFn ResolveSubblockIdHook()
+{
+    static auto hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_subblock_id"));
+    return hook;
+}
+
 struct ExecutionContext {
     uint32_t block_idx = 0;
     uint32_t subblock_id = 0;
@@ -168,6 +186,12 @@ struct ExecutionContext {
 };
 
 inline thread_local ExecutionContext execution_context{};
+
+inline void register_hooks(void *get_subblock_id, void *get_pipe_shared_state)
+{
+    injected_subblock_id_hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(get_subblock_id);
+    injected_pipe_shared_state_hook = reinterpret_cast<GetPipeSharedStateInjectedHookFn>(get_pipe_shared_state);
+}
 
 inline void set_execution_context(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim = 1)
 {
@@ -221,6 +245,12 @@ inline uint32_t get_block_idx()
 
 inline uint32_t get_subblockid()
 {
+    if (pto::cpu_sim::injected_subblock_id_hook != nullptr) {
+        return pto::cpu_sim::injected_subblock_id_hook();
+    }
+    if (auto hook = pto::cpu_sim::ResolveSubblockIdHook(); hook != nullptr) {
+        return hook();
+    }
     if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
         uint32_t block_idx = 0;
         uint32_t subblock_id = 0;

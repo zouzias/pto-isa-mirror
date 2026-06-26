@@ -21,6 +21,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+#define PTO_INSTR_SCOPE(API, ...)
+#define PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, ...)
 
 namespace pto {
 
@@ -2207,6 +2209,7 @@ template <typename Pipe, typename TileProd, TileSplitAxis Split, std::enable_if_
 PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &...events)
 {
     TSYNC(events...);
+    PTO_INSTR_SCOPE_OUTS(TPUSH, 0, pipe, tile);
     TPUSH_IMPL<Pipe, TileProd, Split>(pipe, tile);
     return {};
 }
@@ -2215,7 +2218,12 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPUSH_IMPL<TileData, Pipe>(tile, pipe);
+    PTO_INSTR_SCOPE_OUTS(TPUSH, 0, tile, pipe);
+#ifdef __CPU_SIM
+    TPUSH_REVERSED_IMPL<TileData, Pipe>(tile, pipe);
+#else
+    TPUSH_IMPL(tile, pipe);
+#endif
     return {};
 }
 
@@ -2224,6 +2232,7 @@ template <typename Pipe, typename TileCons, TileSplitAxis Split, std::enable_if_
 PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &...events)
 {
     TSYNC(events...);
+    PTO_INSTR_SCOPE(TPOP, pipe, tile);
     TPOP_IMPL<Pipe, TileCons, Split>(pipe, tile);
     return {};
 }
@@ -2232,7 +2241,12 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPOP_IMPL<TileData, Pipe>(tile, pipe);
+    PTO_INSTR_SCOPE(TPOP, tile, pipe);
+#ifdef __CPU_SIM
+    TPOP_REVERSED_IMPL<TileData, Pipe>(tile, pipe);
+#else
+    TPOP_IMPL(tile, pipe);
+#endif
     return {};
 }
 
@@ -2240,6 +2254,7 @@ template <typename Pipe, TileSplitAxis Split, typename... WaitEvents>
 PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
+    PTO_INSTR_SCOPE_OUTS(TFREE, 0, pipe);
     TFREE_IMPL<Pipe, Split>(pipe);
     return {};
 }
@@ -2249,7 +2264,12 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TALLOC(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TALLOC_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    PTO_INSTR_SCOPE(TALLOC, pipe, gmTensor);
+#ifdef __CPU_SIM
+    TALLOC_GLOBAL_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+#else
+    TALLOC_IMPL(pipe, gmTensor);
+#endif
     return {};
 }
 
@@ -2258,7 +2278,12 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPUSH_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    PTO_INSTR_SCOPE_OUTS(TPUSH, 0, pipe, gmTensor);
+#ifdef __CPU_SIM
+    TPUSH_GLOBAL_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+#else
+    TPUSH_IMPL(pipe, gmTensor);
+#endif
     return {};
 }
 
@@ -2275,7 +2300,12 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPOP_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    PTO_INSTR_SCOPE(TPOP, pipe, gmTensor);
+#ifdef __CPU_SIM
+    TPOP_GLOBAL_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+#else
+    TPOP_IMPL(pipe, gmTensor);
+#endif
     return {};
 }
 
@@ -2284,7 +2314,12 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TFREE_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    PTO_INSTR_SCOPE_OUTS(TFREE, 0, pipe, gmTensor);
+#ifdef __CPU_SIM
+    TFREE_GLOBAL_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+#else
+    TFREE_IMPL(pipe, gmTensor);
+#endif
     return {};
 }
 
@@ -2292,6 +2327,7 @@ template <typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
+    PTO_INSTR_SCOPE_OUTS(TFREE, 0, pipe);
     TFREE_IMPL<Pipe>(pipe);
     return {};
 }
