@@ -295,7 +295,7 @@ private:
         mem.rmtJettyType = 1;
         mem.targetHint = 0;
         mem.tpn = sq.contextInfo.ubJfs.tpID;
-        mem.tid = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId >> kUrmaTokenIdTidShift;
+        mem.tid = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
         mem.rmtTokenValue = symRemoteBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenValue;
         mem.len = symRmaSize;
         mem.addr = symRmaAddr;
