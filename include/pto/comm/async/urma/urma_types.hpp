@@ -24,6 +24,7 @@ constexpr uint32_t kUrmaPollCqThreshold = 10;
 constexpr uint32_t kUrmaMaxPollTimes = 1000000;
 constexpr uint32_t kNumCqePerPollCq = 100;
 constexpr uint64_t kCacheLineSize = 64;
+constexpr size_t kUrmaEidBytes = 16;
 
 // UB 协议单 WQE 最大传输量，对齐设备 max_read/write_size（现网 A5 典型值）
 constexpr uint64_t kUrmaMaxWqeTransferBytes = 256ULL * 1024ULL * 1024ULL;
