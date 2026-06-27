@@ -270,7 +270,6 @@ Path selection:
 
 - **DirectLarge**: full-row writeback for large-token cases.
 - **DirectSmall**: subtile writeback for small-token cases to improve AIV occupancy.
-- **DirectAuto**: host tiling selects the path by token volume.
 
 Unpermute restores the source-rank token order:
 
@@ -360,7 +359,7 @@ cd ${git_clone_path}/kernels/manual/a2a3/dispatch_mega_combine
 
 The default case is currently `worldSize=8, M=2048, K=7168, N=4096, topK=8, expertPerRank=16, maxOutputSize=81940`. A2/A3 users can use the script defaults and do not need to pass an explicit chip option in typical commands.
 
-To run another typical M value, copy the corresponding command from the supported-case table. Example:
+To run another typical M value, use the typical-case commands above directly. Example:
 
 ```bash
 bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max-output-size 81940 --reuse-data
@@ -417,4 +416,4 @@ Common constraints:
 
 | Date | Change |
 | --- | --- |
-| 2026-06-26 | Added bilingual README files following the `gemm_ar` README structure |
+| 2026-06-26 | Added `dispatch_mega_combine` README covering the MegaMoE operator, stage flow, build/run, and FAQ |

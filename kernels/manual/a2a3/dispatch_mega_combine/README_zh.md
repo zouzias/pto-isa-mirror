@@ -270,7 +270,7 @@ gmm2Output[srcRow, 0:K] half
 
 - **DirectLarge**：大 token 量场景，按完整 row 写回。
 - **DirectSmall**：小 token 量场景，按 subtile 拆分，提升 AIV 并行度。
-- **DirectAuto**：host tiling 按 token volume 自动选择。
+
 
 Unpermute 是最后的源 rank 还原阶段：
 
@@ -360,7 +360,7 @@ cd ${git_clone_path}/kernels/manual/a2a3/dispatch_mega_combine
 
 默认 case 由 `run.sh` 内部参数决定，当前是 `worldSize=8, M=2048, K=7168, N=4096, topK=8, expertPerRank=16, maxOutputSize=81940`。A2/A3 场景使用脚本默认配置即可，不需要在典型 case 命令里显式指定芯片参数。
 
-切换其它典型 M 档位时，建议直接使用上面的典型 case 命令，保证 `worldSize/K/N/topK/experts/maxOutputSize` 与性能数据口径一致。例如：
+切换其它典型 M 档位时，建议直接使用上面的典型 case 命令。例如：
 
 ```bash
 bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max-output-size 81940 --reuse-data
@@ -417,4 +417,4 @@ bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max
 
 | 日期 | 变更 |
 | --- | --- |
-| 2026-06-26 | 新增 `dispatch_mega_combine` README，按 `gemm_ar` README 章节格式整理 MegaMoE 算子说明、阶段流程、构建运行和 FAQ |
+| 2026-06-26 | 新增 `dispatch_mega_combine` README，整理 MegaMoE 算子说明、阶段流程、构建运行和 FAQ |
