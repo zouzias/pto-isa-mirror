@@ -14,7 +14,7 @@ h2, h3 {
 
 ### 传统MOE的流程
 
-<img src="moe_ffn_flow_improved.png"  width="800" />
+<img src="moe_ffn_flow_improved.svg"  width="800" />
 
 - ① 本地token permuate：源卡内 [token,expert,k] 按expert排序 [expert,token,k]
 - ② All2All通信：发送 [expert,token,k] 到目标卡
@@ -26,21 +26,21 @@ h2, h3 {
 
 **实际的效果是串行衔接：**
 
-<img src="moe_sequence.png"  width="800" />
+<img src="moe_sequence.svg"  width="800" />
 
 ### Ascend的megamoe的overlap方案
 
 **将通信和计算的粒度拆细,在一个大kernel内实现计算和通信的细粒度的掩盖：**
 
-<img src="megamoe_pipeline_swiglu_2seg_fixed_clean.png" width="800" />
+<img src="megamoe_pipeline_swiglu_2seg_fixed_clean.svg" width="800" />
 
 **实际实现采用expert级的流水overlap：**
 
-<img src="megamoe_pipeline_swiglu_2seg_fixed.png"  width="800" />
+<img src="megamoe_pipeline_swiglu_2seg_fixed.svg"  width="800" />
 
 - ① 开头：两次permuate合并到一起，通过一次轻量的all2all通信对齐内存布局
 
-   <img src="permuate_all2all_count.png"  width="250" />
+   <img src="permuate_all2all_count.svg"  width="250" />
 
 - ② 中间：
   - a.按照expert逐个做AIC和AIV的overlap,第i个专家的GMM可以与第i-1专家的AlltoallV
@@ -51,7 +51,7 @@ h2, h3 {
   - 前重排阶段，能用UB直接完成的场景，全部放到UB里做
   - combine阶段，采用subtile模式提高多核并发
 
-    <img src="aic_aiv_subtile.png"  width="500" />
+    <img src="aic_aiv_subtile.svg"  width="500" />
 
 ### PTO-ISA 的overlap方案
 
@@ -67,7 +67,7 @@ h2, h3 {
 **有效的优化点：**
 
 - 针对核心的 GMM1 和 GMM2 阶段，采用 PTO tile 编程模式进行优化，使用 swizzle、双缓冲、L1→L0 片上多级复用等手段；实测比 Catlass 快约 40%。
-  <img src="avl_l1_tile.png"  width="500" />
+  <img src="avl_l1_tile.svg"  width="500" />
 - 增加参与 combine 的 AIV 核，在 A3 上有些许效果；但不能增加太多，否则会与 GMM2 的 HBM 访问冲突，影响 GMM2 性能。后续可考虑在 A5 上使用 ubuf→cbuf 能力，降低 HBM 压力。
 
 **无效的优化点：**
@@ -79,7 +79,7 @@ h2, h3 {
 
 **PTO-ISA 实测效果对比：**
 
-<img src="megamoe_perf_compare.png" alt="MegaMoE性能对比" width="650" />
+<img src="megamoe_perf_compare.svg" alt="MegaMoE性能对比" width="650" />
 
 整体来看，PTO megamoe 在小 M 场景下与 ascendc 实测基本持平；随着 M 增大，PTO 的 GMM 和通信计算 overlap 优势逐步体现，在 M=512 及以上 case 中整体领先更明显，可以有20%的提升。
 
