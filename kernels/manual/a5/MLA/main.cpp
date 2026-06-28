@@ -158,12 +158,13 @@ void run_tmla()
     aclFloat16 *qHost, *cKvHost;
     aclFloat16 *xexpHost;
     float *tmpFloatExpHost;
-    aclFloat16 *vHost;
+    aclFloat16 *w_uvHost;
     T *outDevice; // qk_out
     aclFloat16 *xexpDevice;
     T *midDevice = nullptr; // not used by this test but kept for symmetry
     aclFloat16 *qDevice, *cKvDevice;
-    aclFloat16 *vDevice;
+    aclFloat16 *w_uvDevice;
+    aclFloat16 *vReconsDevice;
     T *out2Device; // pv_out
     T *out2Host;
 
@@ -182,12 +183,15 @@ void run_tmla()
     aclrtMalloc((void **)&profileDevice, profile_bytes, ACL_MEM_MALLOC_HUGE_FIRST);
     uint8_t *cvCommDevice = nullptr;
     aclrtMalloc((void **)&cvCommDevice, cv_comm_bytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    // allocate v and out2 buffers
-    size_t vSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
+    // allocate w_uv and out2 buffers
+    size_t w_uvSize = KV_LATENT_DIM * HEAD_SIZE * sizeof(aclFloat16);
     size_t pvPartSize = S0 * HEAD_SIZE * sizeof(T);
     int num_tiles = S1 / TILE_S1;
+    size_t vReconsSize = static_cast<size_t>(block_rows) * static_cast<size_t>(kMlaCvFifoSize) *
+                         static_cast<size_t>(tile_factor) * static_cast<size_t>(128) * static_cast<size_t>(HEAD_SIZE) * sizeof(aclFloat16);
     size_t out2TotalSize = pv_fifo_bytes;
-    aclrtMalloc((void **)&vDevice, vSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&w_uvDevice, w_uvSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&vReconsDevice, vReconsSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
     // allocate global_sum buffer (per-tile S0 floats)
     size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
@@ -217,7 +221,7 @@ void run_tmla()
     if (devToml.is_open()) {
         write_dev_entry(devToml, "q_device", reinterpret_cast<uint64_t>(qDevice), qSize);
         write_dev_entry(devToml, "c_kv_device", reinterpret_cast<uint64_t>(cKvDevice), cKvSize);
-        write_dev_entry(devToml, "v_device", reinterpret_cast<uint64_t>(vDevice), vSize);
+        write_dev_entry(devToml, "w_uv_device", reinterpret_cast<uint64_t>(w_uvDevice), w_uvSize);
         write_dev_entry(devToml, "qk_tile_fifo", reinterpret_cast<uint64_t>(outDevice), qk_fifo_bytes);
         write_dev_entry(devToml, "pv_tile_fifo", reinterpret_cast<uint64_t>(out2Device), out2TotalSize);
         write_dev_entry(devToml, "p_tile_fifo", reinterpret_cast<uint64_t>(xexpDevice), p_fifo_bytes_half);
@@ -228,13 +232,13 @@ void run_tmla()
 
     ReadFile(GetGoldenDir() + "/q.bin", qSize, qHost, qSize);
     ReadFile(GetGoldenDir() + "/c_kv.bin", cKvSize, cKvHost, cKvSize);
-    // read v
-    aclrtMallocHost((void **)(&vHost), S1 * HEAD_SIZE * sizeof(aclFloat16));
-    ReadFile(GetGoldenDir() + "/v.bin", vSize, vHost, vSize);
+    // read w_uv_t
+    aclrtMallocHost((void **)(&w_uvHost), KV_LATENT_DIM * HEAD_SIZE * sizeof(aclFloat16));
+    ReadFile(GetGoldenDir() + "/w_uv_t.bin", w_uvSize, w_uvHost, w_uvSize);
 
     aclrtMemcpy(qDevice, qSize, qHost, qSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(cKvDevice, cKvSize, cKvHost, cKvSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(vDevice, vSize, vHost, vSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(w_uvDevice, w_uvSize, w_uvHost, w_uvSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Debug logging setup (preserve original tqksv behavior)
     uint64_t ffts{0};
@@ -252,8 +256,8 @@ void run_tmla()
     // Launch kernel, pass ffts ctrl addr and device-side log buffer, and xexp/tmp_float_exp device ptrs
     LaunchTMLA<S0, HEAD_SIZE, KV_LATENT_DIM, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kMlaCvFifoSize,
                INTERMEDIATE_CHECK, CAUSAL_MASK, kMlaCvFifoConsSyncPeriod>(
-        (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)cKvDevice, (aclFloat16 *)vDevice,
-        (aclFloat16 *)xexpDevice, (float *)expMaxIfifoDevice, (float *)gSumDevice, (float *)expMaxDevice,
+        (uint16_t *)ffts, (aclFloat16 *)qDevice, (aclFloat16 *)cKvDevice, (aclFloat16 *)w_uvDevice,
+        (aclFloat16 *)vReconsDevice, (aclFloat16 *)xexpDevice, (float *)expMaxIfifoDevice, (float *)gSumDevice, (float *)expMaxDevice,
         (float *)oDevice, (float *)oPartsDevice, (float *)outDevice, (float *)out2Device, profileDevice, stream,
         cvCommDevice);
 
@@ -620,7 +624,8 @@ void run_tmla()
     aclrtFree(cKvDevice);
     aclrtFree(xexpDevice);
     aclrtFree(expMaxIfifoDevice);
-    aclrtFree(vDevice);
+    aclrtFree(w_uvDevice);
+    aclrtFree(vReconsDevice);
     aclrtFree(out2Device);
     aclrtFree(gSumDevice);
     aclrtFree(expMaxDevice);
@@ -698,7 +703,7 @@ void run_tmla()
     aclrtFreeHost(cKvHost);
     aclrtFreeHost(xexpHost);
     aclrtFreeHost(tmpFloatExpHost);
-    aclrtFreeHost(vHost);
+    aclrtFreeHost(w_uvHost);
     aclrtFreeHost(out2Host);
     aclrtFreeHost(oHost);
     aclrtFreeHost(oPartsHost);

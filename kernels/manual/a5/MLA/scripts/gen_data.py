@@ -60,6 +60,8 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, kv_latent_dim=KV_LATENT_DIM,
     w_uv.tofile(os.path.join(path, 'w_uv.bin'))
     c_kv_t = c_kv.T.astype(np.float16)
     c_kv_t.tofile(os.path.join(path, 'c_kv_t.bin'))
+    w_uv_t = w_uv.T.astype(np.float16)
+    w_uv_t.tofile(os.path.join(path, 'w_uv_t.bin'))
     golden.tofile(os.path.join(path, 'qk.bin'))
 
     arr_f32 = golden.astype(np.float32)
@@ -124,6 +126,10 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, kv_latent_dim=KV_LATENT_DIM,
 
     v.tofile(os.path.join(path, 'v.bin'))
     v.T.astype(np.float16).tofile(os.path.join(path, 'vt.bin'))
+    for idx in range(num_tiles):
+        c0 = idx * tile_s1
+        v_tile_fp32 = v_fp32[c0:c0 + tile_s1, :].astype(np.float32)
+        v_tile_fp32.tofile(os.path.join(path, f'v_recons_tile{idx}.bin'))
     pv.tofile(os.path.join(path, 'pv.bin'))
     for idx, part in enumerate(pv_tile_fifo_parts):
         part.tofile(os.path.join(path, f'pv_tile_fifo{idx}.bin'))

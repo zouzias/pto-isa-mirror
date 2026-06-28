@@ -55,6 +55,7 @@ enum class AccMode
 #define LAST_LOOP(x, n) ((x) == ((n) - 1))
 #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
 
+template <unsigned Tag = 0>
 AICORE inline uint64_t getPingPong(uint32_t flip)
 {
     static uint64_t pingpong = 0;
