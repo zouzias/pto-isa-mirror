@@ -317,3 +317,48 @@ This avoids PIPE_FIX→PIPE_MTE1 binary flag collision by routing V data through
 1. Measure performance (tick count) with V recon vs baseline (V from GM without V recon)
 2. If performance regression from GM roundtrip, consider Option 3 (PIPE_MTE1→PIPE_FIX pipeline with proper spacing)
 3. Consider using L0C→L1 direct path with more event IDs (Option 2) if GM roundtrip latency is too high
+
+---
+
+## Session 5: Performance Comparison — V recon vs Baseline
+
+### Test Configuration
+- **Case**: HEAD=128, KV_LATENT_DIM=256, S0=128, S1=512, CUBE_S0=128, CUBE_S1=128, TILE_S1=128
+- **FIFO_MODE=1** (ALL_UB_PATH), qkPreloadNum=2, kTileFactor=1
+- **Ascend950PR_9599 simulator**, sys_cnt_multiple=1.0
+
+### ENABLE_V_RECONSTRUCTION Flag
+Added compile-time flag `ENABLE_V_RECONSTRUCTION` (default 1):
+- **V_RECONS=1**: V reconstruction with GM roundtrip (TSTORE→GM→TLOAD)
+- **V_RECONS=0**: Baseline — V loaded directly from GM (no reconstruction)
+
+Passed via `-V` / `--v-recons` flag in run.sh, `-DENABLE_V_RECONSTRUCTION` in CMakeLists.txt.
+Branches compute_pv, main.cpp data loading, and v_recons_fifo pointer handling.
+
+### Baseline Path (V_RECONS=0) in compute_pv
+- Skip V recon section (w_uv TLOAD, TMATMUL, TASSIGN, PIPE_M→PIPE_FIX, TSTORE, PIPE_FIX→PIPE_M)
+- Direct TLOAD vMatTile from GM (`v_recons_fifo + s1_index * HEAD_SIZE`)
+- PIPE_FIX→PIPE_M sync: single wait/set per sub_tile (before/after PV TMATMUL)
+- PIPE_MTE1→PIPE_MTE2 reverse sync with PV_EVENT_ID0/1 priming (same as V recon)
+
+### Results
+
+| Version | Total Tick | Max Diff | Description |
+|---------|-----------|----------|-------------|
+| **Baseline (V_RECONS=0)** | 22,881 | 0.000571 | V from GM directly |
+| **V recon GM roundtrip (V_RECONS=1)** | 40,009 | 0.000571 | V = c_kv × W_uv, TSTORE→GM→TLOAD |
+
+**V recon GM roundtrip is ~75% slower** (40,009 vs 22,881 ticks).
+
+### Analysis
+The V recon GM roundtrip adds:
+1. Extra TMATMUL (c_kv × W_uv) per sub_tile — doubles Cube workload in compute_pv
+2. TSTORE (L0C→GM) + TLOAD (GM→L1) roundtrip — adds GM latency per tile
+3. PIPE_M→PIPE_MTE2 + PIPE_MTE1→PIPE_MTE2 extra sync overhead
+
+With kv_latent_dim=256 > head_size=128, the V recon TMATMUL inner dimension is 256 (same as QK), making the Cube core bottleneck even worse. The GM roundtrip latency further slows the pipeline.
+
+### Next Steps (Priority)
+1. **Option 3 (PIPE_MTE1→PIPE_FIX pipeline)**: Replace GM roundtrip with direct TMOV (L0C→L1) using reverse sync pattern. This eliminates the TSTORE/TLOAD GM access but requires proper PIPE_FIX→PIPE_MTE1 binary flag handling across iterations.
+2. **Option 2 (More event IDs for PIPE_FIX→PIPE_MTE1)**: Use 4+ event IDs to prevent binary flag collision across iterations. With enough spacing (e.g., 4 IDs), the pipeline can sustain longer sequences without collision.
+3. **System-level evaluation**: Even if per-kernel V recon is slower, MLA's system benefit (smaller KV cache → longer context) may outweigh the per-token throughput loss. Need to evaluate end-to-end inference latency with KV cache compression ratio.

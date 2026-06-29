@@ -8,8 +8,8 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ======================================================================================================================
 
-SHORT=r:,v:,n:,c:,a:,p:,m:,i,d,k
-LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,mode:,intermediate,debug,mask,mode_dn
+SHORT=r:,v:,n:,c:,a:,p:,m:,i,d,k,V:
+LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,mode:,intermediate,debug,mask,mode_dn,v-recons:
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -48,6 +48,9 @@ do
         (-k | --mask )
             CAUSAL_MASK=1
             shift 1;;
+        (-V | --v-recons )
+            V_RECONS="$2"
+            shift 2;;
         (--)
             shift;
             break;;
@@ -73,6 +76,8 @@ set -euo pipefail
 : "${NPU_ID:=0}"
 : "${QK_PRELOAD:=2}"
 : "${FIFO_MODE:=1}"
+: "${V_RECONS:=1}"
+: "${V_RECONS:=1}"
 
 GEN_CASE_ARGS=()
 if [[ -n "${CASE_FILTER:-}" && "${CASE_FILTER}" == --* ]]; then
@@ -95,6 +100,7 @@ echo "[RUN.SH] CASES_RAW=${CASES_RAW:-}<none>"
 echo "[RUN.SH] NPU_ID=${NPU_ID}"
 echo "[RUN.SH] QK_PRELOAD=${QK_PRELOAD}"
 echo "[RUN.SH] FIFO_MODE=${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)"
+echo "[RUN.SH] V_RECONS=${V_RECONS} (0=baseline/V_from_GM, 1=V_recon/TMOV_L0C_to_L1)"
 echo "[RUN.SH] GEN_CASE_ARGS=${GEN_CASE_ARGS[*]:-<none>}"
 echo "[RUN.SH] INTERMEDIATE=${INTERMEDIATE:-0}"
 echo "[RUN.SH] CAUSAL_MASK=${CAUSAL_MASK:-0}"
@@ -102,7 +108,7 @@ echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
 echo "[RUN.SH] DN_MODE=${MODE_DN:-1}"
 
 python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
-python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json --fifo_mode "${FIFO_MODE}"
+python3 ../scripts/validate_buffer_usage.py --mode dn --cases generated_cases.json --fifo_mode "${FIFO_MODE}" --qk-preload "${QK_PRELOAD}" --v-recons "${V_RECONS}"
 
 CMAKE_EXTRA=()
 if [[ -n "${DEBUG_BUILD:-}" ]]; then
@@ -110,6 +116,7 @@ if [[ -n "${DEBUG_BUILD:-}" ]]; then
 fi
 CMAKE_EXTRA+=(-DMODE_DN=ON)
 CMAKE_EXTRA+=(-DFIFO_MODE=${FIFO_MODE})
+CMAKE_EXTRA+=(-DENABLE_V_RECONSTRUCTION=${V_RECONS})
 
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" ..
 make -j16

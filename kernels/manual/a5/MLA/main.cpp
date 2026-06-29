@@ -187,11 +187,18 @@ void run_tmla()
     size_t w_uvSize = KV_LATENT_DIM * HEAD_SIZE * sizeof(aclFloat16);
     size_t pvPartSize = S0 * HEAD_SIZE * sizeof(T);
     int num_tiles = S1 / TILE_S1;
-    size_t vReconsSize = static_cast<size_t>(block_rows) * static_cast<size_t>(kMlaCvFifoSize) *
-                         static_cast<size_t>(tile_factor) * static_cast<size_t>(128) * static_cast<size_t>(HEAD_SIZE) * sizeof(aclFloat16);
+#if ENABLE_V_RECONSTRUCTION
+    size_t vReconsSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
+#else
+    size_t vDataSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
+#endif
     size_t out2TotalSize = pv_fifo_bytes;
     aclrtMalloc((void **)&w_uvDevice, w_uvSize, ACL_MEM_MALLOC_HUGE_FIRST);
+#if ENABLE_V_RECONSTRUCTION
     aclrtMalloc((void **)&vReconsDevice, vReconsSize, ACL_MEM_MALLOC_HUGE_FIRST);
+#else
+    aclrtMalloc((void **)&vReconsDevice, vDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+#endif
     aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
     // allocate global_sum buffer (per-tile S0 floats)
     size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
@@ -232,13 +239,26 @@ void run_tmla()
 
     ReadFile(GetGoldenDir() + "/q.bin", qSize, qHost, qSize);
     ReadFile(GetGoldenDir() + "/c_kv.bin", cKvSize, cKvHost, cKvSize);
+#if ENABLE_V_RECONSTRUCTION
     // read w_uv_t
     aclrtMallocHost((void **)(&w_uvHost), KV_LATENT_DIM * HEAD_SIZE * sizeof(aclFloat16));
     ReadFile(GetGoldenDir() + "/w_uv_t.bin", w_uvSize, w_uvHost, w_uvSize);
+#else
+    // read v (baseline: V from GM directly)
+    aclrtMallocHost((void **)(&w_uvHost), KV_LATENT_DIM * HEAD_SIZE * sizeof(aclFloat16));
+    aclFloat16 *vHost;
+    aclrtMallocHost((void **)(&vHost), vDataSize);
+    ReadFile(GetGoldenDir() + "/v.bin", vDataSize, vHost, vDataSize);
+#endif
 
     aclrtMemcpy(qDevice, qSize, qHost, qSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(cKvDevice, cKvSize, cKvHost, cKvSize, ACL_MEMCPY_HOST_TO_DEVICE);
+#if ENABLE_V_RECONSTRUCTION
     aclrtMemcpy(w_uvDevice, w_uvSize, w_uvHost, w_uvSize, ACL_MEMCPY_HOST_TO_DEVICE);
+#else
+    aclrtMemcpy(w_uvDevice, w_uvSize, w_uvHost, w_uvSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(vReconsDevice, vDataSize, vHost, vDataSize, ACL_MEMCPY_HOST_TO_DEVICE);
+#endif
 
     // Debug logging setup (preserve original tqksv behavior)
     uint64_t ffts{0};

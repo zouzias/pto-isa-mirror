@@ -66,6 +66,10 @@ set(FIFO_MODE "1" CACHE STRING "UB Path Mode: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONL
 message(STATUS "UB Path Mode: ${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)")
 add_compile_definitions(FIFO_MODE=${FIFO_MODE})
 
+set(ENABLE_V_RECONSTRUCTION "1" CACHE STRING "V Reconstruction: 0=baseline(V from GM), 1=V recon(TMOV L0C→L1)")
+message(STATUS "V Reconstruction: ${ENABLE_V_RECONSTRUCTION} (0=baseline, 1=TMOV L0C→L1)")
+add_compile_definitions(ENABLE_V_RECONSTRUCTION=${ENABLE_V_RECONSTRUCTION})
+
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"

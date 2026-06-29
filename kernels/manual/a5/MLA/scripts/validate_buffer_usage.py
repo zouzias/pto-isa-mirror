@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--cv_fifo_size", type=int, default=8)
     parser.add_argument("--fifo_mode", type=int, default=1, help="FIFO_MODE: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY")
     parser.add_argument("--qk-preload", type=int, default=2, help="QK preload depth (default: 2)")
+    parser.add_argument("--v-recons", type=int, default=1, help="V Reconstruction: 0=baseline, 1=TMOV L0C→L1 (default: 1)")
     args = parser.parse_args()
     use_ub_to_l1 = (args.fifo_mode == 1)
 
