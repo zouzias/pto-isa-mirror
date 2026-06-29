@@ -22,14 +22,7 @@ def gen_golden_data(case_name, param):
     dst_type = param.ctype
     bias_type = param.bias_type
 
-    m, k, n, is_bias, is_atrans, is_btrans = (
-        param.m,
-        param.k,
-        param.n,
-        param.is_bias,
-        False,
-        False,
-    )
+    m, k, n, is_bias, is_atrans, is_btrans = (param.m, param.k, param.n, param.is_bias, False, False)
 
     x1_gm = np.random.randint(-10, 10, [m, k]).astype(a_type)
     x2_gm = np.random.randint(-10, 10, [k, n]).astype(b_type)
@@ -44,13 +37,9 @@ def gen_golden_data(case_name, param):
     x2_gm.tofile("./x2_gm.bin")
 
     if is_bias:
-        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(
-            dst_type
-        ) + bias_gm.astype(dst_type)
+        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(dst_type) + bias_gm.astype(dst_type)
     else:
-        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(
-            dst_type
-        )
+        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(dst_type)
 
     bias_gm.tofile("./bias_gm.bin")
     golden.tofile("./golden.bin")
@@ -72,19 +61,50 @@ class tmatmulParams:
 
 
 if __name__ == "__main__":
-    # 用例名称
     case_name_list = [
         "TMATMULTest.case_norm_1",
         "TMATMULTest.case_norm_2",
         "TMATMULTest.case_norm_3",
         "TMATMULTest.case_norm_4",
         "TMATMULTest.case_norm_5",
-
+        "TMATMULTest.case_norm_6",
+        "TMATMULTest.case_norm_7",
+        "TMATMULTest.case_norm_8",
         "TMATMULTest.case_bias_1",
         "TMATMULTest.case_bias_2",
         "TMATMULTest.case_bias_3",
         "TMATMULTest.case_bias_4",
         "TMATMULTest.case_bias_5",
+        "TMATMULTest.case_bias_6",
+        "TMATMULTest.case_bias_7",
+        "TMATMULTest.case_bias_8",
+        "TMATMULTest.case_bias_9",
+        "TMATMULTest.case_bias_10",
+        "TMATMULTest.case_bias_11",
+        "TMATMULTest.case_bias_12",
+        "TMATMULTest.case_bias_13",
+        "TMATMULTest.case_bias_14",
+        "TMATMULTest.case_bias_15",
+        "TMATMULTest.case_bias_16",
+        "TMATMULTest.case_bias_17",
+        "TMATMULTest.case_bias_18",
+        "TMATMULTest.case_bias_19",
+        "TMATMULTest.case_bias_20",
+        "TMATMULTest.case_bias_21",
+        "TMATMULTest.case_bias_22",
+        "TMATMULTest.case_bias_23",
+        "TMATMULTest.case_bias_24",
+        "TMATMULTest.case_bias_25",
+        "TMATMULTest.case_bias_26",
+        "TMATMULTest.case_bias_27",
+        "TMATMULTest.case_bias_28",
+        "TMATMULTest.case_bias_29",
+        "TMATMULTest.case_bias_30",
+        "TMATMULTest.case_bias_31",
+        "TMATMULTest.case_bias_32",
+        "TMATMULTest.case_bias_33",
+        "TMATMULTest.case_bias_34",
+        "TMATMULTest.case_bias_35",
     ]
 
     case_params_list = [
@@ -93,13 +113,44 @@ if __name__ == "__main__":
         tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 512, False),
         tmatmulParams(np.int8, np.int8, np.int32, 26, 15, 27, False),
         tmatmulParams(np.int8, np.int8, np.int32, 101, 1, 99, False),
-
-
+        tmatmulParams(np.float16, np.float16, np.float16, 33, 16, 2, False),
+        tmatmulParams(np.float16, np.float16, np.float16, 17, 16, 2, False),
+        tmatmulParams(np.int8, np.int8, np.int32, 33, 15, 2, False),
         tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True),
         tmatmulParams(np.float16, np.float16, np.float16, 16, 15, 16, True, np.float16),
         tmatmulParams(np.int8, np.int8, np.int32, 66, 11, 1, True),
         tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 1, True, np.float16),
         tmatmulParams(np.float16, np.float16, np.float16, 29, 11, 41, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 16, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 8, 16, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 16, 2, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 16, 4, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 16, 8, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 1, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 2, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 4, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 4, 8, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 16, 16, 16, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 3, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 5, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 12, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 32, True, np.float16),
+        tmatmulParams(np.int8, np.int8, np.int32, 4, 16, 2, True),
+        tmatmulParams(np.int8, np.int8, np.int32, 4, 16, 16, True),
+        tmatmulParams(np.int8, np.int8, np.int32, 4, 16, 32, True),
+        tmatmulParams(np.int8, np.int8, np.int32, 4, 16, 63, True),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 33, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 48, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 63, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 64, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 29, 11, 2, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 2, 16, 41, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 17, 16, 2, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 20, 16, 2, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 32, 16, 2, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 33, 16, 2, True, np.float16),
+        tmatmulParams(np.int8, np.int8, np.int32, 33, 15, 2, True),
     ]
 
     for i, case_name in enumerate(case_name_list):
