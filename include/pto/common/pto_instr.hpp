@@ -2215,7 +2215,7 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPUSH_IMPL<TileData, Pipe>(tile, pipe);
+    TPUSH_IMPL<Pipe, TileData, TileSplitAxis::TILE_NO_SPLIT>(pipe, tile);
     return {};
 }
 
@@ -2232,7 +2232,7 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPOP_IMPL<TileData, Pipe>(tile, pipe);
+    TPOP_IMPL<Pipe, TileData, TileSplitAxis::TILE_NO_SPLIT>(pipe, tile);
     return {};
 }
 
@@ -2249,7 +2249,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TALLOC(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TALLOC_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    TALLOC_IMPL(pipe, gmTensor);
     return {};
 }
 
@@ -2258,7 +2258,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPUSH(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPUSH_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    TPUSH_IMPL(pipe, gmTensor);
     return {};
 }
 
@@ -2275,7 +2275,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPOP_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    TPOP_IMPL(pipe, gmTensor);
     return {};
 }
 
@@ -2284,7 +2284,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &...events)
 {
     TSYNC(events...);
-    TFREE_IMPL<Pipe, GlobalData, Split>(pipe, gmTensor);
+    TFREE_IMPL(pipe, gmTensor);
     return {};
 }
 
