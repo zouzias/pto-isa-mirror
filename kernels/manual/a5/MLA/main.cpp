@@ -188,7 +188,8 @@ void run_tmla()
     size_t pvPartSize = S0 * HEAD_SIZE * sizeof(T);
     int num_tiles = S1 / TILE_S1;
 #if ENABLE_V_RECONSTRUCTION
-    size_t vReconsSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
+    size_t vReconsSize = static_cast<size_t>(block_rows) * static_cast<size_t>(2) *
+                         static_cast<size_t>(128) * static_cast<size_t>(HEAD_SIZE) * sizeof(aclFloat16);
 #else
     size_t vDataSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
 #endif

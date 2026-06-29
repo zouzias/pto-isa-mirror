@@ -54,7 +54,7 @@ using namespace std;
 #endif
 
 #ifndef ENABLE_V_RECONSTRUCTION
-#define ENABLE_V_RECONSTRUCTION 1 // Default: V reconstruction enabled (TMOV L0C→L1)
+#define ENABLE_V_RECONSTRUCTION 1 // Default: V reconstruction enabled (GM roundtrip: TSTORE L0C→GM + TLOAD GM→L1)
 #endif
 
 // Mode validation
@@ -514,11 +514,9 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         }
 
 #if ENABLE_V_RECONSTRUCTION
-        const event_t vReconsSyncId = static_cast<event_t>(svMatTileEventId - PV_EVENT_ID0);
-#endif
-
-#if ENABLE_V_RECONSTRUCTION
         constexpr uint32_t Cube_LATENT = KV_LATENT_DIM;
+        const event_t vReconsGMEventId = static_cast<event_t>((tile_id * kTileFactor + sub_tile_id) % 2);
+
         using GlobalDataW_uv =
             GlobalTensor<half, pto::Shape<1, 1, 1, KV_LATENT_DIM, HEAD_SIZE>,
                     pto::Stride<1, 1, 1, 1, KV_LATENT_DIM>, Layout::DN>;
@@ -540,9 +538,13 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         set_flag(PIPE_M, PIPE_FIX, EVENT_ID2);
         wait_flag(PIPE_M, PIPE_FIX, EVENT_ID2);
 
-        wait_flag(PIPE_MTE1, PIPE_FIX, vReconsSyncId);
-        TMOV(vMatTile, vReconsAccTile);
-        set_flag(PIPE_FIX, PIPE_MTE1, vReconsSyncId);
+        using GlobalVReconsData = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Cube_HEAD>,
+                                               pto::Stride<1, 1, 1, Cube_HEAD, 1>>;
+        const size_t v_recons_gm_offset =
+            static_cast<size_t>((tile_id * kTileFactor + sub_tile_id) % 2) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_HEAD);
+        GlobalVReconsData vReconsGlobal(v_recons_fifo + v_recons_gm_offset);
+        TSTORE(vReconsGlobal, vReconsAccTile);
+
         set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 #endif
 
@@ -575,8 +577,15 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
 #if ENABLE_V_RECONSTRUCTION
-        wait_flag(PIPE_FIX, PIPE_MTE1, vReconsSyncId);
         wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+        set_flag(PIPE_M, PIPE_MTE2, vReconsGMEventId);
+
+        wait_flag(PIPE_M, PIPE_MTE2, vReconsGMEventId);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
+        TLOAD(vMatTile, vReconsGlobal);
+        set_flag(PIPE_MTE2, PIPE_MTE1, static_cast<event_t>(svMatTileEventId));
+
+        wait_flag(PIPE_MTE2, PIPE_MTE1, static_cast<event_t>(svMatTileEventId));
 #else
         using GlobalVT = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>,
                                       pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
@@ -601,7 +610,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, pvAccMode);
 #endif
 #if ENABLE_V_RECONSTRUCTION
-        set_flag(PIPE_MTE1, PIPE_FIX, vReconsSyncId);
+        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
 #else
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
 #endif
@@ -1124,7 +1133,9 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
     __gm__ float *qk_tile_fifo_block = qk_tile_fifo + static_cast<size_t>(comm_slot) * qk_fifo_block_stride;
     __gm__ float *pv_tile_fifo_block = pv_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
 #if ENABLE_V_RECONSTRUCTION
-    __gm__ half *v_recons_fifo_block = v_recons_fifo;
+    const size_t v_recons_fifo_block_stride =
+        static_cast<size_t>(2) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(HEAD_SIZE);
+    __gm__ half *v_recons_fifo_block = v_recons_fifo + static_cast<size_t>(comm_slot) * v_recons_fifo_block_stride;
 #else
     __gm__ half *v_data_block = v_recons_fifo;
 #endif
@@ -1153,8 +1164,8 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
 #if ENABLE_V_RECONSTRUCTION
-        set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
-        set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID1);
+        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
+        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
 #else
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
@@ -1329,8 +1340,8 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
 #if ENABLE_V_RECONSTRUCTION
-        wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
+        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
 #else
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
