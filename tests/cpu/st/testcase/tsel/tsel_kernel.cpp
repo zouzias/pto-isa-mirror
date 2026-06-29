@@ -13,8 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-#define PTO_DIV_ROUNDUP(x, y) ((((x) + (y)-1) / (y)))
-#define PTO_CEIL(x, y) ((((x) + (y)-1) / (y)) * (y))
+#define PTO_DIV_ROUNDUP(x, y) ((((x) + (y) - 1) / (y)))
+#define PTO_CEIL(x, y) ((((x) + (y) - 1) / (y)) * (y))
 
 template <typename T, int Rows, int Cols, int ValidRows, int ValidCols>
 __global__ AICORE void runTSEL(__gm__ T __out__ *out, __gm__ uint8_t __in__ *mask, __gm__ T __in__ *src0,
@@ -84,3 +84,15 @@ template void LaunchTSel<aclFloat16, 2, 160, 2, 160>(aclFloat16 *out, uint8_t *m
 template void LaunchTSel<int8_t, 2, 128, 2, 128>(int8_t *out, uint8_t *mask, int8_t *src0, int8_t *src1, void *stream);
 template void LaunchTSel<int8_t, 2, 32, 2, 32>(int8_t *out, uint8_t *mask, int8_t *src0, int8_t *src1, void *stream);
 template void LaunchTSel<int8_t, 2, 160, 2, 160>(int8_t *out, uint8_t *mask, int8_t *src0, int8_t *src1, void *stream);
+template void LaunchTSel<uint16_t, 2, 128, 2, 128>(uint16_t *out, uint8_t *mask, uint16_t *src0, uint16_t *src1,
+                                                   void *stream);
+template void LaunchTSel<uint16_t, 2, 32, 2, 32>(uint16_t *out, uint8_t *mask, uint16_t *src0, uint16_t *src1,
+                                                 void *stream);
+template void LaunchTSel<uint16_t, 2, 160, 2, 160>(uint16_t *out, uint8_t *mask, uint16_t *src0, uint16_t *src1,
+                                                   void *stream);
+template void LaunchTSel<uint32_t, 2, 128, 2, 128>(uint32_t *out, uint8_t *mask, uint32_t *src0, uint32_t *src1,
+                                                   void *stream);
+template void LaunchTSel<uint32_t, 2, 32, 2, 32>(uint32_t *out, uint8_t *mask, uint32_t *src0, uint32_t *src1,
+                                                 void *stream);
+template void LaunchTSel<uint32_t, 2, 160, 2, 160>(uint32_t *out, uint8_t *mask, uint32_t *src0, uint32_t *src1,
+                                                   void *stream);
