@@ -69,6 +69,8 @@ void CONCAT(test_, CASENAME)()
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src2Device, fileSize, src2Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    memset(dstHost, 0, fileSize);
+    aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     CONCAT(Launch, CASENAME)<T, kTRows_, kTCols_, vRows, vCols>(dstDevice, src0Device, src1Device, src2Device, stream);
 
     aclrtSynchronizeStream(stream);
