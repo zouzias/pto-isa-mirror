@@ -195,9 +195,23 @@ inline T getProperDataPart(T *buf, size_t offset)
 {
     if constexpr (isTwinType<T>()) {
         // For FP4 data types we split byte into 2 parts at load operation and then operate with them as single bytes
-        return T::FromRaw((buf[offset / 2].RawData() >> ((offset % 2) ? HALF_BYTE_SHIFT : 0)) & HALF_BYTE_MASK);
+        T data = T::FromRaw((buf[offset / 2].RawData() >> ((offset % 2) ? HALF_BYTE_SHIFT : 0)) & HALF_BYTE_MASK);
+        return data;
     } else {
         return buf[offset];
+    }
+}
+
+template <typename T>
+inline void setProperDataPart(T *buf, size_t offset, T val)
+{
+    if constexpr (isTwinType<T>()) {
+        uint16_t shiftByte = (offset % 2) ? HALF_BYTE_SHIFT : 0;
+        uint8_t rawVal = (val.RawData() << shiftByte) & (HALF_BYTE_MASK << shiftByte);
+        uint8_t org = buf[offset / 2].RawData();
+        buf[offset / 2] = T::FromRaw(org | rawVal);
+    } else {
+        buf[offset] = val;
     }
 }
 

@@ -31,7 +31,7 @@ PTO_INTERNAL void TStoreInstrL12Gm(__cbuf__ typename TileData::DType *dst, typen
     for (uint16_t i = 0; i < nBurst; i++) {
         for (size_t j = 0; j < lenBurst * elemNum; j++) {
             // Write from buffer (src) to GM (dst)
-            dst[dstStride * i + j] = src[srcStride * i + j];
+            setProperDataPart(dst, dstStride * i + j, src[srcStride * i + j]);
         }
     }
 }
@@ -94,13 +94,15 @@ __tf__ PTO_INLINE void StorePlainMatrix(typename GlobalData::DType __out__ *dst,
                 int dstIdx = dstBase + c * static_cast<std::size_t>(gStride4);
                 if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
                     uint64_t scalar = scalars[c];
-                    dst[dstIdx] = quantize_element<D, S, quantMode, applyRelu>(src[srcBase + c], scalar);
+                    D val = quantize_element<D, S, quantMode, applyRelu>(src[srcBase + c], scalar);
+                    setProperDataPart(dst, dstIdx, val);
                 } else {
                     S val = src[srcBase + c];
                     if constexpr (applyRelu) {
                         val = ReLU(val);
                     }
-                    dst[dstIdx] = static_cast<D>(val);
+                    // setProperDataPart(dst, dstIdx, static_cast<D>(val));
+                    setProperDataPart(dst, dstIdx, val);
                 }
             }
         });
@@ -125,13 +127,15 @@ __tf__ PTO_INLINE void StorePlainMatrix(typename GlobalData::DType __out__ *dst,
                 int dstIdx = r * static_cast<std::size_t>(gStride3) + c * dstStride4;
                 if constexpr (quantMode != QuantModeCPU_t::NoQuant) {
                     uint64_t scalar = scalars[r];
-                    dst[dstIdx] = quantize_element<D, S, quantMode, applyRelu>(src[srcBase + r], scalar);
+                    D val = quantize_element<D, S, quantMode, applyRelu>(src[srcBase + r], scalar);
+                    setProperDataPart(dst, dstIdx, val);
                 } else {
                     S val = src[srcBase + r];
                     if constexpr (applyRelu) {
                         val = ReLU(val);
                     }
-                    dst[dstIdx] = static_cast<D>(val);
+                    // setProperDataPart(dst, dstIdx, static_cast<D>(val));
+                    setProperDataPart(dst, dstIdx, val);
                 }
             }
         });
