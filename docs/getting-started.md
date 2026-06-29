@@ -115,7 +115,7 @@ Create and activate a virtual environment:
   python -m pip install -U pip
   python -m pip install numpy ml_dtypes en_dtypes
   ```
-Note: ml_stypes and en_dtypes packages are required for specific tests only. Installing these packages on Windows might require building them from source code.
+Note: ml_dtypes and en_dtypes packages are required for specific tests only. Installing these packages on Windows might require building them from source code.
 
 ### Run CPU Simulator
 
