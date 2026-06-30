@@ -205,7 +205,7 @@ set(ALL_TESTCASES
     tabs
     tlog
     trecip
-    # tstore_acc2gm
+    tstore_acc2gm
     tdivs
     tmuls
     tadds
@@ -263,6 +263,8 @@ set(ALL_TESTCASES
     # tmov_nd2nz
     # textract_acc2vec
     texpands_mat
+    tload_mix
+    tload_mix_copy
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
