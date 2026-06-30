@@ -7,60 +7,59 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#include <pto/pto-inst.hpp>
 #include "test_common.h"
+#include "pto/pto-inst.hpp"
 #include <gtest/gtest.h>
-#include <pto/common/constants.hpp>
 
 using namespace std;
 using namespace pto;
 using namespace PtoTestCommon;
 using namespace pto;
 
-template <typename ST, typename DT, size_t rows, size_t cols, size_t validRows, size_t validCols, uint16_t idxRow,
-          uint16_t idxCol, uint16_t srcLayout, uint16_t dstLayout>
-AICORE inline void runTEXTRACT(__gm__ DT *out, __gm__ ST *src)
+template <typename T, size_t c1hw, size_t n1, size_t n0, size_t c0, size_t dst_row, size_t dst_col, size_t idxR,
+          size_t idxC>
+AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ T *src)
 {
-    constexpr int validRowsDst = validRows - idxRow;
-    constexpr int validColsDst = validCols - idxCol;
+    static_assert(c0 == 32 / sizeof(T));
 
-    using GlobalDataSrc = GlobalTensor<
-        ST, pto::Shape<1, 1, 1, validRows, validCols>,
-        pto::Stride<1 * validRows * validCols, 1 * validRows * validCols, validRows * validCols, validCols, 1>>;
-    using GlobalDataDst = GlobalTensor<DT, pto::Shape<1, 1, 1, validRowsDst, validColsDst>,
-                                       pto::Stride<1 * validRowsDst * validColsDst, 1 * validRowsDst * validColsDst,
-                                                   validRowsDst * validColsDst, validColsDst, 1>>;
+    constexpr size_t srcElemNum = c1hw * n1 * n0 * c0;
+    constexpr size_t srcBufferSize = srcElemNum * sizeof(T);
 
-    GlobalDataSrc srcGlobal(src);
-    GlobalDataDst dstGlobal(out);
+    constexpr size_t dstElemNum = dst_row * dst_col;
+    constexpr size_t dstBufferSize = dstElemNum * sizeof(T);
 
-    constexpr BLayout srcBL = srcLayout > 0 ? BLayout::ColMajor : BLayout::RowMajor;
-    constexpr SLayout srcSL = srcLayout < 2 ? SLayout::NoneBox : SLayout::RowMajor;
-    constexpr BLayout dstBL = dstLayout > 0 ? BLayout::ColMajor : BLayout::RowMajor;
-    constexpr SLayout dstSL = dstLayout < 2 ? SLayout::NoneBox : SLayout::RowMajor;
+    using SrcShapeDim5 = Shape<1, 1, 1, 1, srcElemNum>;
+    using SrcStrideDim5 = pto::Stride<srcElemNum, srcElemNum, srcElemNum, srcElemNum, 1>;
+    using SrcGlobalData = GlobalTensor<T, SrcShapeDim5, SrcStrideDim5>;
 
-    Tile<TileType::Mat, ST, rows, cols, srcBL, validRows, validCols, srcSL, 512> srcTile;
-    Tile<TileType::Mat, DT, rows, cols, dstBL, validRowsDst, validColsDst, dstSL, 512> dstTile;
+    using DstShapeDim5 = Shape<1, 1, 1, 1, dstElemNum>;
+    using DstStrideDim5 = pto::Stride<dstElemNum, dstElemNum, dstElemNum, dstElemNum, 1>;
+    using DstGlobalData = GlobalTensor<T, DstShapeDim5, DstStrideDim5>;
 
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
+    using SrcTileData = Tile<TileType::Vec, T, 1, srcElemNum, BLayout::RowMajor, 1, srcElemNum>;
+    using DstTileData = Tile<TileType::Vec, T, 1, dstElemNum, BLayout::RowMajor, 1, dstElemNum>;
+    SrcTileData src0Tile;
+    TASSIGN(src0Tile, 0x0);
+    DstTileData dst0Tile;
+    TASSIGN(dst0Tile, 0x0 + srcBufferSize);
 
-    std::fill(dstTile.data(), dstTile.data() + rows * cols, 0);
+    using SrcConvTile = ConvTile<TileType::Mat, T, srcBufferSize, Layout::FRACTAL_Z, ConvTileShape<c1hw, n1, n0, c0>>;
+    using DstTileFractal =
+        Tile<TileType::Right, T, dst_row, dst_col, BLayout::RowMajor, dst_row, dst_col, SLayout::ColMajor>;
 
-    /*************************************TLOAD****************************************/
-    TLOAD(srcTile, srcGlobal);
+    SrcConvTile srcTile;
+    static_assert(srcTile.totalDimCount == 4);
+    srcTile.data() = src0Tile.data();
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    DstTileFractal dstTile;
+    dstTile.data() = dst0Tile.data();
 
-    /**********************************TMOV && TEXTRACT**********************************/
-    TEXTRACT(dstTile, srcTile, idxRow, idxCol);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    SrcGlobalData srcGlobal(src);
+    DstGlobalData dstGlobal(out);
 
-    /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal, dstTile);
-    out = dstGlobal.data();
+    TLOAD(src0Tile, srcGlobal);
+    TEXTRACT(dstTile, srcTile, idxR, idxC);
+    TSTORE(dstGlobal, dst0Tile);
 }
 
 class TEXTRACTTest : public testing::Test {
@@ -80,12 +79,12 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename ST, typename DT, size_t rows, size_t cols, size_t validRows, size_t validCols, size_t idxRow,
-          size_t idxCol, uint16_t srcLayout, uint16_t dstLayout>
+template <typename T, size_t c1hw, size_t n1, size_t n0, size_t c0, size_t dst_row, size_t dst_col, size_t idxR,
+          size_t idxC>
 void textract_test()
 {
-    size_t srcFileSize = validRows * validCols * sizeof(ST);
-    size_t dstFileSize = (validRows - idxRow) * (validCols - idxCol) * sizeof(DT);
+    size_t srcFileSize = c1hw * n1 * n0 * c0 * sizeof(T);
+    size_t dstFileSize = dst_row * dst_col * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -105,19 +104,20 @@ void textract_test()
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", inputSize, srcHost, srcFileSize));
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    runTEXTRACT<ST, DT, rows, cols, validRows, validCols, idxRow, idxCol, srcLayout, dstLayout>((DT *)dstDevice,
-                                                                                                (ST *)srcDevice);
+    runTEXTRACT<T, c1hw, n1, n0, c0, dst_row, dst_col, idxR, idxC>((T *)dstDevice, (T *)srcDevice);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
 
-    std::vector<DT> golden(dstFileSize / sizeof(DT));
-    size_t goldenSize = 0;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", goldenSize, golden.data(), dstFileSize));
+    size_t dstElem = dstFileSize / sizeof(T);
+    std::vector<T> golden(dstElem);
+    std::vector<T> devFinal(dstElem);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize));
 
-    bool ret = ResultCmp(golden, (DT *)dstHost, 0);
+    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
 
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
@@ -131,134 +131,22 @@ void textract_test()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TEXTRACTTest, case_half_half_32_32_32_32_IDX_0_0_L_0_0)
+TEST_F(TEXTRACTTest, case_0)
 {
-    textract_test<half, half, 32, 32, 32, 32, 0, 0, 0, 0>();
+    textract_test<aclFloat16, 4, 3, 16, 16, 3 * 16, 2 * 16, 16, 16>();
 }
 
-TEST_F(TEXTRACTTest, case_half_float_32_32_32_32_IDX_0_0_L_0_0)
+TEST_F(TEXTRACTTest, case_1)
 {
-    textract_test<half, float, 32, 32, 32, 32, 0, 0, 0, 0>();
+    textract_test<uint16_t, 4, 3, 16, 16, 3 * 16, 2 * 16, 16, 16>();
 }
 
-TEST_F(TEXTRACTTest, case_float_float_128_96_128_96_IDX_0_0_L_0_0)
+TEST_F(TEXTRACTTest, case_2)
 {
-    textract_test<float, float, 128, 96, 128, 96, 0, 0, 0, 0>();
+    textract_test<float, 4, 3, 16, 8, 3 * 8, 2 * 16, 8, 16>();
 }
 
-TEST_F(TEXTRACTTest, case_int32_t_float_128_96_128_96_IDX_0_0_L_0_0)
+TEST_F(TEXTRACTTest, case_3)
 {
-    textract_test<int32_t, float, 128, 96, 128, 96, 0, 0, 0, 0>();
+    textract_test<int32_t, 4, 3, 16, 8, 3 * 8, 2 * 16, 8, 16>();
 }
-
-TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_128_64_IDX_0_0_L_0_0)
-{
-    textract_test<int8_t, int32_t, 128, 64, 128, 64, 0, 0, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_half_half_32_32_32_32_IDX_8_16_L_0_0)
-{
-    textract_test<half, half, 32, 32, 32, 32, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_half_float_32_32_32_32_IDX_8_16_L_0_0)
-{
-    textract_test<half, float, 32, 32, 32, 32, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_128_96_IDX_8_16_L_0_0)
-{
-    textract_test<float, float, 128, 96, 128, 96, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_int32_t_float_128_96_128_96_IDX_8_16_L_0_0)
-{
-    textract_test<int32_t, float, 128, 96, 128, 96, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_128_64_IDX_8_16_L_0_0)
-{
-    textract_test<int8_t, int32_t, 128, 64, 128, 64, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_half_half_32_32_31_31_IDX_8_16_L_0_0)
-{
-    textract_test<half, half, 32, 32, 31, 31, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_half_float_32_32_31_31_IDX_8_16_L_0_0)
-{
-    textract_test<half, float, 32, 32, 31, 31, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_0)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_int32_t_float_128_96_125_93_IDX_8_16_L_0_0)
-{
-    textract_test<int32_t, float, 128, 96, 125, 93, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_125_61_IDX_8_16_L_0_0)
-{
-    textract_test<int8_t, int32_t, 128, 64, 125, 61, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_1)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 1>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_2)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 2>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_0)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_1)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 1>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_2)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 2>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_0)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_1)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 1>();
-}
-
-TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_2)
-{
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 2>();
-}
-
-#ifdef CPU_SIM_BFLOAT_ENABLED
-TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_32_32_IDX_0_0_L_0_0)
-{
-    textract_test<bfloat16_t, bfloat16_t, 32, 32, 32, 32, 0, 0, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_bfloat16_t_float_32_32_32_32_IDX_8_16_L_0_0)
-{
-    textract_test<bfloat16_t, float, 32, 32, 32, 32, 8, 16, 0, 0>();
-}
-
-TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_31_31_IDX_8_16_L_0_0)
-{
-    textract_test<bfloat16_t, bfloat16_t, 32, 32, 31, 31, 8, 16, 0, 0>();
-}
-#endif

@@ -63,19 +63,21 @@ def gen_golden_data(param : TextractParams):
     idxC = param.idxC
 
     input1 = np.random.randint(1, 5, size=(c1hw, n1, c0, n0)).astype(dtype)
-    # input1.tofile("input.bin")
+    input1.tofile("input.bin")
 
     dtype_size = np.dtype(dtype).itemsize
-    dst_row_aligned = (dst_row * dtype_size) // SHIFT_BLOCK_BYTE
-    dst_col_aligned = dst_col // SHIFT_BLOCK_LEN
-    idx_row_aligned = (idxR * dtype_size) // SHIFT_BLOCK_BYTE
-    idx_col_aligned = idxC // SHIFT_BLOCK_LEN
+    dst_row = (dst_row * dtype_size) // SHIFT_BLOCK_BYTE
+    dst_col = dst_col // SHIFT_BLOCK_LEN
+    idxR = (idxR * dtype_size) // SHIFT_BLOCK_BYTE
+    idxC = idxC // SHIFT_BLOCK_LEN
 
     print(f"Input shape : {input1.shape}")
-    print(f"{dst_row_aligned}-{dst_col_aligned}|{idx_row_aligned}-{idx_col_aligned}")
+    print(f"{dst_row}-{dst_col}|{idxR}-{idxC}")
 
-    output = input1[idx_row_aligned:(idx_row_aligned + dst_row_aligned):][idx_col_aligned:(idx_col_aligned + dst_col_aligned):]
-    print(f"Output shape : {output.shape}")
+    output = input1[idxR : (idxR + dst_row), idxC : (idxC + dst_col), :, :]
+    assert input1[idxR][idxC][3][7] == output[0][0][3][7]
+    output.tofile("golden.bin")
+    print(f"Output shape : {output.shape}, and {input1[idxR][idxC][3][7] == output[0][0][3][7]}")
     print()
     print()
 
@@ -89,7 +91,7 @@ if __name__ == "__main__":
         TextractParams(np.float16, 4, 3, 16, 16,   3*16, 2*16,   16, 16),
         TextractParams(np.uint16, 4, 3, 16, 16,   3*16, 2*16,   16, 16),
         TextractParams(np.float32, 4, 3, 16, 8,   3*8, 2*16,   8, 16),
-        TextractParams(np.int32, 4, 3, 16, 8,   3*8, 2*16,   8, 16)
+        TextractParams(np.int32, 4, 3, 16, 8,   3*8, 2*16,   8, 16),
     ]
 
     for i in range(len(case_params_list)):

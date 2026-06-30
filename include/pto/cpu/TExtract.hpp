@@ -52,19 +52,13 @@ __tf__ PTO_INTERNAL void copy_fractal_shapes(T *dst, T *src, uint16_t indexC, ui
 {
     // All indices and strides represent number of fractals
     constexpr const int BLOCK_SIZE_ELEM = CUBE_BLOCK_SIZE / sizeof(T);
-    src = src + indexR * BLOCK_SIZE_ELEM;
+    src = src + indexR * srcStride * BLOCK_SIZE_ELEM;
     const size_t kCopySize = dstC * CUBE_BLOCK_SIZE;
-    for (size_t i = 0; i < dstR; i++) {
-        T *srcBase = src + (i * srcStride + indexC) * BLOCK_SIZE_ELEM;
-        T *dstBase = dst + i * dstStride * BLOCK_SIZE_ELEM;
+    cpu::parallel_for_rows(dstR, dstR * dstC * BLOCK_SIZE_ELEM, [&](std::size_t r) {
+        T *srcBase = src + (r * srcStride + indexC) * BLOCK_SIZE_ELEM;
+        T *dstBase = dst + r * dstStride * BLOCK_SIZE_ELEM;
         std::memcpy(dstBase, srcBase, kCopySize);
-    }
-
-    // cpu::parallel_for_rows(dstR, dstR * dstC * BLOCK_SIZE_ELEM, [&](std::size_t r) {
-    //     T *srcBase = src + (r * srcStride + indexC) * BLOCK_SIZE_ELEM;
-    //     T *dstBase = dst + r * dstStride * BLOCK_SIZE_ELEM;
-    //     std::memcpy(dstBase, srcBase, kCopySize);
-    // });
+    });
 }
 
 template <typename DstTileData, typename SrcTileData>
