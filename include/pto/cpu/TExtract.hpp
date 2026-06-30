@@ -59,6 +59,12 @@ __tf__ PTO_INTERNAL void copy_fractal_shapes(T *dst, T *src, uint16_t indexC, ui
         T *dstBase = dst + i * dstStride * BLOCK_SIZE_ELEM;
         std::memcpy(dstBase, srcBase, kCopySize);
     }
+
+    // cpu::parallel_for_rows(dstR, dstR * dstC * BLOCK_SIZE_ELEM, [&](std::size_t r) {
+    //     T *srcBase = src + (r * srcStride + indexC) * BLOCK_SIZE_ELEM;
+    //     T *dstBase = dst + r * dstStride * BLOCK_SIZE_ELEM;
+    //     std::memcpy(dstBase, srcBase, kCopySize);
+    // });
 }
 
 template <typename DstTileData, typename SrcTileData>
