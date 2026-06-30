@@ -206,9 +206,8 @@ inline void setProperDataPart(T *buf, size_t offset, T val)
 {
     if constexpr (isTwinType<T>()) {
         uint16_t shiftByte = (offset % 2) ? HALF_BYTE_SHIFT : 0;
-        uint8_t rawVal = (val.RawData() << shiftByte) & (HALF_BYTE_MASK << shiftByte);
-        uint8_t org = buf[offset / 2].RawData();
-        buf[offset / 2] = T::FromRaw(org | rawVal);
+        uint8_t rawVal = (val.RawData()  & HALF_BYTE_MASK) << shiftByte;
+        buf[offset / 2] = (buf[offset / 2] & ~(HALF_BYTE_MASK << shiftByte) | rawVal;
     } else {
         buf[offset] = val;
     }
