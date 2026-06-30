@@ -366,6 +366,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TRowMin.hpp"
 #include "pto/cpu/TMrgSort.hpp"
 #include "pto/cpu/TMov.hpp"
+#include "pto/cpu/TMulAddDst.hpp"
 #include "pto/cpu/TExtract.hpp"
 #include "pto/cpu/TInsert.hpp"
 #include "pto/cpu/TSqrt.hpp"
