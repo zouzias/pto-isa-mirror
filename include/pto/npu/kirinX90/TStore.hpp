@@ -197,6 +197,9 @@ __tf__ AICORE void TStoreAcc(typename GlobalDataTile::DType __out__ *dst, typena
     } else if constexpr (GlobalDataTile::layout == Layout::NC1HWC0) {
         TStoreAccNz2NC1HWC0<GlobalDataTile, TileData, quantizationMode, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride3, validRow, validCol);
+    } else if constexpr (GlobalDataTile::layout == Layout::NDC1HWC0) {
+        TStoreAccNz2NDC1HWC0<GlobalDataTile, TileData, quantizationMode, reluPreMode, Phase>(
+            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride2, gStride4, validRow, validCol);
     }
 }
 
@@ -223,15 +226,19 @@ __tf__ AICORE void TStoreAccFp(typename GlobalData::DType __out__ *dst, typename
         TStoreAccNz2NC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode>(
             dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride3, validRow,
             validCol);
+    } else if constexpr (GlobalData::layout == Layout::NDC1HWC0) {
+        TStoreAccNz2NDC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode>(
+            dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride2, gStride4, validRow,
+            validCol);
     }
 }
 
 template <typename TileData, typename GlobalData, bool isQuant>
 PTO_INTERNAL void CheckAcc2gm(GlobalData &dst, TileData &src)
 {
-    static_assert(
-        (GlobalData::layout == Layout::ND || GlobalData::layout == Layout::NZ || GlobalData::layout == Layout::NC1HWC0),
-        "The output data layout must be ND, NZ or NC1HWC0.");
+    static_assert((GlobalData::layout == Layout::ND || GlobalData::layout == Layout::NZ ||
+                   GlobalData::layout == Layout::NC1HWC0 || GlobalData::layout == Layout::NDC1HWC0),
+                  "The output data layout must be ND, NZ, NC1HWC0 or NDC1HWC0.");
     static_assert(std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, half>,
                   "The input data type must be restricted to int32_t/half!");
     if constexpr (!isQuant) {
@@ -253,10 +260,11 @@ PTO_INTERNAL void CheckAcc2gm(GlobalData &dst, TileData &src)
     }
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert((GlobalData::layout == Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
-                      ((GlobalData::layout == Layout::NZ || GlobalData::layout == Layout::NC1HWC0) &&
+                      ((GlobalData::layout == Layout::NZ || GlobalData::layout == Layout::NC1HWC0 ||
+                        GlobalData::layout == Layout::NDC1HWC0) &&
                        TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
                   "When GlobalData is ND format, the range of Rows is [1, 8192]."
-                  "When GlobalData is NZ or NC1HWC0 format, the range of Rows is [1, 65535] and Cols "
+                  "When GlobalData is NZ, NC1HWC0 or NDC1HWC0 format, the range of Rows is [1, 65535] and Cols "
                   "must be an integer multiple of 16.");
     PTO_ASSERT(src.GetValidCol() >= 1 && src.GetValidCol() <= 4095, "The range of validCol is [1, 4095].");
     PTO_ASSERT(dst.GetShape(GlobalTensorDim::DIM_0) > 0 && dst.GetShape(GlobalTensorDim::DIM_1) > 0 &&

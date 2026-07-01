@@ -311,6 +311,55 @@ PTO_INTERNAL void TStoreAccNz2NC1HWC0(typename GlobalData::DType *dstAddr, __cc_
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
 }
 
+template <typename GlobalData, typename TileData, QuantMode_t quantizationMode = QuantMode_t::NoQuant,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
+PTO_INTERNAL void TStoreAccNz2NDC1HWC0(typename GlobalData::DType *dstAddr, __cc__ typename TileData::DType *srcAddr,
+                                       int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride2,
+                                       int gStride4, int validRow, int validCol)
+{
+    constexpr uint32_t c0ElemCount = std::is_same_v<typename GlobalData::DType, __gm__ int32_t> ?
+                                         16 :
+                                         C0_SIZE_BYTE / sizeof(typename GlobalData::DType);
+    PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
+               "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NDC1HWC0 shape!");
+    PTO_ASSERT(validCol == gShape1 * gShape2 * c0ElemCount,
+               "The validCol of TileData must be equal to Shape1 * Shape2  * c0ElemCount of NDC1HWC0 shape!");
+    PTO_ASSERT(validRow >= 1 && validRow <= 65535,
+               "When GlobalData is NDC1HWC0 format, the range of validRow is [1, 65535].");
+
+    static_assert(std::is_same_v<typename GlobalData::DType, __gm__ float> ||
+                      std::is_same_v<typename GlobalData::DType, __gm__ int32_t> ||
+                      std::is_same_v<typename GlobalData::DType, __gm__ half> ||
+                      std::is_same_v<typename GlobalData::DType, __gm__ bfloat16_t> ||
+                      std::is_same_v<typename GlobalData::DType, __gm__ int8_t> ||
+                      std::is_same_v<typename GlobalData::DType, __gm__ uint8_t>,
+                  "GlobalData::DType must be float/int32_t/half/bfloat16_t/int8_t/uint8_t.");
+
+    uint8_t channelSplitEn = 0;
+    if (std::is_same_v<typename TileData::DType, float> && std::is_same_v<typename GlobalData::DType, __gm__ float>) {
+        channelSplitEn = 1;
+    }
+
+    uint16_t mSize = validRow;
+    uint16_t nSize = validCol;
+    uint16_t srcStride = TileData::Rows;
+    if constexpr (CompactMode::Normal == TileData::Compact) {
+        srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
+    }
+
+    uint32_t c0Size = sizeof(typename GlobalData::DType) * c0ElemCount;
+    uint32_t dstStride = gShape0 * gStride2 / gStride4 * c0Size >> SHIFT_BLOCK_BYTE;
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
+    uint64_t xtReg = srcStride | (static_cast<uint64_t>(unitFlagCtrl & 0x3) << 32) |
+                     (static_cast<uint64_t>(quantizationMode & 0x1f) << 34) |
+                     ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) |
+                     (static_cast<uint64_t>(channelSplitEn & 0x1) << 42);
+    uint64_t xmReg = (static_cast<uint64_t>(nSize & 0xfff) << 4) | (static_cast<uint64_t>(mSize & 0xffff) << 16) |
+                     (static_cast<uint64_t>(dstStride & 0xffffffff) << 32);
+
+    copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
+}
+
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void CheckStaticForVecAndMat()
 {

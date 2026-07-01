@@ -26,7 +26,7 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
                                   uint16_t nBurst, uint16_t lenBurst, uint16_t gmGap, uint16_t l1Gap)
 {
-    copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap, (pad_t)0);
+    pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
 }
 
 template <typename TileData, typename GlobalData>
