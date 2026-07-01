@@ -366,20 +366,13 @@ PTO_INTERNAL void TPush_c2v(Pipe &pipe, TileProd &tile, size_t entryBase, size_t
     constexpr int consCols =
         (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols / 2) : static_cast<int>(TileProd::Cols);
 
-    if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-        using SlotTile = Tile<TileType::Vec, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
-        SlotTile slotTile;
-        TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.C2V_CONSUMER_BUF + entryBase));
-        cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
-    } else {
-        auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
-        for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
-            auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE +
-                                                  pipe.prod.entryOffset);
-            const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
-            const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
-            cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, consRows, rowOffset, colOffset);
-        }
+    auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
+    for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
+        auto *slotPtr =
+            reinterpret_cast<T *>(slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE + pipe.prod.entryOffset);
+        const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
+        const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
+        cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, consRows, rowOffset, colOffset);
     }
 }
 
@@ -421,10 +414,10 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
                                                   entryBase + subOffset);
         GlobalData globalData(addr);
         TSTORE(globalData, tile);
-    } else if constexpr (Pipe::is_c2v) {
-        TPush_c2v<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
-    } else if constexpr (Pipe::is_v2c) {
+    } else if constexpr (Pipe::is_v2c && TileProd::Loc == TileType::Vec) {
         TPush_v2c<Pipe, TileProd, Split>(pipe, tile, entryBase);
+    } else if constexpr (Pipe::is_c2v && TileProd::Loc != TileType::Vec) {
+        TPush_c2v<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
     }
     if (pipe.prod.getRecordStatus()) {
         pipe.prod.template record<Split>();
