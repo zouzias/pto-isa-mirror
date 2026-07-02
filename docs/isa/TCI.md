@@ -49,6 +49,9 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events);
+
+template <typename TileData, typename TileDataTmp, typename T, int descending, typename... WaitEvents>
+PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -59,6 +62,12 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events);
     - `TileData::Cols != 1` (this is the condition enforced by the implementation).
 - **Valid region**:
     - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.
+- **Temporary tile**:
+    - **A2A3**: The C++ API provides an overload with an explicit `tmp` tile for the vectorized implementation path. The no-`tmp` overload uses a scalar loop. `TileDataTmp::DType` must be a 4-byte type (`float`, `int32_t`, or `uint32_t`). The implementation casts `tmp` to `float *`; size the tile by bytes, independent of the declared `TileDataTmp::DType`.
+    - **b32 element types** (`int32_t`, `uint32_t`): minimum tmp size = 768 bytes (192 float elements).
+    - **b16 element types** (`int16_t`, `uint16_t`): minimum tmp size = 1792 bytes (448 float elements).
+    - A convenient shape-independent allocation is 2048 bytes (2 KiB), e.g., `Tile<TileType::Vec, float, 1, 512>`.
+    - **A5**: The `tmp` tile is accepted and ignored. A5 hardware uses the `vci` vector instruction directly without requiring a scratch buffer.
 
 ## Examples
 
@@ -76,6 +85,22 @@ void example_auto() {
 }
 ```
 
+### Auto (with tmp)
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_auto_tmp() {
+  using TileT = Tile<TileType::Vec, int32_t, 1, 16>;
+  using TmpT = Tile<TileType::Vec, float, 1, 512>;
+  TileT dst;
+  TmpT tmp;
+  TCI<TileT, TmpT, int32_t, /*descending=*/0>(dst, /*S=*/0, tmp);
+}
+```
+
 ### Manual
 
 ```cpp
@@ -88,6 +113,24 @@ void example_manual() {
   TileT dst;
   TASSIGN(dst, 0x1000);
   TCI<TileT, int32_t, /*descending=*/1>(dst, /*S=*/100);
+}
+```
+
+### Manual (with tmp)
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_manual_tmp() {
+  using TileT = Tile<TileType::Vec, int32_t, 1, 16>;
+  using TmpT = Tile<TileType::Vec, float, 1, 512>;
+  TileT dst;
+  TmpT tmp;
+  TASSIGN(dst, 0x1000);
+  TASSIGN(tmp, 0x2000);
+  TCI<TileT, TmpT, int32_t, /*descending=*/1>(dst, /*S=*/100, tmp);
 }
 ```
 
