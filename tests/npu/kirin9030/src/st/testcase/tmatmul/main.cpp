@@ -121,6 +121,21 @@ TEST_F(TMATMULTest, case_norm_5)
     tmatmul_test<int32_t, int8_t, int8_t, 5>(101, 1, 99);
 }
 
+TEST_F(TMATMULTest, case_norm_6)
+{
+    tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 6>(33, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_norm_7)
+{
+    tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 7>(17, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_norm_8)
+{
+    tmatmul_test<int32_t, int8_t, int8_t, 8>(33, 15, 2);
+}
+
 template <typename T, typename U, typename S, typename B, int32_t key>
 void tmatmul_bias_test(uint32_t M, uint32_t K, uint32_t N)
 {
@@ -210,4 +225,154 @@ TEST_F(TMATMULTest, case_bias_4)
 TEST_F(TMATMULTest, case_bias_5)
 {
     tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 5>(29, 11, 41);
+}
+
+TEST_F(TMATMULTest, case_bias_6)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 6>(2, 16, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_7)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 7>(4, 16, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_8)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 8>(8, 16, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_9)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 9>(4, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_10)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 10>(4, 16, 4);
+}
+
+TEST_F(TMATMULTest, case_bias_11)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 11>(4, 16, 8);
+}
+
+TEST_F(TMATMULTest, case_bias_12)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 12>(4, 1, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_13)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 13>(4, 2, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_14)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 14>(4, 4, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_15)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 15>(4, 8, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_16)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 16>(16, 16, 16);
+}
+
+TEST_F(TMATMULTest, case_bias_17)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 17>(2, 16, 3);
+}
+
+TEST_F(TMATMULTest, case_bias_18)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 18>(2, 16, 5);
+}
+
+TEST_F(TMATMULTest, case_bias_19)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 19>(2, 16, 12);
+}
+
+TEST_F(TMATMULTest, case_bias_20)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 20>(2, 16, 32);
+}
+
+TEST_F(TMATMULTest, case_bias_21)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 21>(4, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_22)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 22>(4, 16, 16);
+}
+
+TEST_F(TMATMULTest, case_bias_23)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 23>(4, 16, 32);
+}
+
+TEST_F(TMATMULTest, case_bias_24)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 24>(4, 16, 63);
+}
+
+TEST_F(TMATMULTest, case_bias_25)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 25>(2, 16, 33);
+}
+
+TEST_F(TMATMULTest, case_bias_26)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 26>(2, 16, 48);
+}
+
+TEST_F(TMATMULTest, case_bias_27)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 27>(2, 16, 63);
+}
+
+TEST_F(TMATMULTest, case_bias_28)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 28>(2, 16, 64);
+}
+
+TEST_F(TMATMULTest, case_bias_29)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 29>(29, 11, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_30)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 30>(2, 16, 41);
+}
+
+TEST_F(TMATMULTest, case_bias_31)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 31>(17, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_32)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 32>(20, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_33)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 33>(32, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_34)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 34>(33, 16, 2);
+}
+
+TEST_F(TMATMULTest, case_bias_35)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 35>(33, 15, 2);
 }
