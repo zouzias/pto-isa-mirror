@@ -55,8 +55,17 @@ PTO_INTERNAL void TStoreUb2gmInstr(typename GlobalData::DType *dst, __ubuf__ typ
         sizeof(typename TileData::DType) == 1, int8_t,
         std::conditional_t<sizeof(typename TileData::DType) == 2, int16_t,
                            std::conditional_t<sizeof(typename TileData::DType) == 4, int32_t, int64_t>>>;
-    copy_ubuf_to_gm_align(reinterpret_cast<__gm__ T *>(dst), reinterpret_cast<__ubuf__ T *>(src), 0, nBurst, lenBurst,
-                          ubGap, gmGap);
+    constexpr uint16_t MAX_BURST = (1 << 12) - 1;
+    uint16_t chunks = (nBurst + MAX_BURST - 1) / MAX_BURST;
+    for (uint16_t i = 0; i < chunks; i++) {
+        uint16_t remaining = nBurst - i * MAX_BURST;
+        uint16_t burstNums = (remaining > MAX_BURST) ? MAX_BURST : remaining;
+        copy_ubuf_to_gm_align(reinterpret_cast<__gm__ T *>(dst), reinterpret_cast<__ubuf__ T *>(src), 0, burstNums,
+                              lenBurst, ubGap, gmGap);
+        uint32_t stepBytes = burstNums * (lenBurst + gmGap);
+        dst = reinterpret_cast<decltype(dst)>(reinterpret_cast<uintptr_t>(dst) + stepBytes);
+        src = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(src) + stepBytes);
+    }
 }
 
 template <typename GlobalData, typename TileData>

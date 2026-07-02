@@ -233,13 +233,11 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf(__cbuf__ T *dst, __gm__ T *src, uint8_t si
 copy_gm_to_cbuf(dst, src, sid, nBurst, lenBurst, srcStride, dstStride, (pad_t)0);
 #elif defined(PTO_NPU_ARCH_KIRINX90)
 if (dstStride == 0) {
-    lenBurst = lenBurst >> SHIFT_BLOCK_BYTE;
-    srcStride = srcStride >> SHIFT_BLOCK_BYTE;
 copy_gm_to_cbuf(dst, src, sid, nBurst, lenBurst, srcStride, dstStride, (pad_t)0);
 } else {
         using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
                                  std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-copy_gm_to_cbuf_align(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst, lenBurst, (uint8_t)0, (uint8_t)dstStride, srcStride, dstStride >> SHIFT_BLOCK_BYTE);
+copy_gm_to_cbuf_align(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst, lenBurst, (uint8_t)0, (uint8_t)dstStride/sizeof(T), srcStride, dstStride >> SHIFT_BLOCK_BYTE);
 }
 #endif
 }
