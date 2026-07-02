@@ -248,6 +248,24 @@ AICORE inline uint32_t assign_tile_buffers_union(TileA (&tilesA)[NumA], TileB (&
 }
 
 template <typename TileQType, std::size_t NumQ, typename TileCKVType, std::size_t NumCKV, typename TilePType,
+          std::size_t NumP, typename TileVType, std::size_t NumV>
+AICORE inline void allocate_cube_tile_buffers(TileQType (&qTiles)[NumQ], TileCKVType (&cKvTiles)[NumCKV],
+                                               TilePType (&pTiles)[NumP], TileVType (&vTiles)[NumV])
+{
+    constexpr std::size_t total_bytes =
+        tile_buffer_total_bytes<TileQType, NumQ>() + tile_buffer_total_bytes<TileCKVType, NumCKV>() +
+        tile_buffer_total_bytes<TilePType, NumP>() + tile_buffer_total_bytes<TileVType, NumV>();
+    static_assert(total_bytes <= MAX_TILE_L1_BYTES, "Total cube L1 allocation exceeds 512KB");
+
+    uint32_t l1_offset = 0;
+    l1_offset = assign_tile_buffers(qTiles, l1_offset);
+    l1_offset = assign_tile_buffers(cKvTiles, l1_offset);
+    l1_offset = assign_tile_buffers(pTiles, l1_offset);
+    l1_offset = assign_tile_buffers(vTiles, l1_offset);
+    (void)l1_offset;
+}
+
+template <typename TileQType, std::size_t NumQ, typename TileCKVType, std::size_t NumCKV, typename TilePType,
           std::size_t NumP, typename TileVType, std::size_t NumV, typename TileW_uvType, std::size_t NumW_uv>
 AICORE inline void allocate_cube_tile_buffers(TileQType (&qTiles)[NumQ], TileCKVType (&cKvTiles)[NumCKV],
                                                TilePType (&pTiles)[NumP], TileVType (&vTiles)[NumV], TileW_uvType (&w_uvTiles)[NumW_uv])
@@ -347,7 +365,6 @@ AICORE inline int assign_running_acc_tile(AccTileT &accTile, int initial_id = -1
     const int id = running_tile_buffer_idx;
     const uint32_t base_addr = (id == 0) ? 0x0u : 0x20000u;
     TASSIGN(accTile, base_addr);
-    running_tile_buffer_idx ^= 1;
     return id;
 }
 
@@ -546,6 +563,13 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         TSTORE(vReconsGlobal, vReconsAccTile);
 
         set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+#else
+        using GlobalVT = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>,
+                                      pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+        GlobalVT vGlobal((__gm__ half *)(v_recons_fifo + static_cast<size_t>(s1_index) * static_cast<size_t>(HEAD_SIZE)));
+
+        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
+        TLOAD(vMatTile, vGlobal);
 #endif
 
         if (sub_tile_id == 0)
@@ -587,16 +611,9 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
 
         wait_flag(PIPE_MTE2, PIPE_MTE1, static_cast<event_t>(svMatTileEventId));
 #else
-        using GlobalVT = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>,
-                                      pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-        GlobalVT vGlobal((__gm__ half *)(v_recons_fifo + static_cast<size_t>(s1_index) * static_cast<size_t>(HEAD_SIZE)));
-
-        wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
-        TLOAD(vMatTile, vGlobal);
-        set_flag(PIPE_MTE2, PIPE_MTE1, static_cast<event_t>(svMatTileEventId));
-
-        wait_flag(PIPE_MTE2, PIPE_MTE1, static_cast<event_t>(svMatTileEventId));
+        if (sub_tile_id == 0) {
+            wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+        }
 #endif
 
 #if UF_ENABLE
@@ -609,11 +626,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
         const AccMode pvAccMode = (sub_tile_id == 0) ? AccMode::Init : AccMode::Acc;
         pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, pvAccMode);
 #endif
-#if ENABLE_V_RECONSTRUCTION
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
-#else
-        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(svMatTileEventId));
-#endif
 
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 || next_will_be_skipped) {
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -996,7 +1009,11 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
     constexpr uint32_t xexpVecTNBuffers = 2;
     constexpr uint32_t outOTileNBuffers = 2;
     constexpr uint32_t qMatTNBuffers = 1;
+#if ENABLE_V_RECONSTRUCTION
     constexpr uint32_t cKvMatTNBuffers = (qkPreloadNum + 1) * kTileFactor;
+#else
+    constexpr uint32_t cKvMatTNBuffers = 2;
+#endif
 #if USE_UB_TO_L1_PATH
     constexpr uint32_t pMatTNBuffers = 3;
 #else
@@ -1016,10 +1033,12 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
                   "With qkPreloadNum=2, pMatTNBuffers must be >= 3. "
                   "Use --qk-preload 2 and ensure sufficient L1 space when running with UB mode enabled.");
 #endif
+#if ENABLE_V_RECONSTRUCTION
     static_assert(qkPreloadNum * kTileFactor + 1 <= cKvMatTNBuffers,
         "V reconstruction requires cKvMatTNBuffers >= qkPreloadNum * kTileFactor + 1 "
         "to avoid L1 buffer races between concurrent QK writes and PV reads of c_kv. "
         "With qkPreloadNum=2 and kTileFactor=1, cKvMatTNBuffers must be >= 3.");
+#endif
 
     // MLA QK matmul: q_absorbed [KV_LATENT_DIM, Cube_S0] * c_kv [Cube_S1, KV_LATENT_DIM]
     using TileMatQData = Tile<TileType::Mat, half, KV_LATENT_DIM, Cube_S0, BLayout::RowMajor, KV_LATENT_DIM, Cube_S0,
@@ -1042,19 +1061,26 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
         Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
     using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;
 
-    using TileMatW_uvData = Tile<TileType::Mat, half, KV_LATENT_DIM, HEAD_SIZE, BLayout::RowMajor, KV_LATENT_DIM, HEAD_SIZE,
-                                  SLayout::ColMajor, 512>;
-    using TileVReconsData = TileAcc<float, Cube_S1, HEAD_SIZE, Cube_S1, HEAD_SIZE>;
-
     TileMatPData pMatTile[pMatTNBuffers];
     TileMatVData vMatTile[vMatTNBuffers];
     TilePVData pvAccTile;
 
+    using TileMatW_uvData = Tile<TileType::Mat, half, KV_LATENT_DIM, HEAD_SIZE, BLayout::RowMajor, KV_LATENT_DIM, HEAD_SIZE,
+                                  SLayout::ColMajor, 512>;
+    using TileVReconsData = TileAcc<float, Cube_S1, HEAD_SIZE, Cube_S1, HEAD_SIZE>;
+
+#if ENABLE_V_RECONSTRUCTION
     constexpr uint32_t w_uvMatTNBuffers = 1;
     TileMatW_uvData w_uvMatTile[w_uvMatTNBuffers];
     TileVReconsData vReconsAccTile;
 
     allocate_cube_tile_buffers(qMatTile, cKvMatTile, pMatTile, vMatTile, w_uvMatTile);
+#else
+    TileMatW_uvData w_uvMatTile[1];
+    TileVReconsData vReconsAccTile;
+
+    allocate_cube_tile_buffers(qMatTile, cKvMatTile, pMatTile, vMatTile);
+#endif
 
     // Assign accumulator tiles using ping-pong helper. qk starts at 0, pv starts at 1.
     assign_running_acc_tile<QKAccTag>(qkAccTile, 0);
@@ -1160,16 +1186,13 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
     if constexpr (DAV_CUBE) {
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID0));
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID1));
+#if ENABLE_V_RECONSTRUCTION
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID2));
+#endif
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-#if ENABLE_V_RECONSTRUCTION
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
         set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
-#else
-        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
-        set_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
-#endif
     }
     if constexpr (DAV_VEC) {
         set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
@@ -1336,16 +1359,13 @@ __global__ AICORE void runTMLA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm_
         wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID0));
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID1));
+#if ENABLE_V_RECONSTRUCTION
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(QK_EVENT_ID2));
+#endif
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
-#if ENABLE_V_RECONSTRUCTION
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
         wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
-#else
-        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID0));
-        wait_flag(PIPE_MTE1, PIPE_MTE2, static_cast<event_t>(PV_EVENT_ID1));
-#endif
         for (int i = 0; i < pending_qk_sm_consumed; ++i)
             qk2smSync.allocate();
         for (int i = 0; i < pending_update_consumed; ++i)
@@ -1412,18 +1432,24 @@ void LaunchTMLA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *c_kv, aclFloat16 *w_u
 
     const uint64_t q_bytes = static_cast<uint64_t>(S0) * static_cast<uint64_t>(KV_LATENT_DIM) * sizeof(half);
     const uint64_t c_kv_bytes = static_cast<uint64_t>(S1) * static_cast<uint64_t>(KV_LATENT_DIM) * sizeof(half);
+#if ENABLE_V_RECONSTRUCTION
     const uint64_t w_uv_bytes = static_cast<uint64_t>(KV_LATENT_DIM) * static_cast<uint64_t>(HEAD_SIZE) * sizeof(half);
+#endif
     constexpr bool kPrefetchUseSdma = true;
     constexpr int kPrefetchAivCores = 64;
 
     if constexpr (kPrefetchUseSdma) {
         PTO_PREFETCH((__gm__ void *)q, q_bytes, stream);
         PTO_PREFETCH((__gm__ void *)c_kv, c_kv_bytes, stream);
+#if ENABLE_V_RECONSTRUCTION
         PTO_PREFETCH((__gm__ void *)w_uv, w_uv_bytes, stream);
+#endif
     } else {
         PTO_PREFETCH<false, kPrefetchAivCores>((__gm__ void *)q, q_bytes, stream);
         PTO_PREFETCH<false, kPrefetchAivCores>((__gm__ void *)c_kv, c_kv_bytes, stream);
+#if ENABLE_V_RECONSTRUCTION
         PTO_PREFETCH<false, kPrefetchAivCores>((__gm__ void *)w_uv, w_uv_bytes, stream);
+#endif
     }
 
     runTMLA<S0, HEAD_SIZE, KV_LATENT_DIM, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CV_FIFO_SIZE, INTERMEDIATE_CHECK,

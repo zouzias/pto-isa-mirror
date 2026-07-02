@@ -104,9 +104,47 @@ This implementation uses the **weight-absorbed QK** path (approach 2 in `a5-fa-i
 |----------|--------|
 | Weight absorption for QK (`q_absorbed @ c_kv^T`) | **Implemented** |
 | V reconstruction in golden (`v = c_kv @ W_uv`) | **Implemented** (`gen_data.py`) |
-| Fused `c_kv @ W_uv` inside `compute_pv` (L1, no GM write) | **Not yet** — kernel loads `v.bin` like MHA |
+| Fused `c_kv @ W_uv` inside `compute_pv` (GM roundtrip) | **Implemented** (`ENABLE_V_RECONSTRUCTION=1`, default) |
 
-Adding fused V up-projection would extend `compute_pv` with an extra Cube matmul before `P @ V`, keeping `W_uv [KV_LATENT_DIM, HEAD_SIZE]` resident in L1.
+Adding fused V up-projection extends `compute_pv` with an extra Cube matmul (`c_kv × W_uv`) before `P × V`, keeping `W_uv [KV_LATENT_DIM, HEAD_SIZE]` resident in L1. The V reconstruction result goes through a GM roundtrip (TSTORE L0C→GM, then TLOAD GM→L1) with proper PIPE_M→PIPE_MTE2 + PIPE_MTE1→PIPE_MTE2 sync to avoid binary flag collision on PIPE_FIX→PIPE_MTE1 channels.
+
+---
+
+## Run Commands
+
+### Without V reconstruction (baseline — loads `v.bin` from GM)
+
+```bash
+bash run.sh -r npu -v Ascend950PR_9599 --cases "128,64,128,14336,128,128" -p 2 -m 1 --v-recons 0
+```
+
+This is equivalent to commit 93c6d32c behavior: V is loaded directly from GM as `v.bin`, no on-NPU reconstruction. **Faster** (no extra matmul or GM roundtrip per tile).
+
+### With V reconstruction (fused `c_kv × W_uv` on NPU)
+
+```bash
+bash run.sh -r npu -v Ascend950PR_9599 --cases "128,64,128,14336,128,128" -p 2 -m 1 --v-recons 1
+```
+
+V is reconstructed on-NPU: `compute_pv` performs `c_kv × W_uv` matmul, stores result to GM via TSTORE, then loads back via TLOAD for `P × V`. **~75% slower** per tile due to extra Cube matmul + GM roundtrip, but eliminates the need to store full `V` in the KV cache at inference time.
+
+### Simulator (A5 sim)
+
+```bash
+source /usr/local/Ascend/cann_9b2/cann-9.0.0-beta.2/set_env.sh
+bash run.sh -r sim -v Ascend950PR_9599 --cases "128,256,128,512,128,128" -p 2 -m 1 --v-recons 0  # baseline
+bash run.sh -r sim -v Ascend950PR_9599 --cases "128,256,128,512,128,128" -p 2 -m 1 --v-recons 1  # V recon
+```
+
+### Key flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-m` / `--mode` | 1 | FIFO_MODE: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY |
+| `-p` / `--qk-preload` | 2 | Pipeline warmup depth (must be >1 unless kTileFactor=1) |
+| `-V` / `--v-recons` | 1 | 0=baseline (V from GM), 1=V reconstruction on NPU (GM roundtrip) |
+| `-k` / `--mask` | 0 | Enable causal mask |
+| `-i` / `--intermediate` | 0 | Enable per-tile debug dump (may cause UB race on real board) |
 
 ---
 
@@ -137,9 +175,7 @@ HEAD_SIZE,KV_LATENT_DIM,S0,S1,CUBE_S0[,TILE_S1]
 Example (equivalent MHA shape `128,128,512,128,128` but with `kv_latent_dim=256`):
 
 ```bash
-source /usr/local/Ascend/cann_9b2/cann/bin/setenv.bash
-cd kernels/manual/a5/MLA
-bash run.sh -r sim -v Ascend950PR_9599 --cases "128,256,128,512,128,128" -p 2 -m 1
+bash run.sh -r sim -v Ascend950PR_9599 --cases "128,256,128,512,128,128" -p 2 -m 1 --v-recons 0
 ```
 
 ---

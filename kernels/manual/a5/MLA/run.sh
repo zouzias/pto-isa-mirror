@@ -77,7 +77,6 @@ set -euo pipefail
 : "${QK_PRELOAD:=2}"
 : "${FIFO_MODE:=1}"
 : "${V_RECONS:=1}"
-: "${V_RECONS:=1}"
 
 GEN_CASE_ARGS=()
 if [[ -n "${CASE_FILTER:-}" && "${CASE_FILTER}" == --* ]]; then
