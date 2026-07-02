@@ -148,7 +148,6 @@ template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, a
 PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
 {
     using T = typename SrcTileData::DType;
-    static_assert(sizeof(T) == 2 || sizeof(T) == 4, "TGATHER: src element type must be 16 or 32-bit wide");
     static_assert((DstTileData::Loc == TileType::Vec) && (SrcTileData::Loc == TileType::Vec),
                   "TGATHER: expect vec TileType");
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "TGATHER: expect row major");
