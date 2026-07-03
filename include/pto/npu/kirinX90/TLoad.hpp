@@ -41,7 +41,7 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                  uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint16_t l1Gap)
+                                  uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint32_t l1Gap)
 {
     if (l1Gap == 0) {
         lenBurst = lenBurst >> SHIFT_BLOCK_BYTE;
@@ -87,7 +87,6 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(typename TileData::TileDType __out__ dst,
         uint16_t nBurst = dstH;
         uint32_t lenBurst = dstW * C0_SIZE_BYTE;
         uint32_t srcGap = (gStride3 - srcW * c0ElemCount) * sizeof(typename TileData::DType);
-        uint16_t l1Gap = 0;
         for (uint32_t i = 0; i < dstN; i++) {
             int64_t srcAddr1 = i * gStride0;
             int64_t dstAddr1 = i * dstD * dstH * dstW * dstC1 * c0ElemCount;
@@ -97,7 +96,7 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(typename TileData::TileDType __out__ dst,
                 for (uint32_t k = 0; k < dstC1; k++) {
                     srcAddrP = srcAddr + srcAddr1 + srcAddr2 + k * gStride2;
                     dstAddrP = dstAddr + dstAddr1 + dstAddr2 + k * dstH * dstW * c0ElemCount;
-                    TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, l1Gap);
+                    TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, 0);
                 }
             }
         }
@@ -254,9 +253,9 @@ PTO_INTERNAL void TLoadGm2L1Nd2nd(__cbuf__ typename TileData::DType *dstAddr, ty
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
     PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for A2/A3");
     uint16_t nBurst = gShape3;
-    uint16_t lenBurst = validCol * sizeof(typename TileData::DType);
-    uint16_t gmGap = (gStride3 - gShape4) * sizeof(typename TileData::DType);
-    uint16_t l1Gap = (TileData::Cols - validCol) * sizeof(typename TileData::DType);
+    uint32_t lenBurst = validCol * sizeof(typename TileData::DType);
+    uint32_t gmGap = (gStride3 - gShape4) * sizeof(typename TileData::DType);
+    uint32_t l1Gap = (TileData::Cols - validCol) * sizeof(typename TileData::DType);
 
     int64_t dstStride2 = gShape3 * TileData::Cols;
     int64_t dstStride1 = gShape2 * dstStride2;
@@ -290,9 +289,9 @@ PTO_INTERNAL void TLoadGm2L1Dn2dn(__cbuf__ typename TileData::DType *dstAddr, ty
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
     PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for A2/A3");
     uint16_t nBurst = gShape4;
-    uint16_t lenBurst = validRow * sizeof(typename TileData::DType);
-    uint16_t gmGap = (gStride4 - gShape3) * sizeof(typename TileData::DType);
-    uint16_t l1Gap = (TileData::Rows - gShape3) * sizeof(typename TileData::DType);
+    uint32_t lenBurst = validRow * sizeof(typename TileData::DType);
+    uint32_t gmGap = (gStride4 - gShape3) * sizeof(typename TileData::DType);
+    uint32_t l1Gap = (TileData::Rows - gShape3) * sizeof(typename TileData::DType);
     __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
     typename GlobalData::DType *srcAddrP = srcAddr;
 
@@ -548,8 +547,8 @@ __tf__ PTO_INTERNAL void TLoad5HD(typename TileData::TileDType __out__ dst, type
     if ((gStride2 == dstW * c0ElemCount || dstH == 1) && gmGap <= UINT16_MAX && dstC1 <= maxSupportBurst &&
         dstH * dstW <= UINT16_MAX) {
         uint16_t nBurst = dstC1;
-        uint16_t srcGap = gmGap * BLOCK_BYTE_SIZE;
-        uint16_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
+        uint32_t srcGap = gmGap * BLOCK_BYTE_SIZE;
+        uint32_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
         for (uint32_t i = 0; i < dstN; i++) {
             srcAddrP = srcAddr + i * gStride0;
             dstAddrP = dstAddr + i * dstH * dstW * dstC1 * c0ElemCount;
@@ -560,9 +559,9 @@ __tf__ PTO_INTERNAL void TLoad5HD(typename TileData::TileDType __out__ dst, type
         PTO_ASSERT(dstW <= UINT16_MAX, "Fix: max support dstW is UINT16_MAX!");
 
         uint16_t nBurst = dstH;
-        uint16_t lenBurst = dstW * C0_SIZE_BYTE;
-        uint16_t srcGap = (gStride2 - srcW * c0ElemCount) * sizeof(typename TileData::DType);
-        uint16_t l1Gap = 0;
+        uint32_t lenBurst = dstW * C0_SIZE_BYTE;
+        uint32_t srcGap = (gStride2 - srcW * c0ElemCount) * sizeof(typename TileData::DType);
+        uint32_t l1Gap = 0;
         for (uint32_t i = 0; i < dstN; i++) {
             int64_t dstAddr1 = i * dstH * dstW * dstC1 * c0ElemCount;
             int64_t srcAddr1 = i * gStride0;
@@ -595,8 +594,8 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(typename TileData::TileDType __out__ dst,
                       "Fix: The GlobalTensor last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
 
         uint16_t nBurst = dstShape0;
-        uint16_t lenBurst = dstShape1 * dstShape2 * C0_SIZE_BYTE;
-        uint16_t gmGap = (gStride1 - srcShape2 * srcShape3 * c0ElemCount) * sizeof(typename TileData::DType);
+        uint32_t lenBurst = dstShape1 * dstShape2 * C0_SIZE_BYTE;
+        uint32_t gmGap = (gStride1 - srcShape2 * srcShape3 * c0ElemCount) * sizeof(typename TileData::DType);
         TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, 0);
 
     } else {
@@ -604,8 +603,8 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(typename TileData::TileDType __out__ dst,
                    "Fix: layout is Fractal_Z, [srcH,srcW] && [dstH,dstW] should be same!");
         PTO_ASSERT(dstShape3 <= UINT16_MAX, "Fix: max support dstN is UINT16_MAX!");
 
-        uint16_t lenBurst = dstShape3 * C0_SIZE_BYTE;
-        uint16_t gmGap = (gStride2 - srcShape3 * c0ElemCount) * sizeof(typename TileData::DType);
+        uint32_t lenBurst = dstShape3 * C0_SIZE_BYTE;
+        uint32_t gmGap = (gStride2 - srcShape3 * c0ElemCount) * sizeof(typename TileData::DType);
         constexpr uint32_t maxSupportBurst = 4095;
 
         if (dstShape0 * dstShape1 * dstShape2 <= maxSupportBurst) {
