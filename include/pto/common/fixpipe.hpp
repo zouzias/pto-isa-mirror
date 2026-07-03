@@ -12,6 +12,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_FIXPIPE_HPP
 #include <type_traits>
 
+// #ifdef __CPU_SIM
+#include <pto/cpu/common.hpp>
+// #endif
+
 #include <pto/common/type.hpp>
 
 namespace pto {
@@ -70,9 +74,7 @@ template <QuantMode_t quantPre, typename SrcType>
 struct FixpipeConsDType {
     static constexpr bool isHalf = quantPre == QuantMode_t::F322F16 || quantPre == QuantMode_t::QF322F16_PRE ||
                                    quantPre == QuantMode_t::DEQF16 || quantPre == QuantMode_t::VDEQF16;
-    static constexpr bool isBfloat16 = quantPre == QuantMode_t::F322BF16 || quantPre == QuantMode_t::QF322BF16_PRE ||
-                                       quantPre == QuantMode_t::QS322BF16_PRE ||
-                                       quantPre == QuantMode_t::VQS322BF16_PRE;
+    static constexpr bool isBfloat16 = quantPre == QuantMode_t::F322BF16 || quantPre == QuantMode_t::QF322BF16_PRE;
     static constexpr bool isInt8 = quantPre == QuantMode_t::QF322B8_PRE || quantPre == QuantMode_t::REQ8 ||
                                    quantPre == QuantMode_t::VQF322B8_PRE || quantPre == QuantMode_t::VREQ8;
 

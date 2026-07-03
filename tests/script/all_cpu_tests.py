@@ -226,6 +226,7 @@ def main() -> int:
         build_dir = repo_root / build_rel
         build_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f"\n------------------{args.enable_bf16}---------------------\n")
     build_all_cpu_tests(repo_root, args)
     generate_test_data(repo_root, args)
     return run_binaries(repo_root, args)
