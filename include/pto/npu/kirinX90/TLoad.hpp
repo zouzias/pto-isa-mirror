@@ -41,7 +41,7 @@ PTO_INTERNAL void TLoadNd2nzInstr(__cbuf__ typename TileData::DType *dst, typena
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                  uint16_t nBurst, uint16_t lenBurst, uint16_t gmGap, uint16_t l1Gap)
+                                  uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint16_t l1Gap)
 {
     if (l1Gap == 0) {
         lenBurst = lenBurst >> SHIFT_BLOCK_BYTE;
@@ -69,8 +69,8 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(typename TileData::TileDType __out__ dst,
     if ((gStride3 == dstW * c0ElemCount || dstH == 1) && // process for W direction all load or H=1
         gmGap <= UINT16_MAX && dstC1 <= maxSupportBurst && dstH * dstW <= UINT16_MAX) {
         uint16_t nBurst = dstC1;
-        uint16_t srcGap = gmGap * BLOCK_BYTE_SIZE;
-        uint16_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
+        uint32_t srcGap = gmGap * BLOCK_BYTE_SIZE;
+        uint32_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
         for (uint32_t i = 0; i < dstN; i++) {
             int64_t srcAddr1 = i * gStride0;
             int64_t dstAddr1 = i * dstD * dstH * dstW * dstC1 * c0ElemCount;
@@ -85,8 +85,8 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(typename TileData::TileDType __out__ dst,
         PTO_ASSERT(dstW <= UINT16_MAX, "Fix: max support dstW is UINT16_MAX!");
 
         uint16_t nBurst = dstH;
-        uint16_t lenBurst = dstW * C0_SIZE_BYTE;
-        uint16_t srcGap = (gStride3 - srcW * c0ElemCount) * sizeof(typename TileData::DType);
+        uint32_t lenBurst = dstW * C0_SIZE_BYTE;
+        uint32_t srcGap = (gStride3 - srcW * c0ElemCount) * sizeof(typename TileData::DType);
         uint16_t l1Gap = 0;
         for (uint32_t i = 0; i < dstN; i++) {
             int64_t srcAddr1 = i * gStride0;
