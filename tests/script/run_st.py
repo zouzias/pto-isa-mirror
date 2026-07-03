@@ -71,7 +71,16 @@ def set_env_variables(run_mode, soc_version):
             print(f"warning: not found {setenv_path}")
 
         _, simulator_lib_path = get_simulator_info(ascend_home, soc_version)
-        os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+        # The simulator runtime resolves its config .toml files from LD_LIBRARY_PATH.
+        # For the dav_3510 model the working configs live under the `lib/` directory;
+        # use exactly that path (as the manual run does) to get serial AIV mode.
+        simulator_home = os.path.join(ascend_home, "tools", "simulator")
+        candidate = (
+            os.path.basename(os.path.dirname(simulator_lib_path)) if os.path.isdir(simulator_lib_path) else soc_version
+        )
+        lib_path = os.path.join(simulator_home, candidate, "lib")
+        if os.path.isdir(lib_path):
+            os.environ["LD_LIBRARY_PATH"] = f"{lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 
 
 def get_simulator_info(ascend_home, soc_version):
