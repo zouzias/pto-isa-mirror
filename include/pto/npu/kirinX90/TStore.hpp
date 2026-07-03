@@ -218,11 +218,11 @@ PTO_INTERNAL void TStoreAccNz2nz(typename GlobalData::DType *dstAddr, __cc__ typ
     uint16_t nSize = validCol;
 
     uint32_t c0Size = sizeof(typename GlobalData::DType) * gShape4;
-    uint16_t srcStride = TileData::Rows;
+    uint16_t srcStride = TileData::Rows;;
     if constexpr (CompactMode::Normal == TileData::Compact) {
         srcStride = (FRACTAL_NZ_ROW + validRow - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
     }
-    uint32_t dstStride = gShape2 * gShape3 * c0Size;
+    uint32_t dstStride = gShape2 * gShape3 * gShape4;
 
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     constexpr uint8_t channelSplitEn = 0;
