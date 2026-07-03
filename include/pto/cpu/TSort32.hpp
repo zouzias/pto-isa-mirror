@@ -41,7 +41,7 @@ struct ScoreIndexPair {
 };
 
 template <typename T, typename TileDataDst, typename TileDataSrc, typename TileDataIdx>
-PTO_INTERNAL void TSort32(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src,
+PTO_INTERNAL void TSORT32(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src,
                           typename TileDataIdx::TileDType idx, int validRow, int validCol)
 {
     for (int i = 0; i < validRow; i++) {
@@ -113,7 +113,7 @@ PTO_INTERNAL void TSORT32_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataIdx &
     if (validRow != idx.GetValidRow() || validCol != idx.GetValidCol()) {
         return;
     }
-    TSort32<T, TileDataDst, TileDataSrc, TileDataIdx>(dst.data(), src.data(), idx.data(), validRow, validCol);
+    TSORT32<T, TileDataDst, TileDataSrc, TileDataIdx>(dst.data(), src.data(), idx.data(), validRow, validCol);
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename TmpTileData>

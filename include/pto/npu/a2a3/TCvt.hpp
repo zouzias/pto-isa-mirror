@@ -51,7 +51,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *
  * 6. TCVT_IMPL (lines ~710-end)
  *    - High-level entry point computing repeat configuration
- *    - Overloads with TmpTileData mirror TSort32's with-tmp interface
+ *    - Overloads with TmpTileData mirror TSORT32's with-tmp interface
  *
  * QUICK FIND: Search for the conversion function name (e.g., "GenCastCallFp32ToFp16")
  * or the dispatcher "GenCastCall" to locate the relevant section.
