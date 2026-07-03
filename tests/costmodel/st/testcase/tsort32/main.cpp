@@ -35,7 +35,7 @@ void runTSort32()
     TASSIGN(idxTile, rows * cols * sizeof(T0));
     TASSIGN(dstTile, rows * cols * sizeof(T0) + rows * cols * sizeof(T1));
 
-    TSORT32(dstTile, srcTile, idxTile);
+    TSort32(dstTile, srcTile, idxTile);
 
     EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
