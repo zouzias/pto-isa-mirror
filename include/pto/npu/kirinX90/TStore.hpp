@@ -208,15 +208,11 @@ PTO_INTERNAL void TStoreAccNz2nz(typename GlobalData::DType *dstAddr, __cc__ typ
 
     static_assert(GlobalData::staticShape[3] == FRACTAL_NZ_ROW,
                   "When GlobalData is NZ format, the second-to-last dimension shall be 16.");
-    static_assert(
-        (std::is_same_v<typename GlobalData::DType, __gm__ float> &&
-         (GlobalData::staticShape[4] == 8 || GlobalData::staticShape[4] == 16)) ||
-            (std::is_same_v<typename GlobalData::DType, __gm__ int32_t> && GlobalData::staticShape[4] == 16) ||
-            (GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType)),
-        "When GlobalData is in NZ format: if DstType is float, the last dimension must be either 8 or 16, "
-        "and the dimension value is 8 if and only if Channel Split is enabled; if DstType is int32_t, the "
-        "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / "
-        "sizeof(DstType).");
+    static_assert((std::is_same_v<typename GlobalData::DType, __gm__ int32_t> && GlobalData::staticShape[4] == 16) ||
+                      (GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType)),
+                  "When GlobalData is in NZ format: if DstType is int32_t, the "
+                  "last dimension must be exactly 16. In addition, the last dimension must be static and satisfy 32 / "
+                  "sizeof(DstType).");
 
     uint16_t mSize = validRow;
     uint16_t nSize = validCol;
@@ -229,13 +225,8 @@ PTO_INTERNAL void TStoreAccNz2nz(typename GlobalData::DType *dstAddr, __cc__ typ
     uint32_t dstStride = gShape2 * gShape3 * c0Size;
 
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
-    uint8_t channelSplitEn = 0;
-    if (std::is_same_v<typename TileData::DType, float> && std::is_same_v<typename GlobalData::DType, __gm__ float>) {
-        if (gShape4 == 8) {
-            channelSplitEn = 1;
-        }
-    }
-
+    constexpr uint8_t channelSplitEn = 0;
+    
     uint64_t xmReg =
 
         (static_cast<uint64_t>(nSize & 0xfff) << 4) |          // Xm[15:4] nSize
