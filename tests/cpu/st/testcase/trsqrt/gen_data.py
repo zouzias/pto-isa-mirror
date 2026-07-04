@@ -54,8 +54,8 @@ def generate_case_name(param):
         np.float32: 'float',
         np.float16: 'half',
     }[param.dtype]
-    return f"TRSQRTTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_{param.src_row}x{param.src_col}_\
-        {param.valid_row}x{param.valid_col}"
+    return (f"TRSQRTTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_"
+            f"{param.src_row}x{param.src_col}_{param.valid_row}x{param.valid_col}")
 
 if __name__ == "__main__":
     # Get the absolute path of the script
