@@ -66,6 +66,35 @@ __tf__ PTO_INTERNAL void TPartOp(typename TileDataDst::TileDType __out__ dst,
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
+    if (dstValidRow == 0 || dstValidCol == 0) {
+        return;
+    }
+    if (src0ValidRow == 0 || src0ValidCol == 0 || src1ValidRow == 0 || src1ValidCol == 0) {
+        bool copySrc1 = (src0ValidRow == 0 || src0ValidCol == 0);
+        __ubuf__ T *srcPtr = copySrc1 ? src1Ptr : src0Ptr;
+        unsigned srcValidRow = copySrc1 ? src1ValidRow : src0ValidRow;
+        unsigned srcValidCol = copySrc1 ? src1ValidCol : src0ValidCol;
+        unsigned srcRowStride = copySrc1 ? src1RowStride : src0RowStride;
+        unsigned validRow = min(dstValidRow, srcValidRow);
+        unsigned validCol = min(dstValidCol, srcValidCol);
+        uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
+        __VEC_SCOPE__
+        {
+            RegTensor<T> srcReg;
+            MaskReg mask;
+            constexpr auto distValue =
+                std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+            for (uint16_t i = 0; i < (uint16_t)validRow; i++) {
+                uint32_t sreg = validCol;
+                for (uint16_t j = 0; j < repeatTimes; j++) {
+                    mask = CreatePredicate<T>(sreg);
+                    vlds(srcReg, srcPtr, i * srcRowStride + j * elementsPerRepeat, NORM);
+                    vsts(srcReg, dstPtr, i * dstRowStride + j * elementsPerRepeat, distValue, mask);
+                }
+            }
+        }
+        return;
+    }
     if (dstValidRow == src0ValidRow && dstValidRow == src1ValidRow && dstValidCol == src0ValidCol &&
         dstValidCol == src1ValidCol) {
         BinaryInstr<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
@@ -117,17 +146,9 @@ PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
          (dstValidRow == src1ValidRow && dstValidCol == src1ValidCol)) &&
             max(src0ValidRow, src1ValidRow) == dstValidRow && max(src0ValidCol, src1ValidCol) == dstValidCol,
         "Fix: TPARTADD/MUL At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
-    if (dstValidRow == 0 || dstValidCol == 0) {
-        return;
-    } else if (src0ValidRow == 0 || src0ValidCol == 0) {
-        TMOV_IMPL(dst, src1);
-    } else if (src1ValidRow == 0 || src1ValidCol == 0) {
-        TMOV_IMPL(dst, src0);
-    } else {
-        TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
-                src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
-                                              src1ValidRow, src1ValidCol, dstValidRow, dstValidCol, version);
-    }
+    TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride,
+            src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow,
+                           src1ValidCol, dstValidRow, dstValidCol, version);
 }
 
 } // namespace pto
