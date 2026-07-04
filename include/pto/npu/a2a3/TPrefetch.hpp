@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TLoad.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename TileData, typename GlobalData>
 __tf__ AICORE void TPrefetchDoCopy(typename TileData::TileDType __out__ dstTile,
                                    typename GlobalData::DType __in__ *srcPtr, uint16_t rowChunk, uint32_t colChunk,
@@ -85,6 +86,7 @@ PTO_INTERNAL void TPREFETCH_IMPL(TileData &dst, GlobalData &src)
             }
         }
     }
+} // namespace a2a3
 }
 } // namespace pto
 

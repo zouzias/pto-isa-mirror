@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a5 {
 
 template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
           unsigned blockSizeElem>
@@ -178,5 +179,6 @@ PTO_INTERNAL void RowExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
     }
 }
 
+} // namespace a5
 } // namespace pto
 #endif

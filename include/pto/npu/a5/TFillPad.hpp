@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TLoad.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T, typename U>
 PTO_INTERNAL MaskReg PSetTyped(U dist)
@@ -212,5 +213,6 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileData &dst, TileData &src)
     TFillPad_cube<TileData>(dst.data(), src.data(), validDstRow, validDstCol);
 }
 
+} // namespace a5
 } // namespace pto
 #endif

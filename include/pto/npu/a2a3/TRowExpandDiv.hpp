@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TRowExpandBinOp.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T>
 struct RowExpandDivOp {
     PTO_INTERNAL static void RowExpandBinInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t repeats)
@@ -155,6 +156,7 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
             dst.data(), src0.data(), src1.data(), tmp.data(), validRow, validCol);
     }
 #endif
+} // namespace a2a3
 }
 } // namespace pto
 #endif

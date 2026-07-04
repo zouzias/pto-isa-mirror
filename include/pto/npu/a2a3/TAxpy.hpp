@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T>
 struct AxpyOp {
     PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats)
@@ -148,6 +149,7 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     } else {
         PTO_ASSERT(false, "TAXPY: dstTile validRow/validCol must be consistent with of src.");
     }
+} // namespace a2a3
 }
 } // namespace pto
 

@@ -15,6 +15,9 @@ full text of the License.
 #include <pto/common/type.hpp>
 #include <cstdint>
 
+namespace pto {
+namespace a2a3 {
+
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx, uint16_t colIdx)
 {
@@ -26,7 +29,7 @@ PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t row
                   "The destination and source tiles must have the same TileType!");
 
 #ifndef __PTO_AUTO__
-    TASSIGN_IMPL(dst, (uint64_t)(src.data() + totalOffset));
+    MAP_INSTR_IMPL(TASSIGN)(dst, (uint64_t)(src.data() + totalOffset));
 #else
     static_assert(TileDataDst::BFractal == TileDataSrc::BFractal,
                   "The destination and source tiles must have the same BFractal");
@@ -41,5 +44,8 @@ PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t row
     __cce_alias(dst.data(), src.data(), byteOffset);
 #endif
 }
+
+} // namespace a2a3
+} // namespace pto
 
 #endif

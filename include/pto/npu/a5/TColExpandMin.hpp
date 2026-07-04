@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TColExpandBinOp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct ColExpandMinOp {
@@ -34,5 +35,6 @@ PTO_INTERNAL void TCOLEXPANDMIN_IMPL(TileData &dst, TileDataSrc0 &src0, TileData
     using T = typename TileData::DType;
     TCOLEXPANDOP_IMPL<ColExpandMinOp<T>, ColExpandMinOp<T>, TileData, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
 }
+} // namespace a5
 } // namespace pto
 #endif

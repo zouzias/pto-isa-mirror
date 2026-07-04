@@ -9,4 +9,13 @@ BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
 full text of the License.
 */
+#ifndef TSUBVIEW_A5_HPP
+#define TSUBVIEW_A5_HPP
 #include "pto/npu/a2a3/TSubView.hpp"
+
+namespace pto {
+namespace a5 {
+using ::pto::a2a3::TSUBVIEW_IMPL;
+} // namespace a5
+} // namespace pto
+#endif

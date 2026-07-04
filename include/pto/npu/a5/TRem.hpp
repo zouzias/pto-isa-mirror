@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/TFmodRemHp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <RemAlgorithm PrecisionType, typename T>
 struct RemOp {
@@ -128,5 +129,6 @@ PTO_INTERNAL void TREM_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     TRem<TileDataDst, TileDataSrc0, TileDataSrc1, TileDataTmp, elementsPerRepeat, blockSizeElem, PrecisionType>(
         dst.data(), src0.data(), src1.data(), tmp.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 #endif

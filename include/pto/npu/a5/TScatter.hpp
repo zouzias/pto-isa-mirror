@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 template <uint32_t numel, typename T>
 PTO_INTERNAL void InitUBBuffer(__ubuf__ T *dst)
 {
@@ -210,7 +211,7 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src)
     if constexpr (mask == MaskPattern::P1111) {
         PTO_ASSERT(validCol == dst.GetValidCol(), "TSCATTER: validCol of src must match dst.");
         PTO_ASSERT(validRow == dst.GetValidRow(), "TSCATTER: validRow of src must match dst.");
-        return TMOV_IMPL(dst, src);
+        return MAP_INSTR_IMPL(TMOV)(dst, src);
     } else {
         using T = typename DstTile::DType;
         static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, int8_t> ||
@@ -242,6 +243,7 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile &dst, SrcTile &src)
         TScatterMaskImpl<mask, ScatterType, DstTile, SrcTile>(dst.data(), src.data(), validRow, validCol);
     }
 }
+} // namespace a5
 } // namespace pto
 
 #endif

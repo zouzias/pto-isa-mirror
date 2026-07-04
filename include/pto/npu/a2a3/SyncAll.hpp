@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TSync.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 PTO_INTERNAL void SYNCALL_SOFT_DCCI(__gm__ void *ptr)
 {
@@ -278,6 +279,7 @@ PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
+} // namespace a2a3
 }
 } // namespace pto
 #endif

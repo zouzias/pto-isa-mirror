@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, int SrcStride, int DstStride>
 PTO_INTERNAL void BinarySum(__ubuf__ T *dst, __ubuf__ T *src, int validRow, int validCol)
 {
@@ -163,6 +164,7 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src)
     }
 
     TColSum<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), validRow, validCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

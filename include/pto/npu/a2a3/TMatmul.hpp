@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMATMUL_HPP
 
 namespace pto {
+namespace a2a3 {
 
 inline namespace TMatmulInternel {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
@@ -197,6 +198,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRig
 
     TMatmulBias<Phase, TileRes, TileLeft, TileRight, TileBias, true, false, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), m, k, n, kDirectionAlign);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

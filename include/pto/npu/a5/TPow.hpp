@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 namespace PowF {
 constexpr float LOG2_LOWEST_VALUE = 1.175494351e-38f;
 constexpr float LOG2_LOWEST_VALUE_MULS = 8388608.0f;
@@ -678,5 +679,6 @@ PTO_INTERNAL void TPOWS_IMPL(DstTile &dst, BaseTile &base, typename DstTile::DTy
 
     TPowSImpl<algo, DstTile, BaseTile>(dst.data(), base.data(), exp, validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

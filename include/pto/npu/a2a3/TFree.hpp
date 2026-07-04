@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TPush.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 // free space for tile data
 template <typename Pipe, TileSplitAxis Split>
@@ -45,6 +46,7 @@ PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 {
     return;
 }
+} // namespace a2a3
 
 } // namespace pto
 

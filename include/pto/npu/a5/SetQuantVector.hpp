@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SET_QUANT_VECTOR_HPP
 
 namespace pto {
+namespace a5 {
 
 template <typename FpTileData>
 __tf__ PTO_INTERNAL void SET_QUANT_VECTOR(typename FpTileData::TileDType __in__ fp)
@@ -28,6 +29,7 @@ PTO_INTERNAL void SET_QUANT_VECTOR_IMPL(FpTileData &fpTile)
     SET_QUANT_VECTOR<FpTileData>(fpTile.data());
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif // SET_QUANT_VECTOR_HPP

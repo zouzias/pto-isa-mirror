@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename Op, typename T, unsigned blockSizeElem, unsigned DstRowStride, unsigned Src0RowStride>
 PTO_INTERNAL void TRowExpandBinaryCountMode(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T *src1Ptr,
                                             unsigned validRow, unsigned validCol)
@@ -223,6 +224,7 @@ __tf__ PTO_INTERNAL void TRowExpandBin(typename TileDataDst::TileDType __out__ d
     __ubuf__ U *tmpPtr_ = (__ubuf__ U *)__cce_get_tile_ptr(tmp);
     TRowExpandBinaryInstr<Op, T, U, TileDataDst::Rows, TileDataDst::RowStride, TileDataSrc0::RowStride>(
         dstPtr, src0Ptr, src1Ptr, tmpPtr, tmpPtr_, validRow, validCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

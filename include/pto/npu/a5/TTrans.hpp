@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 namespace pto {
+namespace a5 {
 
 template <typename TileDataSrc, typename TileDataDst, unsigned elementsPerRepeat, unsigned blockSizeElem>
 PTO_INTERNAL void TTransB32ColWise(__ubuf__ typename TileDataDst::DType *dstPtr,
@@ -835,6 +836,7 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
                                                                                numCols);
     }
 }
+} // namespace a5
 } // namespace pto
 
 #endif // TTRANS_HPP

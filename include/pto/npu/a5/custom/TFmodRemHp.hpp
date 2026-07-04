@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 
 namespace pto {
+namespace a5 {
 constexpr uint32_t FMOD_ITERATION_NUM_MAX = 11;
 constexpr FloatUnion inf(0x7f800000);
 constexpr FloatUnion negInf(0xff800000);
@@ -172,5 +173,6 @@ PTO_INTERNAL void TFmodRemHP(RegTensor<float> &dstReg, RegTensor<float> &src0Reg
     }
 }
 
+} // namespace a5
 } // namespace pto
 #endif // TINSERT_CUSTOM_HPP

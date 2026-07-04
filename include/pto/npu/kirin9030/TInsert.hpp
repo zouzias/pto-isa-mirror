@@ -12,5 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TINSERT_HPP_KIRIN9030
 #include "common.hpp"
 #include "pto/npu/kirin9030/TMov.hpp"
+namespace pto {
+using kirin9030::SetLoop3Para;
+} // namespace pto
 #include "pto/npu/a5/TInsert.hpp"
 #endif

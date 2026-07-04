@@ -21,7 +21,7 @@ namespace TMovZZTest {
 template <int validRows, int validCols>
 AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_t *outE8Zz)
 {
-    constexpr int paddedCols = PTO_CEIL(validCols, BLOCK_SIZE / sizeof(uint32_t));
+    constexpr int paddedCols = PTO_CEIL(validCols, BLOCK_BYTE_SIZE / sizeof(uint32_t));
     constexpr int paddedRows16 = PTO_CEIL(validRows, 16);
     constexpr int groupedColsValid = paddedCols / 32;
     constexpr int groupedColsFlattened = validRows * groupedColsValid;
@@ -37,9 +37,9 @@ AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_
                          PadValue::Zero>;
     using DstFP8Tile = Tile<TileType::Vec, int8_t, validRows, paddedCols, BLayout::RowMajor, validRows, paddedCols,
                             SLayout::NoneBox, 512, PadValue::Zero>;
-    using MaxTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float)),
+    using MaxTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float)),
                          BLayout::RowMajor, -1, -1>;
-    using ScalingTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float)),
+    using ScalingTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float)),
                              BLayout::RowMajor, -1, -1>;
     using E8NdTile = Tile<TileType::Vec, uint8_t, 1, groupedColsFlattenedPadded, BLayout::RowMajor, -1, -1,
                           SLayout::NoneBox, 512, PadValue::Zero>;
@@ -59,7 +59,7 @@ AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_
     using Fp8NZTile = Tile<TileType::Vec, int8_t, virtualRow, paddedCols, BLayout::ColMajor, validRows, paddedCols,
                            SLayout::RowMajor, 512, PadValue::Null, CompactMode::RowPlusOne>;
 
-    constexpr int maxScalingCols = PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float));
+    constexpr int maxScalingCols = PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float));
 
     SrcTile srcTile(validRows, validCols);
     ScalingTile scalingTile(1, maxScalingCols);
@@ -77,9 +77,9 @@ AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_
 
     constexpr int UB_SIZE = 0x40000;
     constexpr int srcTileBytes = validRows * paddedCols * sizeof(float);
-    constexpr int maxTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float));
+    constexpr int maxTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float));
     constexpr int maxTileBytes = maxTileCols * sizeof(float);
-    constexpr int scalingTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float));
+    constexpr int scalingTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float));
     constexpr bool unrollCondition = (validRows * paddedCols > 1024) && ((validRows * paddedCols) % 256 == 0);
     // Round numGroups up to next VL (64 elements) to account for NORM_B32 vsts writing full VL
     // regardless of predicate mask.  Without this, non-VL-aligned group counts cause the scaling
@@ -209,7 +209,7 @@ template void LaunchTMovZZ<47, 256>(uint8_t *dstFp8Nz, float *src, uint8_t *dstE
 template <int validRows, int validCols>
 AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_t *outE8Zz)
 {
-    constexpr int paddedCols = PTO_CEIL(validCols, BLOCK_SIZE / sizeof(uint32_t));
+    constexpr int paddedCols = PTO_CEIL(validCols, BLOCK_BYTE_SIZE / sizeof(uint32_t));
     constexpr int paddedRows16 = PTO_CEIL(validRows, 16);
     constexpr int groupedColsValid = paddedCols / 32;
     constexpr int groupedColsFlattened = validRows * groupedColsValid;
@@ -225,9 +225,9 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ u
                          PadValue::Zero>;
     using DstFP8Tile = Tile<TileType::Vec, int8_t, validRows, paddedCols, BLayout::RowMajor, validRows, paddedCols,
                             SLayout::NoneBox, 512, PadValue::Zero>;
-    using MaxTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float)),
+    using MaxTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float)),
                          BLayout::RowMajor, -1, -1>;
-    using ScalingTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float)),
+    using ScalingTile = Tile<TileType::Vec, float, 1, PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float)),
                              BLayout::RowMajor, -1, -1>;
     // 2D float8_e8m0_t tile for both TQUANT output and TMOV ZZ source
     // Pad cols to 32-byte alignment (required by RowMajor + NoneBox tile)
@@ -247,7 +247,7 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ u
     using Fp8NZTile = Tile<TileType::Vec, int8_t, virtualRow, paddedCols, BLayout::ColMajor, validRows, paddedCols,
                            SLayout::RowMajor, 512, PadValue::Null, CompactMode::RowPlusOne>;
 
-    constexpr int maxScalingCols = PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float));
+    constexpr int maxScalingCols = PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float));
 
     SrcTile srcTile(validRows, validCols);
     ScalingTile scalingTile(1, maxScalingCols);
@@ -265,7 +265,7 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ u
 
     constexpr int UB_SIZE = 0x40000;
     constexpr int srcTileBytes = validRows * paddedCols * sizeof(float);
-    constexpr int maxTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_SIZE / (int)sizeof(float));
+    constexpr int maxTileCols = PTO_CEIL(groupedColsFlattened, BLOCK_BYTE_SIZE / (int)sizeof(float));
     constexpr int maxTileBytes = maxTileCols * sizeof(float);
     constexpr bool unrollCondition = (validRows * paddedCols > 1024) && ((validRows * paddedCols) % 256 == 0);
     constexpr int scalingTileBytesRaw =

@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBinOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
 PTO_INTERNAL void TPreluCheck(const TileDataDst &dst, const TileDataSrc0 &src0, const TileDataSrc1 &src1,
                               const TileDataTmp &tmp)
@@ -44,11 +45,11 @@ PTO_INTERNAL void TPRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 {
     using T = typename TileDataDst::DType;
     TPreluCheck(dst, src0, src1, tmp);
-    TMUL_IMPL(dst, src0, src1);
+    MAP_INSTR_IMPL(TMUL)(dst, src0, src1);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_V);
 #endif
-    TCMPS_IMPL(tmp, src0, (T)0, CmpMode::GT);
+    MAP_INSTR_IMPL(TCMPS)(tmp, src0, (T)0, CmpMode::GT);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_V);
 #endif
@@ -58,7 +59,8 @@ PTO_INTERNAL void TPRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_V);
 #endif
-    TSEL_IMPL(dst, tmp, src0, dst, selTmp);
+    MAP_INSTR_IMPL(TSEL)(dst, tmp, src0, dst, selTmp);
+} // namespace a2a3
 }
 } // namespace pto
 

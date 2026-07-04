@@ -21,6 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/TSqrtHp.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename Op, typename T, unsigned nRepeatElem>
 PTO_INTERNAL void TUnaryOps_1D_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
 {
@@ -363,5 +364,6 @@ PTO_INTERNAL void TNEG_IMPL(DstTile &dst, SrcTile &src)
 {
     TMULS_IMPL(dst, src, -1);
 }
+} // namespace a5
 } // namespace pto
 #endif

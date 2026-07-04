@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, typename AddrType>
 PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
 {
@@ -31,6 +32,7 @@ PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
                       "GlobalTensor can only be assigned with pointer of same data type.");
         obj.SetAddr(addr);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

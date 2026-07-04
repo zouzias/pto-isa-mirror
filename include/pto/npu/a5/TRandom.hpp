@@ -20,6 +20,7 @@ full text of the License.
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 constexpr uint16_t TRANDOM_ONCE_REPEAT = 4;
 constexpr uint32_t TRANDOM_CONST_0 = 0xD2511F53;
 constexpr uint32_t TRANDOM_CONST_1 = 0xCD9E8D57;
@@ -157,5 +158,6 @@ PTO_INST void TRANDOM_IMPL(DstTile &dst, TRandomKey &key, TRandomCounter &counte
 
     TRandom<Rounds, DstTile>(dst.data(), key, counter, validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif // TRANDOM_HPP

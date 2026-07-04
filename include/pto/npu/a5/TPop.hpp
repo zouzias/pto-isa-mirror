@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/TPush.hpp>
 
 namespace pto {
+namespace a5 {
 /**
  * TPOP: Pop Tile from FIFO
  * * Flow:
@@ -90,7 +91,7 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, GlobalData &gmTensor)
 
     // 3. Increment tile index
     pipe.cons.tileIndex++;
-    TASSIGN_IMPL(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+    MAP_INSTR_IMPL(TASSIGN)(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
 }
 
 //------------------------------------------------
@@ -113,6 +114,7 @@ PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
     }
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif

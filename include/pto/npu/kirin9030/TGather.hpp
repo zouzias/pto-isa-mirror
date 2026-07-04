@@ -8,13 +8,15 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TGATHER_HPP
-#define TGATHER_HPP
+#ifndef TGATHER_HPP_KIRIN9030
+#define TGATHER_HPP_KIRIN9030
 
 #include <pto/common/constants.hpp>
 #include "common.hpp"
 
 namespace pto {
+namespace kirin9030 {
+
 PTO_INTERNAL int CEIL(int a, int b)
 {
     return (a + (b - 1)) / (b);
@@ -263,5 +265,6 @@ template <typename TileDataD, typename TileDataS, typename TileDataS1, typename 
 PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, TileDataS1 &k_value, TileDataC &cdst, TileDataTmp &tmp,
                                uint32_t offset)
 {}
+} // namespace kirin9030
 } // namespace pto
 #endif

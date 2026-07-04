@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T>
 PTO_INTERNAL void ExpPrecisionImpl(RegTensor<T> &dstReg, RegTensor<T> &srcReg, MaskReg &mask)
 {
@@ -31,6 +32,7 @@ PTO_INTERNAL void ExpPrecisionImpl(RegTensor<T> &dstReg, RegTensor<T> &srcReg, M
     vmul(tmpReg, tmpReg, tmpReg, subnormalMask, MODE_ZEROING);
     vsel(dstReg, tmpReg, dstReg, subnormalMask);
 }
+} // namespace a5
 } // namespace pto
 
 #endif

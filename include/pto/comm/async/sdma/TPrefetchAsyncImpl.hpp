@@ -189,7 +189,7 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData &srcGlobalData, Pr
         // Fully-qualified TASSIGN_IMPL avoids two-phase lookup: the public
         // TASSIGN wrapper in `pto/common/pto_instr.hpp` is not yet declared
         // when this template is defined, but the per-arch TASSIGN_IMPL is.
-        TASSIGN_IMPL(ctx.scratchTile, 0x0);
+        MAP_INSTR_IMPL(TASSIGN)(ctx.scratchTile, 0x0);
         if (!detail::InitPrefetchAsyncSession(ctx)) {
             return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
         }

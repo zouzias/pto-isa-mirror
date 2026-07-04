@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TBinSOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TShiftCheck(const TileDataDst &dst, const TileDataSrc &src)
 {
@@ -101,9 +102,9 @@ PTO_INTERNAL void TANDS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     PTO_ASSERT(dst.data() != src.data(),
                "Setting the source Tile and destination Tile to the same memory is unsupported");
 #endif
-    TEXPANDS_IMPL(dst, scalar);
+    MAP_INSTR_IMPL(TEXPANDS)(dst, scalar);
     pipe_barrier(PIPE_V);
-    TAND_IMPL(dst, src, dst);
+    MAP_INSTR_IMPL(TAND)(dst, src, dst);
 }
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -113,9 +114,9 @@ PTO_INTERNAL void TORS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDat
     PTO_ASSERT(dst.data() != src.data(),
                "Setting the source Tile and destination Tile to the same memory is unsupported");
 #endif
-    TEXPANDS_IMPL(dst, scalar);
+    MAP_INSTR_IMPL(TEXPANDS)(dst, scalar);
     pipe_barrier(PIPE_V);
-    TOR_IMPL(dst, src, dst);
+    MAP_INSTR_IMPL(TOR)(dst, src, dst);
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
@@ -125,13 +126,14 @@ PTO_INTERNAL void TXORS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     PTO_ASSERT(dst.data() != src.data() && dst.data() != tmp.data() && src.data() != tmp.data(),
                "dst, src, tmp must in different memory.");
 #endif
-    TORS_IMPL(tmp, src, scalar);
+    MAP_INSTR_IMPL(TORS)(tmp, src, scalar);
     pipe_barrier(PIPE_V);
-    TANDS_IMPL(dst, src, scalar);
+    MAP_INSTR_IMPL(TANDS)(dst, src, scalar);
     pipe_barrier(PIPE_V);
-    TNOT_IMPL(dst, dst);
+    MAP_INSTR_IMPL(TNOT)(dst, dst);
     pipe_barrier(PIPE_V);
-    TAND_IMPL(dst, dst, tmp);
+    MAP_INSTR_IMPL(TAND)(dst, dst, tmp);
+} // namespace a2a3
 }
 } // namespace pto
 

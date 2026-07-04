@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataOffset, unsigned elementsPerRepeat,
           unsigned blockSizeElem, unsigned dstRowStride, unsigned offsetRowStride>
@@ -133,6 +134,7 @@ PTO_INTERNAL void TGATHERB_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataOffs
         }
     }
 }
+} // namespace a5
 } // namespace pto
 
 #endif

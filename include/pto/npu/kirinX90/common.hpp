@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/common.hpp"
 
 namespace pto {
+namespace kirinX90 {
 template <typename DstTileData, typename SrcTileData, typename DstType, typename SrcType, bool isCastQuant>
 PTO_INTERNAL void CheckTMovAccValid()
 {
@@ -76,5 +77,6 @@ struct TMovConfig {
     static constexpr int32_t nzAlign =
         (isFloat && channelSplitEnable) ? baseC0Size : (isFloat ? FRACTAL_NZ_ROW : baseC0Size);
 };
+} // namespace kirinX90
 } // namespace pto
 #endif

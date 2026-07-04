@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct XorOp {
@@ -77,5 +78,6 @@ PTO_INTERNAL void TXOR_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     TXor<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TSQRTHP_HPP
 
 namespace pto {
+namespace a5 {
 template <typename T, typename U>
 PTO_INTERNAL void SqrtPrecisionImpl(U &dstReg, U &srcReg, MaskReg &mask)
 {
@@ -90,5 +91,6 @@ PTO_INTERNAL void SqrtFloatImpl(RegTensor<float> &dst, RegTensor<float> &src, Ma
     por(cmpMaskReg, isZeroPreg, isInfPreg, mask);
     vsel(dst, srcRegCopy, tmpReg, cmpMaskReg);
 }
+} // namespace a5
 } // namespace pto
 #endif // TINSERT_CUSTOM_HPP

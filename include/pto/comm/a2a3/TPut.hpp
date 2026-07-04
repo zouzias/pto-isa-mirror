@@ -49,7 +49,7 @@ PTO_INTERNAL void TputTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
-    TSTORE_IMPL<TileData, DstGT, atomicType>(dst, tile);
+    MAP_INSTR_IMPL(TSTORE)<TileData, DstGT, atomicType>(dst, tile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
@@ -70,8 +70,8 @@ PTO_INTERNAL void TputIntraPingPongOneChunk(GlobalDstData &dstGlobalData, Global
     HalfTileData pongHalf(kHalfRows, curCols);
     const auto baseAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data());
     const auto halfAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data() + kHalfRows * TileData::Cols);
-    TASSIGN_IMPL(pingHalf, baseAddr);
-    TASSIGN_IMPL(pongHalf, halfAddr);
+    MAP_INSTR_IMPL(TASSIGN)(pingHalf, baseAddr);
+    MAP_INSTR_IMPL(TASSIGN)(pongHalf, halfAddr);
     pingHalf.SetKAligned(stagingTileData.GetKAligned());
     pongHalf.SetKAligned(stagingTileData.GetKAligned());
 
@@ -282,7 +282,7 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         TLOAD(stagingTileData, srcGlobalData);
         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        TSTORE_IMPL<TileData, GlobalDstData, atomicType>(dstGlobalData, stagingTileData);
+        MAP_INSTR_IMPL(TSTORE)<TileData, GlobalDstData, atomicType>(dstGlobalData, stagingTileData);
         set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         return;
@@ -323,7 +323,7 @@ PTO_INTERNAL void TputPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalS
         pipe_barrier(PIPE_ALL);
         DynShape pendShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
         DstViewT pendView(dstGlobalData.data() + pp.pendingDstOffset, pendShape, dstChunkStride);
-        TSTORE_IMPL<TileData, DstViewT, atomicType>(pendView, storeTile);
+        MAP_INSTR_IMPL(TSTORE)<TileData, DstViewT, atomicType>(pendView, storeTile);
         TLOAD(loadTile, srcView);
         set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
         set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
@@ -358,7 +358,7 @@ PTO_INTERNAL void TputPingPongFlush(GlobalDstData &dstGlobalData, TileData &ping
     pipe_barrier(PIPE_ALL);
     DynShape lastShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
     DstViewT lastView(dstGlobalData.data() + pp.pendingDstOffset, lastShape, dstChunkStride);
-    TSTORE_IMPL<TileData, DstViewT, atomicType>(lastView, lastTile);
+    MAP_INSTR_IMPL(TSTORE)<TileData, DstViewT, atomicType>(lastView, lastTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
     wait_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
 }

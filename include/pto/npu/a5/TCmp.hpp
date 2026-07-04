@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 const int32_t CMP_BITS_PER_INDEX = 32;
 
@@ -167,5 +168,6 @@ PTO_INTERNAL void TCMP_IMPL(DstTile &dst, SrcTile0 &src0, SrcTile1 &src1, CmpMod
     }
 }
 
+} // namespace a5
 } // namespace pto
 #endif

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define FFTS_FLAG_ID_BIT_START 8
 
 namespace pto {
+namespace a2a3 {
 
 // System reserved FFTS event ids 12-15 for CV comm (control + reserved)
 enum CVCommFftsEvent : uint16_t
@@ -81,6 +82,7 @@ AICORE inline int TSYNC_CVID(int block_idx, __gm__ uint8_t *cv_comm_buf)
 #endif
 #endif
     return comm_slot;
+} // namespace a2a3
 }
 } // namespace pto
 

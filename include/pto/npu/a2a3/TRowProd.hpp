@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TRowReduceOps.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
@@ -86,6 +87,7 @@ PTO_INTERNAL void TROWPROD_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &
 
     TRowProd<T, TileDataOut, TileDataIn, TileDataTmp>(dst.data(), src.data(), tmp.data(), validRow, validCol);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

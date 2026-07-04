@@ -13,6 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace kirinX90 {
+#include "pto/npu/kirinX90/TMov.hpp"
+using kirinX90::SetLoop3Para;
 
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TInsertVecToVecNDUnaligned(typename DstTileData::TileDType __out__ dst,
@@ -519,5 +522,6 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t inde
     }
 }
 
+} // namespace kirinX90
 } // namespace pto
 #endif // TINSERT_HPP

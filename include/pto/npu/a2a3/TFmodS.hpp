@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 // Formula: fmod(a, b) = a - trunc(a/b) * b
 struct FmodSOp {
     PTO_INTERNAL static void FmodSF32Instr(__ubuf__ float *dst, __ubuf__ float *src, float x)
@@ -87,6 +88,7 @@ PTO_INTERNAL void TFMODS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileD
 
     TFmodS<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dst.data(), src.data(), scalar, dst.GetValidRow(), dst.GetValidCol());
+} // namespace a2a3
 }
 } // namespace pto
 

@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SET_QUANT_SCALAR_HPP
 
 namespace pto {
+namespace a5 {
 
 template <typename OutType>
 PTO_INTERNAL void SET_QUANT_SCALAR_IMPL(float preQuantScalar)
@@ -24,6 +25,7 @@ PTO_INTERNAL void SET_QUANT_SCALAR_IMPL(float preQuantScalar)
     set_quant_pre(quantConfig);
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif // SET_QUANT_SCALAR_HPP

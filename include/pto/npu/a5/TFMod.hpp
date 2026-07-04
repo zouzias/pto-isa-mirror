@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/TFmodRemHp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <FmodAlgorithm PrecisionType, typename T>
 struct FModOp {
@@ -110,5 +111,6 @@ PTO_INTERNAL void TFMOD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
     TFMod<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, PrecisionType>(
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartArgBinOps.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T, typename U>
 struct TPartArgMaxOp {
@@ -32,5 +33,6 @@ PTO_INTERNAL void TPARTARGMAX_IMPL(DstValTileData &dstVal, Src0ValTileData &src0
                  Src0ValTileData, Src1ValTileData, DstIdxTileData, Src0IdxTileData, Src1IdxTileData>(
         dstVal, src0Val, src1Val, dstIdx, src0Idx, src1Idx);
 }
+} // namespace a5
 } // namespace pto
 #endif

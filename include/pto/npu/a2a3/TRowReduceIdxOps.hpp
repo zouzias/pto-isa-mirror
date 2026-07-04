@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
+namespace a2a3 {
 template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
 PTO_INTERNAL void TRowReduceIdxCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValValidRow,
                                      uint32_t dstIdxValidRow)
@@ -446,6 +447,7 @@ PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOutVal &dstVal, TileDataOut &dst, Tile
         dstVal.data(), dst.data(), src.data(), tmp.data(), src.GetValidRow(), src.GetValidCol(), dstVal.GetValidRow(),
         dst.GetValidRow(), VFImplKind::VFIMPL_DEFAULT);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

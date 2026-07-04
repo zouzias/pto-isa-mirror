@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 
 namespace pto {
+namespace a2a3 {
 
 // lower-triangular
 template <typename T, unsigned rowStride>
@@ -109,6 +110,7 @@ PTO_INTERNAL void TTRI_IMPL(TileData &dst, int diagonal)
 
     TTri<TileData, isUpperOrLower, rowStride>(dst.data(), validRow, validCol, diagonal);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

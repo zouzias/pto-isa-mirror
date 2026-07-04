@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define VEC_CORE_ID_OFFSET 16
 
 namespace pto {
+namespace a5 {
 
 // Operation types for TSync - identifies the producer/consumer operation
 enum class SyncOpType : uint8_t
@@ -206,6 +207,7 @@ struct TSync_Custom {
         }
     }
 };
+} // namespace a5
 } // namespace pto
 
 #endif // TSYNC_HPP

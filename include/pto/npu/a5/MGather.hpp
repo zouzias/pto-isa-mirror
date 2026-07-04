@@ -19,15 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
-
-#ifndef PTO_GATHER_EXEC_ENUM_DEFINED
-#define PTO_GATHER_EXEC_ENUM_DEFINED
-enum class GatherExec : uint8_t
-{
-    Scalar = 0,
-    Simt = 1
-};
-#endif
+namespace a5 {
 
 template <typename T>
 struct IsValidGatherDType {
@@ -631,6 +623,7 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalTable &table, IdxSrc &indices
     }
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif // MGATHER_HPP

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TColExpandBinOp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct ColExpandExpdifOp {
@@ -54,5 +55,6 @@ PTO_INTERNAL void TCOLEXPANDEXPDIF_IMPL(TileData &dst, TileDataSrc0 &src0, TileD
     TCOLEXPANDOP_IMPL<ColExpandExpdifOp<T>, ColExpandExpdifOp2<T>, TileData, TileDataSrc0, TileDataSrc1>(dst, src0,
                                                                                                          src1);
 }
+} // namespace a5
 } // namespace pto
 #endif

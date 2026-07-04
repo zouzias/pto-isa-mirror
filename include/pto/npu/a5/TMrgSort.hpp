@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a5 {
 
 constexpr const int STRUCT_SIZE = 8;
 constexpr const int STRUCT_SIZE_SHIFT = 3;
@@ -25,13 +26,6 @@ constexpr const int LIST_NUM_4 = 4;
 constexpr const int BLOCK_NUM = 4;
 constexpr const int ONE_ROW = 1;
 constexpr const int EMPTY_LIST_SIZE = 0;
-
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
 
 template <bool exhausted>
 PTO_INTERNAL uint64_t InitConfig()
@@ -288,5 +282,6 @@ PTO_INTERNAL constexpr uint32_t GETMRGSORTTMPSIZE()
 {
     return Src0TileData::Cols + Src1TileData::Cols + Src2TileData::Cols + Src3TileData::Cols;
 }
+} // namespace a5
 } // namespace pto
 #endif

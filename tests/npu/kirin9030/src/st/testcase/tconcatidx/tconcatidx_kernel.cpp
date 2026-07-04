@@ -65,7 +65,7 @@ __global__ AICORE void runTConcat(__gm__ dataType *out, __gm__ dataType *src0, _
     TLOAD(src1IdxTile, src1IdxGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCONCAT_IMPL(dstTile, src0Tile, src1Tile, src0IdxTile, src1IdxTile);
+    TCONCAT(dstTile, src0Tile, src1Tile, src0IdxTile, src1IdxTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);

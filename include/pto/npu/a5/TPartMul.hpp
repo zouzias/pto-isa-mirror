@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartBinOps.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T>
 struct PartMulOp {
     PTO_INTERNAL static void BinInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg preg)
@@ -36,5 +37,6 @@ PTO_INTERNAL void TPARTMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSr
         "Fix: TPARTMUL Invalid data type.");
     TPARTOP_IMPL<PartMulOp<T>, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
 }
+} // namespace a5
 } // namespace pto
 #endif

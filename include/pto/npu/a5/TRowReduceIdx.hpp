@@ -20,6 +20,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct ROWIDXMAX {
@@ -230,6 +231,7 @@ PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx
                                                                  src.GetValidRow(), src.GetValidCol(),
                                                                  dstVal.GetValidRow(), dstIdx.GetValidRow());
 }
+} // namespace a5
 } // namespace pto
 
 #endif

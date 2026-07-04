@@ -11,9 +11,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_NPU_A5_TPREFETCH_ASYNC_HPP
 #define PTO_NPU_A5_TPREFETCH_ASYNC_HPP
 
-// TPREFETCH_ASYNC for A5. The implementation is arch-neutral (all backend
-// differences live inside the SDMA headers), so this header is a thin wrapper
-// over the shared implementation kept next to the SDMA stack.
 #include "pto/comm/async/sdma/TPrefetchAsyncImpl.hpp"
+
+namespace pto {
+namespace a5 {
+using ::pto::TPREFETCH_ASYNC_IMPL;
+} // namespace a5
+} // namespace pto
 
 #endif // PTO_NPU_A5_TPREFETCH_ASYNC_HPP

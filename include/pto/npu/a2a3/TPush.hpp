@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TLoad.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 enum TSyncCVMode : uint8_t
 {
@@ -187,9 +188,9 @@ struct TPipe {
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
             GlobalData globalData(addr, GlobalShape(ValidR, ValidC), GlobalStride(ValidC));
             if constexpr (EN_UNIT_FLAG) {
-                TSTORE_IMPL<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalData, tile);
+                MAP_INSTR_IMPL(TSTORE)<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalData, tile);
             } else { // disable unit flag
-                TSTORE_IMPL(globalData, tile);
+                MAP_INSTR_IMPL(TSTORE)(globalData, tile);
             }
         }
 
@@ -218,7 +219,7 @@ struct TPipe {
             using GlobalData = GlobalTensor<T, GlobalShape, GlobalStride>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
             GlobalData globalData(addr, GlobalShape(gmValidR, gmValidC), GlobalStride(gmStrideR));
-            TSTORE_IMPL(globalData, tile);
+            MAP_INSTR_IMPL(TSTORE)(globalData, tile);
         }
 
         template <typename TileProd>
@@ -449,8 +450,8 @@ struct TPipe {
             uint64_t localTileBase =
                 fifo.C2V_CONSUMER_BUF +
                 (static_cast<size_t>(tileIndex) % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
-            TASSIGN_IMPL(tile, localTileBase);
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         template <typename TileCons, TileSplitAxis Split>
@@ -467,8 +468,8 @@ struct TPipe {
             uint64_t localTileBase =
                 fifo.V2C_CONSUMER_BUF +
                 (static_cast<size_t>(tileIndex) % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
-            TASSIGN_IMPL(tile, localTileBase);
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         PTO_INTERNAL void popCtrlFromCtrlFiFo(RingFiFo &fifo)
@@ -702,9 +703,9 @@ struct TMPipe {
             GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
             // store tile to GM FIFO, enable unit-flag one
             if constexpr (EN_UNIT_FLAG) {
-                TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+                MAP_INSTR_IMPL(TSTORE)<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
             } else { // disable unit flag
-                TSTORE_IMPL(globalTensor, tile);
+                MAP_INSTR_IMPL(TSTORE)(globalTensor, tile);
             }
         } // end of Acc->GM
 
@@ -726,9 +727,9 @@ struct TMPipe {
 #ifdef __PTO_AUTO__
                 __cce_alias(subTile.data(), tile.data(), col_byte_offset);
 #else
-                TASSIGN_IMPL(subTile, (uint64_t)tile.data() + col_byte_offset);
+                MAP_INSTR_IMPL(TASSIGN)(subTile, (uint64_t)tile.data() + col_byte_offset);
 #endif
-                TSTORE_IMPL(globalDataSub, subTile);
+                MAP_INSTR_IMPL(TSTORE)(globalDataSub, subTile);
             }
         }
 
@@ -854,7 +855,7 @@ struct TMPipe {
             if constexpr (DataFiFo::useLocalFiFo) {
                 uint64_t localTileBase = fifo.localFiFoBase + (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) *
                                                                   ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, localTileBase);
+                MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
             }
 #endif
             Tile<TileType::Vec, T, ConsM, ConsN, BLayout::RowMajor, ConsM, ProdN> tileSub;
@@ -866,9 +867,9 @@ struct TMPipe {
 #ifdef __PTO_AUTO__
                 __cce_alias(tileSub.data(), tile.data(), col_byte_offset);
 #else
-                TASSIGN_IMPL(tileSub, (uint64_t)tile.data() + col_byte_offset);
+                MAP_INSTR_IMPL(TASSIGN)(tileSub, (uint64_t)tile.data() + col_byte_offset);
 #endif
-                TLOAD_IMPL(tileSub, globalTensorSub);
+                MAP_INSTR_IMPL(TLOAD)(tileSub, globalTensorSub);
             }
         }
 
@@ -883,10 +884,10 @@ struct TMPipe {
             if constexpr (DataFiFo::useLocalFiFo) {
                 uint64_t tileBase = fifo.localFiFoBase +
                                     (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, tileBase);
+                MAP_INSTR_IMPL(TASSIGN)(tile, tileBase);
             }
 #endif
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         PTO_INTERNAL void popCtrlFromCtrlFiFo(DataFiFo &fifo)
@@ -963,7 +964,8 @@ PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
         pipe.prod.record();
     }
 }
-
+} // namespace a2a3
+using a2a3::TPipe;
 } // namespace pto
 
 #endif

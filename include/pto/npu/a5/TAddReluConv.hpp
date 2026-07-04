@@ -42,18 +42,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
-
-// Rounding type used by the float/half down-casts (round-to-nearest-even),
-// matching the TCVT default (RoundMode::CAST_RINT) for these pairs.
-using __cce_simd::RoundRType;
-
+namespace a5 {
 // ============================================================================
 // Core tile kernel: per-row iteration, processing one repeat (a full vector) at
 // a time. The compute/predicate width follows the source element type; the
 // store packs the narrower destination via PK_B32 (32->16) or PK_B16 (16->8).
-//   DS / SS0 / SS1 : dst / src0 / src1 row strides (in elements)
+//   DStride / SS0 / SS1 : dst / src0 / src1 row strides (in elements)
 // ============================================================================
-template <typename TileDataDst, typename TileDataSrc, unsigned DS, unsigned SS0, unsigned SS1>
+template <typename TileDataDst, typename TileDataSrc, unsigned DStride, unsigned SS0, unsigned SS1>
 __tf__ PTO_INTERNAL OP_NAME(TADDRELUCONV)
     OP_TYPE(element_wise) void TAddReluConv(typename TileDataDst::TileDType __out__ dstData,
                                             typename TileDataSrc::TileDType __in__ src0Data,
@@ -84,13 +80,13 @@ __tf__ PTO_INTERNAL OP_NAME(TADDRELUCONV)
                 if constexpr (std::is_same<ST, float>::value) {
                     // fp32 -> fp16 (vcvt saturates intrinsically)
                     RegTensor<DT> vout;
-                    vcvt(vout, vsum, preg, RoundRType(), RS_DISABLE, PART_EVEN);
-                    vsts(vout, dstPtr, i * DS + j * elementsPerRepeat, PK_B32, preg);
+                    vcvt(vout, vsum, preg, ROUND_R, RS_DISABLE, PART_EVEN);
+                    vsts(vout, dstPtr, i * DStride + j * elementsPerRepeat, PK_B32, preg);
                 } else if constexpr (std::is_same<ST, half>::value) {
                     // fp16 -> int8 (vcvt saturates to [-128,127]; ReLU -> [0,127])
                     RegTensor<DT> vout;
-                    vcvt(vout, vsum, preg, RoundRType(), RS_DISABLE, PART_EVEN);
-                    vsts(vout, dstPtr, i * DS + j * elementsPerRepeat, PK_B16, preg);
+                    vcvt(vout, vsum, preg, ROUND_R, RS_DISABLE, PART_EVEN);
+                    vsts(vout, dstPtr, i * DStride + j * elementsPerRepeat, PK_B16, preg);
                 } else {
                     // int16 -> int8: A5 has no s16->s8 vcvt. Clamp the already
                     // non-negative sum to [0,127] and narrow via s16->u8; the
@@ -98,7 +94,7 @@ __tf__ PTO_INTERNAL OP_NAME(TADDRELUCONV)
                     vmins(vsum, vsum, (ST)127, preg, MODE_ZEROING);
                     RegTensor<uint8_t> vout;
                     vcvt(vout, vsum, preg, RS_DISABLE, PART_EVEN);
-                    vsts(vout, (__ubuf__ uint8_t *)dstPtr, i * DS + j * elementsPerRepeat, PK_B16, preg);
+                    vsts(vout, (__ubuf__ uint8_t *)dstPtr, i * DStride + j * elementsPerRepeat, PK_B16, preg);
                 }
             }
         }
@@ -141,14 +137,16 @@ PTO_INTERNAL void TADDRELUCONV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDa
 {
     TAddReluConvCheck<TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
 
-    constexpr unsigned DS = TileDataDst::RowStride;
+    constexpr unsigned DStride = TileDataDst::RowStride;
     constexpr unsigned SS0 = TileDataSrc0::RowStride;
     constexpr unsigned SS1 = TileDataSrc1::RowStride;
 
     const unsigned validRows = dst.GetValidRow();
     const unsigned validCols = dst.GetValidCol();
 
-    TAddReluConv<TileDataDst, TileDataSrc0, DS, SS0, SS1>(dst.data(), src0.data(), src1.data(), validRows, validCols);
+    TAddReluConv<TileDataDst, TileDataSrc0, DStride, SS0, SS1>(dst.data(), src0.data(), src1.data(), validRows,
+                                                               validCols);
 }
+} // namespace a5
 } // namespace pto
 #endif

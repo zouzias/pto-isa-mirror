@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, typename TileDataDst, typename TileDataSrc, unsigned dstStride>
 __tf__ PTO_INTERNAL void TColExpand(typename TileDataDst::TileDType __out__ dst,
                                     typename TileDataSrc::TileDType __in__ src, int validRow, int validCol)
@@ -58,6 +59,7 @@ PTO_INTERNAL void TCOLEXPAND_IMPL(TileDataOut &dst, TileDataIn &src)
     }
     constexpr int dstStride = TileDataOut::RowStride;
     TColExpand<T, TileDataOut, TileDataIn, dstStride>(dst.data(), src.data(), validRow, validCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

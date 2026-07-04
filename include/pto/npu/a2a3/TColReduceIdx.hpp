@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
           bool WithVal = false>
@@ -316,6 +317,7 @@ PTO_INTERNAL void TCOLARGMIN_IMPL(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx
     TColReduceIdxDispatch<false, TileDataOutVal, TileDataOutIdx, TileDataIn, TileDataTmp, true>(dstVal, dstIdx, src,
                                                                                                 tmp);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

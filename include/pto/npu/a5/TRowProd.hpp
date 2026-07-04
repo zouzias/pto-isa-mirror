@@ -20,6 +20,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a5 {
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TRowProdCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
@@ -116,6 +117,7 @@ PTO_INTERNAL void TROWPROD_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &
     TRowProdCheck<TileDataOut, TileDataIn>(rows, cols, dst.GetValidRow());
     TRowProd<TileDataOut, TileDataIn>(dst.data(), src.data(), rows, cols);
 }
+} // namespace a5
 } // namespace pto
 
 #endif

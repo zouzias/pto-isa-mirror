@@ -90,6 +90,7 @@ __tf__ AICORE void TExtractAccToVec(typename DstTileData::TileDType __out__ dst,
                              static_cast<uint8_t>(reluMode), false, Cfg::isNz2Nd, 0, 0, false, false, 0, false, false,
                              false, false, false, false);
 }
+namespace kirinX90 {
 
 template <typename DstTile, typename SrcTile>
 __tf__ PTO_INTERNAL void TExtractVecToMat(typename DstTile::TileDType __out__ dst,
@@ -294,6 +295,29 @@ PTO_INTERNAL void TExtractVecToVecNZDispatch(DstTileData &dst, SrcTileData &src,
         TExtractVecToVecNZ<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, idxRow, idxCol);
     }
 }
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
+    PTO_ASSERT(indexRow + DstTileData::Rows <= SrcTileData::Rows,
+               "The sum of indexRow and dstRow should be less than srcRow!");
+    PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
+               "The sum of indexCol and dstCol should be less than srcCol!");
+    if constexpr (DstTileData::Loc == TileType::Left) {
+        TExtractToLeft<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
+    } else if constexpr (DstTileData::Loc == TileType::Right) {
+        TExtractToRight<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
+    } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Mat) {
+        TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol, src.GetValidRow(),
+                                                   src.GetValidCol(), dst.GetValidRow(), dst.GetValidCol());
+    } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
+        CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
+        constexpr QuantMode_t quantPre =
+            GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(
+            dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+    }
+}
 
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
@@ -407,5 +431,6 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
     static_assert(mode == AccToVecMode::SingleModeVec0, "Only SingleModeVec0 is supported.");
     TEXTRACT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
 }
+} // namespace kirinX90
 } // namespace pto
 #endif // TEXTRACT_HPP

@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/event.hpp>
 
 namespace pto {
+
+namespace kirin9030 {
 template <Op OpCode>
 PTO_INTERNAL static constexpr pipe_t GetPipeByOpForKirin9030()
 {
@@ -32,6 +34,7 @@ PTO_INTERNAL void TSYNC_IMPL()
     pipe_barrier((pipe_t)pipe);
 #endif
 }
+} // namespace kirin9030
 
 template <Op SrcOp, Op DstOp, bool AutoToken = true, event_t EventID = EVENT_ID0>
 struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, AutoToken, EventID> {
@@ -41,7 +44,7 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
     template <Op op>
     PTO_INTERNAL static constexpr pipe_t GetPipeByOp()
     {
-        return GetPipeByOpForKirin9030<op>();
+        return kirin9030::GetPipeByOpForKirin9030<op>();
     }
 #ifndef __PTO_AUTO__
     static constexpr bool isValidBarrierPipe =

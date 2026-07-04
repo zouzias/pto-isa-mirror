@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TRowReduceOps.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 // Float/Half operation traits (for vcadd-based implementation)
 template <typename T>
@@ -157,6 +158,7 @@ PTO_INTERNAL void TROWSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
 
     TRowSum<typename TileDataIn::DType, TileDataOut, TileDataIn, TileDataTmp>(dst.data(), src.data(), tmp.data(),
                                                                               validCol, validRow);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

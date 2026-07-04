@@ -17,6 +17,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T>
 PTO_INTERNAL constexpr const __gm__ char *GetDTypeName()
@@ -324,6 +325,7 @@ PTO_INTERNAL void TPRINT_IMPL(TileData &src, GlobalData &tmp)
     int validCols = src.GetValidCol();
     TPrintMatOrAccTileByTmp<Format, TileData>(tmpData, validRows, validCols);
     pipe_barrier(PIPE_ALL);
+} // namespace a2a3
 }
 } // namespace pto
 

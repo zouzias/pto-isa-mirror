@@ -13,8 +13,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+#include "pto/npu/a2a3/TMulS.hpp"
 
 namespace pto {
+namespace a2a3 {
 #define SMALL_RPT (4)
 template <typename Op, typename T>
 PTO_INTERNAL void Unary1LCountMode(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
@@ -428,8 +430,9 @@ PTO_INTERNAL void TLOG_IMPL(DstTile &dst, SrcTile &src)
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TNEG_IMPL(DstTile &dst, SrcTile &src)
 {
-    TMULS_IMPL(dst, src, -1);
+    MAP_INSTR_IMPL(TMULS)(dst, src, -1);
 }
+} // namespace a2a3
 } // namespace pto
 
 #endif

@@ -14,6 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
+
+
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
 __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__ dst,
                                          typename SrcTileData::TileDType __in__ src, uint16_t validRow,
@@ -50,7 +53,7 @@ __tf__ PTO_INTERNAL void TInsertAccToVec(typename DstTileData::TileDType __out__
     constexpr bool enableNz2Nz = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor);
     constexpr bool channelSplitEnable =
         enableNz2Nz && (std::is_same_v<dstType, float>) && (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
-    constexpr uint32_t dstStride = GetTmovAccDstStride<DstTileData, SrcTileData>();
+    constexpr uint32_t dstStride = arch::GetTmovAccDstStride<DstTileData, SrcTileData>();
 
     uint32_t dstOffset;
     if constexpr (enableNz2Nd) {
@@ -646,5 +649,6 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t inde
     }
 }
 
+} // namespace a5
 } // namespace pto
 #endif // TInsert_HPP

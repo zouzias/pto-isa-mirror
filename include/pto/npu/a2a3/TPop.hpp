@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TPush.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 // pop tile from fifo for tile data
 template <typename Pipe, typename TileCons, TileSplitAxis Split, std::enable_if_t<is_tile_data_v<TileCons>, int> = 0>
@@ -83,7 +84,7 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, GlobalData &gmTensor)
 
     // 3. Increment tile index
     pipe.cons.tileIndex++;
-    TASSIGN_IMPL(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+    MAP_INSTR_IMPL(TASSIGN)(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
 }
 
 //--------------------------------------------
@@ -106,6 +107,7 @@ PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
         pipe.cons.free();
     }
 }
+} // namespace a2a3
 
 } // namespace pto
 

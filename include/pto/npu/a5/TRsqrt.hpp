@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/Div754.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename Op, RsqrtAlgorithm PrecisionType, typename T, unsigned nRepeatElem>
 PTO_INTERNAL void TRsqrt_1D_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
 {
@@ -199,5 +200,6 @@ PTO_INTERNAL void TRSQRT_IMPL(DstTile &dst, SrcTile &src, TmpTile &tmp)
 {
     TRSQRT_IMPL<PrecisionType>(dst, src);
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 
 namespace pto {
+namespace a5 {
 
 // HistByte enum is defined in <pto/common/type.hpp>
 
@@ -272,5 +273,6 @@ PTO_INTERNAL void THISTOGRAM_IMPL(TileDst &dst, TileSrc &src, TileIdx &idx)
     }
 }
 
+} // namespace a5
 } // namespace pto
 #endif

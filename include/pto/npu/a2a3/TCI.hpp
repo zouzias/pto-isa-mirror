@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename TileData, typename T>
 PTO_INTERNAL void CheckValid()
 {
@@ -268,12 +269,13 @@ PTO_INTERNAL void TCI_IMPL(TileData &dst, T start, TileDataTmp &tmp)
                                                              numRemainPerLine);
         pipe_barrier(PIPE_V);
         if (descending) {
-            TMULS_IMPL(dst, dst, -1);
+            MAP_INSTR_IMPL(TMULS)(dst, dst, -1);
         }
     } else {
         TCI_b16_normal<TileData, TileDataTmp, T, descending>(dst.data(), tmp.data(), start, validCol, numRepeatPerLine,
                                                              numRemainPerLine);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

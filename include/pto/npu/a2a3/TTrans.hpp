@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/utils.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 constexpr int ADDR_NUM = 16;
 constexpr int HALF_ADDR_NUM = 8;
@@ -1113,6 +1114,7 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
         TTrans<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(dst.data(), src.data(), tmp.data(), validRow,
                                                                      validCol, dstStride, srcStride);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

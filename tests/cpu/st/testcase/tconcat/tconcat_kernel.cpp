@@ -34,7 +34,7 @@ struct TConcatCaller {
     template <typename TileDst, typename TileSrc0, typename TileSrc1>
     inline void CallTconcat(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
     {
-        TCONCAT_IMPL(dst, src0, src1);
+        TCONCAT(dst, src0, src1);
     }
 };
 
@@ -73,7 +73,7 @@ struct TConcatIdxCaller {
     template <typename TileDst, typename TileSrc0, typename TileSrc1>
     inline void CallTconcat(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
     {
-        TCONCAT_IMPL(dst, src0, src1, src0IdxTile, src1IdxTile);
+        TCONCAT(dst, src0, src1, src0IdxTile, src1IdxTile);
     }
 
 protected:
@@ -119,7 +119,7 @@ struct TConcatDstIdxCaller : public TConcatIdxCaller<TIdx, sizes> {
     template <typename TileDst, typename TileSrc0, typename TileSrc1>
     inline void CallTconcat(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
     {
-        TCONCAT_IMPL(dst, src0, src1, dstIdxTile, TConcatIdxCaller<TIdx, sizes>::src0IdxTile,
+        TCONCAT(dst, src0, src1, dstIdxTile, TConcatIdxCaller<TIdx, sizes>::src0IdxTile,
                      TConcatIdxCaller<TIdx, sizes>::src1IdxTile);
     }
 

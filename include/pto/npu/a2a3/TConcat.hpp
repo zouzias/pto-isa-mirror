@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename TileDataD, typename TileDataS0, typename TileDataS1>
 __tf__ PTO_INTERNAL void TConcatImpl(typename TileDataD::TileDType __out__ dst,
                                      typename TileDataS0::TileDType __in__ src0,
@@ -256,6 +257,7 @@ PTO_INTERNAL void TCONCAT_IMPL(DstTile &dst, Src0Tile &src0, Src1Tile &src1, Dst
     TConcatIdx<DstTile, Src0Tile, Src1Tile, DstIdxTile, Src0IdxTile, Src1IdxTile, elementsPerBlock, elementsPerRepeat,
                dstStride, src0Stride, src1Stride, dstIdxStride, idx0Stride, idx1Stride, true>(
         dst.data(), src0.data(), src1.data(), dstIdx.data(), src0Idx.data(), src1Idx.data(), validRow, dstValidCol);
+} // namespace a2a3
 }
 } // namespace pto
 

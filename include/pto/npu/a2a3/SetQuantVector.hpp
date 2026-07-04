@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SET_QUANT_VECTOR_HPP
 
 namespace pto {
+namespace a2a3 {
 
 template <typename FpTileData>
 __tf__ PTO_INTERNAL void SET_QUANT_VECTOR(typename FpTileData::TileDType __in__ fp)
@@ -29,6 +30,7 @@ PTO_INTERNAL void SET_QUANT_VECTOR_IMPL(FpTileData &fpTile)
     static_assert(FpTileData::Loc == TileType::Scaling, "Fix: SET_QUANT_VECTOR only supports Scaling input tile type.");
     SET_QUANT_VECTOR<FpTileData>(fpTile.data());
 }
+} // namespace a2a3
 
 } // namespace pto
 

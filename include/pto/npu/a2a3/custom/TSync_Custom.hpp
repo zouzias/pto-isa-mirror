@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 // Operation types for TSync - identifies the producer/consumer operation
 enum class SyncOpType : uint8_t
@@ -143,6 +144,7 @@ struct TSync_Custom {
         }
     }
 };
+} // namespace a2a3
 
 } // namespace pto
 

@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TSubS.hpp>
 #include <pto/npu/a2a3/TMulS.hpp>
 namespace pto {
+namespace a2a3 {
 
 template <typename DstDType, typename SrcDType>
 PTO_INTERNAL void ConvertToDstDtype(__ubuf__ DstDType *dst, __ubuf__ SrcDType *src, uint8_t repeatNum,
@@ -134,6 +135,7 @@ PTO_INTERNAL void TDEQUANT_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataPara
     constexpr unsigned scaleRowStride = TileDataPara::RowStride;
     TDequant<TileDataDst, TileDataSrc, TileDataPara, dstRowStride, srcRowStride, scaleRowStride>(
         dst.data(), src.data(), scale.data(), offset.data(), dst.GetValidRow(), dst.GetValidCol());
+} // namespace a2a3
 }
 } // namespace pto
 #endif

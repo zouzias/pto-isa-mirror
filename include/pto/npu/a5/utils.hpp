@@ -18,28 +18,6 @@ const uint32_t VECTOR_REG_WIDTH = 256;
 const uint32_t VECTOR_REG_WIDTH_2XVL = 512;
 constexpr uint32_t SHIFT_MX_ADDR = 4;
 
-enum class DistVST
-{
-    DIST_NORM_B8,
-    DIST_NORM_B16,
-    DIST_NORM_B32,
-    DIST_ONEPT_B8,
-    DIST_ONEPT_B16,
-    DIST_ONEPT_B32,
-    DIST_PK_B16,
-    DIST_PK_B32,
-    DIST_INTLV_B8,
-    DIST_INTLV_B16,
-    DIST_PK_B64,
-    DIST_INTLV_B32,
-    DIST_PK4_B32,
-    DIST_MRG4CHN_B8,
-    DIST_MRG2CHN_B8,
-    DIST_MRG2CHN_B16,
-    DIST_NORM,
-    DIST_ONEPT
-};
-
 template <typename T, DistVST dist>
 PTO_INTERNAL constexpr DistVST GetDistVst()
 {

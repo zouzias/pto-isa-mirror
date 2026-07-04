@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tstore_common.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantModeGm()
@@ -290,5 +291,6 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
         set_atomic_none();
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

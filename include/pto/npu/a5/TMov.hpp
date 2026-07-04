@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartAdd.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src)
 {
@@ -240,7 +241,7 @@ template <typename DstTileData, typename SrcTileData, typename TmpTileData>
 PTO_INTERNAL constexpr void CommonCheckZZ()
 {
     using T = typename DstTileData::DType;
-    static_assert(std::is_same_v<T, uint8_t> || std::is_same_v<T, hifloat8_t> || std::is_same_v<T, float8_e8m0_t>,
+    static_assert(caps::IsUInt8<T>() || caps::IsHF8<T>() || caps::IsFP8E8M0<T>(),
                   "TMov ND->ZZ: Data type must be uint8_t, hifloat8_t, or float8_e8m0_t.");
     static_assert(std::is_same_v<T, typename SrcTileData::DType> && std::is_same_v<T, typename TmpTileData::DType>,
                   "TMov ND->ZZ: Destination, source, and temporary tile data types must all be the same.");
@@ -797,5 +798,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
     SetFPC<FpTileData>(fp.data());
     TMovCcToUb<DstTileData, SrcTileData, mode, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
 }
+} // namespace a5
 } // namespace pto
 #endif

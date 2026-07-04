@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
+namespace a2a3 {
 template <typename T, typename InstrOp>
 struct TRowReduceOp {
     PTO_INTERNAL static void BinInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t rptTimes,
@@ -317,6 +318,7 @@ PTO_INTERNAL void TRowReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *
                                                                                                          validRow);
     pipe_barrier(PIPE_V);
 }
+} // namespace a2a3
 
 } // namespace pto
 

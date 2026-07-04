@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tload_common.hpp"
 
 namespace pto {
+namespace a5 {
 struct A5LoadOp : LoadOpBase {
     using LoadOpBase::TLoadCubeInstr;
     template <Layout Layout = Layout::ND, typename T>
@@ -651,10 +652,11 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
     if constexpr (is_conv_tile_v<TileData>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        MAP_INSTR_IMPL(TLOAD_CONVTILE)(dst, src);
     } else {
-        TLOAD_TILE_IMPL(dst, src);
+        MAP_INSTR_IMPL(TLOAD_TILE)(dst, src);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif // TLOAD_HPP

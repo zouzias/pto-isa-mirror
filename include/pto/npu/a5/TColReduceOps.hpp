@@ -15,10 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TColReduceCheck(int srcValidRow, int srcValidCol, int dstValidCol)
 {
-    static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
+    static_assert(TileDataOut::Loc == TileType::Vec && TileDataIn::Loc == TileType::Vec,
                   "Fix: TCOLREDUCE only support Vec Tile");
     static_assert(TileDataIn::isRowMajor && TileDataIn::SFractal == SLayout::NoneBox,
                   "Fix: TCOLREDUCE input tile only support Nd fractal Tile");
@@ -129,5 +130,6 @@ PTO_INTERNAL void TColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, unsigned val
             break;
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

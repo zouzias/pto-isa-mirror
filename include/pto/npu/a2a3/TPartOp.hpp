@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, int dstCols, int srcCols, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void TPartCopyInstr(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, uint64_t validRow, uint64_t validCol,
                                  uint64_t startRow)
@@ -179,6 +180,7 @@ PTO_INTERNAL void TPartInstr(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T
             condSrc1EqDst || condSrc1RowLtDst || condSrc1ColLtDst,
             "TPARTOPS: At most one entry in the valid-rows and valid-cols of src0 and src1 is smaller than dst.");
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

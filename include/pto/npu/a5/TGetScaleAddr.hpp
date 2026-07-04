@@ -17,6 +17,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a5 {
 
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TGET_SCALE_ADDR_IMPL(TileDataOut &dst, TileDataIn &src)
@@ -27,6 +28,7 @@ PTO_INTERNAL void TGET_SCALE_ADDR_IMPL(TileDataOut &dst, TileDataIn &src)
     __cce_pto_get_mx_scale_tile(dst.data(), src.data());
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif

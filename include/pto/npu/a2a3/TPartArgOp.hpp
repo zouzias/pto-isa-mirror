@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void TPartArgCopyInstr(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, uint64_t validRow, uint64_t validCol,
                                     uint64_t startRow)
@@ -258,6 +259,7 @@ PTO_INTERNAL void TPARTARGMIN_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
                TileDataSrc1, TileDataSrc1Idx>(dst.data(), dstIdx.data(), src0.data(), src0Idx.data(), src1.data(),
                                               src1Idx.data(), src0ValidRow, src0ValidCol, src1ValidRow, src1ValidCol);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T>
 struct GatherB {
@@ -157,6 +158,7 @@ PTO_INTERNAL void TGATHERB_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataOffs
 
     TGatherB<TileDataDst, TileDataSrc, TileDataOffset, elementsPerRepeat, blockSizeElem, dstRowStride, offsetRowStride>(
         dst.data(), src.data(), offset.data(), validRow, validCol);
+} // namespace a2a3
 }
 } // namespace pto
 

@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 enum class SELMODE : uint8_t
 {
     VSEL_CMPMASK_SPR = 0,
@@ -75,6 +76,7 @@ PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src
 
     TSel<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>(dst.data(), selMask.data(), src0.data(), src1.data(),
                                                          tmp.data(), validRow, validCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 constexpr const int STRUCTSIZE = 8;
 constexpr const int STRUCT_SIZE_SHIFT = 3;
 constexpr const int COL_SIZE = 49152; // UBSIZE / ELEMSIZE = 192 * 1024 B / 4B
@@ -28,13 +29,6 @@ constexpr const int LIST_NUM_4 = 4;
 constexpr const int TMRGSORT_BLOCK_LEN = 64;
 constexpr const int REPEAT_ONE_TIME = 1;
 constexpr const int MAX_REPEAT_TIMES = 255;
-
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
 
 template <bool exhausted>
 PTO_INTERNAL void GetExhaustedData(uint16_t &mrgSortList0, uint16_t &mrgSortList1, uint16_t &mrgSortList2,
@@ -307,6 +301,7 @@ template <typename Src0TileData, typename Src1TileData>
 PTO_INTERNAL constexpr uint32_t GETMRGSORTTMPSIZE()
 {
     return Src0TileData::Cols + Src1TileData::Cols;
+} // namespace a2a3
 }
 } // namespace pto
 #endif

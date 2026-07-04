@@ -38,6 +38,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a5 {
 
 //=============================================================================
 // 归约操作策略（Policy Pattern）
@@ -466,6 +467,7 @@ PTO_INTERNAL void TROWMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     TRowMin<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif

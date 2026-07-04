@@ -30,6 +30,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 // ============================================================================
 // Intrinsic dispatcher: select the fused sub/relu/convert by (src, dst) type.
@@ -176,6 +177,7 @@ PTO_INTERNAL void TSUBRELUCONV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDa
 
     TSubReluConv<TileDataDst, TileDataSrc0, SS0, SS1, DS>(dst.data(), src0.data(), src1.data(), validRow, validCol,
                                                           elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+} // namespace a2a3
 }
 } // namespace pto
 

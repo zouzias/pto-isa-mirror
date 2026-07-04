@@ -8,15 +8,17 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TREMS_HPP
-#define TREMS_HPP
+#ifndef TREMS_HPP_KIRIN9030
+#define TREMS_HPP_KIRIN9030
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include <pto/npu/a5/TBinSOp.hpp>
 #include <pto/npu/kirin9030/TRem.hpp>
+#include <pto/npu/a5/TRemS.hpp>
 
 namespace pto {
+namespace kirin9030 {
 
 template <typename T>
 struct RemSOp {
@@ -44,21 +46,8 @@ __tf__ PTO_INTERNAL OP_NAME(TREMS)
     constexpr unsigned dstRowStride = DstTile::RowStride;
     constexpr unsigned srcRowStride = SrcTile::RowStride;
 
-    BinaryInstr<RemSOp<T>, DstTile, SrcTile, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+    a5::BinaryInstr<RemSOp<T>, DstTile, SrcTile, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
-}
-
-template <typename DstTile, typename SrcTile>
-PTO_INTERNAL void TRemSCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow, unsigned dstValidCol)
-{
-    using T = typename DstTile::DType;
-    static_assert(std::is_same_v<T, typename SrcTile::DType>, "The data type must be same of src and dst");
-    static_assert((sizeof(T) == 2) || (sizeof(T) == 4), "TREMS: Invalid data type");
-    static_assert((DstTile::Loc == TileType::Vec) && (SrcTile::Loc == TileType::Vec),
-                  "TileType of dst and src tiles must be TileType::Vec.");
-    static_assert((DstTile::ValidCol <= DstTile::Cols) && (DstTile::ValidRow <= DstTile::Rows) &&
-                      (SrcTile::ValidCol <= SrcTile::Cols) && (SrcTile::ValidRow <= SrcTile::Rows),
-                  "Number of valid columns and rows must not be greater than number of tile columns and rows.");
 }
 
 template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename DstTile, typename SrcTile, typename TileDataTmp>
@@ -71,8 +60,9 @@ PTO_INTERNAL void TREMS_IMPL(DstTile &dst, SrcTile &src, typename SrcTile::DType
     PTO_ASSERT((src.GetValidCol() == validCol) && (src.GetValidRow() == validRow),
                "Number of validColumns and validRows of src and dst must be the same.");
 
-    TRemSCheck<DstTile, SrcTile>(src.GetValidRow(), src.GetValidCol(), validRow, validCol);
+    a5::TRemSCheck<DstTile, SrcTile>();
     TRemS<DstTile, SrcTile>(dst.data(), src.data(), scalar, validRow, validCol);
 }
+} // namespace kirin9030
 } // namespace pto
-#endif
+#endif // TREMS_HPP_KIRIN9030

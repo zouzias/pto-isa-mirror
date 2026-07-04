@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_capability.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
@@ -109,6 +110,7 @@ PTO_INTERNAL void CheckTMovAccToMat()
                           "The output data type must be restricted to int8_t/uint8_t/half/int16_t.");
         }
     }
+} // namespace a2a3
 }
 } // namespace pto
 

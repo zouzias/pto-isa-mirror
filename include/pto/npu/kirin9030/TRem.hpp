@@ -8,15 +8,16 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TREM_HPP
-#define TREM_HPP
+#ifndef TREM_HPP_KIRIN9030
+#define TREM_HPP_KIRIN9030
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+#include <pto/npu/a5/TRem.hpp>
 #include <pto/npu/a5/TBinOp.hpp>
 
 namespace pto {
-
+namespace kirin9030 {
 template <typename T>
 struct RemOp {
     using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint16_t>;
@@ -133,28 +134,8 @@ __tf__ PTO_INTERNAL OP_NAME(TREM)
 
     constexpr unsigned blockSizeElem = CCE_VL / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    // Note: tmp parameter is not used in a5 implementation (no sign correction needed)
-    BinaryInstr<RemOp<T>, DstTile, Src0Tile, Src1Tile, elementsPerRepeat, blockSizeElem>(dstPtr, src0Ptr, src1Ptr,
-                                                                                         validRows, validCols, version);
-}
-
-template <typename DstTile, typename Src0Tile, typename Src1Tile>
-PTO_INTERNAL void TRemCheck(const DstTile &dst, const Src0Tile &src0, const Src1Tile &src1)
-{
-    using T = typename DstTile::DType;
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, uint16_t> ||
-                      std::is_same_v<T, int16_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t>,
-                  "Fix: TREM has invalid data type.");
-    static_assert(DstTile::isRowMajor && Src0Tile::isRowMajor && Src1Tile::isRowMajor,
-                  "Fix: TREM only support row major layout.");
-    static_assert(std::is_same_v<T, typename Src0Tile::DType> && std::is_same_v<T, typename Src1Tile::DType>,
-                  "Fix: TREM input tile src0, src1 and dst tile data type mismatch.");
-    unsigned validRows = dst.GetValidRow();
-    unsigned validCols = dst.GetValidCol();
-    PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
-               "Fix: TREM input tile src0 valid shape mismatch with output tile dst shape.");
-    PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
-               "Fix: TREM input tile src1 valid shape mismatch with output tile dst shape.");
+    a5::BinaryInstr<RemOp<T>, DstTile, Src0Tile, Src1Tile, elementsPerRepeat, blockSizeElem>(
+        dstPtr, src0Ptr, src1Ptr, validRows, validCols, version);
 }
 
 template <auto PrecisionType = RemAlgorithm::DEFAULT, typename DstTile, typename Src0Tile, typename Src1Tile,
@@ -162,9 +143,10 @@ template <auto PrecisionType = RemAlgorithm::DEFAULT, typename DstTile, typename
 PTO_INTERNAL void TREM_IMPL(DstTile &dst, Src0Tile &src0, Src1Tile &src1, TileDataTmp &tmp)
 {
     using T = typename DstTile::DType;
-    TRemCheck<DstTile, Src0Tile, Src1Tile>(dst, src0, src1);
+    a5::TRemCheck(dst, src0, src1, tmp);
 
     TRem<DstTile, Src0Tile, Src1Tile>(dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace kirin9030
 } // namespace pto
-#endif
+#endif // TREM_HPP_KIRIN9030

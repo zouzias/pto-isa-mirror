@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename DstTileData, typename Src0TileData, typename Src1TileData, typename TmpTileData>
 PTO_INTERNAL void CheckValid()
 {
@@ -301,6 +302,7 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, TileDataS1 &k_va
 
     TGather_cmp<TileDataD, TileDataS, TileDataS1, TileDataC, TileDataTmp, cmpMode>(
         dst.data(), src0.data(), cdst.data(), tmp.data(), k_value.data(), offset, sValidCols, sValidRows);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

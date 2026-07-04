@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartBinOps.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T, typename U, unsigned dstValStride, unsigned dstIdxStride>
 PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, __ubuf__ T *srcValPtr,
                                   __ubuf__ U *srcIdxPtr, unsigned srcValStride, unsigned srcIdxStride, unsigned row,
@@ -235,11 +236,11 @@ PTO_INTERNAL void TPartArgImpl(DstValTileData &dstVal, Src0ValTileData &src0Val,
     if (dstValidRow == 0 || dstValidCol == 0) {
         return;
     } else if (src0ValidRow == 0 || src0ValidCol == 0) {
-        TMOV_IMPL(dstVal, src1Val);
-        TMOV_IMPL(dstIdx, src1Idx);
+        MAP_INSTR_IMPL(TMOV)(dstVal, src1Val);
+        MAP_INSTR_IMPL(TMOV)(dstIdx, src1Idx);
     } else if (src1ValidRow == 0 || src1ValidCol == 0) {
-        TMOV_IMPL(dstVal, src0Val);
-        TMOV_IMPL(dstIdx, src0Idx);
+        MAP_INSTR_IMPL(TMOV)(dstVal, src0Val);
+        MAP_INSTR_IMPL(TMOV)(dstIdx, src0Idx);
     } else {
         TPartArgProc<Op, DstValTileData, Src0ValTileData, Src1ValTileData, DstIdxTileData, Src0IdxTileData,
                      Src1IdxTileData>(dstVal.data(), src0Val.data(), src1Val.data(), dstIdx.data(), src0Idx.data(),
@@ -247,6 +248,7 @@ PTO_INTERNAL void TPartArgImpl(DstValTileData &dstVal, Src0ValTileData &src0Val,
                                       src0Val.GetValidCol(), src1Val.GetValidRow(), src1Val.GetValidCol());
     }
 }
+} // namespace a5
 } // namespace pto
 
 #endif

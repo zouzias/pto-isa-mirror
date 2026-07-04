@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 constexpr const int KHALF = 2;             // for b4 data
 constexpr const int M_STEP_MIN_VAL_B8 = 2; // m_step per loop for fp8
@@ -1112,5 +1113,6 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
                                                                          dst.GetValidCol(), src.GetValidRow(),
                                                                          src.GetValidCol(), indexRow, indexCol);
 }
+} // namespace a5
 } // namespace pto
 #endif // TEXTRACT_HPP

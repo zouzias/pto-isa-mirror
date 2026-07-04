@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TRowReduceOps.hpp"
 
 namespace pto {
+namespace a2a3 {
 // Float/Half operation traits (for vcmax-based implementation)
 template <typename T>
 struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
@@ -116,6 +117,7 @@ PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
 
     TRowMax<typename TileDataIn::DType, TileDataOut, TileDataIn, TileDataTmp>(dst.data(), src.data(), tmp.data(),
                                                                               validCol, validRow);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SETFMATRIX_HPP
 
 namespace pto {
+namespace a5 {
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
 PTO_INTERNAL void SETFMATRIX_IMPL(ConvTileData &src)
 {
@@ -35,5 +36,6 @@ PTO_INTERNAL void SETFMATRIX_IMPL(ConvTileData &src)
         }
     }
 }
+} // namespace a5
 } // namespace pto
 #endif // SETFMATRIX_HPP

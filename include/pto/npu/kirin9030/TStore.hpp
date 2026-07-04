@@ -13,6 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "pto/common/arch/register/tstore_common.hpp"
 namespace pto {
+namespace kirin9030 {
+
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantModeGm()
 {
@@ -215,5 +217,6 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
         dst.GetShape(dim3), dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2),
         dst.GetStride(dim3), dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
 }
+} // namespace kirin9030
 } // namespace pto
 #endif

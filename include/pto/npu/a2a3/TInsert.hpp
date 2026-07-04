@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TInsertVecToVecNDUnaligned(typename DstTileData::TileDType __out__ dst,
@@ -198,6 +199,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &f
     SetFPCInsert<FpTileData>(fp.data());
     TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
                                                                   src.GetValidCol(), indexRow, indexCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TINSERT_HPP

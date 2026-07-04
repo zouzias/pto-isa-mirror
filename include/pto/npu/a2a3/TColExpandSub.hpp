@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TColExpandBinOp.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T>
 struct ColExpandSubOp {
@@ -48,7 +49,8 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TCOLEXPANDSUB_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileDataDst::DType;
-    TCOLEXPANDOP_IMPL<ColExpandSubOp<T>, ColExpandSubOp2<T>, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
+    MAP_INSTR_IMPL(TCOLEXPANDOP)<ColExpandSubOp<T>, ColExpandSubOp2<T>, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

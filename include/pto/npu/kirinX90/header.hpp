@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef HEADER_HPP
-#define HEADER_HPP
+#ifndef HEADER_HPP_KIRINX90
+#define HEADER_HPP_KIRINX90
 #define bfloat16_t half
 #define hifloat8_t int8_t
 #define float8_e4m3_t int8_t
@@ -22,11 +22,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirinX90/common.hpp"
 #include "pto/npu/kirin9030/utils.hpp"
 #include "pto/npu/kirinX90/datatype.hpp"
-#include "pto/npu/a2a3/TSubView.hpp"
-#include "pto/npu/kirinX90/TLoad.hpp"
-#include "pto/npu/kirinX90/TStore.hpp"
+
+// kirinX90-specific includes
+#include "pto/npu/kirinX90/TAssign.hpp"
 #include "pto/npu/kirinX90/TExtract.hpp"
-#include "pto/npu/kirinX90/TInsert.hpp"
 #include "pto/npu/kirinX90/TMov.hpp"
 #include "pto/npu/a2a3/TImg2col.hpp"
 #include "pto/npu/a2a3/SetFmatrix.hpp"
@@ -35,10 +34,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __DAV_VEC__
 #include "pto/npu/kirinX90/TCvt.hpp"
 #endif
-#include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/kirinX90/TInsert.hpp"
+#include "pto/npu/kirinX90/TLoad.hpp"
+#include "pto/npu/kirinX90/TStore.hpp"
+#include "pto/npu/kirinX90/TQuant.hpp"
+
+// kirin9030 includes (reused by kirinX90)
 #include "pto/npu/kirin9030/TSync.hpp"
 #include "pto/npu/kirin9030/TRem.hpp"
 #include "pto/npu/kirin9030/TRemS.hpp"
+#include "pto/npu/kirin9030/TMatmul.hpp"
+#include "pto/npu/kirin9030/TGather.hpp"
+#include "pto/npu/kirin9030/TSubS.hpp"
+
+// A5 includes
+#include "pto/npu/a2a3/TSubView.hpp"
+#include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
@@ -47,7 +58,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMin.hpp"
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TMrgSort.hpp"
-#include "pto/npu/kirin9030/TMatmul.hpp"
 #include "pto/npu/a5/TCmps.hpp"
 #include "pto/npu/a5/TColSum.hpp"
 #include "pto/npu/a5/TReshape.hpp"
@@ -61,8 +71,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TPartAdd.hpp"
 #include "pto/npu/a5/TPartMax.hpp"
 #include "pto/npu/a5/TPartMin.hpp"
-#include "pto/npu/kirin9030/TGather.hpp"
-#include "pto/npu/kirinX90/TQuant.hpp"
 #include "pto/npu/a5/TDeQuant.hpp"
 #include "pto/npu/a5/TRsqrt.hpp"
 #include "pto/npu/a5/TUnaryOp.hpp"
@@ -80,7 +88,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TAxpy.hpp"
 #include "pto/npu/a5/TPrelu.hpp"
 #include "pto/npu/a5/TLRelu.hpp"
-#include "pto/npu/kirin9030/TSubS.hpp"
 #include "pto/npu/a5/TMaxs.hpp"
 #include "pto/npu/a5/TMins.hpp"
 #include "pto/npu/a5/TCmp.hpp"
@@ -117,9 +124,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMul.hpp"
 #include "pto/npu/a5/TFMod.hpp"
 #include "pto/npu/a5/TFModS.hpp"
-#include "pto/npu/a5/TColProd.hpp"
 #include "pto/npu/a5/TRowExpandExpdif.hpp"
 #include "pto/npu/a5/TColExpandExpdif.hpp"
+#include "pto/npu/a5/SetFmatrix.hpp"
+#include "pto/npu/a5/SetImg2colRpt.hpp"
+#include "pto/npu/a5/SetImg2colPadding.hpp"
+#include "pto/npu/a5/SetQuantScalar.hpp"
+#include "pto/npu/a5/SetQuantVector.hpp"
+#include "pto/npu/a5/TAddDeqRelu.hpp"
+#include "pto/npu/a5/TAddReluConv.hpp"
+#include "pto/npu/a5/TFusedMulAdd.hpp"
+#include "pto/npu/a5/TFusedMulAddRelu.hpp"
+#include "pto/npu/a5/TGetScaleAddr.hpp"
+#include "pto/npu/a5/TImg2col.hpp"
+#include "pto/npu/a5/TInterleave.hpp"
+#include "pto/npu/a5/TDeInterleave.hpp"
+#include "pto/npu/a5/TMulAddDst.hpp"
+#include "pto/npu/a5/TPairReduceSum.hpp"
+#include "pto/npu/a5/TPrefetch.hpp"
+#include "pto/npu/a5/TSubRelu.hpp"
+#include "pto/npu/a5/TSubReluConv.hpp"
+
+// Forwarding wrappers in kirinX90 namespace
+#include "pto/npu/kirinX90/header_impl.hpp"
+
 #undef bfloat16_t
 #undef hifloat8_t
 #undef float8_e4m3_t

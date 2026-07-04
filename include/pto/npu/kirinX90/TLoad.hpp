@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TLOAD_HPP
 
 namespace pto {
+namespace kirinX90 {
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
@@ -83,5 +84,6 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
         TLOAD_TILE_IMPL(dst, src);
     }
 }
+} // namespace kirinX90
 } // namespace pto
 #endif // TLOAD_HPP

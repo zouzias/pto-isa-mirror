@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TBinSOp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct AddSOp {
@@ -75,5 +76,6 @@ PTO_INTERNAL void TADDS_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
     TAddS<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride>(
         dst.data(), src0.data(), src1, validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

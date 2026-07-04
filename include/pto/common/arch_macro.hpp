@@ -13,17 +13,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #if __NPU_ARCH__ == 2201
 #define PTO_NPU_ARCH_A2A3
+#define NPU_ARCH_DIR a2a3
 #elif (__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510)
 #define PTO_NPU_ARCH_A5
-#if __NPU_ARCH__ == 3510
+#define NPU_ARCH_DIR a5
 #define PTO_URMA_SUPPORTED
-#endif
 #elif __NPU_ARCH__ == 3113
 #define PTO_COMM_NOT_SUPPORTED
 #define PTO_NPU_ARCH_KIRIN9030
+#define NPU_ARCH_DIR kirin9030
 #elif __NPU_ARCH__ == 3003
 #define PTO_COMM_NOT_SUPPORTED
 #define PTO_NPU_ARCH_KIRINX90
+#define NPU_ARCH_DIR kirinX90
 #endif
 
 #if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
@@ -32,4 +34,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __out__
 #define __cce_get_tile_ptr
 #endif
+
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || \
+    defined(PTO_NPU_ARCH_KIRINX90)
+namespace pto {
+namespace NPU_ARCH_DIR {}
+} // namespace pto
+namespace arch = ::pto::NPU_ARCH_DIR;
+#define MAP_INSTR_IMPL(API) arch::API##_IMPL
+#else
+#define MAP_INSTR_IMPL(API) API##_IMPL
+#endif
+
 #endif // ARCH_MACRO_HPP

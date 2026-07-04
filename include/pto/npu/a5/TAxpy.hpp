@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T, typename U, unsigned elementsPerRepeat, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void AxpyInstrSame(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar, unsigned validRow, unsigned validCol)
 {
@@ -113,5 +114,6 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
     TAxpy<TileDataDst, TileDataSrc, elementsPerRepeat, dstRowStride, src0RowStride>(dst.data(), src0.data(), scalar,
                                                                                     validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

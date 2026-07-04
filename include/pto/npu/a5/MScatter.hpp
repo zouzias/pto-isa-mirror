@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct IsValidScatterDType {
@@ -502,6 +503,7 @@ PTO_INTERNAL void MSCATTER_IMPL(GlobalTable &table, TileSrc &src, TileIdx &indic
     }
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif // MSCATTER_HPP

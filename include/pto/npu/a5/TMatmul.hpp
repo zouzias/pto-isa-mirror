@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 namespace pto {
+namespace a5 {
 
 inline namespace TMatmulInternel {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
@@ -190,7 +191,7 @@ PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, Tile
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    TMATMUL_ACC_IMPL<Phase>(cMatrix, cMatrix, aMatrix, bMatrix);
+    MAP_INSTR_IMPL(TMATMUL_ACC)<Phase>(cMatrix, cMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
@@ -351,5 +352,6 @@ PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     TMatmulMxBias<Phase, TileRes, TileLeft, TileRight, true, false, false>(cMatrix.data(), aMatrix.data(),
                                                                            bMatrix.data(), biasData.data(), 1, k, n);
 }
+} // namespace a5
 } // namespace pto
 #endif

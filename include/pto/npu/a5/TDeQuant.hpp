@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 template <typename T, unsigned paraStride, bool postUpdate>
 PTO_INTERNAL void LoadScaleOffset(RegTensor<T> &reg_scale, RegTensor<T> &reg_offset, __ubuf__ T *&scalePtr,
                                   __ubuf__ T *&offsetPtr, int32_t rowNum)
@@ -176,5 +177,6 @@ PTO_INTERNAL void TDEQUANT_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataPara
     TDeQuant<TileDataDst, TileDataSrc, TileDataPara, dstStride, srcStride, paraStride>(
         dst.data(), src.data(), scale.data(), offset.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 #endif

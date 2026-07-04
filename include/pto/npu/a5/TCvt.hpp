@@ -18,6 +18,37 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/npu/a5/common.hpp"
 #include "pto/npu/a5/utils.hpp"
-#include "pto/common/arch/register/tcvt_common.hpp"
 
+#ifdef __DAV_VEC__
+
+#include "pto/common/arch/register/tcvt_common.hpp"
+namespace pto {
+namespace a5 {
+using ::pto::TCVT_IMPL;
+} // namespace a5
+} // namespace pto
+
+#elif defined(__DAV_CUBE__)
+
+namespace pto {
+namespace a5 {
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode,
+                            bool needSetCtrl = true)
+{}
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode,
+                            bool needSetCtrl = true)
+{}
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, bool needSetCtrl = true)
+{}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, bool needSetCtrl = true)
+{}
+
+} // namespace a5
+} // namespace pto
+#endif // __DAV_VEC__
 #endif // TCVT_HPP

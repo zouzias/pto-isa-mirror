@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TPartBinOps.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct TPartMinOp {
@@ -35,5 +36,6 @@ PTO_INTERNAL void TPARTMIN_IMPL(DstTileData &dst, Src0TileData &src0, Src1TileDa
                   "Fix: TPARTMIN Invalid data type.");
     TPARTOP_IMPL<TPartMinOp<T>, DstTileData, Src0TileData, Src1TileData>(dst, src0, src1);
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -12,6 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TLOAD_HPP
 
 namespace pto {
+namespace a2a3 {
+
+
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
                                   uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint32_t ubGap, uint32_t ubPad)
@@ -83,6 +86,7 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
     } else {
         TLOAD_TILE_IMPL(dst, src);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TLOAD_HPP

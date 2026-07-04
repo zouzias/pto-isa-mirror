@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <typename Op, bool isDynFunc = Op::isDynFunc>
 class BinSOpCaller;
@@ -281,5 +282,6 @@ PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf_
                        srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -47,7 +47,7 @@ __global__ AICORE void runTConcat(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TCONCAT_IMPL(dstTile, src0Tile, src1Tile);
+    TCONCAT(dstTile, src0Tile, src1Tile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TDeInterleaveCheck(const TileDataDst &dst1, const TileDataDst &dst0, const TileDataSrc &src1,
                                      const TileDataSrc &src0)
@@ -246,6 +247,7 @@ PTO_INTERNAL void TDEINTERLEAVE_IMPL(TileDataDst &dst1, TileDataDst &dst0, TileD
     TDeInterleaveSingleSrc<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem>(
         dst1.data(), dst0.data(), src.data(), src.GetValidRow(), src.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 
 #endif

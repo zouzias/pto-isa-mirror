@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TColReduceOps.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename T>
 struct COLPRODOp {
     PTO_INTERNAL static void ReduceInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t repeats,
@@ -47,6 +48,7 @@ PTO_INTERNAL void TCOLPROD_IMPL(TileDataOut &dst, TileDataIn &src)
 
     constexpr int srcstride = TileDataIn::RowStride;
     TColProd<T, TileDataOut, TileDataIn, srcstride>(dst.data(), src.data(), ValidRow, ValidCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

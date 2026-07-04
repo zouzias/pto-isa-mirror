@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/TFmodRemHp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <RemSAlgorithm PrecisionType, typename T>
 struct RemSOp {
@@ -81,9 +82,8 @@ __tf__ PTO_INTERNAL OP_NAME(TREMS)
                 srcRowStride>(dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-PTO_INTERNAL void TRemSCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow, unsigned dstValidCol,
-                             unsigned tmpValidRow, unsigned tmpValidCol)
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TRemSCheck()
 {
     using T = typename TileDataDst::DType;
     static_assert(std::is_same<T, typename TileDataSrc::DType>::value, "The data type must be same of src and dst");
@@ -107,10 +107,10 @@ PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     PTO_ASSERT((src.GetValidCol() == validCol) && (src.GetValidRow() == validRow),
                "Number of validColumns and validRows of src and dst must be the same.");
 
-    TRemSCheck<TileDataDst, TileDataSrc, TileDataTmp>(src.GetValidRow(), src.GetValidCol(), validRow, validCol,
-                                                      tmp.GetValidRow(), tmp.GetValidCol());
+    TRemSCheck<TileDataDst, TileDataSrc>();
     TRemS<PrecisionType, TileDataDst, TileDataSrc, TileDataTmp, dstRowStride, srcRowStride>(
         dst.data(), src.data(), scalar, tmp.data(), validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

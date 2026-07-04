@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TColReduceOps.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T>
 struct TColMinOp {
     using PadType = typename Padding<T>::Type;
@@ -47,5 +48,6 @@ PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut &dst, TileDataIn &src)
     }
     TColMin<typename TileDataIn::DType, TileDataOut, TileDataIn>(dst.data(), src.data(), validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

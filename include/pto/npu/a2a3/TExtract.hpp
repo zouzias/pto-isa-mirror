@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/memory/textract_common.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 template <typename DstTileData, typename SrcTileData, typename DstType, typename SrcType>
 PTO_INTERNAL void CheckTExtract()
@@ -276,9 +277,9 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
                           "TEXTRACT Vec->Vec : Source and destination SFractal must match.");
         }
     } else if constexpr (is_conv_tile_v<SrcTileData>) {
-        TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
+        ::pto::TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
     } else {
-        TEXTRACT_TILE_IMPL(dst, src, indexRow, indexCol);
+        MAP_INSTR_IMPL(TEXTRACT_TILE)(dst, src, indexRow, indexCol);
     }
 }
 
@@ -327,6 +328,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
     SetFPC<FpTileData>(fp.data(), indexCol);
     TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), dst.GetValidRow(),
                                                                    dst.GetValidCol(), indexRow, indexCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TEXTRACT_HPP

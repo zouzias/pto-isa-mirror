@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 namespace pto {
+namespace a2a3 {
 #define SMALL_RPT (4)
 template <typename Op, typename T>
 PTO_INTERNAL void BinS1LCountMode(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow, unsigned validCol)
@@ -239,6 +240,7 @@ PTO_INTERNAL void TBinSInstr(__ubuf__ typename TileDataDst::DType __out__ *dst,
             }
         }
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

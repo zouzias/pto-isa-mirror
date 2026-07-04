@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 
 namespace pto {
+namespace a5 {
 template <typename Op, typename T, unsigned ElementsPerRepeat, unsigned BlockSizeElem>
 PTO_INTERNAL void TBinOps_1D_NoPostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T *src1Ptr,
                                           unsigned validRows, unsigned validCols)
@@ -243,5 +244,6 @@ PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf_
             dst, src0, src1, validRows, validCols, version);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

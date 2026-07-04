@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 constexpr const uint32_t BLOCK_SIZE = 32;
 constexpr const uint32_t FLOAT_DST_STRIDE_COEF = 2;
@@ -197,6 +198,7 @@ PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &
         TSort32Impl<DstTileData, SrcTileData, IdxTileData, dstStride, srcStride>(dst.data(), src.data(), idx.data(),
                                                                                  validRow, repeatNumPerRow, idxStride);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

@@ -15,6 +15,7 @@
 #include <pto/common/type.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T, typename InstrOp>
 struct TColReduceOp {
     template <int dupSrcStride>
@@ -88,6 +89,7 @@ PTO_INTERNAL void TColReduceCheck(int SrcValidRow, int SrcValidCol, int DstValid
                   "Fix: TCOLREDUCE input data type must be consistent with the output data type.");
     PTO_ASSERT(SrcValidCol == DstValidCol,
                "Fix: TCOLREDUCE input valid col must be consistent with the output valid row.");
+} // namespace a2a3
 }
 } // namespace pto
 #endif

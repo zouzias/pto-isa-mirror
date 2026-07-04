@@ -22,10 +22,12 @@ full text of the License.
 #define TALIAS_A2A3_HPP
 #include <pto/common/type.hpp>
 
+namespace pto {
+namespace a2a3 {
+
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void checkAlias()
 {
-    using namespace pto;
     static_assert(is_tile_data_v<TileDataSrc>, "input must be a Tile instance.");
     static_assert(is_tile_data_v<TileDataDst>, "output must be a Tile instance.");
 
@@ -66,6 +68,9 @@ PTO_INTERNAL void TALIAS_IMPL(TileDataDst &original, TileDataSrc &alias)
     checkAlias<TileDataDst, TileDataSrc>();
     TAlias<TileDataDst, TileDataSrc>(original.data(), alias.data());
 }
+
+} // namespace a2a3
+} // namespace pto
 
 #endif // TALIAS_A2A3_HPP
 #endif // __PTO_AUTO__

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DIV_ROUNDUP(x, y) ((((x) + (y)-1) / (y)))
 
 namespace pto {
+namespace a5 {
 
 constexpr const uint32_t BLOCK_SIZE = 32;
 constexpr const uint32_t FLOAT_DST_STRIDE_COEF = 2;
@@ -216,5 +217,6 @@ AICORE inline void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData 
             srcTailPerRow, srcTailRepeatNum);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

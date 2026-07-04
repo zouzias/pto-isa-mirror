@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBinSOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 PTO_INTERNAL static void prepare_s32_data(__ubuf__ int32_t *dst, __ubuf__ int32_t *src0, int32_t src1, uint8_t repeats,
                                           uint8_t dstRepeatStride, uint8_t srcRepeatStride)
 {
@@ -287,6 +288,7 @@ PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataDst::DType scala
     } else {
         PTO_ASSERT(false, "TDIVS: dstTile validRow/validCol must be consistent with of src.");
     }
+} // namespace a2a3
 }
 } // namespace pto
 

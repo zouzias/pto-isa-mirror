@@ -263,7 +263,7 @@ AICORE void runTInsertNZPlusOne(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), Rows, Cols, Rows);
+    TMOV(tmpTile, srcTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -326,7 +326,7 @@ AICORE void runTInsertNZSplit(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), Rows, Cols, Rows);
+    TMOV(tmpTile, srcTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -963,7 +963,7 @@ AICORE void runTInsertNZUnaligned(__gm__ T *out, __gm__ T *src)
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, burstNum, burstLen, 0, 0);
 
-    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), SrcRows, Cols, SrcRows);
+    TMOV(tmpTile, srcTile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -1070,7 +1070,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, burstNum, burstLen, 0, 0);
 
-    pto::TMovToVecNd2Nz<T, TmpVecTile1, Src1VecTile>(tmpTile1.data(), src1Tile.data(), SrcRows1, Cols, SrcRows1);
+    TMOV(tmpTile1, src1Tile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1098,7 +1098,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
             }
         }
     }
-    pto::TMovToVecNd2Nz<T, TmpVecTile2, Src2VecTile>(tmpTile2.data(), src2Tile.data(), SrcRows2, Cols, SrcRows2);
+    TMOV(tmpTile2, src2Tile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1215,7 +1215,7 @@ AICORE void runTInsertNZOverwrite(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    pto::TMovToVecNd2Nz<T, TmpVecTile1, Src1VecTile>(tmpTile1.data(), src1Tile.data(), DstRows, Cols, DstRows);
+    TMOV(tmpTile1, src1Tile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1243,7 +1243,7 @@ AICORE void runTInsertNZOverwrite(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
             }
         }
     }
-    pto::TMovToVecNd2Nz<T, TmpVecTile2, Src2VecTile>(tmpTile2.data(), src2Tile.data(), SrcRows2, Cols, SrcRows2);
+    TMOV(tmpTile2, src2Tile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1396,7 +1396,7 @@ AICORE void runTInsertNZPlusOneVecToVec(__gm__ T *out, __gm__ T *src)
         }
     }
 
-    pto::TMovToVecNd2Nz<T, SrcNZTile, SrcNDTile>(srcNZTile.data(), srcNDTile.data(), SrcRows, Cols, SrcRows);
+    TMOV(srcNZTile, srcNDTile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -1525,7 +1525,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     pipe_barrier(PIPE_ALL);
 
     // Convert ND source to NZ format in tmpTile (writes only ValidRow rows, rest stays zero)
-    pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), ValidRow, Cols, ValidRow);
+    TMOV(tmpTile, srcTile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

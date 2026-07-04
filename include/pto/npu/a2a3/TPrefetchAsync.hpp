@@ -16,4 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // over the shared implementation kept next to the SDMA stack.
 #include "pto/comm/async/sdma/TPrefetchAsyncImpl.hpp"
 
+namespace pto {
+namespace a2a3 {
+using ::pto::TPREFETCH_ASYNC_IMPL;
+} // namespace a2a3
+} // namespace pto
+
 #endif // PTO_NPU_A2A3_TPREFETCH_ASYNC_HPP

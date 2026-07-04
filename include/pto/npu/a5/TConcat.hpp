@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct IndexConcat {
@@ -260,5 +261,6 @@ PTO_INTERNAL void TCONCAT_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, Til
                src0Stride, src1Stride, dstIdxStride, idx0Stride, idx1Stride, true>(
         dst.data(), src0.data(), src1.data(), dstIdx.data(), src0Idx.data(), src1Idx.data(), validRow, dstValidCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBinSOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename T>
 struct LReluOp {
     PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats)
@@ -66,6 +67,7 @@ PTO_INTERNAL void TLRELU_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileD
     PTO_ASSERT(dstValidCol == src.GetValidCol(), "TLRELU: Number of valid columns of dst and src must be the same.");
 
     TLRelu<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), scalar, dstValidRow, dstValidCol);
+} // namespace a2a3
 }
 } // namespace pto
 

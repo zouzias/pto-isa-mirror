@@ -60,9 +60,9 @@ __global__ AICORE void runTQuantDN(__gm__ T __in__ *src_gm, __gm__ int8_t __out_
     constexpr uint32_t colBlkCount = paddedCols / 16;
     constexpr uint32_t hatP = hatM / 2;
     constexpr uint32_t tmpBufSize =
-        (BLOCK_SIZE / sizeof(uint16_t) +
+        (BLOCK_BYTE_SIZE / sizeof(uint16_t) +
          (colBlkCount > hatP ? colBlkCount : hatP) * (hatP > colBlkCount ? hatP : colBlkCount) +
-         BLOCK_SIZE / sizeof(uint16_t)) *
+         BLOCK_BYTE_SIZE / sizeof(uint16_t)) *
         sizeof(uint16_t);
     constexpr uint32_t tmpBufSizeAligned = PTO_CEIL(tmpBufSize, 32);
 

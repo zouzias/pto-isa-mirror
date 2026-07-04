@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 namespace pto {
+namespace a5 {
 
 template <typename T>
 struct GetSignedType {
@@ -113,5 +114,6 @@ PTO_INTERNAL void TCI_IMPL(TileData &dst, T start, TileDataTmp &tmp)
     unsigned validCol = dst.GetValidCol();
     Tci<TileData, TileDataTmp, T, descending>(dst.data(), tmp.data(), start, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

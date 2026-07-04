@@ -7,4 +7,34 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+
+#ifndef TASSIGN_A5_HPP
+#define TASSIGN_A5_HPP
+#include <cstdint>
+#include <pto/common/pto_tile.hpp>
 #include "pto/npu/a2a3/TAssign.hpp"
+
+namespace pto {
+namespace a5 {
+template <typename T, typename AddrType>
+PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
+{
+    // ::pto::a2a3::TASSIGN_IMPL(obj, addr);
+    if constexpr (is_tile_data_v<T> || is_conv_tile_v<T>) {
+#ifndef __PTO_AUTO__
+        static_assert(std::is_integral_v<AddrType>, "Tile can only be assigned with address of int type.");
+        obj.assignData(reinterpret_cast<typename T::TileDType>(static_cast<std::uintptr_t>(addr)));
+#else
+        return;
+#endif
+    } else {
+        static_assert(is_global_data_v<T>, "Only Tile and GlobalTensor data types are supported.");
+        static_assert(std::is_pointer_v<AddrType>, "GlobalTensor can only be assigned with address of pointer type.");
+        static_assert(std::is_same_v<std::remove_cv_t<std::remove_pointer_t<AddrType>>, typename T::DType>,
+                      "GlobalTensor can only be assigned with pointer of same data type.");
+        obj.SetAddr(addr);
+    }
+}
+} // namespace a5
+} // namespace pto
+#endif

@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 
 namespace pto {
+namespace a5 {
 template <typename TileData, unsigned rowStride>
 __tf__ PTO_INTERNAL void TTriu(typename TileData::TileDType __out__ dst, unsigned validRows, unsigned validCols,
                                int diagonal)
@@ -107,6 +108,7 @@ PTO_INTERNAL void TTRI_IMPL(TileData &dst, int diagonal)
     else
         TTriu<TileData, TileData::RowStride>(dst.data(), dst.GetValidRow(), dst.GetValidCol(), diagonal);
 }
+} // namespace a5
 } // namespace pto
 
 #endif // TTRI_HPP(venv)

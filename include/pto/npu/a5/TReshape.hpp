@@ -15,4 +15,10 @@ full text of the License.
 
 #include "pto/npu/a2a3/TReshape.hpp"
 
+namespace pto {
+namespace a5 {
+using ::pto::a2a3::TRESHAPE_IMPL;
+} // namespace a5
+} // namespace pto
+
 #endif

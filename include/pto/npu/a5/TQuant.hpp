@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 
 namespace pto {
+namespace a5 {
 
 namespace tquant_detail {
 
@@ -2944,7 +2945,7 @@ template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, type
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale,
                               [[maybe_unused]] TileDataTmp &tmp, TileDataPara *offset = nullptr)
 {
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+    MAP_INSTR_IMPL(TQUANT)<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 }
 
 // TQUANT Interface for FP32/BF16/FP16->MXFP8 (ND mode)
@@ -2985,7 +2986,7 @@ template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, type
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                               TileDataScaling *scaling)
 {
-    TQUANT_IMPL<quant_type, QuantScaleAlg::OCP, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+    MAP_INSTR_IMPL(TQUANT)<quant_type, QuantScaleAlg::OCP, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
         dst, src, exp, max, scaling);
 }
 
@@ -3072,5 +3073,6 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
             dst, src, exp, max, scaling);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif // TQUANT_HPP

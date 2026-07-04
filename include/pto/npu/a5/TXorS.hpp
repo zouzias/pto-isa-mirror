@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TBinSOp.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename T>
 struct XorSOp {
     static constexpr bool isDynFunc = true;
@@ -69,5 +70,6 @@ PTO_INTERNAL void TXORS_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
 
     TXorS<T, TileDataDst, TileDataSrc>(dst.data(), src0.data(), src1, validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

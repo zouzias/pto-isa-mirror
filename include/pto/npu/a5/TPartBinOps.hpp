@@ -16,6 +16,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TBinOp.hpp"
 
 namespace pto {
+namespace a5 {
+
+// Forward declaration for TMOV_IMPL (defined in TMov.hpp)
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src);
 
 template <typename T, unsigned dstStride, unsigned elementsPerRepeat>
 PTO_INTERNAL void TPartProcRow(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned srcStride, unsigned row,
@@ -120,9 +125,9 @@ PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
     if (dstValidRow == 0 || dstValidCol == 0) {
         return;
     } else if (src0ValidRow == 0 || src0ValidCol == 0) {
-        TMOV_IMPL(dst, src1);
+        MAP_INSTR_IMPL(TMOV)(dst, src1);
     } else if (src1ValidRow == 0 || src1ValidCol == 0) {
-        TMOV_IMPL(dst, src0);
+        MAP_INSTR_IMPL(TMOV)(dst, src0);
     } else {
         TPartOp<Op, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride,
                 src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol,
@@ -130,6 +135,7 @@ PTO_INTERNAL void TPARTOP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc
     }
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif

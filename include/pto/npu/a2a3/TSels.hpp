@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TSel.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename DstTile, typename MaskTile, typename SrcTile, typename TmpTile>
 __tf__ PTO_INTERNAL void TSels(typename DstTile::TileDType __out__ dst, typename MaskTile::TileDType __in__ mask,
                                typename SrcTile::TileDType __in__ src, typename TmpTile::TileDType __in__ tmp,
@@ -63,6 +64,7 @@ PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &
     TSels<TileDataDst, TileDataMask, TileDataSrc, TmpTile>(dst.data(), mask.data(), src.data(), tmp.data(), scalar,
                                                            validRow, validCol);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

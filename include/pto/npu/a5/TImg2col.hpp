@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TIMG2COL_HPP
 
 namespace pto {
+namespace a5 {
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode>
 __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, typename ConvTileData::TileDType __in__ src,
@@ -139,5 +140,6 @@ PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM,
         dst.data(), src.data(), stepM, stepK, posM, posK, src.GetStrideW(), src.GetStrideH(), src.GetFilterW(),
         src.GetFilterH(), src.GetDilationW(), src.GetDilationH(), src.GetTranspose(), src.GetChannelSize());
 }
+} // namespace a5
 } // namespace pto
 #endif // TIMG2COL_HPP

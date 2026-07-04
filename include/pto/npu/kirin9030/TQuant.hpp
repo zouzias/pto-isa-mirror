@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 
 namespace pto {
+namespace kirin9030 {
 
 template <typename TileDataOut, typename TileDataSrc, typename TileDataPara>
 __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ dst,
@@ -123,5 +124,6 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
 {
     static_assert(sizeof(typename TileDataSrc::DType) == 0, "Fix: TQUANT does not support MX data type in Kirin9030.");
 }
+} // namespace kirin9030
 } // namespace pto
 #endif // TQUANT_HPP

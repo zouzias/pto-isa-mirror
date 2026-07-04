@@ -191,6 +191,28 @@ enum class Layout
     MAX,
 };
 
+enum class DistVST
+{
+    DIST_NORM_B8,
+    DIST_NORM_B16,
+    DIST_NORM_B32,
+    DIST_ONEPT_B8,
+    DIST_ONEPT_B16,
+    DIST_ONEPT_B32,
+    DIST_PK_B16,
+    DIST_PK_B32,
+    DIST_INTLV_B8,
+    DIST_INTLV_B16,
+    DIST_PK_B64,
+    DIST_INTLV_B32,
+    DIST_PK4_B32,
+    DIST_MRG4CHN_B8,
+    DIST_MRG2CHN_B8,
+    DIST_MRG2CHN_B16,
+    DIST_NORM,
+    DIST_ONEPT
+};
+
 enum class CmpMode : uint8_t
 {
     EQ = 0,
@@ -531,6 +553,21 @@ constexpr int PTO_RANDOM_KEY_SIZE = 2;
 constexpr int PTO_RANDOM_COUNTER_SIZE = 4;
 using TRandomKey = uint32_t[PTO_RANDOM_KEY_SIZE];
 using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
+
+enum class GatherExec : uint8_t
+{
+    Scalar = 0,
+    Simt = 1
+};
+
+
+struct MrgSortExecutedNumList {
+    uint16_t mrgSortList0;
+    uint16_t mrgSortList1;
+    uint16_t mrgSortList2;
+    uint16_t mrgSortList3;
+};
+
 } // namespace pto
 
 #if defined(__CPU_SIM) || defined(__COSTMODEL)

@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TLoad.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename TileData>
 AICORE constexpr auto getCopyNullPtr()
 {
@@ -400,6 +401,7 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileData &dst, TileData &src)
     uint32_t validDstRow = dst.GetValidRow();
     TFillPad<TileData>(dst.data(), validDstRow, validDstCol);
 } // end of TFILLPAD
+} // namespace a2a3
 
 } // namespace pto
 #endif

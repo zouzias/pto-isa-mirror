@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TSTORE_HPP
 
 namespace pto {
+namespace kirinX90 {
 
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantModeGm()
@@ -376,5 +377,6 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, FpTileData &fp)
         SetAtomicNone();
     }
 }
+} // namespace kirinX90
 } // namespace pto
 #endif

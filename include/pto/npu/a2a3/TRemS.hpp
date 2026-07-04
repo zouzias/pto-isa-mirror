@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 // Formula: remainder(a, b) = a - floor(a/b) * b
 // Note: For fp32, after computing remainder, we check if result * scalar < 0.
 //       If signs differ, we add scalar to result to ensure the result has the same sign as scalar.
@@ -140,6 +141,7 @@ PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     constexpr unsigned srcRowStride = TileDataSrc::RowStride;
     TRemS<TileDataDst, TileDataSrc, TileDataTmp, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dst.data(), src.data(), scalar, tmp.data(), dst.GetValidRow(), dst.GetValidCol());
+} // namespace a2a3
 }
 } // namespace pto
 

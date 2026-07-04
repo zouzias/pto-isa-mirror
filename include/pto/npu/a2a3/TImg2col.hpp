@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TIMG2COL_HPP
 
 namespace pto {
+namespace a2a3 {
 
 template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO>
 PTO_INTERNAL void SetFmatrix(uint16_t fmapH, uint16_t fmapW, const uint8_t *padList)
@@ -114,6 +115,7 @@ PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM,
     TImg2col<TileData, ConvTileData, FmatrixMode>(
         dst.data(), src.data(), stepM, stepK, posM, posK, src.GetStrideW(), src.GetStrideH(), src.GetFilterW(),
         src.GetFilterH(), src.GetDilationW(), src.GetDilationH(), src.GetTranspose(), src.GetChannelSize());
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TIMG2COL_HPP

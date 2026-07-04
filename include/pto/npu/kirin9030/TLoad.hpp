@@ -15,6 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tload_common.hpp"
 
 namespace pto {
+namespace kirin9030 {
+
 struct Kirin9030LoadOp : LoadOpBase {
     using LoadOpBase::TLoadCubeInstr;
     template <Layout Layout = Layout::ND, typename T>
@@ -104,5 +106,6 @@ PTO_INTERNAL void TLOAD_IMPL(DstTile &dst, SrcGlobal &src)
         TLOAD_TILE_IMPL(dst, src);
     }
 }
+} // namespace kirin9030
 } // namespace pto
 #endif // TLOAD_HPP

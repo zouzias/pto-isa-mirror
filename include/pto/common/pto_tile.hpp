@@ -22,6 +22,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+namespace NPU_ARCH_DIR {
+template <typename T, typename AddrType>
+PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr);
+} // namespace NPU_ARCH_DIR
+
+
 constexpr int DYNAMIC = -1;
 
 template <int64_t N1 = DYNAMIC, int64_t N2 = DYNAMIC, int64_t N3 = DYNAMIC, int64_t N4 = DYNAMIC, int64_t N5 = DYNAMIC>
@@ -557,7 +563,11 @@ struct GlobalTensor {
     }
 
     template <typename T, typename AddrType>
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+    friend AICORE void MAP_INSTR_IMPL(TASSIGN)(T &tile, AddrType addr);
+#else
     friend AICORE void TASSIGN_IMPL(T &src, AddrType addr);
+#endif
 
     AICORE DType *data()
     {
@@ -1210,7 +1220,11 @@ public:
     }
 
     template <typename T, typename AddrType>
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+    friend AICORE void MAP_INSTR_IMPL(TASSIGN)(T &tile, AddrType addr);
+#else
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
+#endif
 
     PTO_INTERNAL uint16_t GetFmapH() const
     {
@@ -1644,7 +1658,11 @@ public:
     }
 
     template <typename T, typename AddrType>
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+    friend AICORE void MAP_INSTR_IMPL(TASSIGN)(T &tile, AddrType addr);
+#else
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
+#endif
 
     PTO_INTERNAL bool GetKAligned() const
     {

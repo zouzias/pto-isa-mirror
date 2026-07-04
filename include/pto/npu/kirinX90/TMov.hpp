@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/memory/tmov_common.hpp"
 
 namespace pto {
+namespace kirinX90 {
 
 template <typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src)
@@ -417,5 +418,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
     }
 }
 
+} // namespace kirinX90
 } // namespace pto
 #endif // TMOV_HPP

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TBinSOp.hpp"
 
 namespace pto {
+namespace a5 {
 inline namespace TExpandsInternel {
 constexpr const int EXPANDS_MAX_SUPPORT_REPEAT_TIMES = 32767; // [0:14]
 } // namespace TExpandsInternel
@@ -164,5 +165,6 @@ PTO_INTERNAL void TEXPANDS_IMPL(TileData &dst, typename TileData::DType scalar)
         }
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

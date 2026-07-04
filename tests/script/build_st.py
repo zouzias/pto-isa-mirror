@@ -32,6 +32,22 @@ def run_command(command, cwd=None, check=True):
         raise
 
 
+def get_simulator_info(ascend_home, soc_version):
+    simulator_home = os.path.join(ascend_home, "tools", "simulator")
+    soc_candidates = [soc_version]
+    if soc_version == "Ascend950PR_9599":
+        soc_candidates.extend(["Ascend910_9599"])
+    for candidate in soc_candidates:
+        camodel_path = os.path.join(simulator_home, candidate, "camodel")
+        lib_path = os.path.join(simulator_home, candidate, "lib")
+        if os.path.isdir(camodel_path):
+            return candidate, camodel_path
+        elif os.path.isdir(lib_path):
+            return candidate, lib_path
+    print(f"Warning: Neither 'camodel' nor 'lib' found in {os.path.join(simulator_home, soc_version)}")
+    return soc_version, os.path.join(simulator_home, soc_version, "lib")
+
+
 def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
@@ -41,11 +57,18 @@ def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
         shutil.rmtree(build_dir)
     os.makedirs(build_dir, exist_ok=True)
 
+    # Resolve SOC_VERSION for simulator path (e.g. Ascend950PR_9599 -> Ascend910_9599)
+    ascend_home = os.environ.get("ASCEND_HOME_PATH", "")
+    if run_mode == "sim" and ascend_home:
+        cmake_soc, _ = get_simulator_info(ascend_home, soc_version)
+    else:
+        cmake_soc = soc_version
+
     try:
         cmake_cmd = [
             "cmake",
             f"-DRUN_MODE={run_mode}",
-            f"-DSOC_VERSION={soc_version}",
+            f"-DSOC_VERSION={cmake_soc}",
             f"-DTEST_CASE={testcase}",
             ".."
         ]
@@ -122,8 +145,10 @@ def main():
 
         if args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
+        elif args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
             target_dir = target_dir + "/npu/kirin9030/src/st"
+        elif args.soc_version == "kirinX90":
+            target_dir = target_dir + "/npu/kirinX90/src/st"
         else : # a5
             target_dir = target_dir + "/npu/a5/src/st"
 

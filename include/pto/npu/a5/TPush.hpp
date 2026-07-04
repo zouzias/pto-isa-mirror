@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 
 template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, uint32_t LocalSlotNum = 2,
           bool IsNoSplit = false, bool EN_UNIT_FLAG = false>
@@ -232,7 +233,7 @@ struct TPipe {
             TASSIGN(vecTile, (uint64_t)(fifo.C2V_CONSUMER_BUF + entryBase + entryOffset));
 
             if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                TMOV_IMPL<TileCons, TileProd, AccToVecMode::SingleModeVec0>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileCons, TileProd, AccToVecMode::SingleModeVec0>(vecTile, tile);
             } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
                 static_assert((ProdM % 2 == 0) && (sizeof(T) == 4),
                               "Fix: For C2V(L0C-> UB), only support up-down split with ProdM being multiple of 2 due "
@@ -240,7 +241,7 @@ struct TPipe {
                 PTO_ASSERT((tile.GetValidRow() % 2 == 0) && (sizeof(T) == 4),
                            "Fix: For C2V(L0C-> UB), only support up-down split with ProdM being multiple of 2 due to "
                            "hardware requirement.");
-                TMOV_IMPL<TileCons, TileProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileCons, TileProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
                 static_assert((ProdN % 32 == 0) && (sizeof(T) == 4),
                               "Fix: For C2V(L0C-> UB), only support left-right split with ProdN being multiple of 32 "
@@ -248,7 +249,7 @@ struct TPipe {
                 PTO_ASSERT((tile.GetValidCol() % 32 == 0) && (sizeof(T) == 4),
                            "Fix: For C2V(L0C-> UB), only support left-right split with ProdN being multiple of 32 due "
                            "to hardware requirement.");
-                TMOV_IMPL<TileCons, TileProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileCons, TileProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
             }
         }
 
@@ -263,19 +264,19 @@ struct TPipe {
             constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
             Tile<TileType::Mat, T, ConsM, ConsN, BLayout::ColMajor, ConsM, ConsN> matTile;
             uint64_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
-            TASSIGN_IMPL(matTile, (uint64_t)(fifo.V2C_CONSUMER_BUF + entryBase + entryOffset));
+            MAP_INSTR_IMPL(TASSIGN)(matTile, (uint64_t)(fifo.V2C_CONSUMER_BUF + entryBase + entryOffset));
             if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 // single vector core
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
             } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
                 int rowIndex = ProdM * static_cast<size_t>(get_subblockid());
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(rowIndex), static_cast<uint16_t>(0));
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(rowIndex), static_cast<uint16_t>(0));
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
                 PTO_ASSERT(tile.GetValidCol() * sizeof(T) % 32 == 0,
                            "Fix: For V2C(UB->L1), tile's valid column must be multiple of 32 bytes due to hardware "
                            "requirement.");
                 uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(colIndex));
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(colIndex));
             }
         }
 
@@ -292,9 +293,9 @@ struct TPipe {
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
             GlobalData gmData(addr, GlobalShape(ValidR, ValidC), GlobalStride(ValidC));
             if constexpr (EN_UNIT_FLAG) {
-                TSTORE_IMPL<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(gmData, tile);
+                MAP_INSTR_IMPL(TSTORE)<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(gmData, tile);
             } else { // disable unit flag
-                TSTORE_IMPL(gmData, tile);
+                MAP_INSTR_IMPL(TSTORE)(gmData, tile);
             }
         }
 
@@ -320,7 +321,7 @@ struct TPipe {
             using GlobalData = GlobalTensor<T, GlobalShape, GlobalStride>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
             GlobalData globalData(addr, GlobalShape(gmValidR, gmValidC), GlobalStride(gmStrideR));
-            TSTORE_IMPL(globalData, tile);
+            MAP_INSTR_IMPL(TSTORE)(globalData, tile);
         }
 
         template <typename TileProd>
@@ -594,7 +595,7 @@ struct TPipe {
             constexpr int ConsN = TileCons::Cols;
             uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             uint64_t localTileBase = fifo.C2V_CONSUMER_BUF + entryBase + entryOffset;
-            TASSIGN_IMPL(tile, localTileBase);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
         }
 
         template <typename TileCons, TileSplitAxis Split>
@@ -605,7 +606,7 @@ struct TPipe {
             constexpr int ConsN = TileCons::Cols;
             uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             uint64_t localTileBase = fifo.V2C_CONSUMER_BUF + entryBase + entryOffset;
-            TASSIGN_IMPL(tile, localTileBase);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
         }
 
         template <typename TileCons, TileSplitAxis Split>
@@ -642,8 +643,8 @@ struct TPipe {
             uint64_t localTileBase =
                 fifo.C2V_CONSUMER_BUF +
                 (static_cast<size_t>(tileIndex) % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
-            TASSIGN_IMPL(tile, localTileBase);
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         template <typename TileCons, TileSplitAxis Split>
@@ -658,8 +659,8 @@ struct TPipe {
 
             uint64_t localTileBase =
                 fifo.V2C_CONSUMER_BUF + (tileIndex % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
-            TASSIGN_IMPL(tile, localTileBase);
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         PTO_INTERNAL void popCtrlFromCtrlFiFo(RingFiFo &fifo)
@@ -939,9 +940,9 @@ struct TMPipe {
             GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
             // store tile to GM FIFO, enable unit-flag or disable unit-flag
             if constexpr (EN_UNIT_FLAG) {
-                TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+                MAP_INSTR_IMPL(TSTORE)<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
             } else { // disable unit flag
-                TSTORE_IMPL(globalTensor, tile);
+                MAP_INSTR_IMPL(TSTORE)(globalTensor, tile);
             }
         }
 
@@ -963,7 +964,7 @@ struct TMPipe {
                 TileDataVec vecTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * VecM * ProdN * sizeof(T);
                 TASSIGN(vecTile, fifo.fifoBase + entryBase + entryOffset);
-                TMOV_IMPL<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
             } else if constexpr (isSplitN) {
                 // split N between two vectors
                 constexpr int kTileFactor = ConsN / ProdN;
@@ -972,13 +973,13 @@ struct TMPipe {
                 TileDataVec vecTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ProdM * VecN * sizeof(T);
                 TASSIGN(vecTile, fifo.fifoBase + entryBase + entryOffset);
-                TMOV_IMPL<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
             } else if constexpr (nonSplit) {
                 // single vector core (1v:1v)
                 TileDataCons vecTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ProdM * ProdN * sizeof(T);
                 TASSIGN(vecTile, fifo.fifoBase + entryBase + entryOffset);
-                TMOV_IMPL<TileDataCons, TileDataProd, AccToVecMode::SingleModeVec0>(vecTile, tile);
+                MAP_INSTR_IMPL(TMOV)<TileDataCons, TileDataProd, AccToVecMode::SingleModeVec0>(vecTile, tile);
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
                               "Fix: TPUSH(pushAcc2VecFiFo) has unsupported split mode!");
@@ -1002,8 +1003,8 @@ struct TMPipe {
                 __gm__ T *addrSub = addr + sub_col * ConsM * ConsN;
                 GlobalDataSub globalDataSub((__gm__ T *)(addrSub));
                 uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * ConsN * sizeof(T));
-                TASSIGN_IMPL(subTile, (uint64_t)tile.data() + col_byte_offset);
-                TSTORE_IMPL(globalDataSub, subTile);
+                MAP_INSTR_IMPL(TASSIGN)(subTile, (uint64_t)tile.data() + col_byte_offset);
+                MAP_INSTR_IMPL(TSTORE)(globalDataSub, subTile);
             }
         }
 
@@ -1023,21 +1024,21 @@ struct TMPipe {
                 int row_offset = subblock_base_rows + entryOffset;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
+                MAP_INSTR_IMPL(TASSIGN)(matTile, fifo.fifoBase + entryBase);
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
             } else if constexpr (isSplitN) {
                 // split N between vectors
                 int col_index = ProdN;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
+                MAP_INSTR_IMPL(TASSIGN)(matTile, fifo.fifoBase + entryBase);
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
             } else if constexpr (nonSplit) {
                 // single vector core
                 TileDataCons matTile;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+                MAP_INSTR_IMPL(TASSIGN)(matTile, fifo.fifoBase + entryBase);
+                MAP_INSTR_IMPL(TINSERT)(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
                               "Fix: TPUSH(pushVec2MatFiFo) has unsupported split mode!");
@@ -1227,7 +1228,7 @@ struct TMPipe {
                 uint64_t localTileBase =
                     (uint64_t)fifo.localFiFoBase +
                     (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, localTileBase);
+                MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
             }
 
             using GlobalDataSub = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
@@ -1237,8 +1238,8 @@ struct TMPipe {
                 __gm__ T *addrSub = addr + sub_col * ProdM * ProdN;
                 uint64_t col_byte_offset = sub_col * ProdN * sizeof(T);
                 GlobalDataSub globalTensorSub(addrSub);
-                TASSIGN_IMPL(tileSub, (uint64_t)tile.data() + col_byte_offset);
-                TLOAD_IMPL(tileSub, globalTensorSub);
+                MAP_INSTR_IMPL(TASSIGN)(tileSub, (uint64_t)tile.data() + col_byte_offset);
+                MAP_INSTR_IMPL(TLOAD)(tileSub, globalTensorSub);
             }
         }
 
@@ -1248,7 +1249,7 @@ struct TMPipe {
             uint32_t bufIndex = static_cast<uint32_t>(tile_id % DataFiFo::fifoDepth);
             size_t entryBase = bufIndex * ConsM * ConsN * sizeof(T);
             uint64_t localTileBase = fifo.fifoBase + entryBase + entryOffset;
-            TASSIGN_IMPL(tile, localTileBase);
+            MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
         }
 
         template <typename T, int ConsM, int ConsN, int ProdN>
@@ -1263,9 +1264,9 @@ struct TMPipe {
                 uint64_t localTileBase =
                     (uint64_t)fifo.localFiFoBase +
                     (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, localTileBase);
+                MAP_INSTR_IMPL(TASSIGN)(tile, localTileBase);
             }
-            TLOAD_IMPL(tile, globalTensor);
+            MAP_INSTR_IMPL(TLOAD)(tile, globalTensor);
         }
 
         PTO_INTERNAL void popCtrlFromCtrlFiFo(DataFiFo &fifo)
@@ -1356,6 +1357,10 @@ PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
     }
 }
 
+} // namespace a5
+
+using a5::TPipe;
+using a5::TMPipe;
 } // namespace pto
 
 #endif

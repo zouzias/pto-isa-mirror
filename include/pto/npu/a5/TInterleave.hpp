@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TInterleaveCheck(const TileDataDst &dst1, const TileDataDst &dst0, const TileDataSrc &src1,
                                    const TileDataSrc &src0)
@@ -174,6 +175,7 @@ PTO_INTERNAL void TINTERLEAVE_IMPL(TileDataDst &dst1, TileDataDst &dst0, TileDat
     }
 }
 
+} // namespace a5
 } // namespace pto
 
 #endif

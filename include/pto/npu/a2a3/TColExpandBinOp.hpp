@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename Op, typename T, unsigned BlockSizeElem, unsigned DstRowStride, unsigned Src0RowStride>
 PTO_INTERNAL void TColExpandBinaryCountMode(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T *src1Ptr,
                                             unsigned validRow, unsigned validCol)
@@ -115,6 +116,7 @@ PTO_INTERNAL void TCOLEXPANDOP_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataS
         ColExpandBinaryInstr<Op2, TileData, TileDataSrc1, TileDataSrc0, elementsPerRepeat, blockSizeElem, dstRowStride,
                              src0RowStride>(dst.data(), src1.data(), src0.data(), validRow, validCol);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TCmp.hpp"
 
 namespace pto {
+namespace a5 {
 constexpr const uint16_t RESULT_NUM_PER_INT32 = 32;
 template <typename T>
 AICORE void GenCmpCall(MaskReg &dst, RegTensor<T> &src0, T src1, CmpMode cmpMode, MaskReg &preg)
@@ -264,5 +265,6 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
     unsigned validCol = src0.GetValidCol();
     TCmps_Tile<TileDataDst, TileDataSrc0, TileDataSrc1>(dst.data(), src0.data(), src1.data(), mode, validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

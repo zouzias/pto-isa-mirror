@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBinSOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 PTO_INTERNAL bool IsInteger(float f) noexcept
 {
     FloatUnion converter;
@@ -318,6 +319,7 @@ PTO_INTERNAL void TPOWS_IMPL(DstTile &dst, BaseTile &base, typename DstTile::DTy
 
     TPows<DstTile, BaseTile, TmpTile>(dst.data(), base.data(), exp, tmp.data(), validRows, validCols);
 }
+} // namespace a2a3
 
 } // namespace pto
 

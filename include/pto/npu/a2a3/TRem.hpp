@@ -16,6 +16,7 @@ full text of the License.
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 // Formula: remainder(a, b) = a - floor(a/b) * b
 // Note: For fp32, after computing remainder, we check if result * divider < 0.
 //       If signs differ, we add divider to result to ensure the result has the same sign as divider.
@@ -176,6 +177,7 @@ PTO_INTERNAL void TREM_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
          src0RowStride, src1RowStride>(dst.data(), src0.data(), src1.data(), tmp.data(), dst.GetValidRow(),
                                        dst.GetValidCol());
 }
+} // namespace a2a3
 
 } // namespace pto
 

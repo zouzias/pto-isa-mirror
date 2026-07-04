@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 
 // ----------------------------------------------------------------------------
 // Helper: comparison + select for one pair of old/new value and index registers
@@ -326,5 +327,6 @@ PTO_INTERNAL void TCOLARGMIN_IMPL(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx
     TCOLARG_DISPATCH<TileDataOutVal, TileDataOutIdx, TileDataIn, false>(dstVal, dstIdx, src);
 }
 
+} // namespace a5
 } // namespace pto
 #endif

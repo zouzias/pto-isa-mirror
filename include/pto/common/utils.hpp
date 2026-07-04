@@ -144,6 +144,15 @@ struct B322B16Trait {
         }
     }
 };
+
+template <typename T, int U, int... Args>
+AICORE constexpr bool SupportBytes()
+{
+    if constexpr (sizeof...(Args) > 0) {
+        return sizeof(T) == U || SupportBytes<T, Args...>();
+    }
+    return sizeof(T) == U;
+}
 } // namespace pto
 
 #endif

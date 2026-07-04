@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+namespace a5 {
 template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
                                    typename TileDataMask::TileDType __in__ mask,
@@ -144,5 +145,6 @@ PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &
                                                                                scalar, validRow, validCol);
     }
 }
+} // namespace a5
 } // namespace pto
 #endif

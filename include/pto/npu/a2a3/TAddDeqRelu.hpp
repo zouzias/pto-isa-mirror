@@ -32,6 +32,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 constexpr float DEQ_SHIFT_RIGHT_17_BIT = 1.0f / 131072.0f;
 constexpr float DEQ_SHIFT_LEFT_17_BIT = 131072.0f;
@@ -169,6 +170,7 @@ PTO_INTERNAL void TADDDEQRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     TAddDeqRelu<TileDataDst, TileDataSrc0, TileDataSrc1, TileDataTmp, SS0, SS1, TS, DS>(
         dst.data(), src0.data(), src1.data(), tmp.data(), deqScale, validRow, validCol);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

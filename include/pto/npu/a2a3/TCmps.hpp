@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 constexpr const uint64_t NUM_BITS_IN_BYTE = 8;
 constexpr const uint8_t TCMPS_REPEAT_MAX = 240;
@@ -185,6 +186,7 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
 
     TCmps_Scalar<TileDataDst, TileDataSrc, T>(dst.data(), src0.data(), src1, mode, numRepeatPerLine, validRow);
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

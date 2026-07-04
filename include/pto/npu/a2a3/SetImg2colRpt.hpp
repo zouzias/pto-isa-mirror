@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SET_IMG2COL_RPT_HPP
 
 namespace pto {
+namespace a2a3 {
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
 PTO_INTERNAL void SET_IMG2COL_RPT_IMPL(ConvTileData &src)
 {
@@ -21,6 +22,7 @@ PTO_INTERNAL void SET_IMG2COL_RPT_IMPL(ConvTileData &src)
                              (static_cast<uint64_t>(src.GetRepeatMode()) << 24);
         set_l3d_rpt(rptConfig);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif // SET_IMG2COL_RPT_HPP

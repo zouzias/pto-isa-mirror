@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TPartOp.hpp>
 
 namespace pto {
+namespace a2a3 {
 template <typename T>
 struct PartMulOp {
     PTO_INTERNAL static void PartInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t repeats)
@@ -91,6 +92,7 @@ PTO_INTERNAL void TPARTMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSr
     TPartMul<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride,
              src1RowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow,
                             src1ValidCol, dstValidRow, dstValidCol);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

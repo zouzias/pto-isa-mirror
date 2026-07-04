@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 constexpr const uint64_t BITS_IN_BYTE = 8;
 constexpr const uint64_t TCMP_REPEAT_MAX = 240;
@@ -117,6 +118,7 @@ PTO_INTERNAL void TCMP_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     unsigned validRow = src0.GetValidRow();
     TCmp<TileDataDst, TileDataSrc0, TileDataSrc1>(dst.data(), src0.data(), src1.data(), cmpMode, numRepeatPerLine,
                                                   validRow, elementsPerRepeat);
+} // namespace a2a3
 }
 } // namespace pto
 #endif

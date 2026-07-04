@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TDIV754_HPP
 
 namespace pto {
+namespace a5 {
 template <typename T, typename U>
 PTO_INTERNAL void DivPrecisionImpl(U &dstReg, U &srcReg0, U &srcReg1, MaskReg &mask)
 {
@@ -500,5 +501,6 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half> &dst, RegTensor<half> &src0
     // set output with nan input to nan
     vsel(dst, (RegTensor<half> &)tmp0, dst, maskNan);
 }
+} // namespace a5
 } // namespace pto
 #endif // TINSERT_CUSTOM_HPP

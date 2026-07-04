@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+namespace a2a3 {
 constexpr const int vbrcbElem = 8;
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -126,6 +127,7 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
     } else {
         TRowExpand<TileDataDst, TileDataSrc>(dst.data(), src.data(), dstValidRow, dstValidCol);
     }
+} // namespace a2a3
 }
 } // namespace pto
 #endif

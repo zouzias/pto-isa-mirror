@@ -17,6 +17,7 @@ full text of the License.
 #include <type_traits>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TRESHAPE_IMPL(TileDataOut &dst, TileDataIn &src)
@@ -47,11 +48,12 @@ PTO_INTERNAL void TRESHAPE_IMPL(TileDataOut &dst, TileDataIn &src)
                       (SFractal != SLayout::NoneBox && NewSFractal != SLayout::NoneBox),
                   "TRESHAPE: Cannot reshape between boxed and non-boxed layouts.");
 
-    TASSIGN_IMPL(dst, reinterpret_cast<uintptr_t>(src.data()));
+    MAP_INSTR_IMPL(TASSIGN)(dst, reinterpret_cast<uintptr_t>(src.data()));
 #else
     __cce_alias(dst.data(), src.data(), 0);
 #endif
 }
+} // namespace a2a3
 
 } // namespace pto
 

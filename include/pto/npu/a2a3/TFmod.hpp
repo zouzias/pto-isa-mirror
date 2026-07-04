@@ -16,6 +16,7 @@ full text of the License.
 #include <pto/common/constants.hpp>
 
 namespace pto {
+namespace a2a3 {
 // Formula: fmod(a, b) = a - trunc(a/b) * b
 struct FmodOp {
     PTO_INTERNAL static void FmodF32Instr(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1)
@@ -92,6 +93,7 @@ PTO_INTERNAL void TFMOD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
     TFmod<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride,
           src1RowStride>(dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a2a3
 
 } // namespace pto
 

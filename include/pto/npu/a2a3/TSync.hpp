@@ -21,6 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define FFTS_EVENT_ID_WIDTH 0xf
 #define FFTS_EVENT_ID_OFFSET 8
 namespace pto {
+namespace a2a3 {
 template <Op op>
 PTO_INTERNAL static constexpr pipe_t GetPipeByOpForA3()
 {
@@ -46,6 +47,8 @@ PTO_INTERNAL uint16_t getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseC
             ((eventId & FFTS_EVENT_ID_WIDTH) << FFTS_EVENT_ID_OFFSET));
 }
 
+} // namespace a2a3
+
 template <Op SrcOp, Op DstOp, bool AutoToken = true, event_t EventID = EVENT_ID0>
 struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, AutoToken, EventID> {
     using Base = EventBase<Event, SrcOp, DstOp, AutoToken, EventID>;
@@ -54,7 +57,7 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
     template <Op op>
     PTO_INTERNAL static constexpr pipe_t GetPipeByOp()
     {
-        return GetPipeByOpForA3<op>();
+        return a2a3::GetPipeByOpForA3<op>();
     }
 #ifndef __PTO_AUTO__
     static constexpr bool IsCrossCore =
@@ -82,7 +85,7 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
         if constexpr (IsCrossCore) {
             PTO_STATIC_ASSERT(CrossCoreId != 0xff,
                               "Fix: The cross-core id must be assigned by user when the event is a cross-core event.");
-            ffts_cross_core_sync(Base::srcPipe, getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
+            ffts_cross_core_sync(Base::srcPipe, a2a3::getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
         } else if constexpr (!Base::isSamePipe) {
 #ifdef PTO_FLAG_TEST
             Base::token = __pto_set_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe);

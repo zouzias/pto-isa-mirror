@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TPush.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 // get sub-block offset for global data
 template <typename GlobalData, TileSplitAxis Split>
@@ -65,8 +66,9 @@ PTO_INTERNAL void TALLOC_IMPL(Pipe &pipe, GlobalData &gmTensor)
 
     // 3. Increment tile index
     pipe.prod.tileIndex++;
-    TASSIGN_IMPL(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
+    MAP_INSTR_IMPL(TASSIGN)(gmTensor, reinterpret_cast<typename GlobalData::DType *>(entryBase));
 }
+} // namespace a2a3
 
 } // namespace pto
 #endif

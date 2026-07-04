@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TRowExpandBinOp.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <DivAlgorithm PrecisionType, typename T>
 struct RowExpandDivOp {
@@ -149,5 +150,6 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
 {
     TROWEXPANDDIV_IMPL<PrecisionType>(dst, src0, src1);
 }
+} // namespace a5
 } // namespace pto
 #endif

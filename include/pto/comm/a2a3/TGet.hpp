@@ -70,8 +70,8 @@ PTO_INTERNAL void TgetIntraPingPongOneChunk(GlobalDstData &dstGlobalData, Global
     HalfTileData pongHalf(kHalfRows, chunkCols);
     const auto baseAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data());
     const auto halfAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data() + kHalfRows * TileData::Cols);
-    TASSIGN_IMPL(pingHalf, baseAddr);
-    TASSIGN_IMPL(pongHalf, halfAddr);
+    MAP_INSTR_IMPL(TASSIGN)(pingHalf, baseAddr);
+    MAP_INSTR_IMPL(TASSIGN)(pongHalf, halfAddr);
     pingHalf.SetKAligned(stagingTileData.GetKAligned());
     pongHalf.SetKAligned(stagingTileData.GetKAligned());
 

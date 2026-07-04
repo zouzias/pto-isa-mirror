@@ -23,15 +23,6 @@ PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
     return sizeof(T) * value;
 }
 
-template <typename T, int U, int... Args>
-AICORE constexpr bool SupportBytes()
-{
-    if constexpr (sizeof...(Args) > 0) {
-        return sizeof(T) == U || SupportBytes<T, Args...>();
-    }
-    return sizeof(T) == U;
-}
-
 using MaskReg = vector_bool;
 using UnalignReg = vector_align;
 using AddrReg = vector_address;

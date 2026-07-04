@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+namespace a2a3 {
 
 template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp>
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataTmp &tmp,
@@ -39,21 +40,21 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
         Tile<TileType::Vec, int32_t, TileDataSrc::Rows, TileDataSrc::Cols, BLayout::RowMajor, -1, -1>;
 
     // tmp is reused afterward for fp32->s32 conversion (A3 does not support in-place tcvt).
-    TROWEXPANDMUL_IMPL(src, src, scale, tmp);
+    MAP_INSTR_IMPL(TROWEXPANDMUL)(src, src, scale, tmp);
     pipe_barrier(PIPE_V);
     if constexpr (quant_type == QuantType::INT8_ASYM) {
-        TROWEXPANDADD_IMPL(src, src, *offset, tmp);
+        MAP_INSTR_IMPL(TROWEXPANDADD)(src, src, *offset, tmp);
         pipe_barrier(PIPE_V);
     }
 
     TileDataCvtF16 src_f16(src.GetValidRow(), src.GetValidCol());
     TileDataCvtS32 src_s32(src.GetValidRow(), src.GetValidCol());
 #ifndef __PTO_AUTO__
-    TASSIGN_IMPL(src_f16, reinterpret_cast<uintptr_t>(src.data()));
-    TASSIGN_IMPL(src_s32, reinterpret_cast<uintptr_t>(tmp.data()));
+    MAP_INSTR_IMPL(TASSIGN)(src_f16, reinterpret_cast<uintptr_t>(src.data()));
+    MAP_INSTR_IMPL(TASSIGN)(src_s32, reinterpret_cast<uintptr_t>(tmp.data()));
 #else
-    TRESHAPE_IMPL(src_f16, src);
-    TRESHAPE_IMPL(src_s32, tmp);
+    MAP_INSTR_IMPL(TRESHAPE)(src_f16, src);
+    MAP_INSTR_IMPL(TRESHAPE)(src_s32, tmp);
 #endif
 
     TCVT_IMPL(src_s32, src, RoundMode::CAST_RINT); // fp32->s32, dst=tmp src=src
@@ -62,6 +63,7 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
     pipe_barrier(PIPE_V);
     TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT, SaturationMode::ON); // fp16->int8, dst=dst src=src
     pipe_barrier(PIPE_V);
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TQUANT_HPP

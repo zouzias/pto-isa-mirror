@@ -42,7 +42,7 @@ __global__ AICORE void runCOLEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TCOLEXPAND_IMPL(dstTile, srcTile);
+    TCOLEXPAND(dstTile, srcTile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

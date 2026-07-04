@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/TSync.hpp>
 
 namespace pto {
+namespace a5 {
 
 #define FFTS_BASE_COUNT_WIDTH 0xf
 #define FFTS_MODE_WIDTH 0x3
@@ -293,5 +294,6 @@ PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t *gmWorkspace, __ubuf__ int32_
     pipe_barrier(PIPE_ALL);
 #endif
 }
+} // namespace a5
 } // namespace pto
 #endif

@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/Div754.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <DivAlgorithm PrecisionType, typename T>
 struct DivOp {
@@ -85,5 +86,6 @@ PTO_INTERNAL void TDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     TDiv<PrecisionType, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
+} // namespace a5
 } // namespace pto
 #endif

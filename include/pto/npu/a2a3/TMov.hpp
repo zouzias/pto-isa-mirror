@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TExtract.hpp"
 
 namespace pto {
+namespace a2a3 {
 
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
 __tf__ AICORE void TMovCcToCb(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
@@ -220,6 +221,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
     uint16_t n = src.GetValidCol();
     SetFPC<FpTileData>(fp.data());
     TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+} // namespace a2a3
 }
 } // namespace pto
 #endif // TMOV_HPP

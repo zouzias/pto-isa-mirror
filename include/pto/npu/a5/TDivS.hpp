@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/Div754.hpp"
 
 namespace pto {
+namespace a5 {
 
 template <DivAlgorithm PrecisionType, typename T>
 struct DivSOp {
@@ -191,5 +192,6 @@ PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataSrc::DType scala
     TDivS<PrecisionType, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dst.data(), scalar, src0.data(), validRow, validCol);
 }
+} // namespace a5
 } // namespace pto
 #endif

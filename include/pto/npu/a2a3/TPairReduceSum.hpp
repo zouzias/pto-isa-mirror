@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a2a3 {
 
 template <typename T, unsigned ElementsPerRepeat, unsigned BlockSizeElem, unsigned DstRowStride,
           unsigned Src0RowStride = DstRowStride>
@@ -149,6 +150,7 @@ PTO_INTERNAL void TPAIRREDUCESUM_IMPL(TileDataDst &dst, TileDataSrc0 &src0)
 
     TPairReduceSum<TileDataDst, TileDataSrc0, elementsPerRepeat, blockSizeElem>(dst.data(), src0.data(),
                                                                                 dst.GetValidRow(), dst.GetValidCol());
+} // namespace a2a3
 }
 } // namespace pto
 #endif

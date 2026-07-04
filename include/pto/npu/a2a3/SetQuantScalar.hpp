@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define SET_QUANT_SCALAR_HPP
 
 namespace pto {
+namespace a2a3 {
 
 template <typename OutT>
 PTO_INTERNAL void SET_QUANT_SCALAR_IMPL(float preQuantScalar)
@@ -22,6 +23,7 @@ PTO_INTERNAL void SET_QUANT_SCALAR_IMPL(float preQuantScalar)
         quantValue = (quantValue & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
     }
     set_quant_pre(quantValue);
+} // namespace a2a3
 }
 } // namespace pto
 

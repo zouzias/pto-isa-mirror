@@ -40,13 +40,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/debug.h>
 
 namespace pto {
+namespace a5 {
 
 constexpr float DEQ_SHIFT_RIGHT_17_BIT = 1.0f / 131072.0f;
 constexpr float DEQ_SHIFT_LEFT_17_BIT = 131072.0f;
 
-using __cce_simd::RoundRType;
-
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned DS, unsigned SS0, unsigned SS1>
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned DStride, unsigned SS0,
+          unsigned SS1>
 __tf__ PTO_INTERNAL OP_NAME(TADDDEQRELU)
     OP_TYPE(element_wise) void TAddDeqRelu(typename TileDataDst::TileDType __out__ dstData,
                                            typename TileDataSrc0::TileDType __in__ src0Data,
@@ -74,14 +74,14 @@ __tf__ PTO_INTERNAL OP_NAME(TADDDEQRELU)
                 vlds(vsrc0, src0Ptr, i * SS0 + j * elementsPerRepeat, NORM);
                 vlds(vsrc1, src1Ptr, i * SS1 + j * elementsPerRepeat, NORM);
                 vadd(vsum, vsrc0, vsrc1, preg, MODE_ZEROING);
-                vcvt(vfloat, vsum, preg, RoundRType());
+                vcvt(vfloat, vsum, preg, ROUND_R);
                 vmuls(vfloat, vfloat, static_cast<float>(DEQ_SHIFT_RIGHT_17_BIT), preg, MODE_ZEROING);
                 vmuls(vfloat, vfloat, static_cast<float>(deqScale), preg, MODE_ZEROING);
                 vmuls(vfloat, vfloat, static_cast<float>(DEQ_SHIFT_LEFT_17_BIT), preg, MODE_ZEROING);
                 vmaxs(vfloat, vfloat, (float)0, preg, MODE_ZEROING);
                 RegTensor<DT> vout;
-                vcvt(vout, vfloat, preg, RoundRType(), RS_DISABLE, PART_EVEN);
-                vsts(vout, dstPtr, i * DS + j * elementsPerRepeat, PK_B32, preg);
+                vcvt(vout, vfloat, preg, ROUND_R, RS_DISABLE, PART_EVEN);
+                vsts(vout, dstPtr, i * DStride + j * elementsPerRepeat, PK_B32, preg);
             }
         }
     }
@@ -112,12 +112,13 @@ PTO_INTERNAL void TADDDEQRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDat
                                    TileDataTmp &tmp)
 {
     TAddDeqReluCheck<TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
-    constexpr unsigned DS = TileDataDst::RowStride;
+    constexpr unsigned DStride = TileDataDst::RowStride;
     constexpr unsigned SS0 = TileDataSrc0::RowStride;
     constexpr unsigned SS1 = TileDataSrc1::RowStride;
-    TAddDeqRelu<TileDataDst, TileDataSrc0, TileDataSrc1, DS, SS0, SS1>(dst.data(), src0.data(), src1.data(), deqScale,
-                                                                       dst.GetValidRow(), dst.GetValidCol());
+    TAddDeqRelu<TileDataDst, TileDataSrc0, TileDataSrc1, DStride, SS0, SS1>(
+        dst.data(), src0.data(), src1.data(), deqScale, dst.GetValidRow(), dst.GetValidCol());
 }
 
+} // namespace a5
 } // namespace pto
 #endif

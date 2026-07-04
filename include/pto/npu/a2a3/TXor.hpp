@@ -14,8 +14,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "pto/npu/a2a3/TBinOp.hpp"
+#include "pto/npu/a2a3/TUnaryOp.hpp"
 
 namespace pto {
+namespace a2a3 {
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
 PTO_INTERNAL void TXorCheck(const TileDataDst &dst, const TileDataSrc0 &src0, const TileDataSrc1 &src1,
                             const TileDataTmp &tmp)
@@ -47,14 +49,15 @@ template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, ty
 PTO_INTERNAL void TXOR_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp)
 {
     TXorCheck(dst, src0, src1, tmp);
-    TOR_IMPL(tmp, src0, src1);
+    MAP_INSTR_IMPL(TOR)(tmp, src0, src1);
     pipe_barrier(PIPE_V);
-    TAND_IMPL(dst, src0, src1);
+    MAP_INSTR_IMPL(TAND)(dst, src0, src1);
     pipe_barrier(PIPE_V);
-    TNOT_IMPL(dst, dst);
+    MAP_INSTR_IMPL(TNOT)(dst, dst);
     pipe_barrier(PIPE_V);
     TAND_IMPL(dst, dst, tmp);
 }
+} // namespace a2a3
 } // namespace pto
 
 #endif

@@ -12,9 +12,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMOV_HPP
 #include "common.hpp"
 #include "TExtract.hpp"
-#include "pto/npu/a5/TPartAdd.hpp"
 
 namespace pto {
+namespace kirin9030 {
+
 template <typename DstTile, typename SrcTile>
 __tf__ PTO_INTERNAL void TMovToBt(typename DstTile::TileDType __out__ dst, typename SrcTile::TileDType __in__ src)
 {
@@ -487,5 +488,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTile &dst, SrcTile &src, FpTile &fp)
     SetFPC<FpTile>(fp.data());
     TMovCcToUb<DstTile, SrcTile, mode, quantPre, reluMode>(dst.data(), src.data(), m, n);
 }
+} // namespace kirin9030
 } // namespace pto
 #endif

@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 namespace pto {
+namespace kirin9030 {
 
 inline namespace TMatmulInternel {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
@@ -226,5 +227,6 @@ PTO_INTERNAL void TSETTF32MODE_IMPL()
     static_assert(!isEnable, "Fix: Kirin9030 does not support setting the TF32 mode to enabled.");
     set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
 }
+} // namespace kirin9030
 } // namespace pto
 #endif

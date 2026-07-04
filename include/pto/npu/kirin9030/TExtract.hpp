@@ -13,6 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 
 namespace pto {
+namespace kirin9030 {
+
 constexpr const int SHIFT_M_STEP_B8 = 1;   // 2^1 = 2
 constexpr const int M_STEP_MIN_VAL_B8 = 2; // m_step per loop for fp8
 
@@ -842,5 +844,6 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTile &dst, SrcTile &src, FpTile &fp, uint16_t
     TExtractAccToVec<DstTile, SrcTile, mode, quantPre, reluMode>(
         dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(), indexRow, indexCol);
 }
+} // namespace kirin9030
 } // namespace pto
 #endif // TEXTRACT_HPP
