@@ -103,14 +103,10 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTileData &dst, SrcTileData &src)
                   "TSCATTER: expect same type size for dst and src");
 
     if constexpr (ScatterType == ScatterAxis::SCATTER_ROW) {
-        const unsigned expectedSrcCols = CountSelected(maskPattern, dst.GetValidCol());
-        assert(src.GetValidCol() == expectedSrcCols);
-        assert(src.GetValidRow() == dst.GetValidRow());
+        assert(dst.GetValidCol() == DstTileData::Cols);
         TScatter<maskPattern, DstTileData, SrcTileData>(dst.data(), src.data(), src.GetValidRow(), dst.GetValidCol());
     } else {
-        const unsigned expectedSrcRows = CountSelected(maskPattern, dst.GetValidRow());
-        assert(src.GetValidRow() == expectedSrcRows);
-        assert(src.GetValidCol() == dst.GetValidCol());
+        assert(dst.GetValidRow() == DstTileData::Rows);
         TScatterCol<maskPattern, DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(),
                                                            dst.GetValidCol());
     }
