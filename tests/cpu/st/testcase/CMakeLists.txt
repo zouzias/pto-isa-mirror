@@ -143,6 +143,7 @@ tstore_quant
 tstore_conv
 tsub
 tsubc
+tsubrelu
 tsubs
 tsubsc
 tsubview
