@@ -44,17 +44,6 @@ PTO_INLINE bool MaskSelect(MaskPattern pat, unsigned idx)
     }
 }
 
-PTO_INLINE unsigned CountSelected(MaskPattern pattern, unsigned n)
-{
-    unsigned cnt = 0;
-    for (unsigned i = 0; i < n; ++i) {
-        if (MaskSelect(pattern, i)) {
-            ++cnt;
-        }
-    }
-    return cnt;
-}
-
 template <typename IndexT>
 PTO_INLINE bool IndexInBounds(IndexT raw, std::size_t n)
 {
@@ -154,12 +143,12 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "TGATHER: expect row major");
     static_assert((sizeof(typename DstTileData::DType) == sizeof(T)), "TGATHER: expect same type size for dst and src");
     if constexpr (gatherType == GatherAxis::GATHER_ROW) {
+        assert(dst.GetValidRow() == src.GetValidRow());
         assert(dst.GetValidCol() == DstTileData::Cols);
         TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
     } else {
-        const unsigned expectedRows = CountSelected(maskPattern, src.GetValidRow());
-        assert(dst.GetValidRow() == expectedRows);
         assert(dst.GetValidCol() == src.GetValidCol());
+        assert(dst.GetValidRow() == DstTileData::Rows);
         TGatherCol<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
     }
 }
