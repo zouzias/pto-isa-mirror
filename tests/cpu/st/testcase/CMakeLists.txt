@@ -83,6 +83,7 @@ thistogram
 timg2col
 tinsert
 tinsert_quant
+tinterleave
 tload
 tloadconv
 tlog
