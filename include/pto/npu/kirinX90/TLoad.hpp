@@ -42,8 +42,27 @@ PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typena
     if (l1Gap == 0) {
         lenBurst = lenBurst >> SHIFT_BLOCK_BYTE;
         gmGap = gmGap >> SHIFT_BLOCK_BYTE;
+        pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
+        return;
     }
-    pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
+    if (lenBurst <= UINT16_MAX) {
+        pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
+        return;
+    }
+    
+    for (uint16_t i = 0; i < nBurst; i++) {
+        for (uint16_t j = 0; j < (lenBurst + (uint32_t)UINT16_MAX - 1) / (uint32_t)UINT16_MAX; j++) {
+            uint32_t curLen = lenBurst - j * (uint32_t)UINT16_MAX;
+            if (curLen > (uint32_t)UINT16_MAX) {
+                curLen = (uint32_t)UINT16_MAX;
+            }
+            pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, 1, curLen, 0, 0);
+            src += curLen;
+            dst += curLen;
+        }
+        src += gmGap;
+        dst += l1Gap;
+    }
 }
 
 template <typename TileData, typename GlobalData>
