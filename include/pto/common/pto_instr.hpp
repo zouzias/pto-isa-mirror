@@ -52,7 +52,7 @@ PTO_INST void TSYNC()
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INST void SYNCALL()
 {
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
     SYNCALL_IMPL<CoreType>();
 #else
     PTO_STATIC_ASSERT(CoreType != CoreType, "SYNCALL is not supported on this backend.");
@@ -64,7 +64,7 @@ template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typen
                            int> = 0>
 PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0)
 {
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
         (void)gmWorkspace;
         (void)ubWorkspace;
@@ -85,7 +85,7 @@ template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typen
                            int> = 0>
 PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0)
 {
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
     if constexpr (Mode == SyncAllMode::Hard) {
         (void)gmWorkspace;
@@ -110,7 +110,7 @@ template <
                      int> = 0>
 PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace, int32_t usedCores = 0)
 {
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
         (void)gmWorkspace;
         (void)ubWorkspace;
@@ -523,7 +523,7 @@ PTO_INST RecordEvent TSUBC(TileData &dst, TileData &src0, TileData &src1, TileDa
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
           typename... WaitEvents>
 PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
@@ -933,7 +933,7 @@ PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &...event
     return {};
 }
 #endif
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &...events)
 {
@@ -1017,7 +1017,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &...events)
@@ -2027,7 +2027,7 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, GlobalIdx &indexes, 
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 template <Coalesce CMode, GatherOOB Mode, GatherExec Exec, typename TileDst, typename GlobalData, typename GlobalIdx,
           typename GlobalScratch>
 PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, GlobalIdx &indexes, GlobalScratch &scratch)
@@ -2045,7 +2045,7 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
 template <Coalesce Mode, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &...events)
 {
@@ -2309,7 +2309,7 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
 }
 #endif
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)
 template <HistByte byte, typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename... WaitEvents>
 PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, WaitEvents &...events)
 {

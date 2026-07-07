@@ -79,6 +79,8 @@ def get_simulator_info(ascend_home, soc_version):
     soc_candidates = [soc_version]
     if soc_version == "Ascend950PR_9599":
         soc_candidates.extend(["Ascend910_9599"])
+    elif soc_version == "Ascend960":
+        soc_candidates.extend(["dav_9201"])
     for candidate in soc_candidates:
         camodel_path = os.path.join(simulator_home, candidate, "camodel")
         lib_path = os.path.join(simulator_home, candidate, "lib")
@@ -295,7 +297,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030 / kirinX90")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / a6 / kirin9030 / kirinX90")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
@@ -311,6 +313,8 @@ def main():
         default_soc_version = "Kirin9030"
     elif args.soc_version == "kirinX90":
         default_soc_version = "KirinX90"
+    elif args.soc_version == "a6":
+        default_soc_version = "Ascend960"
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
@@ -329,6 +333,8 @@ def main():
 
         if is_comm and args.soc_version == "a5":
             target_dir = target_dir + "/npu/a5/comm/st"
+        elif is_comm and args.soc_version == "a6":
+            target_dir = target_dir + "/npu/a6/comm/st"
         elif is_comm:
             target_dir = target_dir + "/npu/a2a3/comm/st"
         elif args.soc_version == "a3":
@@ -337,6 +343,8 @@ def main():
             target_dir = target_dir + "/npu/kirin9030/src/st"
         elif args.soc_version == "kirinX90":
             target_dir = target_dir + "/npu/kirinX90/src/st"
+        elif args.soc_version == "a6":
+            target_dir = target_dir + "/npu/a6/src/st"
         else : # a5
             target_dir = target_dir + "/npu/a5/src/st"
 

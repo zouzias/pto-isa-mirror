@@ -66,6 +66,7 @@ checkopts() {
   ENABLE_PACKAGE=FALSE
   ENABLE_A3=FALSE
   ENABLE_A5=FALSE
+  ENABLE_A6=FALSE
   ENABLE_CPU=FALSE
   ENABLE_CPU_BF16=FALSE
   ENABLE_COMM=FALSE
@@ -76,7 +77,7 @@ checkopts() {
   INST_NAME=""
   AUTO_MODE=FALSE
 
-  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,run_all,a3,a5,sim,npu,comm,cpu,cpu_bf16,auto_mode,run_simple,build,cann_3rd_lib_path: -- "$@") || {
+  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,run_all,a3,a5,a6,sim,npu,comm,cpu,cpu_bf16,auto_mode,run_simple,build,cann_3rd_lib_path: -- "$@") || {
   usage
   exit 1
   }
@@ -107,6 +108,10 @@ checkopts() {
         ;;
       --a5)
         ENABLE_A5=TRUE
+        shift
+        ;;
+      --a6)
+        ENABLE_A6=TRUE
         shift
         ;;
       --comm)
@@ -158,14 +163,16 @@ checkopts() {
 build_only() {
   echo $dotted_line
   echo "build only"
-  if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
+  if [ "$ENABLE_A3" = "TRUE" ]; then
     python3 tests/script/build_st.py -r npu -v a3 -t all
-  elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+  fi
+  if [ "$ENABLE_A5" = "TRUE" ]; then
     python3 tests/script/build_st.py -r npu -v a5 -t all
-  elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    python3 tests/script/build_st.py -r npu -v a3 -t all
-    python3 tests/script/build_st.py -r npu -v a5 -t all
-  else
+  fi
+  if [ "$ENABLE_A6" = "TRUE" ]; then
+    python3 tests/script/build_st.py -r npu -v a6 -t all
+  fi
+  if [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "FALSE" ] && [ "$ENABLE_A6" = "FALSE" ]; then
     python3 tests/script/build_st.py -r npu -v a5 -t all
   fi
   echo "build end"
@@ -176,13 +183,16 @@ run_simple_st() {
   echo "Start to run simple st"
   chmod +x ./tests/run_st.sh
   ARGS=" "
-  if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
+  if [ "$ENABLE_A3" = "TRUE" ]; then
     ARGS+="--a3 "
-  elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+  fi
+  if [ "$ENABLE_A5" = "TRUE" ]; then
     ARGS+="--a5 "
-  elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="--a3_a5 "
-  else
+  fi
+  if [ "$ENABLE_A6" = "TRUE" ]; then
+    ARGS+="--a6 "
+  fi
+  if [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "FALSE" ] && [ "$ENABLE_A6" = "FALSE" ]; then
     ARGS+="--a3 "
   fi
   ARGS+="--$RUN_TYPE --simple "
@@ -198,13 +208,16 @@ run_comm_st() {
   echo "Start to run comm st"
   chmod +x ./tests/run_st.sh
   ARGS="--comm "
-  if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
+  if [ "$ENABLE_A3" = "TRUE" ]; then
     ARGS+="--a3 "
-  elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+  fi
+  if [ "$ENABLE_A5" = "TRUE" ]; then
     ARGS+="--a5 "
-  elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="--a3_a5 "
-  else
+  fi
+  if [ "$ENABLE_A6" = "TRUE" ]; then
+    ARGS+="--a6 "
+  fi
+  if [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "FALSE" ] && [ "$ENABLE_A6" = "FALSE" ]; then
     ARGS+="--a3 "
   fi
   ARGS+="--$RUN_TYPE "
@@ -231,13 +244,16 @@ run_all_st() {
   echo "Start to run all st"
   chmod +x ./tests/run_st.sh
   ARGS=" "
-  if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
+  if [ "$ENABLE_A3" = "TRUE" ]; then
     ARGS+="--a3 "
-  elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+  fi
+  if [ "$ENABLE_A5" = "TRUE" ]; then
     ARGS+="--a5 "
-  elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="--a3_a5 "
-  else
+  fi
+  if [ "$ENABLE_A6" = "TRUE" ]; then
+    ARGS+="--a6 "
+  fi
+  if [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "FALSE" ] && [ "$ENABLE_A6" = "FALSE" ]; then
     ARGS+="--a3 "
   fi
   ARGS+="--$RUN_TYPE --all "

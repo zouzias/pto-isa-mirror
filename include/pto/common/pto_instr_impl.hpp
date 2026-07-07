@@ -196,7 +196,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #endif
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/SyncAll.hpp"
@@ -333,13 +333,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Async L2 cache prefetch via SDMA CMO. Dispatched per-arch like other NPU
 // instruction headers; both wrappers pull in the same arch-neutral SDMA-backed
 // implementation (the actual SQE-field differences are handled inside the SDMA
-// helpers via `#ifdef PTO_NPU_ARCH_A5`). Guarded so that costmodel and CPU sim
+// helpers via `#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)`). Guarded so that costmodel and CPU sim
 // builds pick up their own variant from the blocks below.
 #if defined(__CCE_AICORE__) && !(defined(__CPU_SIM) || defined(__COSTMODEL))
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TPrefetchAsync.hpp"
 #endif
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 #include "pto/npu/a5/TPrefetchAsync.hpp"
 #endif
 #endif

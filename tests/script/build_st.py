@@ -32,6 +32,24 @@ def run_command(command, cwd=None, check=True):
         raise
 
 
+def get_simulator_info(ascend_home, soc_version):
+    simulator_home = os.path.join(ascend_home, "tools", "simulator")
+    soc_candidates = [soc_version]
+    if soc_version == "Ascend950PR_9599":
+        soc_candidates.extend(["Ascend910_9599"])
+    elif soc_version == "Ascend960":
+        soc_candidates.extend(["dav_9201"])
+    for candidate in soc_candidates:
+        camodel_path = os.path.join(simulator_home, candidate, "camodel")
+        lib_path = os.path.join(simulator_home, candidate, "lib")
+        if os.path.isdir(camodel_path):
+            return candidate, camodel_path
+        elif os.path.isdir(lib_path):
+            return candidate, lib_path
+    print(f"Warning: Neither 'camodel' nor 'lib' found in {os.path.join(simulator_home, soc_version)}")
+    return soc_version, os.path.join(simulator_home, soc_version, "lib")
+
+
 def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
@@ -41,11 +59,17 @@ def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
         shutil.rmtree(build_dir)
     os.makedirs(build_dir, exist_ok=True)
 
+    cmake_soc = soc_version
+    if run_mode == "sim":
+        ascend_home = os.environ.get("ASCEND_HOME_PATH", "")
+        if ascend_home:
+            cmake_soc, _ = get_simulator_info(ascend_home, soc_version)
+
     try:
         cmake_cmd = [
             "cmake",
             f"-DRUN_MODE={run_mode}",
-            f"-DSOC_VERSION={soc_version}",
+            f"-DSOC_VERSION={cmake_soc}",
             f"-DTEST_CASE={testcase}",
             ".."
         ]
@@ -97,7 +121,7 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirinX90 / kirin9030")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / a6 / kirinX90 / kirin9030")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-a", "--auto-mode-enable", action='store_true', help="开启auto模式")
@@ -106,6 +130,8 @@ def main():
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
         default_soc_version = "Ascend950PR_9599"
+    elif args.soc_version == "a6":
+        default_soc_version = "Ascend960"
     elif args.soc_version == "kirinX90":
         default_soc_version = "KirinX90"
     elif args.soc_version == "kirin9030":
@@ -122,6 +148,8 @@ def main():
 
         if args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
+        elif args.soc_version == "a6":
+            target_dir = target_dir + "/npu/a6/src/st"
         elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
             target_dir = target_dir + "/npu/kirin9030/src/st"
         else : # a5

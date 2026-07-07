@@ -60,7 +60,7 @@ PTO_INTERNAL void SetValue(__gm__ uint8_t *addr, UbTmpBuf &tmpBuf, uint32_t sync
     *ubPtr = x;
     pipe_barrier(PIPE_ALL);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
     copy_ubuf_to_gm_align_v2(reinterpret_cast<__gm__ uint32_t *>(addr), reinterpret_cast<__ubuf__ uint32_t *>(ubPtr), 0,
                              1, static_cast<uint32_t>(sizeof(T)), 0, 0, 0);
 #else
@@ -76,7 +76,7 @@ PTO_INTERNAL T GetValue(__gm__ uint8_t *addr, UbTmpBuf &tmpBuf)
 {
     __ubuf__ T *ubPtr = reinterpret_cast<__ubuf__ T *>(tmpBuf.addr);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
     copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(ubPtr), reinterpret_cast<__gm__ uint32_t *>(addr), 0,
                              1, static_cast<uint32_t>(sizeof(T)), 0, 0, 0, 0, 0, 0);
 #else
@@ -106,7 +106,7 @@ PTO_INTERNAL void AddOneMemcpySqe(__gm__ BatchWriteChannelInfo *channelInfo, __g
     __gm__ BatchWriteItem *sqe = (__gm__ BatchWriteItem *)(channelInfo->sq_base);
     sqe += (sqTail % channelInfo->sq_depth);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
     sqe->type = RT_STARS_SQE_TYPE_SDMA;
     sqe->wrCqe = 1;
     sqe->numBlocks = 0;
@@ -253,7 +253,7 @@ PTO_INTERNAL void SubmitFlagTransferSqes(__gm__ BatchWriteChannelInfo *batchWrit
         *reinterpret_cast<__ubuf__ uint64_t *>(ub + 8) = reinterpret_cast<uint64_t>(channelInfo);
         pipe_barrier(PIPE_ALL);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
         copy_ubuf_to_gm_align_v2(reinterpret_cast<__gm__ uint32_t *>(sendBuf),
                                  reinterpret_cast<__ubuf__ uint32_t *>(ub), 0, 1, kMinSdmaTransferBytes, 0, 0, 0);
 #else
@@ -283,7 +283,7 @@ PTO_INTERNAL void FlushCacheAndRingDoorbell(__gm__ BatchWriteChannelInfo *batchW
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
         SetValue<uint32_t>((__gm__ uint8_t *)(channelInfo->sq_reg_base), tmpBuf, syncId, sqTail[queueId]);
 #else
         SetValue<uint32_t>((__gm__ uint8_t *)(channelInfo->sq_reg_base) + 8, tmpBuf, syncId, sqTail[queueId]);
