@@ -106,6 +106,7 @@ tnot
 tnotify
 tor
 tors
+tpairreducesum
 tpartadd
 tpartargmax
 tpartargmin
