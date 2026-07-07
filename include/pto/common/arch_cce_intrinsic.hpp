@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2026 Huawei Technologies Co., Ltd.
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ PTO_INTERNAL void pto_vgatherb(T &dstReg, __ubuf__ U *base, S &idxReg, vector_bo
 {
 #if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
     vgatherb(dstReg, base, idxReg);
-#else
+#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
     vgatherb(dstReg, base, idxReg, mask);
 #endif
 }
@@ -160,7 +160,7 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
                                 loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false /* antiq_en */);
 #endif
 }
-#elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_A6)
+#elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)
 template <typename T>
 PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint16_t ndNum,
                                                   uint16_t nValue, uint16_t dValue, uint16_t srcNdMatrixStride,
