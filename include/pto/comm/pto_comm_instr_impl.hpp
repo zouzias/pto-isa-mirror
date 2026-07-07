@@ -51,6 +51,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/a5/TReduce.hpp"
 #endif
 
+#ifdef PTO_NPU_ARCH_A6
+
+#endif
+
 #endif
 
 #ifdef __CPU_SIM
