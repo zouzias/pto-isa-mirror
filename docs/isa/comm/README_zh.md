@@ -81,40 +81,20 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 | 值 | 说明 |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA 引擎。当前异步路径仅支持扁平连续的逻辑一维 tensor。|
-| `DmaEngine::URMA` | URMA 引擎（User-level RDMA Memory Access）。仅支持扁平连续的逻辑一维 tensor；仅在 Ascend950（NPU_ARCH 3510）上可用，且要求 CANN Toolkit **>= 9.1.0**。|
-
-### CollEngine
-
-集合通信指令（`TGATHER`、`TSCATTER`、`TREDUCE`、`TBROADCAST`）的后端引擎选择：
-
-| 值 | 说明 |
-|-------|-------------|
-| `CollEngine::AIV` | 默认。在 AI Vector 上通过 `TLOAD` + 计算 + `TSTORE` 的 tile 路径执行。|
-| `CollEngine::CCU` | AIV 触发 CKE gate，由 CCU 硬件执行实际的集合通信。仅在 Ascend950（NPU_ARCH 3510）上可用。选用此后端时，调用方需要传入 `CcuTriggerContext` 作为第一个可变参数。|
-
-### CcuTriggerContext
-
-`CollEngine::CCU` 场景下由宿主传递给 AIV kernel 的不透明上下文。宿主在启动 kernel 前通过 `ccu::TryGet()` + `rtGetDevResAddress()` 填充。
-
-```cpp
-struct CcuTriggerContext {
-    uint64_t ckeSlotVA;  // 来自 rtGetDevResAddress(dieId, ckeId)
-    uint32_t mask;       // 16 位 CKE 触发掩码
-};
-```
+| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输）|
+| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
 
 ### AsyncEvent
 
-由 `TPUT_ASYNC` / `TGET_ASYNC` 返回：
+由 `TPUT_ASYNC` / `TGET_ASYNC` 返回，用于同步传输完成状态：
 
 ```cpp
 struct AsyncEvent {
     uint64_t handle;
     DmaEngine engine;
 
-    bool valid() const;                           // handle != 0 时返回 true
-    bool Wait(const AsyncSession &session) const; // quiet 语义等待（详见 TPUT_ASYNC）
+    bool valid() const;                        // handle != 0 时返回 true
+    bool Wait(const AsyncSession &session) const; // 阻塞直到传输完成
     bool Test(const AsyncSession &session) const; // 非阻塞完成检测
 };
 ```
@@ -130,39 +110,22 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 
 定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
 
-### Signal / Signal2D / GlobalSignal
-
-用于信号同步（`TNOTIFY` / `TWAIT` / `TTEST`）的 `GlobalTensor` 别名：
-
-```cpp
-using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-// 稠密：stride = Cols；带步幅构造函数可传入自定义 DIM_3 stride 表示大网格子区域。
-template <int Rows, int Cols> struct Signal2D;
-
-// 通用别名：自定义形状/步幅时使用。
-template <typename E, typename S, typename St, Layout L = Layout::ND>
-using GlobalSignal = GlobalTensor<E, S, St, L>;
-```
-
 ### ParallelGroup
 
-多 NPU 集合通信（`TGATHER` / `TSCATTER` / `TREDUCE` / `TBROADCAST`）的包装器：
+用于多 NPU 集合通信的包装器：
 
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
-    GlobalData *tensors;   // 每个 rank 的 GlobalTensor 视图（本地或远端 GM）
-    int nranks;
-    int rootIdx;           // 组内所有 rank 必须传入相同的值
+    // 指向 `GlobalData` 对象数组的指针（每个对象封装一个 GM 地址）。
+    // 数组本身是本地元数据；封装的地址可以指向本地或远端 GM，
+    // 具体取决于集合通信指令的语义。
+    GlobalData *tensors;
+    int nranks;   // rank 总数
+    int rootIdx;  // 根 NPU 的 rank 索引
 
-    static ParallelGroup Create(GlobalData *tensorArray, int size, int rootIdx);
-
-    int  GetRootIdx() const;
-    int  GetSize()    const;
-    bool empty()      const;
-    GlobalData&       operator[](int teamRank);
-    const GlobalData& operator[](int teamRank) const;
+    // 工厂函数（推荐）：从已有 tensor 数组构建。
+    static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };
 ```
 

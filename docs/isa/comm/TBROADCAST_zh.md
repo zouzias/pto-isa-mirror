@@ -2,7 +2,7 @@
 
 ## 简介
 
-将当前 NPU 的数据广播到并行组中所有 rank。调用方 NPU 为根节点，其数据将被复制到组内所有 rank（当目标是根节点自身的 tensor slot 时也包含根节点本地缓冲区）。
+将当前 NPU 的数据广播到并行组中所有 rank。调用方 NPU 为根节点，其数据将被复制到所有其他 NPU。
 
 只有根节点需要执行 `TBROADCAST`。非根节点只需确保在操作期间其目标缓冲区已分配且可写。在非根节点上调用 `TBROADCAST` 属于未定义行为。
 
@@ -30,7 +30,7 @@ tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
 
 - `engine`：
     - `CollEngine::AIV`（默认）
-    - `CollEngine::CCU`（仅支持 Ascend950 / NPU_ARCH 3510）
+    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
 
 ## C++ 内建接口
 

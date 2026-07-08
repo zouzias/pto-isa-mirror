@@ -81,40 +81,20 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA engine. Current async path supports flat contiguous logical 1D tensors only. |
-| `DmaEngine::URMA` | URMA engine (User-level RDMA Memory Access). Supports flat contiguous logical 1D tensors only. Available on Ascend950 (NPU_ARCH 3510) only, and requires CANN Toolkit **>= 9.1.0**. |
-
-### CollEngine
-
-Backend engine selection for collective instructions (`TGATHER`, `TSCATTER`, `TREDUCE`, `TBROADCAST`):
-
-| Value | Description |
-|-------|-------------|
-| `CollEngine::AIV` | Default. Tile-based path using `TLOAD` + compute + `TSTORE` on AI Vector. |
-| `CollEngine::CCU` | AIV triggers the CKE gate; the CCU hardware performs the collective. Available on Ascend950 (NPU_ARCH 3510) only. When selected, the caller must pass a `CcuTriggerContext` as the first variadic argument. |
-
-### CcuTriggerContext
-
-Opaque host-to-kernel context for `CollEngine::CCU`. Host fills via `ccu::TryGet()` + `rtGetDevResAddress()` before kernel launch.
-
-```cpp
-struct CcuTriggerContext {
-    uint64_t ckeSlotVA;  // from rtGetDevResAddress(dieId, ckeId)
-    uint32_t mask;       // 16-bit CKE trigger mask
-};
-```
+| `DmaEngine::SDMA` | SDMA engine (supports 1D transfer) |
+| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only; requires CANN >= 9.1.0) |
 
 ### AsyncEvent
 
-Returned by `TPUT_ASYNC` / `TGET_ASYNC`:
+Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
 
 ```cpp
 struct AsyncEvent {
     uint64_t handle;
     DmaEngine engine;
 
-    bool valid() const;                           // true if handle != 0
-    bool Wait(const AsyncSession &session) const; // quiet-semantics wait (see TPUT_ASYNC)
+    bool valid() const;                        // true if handle != 0
+    bool Wait(const AsyncSession &session) const; // block until transfer completes
     bool Test(const AsyncSession &session) const; // non-blocking completion check
 };
 ```
@@ -130,38 +110,21 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 
 Defined in `include/pto/comm/async_common/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
 
-### Signal / Signal2D / GlobalSignal
-
-`GlobalTensor` aliases for signal-based synchronization (`TNOTIFY` / `TWAIT` / `TTEST`):
-
-```cpp
-using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-// Dense: stride = Cols; strided ctor takes a custom DIM_3 stride for sub-region views.
-template <int Rows, int Cols> struct Signal2D;
-
-// Generic alias for custom shape/stride cases.
-template <typename E, typename S, typename St, Layout L = Layout::ND>
-using GlobalSignal = GlobalTensor<E, S, St, L>;
-```
-
 ### ParallelGroup
 
-Wrapper for multi-NPU collectives (`TGATHER` / `TSCATTER` / `TREDUCE` / `TBROADCAST`):
+Wrapper for collective communication across multiple NPUs:
 
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
-    GlobalData *tensors;   // per-rank GlobalTensor views (local or remote GM)
-    int nranks;
-    int rootIdx;           // all ranks must pass the same value
-
-    static ParallelGroup Create(GlobalData *tensorArray, int size, int rootIdx);
-
-    int  GetRootIdx() const;
-    int  GetSize()    const;
-    bool empty()      const;
-    GlobalData&       operator[](int teamRank);
-    const GlobalData& operator[](int teamRank) const;
+    // Pointer to an array of `GlobalData` objects (each wraps a GM address).
+    // The array itself is local metadata; the wrapped addresses may refer to local or remote GM,
+    // depending on the collective instruction.
+    GlobalData *tensors;
+    int nranks;   // Number of ranks
+    int rootIdx;  // Root NPU's rank index
+    
+    // Factory function (recommended): build from an existing tensor array.
+    static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };
 ```

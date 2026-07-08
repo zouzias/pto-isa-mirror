@@ -4,6 +4,7 @@
 
 Gather operation: the calling NPU (root) collects data from all ranks in the parallel group and concatenates the results along **DIM_3** (row dimension) into a local output buffer.
 
+
 Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TGATHER` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding — the same mechanism used by other PTO-COMM instructions.
@@ -29,7 +30,7 @@ Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ i
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950 / NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 
