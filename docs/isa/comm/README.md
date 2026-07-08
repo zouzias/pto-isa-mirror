@@ -4,6 +4,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 - Source of truth (C++ intrinsics): `include/pto/comm/pto_comm_inst.hpp`
 - Type definitions: `include/pto/comm/comm_types.hpp`
+- CCU DSL validation: [CCU_DSL_E2E](CCU_DSL_E2E.md)
 
 ## Point-to-Point Communication (Synchronous)
 - [**TPUT**](TPUT.md): Remote write (GM → UB → GM)

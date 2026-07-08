@@ -142,6 +142,7 @@ if(NOT TARGET ccu_gtest)
     endif()
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ccu_dsl.cmake")
 
 # CCU collective tests: same kernel build as pto_comm_st, but host additionally
 # links hccl and probes for hcomm CCU headers.  Source is main.cc (not main.cpp).
@@ -205,6 +206,7 @@ function(pto_comm_ccu_st NAME)
     find_path(_HCOMM_CCU_PROBE
         NAMES hcomm/ccu/ccu_kernel.h
         PATHS
+            ${ASCEND_HOME_PATH}/x86_64-linux/asc/include/adv_api/hccl/internal/hcomm/pkg_inc
             ${ASCEND_HOME_PATH}/pkg_inc
             ${ASCEND_HOME_PATH}/include
             ${PROJECT_SOURCE_DIR}/../../../../../../include
@@ -268,6 +270,7 @@ treduce_ccu
 tscatter_ccu
 tbroadcast_ccu
 tgather_ccu
+tgather_ccu_dsl
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
@@ -279,6 +282,12 @@ endif()
 
 foreach(TESTCASE ${ALL_TESTCASES})
 if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
-    add_subdirectory(${TESTCASE})
+    if(TESTCASE STREQUAL "tgather_ccu_dsl" AND NOT PTO_ENABLE_CCU_DSL)
+        if(DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE)
+            message(FATAL_ERROR "tgather_ccu_dsl requires -DPTO_ENABLE_CCU_DSL=ON")
+        endif()
+    else()
+        add_subdirectory(${TESTCASE})
+    endif()
 endif()
 endforeach()

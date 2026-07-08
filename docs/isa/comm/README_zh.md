@@ -4,6 +4,7 @@
 
 - 权威来源（C++ 内建接口）：`include/pto/comm/pto_comm_inst.hpp`
 - 类型定义：`include/pto/comm/comm_types.hpp`
+- CCU DSL 验证流程：[CCU_DSL_E2E](CCU_DSL_E2E.md)
 
 ## 点对点通信（同步）
 - [**TPUT**](TPUT_zh.md)：远程写（GM → UB → GM）

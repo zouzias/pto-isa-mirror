@@ -90,6 +90,13 @@ def get_simulator_info(ascend_home, soc_version):
     return soc_version, os.path.join(simulator_home, soc_version, "lib")
 
 
+def append_env_cmake_options(cmake_cmd, option_names):
+    for name in option_names:
+        value = os.environ.get(name, "")
+        if value:
+            cmake_cmd.append(f"-D{name}={value}")
+
+
 def build_project(run_mode, soc_version, testcase="all", debug_enable=False, auto_enable=False):
     original_dir = os.getcwd()
     # 清理并创建build目录
@@ -118,6 +125,14 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
             cmake_cmd.append("-DDEBUG_MODE=ON")
         if auto_enable:
             cmake_cmd.append("-DAUTO_MODE=ON")
+        if testcase.endswith("_dsl"):
+            cmake_cmd.append("-DPTO_ENABLE_CCU_DSL=ON")
+            append_env_cmake_options(cmake_cmd, [
+                "PTO_SOTAC_EXECUTABLE",
+                "PTO_CCU_ADAPTER_SO",
+                "PTO_CCU_ADAPTER_SOURCE_DIR",
+                "PTO_CCU_ADAPTER_INCLUDE_DIR",
+            ])
 
         subprocess.run(
             cmake_cmd,
@@ -170,7 +185,7 @@ def run_gen_data(golden_path):
 
 def needs_test_isolation(testcase):
     """CCU tests need process isolation (one mpirun per GTest case)."""
-    return testcase.endswith("_ccu")
+    return testcase.endswith("_ccu") or "_ccu_" in testcase
 
 
 def list_gtest_cases(testcase_dir, gtest_filter="*"):
