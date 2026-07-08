@@ -154,12 +154,14 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "TGATHER: expect row major");
     static_assert((sizeof(typename DstTileData::DType) == sizeof(T)), "TGATHER: expect same type size for dst and src");
     if constexpr (gatherType == GatherAxis::GATHER_ROW) {
+        const unsigned expectedDstCols = CountSelected(maskPattern, src.GetValidCol());
+        assert(dst.GetValidCol() == expectedDstCols);
         assert(dst.GetValidCol() == DstTileData::Cols);
         TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
     } else {
-        const unsigned expectedRows = CountSelected(maskPattern, src.GetValidRow());
-        assert(dst.GetValidRow() == expectedRows);
-        assert(dst.GetValidCol() == src.GetValidCol());
+        const unsigned expectedDstRows = CountSelected(maskPattern, src.GetValidRow());
+        assert(dst.GetValidRow() == expectedDstRows);
+        assert(dst.GetValidRow() == DstTileData::Rows);
         TGatherCol<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
     }
 }
