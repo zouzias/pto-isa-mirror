@@ -2,8 +2,7 @@
 
 ## Introduction
 
-Reduce operation: gather data from multiple remote NPUs and perform element-wise reduction locally. 
-
+Reduce operation: gather data from multiple remote NPUs and perform element-wise reduction locally.
 
 Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TREDUCE` on non-root ranks is undefined behavior.
 
@@ -31,7 +30,7 @@ Lowering introduces internal accumulator and receive tiles for the reduce pipeli
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend950 / NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 
@@ -87,12 +86,11 @@ void reduce_sum(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, 
                                  BaseShape2D<T, 1, SIZE, Layout::ND>, Layout::ND>;
 
-    // Stack-allocated tensors
     GTensor tensors[NRANKS];
     for (int i = 0; i < NRANKS; ++i) {
         tensors[i] = GTensor(group_addrs[i]);
     }
-    
+
     comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
     GTensor dstG(result);
     TileT accTile, recvTile;
@@ -118,11 +116,40 @@ void reduce_max(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     for (int i = 0; i < NRANKS; ++i) {
         tensors[i] = GTensor(group_addrs[i]);
     }
-    
+
     comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
     GTensor dstG(result);
     TileT accTile, recvTile;
 
     comm::TREDUCE(group, dstG, accTile, recvTile, comm::ReduceOp::Max);
+}
+```
+
+### Ping-Pong Reduce (Double Buffering)
+
+Uses one accumulator tile plus two receive tiles to overlap `TLOAD` of the next chunk with the `ReduceTiles` compute on the current chunk.
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int SIZE, int NRANKS>
+void reduce_sum_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
+    using TileT = Tile<TileType::Vec, T, 1, SIZE>;
+    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>,
+                                 BaseShape2D<T, 1, SIZE, Layout::ND>, Layout::ND>;
+
+    GTensor tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) {
+        tensors[i] = GTensor(group_addrs[i]);
+    }
+
+    comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
+    GTensor dstG(result);
+    TileT accTile, pingTile, pongTile;
+
+    // Ping-pong: overlaps TLOAD of the next remote chunk with the reduce on the current chunk
+    comm::TREDUCE(group, dstG, accTile, pingTile, pongTile, comm::ReduceOp::Sum);
 }
 ```

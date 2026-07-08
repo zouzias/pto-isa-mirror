@@ -4,7 +4,6 @@
 
 Scatter operation: the calling NPU (root) distributes data to all ranks in the parallel group by splitting the local source tensor along **DIM_3** (row dimension). This is the inverse of `TGATHER`.
 
-
 Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation. Calling `TSCATTER` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the per-rank data exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding.
@@ -28,7 +27,7 @@ Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ i
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend950 / NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 

@@ -31,7 +31,7 @@ treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<
 
 - `engine`：
     - `CollEngine::AIV`（默认）
-    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
+    - `CollEngine::CCU`（仅支持 Ascend950 / NPU_ARCH 3510）
 
 ## C++ 内建接口
 
@@ -117,6 +117,33 @@ void reduce_max(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     GTensor dstG(result);
     TileT accTile, recvTile;
     comm::TREDUCE(group, dstG, accTile, recvTile, comm::ReduceOp::Max);
+}
+```
+
+### 乒乓 Reduce（双缓冲）
+
+使用一个累加 Tile 加两个接收 Tile，将下一块的 `TLOAD` 与当前块的 `ReduceTiles` 计算重叠执行。
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int SIZE, int NRANKS>
+void reduce_sum_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
+    using TileT   = Tile<TileType::Vec, T, 1, SIZE>;
+    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>,
+                                 BaseShape2D<T, 1, SIZE, Layout::ND>, Layout::ND>;
+
+    GTensor tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) tensors[i] = GTensor(group_addrs[i]);
+
+    comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
+    GTensor dstG(result);
+    TileT accTile, pingTile, pongTile;
+
+    // 乒乓模式：将下一块远端数据的 TLOAD 与当前块的归约计算重叠执行
+    comm::TREDUCE(group, dstG, accTile, pingTile, pongTile, comm::ReduceOp::Sum);
 }
 ```
 

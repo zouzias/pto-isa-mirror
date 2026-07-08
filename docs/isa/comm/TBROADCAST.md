@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Broadcast data from current NPU to all ranks in the parallel group. The calling NPU is the root and its data is copied to all other NPUs.
+Broadcast data from current NPU to all ranks in the parallel group. The calling NPU is the root and its data is copied to all ranks in the group (including the root's own local buffer when the destination is the root's own tensor slot).
 
 Only the root needs to execute `TBROADCAST`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation. Calling `TBROADCAST` on non-root ranks is undefined behavior.
 
@@ -29,7 +29,7 @@ Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ i
 
 - `engine`:
     - `CollEngine::AIV` (default)
-    - `CollEngine::CCU` (Ascend950, NPU_ARCH 3510 only)
+    - `CollEngine::CCU` (Ascend950 / NPU_ARCH 3510 only)
 
 ## C++ Intrinsic
 

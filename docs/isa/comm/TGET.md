@@ -12,7 +12,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{local}}_{i,j} = \mathrm{src}^{\mathrm{remote}}_{i,j} $$
 
-Data flow: `srcGlobalData (remote GM)` ->`stagingTileData (UB)` ->`dstGlobalData (local GM)`
+Data flow: `srcGlobalData (remote GM)` → `stagingTileData (UB)` → `dstGlobalData (local GM)`
 
 ## Assembly Syntax
 
@@ -76,11 +76,6 @@ void example_tget(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT = Tile<TileType::Vec, T, 16, 16>;
     using GShape = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
-    /* 
-    If the globalTensor is larger than UB Tile, TGET will perform 2D sliding automatically. 
-    using GShape = Shape<1, 1, 1, 4096, 4096>;
-    using GStride = BaseShape2D<T, 4096, 4096, Layout::ND>;
-    */
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
     GTensor srcG(remote_addr);

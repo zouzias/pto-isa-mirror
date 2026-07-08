@@ -14,9 +14,9 @@ Data flow:
     - `DmaEngine::SDMA` (default)
     - `DmaEngine::URMA` (Ascend950, NPU_ARCH 3510 only)
 
-> **Important (SDMA path)**  
-> `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  
-> Non-1D or non-contiguous layouts are not supported by the current SDMA async implementation.
+> **Important**
+> Both `DmaEngine::SDMA` and `DmaEngine::URMA` paths currently support **only flat contiguous logical 1D tensors**.
+> Non-1D or non-contiguous layouts are not supported by the current async implementation.
 
 ## C++ Intrinsic
 

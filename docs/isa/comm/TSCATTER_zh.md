@@ -28,7 +28,7 @@ tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
 
 - `engine`：
     - `CollEngine::AIV`（默认）
-    - `CollEngine::CCU`（Ascend950，仅 NPU_ARCH 3510）
+    - `CollEngine::CCU`（仅支持 Ascend950 / NPU_ARCH 3510）
 
 ## C++ 内建接口
 

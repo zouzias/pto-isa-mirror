@@ -14,9 +14,9 @@
     - `DmaEngine::SDMA`（默认）
     - `DmaEngine::URMA`（Ascend950，仅 NPU_ARCH 3510）
 
-> **注意（SDMA 路径）**
-> `TPUT_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
-> 当前 SDMA 异步实现不支持非一维或非连续布局。
+> **重要**
+> `DmaEngine::SDMA` 与 `DmaEngine::URMA` 两条路径目前均**仅支持扁平连续的逻辑一维 tensor**。
+> 当前异步实现不支持非一维或非连续布局。
 
 ## C++ 内建接口
 
@@ -88,7 +88,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 - URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
 - URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
 - URMA 要求 CANN Toolkit **>= 9.1.0**
-- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 小页，导致注册失败
+- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层 MR 注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到 4KB 页，导致注册失败
 
 若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
 
@@ -122,7 +122,7 @@ URMA 不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直
 
 这意味着多次 `TPUT_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有 pending 操作完成（类似 shmem 的 quiet 语义）。
 
-wait 成功后，所有已发出的 `dstGlobalData` 写入均已全部完成。
+`Wait` 成功后，所有已发出的 `dstGlobalData` 写入均已全部完成。
 
 ## 示例
 
