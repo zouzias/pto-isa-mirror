@@ -29,7 +29,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ### NotifyOp
 
-Operation type for `TNOTIFY` (defined in `include/pto/comm/comm_types.hpp`):
+Operation type for `TNOTIFY`:
 
 | Value | Description |
 |-------|-------------|
@@ -95,20 +95,18 @@ Backend engine selection for collective instructions (`TGATHER`, `TSCATTER`, `TR
 
 ### CcuTriggerContext
 
-Opaque context passed from the host to the AIV kernel when `CollEngine::CCU` is selected. The host fills it via `ccu::TryGet()` + `rtGetDevResAddress()` before kernel launch.
+Opaque host-to-kernel context for `CollEngine::CCU`. Host fills via `ccu::TryGet()` + `rtGetDevResAddress()` before kernel launch.
 
 ```cpp
 struct CcuTriggerContext {
-    uint64_t ckeSlotVA;  // CKE slot VA from rtGetDevResAddress(dieId, ckeId)
+    uint64_t ckeSlotVA;  // from rtGetDevResAddress(dieId, ckeId)
     uint32_t mask;       // 16-bit CKE trigger mask
 };
 ```
 
-See `tests/npu/a5/comm/st/testcase/tbroadcast_ccu/` for a complete host + device example.
-
 ### AsyncEvent
 
-Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
+Returned by `TPUT_ASYNC` / `TGET_ASYNC`:
 
 ```cpp
 struct AsyncEvent {
@@ -116,12 +114,10 @@ struct AsyncEvent {
     DmaEngine engine;
 
     bool valid() const;                           // true if handle != 0
-    bool Wait(const AsyncSession &session) const; // block until all pending ops complete (quiet semantics)
+    bool Wait(const AsyncSession &session) const; // quiet-semantics wait (see TPUT_ASYNC)
     bool Test(const AsyncSession &session) const; // non-blocking completion check
 };
 ```
-
-`Wait` follows quiet semantics: a single `Wait` on the most recent event drains **all** async operations issued since the previous `Wait`. See [TPUT_ASYNC](TPUT_ASYNC.md) / [TGET_ASYNC](TGET_ASYNC.md) for details.
 
 ### AsyncSession
 
@@ -136,61 +132,35 @@ Defined in `include/pto/comm/async_common/async_types.hpp`. See [TPUT_ASYNC](TPU
 
 ### Signal / Signal2D / GlobalSignal
 
-Convenience GlobalTensor aliases for signal-based synchronization (`TNOTIFY`, `TWAIT`, `TTEST`). Defined in `include/pto/comm/comm_types.hpp`.
+`GlobalTensor` aliases for signal-based synchronization (`TNOTIFY` / `TWAIT` / `TTEST`):
 
 ```cpp
-// Scalar 1-element signal:
-//   equivalent to GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>
 using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-// 2-D signal matrix with compile-time shape.
-// Dense constructor:  stride auto-derived from Cols (contiguous layout).
-// Strided constructor: pass a custom DIM_3 stride for sub-region views into a larger grid.
-template <int Rows, int Cols>
-struct Signal2D : GlobalTensor<int32_t, Shape<1,1,1,Rows,Cols>,
-                               Stride<1,1,1,DYNAMIC,1>, Layout::ND> {
-    Signal2D(int32_t *ptr);              // dense: stride = Cols
-    Signal2D(int32_t *ptr, int stride);  // strided: custom DIM_3 stride
-};
+// Dense: stride = Cols; strided ctor takes a custom DIM_3 stride for sub-region views.
+template <int Rows, int Cols> struct Signal2D;
 
-// Generic alias for signal-related instructions when you need a custom shape/stride.
-template <typename Element, typename Shape, typename Stride, Layout L = Layout::ND>
-using GlobalSignal = GlobalTensor<Element, Shape, Stride, L>;
-```
-
-Typical usage:
-
-```cpp
-comm::Signal sig(ptr);                         // scalar signal
-comm::Signal2D<4, 8> grid(matrix_ptr);         // dense 4x8 grid (stride = 8)
-comm::Signal2D<4, 8> sub(matrix_ptr, 128);     // 4x8 sub-region of a 128-col grid
+// Generic alias for custom shape/stride cases.
+template <typename E, typename S, typename St, Layout L = Layout::ND>
+using GlobalSignal = GlobalTensor<E, S, St, L>;
 ```
 
 ### ParallelGroup
 
-Wrapper for collective communication across multiple NPUs (`TGATHER`, `TSCATTER`, `TREDUCE`, `TBROADCAST`):
+Wrapper for multi-NPU collectives (`TGATHER` / `TSCATTER` / `TREDUCE` / `TBROADCAST`):
 
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
-    using value_type = GlobalData;
+    GlobalData *tensors;   // per-rank GlobalTensor views (local or remote GM)
+    int nranks;
+    int rootIdx;           // all ranks must pass the same value
 
-    // Pointer to an array of `GlobalData` objects (each wraps a GM address).
-    // The array itself is local metadata; the wrapped addresses may refer to local or remote GM,
-    // depending on the collective instruction.
-    GlobalData *tensors;
-    int nranks;   // Number of ranks in the group
-    int rootIdx;  // Root NPU's rank index within the group
-
-    // Direct constructor and factory function (recommended). All ranks in the group
-    // must pass the same rootIdx value.
-    ParallelGroup(GlobalData *tensorArray, int size, int rootIdx);
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rootIdx);
 
-    // Accessors
-    int  GetRootIdx() const;                   // rootIdx
-    int  GetSize()    const;                   // nranks
-    bool empty()      const;                   // nranks == 0
+    int  GetRootIdx() const;
+    int  GetSize()    const;
+    bool empty()      const;
     GlobalData&       operator[](int teamRank);
     const GlobalData& operator[](int teamRank) const;
 };

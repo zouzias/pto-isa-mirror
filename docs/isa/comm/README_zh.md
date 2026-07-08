@@ -29,7 +29,7 @@
 
 ### NotifyOp
 
-`TNOTIFY` 的操作类型（定义于 `include/pto/comm/comm_types.hpp`）：
+`TNOTIFY` 的操作类型：
 
 | 值 | 说明 |
 |-------|-------------|
@@ -95,20 +95,18 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 ### CcuTriggerContext
 
-当选择 `CollEngine::CCU` 时，由宿主传递给 AIV kernel 的不透明上下文。宿主在启动 kernel 前通过 `ccu::TryGet()` + `rtGetDevResAddress()` 填充。
+`CollEngine::CCU` 场景下由宿主传递给 AIV kernel 的不透明上下文。宿主在启动 kernel 前通过 `ccu::TryGet()` + `rtGetDevResAddress()` 填充。
 
 ```cpp
 struct CcuTriggerContext {
-    uint64_t ckeSlotVA;  // 来自 rtGetDevResAddress(dieId, ckeId) 的 CKE slot 虚拟地址
+    uint64_t ckeSlotVA;  // 来自 rtGetDevResAddress(dieId, ckeId)
     uint32_t mask;       // 16 位 CKE 触发掩码
 };
 ```
 
-完整的宿主 + 设备端示例参见 `tests/npu/a5/comm/st/testcase/tbroadcast_ccu/`。
-
 ### AsyncEvent
 
-由 `TPUT_ASYNC` / `TGET_ASYNC` 返回，用于同步传输完成状态：
+由 `TPUT_ASYNC` / `TGET_ASYNC` 返回：
 
 ```cpp
 struct AsyncEvent {
@@ -116,12 +114,10 @@ struct AsyncEvent {
     DmaEngine engine;
 
     bool valid() const;                           // handle != 0 时返回 true
-    bool Wait(const AsyncSession &session) const; // 阻塞直到所有 pending 操作完成（quiet 语义）
+    bool Wait(const AsyncSession &session) const; // quiet 语义等待（详见 TPUT_ASYNC）
     bool Test(const AsyncSession &session) const; // 非阻塞完成检测
 };
 ```
-
-`Wait` 遵循 quiet 语义：对最新返回的 event 调用一次 `Wait`，即可等待自上一次 `Wait` 以来发出的**所有**异步操作完成。详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md) / [TGET_ASYNC](TGET_ASYNC_zh.md)。
 
 ### AsyncSession
 
@@ -136,60 +132,35 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 
 ### Signal / Signal2D / GlobalSignal
 
-用于信号同步（`TNOTIFY`、`TWAIT`、`TTEST`）的 GlobalTensor 便捷别名。定义于 `include/pto/comm/comm_types.hpp`。
+用于信号同步（`TNOTIFY` / `TWAIT` / `TTEST`）的 `GlobalTensor` 别名：
 
 ```cpp
-// 标量单元素信号：
-//   等价于 GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>
 using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-// 编译期形状的二维信号矩阵。
-// 稠密构造函数：stride 由 Cols 自动推导（连续布局）。
-// 带步幅构造函数：传入自定义 DIM_3 stride，用于表示大信号网格中的子区域。
-template <int Rows, int Cols>
-struct Signal2D : GlobalTensor<int32_t, Shape<1,1,1,Rows,Cols>,
-                               Stride<1,1,1,DYNAMIC,1>, Layout::ND> {
-    Signal2D(int32_t *ptr);              // 稠密：stride = Cols
-    Signal2D(int32_t *ptr, int stride);  // 带步幅：自定义 DIM_3 stride
-};
+// 稠密：stride = Cols；带步幅构造函数可传入自定义 DIM_3 stride 表示大网格子区域。
+template <int Rows, int Cols> struct Signal2D;
 
-// 通用别名：需要自定义形状/步幅的信号场景使用。
-template <typename Element, typename Shape, typename Stride, Layout L = Layout::ND>
-using GlobalSignal = GlobalTensor<Element, Shape, Stride, L>;
-```
-
-典型用法：
-
-```cpp
-comm::Signal sig(ptr);                         // 标量信号
-comm::Signal2D<4, 8> grid(matrix_ptr);         // 稠密 4x8 网格（stride = 8）
-comm::Signal2D<4, 8> sub(matrix_ptr, 128);     // 从 128 列大网格中截取的 4x8 子区域
+// 通用别名：自定义形状/步幅时使用。
+template <typename E, typename S, typename St, Layout L = Layout::ND>
+using GlobalSignal = GlobalTensor<E, S, St, L>;
 ```
 
 ### ParallelGroup
 
-用于多 NPU 集合通信（`TGATHER`、`TSCATTER`、`TREDUCE`、`TBROADCAST`）的包装器：
+多 NPU 集合通信（`TGATHER` / `TSCATTER` / `TREDUCE` / `TBROADCAST`）的包装器：
 
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
-    using value_type = GlobalData;
+    GlobalData *tensors;   // 每个 rank 的 GlobalTensor 视图（本地或远端 GM）
+    int nranks;
+    int rootIdx;           // 组内所有 rank 必须传入相同的值
 
-    // 指向 `GlobalData` 对象数组的指针（每个对象封装一个 GM 地址）。
-    // 数组本身是本地元数据；封装的地址可以指向本地或远端 GM，
-    // 具体取决于集合通信指令的语义。
-    GlobalData *tensors;
-    int nranks;   // 组内 rank 总数
-    int rootIdx;  // 根 NPU 在组内的 rank 索引
-
-    // 直接构造函数与工厂函数（推荐）。组内所有 rank 必须传入相同的 rootIdx。
-    ParallelGroup(GlobalData *tensorArray, int size, int rootIdx);
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rootIdx);
 
-    // 访问器
-    int  GetRootIdx() const;                   // rootIdx
-    int  GetSize()    const;                   // nranks
-    bool empty()      const;                   // nranks == 0
+    int  GetRootIdx() const;
+    int  GetSize()    const;
+    bool empty()      const;
     GlobalData&       operator[](int teamRank);
     const GlobalData& operator[](int teamRank) const;
 };
