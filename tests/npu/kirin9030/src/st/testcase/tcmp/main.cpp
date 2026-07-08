@@ -134,7 +134,7 @@ TEST_F(TCMPTest, case_int32_32x32_32x32)
 {
     test_tcmp<int32_t, 32, 32, 32, 32, CmpMode::EQ>();
 }
-TEST_F(TCMPTest, case_int16_32x32_16x322)
+TEST_F(TCMPTest, case_int16_32x32_16x32)
 {
     test_tcmp<int16_t, 32, 32, 16, 32, CmpMode::EQ>();
 }

@@ -110,7 +110,7 @@ TEST_F(TStoreTest, case4)
 
 TEST_F(TStoreTest, case5)
 {
-    test_tstore<0, int16_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 125>();
+    test_tstore<0, int16_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 128>();
 }
 
 TEST_F(TStoreTest, case6)

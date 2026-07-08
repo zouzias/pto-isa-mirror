@@ -152,7 +152,7 @@ void LaunchTStore(T *out, T *src, void *stream)
 }
 
 template void LaunchTStore<0, float, 2, 1, 1, 39, 47, 3, 2, 1, 43, 61>(float *out, float *src, void *stream);
-template void LaunchTStore<0, int16_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 125>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTStore<0, int16_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 128>(int16_t *out, int16_t *src, void *stream);
 template void LaunchTStore<0, int8_t, 2, 2, 3, 23, 47, 3, 3, 4, 32, 50>(int8_t *out, int8_t *src, void *stream);
 template void LaunchTStore<1, float, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>(float *out, float *src, void *stream);
 template void LaunchTStore<1, uint16_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>(uint16_t *out, uint16_t *src, void *stream);

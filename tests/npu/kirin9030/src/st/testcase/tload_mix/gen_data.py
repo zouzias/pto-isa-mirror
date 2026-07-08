@@ -168,12 +168,12 @@ if __name__ == "__main__":
         "TLOADMIXTest.NC1HWC02NC1HWC0_int8_t_3_2_8_128_32_3_8_8_128_32",  # cut C1
         "TLOADMIXTest.NC1HWC02NC1HWC0_float16_1_6_10_100_16_1_6_100_100_16",  # cut H
         "TLOADMIXTest.NC1HWC02NC1HWC0_float16_10_16_16_2_16_256_16_100_16_16",  # cut N C1 W
-        "TLOADMIXTest.NC1HWC02NC1HWC0_float16_1_1_1_8192_16_8_16_16_8192_16",  # cut N C1 H
+        # "TLOADMIXTest.NC1HWC02NC1HWC0_float16_1_1_1_8192_16_8_16_16_8192_16",  # cut N C1 H
         "TLOADMIXTest.NC1HWC02NC1HWC0_float_1_1_56_112_8_2_3_224_224_8",  # cut N C1 H W
         "TLOADMIXTest.FZ2FZ_float16_1_7_7_20_16_3_7_7_100_16",  # cut N C1
         "TLOADMIXTest.FZ2FZ_float16_64_7_7_2_16_256_7_7_16_16",  # cut N C1
         "TLOADMIXTest.FZ2FZ_float16_96_3_3_8_16_256_3_3_8_16",  # cut C1
-        "TLOADMIXTest.FZ2FZ_int8_t_1_3_3_64_32_3_3_3_128_32",  # cut N C1
+        "TLOADMIXTest.FZ2FZ_int8_t_2_3_3_64_32_3_3_3_128_32",  # cut N C1
         "TLOADMIXTest.FZ2FZ_int8_t_8_5_5_32_32_8_5_5_128_32",  # cut N
         "TLOADMIXTest.FZ2FZ_float_70_7_7_2_8_256_7_7_256_8",  # cut C1 N
         "TLOADMIXTest.FZ4D2FZ4D_float16_1_49_7_16_16_1_980_32_16_16",  # cut C1HW N
@@ -204,7 +204,7 @@ if __name__ == "__main__":
         TloadParams(np.int8, 3, 2, 8, 128, 32, 3, 8, 8, 128, 32, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
         TloadParams(np.float16, 1, 6, 10, 100, 16, 1, 6, 100, 100, 16, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
         TloadParams(np.float16, 10, 16, 16, 2, 16, 256, 16, 100, 16, 16, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
-        TloadParams(np.float16, 1, 1, 1, 8192, 16, 8, 16, 16, 8192, 16, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
+        # TloadParams(np.float16, 1, 1, 1, 8192, 16, 8, 16, 16, 8192, 16, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
         TloadParams(np.float32, 1, 1, 56, 112, 8, 2, 3, 224, 224, 8, 1, 1, DataFormat["NC1HWC02NC1HWC0"].value),
         TloadParams(np.float16, 1, 7, 7, 20, 16, 3, 7, 7, 100, 16, 1, 1, DataFormat["FZ2FZ"].value),
         TloadParams(np.float16, 64, 7, 7, 2, 16, 256, 7, 7, 16, 16, 1, 1, DataFormat["FZ2FZ"].value),

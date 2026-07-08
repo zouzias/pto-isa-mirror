@@ -109,7 +109,7 @@ TEST_F(TGATHERBTest, case_int16_1x16384_1x2048_1x16384)
 {
     test_tgatherb<int16_t, 1, 16384, 1, 2048, 1, 16384>();
 }
-TEST_F(TGATHERBTest, case_uint16_257x128_257x8_257x128)
+TEST_F(TGATHERBTest, case_uint16_129x128_129x8_129x128)
 {
     test_tgatherb<uint16_t, 129, 128, 129, 8, 129, 128>();
 }
