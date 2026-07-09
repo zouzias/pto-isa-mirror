@@ -17,26 +17,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{base}_{i,j}^{\mathrm{exp}_{i,j}} $$
 
 For floating-point types, the computation follows: `dst = exp(ln(|base|) * exp)` with special case handling for negative base values and integer exponents.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tpow %base, %exp, %tmp : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tpow %base, %exp, %tmp : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tpow ins(%base, %exp, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -44,7 +24,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile,
           typename TmpTile, typename... WaitEvents>
-PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
+PTO_INST RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
 ```
 
 `PrecisionType` has the following values available:
@@ -77,7 +57,7 @@ PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTil
 
 ### A5 Implementation Checks
 
-- For `DEFAULT` algorithm: supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+- For `DEFAULT` algorithm: supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
 - For `HIGH_PRECISION` algorithm: supported element types are `half`, `float`, `bfloat16_t` (floating-point only).
 - Integer types use a separate integer power computation path.
 
@@ -129,30 +109,3 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tpow %base, %exp, %tmp : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dst = pto.tpow %base, %exp, %tmp : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tpow %base, %exp, %tmp : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tpow ins(%base, %exp, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```

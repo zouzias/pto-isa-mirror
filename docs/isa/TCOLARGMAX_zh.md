@@ -22,48 +22,6 @@ $$ \mathrm{dstVal}_{0,j} = \max_{0 \le i < R} \mathrm{src}_{i,j} $$
 
 $$ \mathrm{dstIdx}_{0,j} = \underset{0 \le i < R}{\operatorname{argmax}} \; \mathrm{src}_{i,j} $$
 
-## 汇编语法
-
-### 纯索引模式
-
-同步形式：
-
-```text
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-IR Level 1（SSA）：
-
-```text
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-IR Level 2（DPS）：
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-```
-
-### 值 + 索引模式
-
-同步形式：
-
-```text
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-```
-
-IR Level 1（SSA）：
-
-```text
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-IR Level 2（DPS）：
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`:
@@ -131,7 +89,7 @@ PTO_INST RecordEvent TCOLARGMAX(TileDataOutVal& dstVal, TileDataOutIdx& dstIdx, 
 - 当源元素大小为 2 字节（`half`、`uint16_t`）时：`dstIdx` 元素类型必须为 `uint16_t` 或 `int16_t`。
 - 当源元素大小为 4 字节（`float`、`uint32_t`）时：`dstIdx` 元素类型必须为 `uint32_t` 或 `int32_t`。
 - `tmp` 的元素类型必须与 `src` 一致。
-- `tmp` 用作临时存储；对 half 输入类型，内部执行 s16->f16->s32 转换路径。
+- `tmp` 用作临时存储。
 
 #### A5 实现检查
 
@@ -148,13 +106,13 @@ PTO_INST RecordEvent TCOLARGMAX(TileDataOutVal& dstVal, TileDataOutIdx& dstIdx, 
   |---|---|---|---|---|
   | `half` | 纯索引 | `tmp` | `tmp` | `tmp` |
   | `half` | 值+索引 | `tmp` | `tmp` | `dstIdx` |
-  | `float` | 纯索引 | `tmp` | `dstIdx` | `dstIdx` |
-  | `float` | 值+索引 | `tmp` | `dstIdx` | `dstIdx` |
+  | `float` | 纯索引 | `tmp` | `tmp` | `dstIdx` |
+  | `float` | 值+索引 | `tmp` | `tmp` | `dstIdx` |
 
 - `tmp` Tile 的数据类型必须与 `src` 的数据类型一致。
 - `tmp` Tile 在单行内被划分为最多三个区域：
   - 区域 0（`[0, tmpGapEles)`）：当前行索引计数器（每行递增）。始终存储在 `tmp` 中。
-  - 区域 1（`[tmpGapEles, 2 * tmpGapEles)`）：当前最大值元素，用于比较。`half` 类型存储在 `tmp` 中；`float` 类型存储在 `dstIdx` 中。
+  - 区域 1（`[tmpGapEles, 2 * tmpGapEles)`）：当前最大值元素，用于比较。始终存储在 `tmp` 中。
   - 区域 2（`[2 * tmpGapEles, 3 * tmpGapEles)`）：argmax 索引结果。仅在 `half` + 纯索引模式下存储在 `tmp` 中；其他情况存储在 `dstIdx` 中。
 - `tmpGapEles` 的确定方式：
   - 当 `srcValidCol >= elemPerRpt` 时：`tmpGapEles = elemPerRpt`。
@@ -262,54 +220,4 @@ void example_manual_val_idx() {
   TASSIGN(tmp, 0x3000);
   TCOLARGMAX(dstVal, dstIdx, src, tmp);
 }
-```
-
-## 汇编示例（ASM）
-
-### 纯索引自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 纯索引手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 值 + 索引自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### 值 + 索引手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO 汇编形式
-
-```text
-# 纯索引
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-# 值 + 索引
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-
-# IR Level 2 (DPS) - 纯索引
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-
-# IR Level 2 (DPS) - 值 + 索引
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
