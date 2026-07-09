@@ -74,7 +74,7 @@ PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &s
 ### 基础 Scatter（单暂存 Tile）
 
 根节点拥有 `NRANKS * ROWS` 行、宽度为 `COLS` 的数据，每个 rank 接收 `ROWS × COLS`，沿 DIM_3 拆分。
-Tile 大小可小于每 rank 的数据——此时实现会自动通过二维滑动进行分块传输。
+Tile 大小（`TILE_ROWS × TILE_COLS`）可小于每 rank 的数据——此时实现会自动沿 DIM_3 和 DIM_4 通过二维滑动进行分块传输。
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>

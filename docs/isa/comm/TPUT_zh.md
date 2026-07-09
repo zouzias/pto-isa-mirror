@@ -89,6 +89,11 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT   = Tile<TileType::Vec, T, 16, 16>;
     using GShape  = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
+    /*
+    如果 GlobalTensor 大于 UB Tile，TPUT 会自动执行二维滑动。
+    using GShape = Shape<1, 1, 1, 4096, 4096>;
+    using GStride = BaseShape2D<T, 4096, 4096, Layout::ND>;
+    */
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
     GTensor srcG(local_data);

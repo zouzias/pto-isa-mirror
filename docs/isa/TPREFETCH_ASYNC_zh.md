@@ -36,7 +36,7 @@ auto evt = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
 evt.Wait(ctx.session);
 ```
 
-指令内部使用默认参数构造 SDMA session（`channelGroupIdx = get_block_idx()`、`syncId = 0`、`queue_num = 1`），并保存在 `PrefetchAsyncContext` 中。后续消费者依赖预取结果时，使用返回的 `comm::AsyncEvent` 和 `ctx.session` 等待完成。
+指令内部使用默认参数构造 SDMA session（`channelGroupIdx = get_block_idx()`、`syncId = 0`、`queue_num = 1`），并保存在 `PrefetchAsyncContext` 中。使用 `TPREFETCH_ASYNC` 时用户不需要直接调用 `BuildAsyncSession`；通用 SDMA `AsyncSession` 构造接口及参数含义可参考 [TGET_ASYNC](comm/TGET_ASYNC_zh.md)。后续消费者依赖预取结果时，使用返回的 `comm::AsyncEvent` 和 `ctx.session` 等待完成。
 
 ### 参数
 
@@ -68,3 +68,30 @@ evt.Wait(ctx.session);
 | UB 占用 | 需要目标 Tile | 数据不占用 UB，仅内部使用 scratch |
 | 同步方式 | 同步 | 异步 (`AsyncEvent`) |
 | 典型用途 | 小数据预取到 UB | 大数据或跨阶段数据预热到 L2 |
+
+## 示例
+
+### 基础用法
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+__global__ AICORE void my_kernel(__gm__ half *src, __gm__ half *dst,
+                                 __gm__ uint8_t *workspace)
+{
+    using GShape = Shape<1, 1, 1, 1, 16384>;
+    using GStride = Stride<16384, 16384, 16384, 16384, 1>;
+    GlobalTensor<half, GShape, GStride> srcGlobal(src);
+
+    PrefetchAsyncContext ctx(workspace);
+    auto evt = TPREFETCH_ASYNC(srcGlobal, ctx);
+    evt.Wait(ctx.session);
+
+    using TileData = Tile<TileType::Vec, half, 128, 128, BLayout::RowMajor>;
+    TileData tile;
+    TASSIGN(tile, 0x100);
+    TLOAD(tile, srcGlobal);
+}
+```
