@@ -144,7 +144,7 @@ void example_auto() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dstVal;
   TmpT tmp;
   TROWARGMAX(dst, src, tmp);
   TROWARGMAX(dstVal, dst, src, tmp);
@@ -202,4 +202,3 @@ void example_manual() {
 # IR Level 2 (DPS)
 pto.trowargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

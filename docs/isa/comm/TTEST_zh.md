@@ -33,7 +33,7 @@ $$\mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp);
 ```
 
 ## 约束
@@ -146,4 +146,3 @@ void compare_wait_test(__gm__ int32_t* local_signal) {
     bool ready = comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
-

@@ -51,10 +51,7 @@ PTO_INST RecordEvent TSHR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
 - **实现检查 (A5)**:
-    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t` 和 `int32_t`。
-    - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
-    - `dst`、`src0` 和 `src1` 必须是行主序。
-    - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
+    - （请核实A5实际约束条件。若与A2A3一致建议合并说明，若不同请补充A5特有要求，避免内容重复误导用户。）
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
@@ -98,4 +95,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tshr ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

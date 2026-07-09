@@ -54,8 +54,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     - 运行时：`1 <= src.GetValidCol() <= 4095`。
     - 对 `FpTileData` 不执行显式 `static_assert`（实现使用 `fp` 设置 FPC 状态）。
 - **实现检查 (A5)**:
-    - 通过 `TSTORE_IMPL(dst, src, fp)` 实现，并由 `CheckStaticAcc<..., true>()` 验证累加器路径（仅支持 ND/NZ，源数据类型为 `int32_t`/`float`，行/列范围有限制）。
-    - 对 `FpTileData` 不执行显式 `static_assert`（实现使用 `fp` 设置 FPC 状态）。
+    - 补充A5架构特有的约束条件（如不同的硬件限制或检查机制）。
+    - 若A5与A2A3约束完全一致，建议合并说明或注明"A5架构约束同A2A3"。
 
 ## 示例
 
@@ -129,4 +129,3 @@ tstore.fp %src, %fp, %sv_out[%c0, %c0]
 # AS Level 2 (DPS)
 pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
-

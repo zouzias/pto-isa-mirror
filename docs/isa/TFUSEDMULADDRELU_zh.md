@@ -6,7 +6,7 @@
 
 ## 简介
 
-三元逐元素运算：`src0 * src1 + dst`。
+三元逐元素运算：`src0 * src1 + dst`，并对结果应用ReLU激活函数。
 
 ## 数学语义
 
@@ -95,4 +95,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tfusedmuladdrelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
