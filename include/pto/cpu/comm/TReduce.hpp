@@ -75,6 +75,164 @@ PTO_INTERNAL int GetRemoteRank(int rootIdx, int remoteOrdinal)
     return (remoteOrdinal < rootIdx) ? remoteOrdinal : (remoteOrdinal + 1);
 }
 
+struct TensorShape5D {
+    int dim0;
+    int dim1;
+    int dim2;
+    int dim3;
+    int dim4;
+    int64_t totalRows;
+};
+
+struct TensorStride5D {
+    int dim0;
+    int dim1;
+    int dim2;
+    int dim3;
+    int dim4;
+};
+
+template <typename GlobalData>
+PTO_INTERNAL TensorShape5D GetTensorShape5D(GlobalData &tensor)
+{
+    TensorShape5D shape{tensor.GetShape(GlobalTensorDim::DIM_0), tensor.GetShape(GlobalTensorDim::DIM_1),
+                        tensor.GetShape(GlobalTensorDim::DIM_2), tensor.GetShape(GlobalTensorDim::DIM_3),
+                        tensor.GetShape(GlobalTensorDim::DIM_4), 0};
+    shape.totalRows = static_cast<int64_t>(shape.dim0) * shape.dim1 * shape.dim2 * shape.dim3;
+    return shape;
+}
+
+template <typename GlobalData>
+PTO_INTERNAL TensorStride5D GetTensorStride5D(GlobalData &tensor)
+{
+    return {tensor.GetStride(GlobalTensorDim::DIM_0), tensor.GetStride(GlobalTensorDim::DIM_1),
+            tensor.GetStride(GlobalTensorDim::DIM_2), tensor.GetStride(GlobalTensorDim::DIM_3),
+            tensor.GetStride(GlobalTensorDim::DIM_4)};
+}
+
+template <typename TileData>
+PTO_INTERNAL void ValidateChunkedShape(const TensorShape5D &shape, int tileValidRow, int tileValidCol)
+{
+    if constexpr (TileData::ValidRow != DYNAMIC) {
+        PTO_ASSERT(shape.dim3 % tileValidRow == 0,
+                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+    }
+    if constexpr (TileData::ValidCol != DYNAMIC) {
+        PTO_ASSERT(shape.dim4 % tileValidCol == 0,
+                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+    }
+}
+
+template <typename TileData>
+PTO_INTERNAL void UpdateChunkMasks(TileData &accTileData, TileData &recvTileData, int currentRows, int currentCols)
+{
+    if constexpr (TileData::ValidRow == DYNAMIC) {
+        accTileData.RowMaskInternal = currentRows;
+        recvTileData.RowMaskInternal = currentRows;
+    }
+    if constexpr (TileData::ValidCol == DYNAMIC) {
+        accTileData.ColMaskInternal = currentCols;
+        recvTileData.ColMaskInternal = currentCols;
+    }
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+PTO_INTERNAL void ReduceSingleTile(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                   TileData &accTileData, TileData &recvTileData, pto::comm::ReduceOp op,
+                                   int rootIdx, int nranks)
+{
+    TLOAD(accTileData, parallelGroup[rootIdx]);
+    for (int r = 0; r < nranks; ++r) {
+        if (r == rootIdx) {
+            continue;
+        }
+        TLOAD(recvTileData, parallelGroup[r]);
+        ReduceTiles(accTileData, recvTileData, op);
+    }
+    TSTORE(dstGlobalData, accTileData);
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename SrcViewT, typename DstViewT,
+          typename DynShape, typename DynStride>
+PTO_INTERNAL void ReduceChunk(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                              TileData &recvTileData, pto::comm::ReduceOp op, int rootIdx, int nranks,
+                              int64_t srcOffset, int64_t dstOffset, const DynShape &chunkShape,
+                              const DynStride &srcChunkStride, const DynStride &dstChunkStride)
+{
+    SrcViewT rootView(parallelGroup[rootIdx].data() + srcOffset, chunkShape, srcChunkStride);
+    TLOAD(accTileData, rootView);
+    for (int r = 0; r < nranks; ++r) {
+        if (r == rootIdx) {
+            continue;
+        }
+        SrcViewT remoteView(parallelGroup[r].data() + srcOffset, chunkShape, srcChunkStride);
+        TLOAD(recvTileData, remoteView);
+        ReduceTiles(accTileData, recvTileData, op);
+    }
+    DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
+    TSTORE(dstView, accTileData);
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename SrcViewT, typename DstViewT,
+          typename DynShape, typename DynStride>
+PTO_INTERNAL void ReduceRowColPlane(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+                                    TileData &accTileData, TileData &recvTileData, pto::comm::ReduceOp op,
+                                    const TensorShape5D &shape, const TensorStride5D &srcStride,
+                                    const TensorStride5D &dstStride, int rootIdx, int nranks, int tileValidRow,
+                                    int tileValidCol, int64_t srcBase, int64_t dstBase,
+                                    const DynStride &srcChunkStride, const DynStride &dstChunkStride)
+{
+    for (int rowOff = 0; rowOff < shape.dim3; rowOff += tileValidRow) {
+        const int currentRows = (rowOff + tileValidRow <= shape.dim3) ? tileValidRow : (shape.dim3 - rowOff);
+        for (int colOff = 0; colOff < shape.dim4; colOff += tileValidCol) {
+            const int currentCols = (colOff + tileValidCol <= shape.dim4) ? tileValidCol : (shape.dim4 - colOff);
+            UpdateChunkMasks(accTileData, recvTileData, currentRows, currentCols);
+            const int64_t srcOffset =
+                srcBase + static_cast<int64_t>(rowOff) * srcStride.dim3 + static_cast<int64_t>(colOff) * srcStride.dim4;
+            const int64_t dstOffset =
+                dstBase + static_cast<int64_t>(rowOff) * dstStride.dim3 + static_cast<int64_t>(colOff) * dstStride.dim4;
+            DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+            ReduceChunk<ParallelGroupType, GlobalDstData, TileData, SrcViewT, DstViewT>(
+                parallelGroup, dstGlobalData, accTileData, recvTileData, op, rootIdx, nranks, srcOffset, dstOffset,
+                chunkShape, srcChunkStride, dstChunkStride);
+        }
+    }
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename GlobalSrcData>
+PTO_INTERNAL void ReduceChunked(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                                TileData &recvTileData, pto::comm::ReduceOp op, GlobalSrcData &refTensor,
+                                const TensorShape5D &shape, int rootIdx, int nranks, int tileValidRow,
+                                int tileValidCol)
+{
+    using T = typename GlobalSrcData::RawDType;
+    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+    const TensorStride5D srcStride = GetTensorStride5D(refTensor);
+    const TensorStride5D dstStride = GetTensorStride5D(dstGlobalData);
+    DynStride srcChunkStride(srcStride.dim0, srcStride.dim1, srcStride.dim2, srcStride.dim3, srcStride.dim4);
+    DynStride dstChunkStride(dstStride.dim0, dstStride.dim1, dstStride.dim2, dstStride.dim3, dstStride.dim4);
+    for (int i0 = 0; i0 < shape.dim0; ++i0) {
+        for (int i1 = 0; i1 < shape.dim1; ++i1) {
+            for (int i2 = 0; i2 < shape.dim2; ++i2) {
+                const int64_t srcBase = static_cast<int64_t>(i0) * srcStride.dim0 +
+                                        static_cast<int64_t>(i1) * srcStride.dim1 +
+                                        static_cast<int64_t>(i2) * srcStride.dim2;
+                const int64_t dstBase = static_cast<int64_t>(i0) * dstStride.dim0 +
+                                        static_cast<int64_t>(i1) * dstStride.dim1 +
+                                        static_cast<int64_t>(i2) * dstStride.dim2;
+                ReduceRowColPlane<ParallelGroupType, GlobalDstData, TileData, SrcViewT, DstViewT>(
+                    parallelGroup, dstGlobalData, accTileData, recvTileData, op, shape, srcStride, dstStride, rootIdx,
+                    nranks, tileValidRow, tileValidCol, srcBase, dstBase, srcChunkStride, dstChunkStride);
+            }
+        }
+    }
+}
+
 } // namespace detail
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
@@ -96,157 +254,26 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
 
-    // Get GlobalTensor dimensions from root's source tensor
     GlobalSrcData &refTensor = parallelGroup[rootIdx];
-    const int gShape0 = refTensor.GetShape(GlobalTensorDim::DIM_0);
-    const int gShape1 = refTensor.GetShape(GlobalTensorDim::DIM_1);
-    const int gShape2 = refTensor.GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = refTensor.GetShape(GlobalTensorDim::DIM_3);
-    const int gShape4 = refTensor.GetShape(GlobalTensorDim::DIM_4);
-
-    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+    const detail::TensorShape5D shape = detail::GetTensorShape5D(refTensor);
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
 
     PTO_ASSERT(tileValidRow > 0, "TREDUCE: tileValidRow must be greater than 0");
     PTO_ASSERT(tileValidCol > 0, "TREDUCE: tileValidCol must be greater than 0");
 
-    if (totalRows == 0 || gShape4 == 0) {
+    if (shape.totalRows == 0 || shape.dim4 == 0) {
         return;
     }
 
-    // ---- Simple path: data fits in UB tile in both dimensions ----
-    if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
-        // Single rank case: just copy local data to output
-        if (nranks == 1) {
-            TLOAD(accTileData, parallelGroup[rootIdx]);
-            TSTORE(dstGlobalData, accTileData);
-            return;
-        }
-
-        // Step 1: Load root data into accumulator
-        TLOAD(accTileData, parallelGroup[rootIdx]);
-
-        // Step 2: Reduce data from all other ranks
-        for (int r = 0; r < nranks; ++r) {
-            if (r == rootIdx) {
-                continue; // Skip self, already loaded
-            }
-
-            // Load remote data into receive buffer
-            TLOAD(recvTileData, parallelGroup[r]);
-
-            // Perform reduction
-            detail::ReduceTiles(accTileData, recvTileData, op);
-        }
-        TSTORE(dstGlobalData, accTileData);
+    if (shape.totalRows <= tileValidRow && shape.dim4 <= tileValidCol) {
+        detail::ReduceSingleTile(parallelGroup, dstGlobalData, accTileData, recvTileData, op, rootIdx, nranks);
         return;
     }
 
-    // ---- 2D sliding chunked path ----
-    //
-    // Strategy (ND layout):
-    //   - Iterate over outer dimensions (dim0, dim1, dim2) explicitly.
-    //   - Within each (i0, i1, i2) block, slide a (tileValidRow x tileValidCol)
-    //     window over the (dim3 x dim4) plane.
-    //   - For each chunk, execute the full reduce pipeline:
-    //     TLOAD root chunk → reduce all remote chunks → TSTORE result.
-
-    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
-    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
-
-    // Row validation: static ValidRow requires shape3 to be exactly divisible
-    if constexpr (!isDynamicRow) {
-        PTO_ASSERT(gShape3 % tileValidRow == 0,
-                   "TREDUCE chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
-                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
-    }
-    // Column validation: static ValidCol requires shape4 to be exactly divisible
-    if constexpr (!isDynamicCol) {
-        PTO_ASSERT(gShape4 % tileValidCol == 0,
-                   "TREDUCE chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
-                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
-    }
-
-    // Source strides (from root's tensor, assumed same for all ranks)
-    const int srcStride0 = refTensor.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = refTensor.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = refTensor.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = refTensor.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = refTensor.GetStride(GlobalTensorDim::DIM_4);
-
-    // Destination strides
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
-
-    // View types with fully dynamic shape/stride for chunk GlobalTensors
-    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
-    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
-    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
-    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
-
-    // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
-    for (int i0 = 0; i0 < gShape0; ++i0) {
-        for (int i1 = 0; i1 < gShape1; ++i1) {
-            for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
-
-                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
-
-                    if constexpr (isDynamicRow) {
-                        accTileData.RowMaskInternal = currentRows;
-                        recvTileData.RowMaskInternal = currentRows;
-                    }
-
-                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
-
-                        if constexpr (isDynamicCol) {
-                            accTileData.ColMaskInternal = currentCols;
-                            recvTileData.ColMaskInternal = currentCols;
-                        }
-
-                        // Compute element offsets for this chunk
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
-
-                        DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-
-                        // Load root's chunk into accumulator
-                        SrcViewT rootView(parallelGroup[rootIdx].data() + srcOffset, chunkShape, srcChunkStride);
-                        TLOAD(accTileData, rootView);
-
-                        if (nranks != 1) {
-                            for (int r = 0; r < nranks; ++r) {
-                                if (r == rootIdx)
-                                    continue;
-
-                                SrcViewT remoteView(parallelGroup[r].data() + srcOffset, chunkShape, srcChunkStride);
-                                TLOAD(recvTileData, remoteView);
-
-                                detail::ReduceTiles(accTileData, recvTileData, op);
-                            }
-                        }
-
-                        // Store reduced chunk to destination
-                        DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
-                        TSTORE(dstView, accTileData);
-                    }
-                }
-            }
-        }
-    }
+    detail::ValidateChunkedShape<TileData>(shape, tileValidRow, tileValidCol);
+    detail::ReduceChunked(parallelGroup, dstGlobalData, accTileData, recvTileData, op, refTensor, shape, rootIdx, nranks,
+                          tileValidRow, tileValidCol);
 }
 
 // ============================================================================
