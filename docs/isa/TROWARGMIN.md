@@ -17,26 +17,6 @@ $$ \mathrm{dst}_{i,0} = \underset{0 \le j < C}{\operatorname{argmin}} \; \mathrm
 
 $$ \mathrm{dstval}_{i,0} = \min_{0 \le j < C} \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
-```
-Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
-
-### IR Level 1 (SSA)
-
-```text
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### IR Level 2 (DPS)
-
-```text
-pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -61,7 +41,7 @@ PTO_INST RecordEvent TROWARGMIN(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, 
 
 ### General constraints / checks
 
-- Supported source element types: `half`, `float`.
+- Supported source element types: `half`, `float`, `int16_t`, `int32_t` (A2A3); A5 additionally accepts other 2-byte or 4-byte element types.
 - `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 - When output index only:
     - `dst` and `src` must be `TileType::Vec`.
@@ -75,7 +55,10 @@ PTO_INST RecordEvent TROWARGMIN(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, 
         - ND layout whose valid column count is 1.
 - When output both value and index:
     - `dstVal`, `dstIdx`, `src` must be `TileType::Vec`.
-    - Supported destination element types: `uint32_t`, `int32_t`.
+    - `dstVal` must use the same element type as `src`.
+    - Supported destination index element types:
+        - 4-byte source (`float`): `uint32_t`, `int32_t`.
+        - 2-byte source (`half`): `uint32_t`, `int32_t`, `uint16_t`, `int16_t`.
     - Runtime checks follow the shared row-reduce check path:
         - `src.GetValidRow() != 0`
         - `src.GetValidCol() != 0`
@@ -140,7 +123,7 @@ void example_auto() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dstVal;
   TmpT tmp;
   TROWARGMIN(dst, src, tmp);
   TROWARGMIN(dstVal, dst, src, tmp);
@@ -161,6 +144,7 @@ void example_manual() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
+  DstValT dstVal;
   TmpT tmp;
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
@@ -170,31 +154,3 @@ void example_manual() {
   TROWARGMIN(dstVal, dst, src, tmp);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
-pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
