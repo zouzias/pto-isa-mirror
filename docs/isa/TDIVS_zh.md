@@ -150,3 +150,9 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
+
+
+
+
+
+
