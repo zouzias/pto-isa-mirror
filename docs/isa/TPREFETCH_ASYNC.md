@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Prefetch data from Global Memory (GM/HBM) into the NPU's L2 Cache via SDMA CMO (Cache Maintenance Operation, opcode=6). Unlike `TPREFETCH`, which moves data from GM into UB, `TPREFETCH_ASYNC` keeps data in L2 cache only, consuming no UB space for the data itself. This allows subsequent `TLOAD` operations to hit L2 cache instead of going to GM.
+Prefetch data from Global Memory (GM/HBM) into the NPU's L2 cache through SDMA CMO (Cache Maintenance Operation, opcode=6). Unlike `TPREFETCH`, which moves data from GM into UB, `TPREFETCH_ASYNC` only warms the data in L2 cache and does not consume UB space for the data itself. This allows subsequent `TLOAD` operations to hit in L2 cache instead of going to GM.
 
-`TPREFETCH_ASYNC` is logically a memory-access/cache-hint instruction. It uses the SDMA CMO path internally, but the public API lives in namespace `pto`, next to `pto::TPREFETCH`.
+`TPREFETCH_ASYNC` is logically a memory-access/cache-hint instruction. Although the implementation reuses the SDMA CMO backend, users call it as `pto::TPREFETCH_ASYNC(...)`, not through the `pto::comm` namespace.
 
 ## Data Flow
 
@@ -16,7 +16,7 @@ GM / HBM  ──(SDMA CMO prefetch)──>  L2 Cache
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`, namespace `pto`:
+Declared in `include/pto/common/pto_instr.hpp` under the `pto` namespace:
 
 ```cpp
 namespace pto {
@@ -28,7 +28,7 @@ PTO_INST comm::AsyncEvent TPREFETCH_ASYNC(GlobalData &src, PrefetchAsyncContext 
 } // namespace pto
 ```
 
-`PrefetchAsyncContext` contains the SDMA workspace pointer prepared host-side via `SdmaWorkspaceManager::Init`:
+`PrefetchAsyncContext` contains the SDMA workspace pointer prepared on the host side by `SdmaWorkspaceManager::Init`:
 
 ```cpp
 pto::PrefetchAsyncContext ctx(workspace);
@@ -36,28 +36,32 @@ auto evt = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
 evt.Wait(ctx.session);
 ```
 
-The instruction builds and stores an SDMA session inside `PrefetchAsyncContext` with default parameters (`channelGroupIdx = get_block_idx()`, `syncId = 0`, `queue_num = 1`). Use the returned `comm::AsyncEvent` with `ctx.session` to wait for completion when a dependent consumer must observe the prefetch.
+The instruction builds and caches an SDMA session inside `PrefetchAsyncContext` with default parameters (`channelGroupIdx = get_block_idx()`, `syncId = 0`, `queue_num = 1`). Users do not need to call `BuildAsyncSession` directly for `TPREFETCH_ASYNC`; see [TGET_ASYNC](comm/TGET_ASYNC.md) for the general SDMA `AsyncSession` construction API and parameter meanings. Use the returned `comm::AsyncEvent` with `ctx.session` to wait for completion before a dependent consumer needs the prefetched data.
 
 ### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `src` | `GlobalData&` | Source GlobalTensor region to prefetch into L2 |
+| `src` | `GlobalData&` | Source `GlobalTensor` region to prefetch into L2 |
 | `ctx` | `PrefetchAsyncContext&` | Compute-side prefetch context containing the SDMA workspace base and internally built `comm::AsyncSession` |
 | `events...` | `WaitEvents&...` | Optional wait events for synchronization |
 
 ### Return Value
 
-`comm::AsyncEvent` - handle for asynchronous completion tracking. Call `evt.Wait(ctx.session)` before a dependent `TLOAD` when the consumer must observe prefetched data.
+`comm::AsyncEvent` - a handle for tracking asynchronous completion. Call `evt.Wait(ctx.session)` before a dependent `TLOAD` when the consumer must observe the prefetched data.
 
 ## Constraints
 
 - Source data must be in Global Memory (GM/HBM address space).
 - For the GlobalTensor overload, the tensor must be flat contiguous (packed 1D layout).
 - The SDMA workspace must be initialized by host code before the kernel launch and passed into the kernel.
-- `PrefetchAsyncContext` owns a 256-byte UB scratch tile and an `AsyncSession` used while constructing and waiting on SDMA metadata.
-- SDMA CMO operates at cache-line granularity; non-aligned prefetch ranges are rounded by hardware.
+- In auto mode (`__PTO_AUTO__`), this instruction is a no-op stub for API compatibility and returns an empty `AsyncEvent`.
 - On CPU simulation backend, this instruction is a no-op (returns an empty `AsyncEvent`).
+
+## Notes
+
+- `PrefetchAsyncContext` contains a 256-byte UB scratch tile used only for SDMA control metadata, not for prefetched payload data. It also stores the `AsyncSession` used by the returned event.
+- SDMA CMO operates at cache-line granularity; unaligned prefetch ranges are handled by hardware.
 
 ## Comparison with TPREFETCH
 
@@ -82,7 +86,7 @@ __global__ AICORE void my_kernel(__gm__ half *src, __gm__ half *dst,
                                  __gm__ uint8_t *workspace)
 {
     using GShape = Shape<1, 1, 1, 1, 16384>;
-    using GStride = Stride<1, 1, 1, 1, 1>;
+    using GStride = Stride<16384, 16384, 16384, 16384, 1>;
     GlobalTensor<half, GShape, GStride> srcGlobal(src);
 
     PrefetchAsyncContext ctx(workspace);
