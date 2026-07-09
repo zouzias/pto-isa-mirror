@@ -95,8 +95,10 @@ license: CANN Open Software License Agreement Version 2.0
 ### 3. 菜单文档
 
 #### docs/menu_ops_development.md（API参考 段）
+- **格式**: GitCode 侧边栏菜单——每个节点为 `[名称](目标.md)` 链接，2 空格缩进；带子项的分组节点（含各指令分类）为普通链接并指向 `docs/menu/<分类>_zh.md` 占位跳转页，**不要**加 `<a name="sub_menu"></a>`（该标记仅用于"叶子节点指向目录 README 自动展开子菜单"，与手写子项混用会导致子项不渲染）
 - **位置**: `API参考` 段下按分类排序的中文链接列表
 - **同 ISA 参考目录结构**
+- **新增分类时**：同步在 `docs/menu/` 下新建对应 `<分类>_zh.md` 占位页
 
 ### 4. 汇编文档（动态选择）
 
