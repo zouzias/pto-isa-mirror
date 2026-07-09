@@ -1,82 +1,10 @@
 {
   "instructions": [
     {
-      "instruction": "TSYNC",
-      "category": "Synchronization",
-      "summary_en": "Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).",
-      "summary_zh": "同步 PTO 执行（等待事件或插入每操作流水线屏障）。",
-      "diagram_template": "sync",
-      "operands": [
-        "producer",
-        "consumer"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TASSIGN",
       "category": "Manual / Resource Binding",
       "summary_en": "Bind a Tile object to an implementation-defined on-chip address (manual placement).",
       "summary_zh": "将 Tile 对象绑定到实现定义的片上地址（手动放置）。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSETHF32MODE",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Configure HF32 transform mode (implementation-defined).",
-      "summary_zh": "设置 HF32 变换模式（实现定义）。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSETTF32MODE",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Configure TF32 transform mode (implementation-defined).",
-      "summary_zh": "设置 TF32 变换模式（实现定义）。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "SETFMATRIX",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Set FMATRIX register(s) for IMG2COL-like ops.",
-      "summary_zh": "为类 IMG2COL 操作设置 FMATRIX 寄存器。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "SET_IMG2COL_RPT",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Set IMG2COL repeat metadata from an IMG2COL configuration tile.",
-      "summary_zh": "从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "SET_IMG2COL_PADDING",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Set IMG2COL padding metadata from an IMG2COL configuration tile.",
-      "summary_zh": "从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。",
       "diagram_template": "config",
       "operands": [
         "config",
@@ -293,32 +221,6 @@
       "notes": []
     },
     {
-      "instruction": "TADDC",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary add: `src0 + src1 + src2`.",
-      "summary_zh": "三元逐元素加法：`src0 + src1 + src2`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBC",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `src0 - src1 + src2`.",
-      "summary_zh": "三元逐元素运算：`src0 - src1 + src2`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TCVT",
       "category": "Elementwise (Tile-Tile)",
       "summary_en": "Elementwise type conversion with a specified rounding mode.",
@@ -440,58 +342,6 @@
       "category": "Elementwise (Tile-Tile)",
       "summary_en": "Elementwise fmod of two tiles.",
       "summary_zh": "两个 Tile 的逐元素余数，余数符号与被除数相同。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TMULADDDST",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `src0 * src1 + dst`.",
-      "summary_zh": "三元逐元素运算：`src0 * src1 + dst`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TFUSEDMULADD",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `src0 * dst + src1`.",
-      "summary_zh": "三元逐元素运算：`src0 * dst + src1`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBRELU",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise subtract then ReLU of two tiles.",
-      "summary_zh": "src0和src1逐元素相减后ReLU。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TFUSEDMULADDRELU",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `ReLU(src0 * dst + src1)`.",
-      "summary_zh": "三元逐元素运算：`ReLU(src0 * dst + src1)`。",
       "diagram_template": "elementwise",
       "operands": [
         "dst",
@@ -713,32 +563,6 @@
       "category": "Tile-Scalar / Tile-Immediate",
       "summary_en": "Leaky ReLU with a scalar slope.",
       "summary_zh": "带标量斜率的 Leaky ReLU。",
-      "diagram_template": "scalar",
-      "operands": [
-        "dst",
-        "src",
-        "scalar"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TADDSC",
-      "category": "Tile-Scalar / Tile-Immediate",
-      "summary_en": "Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`.",
-      "summary_zh": "与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。",
-      "diagram_template": "scalar",
-      "operands": [
-        "dst",
-        "src",
-        "scalar"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBSC",
-      "category": "Tile-Scalar / Tile-Immediate",
-      "summary_en": "Elementwise fused op: `src0 - scalar + src1`.",
-      "summary_zh": "融合逐元素运算：`src0 - scalar + src1`。",
       "diagram_template": "scalar",
       "operands": [
         "dst",
@@ -1072,34 +896,10 @@
       "notes": []
     },
     {
-      "instruction": "TPREFETCH_ASYNC",
-      "category": "Memory (GM <-> Tile)",
-      "summary_en": "Asynchronously prefetch a GlobalTensor region from GM into L2 cache via SDMA CMO.",
-      "summary_zh": "通过 SDMA CMO 将 GlobalTensor 区域从 GM 异步预取到 L2 Cache。",
-      "diagram_template": "memory",
-      "operands": [
-        "global",
-        "context"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TSTORE",
       "category": "Memory (GM <-> Tile)",
       "summary_en": "Store data from a Tile into a GlobalTensor (GM), optionally using atomic write or quantization parameters.",
       "summary_zh": "将 Tile 中的数据存储到 GlobalTensor (GM)，可选使用原子写入或量化参数。",
-      "diagram_template": "memory",
-      "operands": [
-        "tile",
-        "global"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSTORE_FP",
-      "category": "Memory (GM <-> Tile)",
-      "summary_en": "Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.",
-      "summary_zh": "使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。",
       "diagram_template": "memory",
       "operands": [
         "tile",
@@ -1248,18 +1048,6 @@
       "notes": []
     },
     {
-      "instruction": "TEXTRACT_FP",
-      "category": "Data Movement / Layout",
-      "summary_en": "Extract with fp/scaling tile (vector-quantization parameters).",
-      "summary_zh": "带 fp/缩放 Tile 的提取（向量量化参数）。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TIMG2COL",
       "category": "Data Movement / Layout",
       "summary_en": "Image-to-column transform for convolution-like workloads.",
@@ -1284,46 +1072,10 @@
       "notes": []
     },
     {
-      "instruction": "TINSERT_FP",
-      "category": "Data Movement / Layout",
-      "summary_en": "Insert with fp/scaling tile (vector-quantization parameters).",
-      "summary_zh": "带 fp/缩放 Tile 的插入（向量量化参数）。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TFILLPAD",
       "category": "Data Movement / Layout",
       "summary_en": "Copy+pad a tile outside the valid region with a compile-time pad value.",
       "summary_zh": "复制 Tile 并在有效区域外使用编译时填充值进行填充。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TFILLPAD_INPLACE",
-      "category": "Data Movement / Layout",
-      "summary_en": "In-place fill/pad variant.",
-      "summary_zh": "原地填充/填充变体。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TFILLPAD_EXPAND",
-      "category": "Data Movement / Layout",
-      "summary_en": "Fill/pad while allowing dst to be larger than src.",
-      "summary_zh": "填充/填充时允许目标大于源。",
       "diagram_template": "reshape_move",
       "operands": [
         "dst",
@@ -1344,60 +1096,10 @@
       "notes": []
     },
     {
-      "instruction": "TMOV_FP",
-      "category": "Data Movement / Layout",
-      "summary_en": "Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.",
-      "summary_zh": "使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TRESHAPE",
-      "category": "Data Movement / Layout",
-      "summary_en": "Reinterpret a tile as another tile type/shape while preserving the underlying bytes.",
-      "summary_zh": "将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TTRANS",
       "category": "Data Movement / Layout",
       "summary_en": "Transpose with an implementation-defined temporary tile.",
       "summary_zh": "使用实现定义的临时 Tile 进行转置。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBVIEW",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Reinterpret a tile as a subtile of another tile.",
-      "summary_zh": "表达一个tile是另一个tile的subview。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src",
-        "rowOffset",
-        "colOffset"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TGET_SCALE_ADDR",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Bind the on-chip address of output tile to a scaled factor of that of input tile.",
-      "summary_zh": "将输出tile的片上内存值绑定为扩展后的输入tile内存的值。",
       "diagram_template": "reshape_move",
       "operands": [
         "dst",
@@ -1575,29 +1277,222 @@
       "notes": []
     },
     {
-      "instruction": "TADDReluConv",
-      "category": "Complex",
-      "summary_en": "Fused elementwise add, ReLU clamp, and type conversion: dst = convert(max(0, src0 + src1)).",
-      "summary_zh": "融合逐元素加法、ReLU 限幅和类型转换：dst = convert(max(0, src0 + src1))。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
+      "instruction": "TALLOC",
+      "category": "Synchronization",
+      "summary_en": "Allocate a producer FIFO slot from a TPipe and expose it as a GlobalTensor view.",
+      "summary_zh": "从 TPipe 中分配一个生产者 FIFO 槽位，并将其暴露为 GlobalTensor 视图。",
+      "diagram_template": "sync",
+      "operands": [],
       "notes": []
     },
     {
-      "instruction": "TAddDeqRelu",
+      "instruction": "TFREE",
+      "category": "Synchronization",
+      "summary_en": "Release FIFO slot space.",
+      "summary_zh": "释放 FIFO 中的槽位（slot）空间。",
+      "diagram_template": "sync",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPOP",
+      "category": "Synchronization",
+      "summary_en": "Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.",
+      "summary_zh": "从 TPipe FIFO 中弹出消费者 tile，用于 Cube-Vector 通信。",
+      "diagram_template": "sync",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPUSH",
+      "category": "Synchronization",
+      "summary_en": "Push a producer tile into a TPipe FIFO for Cube-Vector communication and inter-core synchronization.",
+      "summary_zh": "将生产者 tile 推入 FIFO，用于 Cube-Vector 之间的数据传输和核间同步。",
+      "diagram_template": "sync",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "SYNCALL",
+      "category": "Synchronization",
+      "summary_en": "Cross-core synchronization barrier (hardware FFTS or software GM polling).",
+      "summary_zh": "跨核同步屏障（硬件 FFTS 或软件 GM 轮询）。",
+      "diagram_template": "sync",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TBROADCAST",
+      "category": "Communication",
+      "summary_en": "Broadcast data from current NPU to all ranks.",
+      "summary_zh": "将当前 NPU 的数据广播到所有 rank。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TCOLARGMAX",
+      "category": "Axis Reduce / Expand",
+      "summary_en": "Get the row index of the maximum element for each column/Get the row value and index of the maximum element for each column",
+      "summary_zh": "获取每列最大值对应行索引/获取每列最大值对应行值和索引。",
+      "diagram_template": "reduce_expand",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TCOLARGMIN",
+      "category": "Axis Reduce / Expand",
+      "summary_en": "Get the row index of the minimum element for each column/Get the row value and index of the minimum element for each column",
+      "summary_zh": "获取每列最小值对应行索引/获取每列最小值对应行值和索引。",
+      "diagram_template": "reduce_expand",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TCONCAT",
+      "category": "Data Movement / Layout",
+      "summary_en": "Concatenate two tiles horizontally along the column dimension.",
+      "summary_zh": "将两个 Tile 沿列维度水平拼接。",
+      "diagram_template": "reshape_move",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TGET",
+      "category": "Communication",
+      "summary_en": "Remote read: read remote NPU data to local memory (GM → UB → GM).",
+      "summary_zh": "远程读：将远端 NPU 数据读取到本地内存（GM → UB → GM）。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TGET_ASYNC",
+      "category": "Communication",
+      "summary_en": "Asynchronous remote read (remote GM → DMA engine → local GM).",
+      "summary_zh": "异步远程读（远端 GM → DMA 引擎 → 本地 GM）。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TNOTIFY",
+      "category": "Communication",
+      "summary_en": "Send flag notification to remote NPU.",
+      "summary_zh": "向远端 NPU 发送标志通知。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPARTARGMAX",
       "category": "Complex",
-      "summary_en": "Fused elementwise add, dequantization scale, and ReLU clamp: dst = half(max(0, (src0 + src1) * deqScale)).",
-      "summary_zh": "融合逐元素加法、反量化缩放和 ReLU 限幅：dst = half(max(0, (src0 + src1) * deqScale))。",
+      "summary_en": "Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions.",
+      "summary_zh": "部分逐元素最大值选择并返回对应索引（argmax），对不匹配的有效区域具有实现定义的处理方式。",
+      "diagram_template": "complex",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPARTARGMIN",
+      "category": "Complex",
+      "summary_en": "Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions.",
+      "summary_zh": "部分逐元素最小值选择并返回对应索引（argmin），对不匹配的有效区域具有实现定义的处理方式。",
+      "diagram_template": "complex",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPOW",
+      "category": "Elementwise (Tile-Tile)",
+      "summary_en": "Elementwise power of two tiles.",
+      "summary_zh": "逐元素幂运算。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPOWS",
+      "category": "Tile-Scalar / Tile-Immediate",
+      "summary_en": "Elementwise power of a tile by a scalar.",
+      "summary_zh": "Tile 逐元素与标量幂运算。",
+      "diagram_template": "scalar",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPUT",
+      "category": "Communication",
+      "summary_en": "Remote write: transfer local data to remote NPU memory (GM → UB → GM).",
+      "summary_zh": "远程写：将本地数据传输到远端 NPU 内存（GM → UB → GM）。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TPUT_ASYNC",
+      "category": "Communication",
+      "summary_en": "Asynchronous remote write (local GM → DMA engine → remote GM).",
+      "summary_zh": "异步远程写（本地 GM → DMA 引擎 → 远端 GM）。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TRANDOM",
+      "category": "Complex",
+      "summary_en": "Generates random numbers in the destination tile using a counter-based cipher algorithm.",
+      "summary_zh": "使用基于计数器的密码算法在目标 Tile 中生成随机数。",
+      "diagram_template": "complex",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TREDUCE",
+      "category": "Communication",
+      "summary_en": "Gather and reduce data from all ranks element-wise to local.",
+      "summary_zh": "从所有 rank 收集数据并逐元素归约到本地。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TROWPROD",
+      "category": "Axis Reduce / Expand",
+      "summary_en": "Reduce each row by multiplying across columns.",
+      "summary_zh": "通过跨列乘积来归约每一行。",
+      "diagram_template": "reduce_expand",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TTEST",
+      "category": "Communication",
+      "summary_en": "Non-blocking test if signal(s) meet comparison condition.",
+      "summary_zh": "非阻塞检测信号是否满足比较条件。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TWAIT",
+      "category": "Communication",
+      "summary_en": "Blocking wait until signal(s) meet comparison condition.",
+      "summary_zh": "阻塞等待，直到信号满足比较条件。",
+      "diagram_template": "elementwise",
+      "operands": [],
+      "notes": []
+    },
+    {
+      "instruction": "TAXPY",
+      "category": "Tile-Scalar / Tile-Immediate",
+      "summary_en": "Scaled elementwise AXPY: dst = scalar · src0 + dst (in-place accumulate); supports same or mixed (float dst, half src) precision.",
+      "summary_zh": "标量缩放的逐元素 AXPY：dst = scalar · src0 + dst（原地累加），支持同精度或混合精度（dst 为 float、src0 为 half）。",
       "diagram_template": "elementwise",
       "operands": [
         "dst",
         "src0",
-        "src1",
-        "tmp"
+        "scalar"
       ],
       "notes": []
     }

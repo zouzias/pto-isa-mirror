@@ -1,6 +1,6 @@
 # PTO Abstract Machine
 
-This folder defines the abstract execution model used by the PTO ISA and PTO Tile Lib. It is intentionally written as a *programmer-facing* model: it describes what a correct program may assume, without requiring the reader to understand every micro-architectural detail of a specific device generation.
+This folder defines the abstract execution model used by the PTO ISA and PTO ISA. It is intentionally written as a *programmer-facing* model: it describes what a correct program may assume, without requiring the reader to understand every micro-architectural detail of a specific device generation.
 
 ## Documents
 

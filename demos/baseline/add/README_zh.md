@@ -84,7 +84,7 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
 ## 3. 构建与运行
 
-本示例依赖 PTO Tile Lib、PyTorch、`torch_npu` 与 CANN。请参考 `torch_npu` 官方安装指南：
+本示例依赖 PTO ISA、PyTorch、`torch_npu` 与 CANN。请参考 `torch_npu` 官方安装指南：
 
 https://gitcode.com/ascend/pytorch#%E5%AE%89%E8%A3%85
 
@@ -106,7 +106,7 @@ set(SOC_VERSION "Ascendxxxyy" CACHE STRING "system on chip type")
 
 ### 3.2 构建 wheel
 
-设置 PTO Tile Lib 路径并构建 wheel：
+设置 PTO ISA 路径并构建 wheel：
 
 ```bash
 export ASCEND_HOME_PATH=/usr/local/Ascend/

@@ -1,6 +1,6 @@
 # Events and Synchronization
 
-PTO Tile Lib supports an explicit event model for expressing dependencies between operations without introducing a global barrier for every instruction.
+PTO ISA supports an explicit event model for expressing dependencies between operations without introducing a global barrier for every instruction.
 
 This document describes the C++ event types used by `include/pto/common/pto_instr.hpp` and `include/pto/common/event.hpp`.
 

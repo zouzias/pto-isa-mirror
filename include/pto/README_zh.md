@@ -1,6 +1,6 @@
 # include/pto/
 
-该目录是 PTO Tile Lib 的主要公共头文件入口，包含：
+该目录是 PTO ISA 的主要公共头文件入口，包含：
 
 - Tile 类型系统与共享工具
 - PTO 指令 API 声明（Auto/Manual 两种形式）

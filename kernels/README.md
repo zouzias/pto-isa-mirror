@@ -1,6 +1,6 @@
 # Kernels
 
-This directory contains kernel/operator implementations that complement PTO Tile Lib.
+This directory contains kernel/operator implementations that complement PTO ISA.
 
 Most kernel subdirectories are **self-contained mini-projects** (kernel + host + scripts) with their own `README.md`, `CMakeLists.txt`, and `run.sh`.
 

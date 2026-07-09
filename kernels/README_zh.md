@@ -1,6 +1,6 @@
 # Kernels
 
-本目录包含与 PTO Tile Lib 配套的 kernel / operator 实现。
+本目录包含与 PTO ISA 配套的 kernel / operator 实现。
 
 多数子目录都是**自包含的小工程**（kernel + host + 脚本），通常会包含自己的 `README.md`、`CMakeLists.txt` 与 `run.sh`，便于独立发现与运行。
 

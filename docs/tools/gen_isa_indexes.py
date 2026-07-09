@@ -54,8 +54,27 @@ CATEGORY_ZH = {
     "Memory (GM <-> Tile)": "内存（GM <-> Tile）",
     "Matrix Multiply": "矩阵乘",
     "Data Movement / Layout": "数据搬运 / 布局",
+    "Communication": "通信",
     "Complex": "复杂指令",
 }
+
+
+ISA_DIR = REPO_ROOT / "docs" / "isa"
+
+
+def _doc_rel(instr: str, zh: bool) -> str:
+    """Repo-relative doc path for an instruction, accounting for the
+    docs/isa/comm/ subdirectory used by communication instructions."""
+    suffix = "_zh.md" if zh else ".md"
+    for sub in ("", "comm/"):
+        if (ISA_DIR / f"{sub}{instr}{suffix}").exists():
+            return f"isa/{sub}{instr}{suffix}"
+    return f"isa/{instr}{suffix}"  # fallback
+
+
+def _doc_rel_readme(instr: str, zh: bool) -> str:
+    """Doc path relative to docs/isa/ (for isa/README*.md links)."""
+    return _doc_rel(instr, zh)[len("isa/"):]
 
 
 def load_manifest(path: Path) -> List[Dict[str, object]]:
@@ -91,12 +110,12 @@ def render_isa_readme(entries: List[Dict[str, object]]) -> str:
     grouped = group_by_category(entries)
     lines: List[str] = []
     lines.append('<p align="center">')
-    lines.append('  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />')
+    lines.append('  <img src="../figures/pto_logo.svg" alt="PTO ISA" width="180" />')
     lines.append("</p>")
     lines.append("")
     lines.append("# PTO ISA Reference")
     lines.append("")
-    lines.append("This directory contains the per-instruction reference for the PTO Tile Lib ISA.")
+    lines.append("This directory contains the per-instruction reference for the PTO ISA.")
     lines.append("")
     lines.append("- Source of truth (C++ intrinsics): `include/pto/common/pto_instr.hpp`")
     lines.append("- Common conventions (operands, events, modifiers): `docs/isa/conventions.md`")
@@ -107,7 +126,7 @@ def render_isa_readme(entries: List[Dict[str, object]]) -> str:
             instr = str(e["instruction"])
             summary = str(e.get("summary_en", "")).strip()
             suffix = f" - {summary}" if summary else ""
-            lines.append(f"- [{instr}]({instr}.md){suffix}")
+            lines.append(f"- [{instr}]({_doc_rel_readme(instr, False)}){suffix}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -116,12 +135,12 @@ def render_isa_readme_zh(entries: List[Dict[str, object]]) -> str:
     grouped = group_by_category(entries)
     lines: List[str] = []
     lines.append('<p align="center">')
-    lines.append('  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />')
+    lines.append('  <img src="../figures/pto_logo.svg" alt="PTO ISA" width="180" />')
     lines.append("</p>")
     lines.append("")
     lines.append("# PTO ISA 参考")
     lines.append("")
-    lines.append("本目录是 PTO Tile Lib ISA 的指令参考（每条指令一页）。")
+    lines.append("本目录是 PTO ISA 的指令参考（每条指令一页）。")
     lines.append("")
     lines.append("- 权威来源：`include/pto/common/pto_instr.hpp`")
     lines.append("- 通用约定（操作数、事件、修饰符）：`docs/isa/conventions_zh.md`")
@@ -132,7 +151,7 @@ def render_isa_readme_zh(entries: List[Dict[str, object]]) -> str:
             instr = str(e["instruction"])
             summary = str(e.get("summary_zh", "")).strip()
             suffix = f" - {summary}" if summary else ""
-            lines.append(f"- [{instr}]({instr}_zh.md){suffix}")
+            lines.append(f"- [{instr}]({_doc_rel_readme(instr, True)}){suffix}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -161,7 +180,7 @@ def render_ptoisa(entries: List[Dict[str, object]]) -> str:
         cat = str(e.get("category", ""))
         instr = str(e["instruction"])
         summary = str(e.get("summary_en", "")).strip()
-        lines.append(f"| {cat} | [`{instr}`](isa/{instr}.md) | {summary} |")
+        lines.append(f"| {cat} | [`{instr}`]({_doc_rel(instr, False)}) | {summary} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -190,7 +209,7 @@ def render_ptoisa_zh(entries: List[Dict[str, object]]) -> str:
         cat = CATEGORY_ZH.get(str(e.get("category", "")), str(e.get("category", "")))
         instr = str(e["instruction"])
         summary = str(e.get("summary_zh", "")).strip()
-        lines.append(f"| {cat} | [`{instr}`](isa/{instr}_zh.md) | {summary} |")
+        lines.append(f"| {cat} | [`{instr}`]({_doc_rel(instr, True)}) | {summary} |")
     lines.append("")
     return "\n".join(lines)
 

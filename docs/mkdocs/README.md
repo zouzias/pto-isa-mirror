@@ -1,12 +1,13 @@
 # docs/mkdocs Documentation Build Guide
 
-This directory is used to build the online documentation and local static documentation site for PTO Tile Lib, based on MkDocs (Material theme).
+This directory is used to build the online documentation and local static documentation site for PTO ISA, based on MkDocs (Material theme).
 
 ## Documentation Content
 
 The generated documentation covers:
 
-- PTO ISA instruction reference
+- PTO ISA instruction reference
+
 - Programming model and developer documentation
 - Getting started and usage guides
 - Kernel examples and directory guides

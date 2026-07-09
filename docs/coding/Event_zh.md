@@ -1,6 +1,6 @@
 # 事件与同步
 
-PTO Tile Lib 支持显式事件（event）模型，用于表达操作之间的依赖关系，而不必为每条指令都引入全局屏障。
+PTO ISA 支持显式事件（event）模型，用于表达操作之间的依赖关系，而不必为每条指令都引入全局屏障。
 
 本文档描述 `include/pto/common/pto_instr.hpp` 与 `include/pto/common/event.hpp` 中使用的 C++ 事件类型。
 

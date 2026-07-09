@@ -1,6 +1,6 @@
 # include/pto/
 
-This is the primary public header entry for PTO Tile Lib. It contains:
+This is the primary public header entry for PTO ISA. It contains:
 
 - The Tile type system and shared utilities
 - PTO instruction API declarations (Auto/Manual forms)

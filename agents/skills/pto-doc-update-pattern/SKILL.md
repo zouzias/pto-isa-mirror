@@ -1,12 +1,14 @@
 ---
 name: PTO指令文档更新模式
-description: PTO ISA 新增指令时需要更新的文档文件和位置模式总结。根据 docs/assembly/README.md 中的分类动态选择需要修改的汇编文件。触发：新增 PTO 指令（如 TPOW、TPOWS）后需要同步更新文档时。
+description: PTO ISA 新增指令时需要更新的文档文件和位置模式总结。触发：新增 PTO 指令（如 TPOW、TPOWS）后需要同步更新文档时。（AS/汇编文档本轮不上线：各指令页汇编语法/汇编示例段落已移除、docs/assembly/ 不存在，相关步骤跳过）
 license: CANN Open Software License Agreement Version 2.0
 ---
 
 # PTO指令文档更新模式
 
 此 skill 总结了为 PTO ISA 添加新指令（如 TPOW、TPOWS）时需要更新的文档文件和位置模式。
+
+> **⚠️ AS / 汇编文档本轮暂不上线**：各指令页的 `## 汇编语法` / `## 汇编示例（ASM）`（EN: `## Assembly Syntax` / `## ASM Form Examples`）段落已全部移除，且 `docs/assembly/` 目录当前不存在。因此本文件中所有涉及 `docs/assembly/<类别>-ops.md` 的步骤**本轮跳过**，相关小节仅作将来恢复时的参考。
 
 ## 适用场景
 
@@ -31,7 +33,6 @@ license: CANN Open Software License Agreement Version 2.0
 | ISA参考目录 | `docs/isa/README.md` - 按分类排序的指令列表 |
 | ISA参考目录 | `docs/isa/README_zh.md` - 按分类排序的指令列表（中文） |
 | 菜单文档 | `docs/menu_ops_development.md`（API参考 段）- 按分类排序的中文链接 |
-| 汇编参考 | `docs/assembly/<类别>-ops.md` - 根据指令类型动态选择 |
 | 指令族矩阵 | `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix.md` - 指令族矩阵 |
 | 指令族矩阵 | `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix_zh.md` - 指令族矩阵（中文） |
 | include索引 | `include/README.md` - 实现状态表格 |
@@ -95,8 +96,10 @@ license: CANN Open Software License Agreement Version 2.0
 ### 3. 菜单文档
 
 #### docs/menu_ops_development.md（API参考 段）
+- **格式**: GitCode 侧边栏菜单——每个节点为 `[名称](目标.md)` 链接，2 空格缩进；带子项的分组节点（含各指令分类）为普通链接并指向 `docs/menu/<分类>_zh.md` 占位跳转页，**不要**加 `<a name="sub_menu"></a>`（该标记仅用于"叶子节点指向目录 README 自动展开子菜单"，与手写子项混用会导致子项不渲染）
 - **位置**: `API参考` 段下按分类排序的中文链接列表
 - **同 ISA 参考目录结构**
+- **新增分类时**：同步在 `docs/menu/` 下新建对应 `<分类>_zh.md` 占位页
 
 ### 4. 汇编文档（动态选择）
 
@@ -168,7 +171,6 @@ license: CANN Open Software License Agreement Version 2.0
 - [ ] `docs/isa/README.md` - ISA参考目录
 - [ ] `docs/isa/README_zh.md` - ISA参考目录（中文）
 - [ ] `docs/menu_ops_development.md` - 菜单文档（API参考 段）
-- [ ] `docs/assembly/<类别>-ops.md` - 动态选择的汇编文件（英文+中文）
 - [ ] `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix.md` - 指令族矩阵
 - [ ] `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix_zh.md` - 指令族矩阵（中文）
 

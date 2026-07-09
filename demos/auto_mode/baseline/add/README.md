@@ -92,7 +92,7 @@ TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 
 ## 3. Build and run
 
-This example requires PTO Tile Lib, PyTorch, `torch_npu`, and CANN. Follow the official `torch_npu` installation guide:
+This example requires PTO ISA, PyTorch, `torch_npu`, and CANN. Follow the official `torch_npu` installation guide:
 
 https://gitcode.com/ascend/pytorch#%E5%AE%89%E8%A3%85
 
@@ -114,7 +114,7 @@ You can query the chip name on the target machine via `npu_smi info` and use `As
 
 ### 3.2 Build the wheel
 
-Set the PTO Tile Lib path and build a wheel:
+Set the PTO ISA path and build a wheel:
 
 ```bash
 export ASCEND_HOME_PATH=/usr/local/Ascend/

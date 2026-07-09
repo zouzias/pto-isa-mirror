@@ -1,12 +1,12 @@
 # Version Compatibility
 
-This document summarizes version and platform compatibility in a way that is consistent with the current PTO Tile Lib repository.
+This document summarizes version and platform compatibility in a way that is consistent with the current PTO ISA repository.
 
 It intentionally avoids unsupported claims about release lifecycles, deprecated historical APIs, or framework integration matrices that are not defined in this repository.
 
 ## 1. Compatibility Scope
 
-PTO Tile Lib targets the following execution environments:
+PTO ISA targets the following execution environments:
 
 - **Ascend A2**
 - **Ascend A3**
@@ -21,9 +21,9 @@ The repository provides:
 
 For the project-level platform statement, see `README.md`. For backend implementation coverage by instruction, see `include/README.md`.
 
-## 2. What “compatibility” means in PTO Tile Lib
+## 2. What “compatibility” means in PTO ISA
 
-In PTO Tile Lib, compatibility should be understood along three dimensions:
+In PTO ISA, compatibility should be understood along three dimensions:
 
 ### 2.1 API compatibility
 
@@ -63,7 +63,7 @@ A kernel that is valid in PTO source form may still require backend-specific rev
 - performance tuning parameters
 - manual placement and synchronization strategy
 
-In practice, PTO Tile Lib encourages validating logic on CPU simulation first, then validating behavior and performance on the target Ascend platform.
+In practice, PTO ISA encourages validating logic on CPU simulation first, then validating behavior and performance on the target Ascend platform.
 
 ## 3. Supported platforms
 
@@ -118,7 +118,7 @@ For example:
 
 ### 5.2 Event compatibility is backend-sensitive
 
-PTO Tile Lib supports an explicit event model, but the exact behavior depends on the backend:
+PTO ISA supports an explicit event model, but the exact behavior depends on the backend:
 
 - on device builds, typed `Event<SrcOp, DstOp>` objects are used to model dependencies
 - on CPU simulation, synchronization behavior is simplified and some event-related paths act as no-ops
@@ -156,7 +156,7 @@ This workflow is more reliable than assuming that all documented instructions ar
 
 This document does **not** define:
 
-- a formal semantic-versioning policy for PTO Tile Lib releases
+- a formal semantic-versioning policy for PTO ISA releases
 - LTS / support-lifecycle commitments
 - historical migration guarantees across unpublished API generations
 - framework compatibility matrices outside what is explicitly documented in this repository
