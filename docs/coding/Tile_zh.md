@@ -1,6 +1,6 @@
 # Tile 编程模型
 
-PTO Tile Lib 程序围绕 **Tile** 进行编写：Tile 是固定容量的二维缓冲区，是大多数 PTO 指令的计算单元，也是数据搬运的基本单位。
+PTO ISA 程序围绕 **Tile** 进行编写：Tile 是固定容量的二维缓冲区，是大多数 PTO 指令的计算单元，也是数据搬运的基本单位。
 
 概念上，Tile 位于**片上 Tile 存储**（类似寄存器文件或 SRAM 的存储区），并通过 `TLOAD`/`TSTORE` 在全局内存（GM）与片上之间搬运。在 CPU 仿真后端中，Tile 存放在主机内存，但会保持相同的形状/布局/有效区域规则，便于验证代码合法性与语义一致性。
 
@@ -71,7 +71,7 @@ PTO 用两层布局描述 Tile：
 
 - **基础布局** `BLayout`（`RowMajor`/`ColMajor`）：外层（未盒化）矩阵解释。
 - **盒化/分形布局** `SLayout`（`NoneBox`、`RowMajor`、`ColMajor`）：是否将 Tile 在内部划分为固定大小的“基块”（base tile，亦常称 *fractals*）。
-- **基块大小** `SFractalSize`：单个基块的字节大小。当前 PTO Tile Lib 常用：
+- **基块大小** `SFractalSize`：单个基块的字节大小。当前 PTO ISA 常用：
   - `TileConfig::fractalABSize = 512` bytes（常用于 A/B 操作数 Tile）
   - `TileConfig::fractalCSize = 1024` bytes（常用于累加器 Tile）
 

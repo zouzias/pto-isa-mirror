@@ -1,6 +1,6 @@
 # tests/
 
-Tests and examples for PTO Tile Lib, covering both CPU simulation and NPU (including `sim` and on-board `npu` modes).
+Tests and examples for PTO ISA, covering both CPU simulation and NPU (including `sim` and on-board `npu` modes).
 
 ## Test Entry Points
 

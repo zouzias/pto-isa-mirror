@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="220" />
+  <img src="figures/pto_logo.svg" alt="PTO ISA" width="220" />
 </p>
 
 # 快速开始

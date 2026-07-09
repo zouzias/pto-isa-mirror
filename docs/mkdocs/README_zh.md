@@ -1,12 +1,13 @@
 # docs/mkdocs 文档构建说明
 
-本目录用于构建 PTO Tile Lib 的在线文档与本地静态文档站点，基于 MkDocs（Material 主题）。
+本目录用于构建 PTO ISA 的在线文档与本地静态文档站点，基于 MkDocs（Material 主题）。
 
 ## 文档内容
 
 构建后的文档覆盖以下内容：
 
-- PTO ISA 指令参考
+- PTO ISA 指令参考
+
 - 编程模型与开发文档
 - 快速开始与使用指南
 - kernel 示例与目录说明

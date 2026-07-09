@@ -1,6 +1,6 @@
 # Multi-core Programming
 
-This document describes common multi-core programming patterns in PTO Tile Lib and emphasizes work partitioning styles that align with the current programming model.
+This document describes common multi-core programming patterns in PTO ISA and emphasizes work partitioning styles that align with the current programming model.
 
 It focuses on tile-based decomposition, output ownership, load balancing, and locality.
 
@@ -167,7 +167,7 @@ This workflow keeps the programming model aligned with the rest of the PTO docum
 
 ## 8. Notes
 
-Multi-core programming in PTO Tile Lib is generally organized around:
+Multi-core programming in PTO ISA is generally organized around:
 
 - SPMD-style work partitioning;
 - output ownership and regular tile ranges;

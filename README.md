@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/figures/pto_logo.svg" alt="PTO Tile Lib" width="220" />
+  <img src="docs/figures/pto_logo.svg" alt="PTO ISA" width="220" />
 </p>
 
-# PTO Tile Library
+# PTO ISA
 
 Parallel Tile Operation (PTO) is a virtual ISA for tile-oriented programming defined by Ascend CANN. This repository provides PTO Tile instruction implementations, examples, tests, and documentation to help developers migrate and optimize operators more smoothly across different Ascend generations.
 
@@ -12,7 +12,7 @@ Parallel Tile Operation (PTO) is a virtual ISA for tile-oriented programming def
 
 ## 📰 News
 
-- 🎉 **2025-12-27**: PTO Tile Library is officially open-sourced.
+- 🎉 **2025-12-27**: PTO ISA is officially open-sourced.
 - ✨ **2026-01-30**: Added reduction instructions and MX instructions.
 - 🚀 **2026-02-28**: Added convolution instructions, quantization instructions, and inter-kernel communication instructions.
 - 🔥 **2026-03-30**: Added support for Ascend A5, asynchronous communication instructions, and CostModel performance simulation.
@@ -48,7 +48,7 @@ At present, PTO instructions have been integrated into the following frameworks:
 
 ## 👥 Intended Audience
 
-PTO Tile Lib is mainly intended for the following developers:
+PTO ISA is mainly intended for the following developers:
 
 - Framework or compiler backend developers who interface directly with Ascend hardware
 - High-performance operator developers who need to migrate and reuse implementations across platforms
@@ -118,7 +118,7 @@ This repository also demonstrates how standard tile operations can be mapped to 
 
 ### Development and Optimization
 
-- [Developer Documentation Index](docs/coding/README.md): browse documentation for extending PTO Tile Lib
+- [Developer Documentation Index](docs/coding/README.md): browse documentation for extending PTO ISA
 - [Performance Optimization](docs/coding/opt.md): review performance analysis and tuning guidance
 - [Documentation Build Guide](docs/mkdocs/README.md): learn how to build the MkDocs site locally
 
@@ -204,7 +204,6 @@ Key directories are listed below:
 ├── docs/                        # ISA, programming model, getting started, and doc site sources
 │   ├── isa/                     # Instruction references and category indexes
 │   ├── coding/                  # Developer and performance optimization docs
-│   ├── assembly/                # PTO-AS assembly syntax and specification
 │   └── mkdocs/                  # MkDocs config and source files
 ├── demos/                       # Auto Mode, baseline, and torch_jit examples
 ├── tests/                       # CPU / NPU tests, scripts, and test entry points

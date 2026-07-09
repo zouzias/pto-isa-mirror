@@ -1,6 +1,6 @@
-# 发布说明 — PTO Tile Lib
+# 发布说明 — PTO ISA
 
-本文档用于汇总 PTO Tile Lib 的版本变更信息。
+本文档用于汇总 PTO ISA 的版本变更信息。
 
 格式遵循 Keep a Changelog 风格（Added / Changed / Fixed / Deprecated / Removed / Security）。
 
@@ -10,7 +10,7 @@
 
 ### Added
 
-- PTO Tile Lib 初次公开发布。
+- PTO ISA 初次公开发布。
 
 ### Changed
 

@@ -1,6 +1,6 @@
 # PTO Tile Intrinsics Programming Model
 
-PTO Tile Lib provides **tile-granularity** intrinsics that map to the PTO ISA. The model is designed for:
+PTO ISA provides **tile-granularity** intrinsics that map to the PTO ISA. The model is designed for:
 
 - **Portability across device generations**: hardware may change (instruction details, storage layout, scheduling), but the programming model remains stable.
 - **Near-hardware performance**: the Tile and GlobalTensor abstractions are low-level enough to express efficient data movement and compute.

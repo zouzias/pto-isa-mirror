@@ -1,6 +1,6 @@
 # 算子融合
 
-本文档从 kernel 组织方式、中间数据搬运和片上资源使用等角度，说明 PTO Tile Lib 中与算子融合相关的考虑因素。
+本文档从 kernel 组织方式、中间数据搬运和片上资源使用等角度，说明 PTO ISA 中与算子融合相关的考虑因素。
 
 本文档重点讨论能够通过 PTO 编程模型直接表达的融合机会。
 
@@ -129,7 +129,7 @@ The following characteristics are typical of fusion in PTO kernels:
 
 ## 8. 结语
 
-在 PTO Tile Lib 中，更准确的算子融合表述应当是：
+在 PTO ISA 中，更准确的算子融合表述应当是：
 
 - 它是一种减少中间 GM 流量的方式
 - 它首先是一种 kernel 组织与优化手段

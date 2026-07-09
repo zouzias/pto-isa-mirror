@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/figures/pto_logo.svg" alt="PTO Tile Lib" width="220" />
+  <img src="docs/figures/pto_logo.svg" alt="PTO ISA" width="220" />
 </p>
 
-# PTO Tile Library
+# PTO ISA
 
 PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 编程的虚拟 ISA。本仓库提供 PTO Tile 指令的实现、示例、测试与文档，帮助开发者在不同昇腾代际之间更平滑地迁移和优化算子。
 
@@ -12,7 +12,7 @@ PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 编程
 
 ## 📰 新闻
 
-- 🎉 **2025-12-27**：PTO Tile Library 正式开源发布。
+- 🎉 **2025-12-27**：PTO ISA 正式开源发布。
 - ✨ **2026-01-30**：新增合轴类指令、MX 指令。
 - 🚀 **2026-02-28**：新增卷积类指令、量化类指令、核间通信类指令。
 - 🔥 **2026-03-30**：支持昇腾 A5 芯片，新增异步通信指令、CostModel 性能仿真。
@@ -48,7 +48,7 @@ PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指�
 
 ## 👥 适用人群
 
-PTO Tile Lib 主要面向以下开发者：
+PTO ISA 主要面向以下开发者：
 
 - 直接对接昇腾硬件的框架或编译器后端开发者
 - 需要跨平台迁移与复用实现的高性能算子开发者
@@ -118,7 +118,7 @@ python3 -m build --wheel
 
 ### 开发与优化
 
-- [开发文档索引](docs/coding/README_zh.md)：查看扩展 PTO Tile Lib 的开发文档
+- [开发文档索引](docs/coding/README_zh.md)：查看扩展 PTO ISA 的开发文档
 - [性能优化](docs/coding/opt_zh.md)：查看性能分析与调优建议
 - [文档构建说明](docs/website_zh.md)：查看 MkDocs 文档的本地构建方式
 
@@ -204,7 +204,6 @@ Ascend 910B2 多核对比，基线为 `torch_npu`：
 ├── docs/                        # ISA、编程模型、快速开始与文档站点源文件
 │   ├── isa/                     # 指令参考与分类索引
 │   ├── coding/                  # 开发与性能优化文档
-│   ├── assembly/                # PTO-AS 汇编语法与规范
 │   └── mkdocs/                  # MkDocs 文档构建配置与源文件
 ├── demos/                       # Auto Mode、baseline 与 torch_jit 示例
 ├── tests/                       # CPU / NPU 测试、脚本与测试入口

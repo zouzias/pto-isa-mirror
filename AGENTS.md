@@ -1,4 +1,4 @@
-# AGENTS.md - PTO Tile Library
+# AGENTS.md - PTO ISA
 
 This file provides essential information for agentic coding agents working in this repository.
 

@@ -1,10 +1,10 @@
 # scripts/package/
 
-Packaging and release scripts/templates for PTO Tile Lib. This directory is used to generate distributable artifacts.
+Packaging and release scripts/templates for PTO ISA. This directory is used to generate distributable artifacts.
 
 ## Layout (High Level)
 
-- `pto_isa/`: Package templates and helper scripts specific to PTO Tile Lib
+- `pto_isa/`: Package templates and helper scripts specific to PTO ISA
 - `module/`: Module-level packaging descriptors
 
 Common helpers (`package.py`, `install_common_parser.sh`, install/cleanup

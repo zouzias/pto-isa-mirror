@@ -1,4 +1,4 @@
-# Debugging PTO Tile Lib (Assertions Guide)
+# Debugging PTO ISA (Assertions Guide)
 
 This document helps you diagnose compilation/runtime failures caused by assertions in `include/pto/`.
 

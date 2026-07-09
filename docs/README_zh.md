@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
+  <img src="figures/pto_logo.svg" alt="PTO ISA" width="200" />
 </p>
 
 # PTO ISA 文档导航
 
-这里是 PTO Tile Lib 的文档入口页，用于帮助读者按主题快速定位文档，而不是逐个目录查找。
+这里是 PTO ISA 的文档入口页，用于帮助读者按主题快速定位文档，而不是逐个目录查找。
 
 PTO 相关文档主要覆盖以下几类内容：
 
@@ -15,7 +15,7 @@ PTO 相关文档主要覆盖以下几类内容：
 
 ## 建议阅读路径
 
-如果您第一次接触 PTO Tile Lib，建议按以下顺序阅读：
+如果您第一次接触 PTO ISA，建议按以下顺序阅读：
 
 1. [快速开始指南](getting-started_zh.md)：先完成环境准备并运行 CPU Simulator
 2. [ISA 总览](PTOISA_zh.md)：建立对 PTO ISA 的整体认识
@@ -35,7 +35,7 @@ PTO 相关文档主要覆盖以下几类内容：
 
 ### 2. 编程模型与开发文档
 
-- [开发文档索引](coding/README_zh.md)：扩展 PTO Tile Lib 的开发文档入口
+- [开发文档索引](coding/README_zh.md)：扩展 PTO ISA 的开发文档入口
 - [Tile 编程模型](coding/Tile_zh.md)：介绍 tile shape、tile mask 与数据布局
 - [事件与同步](coding/Event_zh.md)：介绍事件记录、等待与同步机制
 - [性能优化](coding/opt_zh.md)：介绍性能分析与调优建议
