@@ -21,25 +21,6 @@ $$
 \end{cases}
 $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tsel %mask, %src0, %src1 : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -58,8 +39,8 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-    - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - `sizeof(TileData::DType)` must be `1`, `2`, or `4` bytes.
+    - `TileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
@@ -121,32 +102,5 @@ void example_manual() {
   TASSIGN(tmp,  0x5000);
   TSEL(dst, mask, src0, src1, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tsel %mask, %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

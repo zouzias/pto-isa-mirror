@@ -15,25 +15,6 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \oplus \mathrm{scalar} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = txors %src, %scalar : !pto.tile<...>, i32
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.txors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -52,6 +33,7 @@ PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 - **Implementation checks (A5)**:
     - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
     - `dst` and `src` element types must match.
+    - `dst` and `src` must use row-major layout.
     - `src.GetValidRow()/GetValidCol()` must match `dst`.
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
@@ -84,30 +66,4 @@ void example() {
 }
 ```
 
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.txors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.txors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = txors %src, %scalar : !pto.tile<...>, i32
-# AS Level 2 (DPS)
-pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 
