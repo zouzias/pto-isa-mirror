@@ -1,10 +1,10 @@
 # scripts/package/
 
-PTO Tile Lib 的打包/发布脚本与模板，用于生成可分发产物。
+PTO ISA 的打包/发布脚本与模板，用于生成可分发产物。
 
 ## 目录结构（概览）
 
-- `pto_isa/`：PTO Tile Lib 专用的打包模板与辅助脚本
+- `pto_isa/`：PTO ISA 专用的打包模板与辅助脚本
 - `module/`：模块级打包描述
 
 公共脚本（`package.py`、`install_common_parser.sh`、安装/清理片段等）已复用自

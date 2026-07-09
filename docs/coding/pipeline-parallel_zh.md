@@ -1,6 +1,6 @@
 # 流水线并行
 
-本文档从阶段执行、缓冲组织和显式同步等角度，说明 PTO Tile Lib 中的流水线重叠方式。
+本文档从阶段执行、缓冲组织和显式同步等角度，说明 PTO ISA 中的流水线重叠方式。
 
 本文档重点讨论 load、transform、compute、store 等阶段在软件层面的组织方式。
 
@@ -124,7 +124,7 @@ TLOAD -> 布局 / 暂存变换 -> compute -> TSTORE
 
 ## 9. 相关参考文档
 
-在当前 PTO Tile Lib 仓库中，最相关的参考包括：
+在当前 PTO ISA 仓库中，最相关的参考包括：
 
 - `docs/coding/Event.md`
 - `docs/coding/Tile.md`
@@ -133,7 +133,7 @@ TLOAD -> 布局 / 暂存变换 -> compute -> TSTORE
 
 ## 9. 结语
 
-在 PTO Tile Lib 中，更准确的流水线并行描述方式应当是：
+在 PTO ISA 中，更准确的流水线并行描述方式应当是：
 
 - 在合法前提下重叠 load / transform / compute / store 等阶段
 - 谨慎使用缓冲与显式同步

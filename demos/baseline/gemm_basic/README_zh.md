@@ -115,7 +115,7 @@ python3 -m pip install -r requirements.txt
 
 ### 2. 构建 wheel
 
-配置 Ascend CANN 环境、 PTO Tile Lib 路径并构建 wheel：
+配置 Ascend CANN 环境、 PTO ISA 路径并构建 wheel：
 
 ```bash
 export ASCEND_HOME_PATH=/usr/local/Ascend/

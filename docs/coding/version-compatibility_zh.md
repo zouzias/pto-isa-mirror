@@ -1,12 +1,12 @@
 # 版本兼容性说明
 
-本文档基于当前 PTO Tile Lib 仓库中的实际内容，说明版本与平台兼容性的基本原则。
+本文档基于当前 PTO ISA 仓库中的实际内容，说明版本与平台兼容性的基本原则。
 
 本文档有意避免写入仓库中未正式定义的信息，例如未经声明的版本生命周期、无法核实的历史废弃 API，或仓库中未给出依据的框架兼容矩阵。
 
 ## 1. 兼容性范围
 
-PTO Tile Lib 当前面向以下执行环境：
+PTO ISA 当前面向以下执行环境：
 
 - **Ascend A2**
 - **Ascend A3**
@@ -21,9 +21,9 @@ PTO Tile Lib 当前面向以下执行环境：
 
 项目级的平台说明可参考 `README.md`；按指令划分的后端实现覆盖情况可参考 `include/README.md`。
 
-## 2. 在 PTO Tile Lib 中，“兼容性”具体指什么
+## 2. 在 PTO ISA 中，“兼容性”具体指什么
 
-在 PTO Tile Lib 中，兼容性通常需要从以下三个维度理解。
+在 PTO ISA 中，兼容性通常需要从以下三个维度理解。
 
 ### 2.1 API 兼容性
 
@@ -118,7 +118,7 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 
 ### 5.2 Event 兼容性与后端相关
 
-PTO Tile Lib 支持显式事件模型，但其具体行为与后端有关：
+PTO ISA 支持显式事件模型，但其具体行为与后端有关：
 
 - 在 device build 下，使用类型化的 `Event<SrcOp, DstOp>` 对象表达依赖
 - 在 CPU 仿真下，同步行为会被简化，部分事件路径表现为 no-op
@@ -156,7 +156,7 @@ Event 的详细模型说明请参考 [Event 编程模型](Event_zh.md)。
 
 本文档**不**定义以下内容：
 
-- PTO Tile Lib 的正式语义化版本策略
+- PTO ISA 的正式语义化版本策略
 - LTS / 支持周期承诺
 - 针对未公开历史版本的迁移兼容保证
 - 仓库中未明确给出依据的外部框架兼容矩阵

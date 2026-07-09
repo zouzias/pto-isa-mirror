@@ -1,10 +1,10 @@
-# Repo Context for AI Agents (PTO Tile Lib)
+# Repo Context for AI Agents (PTO ISA)
 
 This document is a fast, practical orientation for agents working in this repo: what it is, where the key entrypoints live, and the shortest paths to build/run in **CPU**, **NPU simulator (`sim`)**, and **on-board NPU (`npu`)** modes.
 
 ## What This Repo Is
 
-- **PTO Tile Library**: C++ headers + implementations for the PTO (Parallel Tile Operation) virtual ISA defined by Ascend CANN.
+- **PTO ISA**: C++ headers + implementations for the PTO (Parallel Tile Operation) virtual ISA defined by Ascend CANN.
 - Supports multiple backends:
   - **CPU simulation** (cross-platform, no Ascend driver/CANN required).
   - **Ascend NPU** backends split by SoC generation:

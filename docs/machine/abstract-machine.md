@@ -1,6 +1,6 @@
 # PTO Machine Model (Abstract)
 
-This document defines the abstract machine model for the **PTO ISA** as exposed by **PTO Tile Lib**.
+This document defines the abstract machine model for the **PTO ISA** as exposed by **PTO ISA**.
 
 The goal is to provide a stable programming model across fast-evolving device generations:
 
