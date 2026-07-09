@@ -10,7 +10,7 @@
 
 对于 TileData 流程：
 
-1. `TPUSH(Pipe&, TileData&, Split)` 将生产者 tile 存入当前 FIFO 槽位，并为消费者记录数据就绪同步。生产者 tile 索引在槽位地址计算完成后递增。
+1. `TPUSH(Pipe&, TileData&)` 将生产者 tile 存入当前 FIFO 槽位，并为消费者记录数据就绪同步。（注：Split为模板参数）生产者 tile 索引在槽位地址计算完成后递增。
 2. `TPOP(Pipe&, TileData&, Split)` 等待生产者的数据就绪同步，将当前 FIFO 槽位加载到消费者 tile 中。消费者 tile 索引在槽位地址计算完成后递增。
 3. `TFREE(Pipe&, Split)` 释放 FIFO 中的槽位空间。A2A3 平台上此接口为空操作（`TPOP` 已在内部执行空闲空间通知），A5 平台上会释放 `TPOP` 使用的 FIFO 槽位空间。
 
@@ -86,7 +86,7 @@ AICORE void example_c2v(__gm__ void *fifoMem)
     using Pipe = TPipe<FlagID, Direction::DIR_C2V, M * N * sizeof(T), FifoDepth>;
     using VecTile = Tile<TileType::Vec, T, M / 2, N, BLayout::RowMajor, M / 2, N>;
 
-    Pipe pipe(fifoMem, LocalBase, 0x0);
+    Pipe pipe(fifoMem, LocalBase, 0x0); （需统一V2C示例中的参数顺序，建议核对TPipe构造函数实际定义）
     VecTile tile;
 
     TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, tile);
