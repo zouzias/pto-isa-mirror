@@ -44,42 +44,24 @@ $$
 \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} / b_i[\,j \bmod (32 / \mathit{sizeof}(T))\,]
 $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
-          typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+          typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
-- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float` for A2, A3 and A5, `int16`, `int32`, `uint16`, `uint32` for A5.
+- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float` for A2, A3 and A5, `int16`, `int32`, `uint16`, `uint32`, `bfloat16_t`, `int8_t`, `uint8_t` for A5.
 - `TileDataDst` must be **RowMajor** (`TileDataDst::isRowMajor == true`).
 - Exactly one of `src0` or `src1` must have the same valid shape as `dst` (i.e., `validRow == dst.validRow` and `validCol == dst.validCol`). That operand is the full-sized operand. The other operand is the **expanded operand** (row-broadcast source).
 - The full-sized operand must be **RowMajor** (`isRowMajor == true`).
@@ -96,8 +78,9 @@ When the expanded operand is **ColMajor** (`isRowMajor == false`):
 When the expanded operand is **RowMajor** (`isRowMajor == true`):
 
 - Its valid column count must be **32 / sizeof(T)** (a 32-byte block per row): `srcX.GetValidCol() == 32 / sizeof(T)`.
-  - For `half` / `int16` / `uint16`: `validCol == 16`.
+  - For `half` / `int16` / `uint16` / `bfloat16_t`: `validCol == 16`.
   - For `float` / `int32` / `uint32`: `validCol == 8`.
+  - For `int8_t` / `uint8_t`: `validCol == 32`.
 - Its valid row count must equal `dst.GetValidRow()`: `srcX.GetValidRow() == dst.GetValidRow()`.
 
 ### Additional target-specific constraints
@@ -158,31 +141,3 @@ void example_manual() {
   TROWEXPANDDIV(dst, src0, src1);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trowexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

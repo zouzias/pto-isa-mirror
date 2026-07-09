@@ -18,26 +18,6 @@ $$
 \mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, s_j)
 $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tcolexpandmin %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tcolexpandmin %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tcolexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -49,7 +29,7 @@ PTO_INST RecordEvent TCOLEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ## 约束
 
-- `TileDataDst::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`、`int16`、`int32`适用于A2，A3和A5，`uint16`、`uint32`适用于A5。
+- `TileDataDst::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`、`int16`、`int32`适用于A2，A3和A5，`uint16`、`uint32`、`bfloat16_t`、`int8_t`、`uint8_t`适用于A5。
 - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
 - `src1` 预期提供**每列一个标量**（即，其有效形状必须覆盖 `C` 个值）。
 - 确切的布局/分形约束是目标特定的；参见 `include/pto/npu/*/TColExpand*.hpp` 下的后端头文件。
@@ -57,31 +37,3 @@ PTO_INST RecordEvent TCOLEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 ## 示例
 
 参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tcolexpandmin %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tcolexpandmin %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO 汇编形式
-
-```text
-%dst = tcolexpandmin %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tcolexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

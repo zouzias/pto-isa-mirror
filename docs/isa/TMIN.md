@@ -15,25 +15,6 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tmin %src0, %src1 : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -52,7 +33,7 @@ PTO_INST RecordEvent TMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
     - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`.
+    - `TileData::DType` must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`, `bfloat16_t`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
@@ -91,32 +72,5 @@ void example_manual() {
   TASSIGN(dst,  0x3000);
   TMIN(dst, src0, src1);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tmin %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
