@@ -1,6 +1,6 @@
-# Release Notes — PTO Tile Lib
+# Release Notes — PTO ISA
 
-This document summarizes version changes in PTO Tile Lib.
+This document summarizes version changes in PTO ISA.
 
 The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated / Removed / Security).
 
@@ -10,7 +10,7 @@ The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated 
 
 ### Added
 
-- Initial public release of PTO Tile Lib.
+- Initial public release of PTO ISA.
 
 ### Changed
 

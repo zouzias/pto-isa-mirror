@@ -1,6 +1,6 @@
 # 编译流程说明
 
-本文档从源码组织、公共 intrinsics、backend 选择和仓库构建入口几个角度，说明 PTO Tile Lib 的构建与编译流程。
+本文档从源码组织、公共 intrinsics、backend 选择和仓库构建入口几个角度，说明 PTO ISA 的构建与编译流程。
 
 本文档重点描述开发者可见的工作流，不将未公开定义的编译器内部阶段扩展为规范接口说明。
 
@@ -18,7 +18,7 @@ intrinsic 层主要由 [PTO 公共头文件](../../include/pto/README.md) 下的
 
 ## 2. 构建与编译特征
 
-PTO Tile Lib 采用 **C++ intrinsic 接口**。
+PTO ISA 采用 **C++ intrinsic 接口**。
 
 从公共 API 角度看，该库主要采用 **header-based / template-based** 的使用方式。
 同一份 PTO 源码可以在不同 build 配置下对接不同 backend。
@@ -144,11 +144,11 @@ NPU 路径面向 Ascend 硬件或 simulator 侧执行。
 
 一些在通用 AI 工具或网络示例中常见的片段，例如通用的 `find_package(PTO REQUIRED)`、假设存在的 `PTO::pto` 链接目标等，并**不能**直接视为本仓库已经正式定义的标准集成方式。
 
-补充文档或扩展 PTO Tile Lib 时，应以仓库内构建脚本、顶层 `CMakeLists.txt` 以及现有测试和 demo 的构建方式为主要参考。
+补充文档或扩展 PTO ISA 时，应以仓库内构建脚本、顶层 `CMakeLists.txt` 以及现有测试和 demo 的构建方式为主要参考。
 
 ## 9. 说明
 
-PTO Tile Lib 的编译流程可概括为：
+PTO ISA 的编译流程可概括为：
 
 - PTO 代码以 C++ 和公共 intrinsics 形式编写；
 - 构建系统根据配置选择对应的 backend 实现；

@@ -1,6 +1,6 @@
 # Pipeline Parallelism
 
-This document describes pipeline overlap in PTO Tile Lib from the perspective of staged execution, buffering, and explicit synchronization.
+This document describes pipeline overlap in PTO ISA from the perspective of staged execution, buffering, and explicit synchronization.
 
 It focuses on software-visible organization of load, transform, compute, and store stages.
 
@@ -125,7 +125,7 @@ This mirrors the tuning philosophy in `docs/coding/opt.md`.
 
 ## 9. Related references
 
-For the current PTO Tile Lib repository, the most relevant documents are:
+For the current PTO ISA repository, the most relevant documents are:
 
 - `docs/coding/Event.md`
 - `docs/coding/Tile.md`
@@ -134,7 +134,7 @@ For the current PTO Tile Lib repository, the most relevant documents are:
 
 ## 9. Conclusion
 
-In PTO Tile Lib, pipeline parallelism is best described as:
+In PTO ISA, pipeline parallelism is best described as:
 
 - overlapping load / transform / compute / store stages when legal
 - using buffering and explicit synchronization carefully

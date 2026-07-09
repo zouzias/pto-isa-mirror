@@ -1,6 +1,6 @@
 # Operator Fusion
 
-This document describes operator-fusion-related considerations in PTO Tile Lib from the perspective of kernel structuring, intermediate data movement, and on-chip resource usage.
+This document describes operator-fusion-related considerations in PTO ISA from the perspective of kernel structuring, intermediate data movement, and on-chip resource usage.
 
 It focuses on fusion opportunities that can be expressed directly through the PTO programming model.
 
@@ -131,7 +131,7 @@ This keeps fusion decisions tied to measured benefit rather than intuition alone
 
 ## 8. Conclusion
 
-In PTO Tile Lib, operator fusion should be described conservatively as:
+In PTO ISA, operator fusion should be described conservatively as:
 
 - a way to reduce unnecessary intermediate GM traffic
 - a kernel-structuring and optimization technique

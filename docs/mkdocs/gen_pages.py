@@ -10,7 +10,7 @@
 # --------------------------------------------------------------------------------
 
 """
-MkDocs build-time generator for PTO Tile Lib.
+MkDocs build-time generator for PTO ISA.
 
 We intentionally keep MkDocs config under `docs/mkdocs/` and generate a *mirror*
 of repository markdown into `docs/mkdocs/src/` so the site can browse markdown

@@ -1,6 +1,6 @@
 # Contributing Guide
 
-We welcome developers to explore PTO Tile Lib and contribute to the project. Before participating in community contributions, please refer to [cann-community](https://gitcode.com/cann/community) to review the community code of conduct, complete the CLA process, and understand the contribution workflow used by the source repositories.
+We welcome developers to explore PTO ISA and contribute to the project. Before participating in community contributions, please refer to [cann-community](https://gitcode.com/cann/community) to review the community code of conduct, complete the CLA process, and understand the contribution workflow used by the source repositories.
 
 This document is organized into three parts:
 
