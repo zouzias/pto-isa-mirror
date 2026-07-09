@@ -81,7 +81,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 | 值 | 说明 |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
+| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输；在 Ascend950 / NPU_ARCH 3510 上，硬件 SDMA 异步路径当前仅支持 TGET 方向，`TPUT_ASYNC` 使用 MTE fallback 路径）|
 | `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
 
 ### AsyncEvent
