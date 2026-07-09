@@ -95,7 +95,7 @@ using namespace pto;
 void example_manual() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT dst;
-  TASSIGN(dst, 1.0f);
+  TASSIGN(dst, 0x1000);
   TEXPANDS(dst, 0.0f);
 }
 ```

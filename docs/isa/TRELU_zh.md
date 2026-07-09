@@ -52,7 +52,11 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
     - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
     - 运行时： `src`且`dst` tiles 应具有相同的 `validRow/validCol`.
 - **实现检查 (A5)**:
-    - [请补充A5架构的实际约束条件，当前内容误复制了A2A3的约束]
+    - `TileData::DType` 必须是以下之一： `half`, `float`, `int32_t`（与 A2A3 一致）.
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）.
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）.
+    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+    - 运行时： `src`且`dst` tiles 应具有相同的 `validRow/validCol`.
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域; `src/dst` 假定是兼容的 (此操作中不通过显式运行时检查进行验证).
 
