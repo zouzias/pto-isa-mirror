@@ -29,7 +29,7 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
     - `GlobalSignalData::DType` 必须为 `int32_t` (32 位信号)。
 - **内存约束**：
     - `dstSignalData` 必须指向远端地址（目标 NPU）。
-    - `dstSignalData` 应 4 字节对齐。
+    - `dstSignalData` 应 4字节对齐。
 - **操作语义**：
     - `NotifyOp::Set`：直接存储到远端内存。
     - `NotifyOp::AtomicAdd`：使用 `st_atomic` 指令执行硬件原子加。

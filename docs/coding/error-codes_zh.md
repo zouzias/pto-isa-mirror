@@ -267,7 +267,7 @@ void my_kernel(..., uint32_t size) {
     printf("Error: size %u exceeds MAX_SIZE %u\n", size, MAX_SIZE);
     return;
   }
-  
+
   // 继续执行
   // ...
 }
@@ -290,7 +290,7 @@ void my_kernel(__gm__ float* out, __gm__ const float* in) {
     printf("Error: null pointer\n");
     return;
   }
-  
+
   // 继续执行
   // ...
 }
@@ -313,7 +313,7 @@ AddressSanitizer: heap-buffer-overflow
 // 添加边界检查
 for (int i = start; i < end; i += TILE_SIZE) {
   int actual_size = min(TILE_SIZE, end - i);  // 防止越界
-  
+
   TLOAD(tile, GlobalTensor(in + i, actual_size));
   // ...
 }
@@ -336,7 +336,7 @@ Required: 600 KB, Available: 512 KB
 **解决方案**：
 ```cpp
 // 方法1：减小 Tile 尺寸
-// ❌ 错误：16 × 512 × 4 bytes = 32 KB，多个 Tile 超出 L1
+// ❌ 错误：16 × 512 × 4 Byte = 32 KB，多个 Tile 超出 L1
 using TileT = Tile<TileType::Vec, float, 16, 512>;
 
 // ✅ 正确：减小到 256
@@ -381,7 +381,7 @@ for (int offset = 0; offset < total_size; offset += CHUNK_SIZE) {
 
 **错误信息**：
 ```
-Memory leak detected: 1024 KB not freed
+Memory leak detected: 1 MB not freed
 ```
 
 **原因**：动态分配的内存未释放
@@ -394,11 +394,11 @@ class TileBuffer {
   TileBuffer(size_t size) {
     data_ = new float[size];
   }
-  
+
   ~TileBuffer() {
     delete[] data_;
   }
-  
+
  private:
   float* data_;
 };
@@ -677,7 +677,7 @@ z = torch.ops.npu.my_add(x, y)
 
 # 或在算子内部检查
 at::Tensor my_add_impl(const at::Tensor& x, const at::Tensor& y) {
-  TORCH_CHECK(x.device() == y.device(), 
+  TORCH_CHECK(x.device() == y.device(),
               "Inputs must be on same device");
   // ...
 }
@@ -708,7 +708,7 @@ class MyAddFunction : public torch::autograd::Function<MyAddFunction> {
       const at::Tensor& y) {
     return my_add_impl(x, y);
   }
-  
+
   static std::vector<at::Tensor> backward(
       torch::autograd::AutogradContext* ctx,
       std::vector<at::Tensor> grad_outputs) {
