@@ -41,9 +41,9 @@ PTO_INST RecordEvent TSUBVIEW(TileDataDst &dst, TileDataSrc &src, uint16_t rowId
 规定在`TSUBVIEW_IMPL`中:
 
 - **Tile类型必须相同**: `TileDataSrc::Loc == TileDataDst::Loc`.
-- **输入和输出Tile的静态shape必须相同**: `TileDataSrc::Rows == TileDataDst::Rows` and `TileDataSrc::Cols == TileDataDst::Cols`.
-- **输入和输出Tile的BLayout必须相同**: `TileDataSrc::BFractal == TileDataDst::BFractal`.
-- **src的validRow和validCol必须大于等于dst的validRow和validCol**
+- 在 Auto 模式下额外检查：
+    - **输入和输出Tile的BLayout必须相同**: `TileDataSrc::BFractal == TileDataDst::BFractal`.
+    - **src的validRow和validCol必须大于等于dst的validRow和validCol**
 
 ## 示例
 

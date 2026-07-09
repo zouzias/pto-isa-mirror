@@ -59,12 +59,13 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
     - 转置大小取自 `src.GetValidRow()` / `src.GetValidCol()`。
 - **实现检查 (A5)**:
     - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`。
-    - 对输入和输出的主维度强制执行 32 字节对齐约束（行主序检查 `Cols * sizeof(T) % 32 == 0`，列主序检查 `Rows * sizeof(T) % 32 == 0`）。
+    - 源布局必须是行主序（`TileDataSrc::isRowMajor`）。
+    - 对输入和输出的列维度强制执行 32 字节对齐约束（`TileDataSrc::Cols * sizeof(T) % 32 == 0` 且 `TileDataDst::Cols * sizeof(U) % 32 == 0`）。
     - 支持的元素类型按元素宽度限制如下：
     - 4 字节：`uint32_t`、`int32_t`、`float`
     - 2 字节：`uint16_t`、`int16_t`、`half`、`bfloat16_t`
     - 1 字节：`uint8_t`、`int8_t`
-    - 实现在静态 Tile 形状（`TileDataSrc::Rows/Cols`）上运算，不参考 `GetValidRow/GetValidCol`。
+    - 转置大小取自 `src.GetValidRow()` / `src.GetValidCol()`。
 - **临时 Tile**:
     - C++ API 需要 `tmp`，需要的tmp空间大小计算公式如下：
     - **基础参数**:
