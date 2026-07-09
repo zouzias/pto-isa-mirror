@@ -12,7 +12,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{local}}_{i,j} = \mathrm{src}^{\mathrm{remote}}_{i,j} $$
 
-Data flow: `srcGlobalData (remote GM)` ->`stagingTileData (UB)` ->`dstGlobalData (local GM)`
+Data flow: `srcGlobalData (remote GM)` → `stagingTileData (UB)` → `dstGlobalData (local GM)`
 
 ## Assembly Syntax
 
