@@ -116,20 +116,6 @@ When `validCol % 32 != 0`, the trailing partial block ($t = C \bmod 32$ elements
 
 Padding values ($-\infty$ = `-(0.0/0.0)`) land at the bottom of the descending order. If `validCol > 32 × 255`, the row is chunked into `REPEAT_MAX`-sized groups, each sorted via a separate `vbitsort` call.
 
-## Assembly Syntax
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## Examples
 
 ```cpp
@@ -149,29 +135,4 @@ using IdxT2 = Tile<TileType::Vec, uint32_t, 1, 100>;
 using DstT2 = Tile<TileType::Vec, half, 1, 400>;  // 4× src cols (half)
 using TmpT  = Tile<TileType::Vec, half, 1, 128>;  // ≥ ceil32(100)=128
 TSort32(dst2, src2, idx2, tmp);
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

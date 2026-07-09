@@ -14,16 +14,6 @@ Scatter 操作：调用方 NPU（根节点）将本地源 tensor 沿 **DIM_3**�
 
 $$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
 
-## 汇编语法
-
-同步形式：
-
-```text
-tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
-```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
-
 ## 模板参数
 
 - `engine`：
@@ -127,4 +117,3 @@ void scatter_pingpong(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int m
     comm::TSCATTER(group, srcG, pingTile, pongTile);
 }
 ```
-

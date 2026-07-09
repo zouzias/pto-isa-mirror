@@ -16,16 +16,6 @@ $$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k
 
 其中 $N$ 为 rank 总数，`root` 为调用方 NPU。
 
-## 汇编语法
-
-同步形式：
-
-```text
-tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
-```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
-
 ## 模板参数
 
 - `engine`：

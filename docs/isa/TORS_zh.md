@@ -14,26 +14,6 @@ Tile 与标量的逐元素按位或。
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;|\; \mathrm{scalar} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tors %src, %scalar : !pto.tile<...>, i32
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -75,6 +55,7 @@ void example() {
   TORS(dst, src, 0xffu);
 }
 ```
+<<<<<<< Updated upstream
 
 ## 汇编示例（ASM）
 
@@ -102,3 +83,5 @@ void example() {
 # AS Level 2 (DPS)
 pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
+=======
+>>>>>>> Stashed changes

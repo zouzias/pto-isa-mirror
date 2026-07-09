@@ -36,7 +36,3 @@ AICORE void example_set_quant_vector()
     SET_QUANT_VECTOR(fpTile);
 }
 ```
-
-## 汇编示例（ASM）
-
-当前公开的汇编参考尚未为 `SET_QUANT_VECTOR` 定义稳定的 PTO-AS 写法。设置量化配置时请使用 C++ intrinsic 形式。

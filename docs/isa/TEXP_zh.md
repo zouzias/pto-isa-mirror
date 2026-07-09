@@ -14,26 +14,6 @@
 
 $$ \mathrm{dst}_{i,j} = \exp(\mathrm{src}_{i,j}) $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = texp %src : !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -49,7 +29,6 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 * `ExpAlgorithm::DEFAULT`：普通算法，速度快但精度较低。
 * `ExpAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢。
 
-
 ## 约束
 
 - **实现检查 (NPU)**:
@@ -62,7 +41,6 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **高精度算法**
     - 仅在A5上有效，`PrecisionType`选项在A3上将被忽略。
-
 
 ## 示例
 
@@ -96,31 +74,3 @@ void example_manual() {
   TEXP(dst, src);
 }
 ```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO 汇编形式
-
-```text
-%dst = texp %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

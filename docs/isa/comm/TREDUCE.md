@@ -4,7 +4,6 @@
 
 Reduce operation: gather data from multiple remote NPUs and perform element-wise reduction locally. 
 
-
 Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TREDUCE` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the reduction is automatically chunked via 2D sliding.
@@ -16,16 +15,6 @@ For each element `(i, j)` in the valid region:
 $$ \mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}_{i,j} $$
 
 where $N$ is the number of ranks and $\oplus$ is the reduction operation (sum, max, min, etc.).
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-treduce %group, %dst {op = #pto.reduce_op<Sum>} : (!pto.group<...>, !pto.memref<...>)
-treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<...>)
-```
-Lowering introduces internal accumulator and receive tiles for the reduce pipeline; the C++ intrinsic requires explicit `accTileData`, `recvTileData` (or `accTileData`, `pingTileData`, `pongTileData`) operand(s).
 
 ## Template Parameter
 

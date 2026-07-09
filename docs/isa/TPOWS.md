@@ -1,6 +1,5 @@
 # TPOWS
 
-
 ## Tile Operation Diagram
 
 ![TPOWS tile operation](../figures/isa/TPOWS.svg)
@@ -16,26 +15,6 @@ For each element `(i, j)` in the valid region:
 $$ \mathrm{dst}_{i,j} = \mathrm{base}_{i,j}^{\mathrm{exp}} $$
 
 For floating-point types, the computation follows: `dst = exp(ln(|base|) * exp)` with special case handling for negative base values and integer exponents.
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tpows %base, %exp, %tmp : !pto.tile<...>, dtype
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tpows %base, %exp, %tmp : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tpows ins(%base, %exp, %tmp : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 
 ## C++ Intrinsic
 
@@ -125,31 +104,4 @@ void example_manual() {
   TASSIGN(tmp, 0x3000);
   TPOWS(dst, base, 2.0f, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tpows %base, %exp, %tmp : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tpows %base, %exp, %tmp : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tpows %base, %exp, %tmp : !pto.tile<...>, dtype
-# AS Level 2 (DPS)
-pto.tpows ins(%base, %exp, %tmp : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

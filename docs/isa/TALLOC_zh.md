@@ -121,7 +121,3 @@ AICORE void example_v2c_split(__gm__ void *fifoMem)
     TPUSH<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
 }
 ```
-
-## ASM 形式示例
-
-当前公开的汇编参考尚未为 `TALLOC` 定义稳定的 PTO-AS 写法。手写 CV FIFO 程序时请使用 C++ intrinsic 形式。

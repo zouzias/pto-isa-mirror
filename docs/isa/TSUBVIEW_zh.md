@@ -17,16 +17,6 @@
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{rowIdx} + i,\mathrm{colIdx} + j} $$
 
-## 汇编语法
-
-### IR Level 1 (SSA)
-
-TODO
-
-### IR Level 2 (DPS)
-
-TODO
-
 ## C++ Intrinsic
 
 定义在 `include/pto/common/pto_instr.hpp`:
@@ -69,17 +59,3 @@ void example() {
   TSUBVIEW(dst3, src, 2, 32);
 }
 ```
-
-## ASM示例
-
-### Auto模式
-
-TODO
-
-### Manual模式
-
-TODO
-
-### PTO汇编格式
-
-TODO

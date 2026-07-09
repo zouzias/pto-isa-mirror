@@ -1,6 +1,5 @@
 ﻿# TCOLPROD
 
-
 ## Tile Operation Diagram
 
 ![TCOLPROD tile operation](../figures/isa/TCOLPROD.svg)
@@ -14,26 +13,6 @@ Reduce each column by multiplying across rows.
 Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= j < C`:
 
 $$ \mathrm{dst}_{0,j} = \prod_{i=0}^{R-1} \mathrm{src}_{i,j} $$
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tcolprod %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tcolprod %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tcolprod ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 
 ## C++ Intrinsic
 
@@ -98,31 +77,3 @@ void example_manual() {
   TCOLPROD(dst, src);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tcolprod %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tcolprod %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tcolprod %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tcolprod ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

@@ -1,6 +1,5 @@
 ﻿# TSYNC
 
-
 ## Tile Operation Diagram
 
 ![TSYNC tile operation](../figures/isa/TSYNC.svg)
@@ -18,36 +17,6 @@ Many intrinsics in `include/pto/common/pto_instr.hpp` call `TSYNC(events...)` in
 
 Not applicable.
 
-## Assembly Syntax
-
-Event operand form:
-
-```text
-tsync %e0, %e1 : !pto.event<...>, !pto.event<...>
-```
-
-Single-op barrier form:
-
-```text
-tsync.op #pto.op<TADD>
-```
-
-### AS Level 1 (SSA)
-
-```text
-// Level 1 (SSA) does not support explicit synchronization primitives.
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.record_event[src_op, dst_op, eventID]
-// 支持的op：TLOAD，TSTORE_ACC，TSTORE_VEC，TMOV_M2L，TMOV_M2S，TMOV_M2B，TMOV_M2V，TMOV_V2M，TMATMUL，TVEC
-pto.wait_event[src_op, dst_op, eventID]
-// 支持的op：TLOAD，TSTORE_ACC，TSTORE_VEC，TMOV_M2L，TMOV_M2S，TMOV_M2B，TMOV_M2V，TMOV_V2M，TMATMUL，TVEC
-pto.barrier(op)
-// 支持的op：TVEC,TMATMUL
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -63,7 +32,11 @@ PTO_INST void TSYNC(WaitEvents &... events);
 ## Constraints
 
 - **Implementation checks (`TSYNC<Op>()`)**:
-    - `TSYNC_IMPL<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
+    - `TSYNC_IMPL<Op>()` — the supported pipeline set is decided by the `PTO_STATIC_ASSERT` in the **backend** `include/pto/npu/<arch>/TSync.hpp`, effective only in non-auto mode (`#ifndef __PTO_AUTO__`):
+      - A2A3: supports `S / V / M / MTE1 / MTE2 / MTE3 / FIX / ALL` (`npu/a2a3/TSync.hpp`).
+      - A5: supports only `MTE2 / MTE3 / ALL` (`npu/a5/TSync.hpp`).
+      - CPU simulation: empty implementation.
+    - After the assert passes, `pipe_barrier(pipe)` is emitted.
 - **`TSYNC(events...)` semantics**:
     - `TSYNC(events...)` calls `WaitAllEvents(events...)`, which invokes `events.Wait()` on each event token. In auto mode, this is no-op.
 
@@ -106,31 +79,3 @@ void example_manual() {
   TSYNC(e);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%result = pto.tsync ...
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%result = pto.tsync ...
-```
-
-### PTO Assembly Form
-
-```text
-tsync %e0, %e1 : !pto.event<...>, !pto.event<...>
-# AS Level 2 (DPS)
-pto.record_event[src_op, dst_op, eventID]
-```
-

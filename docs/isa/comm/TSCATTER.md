@@ -4,7 +4,6 @@
 
 Scatter operation: the calling NPU (root) distributes data to all ranks in the parallel group by splitting the local source tensor along **DIM_3** (row dimension). This is the inverse of `TGATHER`.
 
-
 Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation. Calling `TSCATTER` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the per-rank data exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding.
@@ -14,15 +13,6 @@ Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure th
 The local source tensor has shape $(D_0, D_1, D_2, N \times H, W)$, where $N$ is the number of ranks and each rank receives $H$ rows. After the operation:
 
 $$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
-```
-Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
 ## Template Parameter
 

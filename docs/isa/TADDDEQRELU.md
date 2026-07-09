@@ -16,26 +16,6 @@ $$ \mathrm{dst}_{i,j} = \max(0, (\mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}) \tim
 
 The dequantization uses precision-compensated scaling: `(x >> 17) * deqScale << 17` which is mathematically equivalent to `x * deqScale` but avoids precision loss for large int32 intermediate values.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -133,31 +113,4 @@ void example_manual() {
   TASSIGN(tmp,  0x4000);
   TADDDEQRELU(dst, src0, src1, deqScale, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
 ```

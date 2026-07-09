@@ -14,16 +14,6 @@ $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \mathrm{src}^{\mathrm{remote}}_{i,j}$$
 
 数据流：`srcGlobalData（远端 GM）` → `stagingTileData（UB）` → `dstGlobalData（本地 GM）`
 
-## 汇编语法
-
-同步形式：
-
-```text
-tget %dst_local, %src_remote : (!pto.memref<...>, !pto.memref<...>)
-```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
-
 ## C++ 内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`
@@ -101,4 +91,3 @@ TASSIGN(pongTile, tileUBBytes);  // 不重叠的 UB 区域
 // 将 TLOAD[i+1] 与 TSTORE[i] 重叠执行以提升流水线利用率
 comm::TGET(dstG, srcG, pingTile, pongTile);
 ```
-

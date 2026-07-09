@@ -16,26 +16,6 @@ $$ \mathrm{dst}_{i,j} = \max(0, (\mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}) \tim
 
 反量化使用精度补偿缩放：`(x >> 17) * deqScale << 17`，数学上等价于 `x * deqScale`，但避免了大 int32 中间值的精度损失。
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -133,31 +113,4 @@ void example_manual() {
   TASSIGN(tmp,  0x4000);
   TADDDEQRELU(dst, src0, src1, deqScale, tmp);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
-```
-
-### PTO 汇编形式
-
-```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
 ```

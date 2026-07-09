@@ -14,13 +14,6 @@ $$\mathrm{signal}^{\mathrm{remote}} = \mathrm{value}$$
 
 $$\mathrm{signal}^{\mathrm{remote}} \mathrel{+}= \mathrm{value} \quad (\text{原子操作})$$
 
-## 汇编语法
-
-```text
-tnotify %signal_remote, %value {op = #pto.notify_op<Set>} : (!pto.memref<i32>, i32)
-tnotify %signal_remote, %value {op = #pto.notify_op<AtomicAdd>} : (!pto.memref<i32>, i32)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
@@ -96,4 +89,3 @@ void consumer(__gm__ int32_t* local_flag) {
     // ... 消费数据 ...
 }
 ```
-

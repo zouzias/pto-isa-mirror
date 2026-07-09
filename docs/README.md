@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
+  <img src="figures/pto_logo.svg" alt="PTO ISA" width="200" />
 </p>
 
 # PTO ISA Documentation Guide
 
-This page is the main documentation entry for PTO Tile Lib. It helps readers locate documents by topic instead of navigating directories one by one.
+This page is the main documentation entry for PTO ISA. It helps readers locate documents by topic instead of navigating directories one by one.
 
 The PTO documentation mainly covers the following areas:
 
@@ -15,7 +15,7 @@ The PTO documentation mainly covers the following areas:
 
 ## Recommended Reading Path
 
-If you are new to PTO Tile Lib, we recommend reading in the following order:
+If you are new to PTO ISA, we recommend reading in the following order:
 
 1. [Getting Started](getting-started.md): set up the environment and run the CPU simulator first
 2. [ISA Overview](PTOISA.md): build an overall understanding of the PTO ISA
@@ -35,7 +35,7 @@ If you are new to PTO Tile Lib, we recommend reading in the following order:
 
 ### 2. Programming Model and Development Notes
 
-- [Development Documentation Index](coding/README.md): entry for developer-facing PTO Tile Lib documentation
+- [Development Documentation Index](coding/README.md): entry for developer-facing PTO ISA documentation
 - [Tile Programming Model](coding/Tile.md): tile shape, tile mask, and data layout
 - [Events and Synchronization](coding/Event.md): event recording, waiting, and synchronization behavior
 - [Performance Optimization](coding/opt.md): performance analysis and tuning guidance

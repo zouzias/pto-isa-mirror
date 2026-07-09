@@ -6,7 +6,6 @@ Blocking wait until signal(s) meet comparison condition. Used in conjunction wit
 
 Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor).
 
-
 ## Math Interpretation
 
 Wait (spin) until the following condition is satisfied:
@@ -20,13 +19,6 @@ Signal tensor (all elements must satisfy):
 $$ \forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
 
 where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
-
-## Assembly Syntax
-
-```text
-twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
-twait %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32)
-```
 
 ## C++ Intrinsic
 

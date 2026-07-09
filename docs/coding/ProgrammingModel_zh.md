@@ -1,6 +1,6 @@
 # PTO Tile Intrinsics 编程模型
 
-PTO Tile Lib 提供以 **Tile 粒度**为核心的 C++ 内建接口（intrinsics），并可映射到 PTO ISA。该模型的设计目标是：
+PTO ISA 提供以 **Tile 粒度**为核心的 C++ 内建接口（intrinsics），并可映射到 PTO ISA。该模型的设计目标是：
 
 - **跨设备代际的可移植性**：硬件细节可能变化（指令细节、存储布局、调度约束等），但编程模型保持稳定。
 - **接近硬件的性能表达能力**：Tile 与 GlobalTensor 足够底层，可表达高效的数据搬运与计算。

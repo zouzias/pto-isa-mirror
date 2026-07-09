@@ -1,6 +1,5 @@
 # TADDReluConv
 
-
 ## Tile Operation Diagram
 
 ![TADDReluConv tile operation](../figures/isa/TADDReluConv.svg)
@@ -19,27 +18,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{convert}\!\left(\max\!\left(0,\;\mathrm{src0}_{i
 
 where `convert` narrows the result from the source type to the destination type with saturating behavior. For floating-point down-casts, rounding follows round-to-nearest-even.
 
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
-Synchronous form:
-
-```text
-%dst = taddreluconv %src0, %src1 : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.taddreluconv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -97,31 +75,4 @@ void example_manual() {
   TASSIGN(dst,  0x3000);
   TADDRELUCONV(dst, src0, src1);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = taddreluconv %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.taddreluconv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

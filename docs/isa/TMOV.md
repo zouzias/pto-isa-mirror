@@ -1,6 +1,5 @@
 ﻿# TMOV
 
-
 ## Tile Operation Diagram
 
 ![TMOV tile operation](../figures/isa/TMOV.svg)
@@ -69,30 +68,6 @@ Only the **X→ZZ** transforms take a `tmp` operand (the 3-arg overload). ND→Z
 the `vgather2` index buffer; DN→ZZ accepts it for interface parity but does not access it
 (the `vsstb` scatter needs no scratch). ND→NZ has no `tmp`.
 
-## Assembly Syntax
-
-The PTO AS design recommends splitting `TMOV` into a family of ops:
-
-```text
-%left  = tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
-%right = tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
-%bias  = tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
-%scale = tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
-%vec   = tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
-%v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
@@ -212,7 +187,6 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
     - destination stride must be non-zero and `dstStride * sizeof(dstType)` must be a multiple of `32` bytes
     - relu/scalar-quant/vector-quant forms are supported through the corresponding overloads
 
-
 ## Examples
 
 ### ND → NZ (data) — (128, 256) BF16
@@ -316,31 +290,3 @@ void example_manual() {
   TMOV(left, mat);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

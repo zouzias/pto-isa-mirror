@@ -14,16 +14,6 @@ $$\mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j}$$
 
 数据流：`srcGlobalData（本地 GM）` → `stagingTileData（UB）` → `dstGlobalData（远端 GM）`
 
-## 汇编语法
-
-同步形式：
-
-```text
-tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
-```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
-
 ## C++ 内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`
@@ -123,4 +113,3 @@ comm::TPUT(dstG, srcG, pingTile, pongTile);
 // 在运行时而非编译期模板参数中选择原子类型
 comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```
-

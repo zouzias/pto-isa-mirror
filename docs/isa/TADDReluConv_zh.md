@@ -18,27 +18,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{convert}\!\left(\max\!\left(0,\;\mathrm{src0}_{i
 
 其中 `convert` 将结果从源类型窄化到目标类型并采用饱和行为。对于浮点降类型转换, 舍入遵循就近偶数 (round-to-nearest-even)。
 
-## 汇编语法
-
-PTO-AS 形式: 详见 [PTO-AS 规范](../assembly/PTO-AS_zh.md).
-
-同步形式:
-
-```text
-%dst = taddreluconv %src0, %src1 : !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.taddreluconv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`:
@@ -96,31 +75,4 @@ void example_manual() {
   TASSIGN(dst,  0x3000);
   TADDRELUCONV(dst, src0, src1);
 }
-```
-
-## 汇编示例 (ASM)
-
-### 自动模式
-
-```text
-# 自动模式: 由编译器/运行时负责资源放置与调度.
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式: 先显式绑定资源, 再发射指令.
-# 可选 (当该指令包含 tile 操作数时):
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.taddreluconv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO 汇编形式
-
-```text
-%dst = taddreluconv %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.taddreluconv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

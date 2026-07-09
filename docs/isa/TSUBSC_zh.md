@@ -14,26 +14,6 @@
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{scalar} + \mathrm{src1}_{i,j} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tsubsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tsubsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -70,6 +50,7 @@ void example() {
   TSUBSC(out, a, 2.0f, b);
 }
 ```
+<<<<<<< Updated upstream
 
 ## 汇编示例（ASM）
 
@@ -101,3 +82,5 @@ pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 
 
+=======
+>>>>>>> Stashed changes

@@ -1,10 +1,8 @@
 ﻿# TDEINTERLEAVE
 
-
 ## Tile Operation Diagram
 
 ![TDEINTERLEAVE](../figures/isa/TDEINTERLEAVE.svg)
-
 
 ## Introduction
 
@@ -41,49 +39,6 @@ Where `halfValidCols = src.GetValidCol() / 2`.
 
 > **Note**: For the single-source form, the source tile width must be at least `2 × ElementsPerRepeat` (where `ElementsPerRepeat = 256 / sizeof(T)`) so that two adjacent register-sized chunks can be loaded from the same row without crossing row boundaries.
 
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
-Synchronous form (two-source):
-
-```text
-%dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
-```
-
-Synchronous form (single-source):
-
-```text
-%dst0, %dst1 = tdeinterleave %src : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-Two-source form:
-
-```text
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-Single-source form:
-
-```text
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### AS Level 2 (DPS)
-
-Two-source form:
-
-```text
-pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
-Single-source form:
-
-```text
-pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -186,49 +141,6 @@ void example_manual_single_src() {
 
     TDEINTERLEAVE(dst1, dst0, src);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-# Two-source form:
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-# Single-source form:
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Two-source form:
-# pto.tassign %src0, @tile(0x1000)
-# pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst0, @tile(0x3000)
-# pto.tassign %dst1, @tile(0x4000)
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-# Single-source form:
-# pto.tassign %src,  @tile(0x1000)
-# pto.tassign %dst0, @tile(0x2000)
-# pto.tassign %dst1, @tile(0x3000)
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO Assembly Form
-
-```text
-# Two-source form:
-%dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-
-# Single-source form:
-%dst0, %dst1 = tdeinterleave %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
 ## Related Instructions

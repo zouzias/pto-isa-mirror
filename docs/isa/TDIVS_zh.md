@@ -20,34 +20,6 @@
 
   $$ \mathrm{dst}_{i,j} = \frac{\mathrm{scalar}}{\mathrm{src}_{i,j}} $$
 
-## 汇编语法
-
-Tile/标量形式：
-
-```text
-%dst = tdivs %src, %scalar : !pto.tile<...>, f32
-```
-
-标量/Tile 形式：
-
-```text
-%dst = tdivs %scalar, %src : f32, !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-%dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -123,6 +95,7 @@ void example_manual() {
   TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, 2.0f, src);
 }
 ```
+<<<<<<< Updated upstream
 
 ## 汇编示例（ASM）
 
@@ -156,3 +129,5 @@ pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 
 
+=======
+>>>>>>> Stashed changes

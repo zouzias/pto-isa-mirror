@@ -14,16 +14,6 @@
 
 Address(`dst`) = Address(`src`) >> `SHIFT_MX_ADDR`
 
-## 汇编语法
-
-### IR Level 1 (SSA)
-
-TODO
-
-### IR Level 2 (DPS)
-
-TODO
-
 ## C++ 内建接口
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -63,17 +53,3 @@ void example() {
     TGET_SCALE_ADDR(bScaleTile, bTile);
 }
 ```
-
-## asm form examples
-
-### Auto Mode
-
-TODO
-
-### Manual Mode
-
-TODO
-
-### PTO Assembly Form
-
-TODO

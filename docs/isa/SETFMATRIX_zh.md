@@ -10,21 +10,9 @@
 
 ## 数学语义
 
-除非另有说明，语义定义在有效区域上，目标相关行为标记为实现定义。
+该指令不直接产生张量算术结果。它将 ConvTile 的 fmap 宽/高与 padding 列表打包写入 **FMATRIX 硬件寄存器**，供后续 `TIMG2COL` 等类 IMG2COL 操作使用。寄存器布局（实现定义）：低 16 位为 `fmapW`，次 16 位为 `fmapH`，从第 32 位起每 8 位存放一个 padding 值（共 4 个，取自 `src.GetPadListArray()[0..3]`）。
 
-## 汇编语法
-
-### AS Level 1（SSA）
-
-```text
-pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.SETFMATRIX ins(%cfg : !pto.fmatrix_config) outs()
-```
+仅在 `FmatrixMode` 为 `FMATRIX_A_MANUAL` / `FMATRIX_B_MANUAL` 时生效（分别调用 `set_fmatrix` / `set_fmatrix_b`）；`FMATRIX_A_AUTO` / `FMATRIX_B_AUTO` 下为空操作。
 
 ## C++ 内建接口
 
@@ -37,36 +25,25 @@ PTO_INST RecordEvent SETFMATRIX(ConvTileData &src, WaitEvents &... events);
 
 ## 约束
 
-类型/布局/位置/形状的合法性由后端决定；对于特定后端，请将实现相关说明视为规范性约束。
+- 该指令属于后端相关能力，仅在支持 FMATRIX 寄存器的后端可用。
+- `src` 必须是能提供 `GetFmapW()` / `GetFmapH()` / `GetPadListArray()` 的 ConvTile 类型。
+- `FmatrixMode` 取 `FMATRIX_A_MANUAL` / `FMATRIX_B_MANUAL` 时才写入寄存器；`FMATRIX_A_AUTO` / `FMATRIX_B_AUTO` 为空操作。
+- 在同一执行流中，应先设置 FMATRIX，再执行依赖的 `TIMG2COL` 指令。
 
 ## 示例
 
-参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。
+```cpp
+#include <pto/pto-inst.hpp>
 
-## 汇编示例（ASM）
+using namespace pto;
 
-### 自动模式
+void example_setfmatrix() {
+  // ConvTile<Loc, Element, BufferSize, Layout, ConvTileShape<...>>
+  using CfgTile = ConvTile<TileType::Mat, half, 128, Layout::NC1HWC0,
+                           ConvTileShape<1, 1, 16, 16, 16>>;
+  CfgTile cfg;
 
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()
+  SETFMATRIX(cfg);                                            // 默认 FmatrixMode = FMATRIX_A_MANUAL
+  SETFMATRIX<CfgTile, SetFmatrixMode::FMATRIX_B_MANUAL>(cfg); // 显式指定 B 侧
+}
 ```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()
-```
-
-### PTO 汇编形式
-
-```text
-pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()
-# AS Level 2 (DPS)
-pto.SETFMATRIX ins(%cfg : !pto.fmatrix_config) outs()
-```
-

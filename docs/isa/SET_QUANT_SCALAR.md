@@ -36,7 +36,3 @@ AICORE void example_set_quant_scalar()
     SET_QUANT_SCALAR<int8_t>(preQuantScale);
 }
 ```
-
-## ASM Form Examples
-
-The current public assembly reference does not define a stable PTO-AS spelling for `SET_QUANT_SCALAR`. Use the C++ intrinsic form for quantization configuration.

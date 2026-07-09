@@ -12,39 +12,16 @@ Set IMG2COL repeat metadata from an IMG2COL configuration tile (implementation-d
 
 No direct tensor arithmetic is produced by this instruction. It updates IMG2COL control state used by subsequent data-movement operations.
 
-## Assembly Syntax
-
-Schematic form:
-
-```text
-SET_IMG2COL_RPT %cfg
-```
-
-### AS Level 1 (SSA)
-
-```text
-pto.SET_IMG2COL_RPT %cfg : !pto.fmatrix_config -> ()
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.SET_IMG2COL_RPT ins(%cfg : !pto.fmatrix_config) outs()
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename ConvTileData, typename... WaitEvents>
-PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events);
-
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events);
 ```
 
-For `MEMORY_BASE` targets, an overload without `SetFmatrixMode` is also provided.
+`FmatrixMode` defaults to `FMATRIX_A_MANUAL` and may be omitted; pass it explicitly when needed (e.g. `SetFmatrixMode::FMATRIX_B_MANUAL`).
 
 ## Constraints
 
@@ -60,35 +37,13 @@ For `MEMORY_BASE` targets, an overload without `SetFmatrixMode` is also provided
 
 using namespace pto;
 
-void example_set_img2col_rpt(Img2colTileConfig<uint64_t>& cfg) {
-  SET_IMG2COL_RPT(cfg);
+void example_set_img2col_rpt() {
+  // ConvTile<Loc, Element, BufferSize, Layout, ConvTileShape<...>>
+  using CfgTile = ConvTile<TileType::Mat, half, 128, Layout::NC1HWC0,
+                           ConvTileShape<1, 1, 16, 16, 16>>;
+  CfgTile cfg;
+
+  SET_IMG2COL_RPT(cfg);                                            // default FmatrixMode = FMATRIX_A_MANUAL
+  SET_IMG2COL_RPT<CfgTile, SetFmatrixMode::FMATRIX_B_MANUAL>(cfg); // explicit
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-pto.SET_IMG2COL_RPT %cfg : !pto.fmatrix_config -> ()
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-pto.SET_IMG2COL_RPT %cfg : !pto.fmatrix_config -> ()
-```
-
-### PTO Assembly Form
-
-```text
-pto.SET_IMG2COL_RPT %cfg : !pto.fmatrix_config -> ()
-# AS Level 2 (DPS)
-pto.SET_IMG2COL_RPT ins(%cfg : !pto.fmatrix_config) outs()
-```
-

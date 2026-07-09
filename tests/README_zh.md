@@ -1,6 +1,6 @@
 # tests/
 
-PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `npu` 两种模式）。
+PTO ISA 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `npu` 两种模式）。
 
 ## 测试入口
 

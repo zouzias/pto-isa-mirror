@@ -1,6 +1,6 @@
 # PTO Demos
 
-This directory contains demonstration examples showing how to use PTO Tile Library in different scenarios.
+This directory contains demonstration examples showing how to use PTO ISA in different scenarios.
 
 ## Directory Structure
 

@@ -25,6 +25,7 @@ $$ \mathrm{dst}_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src
 
 `dst` 的编码/类型由实现定义（位压缩掩码 Tile，每个比特代表一个比较结果）。
 
+<<<<<<< Updated upstream
 ## 汇编语法
 
 同步形式：
@@ -45,6 +46,8 @@ $$ \mathrm{dst}_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src
 pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
+=======
+>>>>>>> Stashed changes
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/type.hpp`：
@@ -141,6 +144,7 @@ void example_tile() {
   TCMPS(dst, src0, src1, CmpMode::GE);
 }
 ```
+<<<<<<< Updated upstream
 
 ## 汇编示例（ASM）
 
@@ -169,3 +173,5 @@ void example_tile() {
 pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
+=======
+>>>>>>> Stashed changes

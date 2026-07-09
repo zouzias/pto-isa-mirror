@@ -14,15 +14,6 @@ $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
 Data flow: `srcGlobalData (local GM)` → `stagingTileData (UB)` → `dstGlobalData (remote GM)`
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
-```
-Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
-
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`

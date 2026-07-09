@@ -1,6 +1,5 @@
 ﻿# TEXP
 
-
 ## Tile Operation Diagram
 
 ![TEXP tile operation](../figures/isa/TEXP.svg)
@@ -15,25 +14,6 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \exp(\mathrm{src}_{i,j}) $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = texp %src : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -49,7 +29,6 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 * `ExpAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
 * `ExpAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
 
-
 ## Constraints
 
 - **Implementation checks (NPU)**:
@@ -62,7 +41,6 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **High Precision Algorithm**
     - Only available on A5, `PrecisionType` option is ignored on A3.
-
 
 ## Examples
 
@@ -96,31 +74,3 @@ void example_manual() {
   TEXP(dst, src);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = texp %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

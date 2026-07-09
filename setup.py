@@ -28,7 +28,7 @@ def get_include_files():
 setup(
     name="pto-isa",
     version="9.1.0",
-    description="PTO Tile Library - A tile-based programming library for AI Core",
+    description="PTO ISA - A tile-based programming library for AI Core",
     author="Huawei Technologies Co., Ltd.",
     license="CANN Open Software License Agreement Version 2.0",
     packages=find_packages(exclude=["tests*", "demos*", "scripts*", "kernels*"]),

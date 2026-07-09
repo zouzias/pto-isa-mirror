@@ -1,6 +1,6 @@
 # Compilation Process
 
-This document describes the build and compilation flow for PTO Tile Lib from the perspective of source organization, public intrinsics, backend selection, and repository build entry points.
+This document describes the build and compilation flow for PTO ISA from the perspective of source organization, public intrinsics, backend selection, and repository build entry points.
 
 It focuses on the developer-visible workflow and does not expand undocumented internal compiler stages into normative interface descriptions.
 
@@ -18,7 +18,7 @@ The intrinsic layer is implemented primarily through headers under [PTO Public H
 
 ## 2. Build and compilation characteristics
 
-PTO Tile Lib uses a **C++ intrinsic interface**.
+PTO ISA uses a **C++ intrinsic interface**.
 
 From the public API perspective, the library is primarily **header-based / template-based**.
 The same PTO source can be built against different backends depending on build configuration.
@@ -144,11 +144,11 @@ When a PTO kernel does not compile or run as expected, the most reliable checks 
 
 Some commonly written build examples on the internet, such as generic `find_package(PTO REQUIRED)` snippets or imagined standalone `PTO::pto` link targets, are **not** established as the canonical integration model by this repository.
 
-When documenting or extending PTO Tile Lib, use the repository build scripts, the top-level `CMakeLists.txt`, and existing test or demo build patterns as the primary reference.
+When documenting or extending PTO ISA, use the repository build scripts, the top-level `CMakeLists.txt`, and existing test or demo build patterns as the primary reference.
 
 ## 9. Notes
 
-The compilation flow of PTO Tile Lib can be summarized as follows:
+The compilation flow of PTO ISA can be summarized as follows:
 
 - PTO code is written in C++ with public intrinsics.
 - The build system selects the corresponding backend implementation according to configuration.

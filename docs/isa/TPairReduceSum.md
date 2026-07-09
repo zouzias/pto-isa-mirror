@@ -1,10 +1,8 @@
 # TPAIRREDUCESUM
 
-
 ## Tile Operation Diagram
 
 ![TPAIRREDUCESUM](../figures/isa/TPairReduceSum.svg)
-
 
 ## Introduction
 
@@ -19,28 +17,6 @@ $$ \mathrm{dst}_{i,k} = \mathrm{src0}_{i, 2k} + \mathrm{src0}_{i, 2k+1}, \quad 0
 Elements at positions `⌈validCols/2⌉ … validCols−1` in each row of `dst` are filled with 0. Inactive elements (positions outside the valid region) are also treated as 0.
 
 Where `validRows = dst.GetValidRow()` and `validCols = dst.GetValidCol()`.
-
-## Assembly Syntax
-
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
-Synchronous form:
-
-```text
-%dst = tpairreducesum %src : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tpairreducesum %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tpairreducesum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 
 ## C++ Intrinsic
 
@@ -99,33 +75,6 @@ void example_manual() {
 
     TPAIRREDUCESUM(dst, src0);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tpairreducesum %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %src,  @tile(0x1000)
-# pto.tassign %dst,  @tile(0x2000)
-%dst = pto.tpairreducesum %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tpairreducesum %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tpairreducesum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## Related Instructions

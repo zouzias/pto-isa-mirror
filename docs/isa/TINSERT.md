@@ -1,6 +1,5 @@
 ﻿# TINSERT
 
-
 ## Tile Operation Diagram
 
 ![TINSERT tile operation](../figures/isa/TINSERT.svg)
@@ -24,26 +23,6 @@ Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R` and `0
 $$
 \mathrm{dst}_{\mathrm{indexRow}+i,\;\mathrm{indexCol}+j} = \mathrm{src}_{i,j}
 $$
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tinsert ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 
 ## C++ Intrinsic
 
@@ -224,31 +203,3 @@ void example_manual() {
   TINSERT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tinsert ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
-```
-

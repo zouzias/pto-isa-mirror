@@ -4,7 +4,6 @@
 
 Gather operation: the calling NPU (root) collects data from all ranks in the parallel group and concatenates the results along **DIM_3** (row dimension) into a local output buffer.
 
-
 Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TGATHER` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding — the same mechanism used by other PTO-COMM instructions.
@@ -16,15 +15,6 @@ Each rank $r$ has source data of shape $(D_0, D_1, D_2, H, W)$. The gather conca
 $$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, d_1, d_2,\; i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
 
 The destination tensor has shape $(D_0, D_1, D_2, N \times H, W)$.
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
-```
-Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
 ## Template Parameter
 

@@ -1,6 +1,6 @@
 # Tile Programming Model
 
-PTO Tile Lib programs operate on **Tiles**: fixed-capacity 2-D buffers that are the unit of computation and the unit of most data movement for PTO instructions.
+PTO ISA programs operate on **Tiles**: fixed-capacity 2-D buffers that are the unit of computation and the unit of most data movement for PTO instructions.
 
 Conceptually, a Tile lives in **on-chip tile storage** (a register-file-like or SRAM-like storage) and is moved to/from global memory (GM) via `TLOAD`/`TSTORE`. On the CPU simulator backend, Tiles are stored in host memory, but the same shape/layout rules are preserved so code can be validated.
 
@@ -71,7 +71,7 @@ PTO models layout with two knobs:
 
 - **Base layout** `BLayout` (`RowMajor`/`ColMajor`): the outer (unboxed) matrix interpretation.
 - **Boxed/fractal layout** `SLayout` (`NoneBox`, `RowMajor`, `ColMajor`): whether the tile is internally partitioned into fixed-size “base tiles” (also called *fractals*).
-- **Base-tile size** `SFractalSize`: the byte size of a base tile. PTO Tile Lib currently uses:
+- **Base-tile size** `SFractalSize`: the byte size of a base tile. PTO ISA currently uses:
   - `TileConfig::fractalABSize = 512` bytes (common for A/B operand tiles)
   - `TileConfig::fractalCSize = 1024` bytes (common for accumulator tiles)
 

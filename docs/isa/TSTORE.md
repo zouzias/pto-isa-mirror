@@ -1,6 +1,5 @@
 ﻿# TSTORE
 
-
 ## Tile Operation Diagram
 
 ![TSTORE tile operation](../figures/isa/TSTORE.svg)
@@ -15,25 +14,6 @@ Notation depends on the `GlobalTensor` shape/stride and the `Tile` layout. Conce
 
 $$ \mathrm{dst}_{r_0 + i,\; c_0 + j} = \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-tstore %t1, %sv_out[%c0, %c0]
-```
-
-### AS Level 1 (SSA)
-
-```text
-pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
@@ -144,31 +124,3 @@ void example_manual(__gm__ T* out) {
   TSTORE<TileT, GTensor, AtomicType::AtomicAdd>(gout, t);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### PTO Assembly Form
-
-```text
-tstore %t1, %sv_out[%c0, %c0]
-# AS Level 2 (DPS)
-pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
-```
-

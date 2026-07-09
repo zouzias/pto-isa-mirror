@@ -36,7 +36,3 @@ AICORE void example_set_quant_vector()
     SET_QUANT_VECTOR(fpTile);
 }
 ```
-
-## ASM Form Examples
-
-The current public assembly reference does not define a stable PTO-AS spelling for `SET_QUANT_VECTOR`. Use the C++ intrinsic form for quantization configuration.

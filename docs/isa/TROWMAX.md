@@ -1,6 +1,5 @@
 ﻿# TROWMAX
 
-
 ## Tile Operation Diagram
 
 ![TROWMAX tile operation](../figures/isa/TROWMAX.svg)
@@ -14,27 +13,6 @@ Reduce each row by taking the maximum across columns.
 Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
 
 $$ \mathrm{dst}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j} $$
-
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trowmax %src : !pto.tile<...> -> !pto.tile<...>
-```
-Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 
 ## C++ Intrinsic
 
@@ -85,7 +63,6 @@ PTO_INST RecordEvent TROWMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 `tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses vector register-based reduction (`vcmax` instruction) and does not require scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
 
-
 ## Examples
 
 ### Auto
@@ -126,31 +103,3 @@ void example_manual() {
   TROWMAX(dst, src, tmp);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trowmax %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-

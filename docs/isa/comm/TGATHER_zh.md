@@ -16,16 +16,6 @@ $$\mathrm{dst}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} = \mathrm{src}^{(r)}_{d_0, 
 
 目标 tensor 的形状为 $(D_0, D_1, D_2, N \times H, W)$。
 
-## 汇编语法
-
-同步形式：
-
-```text
-tgather %group, %dst : (!pto.group<...>, !pto.memref<...>)
-```
-
-降级时会为 GM→UB→GM 数据路径引入 UB 暂存 Tile；C++ 内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
-
 ## 模板参数
 
 - `engine`：
