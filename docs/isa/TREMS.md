@@ -15,25 +15,6 @@ For each element `(i, j)` in the valid region:
 
 $$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trems %src, %scalar : !pto.tile<...>, f32
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -54,7 +35,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 - **Implementation Checks (A2A3)**:
     - `dst` and `src` must use the same element type.
-    - Supported element types: `float` and `int32_t`.
+    - Supported element types: `float`, `float32_t`, and `int32_t`.
     - `dst` and `src` must be vector tiles.
     - `dst` and `src` must be row-major.
     - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
@@ -64,7 +45,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
       - Data type must match `TileDataDst::DType`.
 - **Implementation Checks (A5)**:
     - `dst` and `src` must use the same element type.
-    - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
+    - Supported element types are 2-byte or 4-byte types supported by the target implementation (including `half` and `float`).
     - `dst` and `src` must be vector tiles.
     - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
     - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
@@ -90,32 +71,5 @@ void example() {
   Tile<TileType::Vec, float, 16, 16> tmp;
   TREMS(out, x, 3.0f, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trems %src, %scalar : !pto.tile<...>, f32
-# AS Level 2 (DPS)
-pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

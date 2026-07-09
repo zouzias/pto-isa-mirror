@@ -15,25 +15,6 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;|\; \mathrm{scalar} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tors %src, %scalar : !pto.tile<...>, i32
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -52,10 +33,10 @@ PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataD
     - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
     - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
 - **Implementation checks (A5)**:
-    - Intended for integral element types supported by `TEXPANDS` and `TOR`.
+    - `sizeof(T)` must be 1, 2, or 4 bytes (8/16/32-bit types).
     - `dst` and `src` must use the same element type.
-    - `dst` and `src` must be vector tiles.
-    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+    - `dst` and `src` must use row-major layout.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
@@ -75,30 +56,4 @@ void example() {
 }
 ```
 
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tors %src, %scalar : !pto.tile<...>, i32
-# AS Level 2 (DPS)
-pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 

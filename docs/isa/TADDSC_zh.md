@@ -14,26 +14,6 @@
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{scalar} + \mathrm{src1}_{i,j} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = taddsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.taddsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -46,17 +26,9 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 
 ## 约束
 
-- **实现检查 (A2A3)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
-    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **实现检查 (A5)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
-    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **通用约束**:
-    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-    - 运行时：`dst`、`src0` 和 `src1` 的有效行列数必须相同。
-    - 标量类型必须与 Tile 数据类型一致。
+- **实现检查 (CPU)**:
+    - 无显式的数据类型、位置或布局检查；实现使用通用 Tile 迭代。
+- **无 NPU 实现**: TADDSC 目前仅在 CPU 模拟器上支持，没有 A2A3 或 A5 后端。
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
@@ -74,30 +46,4 @@ void example() {
 }
 ```
 
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.taddsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.taddsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO 汇编形式
-
-```text
-%dst = taddsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
-# AS Level 2 (DPS)
-pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 

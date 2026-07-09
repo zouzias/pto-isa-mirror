@@ -23,48 +23,6 @@ $$ \mathrm{dstVal}_{0,j} = \max_{0 \le i < R} \mathrm{src}_{i,j} $$
 
 $$ \mathrm{dstIdx}_{0,j} = \underset{0 \le i < R}{\operatorname{argmax}} \; \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-### Pure Index Mode
-
-Synchronous form:
-
-```text
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-IR Level 1 (SSA):
-
-```text
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-IR Level 2 (DPS):
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-```
-
-### Value + Index Mode
-
-Synchronous form:
-
-```text
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-```
-
-IR Level 1 (SSA):
-
-```text
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-IR Level 2 (DPS):
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -132,7 +90,7 @@ In addition to the general constraints:
 - When source element size is 2 bytes (`half`, `uint16_t`): `dstIdx` element type must be `uint16_t` or `int16_t`.
 - When source element size is 4 bytes (`float`, `uint32_t`): `dstIdx` element type must be `uint32_t` or `int32_t`.
 - `tmp` must use the same element type as `src`.
-- `tmp` is used as scratch storage; for half input types an internal s16->f16->s32 conversion path is used for the index.
+- `tmp` is used as scratch storage.
 
 #### A5 implementation checks
 
@@ -149,13 +107,13 @@ In addition to the general constraints:
   |---|---|---|---|---|
   | `half` | Pure Index | `tmp` | `tmp` | `tmp` |
   | `half` | Value + Index | `tmp` | `tmp` | `dstIdx` |
-  | `float` | Pure Index | `tmp` | `dstIdx` | `dstIdx` |
-  | `float` | Value + Index | `tmp` | `dstIdx` | `dstIdx` |
+  | `float` | Pure Index | `tmp` | `tmp` | `dstIdx` |
+  | `float` | Value + Index | `tmp` | `tmp` | `dstIdx` |
 
 * `tmp` tile's data type must be the same as `src`'s data type.
 * `tmp` tile is organized into up to three regions within a single row:
   - Region 0 (`[0, tmpGapEles)`): current row index counter (incremented per row). Always stored in `tmp`.
-  - Region 1 (`[tmpGapEles, 2 * tmpGapEles)`): current maximum elements for comparison. Stored in `tmp` for `half` type; stored in `dstIdx` for `float` type.
+  - Region 1 (`[tmpGapEles, 2 * tmpGapEles)`): current maximum elements for comparison. Always stored in `tmp`.
   - Region 2 (`[2 * tmpGapEles, 3 * tmpGapEles)`): argmax index result. Stored in `tmp` only for `half` + Pure Index mode; stored in `dstIdx` otherwise.
 * `tmpGapEles` is determined as follows:
   - When `srcValidCol >= elemPerRpt`: `tmpGapEles = elemPerRpt`.
@@ -263,54 +221,4 @@ void example_manual_val_idx() {
   TASSIGN(tmp, 0x3000);
   TCOLARGMAX(dstVal, dstIdx, src, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Pure Index Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Pure Index Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Value + Index Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### Value + Index Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO Assembly Form
-
-```text
-# Pure index
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-# Value + index
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-
-# IR Level 2 (DPS) - pure index
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-
-# IR Level 2 (DPS) - value + index
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
