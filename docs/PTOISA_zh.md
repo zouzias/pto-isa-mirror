@@ -145,6 +145,7 @@
 | 复杂指令 | [`TGATHERB`](isa/TGATHERB_zh.md) | 使用字节偏移量收集元素。 |
 | 复杂指令 | [`TSCATTER`](isa/TSCATTER_zh.md) | 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。 |
 | 复杂指令 | [`TQUANT`](isa/TQUANT_zh.md) | 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。 |
+| 复杂指令 | [`TDEQUANT`](isa/TDEQUANT_zh.md) | 对量化 Tile 做仿射反量化（S8/S16 -> FP32）：dst = (src - offset) * scale。 |
 | 通信 | [`TPUT`](isa/comm/TPUT_zh.md) | 远程写：将本地数据传输到远端 NPU 内存（GM → UB → GM）。 |
 | 通信 | [`TGET`](isa/comm/TGET_zh.md) | 远程读：将远端 NPU 数据读取到本地内存（GM → UB → GM）。 |
 | 通信 | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC_zh.md) | 异步远程写（本地 GM → DMA 引擎 → 远端 GM）。 |

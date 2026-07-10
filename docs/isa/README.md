@@ -164,6 +164,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TGATHERB](TGATHERB.md) - Gather elements using byte offsets.
 - [TSCATTER](TSCATTER.md) - Scatter rows of a source tile into a destination tile using per-element row indices.
 - [TQUANT](TQUANT.md) - Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
+- [TDEQUANT](TDEQUANT.md) - Affine dequantization of a quantized tile (S8/S16 -> FP32): dst = (src - offset) * scale.
 
 ## Cross-core Communication
 - [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.

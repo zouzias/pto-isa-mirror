@@ -1575,6 +1575,20 @@
       "notes": []
     },
     {
+      "instruction": "TDEQUANT",
+      "category": "Complex",
+      "summary_en": "Affine dequantization of a quantized tile (S8/S16 -> FP32): dst = (src - offset) * scale.",
+      "summary_zh": "对量化 Tile 做仿射反量化（S8/S16 -> FP32）：dst = (src - offset) * scale。",
+      "diagram_template": "elementwise",
+      "operands": [
+        "dst",
+        "src",
+        "scale",
+        "offset"
+      ],
+      "notes": []
+    },
+    {
       "instruction": "TADDReluConv",
       "category": "Complex",
       "summary_en": "Fused elementwise add, ReLU clamp, and type conversion: dst = convert(max(0, src0 + src1)).",

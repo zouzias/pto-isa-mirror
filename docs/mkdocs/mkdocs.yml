@@ -199,6 +199,7 @@ nav:
           - TSORT32: docs/isa/TSORT32.md
           - TMRGSORT: docs/isa/TMRGSORT.md
           - TQUANT: docs/isa/TQUANT.md
+          - TDEQUANT: docs/isa/TDEQUANT.md
           - TPRINT: docs/isa/TPRINT.md
       - Communication:
           - Overview: docs/isa/comm/README.md
