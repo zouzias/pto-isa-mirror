@@ -7,7 +7,7 @@
 
 ## Introduction
 
-Elementwise floor with a scalar: `fmod(src, scalar)`.
+Elementwise modulo with a scalar: `fmod(src, scalar)`.
 
 ## Math Interpretation
 

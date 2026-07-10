@@ -39,6 +39,9 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
+
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TAND(TileData &dst, TileData &src0, TileData &src1, WaitEvents &... events);
 ```
@@ -46,12 +49,12 @@ PTO_INST RecordEvent TAND(TileData &dst, TileData &src0, TileData &src1, WaitEve
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - Supported element types are 1-byte, 2-byte, or 4-byte integral types.
+    - Supported element types are 1-byte, 2-byte, or 4-byte types.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 - **Implementation checks (A5)**:
-    - Supported element types are 1-byte, 2-byte, or 4-byte integral types.
+    - Supported element types are 1-byte, 2-byte, or 4-byte types.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.

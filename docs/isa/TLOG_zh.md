@@ -62,7 +62,7 @@ PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 - **域 / NaN**:
     - 域行为（例如，`log(<=0)`）由目标定义。
 - **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
+    - 仅在A5上有效，`PrecisionType`选项在A2A3上将被忽略。
 
 ## 示例
 

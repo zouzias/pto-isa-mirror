@@ -43,13 +43,14 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## 约束
 
-- `TileDataDst::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float` 适用于A2，A3和A5，`int16`、`int32`、`uint16`、`uint32`适用于A5。
+- `TileDataDst::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float` 适用于A2，A3和A5，`int16`、`int32`、`uint16`、`uint32`、`bfloat16_t`、`int8_t`、`uint8_t`适用于A5。
 - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
 - `src1` 预期提供**每列一个标量**（即，其有效形状必须覆盖 `C` 个值）。
 - 确切的布局/分形约束是目标特定的；参见 `include/pto/npu/*/TColExpand*.hpp` 下的后端头文件。

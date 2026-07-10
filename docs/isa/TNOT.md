@@ -45,10 +45,8 @@ PTO_INST RecordEvent TNOT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## Constraints
 
-## Constraints
-
 - **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `int16_t`, `uint16_t`, `uint32_t`, `int32_t`.
+    - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.

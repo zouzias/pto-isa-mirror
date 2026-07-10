@@ -39,12 +39,19 @@ pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
+
+`PrecisionType` 可取以下值：
+
+* `RsqrtAlgorithm::DEFAULT`：普通算法，速度较快但精度较低。
+* `RsqrtAlgorithm::HIGH_PRECISION`：高精度算法，但速度较慢。
 
 ## 约束
 
@@ -63,11 +70,11 @@ PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 
 ### 无 `tmp`（2 参数重载：`TRSQRT(dst, src)`）
 
-不需要 `tmp`。默认精度实现直接使用 `vsqrt` + `vdiv`。
+不需要 `tmp`。在 A2A3 上，默认实现使用 `vrsqrt` 硬件指令。在 A5 上，实现使用 `vsqrt` + `vdiv`。
 
 ### 带 `tmp`（3 参数重载：`TRSQRT(dst, src, tmp)`）
 
-`tmp` 被接口接受但当前 A5 实现**不使用**。3 参数重载简单地委托给 2 参数实现（`TRSQRT_IMPL<PrecisionType>(dst, src)`）。`tmp` 仅为了 API 兼容性和潜在的未来高精度路径而保留在 C++ 内建接口签名中。
+在 A2A3 上，传入 `tmp` 会触发高精度路径，将 `tmp` 填充为 `1.0`，计算 `vsqrt` 到 `dst`，然后计算 `dst = tmp / dst`。在 A5 上，`tmp` 被接口接受但**不使用**——3 参数重载委托给 2 参数实现（`TRSQRT_IMPL<PrecisionType>(dst, src)`）。`tmp` 仅为了 API 兼容性而保留在 C++ 内建接口签名中。
 
 ## 示例
 

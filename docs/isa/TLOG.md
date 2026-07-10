@@ -63,7 +63,7 @@ PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 - **Domain / NaN**:
     - Domain behavior (e.g., `log(<=0)`) is target-defined.
 - **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - Only available on A5, `PrecisionType` option is ignored on A2A3.
 
 
 ## Examples

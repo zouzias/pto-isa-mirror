@@ -39,9 +39,15 @@ pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = SqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
+
+`PrecisionType` 可取以下值：
+
+* `SqrtAlgorithm::DEFAULT`：普通算法，速度较快但精度较低。
+* `SqrtAlgorithm::HIGH_PRECISION`：高精度算法，但速度较慢。
 
 ## 约束
 
@@ -55,6 +61,8 @@ PTO_INST RecordEvent TSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域.
 - **域 / NaN**:
     - 行为由目标定义（例如，对于负数输入）。
+- **高精度算法**:
+    - 仅在A5上有效，`PrecisionType`选项在A2A3上将被忽略。
 
 ## 示例
 

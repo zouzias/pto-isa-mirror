@@ -45,7 +45,7 @@ pto.tpow ins(%base, %exp, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.ti
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile,
           typename TmpTile, typename... WaitEvents>
-PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
+PTO_INST RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
 ```
 
 `PrecisionType` 可选值：
@@ -78,7 +78,7 @@ PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTil
 
 ### A5 实现检查
 
-- `DEFAULT` 算法支持的元素类型：`uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`float`、`bfloat16_t`。
+- `DEFAULT` 算法支持的元素类型：`uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`float`。
 - `HIGH_PRECISION` 算法支持的元素类型：`half`、`float`、`bfloat16_t`（仅支持浮点类型）。
 - 整数类型使用独立的整数幂计算路径。
 

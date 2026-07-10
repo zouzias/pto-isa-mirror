@@ -44,7 +44,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename TmpTile,
           typename... WaitEvents>
-PTO_INTERNAL RecordEvent TPOWS(DstTile &dst, BaseTile &base, typename DstTile::DType exp, TmpTile &tmp,
+PTO_INST RecordEvent TPOWS(DstTile &dst, BaseTile &base, typename DstTile::DType exp, TmpTile &tmp,
                                WaitEvents &... events);
 ```
 

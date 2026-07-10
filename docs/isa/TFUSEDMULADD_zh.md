@@ -6,20 +6,20 @@
 
 ## 简介
 
-三元逐元素运算：`src0 * src1 + dst`。
+逐元素运算：`src0 * dst + src1`。
 
 ## 数学语义
 
 对每个元素 `(i, j)` 在有效区域内：
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \* \mathrm{src1}_{i,j} + \mathrm{dst}_{i,j} $$
+$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \* \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
 
 ## 汇编语法
 
 同步形式：
 
 ```text
-%dst = tfusedmuladd %src0, %src1 : !pto.tile<...>, !pto.tile<...>
+%dst = tfusedmuladd %src0, %src1 : !pto.tile<...>
 ```
 
 ### AS Level 1（SSA）
@@ -91,7 +91,7 @@ void example() {
 ### PTO 汇编形式
 
 ```text
-%dst = tfusedmuladd %src0, %src1 : !pto.tile<...>, !pto.tile<...>
+%dst = tfusedmuladd %src0, %src1 : !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tfusedmuladd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

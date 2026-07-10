@@ -39,12 +39,19 @@ pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
+
+`PrecisionType` has the following values available:
+
+* `RsqrtAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
+* `RsqrtAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
 
 ## Constraints
 
@@ -63,11 +70,11 @@ PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
 
 ### Without `tmp` (2-argument overload: `TRSQRT(dst, src)`)
 
-No `tmp` is required. The default-precision implementation uses `vsqrt` + `vdiv` directly.
+No `tmp` is required. On A2A3, the default implementation uses the `vrsqrt` hardware instruction. On A5, the implementation uses `vsqrt` + `vdiv`.
 
 ### With `tmp` (3-argument overload: `TRSQRT(dst, src, tmp)`)
 
-`tmp` is accepted by the interface but **not used** by the current A5 implementation. The 3-argument overload simply delegates to the 2-argument implementation (`TRSQRT_IMPL<PrecisionType>(dst, src)`). `tmp` is retained in the C++ intrinsic signature for API compatibility and potential future high-precision paths.
+On A2A3, passing `tmp` triggers the high-precision path, which fills `tmp` with `1.0`, computes `vsqrt` into `dst`, then computes `dst = tmp / dst`. On A5, `tmp` is accepted by the interface but **not used** — the 3-argument overload delegates to the 2-argument implementation (`TRSQRT_IMPL<PrecisionType>(dst, src)`). `tmp` is retained in the C++ intrinsic signature for API compatibility.
 
 ## Examples
 

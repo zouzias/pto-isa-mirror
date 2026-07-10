@@ -54,7 +54,7 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 - **Implementation checks (A2A3)**:
     - `dst`, `src0`, `src1`, and `tmp` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
+    - Supported element types are 1-byte, 2-byte, or 4-byte types.
     - `dst`, `src0`, `src1`, and `tmp` must be row-major.
     - `src0`, `src1`, and `tmp` valid shapes must match `dst`.
     - In manual mode, `dst`, `src0`, `src1`, and `tmp` must not overlap in memory.

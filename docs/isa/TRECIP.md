@@ -51,19 +51,23 @@ PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... 
 
 ## Constraints
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float` or `half`;
+- **Implementation checks (A2A3)**:
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`;
     - Tile location must be vector (`TileData::Loc == TileType::Vec`);
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
     - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
     - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+- **Implementation checks (A5)**:
+    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`, `half`, `float`;
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Domain / NaN**:
     - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
 - **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - Only available on A5, `PrecisionType` option is ignored on A2A3.
 
 ## Examples
 

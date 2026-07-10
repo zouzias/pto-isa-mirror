@@ -68,7 +68,7 @@ PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - **Division-by-zero**:
     - Behavior is target-defined.
 - **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - Only available on A5, `PrecisionType` option is ignored on A2A3.
 
 ## Examples
 

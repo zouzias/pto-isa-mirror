@@ -45,6 +45,12 @@ PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## 约束
 
+- **实现检查 (A2A3)**:
+    - `TileData::DType` 必须是以下之一：`int32_t`, `int16_t`, `half`, `float`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+- **实现检查 (A5)**:
+    - `TileData::DType` 必须是以下之一：`int32_t`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float`, `bfloat16_t`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
 
 ## 示例

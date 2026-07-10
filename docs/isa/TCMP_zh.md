@@ -41,14 +41,14 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/type.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1, CmpMode cmpMode, WaitEvents &... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, CmpMode cmpMode, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - 输入类型必须是以下之一：`int32_t`、`half`、`float`。
+    - 输入类型必须是以下之一：`int16_t`、`int32_t`、`half`、`float`。
     - 输出类型必须是 `uint8_t`。
     - `src0/src1/dst` tile 位置必须是 `TileType::Vec`。
     - 静态有效边界：`TileDataSrc::ValidRow <= TileDataSrc::Rows` 且 `TileDataSrc::ValidCol <= TileDataSrc::Cols`。
@@ -58,6 +58,8 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 - **实现检查 (A5)**:
     - 输入类型必须是以下之一：`uint32_t`、`int32_t`、`uint16_t`、`int16_t`、`uint8_t`、`int8_t`、`float`、`half`、`bfloat16_t`。
     - 输出类型必须是 `uint32_t`。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - `src0/src1/dst` tile 位置必须是 `TileType::Vec`。
     - 已实现（参见 `include/pto/npu/a5/TCmp.hpp`）。
     - A5 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域，并将打包的谓词掩码写入 `dst`（目标定义的打包方式）。
 - **掩码编码**:

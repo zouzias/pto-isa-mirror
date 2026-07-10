@@ -56,7 +56,7 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     - 在手动模式下，`src0`、`src1`、`dst` 和 `tmp` 的内存区域不得重叠。
 - **实现检查 (A5)**:
     - `dst`、`src0` 和 `src1` 的元素类型必须一致。支持的类型：`half`、`float`。
-    - 所有 Tile 必须是行主序。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
     - `src0` 和 `src1` 的有效形状必须与 `dst` 一致。
 
 ## 临时空间

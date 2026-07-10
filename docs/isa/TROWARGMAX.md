@@ -61,7 +61,7 @@ PTO_INST RecordEvent TROWARGMAX(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, 
 
 ### General constraints / checks
 
-- Supported source element types: `half`, `float`.
+- Supported source element types: `half`, `float`, `int16_t`, `int32_t` (A2A3); A5 additionally accepts other 2-byte or 4-byte element types.
 - `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
 - When output index only:
     - `dst` and `src` must be `TileType::Vec`.
@@ -75,7 +75,10 @@ PTO_INST RecordEvent TROWARGMAX(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, 
         - ND layout whose valid column count is 1.
 - When output both value and index:
     - `dstVal`, `dstIdx`, `src` must be `TileType::Vec`.
-    - Supported destination element types: `uint32_t`, `int32_t`.
+    - `dstVal` must use the same element type as `src`.
+    - Supported destination index element types:
+        - 4-byte source (`float`): `uint32_t`, `int32_t`.
+        - 2-byte source (`half`): `uint32_t`, `int32_t`, `uint16_t`, `int16_t`.
     - Runtime checks follow the shared row-reduce check path:
         - `src.GetValidRow() != 0`
         - `src.GetValidCol() != 0`
@@ -140,7 +143,7 @@ void example_auto() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dstVal;
   TmpT tmp;
   TROWARGMAX(dst, src, tmp);
   TROWARGMAX(dstVal, dst, src, tmp);
@@ -161,7 +164,7 @@ void example_manual() {
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
   DstT dst;
-  DstValT dst;
+  DstValT dstVal;
   TmpT tmp;
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);

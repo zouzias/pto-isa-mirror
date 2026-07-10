@@ -54,7 +54,7 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - `src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
 - **实现检查 (A2A3)**:
     - `dst`、`src0`、`src1` 和 `tmp` 的元素类型必须一致。
-    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`。
+    - 支持的元素类型为1字节、2字节或4字节类型。
     - `dst`、`src0`、`src1` 和 `tmp` 必须是行主序。
     - `src0`、`src1` 和 `tmp` 的有效形状必须不小于 `dst`。
     - 在手动模式下，`dst`、`src0`、`src1` 和 `tmp` 的内存区域不得重叠。

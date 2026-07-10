@@ -45,6 +45,12 @@ PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## Constraints
 
+- **Implementation checks (A2A3)**:
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+- **Implementation checks (A5)**:
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float`, `bfloat16_t`.
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 
 ## Examples

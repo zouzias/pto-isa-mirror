@@ -41,17 +41,17 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
 
 ```cpp
-template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode, WaitEvents &... events);
 
-template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents &... events);
 
-template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode,
                           SaturationMode satMode, WaitEvents &... events);
 
-template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+template <bool NeedSetCtrl = true, typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode,
                           WaitEvents &... events);
 ```
