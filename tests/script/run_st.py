@@ -69,8 +69,13 @@ def set_env_variables(run_mode, soc_version):
 def get_simulator_info(ascend_home, soc_version):
     simulator_home = os.path.join(ascend_home, "tools", "simulator")
     soc_candidates = [soc_version]
+    # Normalize known aliases to real simulator folder names.
     if soc_version == "Ascend950PR_9599":
         soc_candidates.extend(["Ascend910_9599"])
+    elif soc_version == "a6":
+        soc_candidates = ["dav_9201", "a6"]
+    elif soc_version == "dav_9201":
+        soc_candidates.extend(["a6"])
     for candidate in soc_candidates:
         camodel_path = os.path.join(simulator_home, candidate, "camodel")
         lib_path = os.path.join(simulator_home, candidate, "lib")
