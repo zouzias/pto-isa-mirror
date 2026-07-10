@@ -93,7 +93,7 @@ tlog
 tlrelu
 tmatmul
 tmatmul_layout
-#tmatmul_mx
+tmatmul_mx
 tmax
 tmaxs
 tmin
@@ -124,6 +124,7 @@ tpushpop_fixpipe
 tput
 tput_async
 tquant
+tquant_dn
 trandom
 trecip
 treduce
