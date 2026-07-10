@@ -43,7 +43,7 @@ This table tracks per-instruction backend availability:
 | [`TAND`](../docs/isa/TAND.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TANDS`](../docs/isa/TANDS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TASSIGN`](../docs/isa/TASSIGN.md) | Yes | TODO | Yes | Yes | Yes | Yes |
-| [`TAXPY`]() | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TAXPY`](../docs/isa/TAXPY.md) | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TBROADCAST`](../docs/isa/comm/TBROADCAST.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TCI`](../docs/isa/TCI.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TCMP`](../docs/isa/TCMP.md) | Yes | Yes | Yes | Yes | Yes | Yes |
