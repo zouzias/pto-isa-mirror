@@ -20,19 +20,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
-#include "pto/npu/kirin5162/TCvt.hpp"
-#include "pto/npu/kirin5162/TExtract.hpp"
-#include "pto/npu/kirin5162/TGather.hpp"
-#include "pto/npu/kirin5162/TInsert.hpp"
-#include "pto/npu/kirin5162/TLoad.hpp"
-#include "pto/npu/kirin5162/TMatmul.hpp"
-#include "pto/npu/kirin5162/TMov.hpp"
-#include "pto/npu/kirin5162/TQuant.hpp"
-#include "pto/npu/kirin5162/TStore.hpp"
-#include "pto/npu/kirin5162/TSubS.hpp"
-#include "pto/npu/kirin5162/TSync.hpp"
-#include "pto/npu/kirin5162/TRem.hpp"
-#include "pto/npu/kirin5162/TRemS.hpp"
+__aicore__ inline void set_mark(uint64_t v)
+{
+#if defined(__CCE_KT_TEST__) && __CCE_KT_TEST__ == 1
+
+#else
+    __asm__ __volatile__("");
+    asm volatile("MOV COND, %0\n" : "+l"(v));
+    __asm__ __volatile__("");
+#endif
+}
+
+#include "pto/npu/ascend5162a/TCvt.hpp"
+#include "pto/npu/ascend5162a/TExtract.hpp"
+#include "pto/npu/ascend5162a/TGather.hpp"
+#include "pto/npu/ascend5162a/TInsert.hpp"
+#include "pto/npu/ascend5162a/TLoad.hpp"
+#include "pto/npu/ascend5162a/TMatmul.hpp"
+#include "pto/npu/ascend5162a/TMov.hpp"
+#include "pto/npu/ascend5162a/TQuant.hpp"
+#include "pto/npu/ascend5162a/TStore.hpp"
+#include "pto/npu/ascend5162a/TSubS.hpp"
+#include "pto/npu/ascend5162a/TSync.hpp"
+#include "pto/npu/ascend5162a/TRem.hpp"
+#include "pto/npu/ascend5162a/TRemS.hpp"
 
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TAdd.hpp"

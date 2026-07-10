@@ -26,7 +26,16 @@ PTO_INTERNAL void TLoadInstr(__ubuf__ typename DstTile::DType *dst, typename Src
                                  nBurst, lenBurst, 0 /*left padding count*/, 0 /*right padding count*/,
                                  enableUBPad /*data select bit*/, 0, gmStride, ubStride);
 }
+// __aicore__ inline void set_mark(uint64_t v)
+// {
+// #if defined(__CCE_KT_TEST__) && __CCE_KT_TEST__ == 1
 
+// #else
+//     __asm__ __volatile__("");
+//     asm volatile("MOV COND, %0\n" : "+l"(v));
+//     __asm__ __volatile__("");
+// #endif
+// }
 template <typename DstTile, typename SrcGlobal>
 PTO_INTERNAL void TLoadVecND2ND(__ubuf__ typename DstTile::DType *dstAddr, typename SrcGlobal::DType *srcAddr,
                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
@@ -52,11 +61,16 @@ PTO_INTERNAL void TLoadVecND2ND(__ubuf__ typename DstTile::DType *dstAddr, typen
     set_loop2_stride_outtoub(loop2_dst_stride << 40 | loop2_src_stride);
     set_loop1_stride_outtoub(loop1_dst_stride << 40 | loop1_src_stride);
     set_loop_size_outtoub(loop2 << 21 | loop1);
+    // set_mark();
+    // printf("loop1: %d, loop2: %d, loop1_src_stride: %d, loop2_src_stride: %d, loop1_dst_stride: %d, loop2_dst_stride: %d\n",
+    //     loop1, loop2, loop1_src_stride, loop2_src_stride, loop1_dst_stride, loop2_dst_stride);
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t dstAddr0 = i * dstStride0;
         int64_t srcAddr0 = i * gStride0;
         dstAddrP = dstAddr + dstAddr0;
         srcAddrP = srcAddr + srcAddr0;
+        // printf("i: %d, dstAddr0: %#x, srcAddr0: %#x, nBurst: %d, lenBurst: %d, gmStride: %d, ubStride: %d, enableUBPad: %d\n",
+        //     i, dstAddr0, srcAddr0, nBurst, lenBurst, gmStride, ubStride, enableUBPad);
         TLoadInstr<DstTile, SrcGlobal>(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, ubStride, enableUBPad);
     }
 }

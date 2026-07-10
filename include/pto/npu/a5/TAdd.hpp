@@ -42,6 +42,11 @@ __tf__ PTO_INTERNAL OP_NAME(TADD)
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
 
+    set_mark(0x33333333);
+    set_mark(validRows);
+    set_mark(validCols);
+    set_mark(0x44444444);
+
     BinaryInstr<AddOp<T>, TileDataDst, TileDataSrc0, TileDataSrc1, ElementsPerRepeat, BlockSizeElem>(
         dstPtr, src0Ptr, src1Ptr, validRows, validCols, version);
     return;
@@ -74,6 +79,11 @@ PTO_INTERNAL void TADD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     TAddCheck<TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+
+    set_mark(0x11111111);
+    set_mark(elementsPerRepeat);
+    set_mark(blockSizeElem);
+    set_mark(0x22222222);
 
     TAdd<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());

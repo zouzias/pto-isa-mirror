@@ -312,7 +312,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TFusedMulAddRelu.hpp"
 #endif
 #ifdef PTO_NPU_ARCH_ASCEND5162A
-#include "pto/npu/kirin5162/header.hpp"
+#include "pto/npu/ascend5162a/header.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_KIRIN9030

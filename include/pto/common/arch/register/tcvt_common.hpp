@@ -24,7 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <array>
 
 // Architecture-specific saturation mode
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define ARCH_RS_SAT RS_ENABLE // Workaround for CTRL issues
 #else
 #define ARCH_RS_SAT RS_DISABLE // Standard

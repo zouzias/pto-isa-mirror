@@ -23,6 +23,7 @@ enum class ChipArch : uint8_t
     A5 = 1,
     KIRIN9030 = 2,
     KIRINX90 = 3,
+    ASCEND_5162A = 4,
     UNKNOWN = 255,
 };
 
@@ -94,7 +95,13 @@ struct ArchTraits<ChipArch::KIRIN9030> : ArchTraitsBase<ChipArch::KIRIN9030> {
     static constexpr bool AccSupportsInt32 = true;
 };
 using CurrArch = ArchTraits<ChipArch::KIRIN9030>;
-
+#elif defined(PTO_NPU_ARCH_ASCEND5162A)
+template <>
+struct ArchTraits<ChipArch::ASCEND_5162A> : ArchTraitsBase<ChipArch::ASCEND_5162A> {
+    static constexpr bool AccSupportsHalf = true;
+    static constexpr bool AccSupportsInt32 = true;
+};
+using CurrArch = ArchTraits<ChipArch::ASCEND_5162A>;
 #elif defined(PTO_NPU_ARCH_KIRINX90)
 template <>
 struct ArchTraits<ChipArch::KIRINX90> : ArchTraitsBase<ChipArch::KIRINX90> {

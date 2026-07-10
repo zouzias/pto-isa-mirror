@@ -11,6 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef ARCH_MACRO_HPP
 #define ARCH_MACRO_HPP
 
+#define __NPU_ARCH__ 5162
+#ifndef __NPU_ARCH__
+#define __NPU_ARCH__ 5162
+#endif
+
 #if __NPU_ARCH__ == 2201
 #define PTO_NPU_ARCH_A2A3
 #elif (__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510)

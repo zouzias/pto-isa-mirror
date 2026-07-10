@@ -53,7 +53,7 @@ PTO_INTERNAL void pto_vgatherb(__ubuf__ T *dst, __ubuf__ uint32_t *src, uint32_t
 {
     vgatherb(dst, src, offsetAddr, dstRepeatStride, dstBlockStride, repeat);
 }
-#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T, typename U, typename S>
 PTO_INTERNAL void pto_vgatherb(T &dstReg, __ubuf__ U *base, S &idxReg, vector_bool &mask)
 {
@@ -120,17 +120,17 @@ PTO_INTERNAL void pto_set_tload_pad_val(uint64_t config)
     if constexpr (type == TileType::Vec) {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRINX90)
         set_mov_pad_val(config);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
         set_pad_val_outtoub(config);
 #endif
     } else if constexpr (type == TileType::Mat) {
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
         set_pad_val_outtol1(config);
 #endif
     }
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T>
 PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint64_t loop1SrcStride,
                                                   uint8_t l2CacheCtl, uint16_t nValue, uint32_t dValue,
@@ -141,7 +141,7 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
 #if defined(PTO_NPU_ARCH_A5)
     copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
                                 loop1SrcStride, l2CacheCtl, nValue, dValue, loop4SrcStride, smallc0En);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
     copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
                                 loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false /* antiq_en */);
 #endif
@@ -189,7 +189,7 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
 }
 #endif
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T>
 PTO_INTERNAL void pto_copy_gm_to_cbuf_align_v2(__cbuf__ T *dst, __gm__ T *src, uint8_t sid, uint32_t nBurst,
                                                uint32_t lenBurst, uint8_t leftPaddingCount, uint8_t rightPaddingCount,
@@ -202,7 +202,7 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_align_v2(__cbuf__ T *dst, __gm__ T *src, u
     copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
                              lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, l2CacheCtl, burstSrcStride,
                              burstDstStride);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
     copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
                              lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, burstSrcStride,
                              burstDstStride);
@@ -210,7 +210,7 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_align_v2(__cbuf__ T *dst, __gm__ T *src, u
 }
 #endif
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
 template <typename T>
 PTO_INTERNAL void pto_copy_ubuf_to_gm_align_v2(__gm__ T *dst, __ubuf__ T *src, uint8_t sid, uint32_t nBurst,
                                                uint32_t lenBurst, uint8_t l2CacheCtl, uint64_t burstDstStride,
@@ -218,7 +218,7 @@ PTO_INTERNAL void pto_copy_ubuf_to_gm_align_v2(__gm__ T *dst, __ubuf__ T *src, u
 {
 #if defined(PTO_NPU_ARCH_A5)
     copy_ubuf_to_gm_align_v2(dst, src, sid, nBurst, lenBurst, l2CacheCtl, burstDstStride, burstSrcStride);
-#elif defined(PTO_NPU_ARCH_KIRIN9030)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
     copy_ubuf_to_gm_align_v2(dst, src, sid, nBurst, lenBurst, burstDstStride, burstSrcStride);
 #endif
 }
