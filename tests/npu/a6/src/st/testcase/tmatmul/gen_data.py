@@ -29,21 +29,25 @@ class TMatmulParams:
         self.b_int4 = b_int4
 
 
-def pack_int4_stream_with_padding(values: np.ndarray, padded_size: int) -> np.ndarray:
-    """Pack signed int4 values as [high nibble, low nibble] pairs and pad to padded_size bytes."""
-    flat = values.astype(np.int16).reshape(-1)
-    if flat.size % 2 != 0:
-        flat = np.append(flat, 0)
+def pack_int4_rows_with_stride(values_2d: np.ndarray, row_stride_bytes: int) -> np.ndarray:
+    """Pack signed int4 matrix rows into bytes and place each packed row at row_stride_bytes stride.
 
-    hi = ((flat[0::2] & 0x0F) << 4).astype(np.uint8)
-    lo = (flat[1::2] & 0x0F).astype(np.uint8)
-    packed = (lo | hi).astype(np.uint8)
+    Packed byte format follows [high nibble, low nibble] for consecutive logical elements.
+    """
+    rows, cols = values_2d.shape
+    packed_cols = (cols + 1) // 2
+    out = np.zeros((rows, row_stride_bytes), dtype=np.uint8)
 
-    if packed.size < padded_size:
-        out = np.zeros(padded_size, dtype=np.uint8)
-        out[: packed.size] = packed
-        return out
-    return packed[:padded_size]
+    for r in range(rows):
+        row = values_2d[r].astype(np.int16)
+        if row.size % 2 != 0:
+            row = np.append(row, 0)
+        hi = ((row[0::2] & 0x0F) << 4).astype(np.uint8)
+        lo = (row[1::2] & 0x0F).astype(np.uint8)
+        packed = (lo | hi).astype(np.uint8)
+        out[r, :packed_cols] = packed[:packed_cols]
+
+    return out.reshape(-1)
 
 
 def gen_golden_data(param):
@@ -65,9 +69,9 @@ def gen_golden_data(param):
         # DN layout: store transposed bytes to preserve the same logical matrix values.
         x1_gm.T.tofile("x1_gm.bin")
         if param.b_int4:
-            # A6 MMAD.s8s4 consumes packed int4 stream: 2 signed int4 values per byte.
+            # Keep one-byte dtype row-stride in GM while storing packed s4 payload at row head.
             x2_dn = x2_gm.T
-            x2_store = pack_int4_stream_with_padding(x2_dn, param.k * param.n)
+            x2_store = pack_int4_rows_with_stride(x2_dn, row_stride_bytes=param.k)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.T.tofile("x2_gm.bin")
@@ -75,7 +79,7 @@ def gen_golden_data(param):
         # ND layout: write plain row-major tensors.
         x1_gm.tofile("x1_gm.bin")
         if param.b_int4:
-            x2_store = pack_int4_stream_with_padding(x2_gm, param.k * param.n)
+            x2_store = pack_int4_rows_with_stride(x2_gm, row_stride_bytes=param.n)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.tofile("x2_gm.bin")
