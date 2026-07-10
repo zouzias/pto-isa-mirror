@@ -21,6 +21,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/SyncAll.hpp"
 #include "pto/npu/a5/TAdd.hpp"
+#include "pto/npu/a5/TMov.hpp"
+#include "pto/npu/a5/TMatmul.hpp"
 #include "pto/npu/a5/TLoad.hpp"
 #include "pto/npu/a5/TStore.hpp"
 
