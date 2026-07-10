@@ -18,7 +18,7 @@ np.random.seed(19)
 
 
 class TMatmulParams:
-    def __init__(self, a_type, b_type, out_type, m, k, n, layout="dn"):
+    def __init__(self, a_type, b_type, out_type, m, k, n, layout="dn", b_int4=False):
         self.a_type = a_type
         self.b_type = b_type
         self.out_type = out_type
@@ -26,6 +26,7 @@ class TMatmulParams:
         self.k = k
         self.n = n
         self.layout = layout
+        self.b_int4 = b_int4
 
 
 def gen_golden_data(param):
@@ -37,16 +38,26 @@ def gen_golden_data(param):
         x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
         x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
 
+    if param.b_int4:
+        x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
+        x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
+
     golden = np.matmul(x1_gm.astype(param.out_type), x2_gm.astype(param.out_type)).astype(param.out_type)
+
+    if param.b_int4:
+        # Store int4 values in low nibble for pto::int4b_t input buffers.
+        x2_store = (x2_gm.astype(np.int16) & 0x0F).astype(np.uint8)
+    else:
+        x2_store = x2_gm
 
     if param.layout == "dn":
         # DN layout: store transposed bytes to preserve the same logical matrix values.
         x1_gm.T.tofile("x1_gm.bin")
-        x2_gm.T.tofile("x2_gm.bin")
+        x2_store.T.tofile("x2_gm.bin")
     else:
         # ND layout: write plain row-major tensors.
         x1_gm.tofile("x1_gm.bin")
-        x2_gm.tofile("x2_gm.bin")
+        x2_store.tofile("x2_gm.bin")
     golden.tofile("golden.bin")
 
 
@@ -69,6 +80,7 @@ if __name__ == "__main__":
         "TMATMULTest.case_nd_fp16_fp16_to_fp32_95x33x79",
         "TMATMULTest.case_nd_int8_int8_to_int32_129x95x33",
         "TMATMULTest.case_nd_fp32_fp32_to_fp32_47x29x25",
+        "TMATMULTest.case_nd_int8_int4_to_int32_64x64x64",
     ]
 
     case_params_list = [
@@ -86,6 +98,7 @@ if __name__ == "__main__":
         TMatmulParams(np.float16, np.float16, np.float32, 95, 33, 79, "nd"),
         TMatmulParams(np.int8, np.int8, np.int32, 129, 95, 33, "nd"),
         TMatmulParams(np.float32, np.float32, np.float32, 47, 29, 25, "nd"),
+        TMatmulParams(np.int8, np.int8, np.int32, 64, 64, 64, "nd", b_int4=True),
     ]
 
     for i, case_name in enumerate(case_name_list):
