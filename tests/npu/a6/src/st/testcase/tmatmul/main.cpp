@@ -161,7 +161,7 @@ TEST_F(TMATMULTest, case_nd_fp32_fp32_to_fp32_47x29x25)
     tmatmul_test<float, float, float, 14>(47, 29, 25);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_64x64x64)
+TEST_F(TMATMULTest, case_dn_int8_int4_to_int32_64x64x64)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 15>(64, 64, 64);
 }
