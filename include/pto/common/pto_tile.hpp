@@ -1676,6 +1676,23 @@ public:
         set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
     }
 #endif
+
+#if defined(__CPU_SIM)
+    DType GetElement(int r, int c)
+    {
+        return data_[GetTileElementOffset<decltype(*this)>(r, c)];
+    }
+
+    void SetElement(int r, int c, const DType &val)
+    {
+        data_[GetTileElementOffset<decltype(*this)>(r, c)] = val;
+    }
+
+    void AddToElement(int r, int c, const DType &summand)
+    {
+        data_[GetTileElementOffset<decltype(*this)>(r, c)] += summand;
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {

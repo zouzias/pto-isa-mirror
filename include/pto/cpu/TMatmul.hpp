@@ -16,55 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/MXTypes.hpp"
 
 namespace pto {
-template <typename TileAcc, typename TileLeft, typename TileRight>
-void TMatmulNzZn(typename TileAcc::TileDType dst, typename TileAcc::TileDType acc, typename TileLeft::TileDType src0,
-                 typename TileRight::TileDType src1, uint16_t M, uint16_t N, uint16_t K)
-{
-    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
-        for (uint16_t j = 0; j < N; j++) {
-            typename TileAcc::DType mul_acc = 0;
-
-            // PTO_CPU_VECTORIZE_LOOP
-            for (uint16_t k = 0; k < K; k++) {
-                size_t src0Idx = GetTileElementOffset<TileLeft>(i, k);
-                size_t src1Idx = GetTileElementOffset<TileRight>(k, j);
-
-                auto a = (double)static_cast<typename TileAcc::DType>(src0[src0Idx]);
-                auto b = (double)static_cast<typename TileAcc::DType>(src1[src1Idx]);
-                mul_acc += static_cast<typename TileAcc::DType>(src0[src0Idx]) *
-                           static_cast<typename TileAcc::DType>(src1[src1Idx]);
-            }
-
-            size_t dstIdx = GetTileElementOffset<TileAcc>(i, j);
-            dst[dstIdx] = acc ? acc[dstIdx] + mul_acc : mul_acc;
-        }
-    });
-}
-
-template <typename TileAcc, typename TileLeft, typename TileRight, typename TileLeftScale, typename TileRightScale>
-void TMatmulMX(typename TileAcc::TileDType dst, typename TileAcc::TileDType acc, typename TileLeft::TileDType src0,
-               typename TileRight::TileDType src1, typename TileLeftScale::TileDType scale0,
-               typename TileRightScale::TileDType scale1, uint16_t M, uint16_t N, uint16_t K)
-{
-    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
-        for (uint16_t j = 0; j < N; j++) {
-            typename TileAcc::DType mul_acc = 0;
-
-            PTO_CPU_VECTORIZE_LOOP
-            for (uint16_t k = 0; k < K; k++) {
-                size_t scale0Idx = GetTileElementOffset<TileLeftScale>(i, k / 32);
-                size_t scale1Idx = GetTileElementOffset<TileRightScale>(k / 32, j);
-                size_t src0Idx = GetTileElementOffset<TileLeft>(i, k);
-                size_t src1Idx = GetTileElementOffset<TileRight>(k, j);
-                double scaleFactor = scale0[scale0Idx] * scale1[scale1Idx];
-                mul_acc += src0[src0Idx] * src1[src1Idx] * scaleFactor;
-            }
-
-            size_t dstIdx = GetTileElementOffset<TileAcc>(i, j);
-            dst[dstIdx] = acc ? acc[dstIdx] + mul_acc : mul_acc;
-        }
-    });
-}
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void CheckMadValid()
@@ -93,6 +44,30 @@ PTO_INTERNAL void CheckMadValid()
              (TileRight::SFractal == SLayout::ColMajor)) &&
             ((TileAcc::Loc == TileType::Acc) && (!TileAcc::isRowMajor) && (TileAcc::SFractal == SLayout::RowMajor)),
         "Non-conforming matrix fractal");
+}
+
+template <typename TileAcc, typename TileLeft, typename TileRight>
+void TMatmulNzZn(TileAcc &dst, TileAcc *acc, TileLeft &src0, TileRight &src1)
+{
+    CheckMadValid<TileAcc, TileLeft, TileRight>();
+
+    uint16_t M = src0.GetValidRow();
+    uint16_t K = src0.GetValidCol();
+    uint16_t N = src1.GetValidCol();
+
+    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
+        for (uint16_t j = 0; j < N; j++) {
+            typename TileAcc::DType mul_acc = 0;
+
+            // PTO_CPU_VECTORIZE_LOOP
+            for (uint16_t k = 0; k < K; k++) {
+                mul_acc = std::fmaf(static_cast<typename TileAcc::DType>(src0.GetElement(i, k)),
+                                    static_cast<typename TileAcc::DType>(src1.GetElement(k, j)), mul_acc);
+            }
+
+            dst.SetElement(i, j, acc ? acc->GetElement(i, j) + mul_acc : mul_acc);
+        }
+    });
 }
 
 template <typename A, typename B>
@@ -151,47 +126,53 @@ PTO_INTERNAL void CheckBiasValid()
                   "Non-conforming bias fractal");
 }
 
+template <typename TileAcc, typename TileLeft, typename TileRight, typename TileLeftScale, typename TileRightScale>
+void TMatmulMX(TileAcc &dst, TileAcc &acc, TileLeft &src0, TileRight &src1, TileLeftScale &scale0,
+               TileRightScale &scale1)
+{
+    uint16_t M = src0.GetValidRow();
+    uint16_t K = src0.GetValidCol();
+    uint16_t N = src1.GetValidCol();
+    CheckMadMxValid<TileAcc, TileLeft, TileLeftScale, TileRight, TileRightScale>();
+    CheckDynamicMmad(M, K, N);
+
+    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
+        for (uint16_t j = 0; j < N; j++) {
+            typename TileAcc::DType mul_acc = 0;
+
+            PTO_CPU_VECTORIZE_LOOP
+            for (uint16_t k = 0; k < K; k++) {
+                // Each scale factor is applied to the group of 32 values
+                double scaleFactor = scale0.GetElement(i, k / 32) * scale1.GetElement(k / 32, j);
+                mul_acc = std::fmaf(src0.GetElement(i, k) , src1.GetElement(k, j) * scaleFactor, mul_acc);
+            }
+
+            dst.SetElement(i, j, acc ? acc.GetElement(i, j) + mul_acc : mul_acc);
+        }
+    });
+}
+
 template <typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    CheckMadValid<TileAcc, TileLeft, TileRight>();
-
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-
-    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
+    TMatmulNzZn(cMatrix, (TileAcc*)nullptr, aMatrix, bMatrix);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    CheckMadValid<TileAcc, TileLeft, TileRight>();
-
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-
-    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cOutMatrix.data(), cInMatrix.data(), aMatrix.data(), bMatrix.data(), m, n,
-                                              k);
+    TMatmulNzZn(cOutMatrix, &cInMatrix, aMatrix, bMatrix);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight, typename TileBias>
 PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasMatrix)
 {
-    CheckMadValid<TileAcc, TileLeft, TileRight>();
     CheckBiasValid<TileAcc, TileBias>();
-
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-
-    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
-    for (size_t c = 0; c < n; c++) {
-        size_t bias_idx = GetTileElementOffset<TileBias>(0, c);
-        for (size_t r = 0; r < m; r++) {
-            size_t out_idx = GetTileElementOffset<TileAcc>(r, c);
-            cMatrix.data()[out_idx] += biasMatrix.data()[bias_idx];
+    TMatmulNzZn(cMatrix, nullptr, aMatrix, bMatrix);
+    for (size_t c = 0; c < cMatrix.GetValidCols(); c++) {
+        auto bias = biasMatrix.GetElement(0, c);
+        for (size_t r = 0; r < cMatrix.GetValidRows(); r++) {
+            cMatrix.AddToElement(r, c, bias);
         }
     }
 }
@@ -223,14 +204,7 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
                                   TileRightScale &bScaleMatrix)
 {
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-    CheckDynamicMmad(m, k, n);
-    CheckMadMxValid<TileRes, TileLeft, TileLeftScale, TileRight, TileRightScale>();
-
-    TMatmulMX<TileRes, TileLeft, TileRight, TileLeftScale, TileRightScale>(
-        cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), aScaleMatrix.data(), bScaleMatrix.data(), m, n, k);
+    TMatmulMX(cMatrix, nullptr, aMatrix, bMatrix, aScaleMatrix, bScaleMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
@@ -238,39 +212,24 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix,
                                   TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix)
 {
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-    CheckDynamicMmad(m, k, n);
-    CheckMadMxValid<TileRes, TileLeft, TileLeftScale, TileRight, TileRightScale>();
-
-    TMatmulMX<TileRes, TileLeft, TileRight, TileLeftScale, TileRightScale>(
-        cOutMatrix.data(), cInMatrix.data(), aMatrix.data(), bMatrix.data(), aScaleMatrix.data(), bScaleMatrix.data(),
-        m, n, k);
+    TMatmulMX(cOutMatrix, &cInMatrix, aMatrix, bMatrix, aScaleMatrix, bScaleMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale, typename TileBias>
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-                                  TileRightScale &bScaleMatrix, TileBias &biasData)
+                                  TileRightScale &bScaleMatrix, TileBias &biasTile)
 {
     static_assert(std::is_same_v<typename TileBias::DType, float>, "TMatmulMX:No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TMatmulMX:TileBias must be single row.");
 
-    uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
-    uint16_t n = bMatrix.GetValidCol();
-    CheckMadMxValid<TileRes, TileLeft, TileLeftScale, TileRight, TileRightScale>();
-    CheckDynamicMmad(m, k, n);
     CheckBiasValid<TileRes, TileBias>();
 
-    TMatmulMX<TileRes, TileLeft, TileRight, TileLeftScale, TileRightScale>(
-        cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), aScaleMatrix.data(), bScaleMatrix.data(), m, n, k);
-    for (size_t c = 0; c < n; c++) {
-        for (size_t r = 0; r < m; r++) {
-            size_t out_idx = GetTileElementOffset<TileRes>(r, c);
-            size_t bias_idx = GetTileElementOffset<TileBias>(0, c);
-            cMatrix.data()[out_idx] += biasData.data()[bias_idx];
+    TMatmulMX(cMatrix, nullptr, aMatrix, bMatrix, aScaleMatrix, bScaleMatrix);
+    for (size_t c = 0; c < cMatrix.GetValidCols(); c++) {
+        auto bias = biasTile.GetElement(0,c);
+        for (size_t r = 0; r < cMatrix.GetValidRows(); r++) {
+            cMatrix.AddToElement(r,c,bias);
         }
     }
 }
