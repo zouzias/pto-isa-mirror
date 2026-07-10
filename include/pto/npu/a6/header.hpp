@@ -14,16 +14,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE BLOCK_BYTE_SIZE
+#endif
+
 #include "pto/npu/a6/datatype.hpp"
 #include "pto/npu/a6/TSync.hpp"
 
-// A6 reuses A5 instruction implementations.
+// A6 currently reuses a mixed backend implementation set.
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/SyncAll.hpp"
 #include "pto/npu/a5/TAdd.hpp"
+#include "pto/npu/a5/TLoad.hpp"
 #include "pto/npu/a5/TMov.hpp"
 #include "pto/npu/a5/TMatmul.hpp"
-#include "pto/npu/a5/TLoad.hpp"
 #include "pto/npu/a5/TStore.hpp"
 
 #endif

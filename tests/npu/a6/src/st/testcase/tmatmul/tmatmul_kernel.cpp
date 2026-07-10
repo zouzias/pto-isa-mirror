@@ -27,8 +27,10 @@ template <typename OutType, typename AType, typename BType, typename BiasType, i
 __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ BiasType *src2)
 {
     constexpr int blockAlign = (sizeof(AType) == 1) ? 32 : 16;
+    constexpr int biasAlign = 64 / sizeof(BiasType);
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
+    constexpr int BiasN = CeilAlign<int>(validN, biasAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
 
     using GlobalDataSrc0 =
@@ -47,14 +49,16 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     GlobalDataSrc2 src2Global(src2);
     GlobalDataOut dstGlobal(out);
 
+    using AccType = std::conditional_t<std::is_same_v<OutType, half>, float, OutType>;
+
     using TileMatAData = Tile<TileType::Mat, AType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
-    using TileBiasData = Tile<TileType::Mat, BiasType, 1, N, BLayout::RowMajor, 1, validN>;
+    using TileBiasData = Tile<TileType::Mat, BiasType, 1, BiasN, BLayout::RowMajor, 1, validN>;
 
     using LeftTile = TileLeft<AType, M, K, validM, validK>;
     using RightTile = TileRight<BType, K, N, validK, validN>;
-    using AccTile = TileAcc<OutType, M, N, validM, validN>;
-    using BiasTile = Tile<TileType::Bias, OutType, 1, N, BLayout::RowMajor, 1, N>;
+    using AccTile = TileAcc<AccType, M, N, validM, validN>;
+    using BiasTile = Tile<TileType::Bias, AccType, 1, BiasN, BLayout::RowMajor, 1, BiasN>;
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -131,14 +135,16 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
     GlobalDataSrc2 src2Global(src2);
     GlobalDataOut dstGlobal(out);
 
+    using AccType = std::conditional_t<std::is_same_v<OutType, half>, float, OutType>;
+
     using TileMatAData = Tile<TileType::Mat, AType, BASEM, BASEK, BLayout::ColMajor, M, BASEK, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, BType, BASEK, BASEN, BLayout::ColMajor, BASEK, N, SLayout::RowMajor, 512>;
     using TileBiasData = Tile<TileType::Mat, BiasType, 1, BASEN, BLayout::RowMajor, 1, N>;
 
     using LeftTile = TileLeft<AType, BASEM, BASEK, M, BASEK>;
     using RightTile = TileRight<BType, BASEK, BASEN, BASEK, N>;
-    using AccTile = TileAcc<OutType, BASEM, BASEN, M, N>;
-    using BiasTile = Tile<TileType::Bias, OutType, 1, BASEN, BLayout::RowMajor, 1, N>;
+    using AccTile = TileAcc<AccType, BASEM, BASEN, M, N>;
+    using BiasTile = Tile<TileType::Bias, AccType, 1, BASEN, BLayout::RowMajor, 1, N>;
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
