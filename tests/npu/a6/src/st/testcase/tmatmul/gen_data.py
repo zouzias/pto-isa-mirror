@@ -30,13 +30,13 @@ class TMatmulParams:
 
 
 def pack_int4_stream_with_padding(values: np.ndarray, padded_size: int) -> np.ndarray:
-    """Pack signed int4 values as [low nibble, high nibble] pairs and pad to padded_size bytes."""
+    """Pack signed int4 values as [high nibble, low nibble] pairs and pad to padded_size bytes."""
     flat = values.astype(np.int16).reshape(-1)
     if flat.size % 2 != 0:
         flat = np.append(flat, 0)
 
-    lo = (flat[0::2] & 0x0F).astype(np.uint8)
-    hi = ((flat[1::2] & 0x0F) << 4).astype(np.uint8)
+    hi = ((flat[0::2] & 0x0F) << 4).astype(np.uint8)
+    lo = (flat[1::2] & 0x0F).astype(np.uint8)
     packed = (lo | hi).astype(np.uint8)
 
     if packed.size < padded_size:
