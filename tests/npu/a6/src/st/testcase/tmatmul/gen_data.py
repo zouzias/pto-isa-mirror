@@ -29,22 +29,10 @@ class TMatmulParams:
         self.b_int4 = b_int4
 
 
-def pack_int4_stream_with_padding(values: np.ndarray, padded_size: int) -> np.ndarray:
-    """Pack signed int4 values ([-8, 7]) into nibbles and pad to padded_size bytes."""
+def encode_int4_bytes(values: np.ndarray) -> np.ndarray:
+    """Encode signed int4 values ([-8, 7]) as one byte per element (low nibble valid)."""
     flat = values.astype(np.int16).reshape(-1)
-    # Hardware may consume s4 pairs as [high_nibble, low_nibble].
-    # Pack even-indexed value into high nibble and odd-indexed value into low nibble.
-    high_nibble = ((flat[0::2] & 0x0F) << 4).astype(np.uint8)
-    low_nibble = np.zeros_like(high_nibble)
-    if flat.size > 1:
-        low_nibble[: flat[1::2].size] = (flat[1::2] & 0x0F).astype(np.uint8)
-    packed = (high_nibble | low_nibble).astype(np.uint8)
-
-    if packed.size < padded_size:
-        out = np.zeros(padded_size, dtype=np.uint8)
-        out[: packed.size] = packed
-        return out
-    return packed[:padded_size]
+    return (flat & 0x0F).astype(np.uint8)
 
 
 def gen_golden_data(param):
@@ -66,9 +54,10 @@ def gen_golden_data(param):
         # DN layout: store transposed bytes to preserve the same logical matrix values.
         x1_gm.T.tofile("x1_gm.bin")
         if param.b_int4:
-            # MMAD.s8s4 expects packed s4 stream (two int4 values per byte).
+            # For this A6 TMATMUL path, int4b_t is consumed as one element per byte
+            # with the low nibble carrying signed int4 payload.
             x2_dn = x2_gm.T
-            x2_store = pack_int4_stream_with_padding(x2_dn, param.k * param.n)
+            x2_store = encode_int4_bytes(x2_dn)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.T.tofile("x2_gm.bin")
@@ -76,8 +65,7 @@ def gen_golden_data(param):
         # ND layout: write plain row-major tensors.
         x1_gm.tofile("x1_gm.bin")
         if param.b_int4:
-            # MMAD.s8s4 expects packed s4 stream (two int4 values per byte).
-            x2_store = pack_int4_stream_with_padding(x2_gm, param.k * param.n)
+            x2_store = encode_int4_bytes(x2_gm)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.tofile("x2_gm.bin")
