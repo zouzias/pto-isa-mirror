@@ -71,8 +71,8 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    TEXTRACT(aTile, aMatTile, 0, 0);
+    TEXTRACT(bTile, bMatTile, 0, 0);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
