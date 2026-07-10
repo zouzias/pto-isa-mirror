@@ -45,33 +45,19 @@ PTO_INTERNAL void TBinOps_1D_PostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr,
                                         unsigned validRows, unsigned validCols)
 {
     uint16_t repeatTimes = CeilDivision(validRows * validCols, ElementsPerRepeat);
-    constexpr uint16_t repeat1 = 8;
-    constexpr uint16_t elementOnce = ElementsPerRepeat / repeat1;
-    set_mark(0x21212121);
-    set_mark((uint64_t)(repeatTimes));
-    set_mark((uint64_t)(ElementsPerRepeat));
-    set_mark(0x23232323);
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0_PU, vreg1_PU, vreg2_PU;
+        RegTensor<T> vreg0, vreg1, vreg2;
         MaskReg preg;
-
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         unsigned sreg = validRows * validCols;
-    // set_mark(0x21212121);
-        // set_mark((uint64_t)(repeatTimes)); ElementsPerRepeat = 64
-        // repeatTimes = 4;
-        // set_mark((uint64_t)(ElementsPerRepeat));(1,4,1,64)
-        // set_mark(0x23232323);
         for (uint16_t i = 0; i < (uint16_t)repeatTimes; ++i) {
-            for (uint16_t j = 0; j < (uint16_t)repeat1; ++j) {
-                preg = CreatePredicate<T>(sreg);
-                vlds(vreg0_PU, src0Ptr, elementOnce, NORM, POST_UPDATE);
-                vlds(vreg1_PU, src1Ptr, elementOnce, NORM, POST_UPDATE);
-                Op::BinInstr(vreg2_PU, vreg0_PU, vreg1_PU, preg);
-                vsts(vreg2_PU, dstPtr, elementOnce, distValue, preg, POST_UPDATE);
-            }
+            preg = CreatePredicate<T>(sreg);
+            vlds(vreg0, src0Ptr, i * ElementsPerRepeat, NORM);
+            vlds(vreg1, src1Ptr, i * ElementsPerRepeat, NORM);
+            Op::BinInstr(vreg2, vreg0, vreg1, preg);
+            vsts(vreg2, dstPtr, i * ElementsPerRepeat, distValue, preg);
         }
     }
 }
@@ -190,23 +176,19 @@ PTO_INTERNAL void TBinOp1DSwitch(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
-            set_mark(0x77777777);
             TBinOps_1D_NoPostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem>(dst, src0, src1, validRows, validCols);
             break;
         case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            set_mark(0x88888888);
             TBinOps_2D_NoPostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem, DstRowStride, Src0RowStride,
                                     Src1RowStride>(dst, src0, src1, validRows, validCols);
             break;
         case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            set_mark(0x99999999);
             TBinOps_2D_PostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem, DstRowStride, Src0RowStride, Src1RowStride>(
                 dst, src0, src1, validRows, validCols);
             break;
         case VFImplKind::VFIMPL_1D_POST_UPDATE:
         case VFImplKind::VFIMPL_DEFAULT:
         default:
-            set_mark(0x12121212);
             TBinOps_1D_PostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem>(dst, src0, src1, validRows, validCols);
             break;
     }
@@ -220,19 +202,16 @@ PTO_INTERNAL void TBinOp2DSwitch(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
         case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            set_mark(0x13131313);
             TBinOps_2D_NoPostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem, DstRowStride, Src0RowStride,
                                     Src1RowStride>(dst, src0, src1, validRows, validCols);
             break;
         case VFImplKind::VFIMPL_1D_POST_UPDATE:
         case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            set_mark(0x14141414);
             TBinOps_2D_PostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem, DstRowStride, Src0RowStride, Src1RowStride>(
                 dst, src0, src1, validRows, validCols);
             break;
         case VFImplKind::VFIMPL_DEFAULT:
         default:
-            set_mark(0x15151515);
             TBinOps_2D_NoPostUpdate<Op, T, ElementsPerRepeat, BlockSizeElem, DstRowStride, Src0RowStride,
                                     Src1RowStride>(dst, src0, src1, validRows, validCols);
             break;
@@ -256,11 +235,9 @@ PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf_
         ((TileDataDst::Rows == 1) && (TileDataSrc0::Rows == 1) && (TileDataSrc1::Rows == 1));
 
     if constexpr (isContiguous) {
-        set_mark(0x55555555);
         TBinOp1DSwitch<Op, T, ElementsPerRepeat, BlockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dst, src0, src1, validRows, validCols, version);
     } else {
-        set_mark(0x66666666);
         TBinOp2DSwitch<Op, T, ElementsPerRepeat, BlockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dst, src0, src1, validRows, validCols, version);
     }

@@ -17,7 +17,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/memory.hpp>
 
 namespace pto {
+#if defined(PTO_NPU_ARCH_ASCEND5162A)
+constexpr int REPEAT_BYTE = 32;
+#else
 constexpr int REPEAT_BYTE = 256;
+#endif
 constexpr int REPEAT_MAX = 255;
 constexpr const int BLOCK_BYTE_SIZE = 32;
 constexpr const int FIXP_BURST_UNIT_LEN = 64;

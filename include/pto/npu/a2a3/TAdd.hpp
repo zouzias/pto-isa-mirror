@@ -39,13 +39,10 @@ __tf__ PTO_INTERNAL void TAdd(typename TileDataDst::TileDType __out__ dst, typen
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
-    set_mark(0x11111111);
     if constexpr (dstRowStride == src0RowStride && dstRowStride == src1RowStride) {
-        set_mark(0x22222222);
         BinaryInstr<AddOp<T>, T, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dstPtr, src0Ptr, src1Ptr,
                                                                                               validRows, validCols);
     } else {
-        set_mark(0x33333333);
         BinaryInstr<AddOp<T>, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dstPtr, src0Ptr, src1Ptr, validRows, validCols);
     }
