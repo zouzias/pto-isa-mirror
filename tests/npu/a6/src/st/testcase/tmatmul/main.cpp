@@ -165,3 +165,23 @@ TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_64x64x64)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 15>(64, 64, 64);
 }
+
+TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_96x128x65)
+{
+    tmatmul_test<int32_t, int8_t, pto::int4b_t, 16>(96, 128, 65);
+}
+
+TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_129x95x33)
+{
+    tmatmul_test<int32_t, int8_t, pto::int4b_t, 17>(129, 95, 33);
+}
+
+TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_17x33x31)
+{
+    tmatmul_test<int32_t, int8_t, pto::int4b_t, 18>(17, 33, 31);
+}
+
+TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_2x80x48)
+{
+    tmatmul_test<int32_t, int8_t, pto::int4b_t, 19>(2, 80, 48);
+}
