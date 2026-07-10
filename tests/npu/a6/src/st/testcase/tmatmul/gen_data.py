@@ -29,10 +29,21 @@ class TMatmulParams:
         self.b_int4 = b_int4
 
 
-def encode_int4_bytes(values: np.ndarray) -> np.ndarray:
-    """Encode signed int4 values ([-8, 7]) as one byte per element (low nibble valid)."""
+def pack_int4_stream_with_padding(values: np.ndarray, padded_size: int) -> np.ndarray:
+    """Pack signed int4 values as [low nibble, high nibble] pairs and pad to padded_size bytes."""
     flat = values.astype(np.int16).reshape(-1)
-    return (flat & 0x0F).astype(np.uint8)
+    if flat.size % 2 != 0:
+        flat = np.append(flat, 0)
+
+    lo = (flat[0::2] & 0x0F).astype(np.uint8)
+    hi = ((flat[1::2] & 0x0F) << 4).astype(np.uint8)
+    packed = (lo | hi).astype(np.uint8)
+
+    if packed.size < padded_size:
+        out = np.zeros(padded_size, dtype=np.uint8)
+        out[: packed.size] = packed
+        return out
+    return packed[:padded_size]
 
 
 def gen_golden_data(param):
@@ -54,10 +65,9 @@ def gen_golden_data(param):
         # DN layout: store transposed bytes to preserve the same logical matrix values.
         x1_gm.T.tofile("x1_gm.bin")
         if param.b_int4:
-            # For this A6 TMATMUL path, int4b_t is consumed as one element per byte
-            # with the low nibble carrying signed int4 payload.
+            # A6 MMAD.s8s4 consumes packed int4 stream: 2 signed int4 values per byte.
             x2_dn = x2_gm.T
-            x2_store = encode_int4_bytes(x2_dn)
+            x2_store = pack_int4_stream_with_padding(x2_dn, param.k * param.n)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.T.tofile("x2_gm.bin")
@@ -65,7 +75,7 @@ def gen_golden_data(param):
         # ND layout: write plain row-major tensors.
         x1_gm.tofile("x1_gm.bin")
         if param.b_int4:
-            x2_store = encode_int4_bytes(x2_gm)
+            x2_store = pack_int4_stream_with_padding(x2_gm, param.k * param.n)
             x2_store.tofile("x2_gm.bin")
         else:
             x2_gm.tofile("x2_gm.bin")
