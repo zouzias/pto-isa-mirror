@@ -124,6 +124,7 @@ tpushpop_fixpipe
 tput
 tput_async
 tquant
+#tquant_dn
 trandom
 trecip
 treduce
