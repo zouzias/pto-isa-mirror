@@ -160,9 +160,13 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
 {
     using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
                                  std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+#if defined(PTO_NPU_ARCH_A5)
     copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
                                 loop1SrcStride, l2CacheCtl, nValue, dValue, loop4SrcStride, smallc0En);
+#elif defined(PTO_NPU_ARCH_A6)
+    copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
+                                loop1SrcStride, l2CacheCtl, nValue, dValue, loop4SrcStride, smallc0En,
+                                false /* enablePreReadIgnoreSync */);
 #elif defined(PTO_NPU_ARCH_KIRIN9030)
     copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
                                 loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false /* antiq_en */);
