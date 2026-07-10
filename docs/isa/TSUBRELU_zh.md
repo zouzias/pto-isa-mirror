@@ -6,7 +6,7 @@
 
 ## 简介
 
-三元逐元素运算：`relu(src0 - src1)`。
+逐元素运算：`relu(src0 - src1)`。
 
 ## 数学语义
 
@@ -19,7 +19,7 @@ $$ \mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j} - \mathrm{src1}_{i,j}, 0) $$
 同步形式：
 
 ```text
-%dst = tsubrelu %src0, %src1 : !pto.tile<...>, !pto.tile<...>
+%dst = tsubrelu %src0, %src1 : !pto.tile<...>
 ```
 
 ### AS Level 1（SSA）
@@ -92,7 +92,7 @@ void example() {
 ### PTO 汇编形式
 
 ```text
-%dst = tsubrelu %src0, %src1 : !pto.tile<...>, !pto.tile<...>
+%dst = tsubrelu %src0, %src1 : !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tsubrelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

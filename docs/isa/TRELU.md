@@ -46,7 +46,7 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `half`, `float`, `int32_t`.
+    - No explicit data type static_assert; supported element types are `half`, `float`, `int32_t` (relies on hardware support).
     - Tile layout must be row-major (`TileData::isRowMajor`).
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.

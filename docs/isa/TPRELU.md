@@ -56,7 +56,7 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     - In manual mode, `src0`, `src1`, `dst`, and `tmp` must not overlap in memory.
 - **Implementation checks (A5)**:
     - `dst`, `src0`, and `src1` element types must match. Supported types: `half`, `float`.
-    - All tiles must be row-major.
+    - `dst`, `src0`, and `src1` must be row-major.
     - `src0` and `src1` valid shapes must match `dst`.
 
 ## Temporary Space

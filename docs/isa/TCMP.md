@@ -41,14 +41,14 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1, CmpMode cmpMode, WaitEvents &... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, CmpMode cmpMode, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - Input type must be one of: `int32_t`, `half`, `float`.
+    - Input type must be one of: `int16_t`, `int32_t`, `half`, `float`.
     - Output type must be `uint8_t`.
     - `src0/src1/dst` tile location must be `TileType::Vec`.
     - Static valid bounds: `TileDataSrc::ValidRow <= TileDataSrc::Rows` and `TileDataSrc::ValidCol <= TileDataSrc::Cols`.
@@ -58,6 +58,8 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 - **Implementation checks (A5)**:
     - Input type must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, `half`, `bfloat16_t`.
     - Output type must be `uint32_t`.
+    - `dst`, `src0`, and `src1` must be row-major.
+    - `src0/src1/dst` tile location must be `TileType::Vec`.
     - Implemented (see `include/pto/npu/a5/TCmp.hpp`).
     - The A5 implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain and writes a packed predicate mask into `dst` (target-defined packing).
 - **Mask encoding**:

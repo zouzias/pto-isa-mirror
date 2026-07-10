@@ -48,10 +48,15 @@ template <auto PrecisionType = RemAlgorithm::DEFAULT, typename TileDataDst, type
 PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
+`PrecisionType` 可取以下值：
+
+* `RemAlgorithm::DEFAULT`：普通算法，速度较快但精度较低。
+* `RemAlgorithm::HIGH_PRECISION`：高精度算法，但速度较慢。
+
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - `TileData::DType` 必须是以下之一：`float`, `float32_t`, `int32_t`。
+    - `TileData::DType` 必须是以下之一：`float`, `int32_t`。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
     - 运行时：`src0`、`src1` 和 `dst` tiles 应具有相同的 `validRow/validCol`。

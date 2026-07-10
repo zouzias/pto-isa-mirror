@@ -44,7 +44,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile,
           typename TmpTile, typename... WaitEvents>
-PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
+PTO_INST RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTile &tmp, WaitEvents &... events);
 ```
 
 `PrecisionType` has the following values available:
@@ -77,7 +77,7 @@ PTO_INTERNAL RecordEvent TPOW(DstTile &dst, BaseTile &base, ExpTile &exp, TmpTil
 
 ### A5 Implementation Checks
 
-- For `DEFAULT` algorithm: supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+- For `DEFAULT` algorithm: supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
 - For `HIGH_PRECISION` algorithm: supported element types are `half`, `float`, `bfloat16_t` (floating-point only).
 - Integer types use a separate integer power computation path.
 

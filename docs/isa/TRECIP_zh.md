@@ -51,19 +51,23 @@ PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... 
 
 ## 约束
 
-- **实现检查 (NPU)**:
-    - `TileData::DType` 必须是以下之一：`float` 或 `half`。
+- **实现检查 (A2A3)**:
+    - `TileData::DType` 必须是以下之一：`int32_t`, `int16_t`, `half`, `float`。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`);
     - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
     - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
-    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
     - A3 的 TRECIP 指令不支持将源 Tile 和目标 Tile 设置为相同的内存。
+- **实现检查 (A5)**:
+    - `TileData::DType` 必须是以下之一：`int32_t`, `uint32_t`, `int16_t`, `uint16_t`, `half`, `float`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`);
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **域 / NaN**:
     - 除零行为由目标定义；CPU 模拟器在调试构建中会断言。
 - **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项在A3上将被忽略。
+    - 仅在A5上有效，`PrecisionType`选项在A2A3上将被忽略。
 
 ## 示例
 

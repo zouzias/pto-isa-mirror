@@ -6,13 +6,13 @@
 
 ## Introduction
 
-Elementwise operation: `src0 * dst + src1`.
+Elementwise operation: `relu(src0 * dst + src1)`.
 
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \* \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
+$$ \mathrm{dst}_{i,j} = \max(0,\ \mathrm{src0}_{i,j} \* \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j}) $$
 
 ## Assembly Syntax
 

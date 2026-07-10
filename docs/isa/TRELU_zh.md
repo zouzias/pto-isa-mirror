@@ -46,7 +46,7 @@ PTO_INST RecordEvent TRELU(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - `TileData::DType` 必须是以下之一： `half`, `float`, `int32_t`.
+    - 无显式数据类型静态断言；支持的元素类型为 `half`, `float`, `int32_t`（依赖硬件支持）。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
     - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.

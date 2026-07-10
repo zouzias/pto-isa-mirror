@@ -61,7 +61,7 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - Only available on A5, `PrecisionType` option is ignored on A2A3.
 
 
 ## Examples

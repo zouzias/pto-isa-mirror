@@ -39,6 +39,9 @@ pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
+
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEvents &... events);
 ```
@@ -46,12 +49,12 @@ PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEven
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t` 和 `int32_t`。
+    - 支持的元素类型为1字节、2字节或4字节类型。
     - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
 - **实现检查 (A5)**:
-    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t` 和 `int32_t`（与 A2A3 一致）。
+    - 支持的元素类型为1字节、2字节或4字节类型。
     - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。

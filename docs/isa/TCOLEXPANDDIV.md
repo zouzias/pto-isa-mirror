@@ -43,13 +43,14 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## Constraints
 
-- `TileDataDst::DType`, `TileDataSrc1::DType` must be one of: `half`, `float` for A2, A3 and A5, `int16`, `int32`, `uint16`, `uint32` for A5.
+- `TileDataDst::DType`, `TileDataSrc1::DType` must be one of: `half`, `float` for A2, A3 and A5, `int16`, `int32`, `uint16`, `uint32`, `bfloat16_t`, `int8_t`, `uint8_t` for A5.
 - Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
 - `src1` is expected to provide **one scalar per column** (i.e., its valid shape must cover `C` values).
 - Exact layout/fractal constraints are target-specific; see backend headers under `include/pto/npu/*/TColExpand*.hpp`.

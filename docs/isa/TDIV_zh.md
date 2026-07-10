@@ -68,7 +68,7 @@ PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - **除零**:
     - 行为由目标定义。
 - **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项在A3上将被忽略。
+    - 仅在A5上有效，`PrecisionType`选项在A2A3上将被忽略。
 
 ## 示例
 

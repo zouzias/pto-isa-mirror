@@ -45,7 +45,13 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 
 ## 约束
 
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- Tile 类型：`dst` 和 `src` 必须为 `TileType::Vec`。
+- Tile 布局：`src` 和 `dst` 均须使用 ND 布局（行主且非分形：`isRowMajor` 且 `SLayout::NoneBox`）。
+- 数据类型：元素大小必须为 1、2 或 4 字节；`dst` 和 `src` 的元素类型必须一致。
+- 运行期检查：
+    - A2A3：若 `dst.GetValidRow()`、`dst.GetValidCol()`、`src.GetValidRow()`、`src.GetValidCol()` 中任意一个为零则提前返回。
+    - A5：断言 `srcValidRow != 0 && srcValidCol != 0`。
+    - 两个后端均断言 `src.GetValidCol() == dst.GetValidCol()`。
 
 ## 示例
 
