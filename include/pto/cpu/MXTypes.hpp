@@ -186,7 +186,6 @@ template <typename T>
 inline T getProperDataPart(T* buf, size_t offset)
 {
     if constexpr (isTwinType<T>()) {
-        // For FP4 data types we split byte into 2 parts at load operation and then operate with them as single bytes
         return T::FromRaw((buf[offset / 2].RawData() >> ((offset % 2) ? HALF_BYTE_SHIFT : 0)) & HALF_BYTE_MASK);
     } else {
         return buf[offset];

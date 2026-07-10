@@ -18,12 +18,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename TileDataDst, typename TileDataSrc, PadValue PadVal = TileDataDst::PadVal>
-void TFillPad(
-    typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src, unsigned validDstRow,
-    unsigned validDstCol, unsigned validSrcRow, unsigned validSrcCol)
+void TFillPad(TileDataDst &dst, TileDataSrc &src)
 {
     using DType = typename TileDataDst::DType;
     DType padVal = 0;
+
+    const auto validSrcRow = src.GetValidRow();
+    const auto validSrcCol = src.GetValidCol();
 
     // Handle custom pad values (PadCustom<-1.0f>, etc.)
     if constexpr (isCustomPadValue(PadVal)) {
@@ -51,17 +52,17 @@ void TFillPad(
             padVal = std::numeric_limits<DType>::min();
     }
 
-    cpu::parallel_for_1d(
-        0, TileDataDst::Rows, static_cast<std::size_t>(TileDataDst::Rows) * TileDataDst::Cols, [&](std::size_t i) {
-            PTO_CPU_VECTORIZE_LOOP
-            for (std::size_t j = 0; j < TileDataDst::Cols; ++j) {
-                if (i < validSrcRow && j < validSrcCol) {
-                    dst[GetTileElementOffset<TileDataDst>(i, j)] = src[GetTileElementOffset<TileDataSrc>(i, j)];
-                } else {
-                    dst[GetTileElementOffset<TileDataDst>(i, j)] = padVal;
-                }
-            }
-        });
+    cpu::parallel_for_1d(0, TileDataDst::Rows, static_cast<std::size_t>(TileDataDst::Rows) * TileDataDst::Cols,
+                         [&](std::size_t i) {
+                             PTO_CPU_VECTORIZE_LOOP
+                             for (std::size_t j = 0; j < TileDataDst::Cols; ++j) {
+                                 if (i < validSrcRow && j < validSrcCol) {
+                                     dst.SetElement(i, j, src.GetElement(i, j));
+                                 } else {
+                                     dst.SetElement(i, j, padVal);
+                                 }
+                             }
+                         });
 }
 
 template <typename TileDataDst, typename TileDataSrc, bool inplace>
@@ -84,10 +85,7 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst& dst, TileDataSrc& src)
     if (validDstRow == 0 || validDstCol == 0) {
         return;
     }
-    if constexpr (!inplace) {
-        TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
-    }
-    TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
+    TFillPad<TileDataDst, TileDataSrc>(dst, src);
 }
 
 template <typename TileData, PadValue PadVal = PadValue::Zero>
@@ -107,7 +105,7 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileData& dst, TileData& src)
         return;
     }
 
-    TFillPad<TileData, TileData, PadVal>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
+    TFillPad<TileData, TileData, PadVal>(dst, src);
 }
 
 template <typename TileDataDst, typename TileDataSrc>

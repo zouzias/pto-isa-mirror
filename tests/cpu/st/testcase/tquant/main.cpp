@@ -168,9 +168,9 @@ TEST(TQuantCpuSimTest, Int8SymMatchesExactReference)
     ParaTile scale;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(scale, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {
@@ -203,11 +203,11 @@ TEST(TQuantCpuSimTest, Int8AsymMatchesExactReference)
     ParaTile offset;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(scale, addr);
-    addr += ParaTile::Numel * sizeof(typename ParaTile::DType);
+    addr += ParaTile::GetSizeInBytes();
     TASSIGN(offset, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {
@@ -246,13 +246,13 @@ void TestFP8ExactMatch()
     MaxTile max;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(scaling, addr);
-    addr += ScaleTile::Numel * sizeof(typename ScaleTile::DType);
+    addr += ScaleTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(expTile, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(max, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {
@@ -304,13 +304,13 @@ TEST(TQuantCpuSimTest, MxFp8NvNdMatchesDescaleRceil)
     MaxTile max;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(scaling, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(exp, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(max, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {
@@ -416,13 +416,13 @@ void RunMxFp8Boundary2x256()
     ScalingTile scaling;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(scaling, addr);
-    addr += ScalingTile::Numel * sizeof(typename ScalingTile::DType);
+    addr += ScalingTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(exp, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(max, addr);
 
     FillMxFp8BoundarySource(src);
@@ -559,13 +559,13 @@ void AssignMxFp4Tiles(SrcTile& src, DstTile& dst, ExpTile& exp, MaxTile& max, Ma
 {
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(exp, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(max, addr);
-    addr += MaxTile::Numel * sizeof(typename MaxTile::DType);
+    addr += MaxTile::GetSizeInBytes();
     TASSIGN(scaling, addr);
 }
 
@@ -710,15 +710,15 @@ void TestFp8NzReordersExponentsExactly()
     MaxTile max;
     size_t addr = 0;
     TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    addr += SrcTile::GetSizeInBytes();
     TASSIGN(scaling, addr);
-    addr += ScaleTile::Numel * sizeof(typename ScaleTile::DType);
+    addr += ScaleTile::GetSizeInBytes();
     TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    addr += DstTile::GetSizeInBytes();
     TASSIGN(exp, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(expZz, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    addr += ExpTile::GetSizeInBytes();
     TASSIGN(max, addr);
 
     for (int r = 0; r < src.GetValidRow(); ++r) {

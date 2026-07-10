@@ -93,7 +93,7 @@ tlog
 tlrelu
 tmatmul
 tmatmul_layout
-#tmatmul_mx
+tmatmul_mx
 tmax
 tmaxs
 tmin
@@ -163,7 +163,7 @@ ttri
 twait
 txor
 txors
-ttrans_conv
+ ttrans_conv
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
