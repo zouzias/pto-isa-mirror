@@ -25,9 +25,9 @@ struct A6LoadOp : LoadOpBase {
             pto_copy_gm_to_cbuf_multi_nd2nz(dst, src, 0 /*sid*/, loop1SrcStride, 0, nValue, dValue, loop4SrcStride);
         } else {
             using LoadT = LoadTypeBySize_t<T>;
-            copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ LoadT *>(dst),
-                                        reinterpret_cast<__gm__ LoadT *>(src), 0 /*sid*/, loop1SrcStride, 0,
-                                        nValue, dValue, loop4SrcStride, false, false /* enablePreReadIgnoreSync */);
+            copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ LoadT *>(dst), reinterpret_cast<__gm__ LoadT *>(src),
+                                        0 /*sid*/, loop1SrcStride, 0, nValue, dValue, loop4SrcStride, false,
+                                        false /* enablePreReadIgnoreSync */);
         }
     }
 };
