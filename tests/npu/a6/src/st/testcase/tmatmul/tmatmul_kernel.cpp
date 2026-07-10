@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T>
-constexpr inline T CeilAlign(T num1, T num2)
+AICORE constexpr inline T CeilAlign(T num1, T num2)
 {
     if (num2 == 0) {
         return 0;
@@ -31,14 +31,14 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     constexpr int K = CeilAlign<int>(validK, blockAlign);
 
     using GlobalDataSrc0 =
-        GlobalTensor<AType, Shape<1, 1, 1, validM, validK>, Stride<1 * validM * validK, 1 * validM * validK,
-                                                                     validM * validK, validK, 1>>;
+        GlobalTensor<AType, pto::Shape<1, 1, 1, validM, validK>,
+                     pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
     using GlobalDataSrc1 =
-        GlobalTensor<BType, Shape<1, 1, 1, validK, validN>, Stride<1 * validK * validN, 1 * validK * validN,
-                                                                     validK * validN, validN, 1>>;
+        GlobalTensor<BType, pto::Shape<1, 1, 1, validK, validN>,
+                     pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
     using GlobalDataOut =
-        GlobalTensor<OutType, Shape<1, 1, 1, validM, validN>, Stride<1 * validM * validN, 1 * validM * validN,
-                                                                       validM * validN, validN, 1>>;
+        GlobalTensor<OutType, pto::Shape<1, 1, 1, validM, validN>,
+                     pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
 
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
