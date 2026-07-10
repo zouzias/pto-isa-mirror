@@ -38,8 +38,10 @@ def gen_golden_data(param):
 
     golden = np.matmul(x1_gm.astype(param.out_type), x2_gm.astype(param.out_type)).astype(param.out_type)
 
-    x1_gm.tofile("x1_gm.bin")
-    x2_gm.tofile("x2_gm.bin")
+    # Kernel loads A/B as Layout::DN (column-major view). Store transposed C-order bytes
+    # so logical values seen by kernel still match x1_gm and x2_gm.
+    x1_gm.T.tofile("x1_gm.bin")
+    x2_gm.T.tofile("x2_gm.bin")
     golden.tofile("golden.bin")
 
 

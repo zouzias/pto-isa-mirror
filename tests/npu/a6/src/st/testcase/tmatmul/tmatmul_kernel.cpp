@@ -32,10 +32,12 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
 
     using GlobalDataSrc0 =
         GlobalTensor<AType, pto::Shape<1, 1, 1, validM, validK>,
-                     pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+                     pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, 1, validM>,
+                     pto::Layout::DN>;
     using GlobalDataSrc1 =
         GlobalTensor<BType, pto::Shape<1, 1, 1, validK, validN>,
-                     pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+                     pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, 1, validK>,
+                     pto::Layout::DN>;
     using GlobalDataOut =
         GlobalTensor<OutType, pto::Shape<1, 1, 1, validM, validN>,
                      pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
