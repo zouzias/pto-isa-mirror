@@ -61,7 +61,7 @@ if __name__ == "__main__":
         "TMATMULTest.case_fp16_fp16_to_fp32_1x256x64",
         "TMATMULTest.case_nd_fp16_fp16_to_fp32_64x64x64",
         "TMATMULTest.case_nd_int8_int8_to_int32_96x128x65",
-        "TMATMULTest.case_nd_fp32_fp32_to_fp32_33x65x17",
+        "TMATMULTest.case_nd_fp32_fp32_to_fp32_33x63x31",
         "TMATMULTest.case_nd_fp16_fp16_to_fp32_2x80x48",
     ]
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         TMatmulParams(np.float16, np.float16, np.float32, 1, 256, 64, "dn"),
         TMatmulParams(np.float16, np.float16, np.float32, 64, 64, 64, "nd"),
         TMatmulParams(np.int8, np.int8, np.int32, 96, 128, 65, "nd"),
-        TMatmulParams(np.float32, np.float32, np.float32, 33, 65, 17, "nd"),
+        TMatmulParams(np.float32, np.float32, np.float32, 33, 63, 31, "nd"),
         TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd"),
     ]
 

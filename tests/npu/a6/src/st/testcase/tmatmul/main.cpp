@@ -121,9 +121,9 @@ TEST_F(TMATMULTest, case_nd_int8_int8_to_int32_96x128x65)
     tmatmul_test<int32_t, int8_t, int8_t, 6>(96, 128, 65);
 }
 
-TEST_F(TMATMULTest, case_nd_fp32_fp32_to_fp32_33x65x17)
+TEST_F(TMATMULTest, case_nd_fp32_fp32_to_fp32_33x63x31)
 {
-    tmatmul_test<float, float, float, 7>(33, 65, 17);
+    tmatmul_test<float, float, float, 7>(33, 63, 31);
 }
 
 TEST_F(TMATMULTest, case_nd_fp16_fp16_to_fp32_2x80x48)
