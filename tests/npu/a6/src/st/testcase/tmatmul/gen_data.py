@@ -101,7 +101,7 @@ if __name__ == "__main__":
         "TMATMULTest.case_nd_fp16_fp16_to_fp32_95x33x79",
         "TMATMULTest.case_nd_int8_int8_to_int32_129x95x33",
         "TMATMULTest.case_nd_fp32_fp32_to_fp32_47x29x25",
-        "TMATMULTest.case_dn_int8_int4_to_int32_64x64x64",
+        "TMATMULTest.case_nd_int8_int4_to_int32_64x64x64",
     ]
 
     case_params_list = [
