@@ -32,7 +32,7 @@ class TMatmulParams:
 def pack_int4_rows_with_stride(values_2d: np.ndarray, row_stride_bytes: int) -> np.ndarray:
     """Pack signed int4 matrix rows into bytes and place each packed row at row_stride_bytes stride.
 
-    Packed byte format follows [high nibble, low nibble] for consecutive logical elements.
+    Packed byte format follows [low nibble, high nibble] for consecutive logical elements.
     """
     rows, cols = values_2d.shape
     packed_cols = (cols + 1) // 2
@@ -42,8 +42,8 @@ def pack_int4_rows_with_stride(values_2d: np.ndarray, row_stride_bytes: int) -> 
         row = values_2d[r].astype(np.int16)
         if row.size % 2 != 0:
             row = np.append(row, 0)
-        hi = ((row[0::2] & 0x0F) << 4).astype(np.uint8)
-        lo = (row[1::2] & 0x0F).astype(np.uint8)
+        lo = (row[0::2] & 0x0F).astype(np.uint8)
+        hi = ((row[1::2] & 0x0F) << 4).astype(np.uint8)
         packed = (lo | hi).astype(np.uint8)
         out[r, :packed_cols] = packed[:packed_cols]
 
