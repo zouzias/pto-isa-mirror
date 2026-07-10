@@ -160,7 +160,20 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(__cbuf__ T *dst, __gm__ T *src
 {
     using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
                                  std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+#if defined(PTO_NPU_ARCH_A6)
+    (void)l2CacheCtl;
+    // A6 (dav_3101) variant does not take l2CacheCtl; the final bool is antiq_en.
+    if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ int8_t *>(dst), reinterpret_cast<__gm__ int8_t *>(src),
+                                    sid, loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false);
+    } else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+        copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ half *>(dst), reinterpret_cast<__gm__ half *>(src), sid,
+                                    loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false);
+    } else {
+        copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ float *>(dst), reinterpret_cast<__gm__ float *>(src),
+                                    sid, loop1SrcStride, nValue, dValue, loop4SrcStride, smallc0En, false);
+    }
+#elif defined(PTO_NPU_ARCH_A5)
     copy_gm_to_cbuf_multi_nd2nz(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid,
                                 loop1SrcStride, l2CacheCtl, nValue, dValue, loop4SrcStride, smallc0En);
 #elif defined(PTO_NPU_ARCH_KIRIN9030)
@@ -220,7 +233,13 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_align_v2(__cbuf__ T *dst, __gm__ T *src, u
 {
     using U = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
                                  std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+#if defined(PTO_NPU_ARCH_A6)
+    (void)l2CacheCtl;
+    // A6 (dav_3101) variant does not take l2CacheCtl.
+    copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
+                             lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, burstSrcStride,
+                             burstDstStride);
+#elif defined(PTO_NPU_ARCH_A5)
     copy_gm_to_cbuf_align_v2(reinterpret_cast<__cbuf__ U *>(dst), reinterpret_cast<__gm__ U *>(src), sid, nBurst,
                              lenBurst, leftPaddingCount, rightPaddingCount, dataSelectBit, l2CacheCtl, burstSrcStride,
                              burstDstStride);

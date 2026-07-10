@@ -11,7 +11,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef ARCH_MACRO_HPP
 #define ARCH_MACRO_HPP
 
-#if __NPU_ARCH__ == 2201
+#if defined(PTO_FORCE_ARCH_A6)
+#define PTO_COMM_NOT_SUPPORTED
+#define PTO_NPU_ARCH_A6
+#elif __NPU_ARCH__ == 2201
 #define PTO_NPU_ARCH_A2A3
 #elif (__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510)
 #define PTO_NPU_ARCH_A5
