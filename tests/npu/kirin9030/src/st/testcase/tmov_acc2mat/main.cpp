@@ -182,6 +182,26 @@ TEST_F(TMOVTest, case_nz2nd_10)
     tmov_acc2mat_test<2, uint16_t, uint16_t, uint16_t, 10>(48, 112, 48);
 }
 
+TEST_F(TMOVTest, case_nz2nd_11)
+{
+    tmov_acc2mat_test<2, uint16_t, uint16_t, uint16_t, 11>(111, 48, 96);
+}
+
+TEST_F(TMOVTest, case_nz2nd_12)
+{
+    tmov_acc2mat_test<2, uint16_t, uint16_t, uint16_t, 12>(112, 48, 88);
+}
+
+TEST_F(TMOVTest, case_nz2nd_13)
+{
+    tmov_acc2mat_test<2, uint16_t, uint16_t, uint16_t, 13>(97, 48, 80);
+}
+
+TEST_F(TMOVTest, case_nz2nd_14)
+{
+    tmov_acc2mat_test<2, uint16_t, uint16_t, uint16_t, 14>(112, 48, 65);
+}
+
 TEST_F(TMOVTest, case_nz2nz_extract)
 {
     tmov_acc2mat_test<1, uint16_t, uint16_t, uint16_t, 5, 16, 16>(64, 64, 64);
