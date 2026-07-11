@@ -406,6 +406,22 @@ void LaunchTMOVAcc2MatNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, void *st
         RunTMOV<half, half, half, 112, 48, 65, 112, 80>
             <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
                                      reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
+    } else if constexpr (tilingKey == 15) {
+        RunTMOV<half, half, half, 64, 48, 33, 64, 48>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
+                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
+    } else if constexpr (tilingKey == 16) {
+        RunTMOV<half, half, half, 80, 48, 49, 80, 64>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
+                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
+    } else if constexpr (tilingKey == 17) {
+        RunTMOV<half, half, half, 97, 48, 97, 112, 112>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
+                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
+    } else if constexpr (tilingKey == 18) {
+        RunTMOV<half, half, half, 64, 48, 64, 64, 64>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
+                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
     }
 }
 
@@ -423,3 +439,7 @@ template void LaunchTMOVAcc2MatNZ2ND<11>(uint8_t *out, uint8_t *src0, uint8_t *s
 template void LaunchTMOVAcc2MatNZ2ND<12>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2MatNZ2ND<13>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2MatNZ2ND<14>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMOVAcc2MatNZ2ND<15>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMOVAcc2MatNZ2ND<16>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMOVAcc2MatNZ2ND<17>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMOVAcc2MatNZ2ND<18>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
