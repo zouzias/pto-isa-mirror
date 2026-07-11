@@ -147,3 +147,38 @@ TEST_F(TStoreTest, case12)
 {
     test_tstore<0, int64_t, 1, 1, 2, 39, 47, 2, 2, 2, 43, 50>();
 }
+
+TEST_F(TStoreTest, case13)
+{
+    test_tstore<0, int32_t, 1, 1, 1, 8, 16, 1, 1, 1, 16, 16>();
+}
+
+TEST_F(TStoreTest, case14)
+{
+    test_tstore<0, int16_t, 1, 2, 3, 16, 32, 2, 3, 4, 32, 32>();
+}
+
+TEST_F(TStoreTest, case15)
+{
+    test_tstore<0, int8_t, 2, 3, 1, 16, 32, 3, 4, 2, 32, 32>();
+}
+
+TEST_F(TStoreTest, case16)
+{
+    test_tstore<0, uint32_t, 2, 1, 2, 8, 16, 3, 2, 3, 16, 16>();
+}
+
+TEST_F(TStoreTest, case17)
+{
+    test_tstore<0, int32_t, 3, 4, 1, 16, 8, 4, 5, 2, 32, 16>();
+}
+
+TEST_F(TStoreTest, case18)
+{
+    test_tstore<0, uint16_t, 2, 1, 1, 16, 32, 3, 2, 2, 32, 32>();
+}
+
+TEST_F(TStoreTest, case19)
+{
+    test_tstore<0, int16_t, 1, 1, 1, 32, 16, 2, 2, 2, 32, 32>();
+}
