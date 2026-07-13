@@ -181,9 +181,14 @@ TEST_F(TStoreAcc2gmTest, case6)
     test_tstore_acc2gm_nz2nd<6, uint16_t, uint16_t, 100, 222, 60>();
 }
 
+TEST_F(TStoreAcc2gmTest, case7)
+{
+    test_tstore_acc2gm_nz2nd<7, float, float, 128, 128, 61>();
+}
+
 TEST_F(TStoreAcc2gmTest, case13)
 {
-    test_tstore_acc2gm_nz2nd<7, int32_t, int8_t, 44, 128, 27>();
+    test_tstore_acc2gm_nz2nd<8, int32_t, int8_t, 44, 128, 27>();
 }
 
 TEST_F(TStoreAcc2gmTest, case16)

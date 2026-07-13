@@ -225,6 +225,9 @@ void LaunchTStoreAcc2gmNz2nd(uint8_t *out, uint8_t *src0, uint8_t *src1, void *s
             reinterpret_cast<bfloat16_t *>(out), reinterpret_cast<bfloat16_t *>(src0),
             reinterpret_cast<bfloat16_t *>(src1));
     } else if constexpr (tilingKey == 7) {
+        TStoreAcc2gmNz2nd<1, float, float, float, 1, 1, 1, 128, 128, 1, 1, 1, 128, 128, 128, 128, 61>(
+            reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1));
+    } else if constexpr (tilingKey == 8) {
         TStoreAcc2gmNz2nd<1, int32_t, int32_t, int8_t, 1, 1, 1, 44, 128, 1, 1, 1, 44, 128, 44, 128, 27>(
             reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1));
     } else if constexpr (tilingKey == 21) {
@@ -277,6 +280,7 @@ template void LaunchTStoreAcc2gmNz2nd<4>(uint8_t *out, uint8_t *src0, uint8_t *s
 template void LaunchTStoreAcc2gmNz2nd<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTStoreAcc2gmNz2nd<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTStoreAcc2gmNz2nd<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTStoreAcc2gmNz2nd<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template void LaunchTStoreAcc2gmScalarNz2nd<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream,
                                                float scalarQuant);
