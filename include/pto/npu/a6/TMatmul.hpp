@@ -17,6 +17,18 @@ namespace pto {
 
 inline namespace TMatmulInternel {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
+
+template <typename TileRes, typename TileLeft, typename TileRight>
+inline constexpr bool kIsMmadF16F32 = std::is_same_v<typename TileRes::DType, float>
+    &&std::is_same_v<typename TileLeft::DType, half> &&std::is_same_v<typename TileRight::DType, half>;
+
+template <typename TileRes, typename TileLeft, typename TileRight>
+inline constexpr bool kIsMmadF16S8 = std::is_same_v<typename TileRes::DType, float>
+    &&std::is_same_v<typename TileLeft::DType, half> &&std::is_same_v<typename TileRight::DType, int8_t>;
+
+template <typename TileRes, typename TileLeft, typename TileRight>
+inline constexpr bool kIsMmadS8S4 = std::is_same_v<typename TileRes::DType, int32_t>
+    &&std::is_same_v<typename TileLeft::DType, int8_t> &&std::is_same_v<typename TileRight::DType, int4b_t>;
 } // namespace TMatmulInternel
 
 template <typename TileLeft>
@@ -35,13 +47,12 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType *b = (__cb__ typename TileRight::DType *)__cce_get_tile_ptr(bMatrix);
 
-    if constexpr (std::is_same_v<typename TileRes::DType, int32_t> &&
-                  std::is_same_v<typename TileLeft::DType, int8_t> &&
-                  std::is_same_v<typename TileRight::DType, int4b_t>) {
+    if constexpr (kIsMmadS8S4<TileRes, TileLeft, TileRight>) {
         mad_s8s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (std::is_same_v<typename TileRes::DType, float> &&
-                         std::is_same_v<typename TileLeft::DType, half> &&
-                         std::is_same_v<typename TileRight::DType, int8_t>) {
+    } else if constexpr (kIsMmadF16F32<TileRes, TileLeft, TileRight>) {
+        // A6 MMAD.f16f32 uses the standard mad entry point on current toolchains.
+        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
         // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else {
@@ -61,13 +72,12 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix, type
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType *)xd;
 
-    if constexpr (std::is_same_v<typename TileRes::DType, int32_t> &&
-                  std::is_same_v<typename TileLeft::DType, int8_t> &&
-                  std::is_same_v<typename TileRight::DType, int4b_t>) {
+    if constexpr (kIsMmadS8S4<TileRes, TileLeft, TileRight>) {
         mad_s8s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (std::is_same_v<typename TileRes::DType, float> &&
-                         std::is_same_v<typename TileLeft::DType, half> &&
-                         std::is_same_v<typename TileRight::DType, int8_t>) {
+    } else if constexpr (kIsMmadF16F32<TileRes, TileLeft, TileRight>) {
+        // A6 MMAD.f16f32 uses the standard mad entry point on current toolchains.
+        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
         // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else {
@@ -175,7 +185,8 @@ PTO_INTERNAL void CheckMadValid()
                           (std::is_same_v<AType, float8_e5m2_t> && std::is_same_v<BType, float8_e4m3_t>) ||
                           (std::is_same_v<AType, float8_e5m2_t> && std::is_same_v<BType, float8_e5m2_t>) ||
                           (std::is_same_v<AType, hifloat8_t> && std::is_same_v<BType, hifloat8_t>),
-                      "No supported data type when Acc Type is float.");
+                      "For A6 float accumulation, supported input pairs include halfxhalf (MMAD.f16f32), halfxint8 "
+                      "(MMAD.f16s8), bfloat16xbfloat16, floatxfloat, selected fp8 pairs, and hifloat8xhifloat8.");
     }
     static_assert(
         ((TileLeft::Loc == TileType::Left) && (!TileLeft::isRowMajor) && (TileLeft::SFractal == SLayout::RowMajor)) &&
