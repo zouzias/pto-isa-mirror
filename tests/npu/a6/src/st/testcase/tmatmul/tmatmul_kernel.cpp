@@ -422,7 +422,7 @@ void LaunchTMATMUL<37>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 template <>
 void LaunchTMATMUL<38>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    RunTMATMUL_ND<float, half, int4b_t, 16, 16, 16><<<1, nullptr, stream>>>(
+    RunTMATMUL_ND<float, half, int4b_t, 16, 64, 32><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
 }
 

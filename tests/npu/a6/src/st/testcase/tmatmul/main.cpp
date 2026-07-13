@@ -276,9 +276,9 @@ TEST_F(TMATMULTest, case_mmad_f16s4_nd_129x95x63)
     tmatmul_test<float, uint16_t, pto::int4b_t, 37>(129, 95, 63);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16s4_nd_16x16x16)
+TEST_F(TMATMULTest, case_mmad_f16s4_nd_16x64x32)
 {
-    tmatmul_test<float, uint16_t, pto::int4b_t, 38>(16, 16, 16);
+    tmatmul_test<float, uint16_t, pto::int4b_t, 38>(16, 64, 32);
 }
 
 TEST_F(TMATMULTest, case_mmad_f16s4_nd_128x128x128)
