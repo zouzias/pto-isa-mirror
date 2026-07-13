@@ -1557,7 +1557,7 @@ public:
     TileDType &data()
     {
         if (!data_) {
-            internalBuffer.resize(Rows * Cols);
+            internalBuffer.resize(Rows * Cols / (isTwinType<DType>() ? 2 : 1));
             data_ = internalBuffer.data();
         }
         return data_;
@@ -1680,17 +1680,25 @@ public:
 #if defined(__CPU_SIM)
     DType GetElement(int r, int c)
     {
-        return data_[GetTileElementOffset<decltype(*this)>(r, c)];
+        return getProperDataPart(data(), GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c));
     }
 
     void SetElement(int r, int c, const DType &val)
     {
-        data_[GetTileElementOffset<decltype(*this)>(r, c)] = val;
+        setProperDataPart(data(), GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c), val);
     }
 
     void AddToElement(int r, int c, const DType &summand)
     {
-        data_[GetTileElementOffset<decltype(*this)>(r, c)] += summand;
+        const auto offset = GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c);
+        if constexpr (isTwinType<DType>()) {
+            const auto val =
+                getProperDataPart(data(), GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c));
+            setProperDataPart(data(), GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c),
+                              val + summand);
+        } else {
+            data()[offset] += summand;
+        }
     }
 #endif
 private:

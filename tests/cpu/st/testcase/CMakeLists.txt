@@ -91,7 +91,7 @@ tlog
 tlrelu
 tmatmul
 tmatmul_layout
-#tmatmul_mx
+tmatmul_mx
 tmax
 tmaxs
 tmin

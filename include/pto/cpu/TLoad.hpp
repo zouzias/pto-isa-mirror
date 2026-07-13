@@ -64,7 +64,7 @@ __tf__ PTO_INLINE void LoadPlainMatrix(typename GlobalData::DType __out__ *dst, 
         const std::size_t srcBase = r * strideBase;
         PTO_CPU_VECTORIZE_LOOP
         for (std::size_t c = 0; c < shape; c++) {
-            dst[dstBase + c] = getProperDataPart(src, srcBase + c * stride);
+            dst[dstBase + c] = src[srcBase + c * stride];
         }
     });
 }
@@ -108,7 +108,7 @@ __tf__ PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *
                 tile_idx = GetTileElementOffsetSubfractals<TileData>(subTileR, innerR, subTileC, innerC);
 
                 size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
-                dst[tile_idx] = getProperDataPart(src, gd_idx);
+                dst[tile_idx] = src[gd_idx];
             }
         });
 }
@@ -132,7 +132,7 @@ __tf__ AICORE void TLoad(typename TileData::TileDType __out__ dst, typename Glob
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         ForEachNZElement<TileData>(validRow, validCol, gShape1, gShape3, gShape4, gStride0, gStride1, gStride2,
                                    gStride3, gStride4, [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-                                       dst[tile_idx] = getProperDataPart(src, gd_idx);
+                                       dst[tile_idx] = src[gd_idx];
                                    });
     } else if (TileData::SFractal == SLayout::NoneBox) {
         LoadPlain<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
@@ -174,7 +174,7 @@ PTO_INTERNAL void TLoadInstrGm2L1(__cbuf__ typename TileData::DType *dst, typena
     uint8_t elemNum = C0_SIZE_BYTE / sizeof(typename TileData::DType);
     for (uint16_t i = 0; i < nBurst; i++) {
         for (size_t j = 0; j < lenBurst * elemNum; j++) {
-            dst[dstStride * i + j] = getProperDataPart(src, srcStride * i + j);
+            dst[dstStride * i + j] = src[srcStride * i + j];
         }
     }
 }
