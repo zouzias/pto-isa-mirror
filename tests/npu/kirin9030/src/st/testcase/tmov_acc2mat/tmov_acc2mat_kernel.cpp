@@ -278,34 +278,41 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     TASSIGN<0x0>(srcTileData);
     TASSIGN<0x0>(dstTileData);
 
-    if constexpr (isRelu) {
-        TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
+    if constexpr (layoutType == Layout::ND && !isRelu && indexRow == 0 && indexCol == 0 && !isInsert) {
+        TMOV(dstTileData, cTile);
+
+        set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
     } else {
-        if constexpr (indexRow == 0 && indexCol == 0) {
-            TMOV(srcTileData, cTile);
-        } else if constexpr (!isInsert) {
-            TEXTRACT(srcTileData, cTile, indexRow, indexCol);
+        if constexpr (isRelu) {
+            TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
         } else {
-            using GlobalDataSrc2 =
-                GlobalTensor<OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
-                             pto::Stride<copyOutM * copyOutN, copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
-            GlobalDataSrc2 src2Global(src2);
-            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-            TLOAD(srcTileData, src2Global);
-            set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
-            TINSERT(srcTileData, cTile, indexRow, indexCol);
+            if constexpr (indexRow == 0 && indexCol == 0) {
+                TMOV(srcTileData, cTile);
+            } else if constexpr (!isInsert) {
+                TEXTRACT(srcTileData, cTile, indexRow, indexCol);
+            } else {
+                using GlobalDataSrc2 =
+                    GlobalTensor<OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
+                                 pto::Stride<copyOutM * copyOutN, copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
+                GlobalDataSrc2 src2Global(src2);
+                set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+                TLOAD(srcTileData, src2Global);
+                set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+                TINSERT(srcTileData, cTile, indexRow, indexCol);
+            }
         }
+
+        set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+
+        TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
+
+        set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     }
-
-    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-
-    TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
-
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
 
     RunTSTORE<OutType, DstTileData, copyOutM, copyOutN, layoutType, sfractalSize>(out, dstTileData);
 }
