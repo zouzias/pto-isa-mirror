@@ -235,6 +235,10 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nd_20",
         "TMOVTest.case_nz2nd_21",
         "TMOVTest.case_nz2nd_22",
+        "TMOVTest.case_nz2nd_23",
+        "TMOVTest.case_nz2nd_24",
+        "TMOVTest.case_nz2nd_25",
+        "TMOVTest.case_nz2nd_26",
 
         ##textract
         "TMOVTest.case_nz2nz_extract",
@@ -270,6 +274,10 @@ if __name__ == "__main__":
         TMovParams(np.float16, np.float16, np.float16, 80, 48, 63),
         TMovParams(np.float16, np.float16, np.float16, 64, 48, 65),
         TMovParams(np.float16, np.float16, np.float16, 48, 48, 65),
+        TMovParams(np.float16, np.float16, np.float16, 112, 48, 64),
+        TMovParams(np.float16, np.float16, np.float16, 64, 48, 64),
+        TMovParams(np.float16, np.float16, np.float16, 80, 48, 48),
+        TMovParams(np.float16, np.float16, np.float16, 48, 48, 48),
 
         TMovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, 'NZ', 512, False, False, False, None, 1,
             16, 16),
