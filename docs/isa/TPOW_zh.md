@@ -24,7 +24,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{base}_{i,j}^{\mathrm{exp}_{i,j}} $$
 %dst = tpow %base, %exp, %tmp : !pto.tile<...>
 ```
 
-降低时可能引入内部临时 Tile；C++ 内建接口需要显式传入 `tmp` 操作数。
+降阶时可能引入内部临时 Tile；C++ 内建接口需要显式传入 `tmp` 操作数。
 
 ### AS Level 1（SSA）
 
