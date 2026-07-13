@@ -36,6 +36,10 @@ constexpr uint32_t kUrmaSqeRmtEidHOffset = 24;
 constexpr uint32_t kUrmaSqeRmtAddrLOffset = 40;
 constexpr uint32_t kUrmaSqeRmtAddrHOffset = 44;
 
+// Opt-in: pass to Init() to resolve qpNum from ACL_DEV_ATTR_VECTOR_CORE_NUM.
+// Default Init qpNum is 1; do not use this as the default.
+constexpr uint32_t kUrmaAutoQpNum = 0;
+
 // ============================================================================
 // UrmaOpcode — URMA operation codes (binary-compatible with hcomm UB ABI)
 // ============================================================================
