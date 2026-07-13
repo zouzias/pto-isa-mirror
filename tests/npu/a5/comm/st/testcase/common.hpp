@@ -413,7 +413,8 @@ struct UrmaTestContext {
         return true;
     }
 
-    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
+    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded,
+               uint32_t qpNum = 1)
     {
         if (n_devices <= 0 || n_ranks <= 0) {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
@@ -456,7 +457,8 @@ struct UrmaTestContext {
         }
         CommMpiBarrier();
 
-        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize)) {
+        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize,
+                          qpNum)) {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             aclrtFree(devBuf);
             devBuf = nullptr;

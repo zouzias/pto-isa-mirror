@@ -90,6 +90,7 @@ struct UrmaExecContext {
 
 struct UrmaEventContext {
     __gm__ uint8_t *contextGm{nullptr};
+    uint32_t qpIdx{0};
 };
 
 struct UrmaSession {
