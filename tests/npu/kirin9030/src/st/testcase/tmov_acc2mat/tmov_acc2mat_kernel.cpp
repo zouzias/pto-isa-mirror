@@ -279,11 +279,10 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     TASSIGN<0x0>(dstTileData);
 
     if constexpr (layoutType == Layout::ND && !isRelu && indexRow == 0 && indexCol == 0 && !isInsert) {
-        using GlobalDataOut =
-            GlobalTensor<OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
-                         pto::Stride<copyOutM * copyOutN, copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
-        GlobalDataOut dstGlobal(out);
-        TSTORE(dstGlobal, cTile);
+        TMOV(dstTileData, cTile);
+
+        set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
     } else {
         if constexpr (isRelu) {
             TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
@@ -313,9 +312,9 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
 
         set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-
-        RunTSTORE<OutType, DstTileData, copyOutM, copyOutN, layoutType, sfractalSize>(out, dstTileData);
     }
+
+    RunTSTORE<OutType, DstTileData, copyOutM, copyOutN, layoutType, sfractalSize>(out, dstTileData);
 }
 
 template <int32_t tilingKey>
