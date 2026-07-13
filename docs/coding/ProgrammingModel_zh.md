@@ -13,7 +13,7 @@ PTO Tile Lib 提供以 **Tile 粒度**为核心的 C++ 内建接口（intrinsics
 - **Tile**：固定容量的二维片上缓冲区（概念上类似 tile 寄存器 / SRAM 块），也是大多数 PTO 指令的主要计算单元。参见：`docs/coding/Tile_zh.md`。
 - **GlobalTensor**：全局内存（GM）的轻量级视图，带 5 维 shape/stride/layout 元数据；被 `TLOAD`、`TSTORE` 等内存类指令消费。参见：`docs/coding/GlobalTensor_zh.md`。
 - **Scalar**：用于参数化指令的立即数与枚举（舍入模式、比较模式、原子模式等）。参见：`docs/coding/Scalar_zh.md`。
-- **Event**：显式的依赖 token，用于在不引入全局屏障的情况下表达流水线类之间的顺序约束。参见：`docs/coding/Event_zh.md`。
+- **Event**：显式的依赖 token，用于在不引入全局屏障的情况下表达流水线阶段之间的顺序约束。参见：`docs/coding/Event_zh.md`。
 
 ## 两种开发风格
 
