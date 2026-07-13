@@ -161,67 +161,77 @@ TEST_F(TMATMULTest, case_nd_fp32_fp32_to_fp32_47x29x25)
     tmatmul_test<float, float, float, 14>(47, 29, 25);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_64x64x64)
+TEST_F(TMATMULTest, case_mmad_s8s4_nd_64x64x64)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 15>(64, 64, 64);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_96x128x65)
+TEST_F(TMATMULTest, case_mmad_s8s4_nd_96x128x65)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 16>(96, 128, 65);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_129x95x33)
+TEST_F(TMATMULTest, case_mmad_s8s4_nd_129x95x33)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 17>(129, 95, 33);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_17x33x31)
+TEST_F(TMATMULTest, case_mmad_s8s4_nd_17x33x31)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 18>(17, 33, 31);
 }
 
-TEST_F(TMATMULTest, case_nd_int8_int4_to_int32_2x80x48)
+TEST_F(TMATMULTest, case_mmad_s8s4_nd_2x80x48)
 {
     tmatmul_test<int32_t, int8_t, pto::int4b_t, 19>(2, 80, 48);
 }
 
-TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_64x64x64)
+TEST_F(TMATMULTest, case_mmad_f16s8_nd_64x64x64)
 {
     tmatmul_test<float, uint16_t, int8_t, 20>(64, 64, 64);
 }
 
-TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_96x128x89)
+TEST_F(TMATMULTest, case_mmad_f16s8_nd_96x128x89)
 {
     tmatmul_test<float, uint16_t, int8_t, 21>(96, 128, 89);
 }
 
-TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_129x95x63)
+TEST_F(TMATMULTest, case_mmad_f16s8_nd_129x95x63)
 {
     tmatmul_test<float, uint16_t, int8_t, 22>(129, 95, 63);
 }
 
-TEST_F(TMATMULTest, case_fp16_int8_to_fp32_65x90x89)
+TEST_F(TMATMULTest, case_mmad_f16s8_dn_65x90x89)
 {
     tmatmul_test<float, uint16_t, int8_t, 23>(65, 90, 89);
 }
 
-TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_2x90x31)
+TEST_F(TMATMULTest, case_mmad_f16s8_nd_2x90x31)
 {
     tmatmul_test<float, uint16_t, int8_t, 24>(2, 90, 31);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16f32_nd_fp16_fp16_to_fp32_64x64x64)
+TEST_F(TMATMULTest, case_mmad_f16f32_nd_64x64x64)
 {
     tmatmul_test<float, uint16_t, uint16_t, 25>(64, 64, 64);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16f32_nd_fp16_fp16_to_fp32_95x33x79)
+TEST_F(TMATMULTest, case_mmad_f16f32_nd_95x33x79)
 {
     tmatmul_test<float, uint16_t, uint16_t, 26>(95, 33, 79);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16f32_fp16_fp16_to_fp32_127x33x95)
+TEST_F(TMATMULTest, case_mmad_f16f32_dn_127x33x95)
 {
     tmatmul_test<float, uint16_t, uint16_t, 27>(127, 33, 95);
+}
+
+TEST_F(TMATMULTest, case_mmad_f16e4m3_nd_64x64x64)
+{
+    tmatmul_test<float, uint16_t, uint8_t, 28>(64, 64, 64);
+}
+
+TEST_F(TMATMULTest, case_mmad_f16e4m3_dn_127x33x95)
+{
+    tmatmul_test<float, uint16_t, uint8_t, 29>(127, 33, 95);
 }
