@@ -11,8 +11,8 @@ Tile-based GEMV with explicit accumulator input tile (`cInMatrix`) and output ti
 
 ## See also
 
-- Base GEMV instruction: `docs/isa/TGEMV.md`.
-- Bias variant: `docs/isa/TGEMV_BIAS.md`.
+- Base GEMV instruction: [TGEMV](TGEMV.md).
+- Bias variant: [TGEMV_BIAS](TGEMV_BIAS.md).
 
 ## C++ Intrinsic
 

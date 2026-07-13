@@ -10,8 +10,8 @@
 
 ## 另请参见
 
-- 基础 GEMV 指令：`docs/isa/TGEMV.md`。
-- 偏置变体：`docs/isa/TGEMV_BIAS.md`。
+- 基础 GEMV 指令：[TGEMV](TGEMV_zh.md)。
+- 偏置变体：[TGEMV_BIAS](TGEMV_BIAS_zh.md)。
 
 ## C++ 内建接口
 

@@ -11,8 +11,8 @@ Tile-based GEMV with bias add.
 
 ## See also
 
-- Base GEMV instruction: `docs/isa/TGEMV.md`.
-- Accumulation variant: `docs/isa/TGEMV_ACC.md`.
+- Base GEMV instruction: [TGEMV](TGEMV.md).
+- Accumulation variant: [TGEMV_ACC](TGEMV_ACC.md).
 
 ## C++ Intrinsic
 

@@ -80,8 +80,8 @@ PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale
 
 实际使用模式请参见：
 
-- `docs/isa/TMATMUL_MX.md`
-- `docs/isa/TGEMV.md`
+- [TMATMUL_MX](TMATMUL_MX_zh.md)
+- [TGEMV](TGEMV_zh.md)
 
 ## 汇编示例（ASM）
 

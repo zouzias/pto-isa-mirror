@@ -10,8 +10,8 @@
 
 ## 另请参见
 
-- 基础 GEMV 指令：`docs/isa/TGEMV.md`。
-- 累加变体：`docs/isa/TGEMV_ACC.md`。
+- 基础 GEMV 指令：[TGEMV](TGEMV_zh.md)。
+- 累加变体：[TGEMV_ACC](TGEMV_ACC_zh.md)。
 
 ## C++ 内建接口
 

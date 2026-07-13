@@ -82,8 +82,8 @@ Additional overloads support accumulation/bias variants and `AccPhase` selection
 
 For practical usage patterns, see:
 
-- `docs/isa/TMATMUL_MX.md`
-- `docs/isa/TGEMV.md`
+- [TMATMUL_MX](TMATMUL_MX.md)
+- [TGEMV](TGEMV.md)
 
 ## ASM Form Examples
 
