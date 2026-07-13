@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -28,9 +29,7 @@ def gen_golden_data_tprelu(case_name, param):
 
     # Perform the addbtraction
     golden = NumExt.zeros([row, col], dtype)
-    golden[:h_valid, :w_valid] = NumExt.astype(
-        np.where(input1 > 0, input1, input1 * input2), dtype
-    )[:h_valid, :w_valid]
+    golden[:h_valid, :w_valid] = NumExt.astype(np.where(input1 > 0, input1, input1 * input2), dtype)[:h_valid, :w_valid]
 
     # Save the input and golden data to binary files
     NumExt.write_array("input1.bin", input1, dtype)
@@ -53,8 +52,10 @@ class TPreluParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    return f"TPRELUTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
-           f"{param.valid_row}x{param.valid_col}"
+    return (
+        f"TPRELUTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"
+        + f"{param.valid_row}x{param.valid_col}"
+    )
 
 
 if __name__ == "__main__":

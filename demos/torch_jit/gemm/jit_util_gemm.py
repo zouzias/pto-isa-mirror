@@ -29,7 +29,6 @@ def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
 
 
 def compile_cpp(kernel_cpp: str, verbose: bool = False, timeout: int = 120) -> str:
-
     # output .so next to kernel_cpp
     lib_path = os.path.join(os.path.dirname(kernel_cpp), "gemm_jit.so")
 
@@ -82,13 +81,7 @@ def load_lib(lib_path: str, check_type: bool = True):
         block_dim: int = default_block_dim,
         stream_ptr=default_stream_ptr,
     ):
-        lib.call_kernel(
-            block_dim,
-            stream_ptr,
-            torch_to_ctypes(c),
-            torch_to_ctypes(a),
-            torch_to_ctypes(b),
-        )
+        lib.call_kernel(block_dim, stream_ptr, torch_to_ctypes(c), torch_to_ctypes(a), torch_to_ctypes(b))
 
     return gemm
 

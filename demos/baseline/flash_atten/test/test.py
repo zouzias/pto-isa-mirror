@@ -11,15 +11,15 @@
 # --------------------------------------------------------------------------------
 
 import torch
-import torch.nn as nn
-import torch_npu
+import torch_npu  # noqa: F401
 from torch_npu.testing.testcase import TestCase, run_tests
-import op_extension
+import op_extension  # noqa: F401
 import numpy as np
 
 S0_BASE = 64
 HEAD_SIZE = 128
 TILE_S1_DEFAULT = 256
+
 
 def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, is_causal=False):
     # generate inputs in FP16, compute golden in FP32
@@ -33,22 +33,22 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
     assert tile_s1 % cube_s1 == 0, "TILE_S1 must be divisible by CUBE_S1"
 
     # write FP16 inputs and FP32 golden
-    #q.tofile(os.path.join(path, 'q.bin'))
+    # q.tofile(os.path.join(path, 'q.bin'))
     q_torch = torch.from_numpy(q)
-    #k.tofile(os.path.join(path, 'k.bin'))
-    k_torch = torch.from_numpy(k)
-    kt = k.T.astype(np.float16)    
-    #kt.tofile(os.path.join(path, 'kt.bin')) 
+    # k.tofile(os.path.join(path, 'k.bin'))
+    torch.from_numpy(k)
+    kt = k.T.astype(np.float16)
+    # kt.tofile(os.path.join(path, 'kt.bin'))
     kt_torch = torch.from_numpy(kt.copy())
-    #golden.tofile(os.path.join(path, 'qk.bin'))
+    # golden.tofile(os.path.join(path, 'qk.bin'))
     qk_torch = torch.from_numpy(golden)
     # also produce softmax x_exp (per-row) saved as FP16 and tmp_float_exp saved as FP32
     # compute softmax in tiled fashion by TILE_S1 tiles (default 256)
     arr_f32 = golden.astype(np.float32)
     if is_causal:
-        mask = np.triu((np.ones(arr_f32.shape) * float(-3.40282e+38)).astype(np.float32), 1)
+        mask = np.triu((np.ones(arr_f32.shape) * float(-3.40282e38)).astype(np.float32), 1)
         arr_f32 += mask
-    scale = 1/np.sqrt(head_size)
+    scale = 1 / np.sqrt(head_size)
     num_tiles = s1 // tile_s1
 
     # allocate full arrays to collect per-tile exponentials and per-tile global sums
@@ -67,12 +67,12 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
         # local max per row for this tile
         local_max = np.max(tile, axis=1, keepdims=True).astype(np.float32)
         if global_max is not None:
-            local_max = np.maximum(local_max, global_max).astype(np.float32) 
+            local_max = np.maximum(local_max, global_max).astype(np.float32)
         if ti == 0:
             new_global_max = local_max
             tmp_float = (tile - new_global_max) * scale
             tmp_float_exp = np.exp(tmp_float).astype(np.float32)
-            new_global_sum = (np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32))
+            new_global_sum = np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32)
             exp_max_tile = np.ones_like(new_global_max).astype(np.float32)
         else:
             # exp_max = exp((global_max - local_max) * scale)
@@ -81,7 +81,7 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
             new_global_max = local_max
             tmp_float = (tile - new_global_max) * scale
             tmp_float_exp = np.exp(tmp_float).astype(np.float32)
-            new_global_sum = exp_max * global_sum + (np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32) )
+            new_global_sum = exp_max * global_sum + (np.sum(tmp_float_exp, axis=1, keepdims=True).astype(np.float32))
             exp_max_tile = exp_max
 
         # record results and update global state
@@ -95,8 +95,8 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
     # p saved as FP16 (store raw exponentials per tile as half)
     soft = (full_exp).astype(np.float16)
     p_torch = torch.from_numpy(soft)
-    #soft.tofile(os.path.join(path, 'p.bin'))
-    #tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
+    # soft.tofile(os.path.join(path, 'p.bin'))
+    # tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
     p_fp32_torch = torch.from_numpy(tmp_float_exp)
 
     # generate random V (S1 x HEAD_SIZE) and compute y = soft (S0 x S1) dot V (S1 x HEAD_SIZE)
@@ -111,17 +111,17 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
     pv_tile_fifo_parts = []
     for ti in range(num_tiles):
         c0 = ti * tile_s1
-        soft_tile = soft_f32[:, c0:c0+tile_s1]
-        v_tile = v[c0:c0+tile_s1, :].astype(np.float32)
+        soft_tile = soft_f32[:, c0 : c0 + tile_s1]
+        v_tile = v[c0 : c0 + tile_s1, :].astype(np.float32)
         pv_tile_fifo = (soft_tile.dot(v_tile)).astype(np.float32)
         pv_tile_fifo_parts.append(pv_tile_fifo)
         pv += pv_tile_fifo
 
-    #v.tofile(os.path.join(path, 'v.bin'))
+    # v.tofile(os.path.join(path, 'v.bin'))
     v_torch = torch.from_numpy(v)
-    vt = v.T.astype(np.float16)    
-    #vt.tofile(os.path.join(path, 'vt.bin'))       
-    #pv.tofile(os.path.join(path, 'pv.bin'))
+    v.T.astype(np.float16)
+    # vt.tofile(os.path.join(path, 'vt.bin'))
+    # pv.tofile(os.path.join(path, 'pv.bin'))
     pv_torch = torch.from_numpy(pv)
     # write per-tile partials as pv_tile_fifo0.bin, pv_tile_fifo1.bin
     """
@@ -148,16 +148,14 @@ def gen_case(s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, 
         # write per-iteration o
         # o_running.astype(np.float32).tofile(os.path.join(path, f'o_part{ti}.bin'))
     # write final running output
-    #o_running.astype(np.float32).tofile(os.path.join(path, 'o.bin'))
+    # o_running.astype(np.float32).tofile(os.path.join(path, 'o.bin'))
     o_torch = torch.from_numpy(o_running.astype(np.float32))
 
     return q_torch, kt_torch, v_torch, o_torch, [qk_torch, p_torch, p_fp32_torch, pv_torch]
 
 
 class TestCustomFA(TestCase):
-
     def test_fa_custom_ops(self):
-
         for seq_len in [1024, 2048, 4096, 8192, 16384, 32768]:
             for head_size in [64, 128]:
                 for is_causal in [False, True]:
@@ -174,7 +172,7 @@ class TestCustomFA(TestCase):
                     output = torch.ops.npu.my_fa(q_npu, k_npu, v_npu, is_causal)
 
                     # Validate the results
-                    self.assertRtolEqual(output, cpuout, prec=1.e-3)
+                    self.assertRtolEqual(output, cpuout, prec=1.0e-3)
 
 
 if __name__ == "__main__":

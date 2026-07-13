@@ -13,15 +13,12 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
-    row = param.row
-    valid_row = param.valid_row
-    col = param.col
-    valid_col = param.valid_col
 
     if np.issubdtype(dtype, np.integer):
         value_max = np.iinfo(dtype).max
@@ -61,9 +58,7 @@ if __name__ == "__main__":
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
 
-    case_params_list = [
-        TRandomParams("case01", np.uint32, 4, 256, 4, 256),
-    ]
+    case_params_list = [TRandomParams("case01", np.uint32, 4, 256, 4, 256)]
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

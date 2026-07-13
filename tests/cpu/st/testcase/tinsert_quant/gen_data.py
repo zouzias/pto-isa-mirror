@@ -54,12 +54,9 @@ def get_quant_vector(dst_dtype, n, saturate_inf):
         sign_bit = 1 if (dst_dtype == np.int8) else 0
         # if saturate_inf, saturate INF to +/- MAX, and NaN to 0 in float-2-float operations
         # otherwise, keep it as is
-        sat_bit = 1 if saturate_inf else 0 
+        sat_bit = 1 if saturate_inf else 0
 
-        packed = (int(sat_bit) << 48) | \
-                    (int(sign_bit) << 46) | \
-                    (int(offset_val & 0x1FF) << 37) | \
-                    (int(f_bits))
+        packed = (int(sat_bit) << 48) | (int(sign_bit) << 46) | (int(offset_val & 0x1FF) << 37) | (int(f_bits))
         result.append(packed)
 
     return np.array(result, dtype=np.uint64)
@@ -110,7 +107,7 @@ def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False):
     elif mode == QuantMode.I32_TO_F16:
         f16_lim = np.finfo(np.float16)
         res = np.clip(res, f16_lim.min, f16_lim.max)
-    
+
     if use_relu:
         res = np.maximum(res, 0)
 
@@ -129,7 +126,7 @@ def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_
         q_param = quant_array[j] if is_vector else quant_array[0]
         for i in range(rows):
             out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, dst_dtype, use_relu)
-    
+
     return out
 
 
@@ -138,7 +135,9 @@ def gen_golden_data(case_name, param: TInsertParams):
     dst_shape = [param.dst_valid_rows, param.dst_valid_cols]
     idx_row, idx_col = param.idx_row, param.idx_col
     total_elements = src_shape[0] * src_shape[1]
-    raw_data = NumExt.astype(np.arange(1 - total_elements // 2, 1 + total_elements // 2).reshape(src_shape), param.src_dtype)
+    raw_data = NumExt.astype(
+        np.arange(1 - total_elements // 2, 1 + total_elements // 2).reshape(src_shape), param.src_dtype
+    )
 
     quant_mode = get_quant_mode(param.src_dtype, param.dst_dtype)
     if quant_mode == QuantMode.F32_TO_F16:
@@ -174,23 +173,25 @@ def type2str(t):
 
 class TInsertParams:
     def __init__(
-        self, 
-        src_dtype: np.dtype, 
+        self,
+        src_dtype: np.dtype,
         dst_dtype: np.dtype,
-        dst_valid_rows: int, 
-        dst_valid_cols: int,  
-        src_valid_rows: int, 
-        src_valid_cols: int, 
-        idx_row: int, 
+        dst_valid_rows: int,
+        dst_valid_cols: int,
+        src_valid_rows: int,
+        src_valid_cols: int,
+        idx_row: int,
         idx_col: int,
-        is_v_quant: bool, 
+        is_v_quant: bool,
         saturate_inf: bool,
-        use_relu: bool
+        use_relu: bool,
     ):
-        assert src_valid_rows + idx_row <= dst_valid_rows, \
-        "TInsert: Row overflow - (index + dst row) should be less than or equal to src row"
-        assert src_valid_cols + idx_col <= dst_valid_cols, \
-        "TInsert: Col overflow - (index + dst col) should be less than or equal to src col"
+        assert src_valid_rows + idx_row <= dst_valid_rows, (
+            "TInsert: Row overflow - (index + dst row) should be less than or equal to src row"
+        )
+        assert src_valid_cols + idx_col <= dst_valid_cols, (
+            "TInsert: Col overflow - (index + dst col) should be less than or equal to src col"
+        )
 
         self.src_dtype = src_dtype
         self.dst_dtype = dst_dtype
@@ -203,10 +204,11 @@ class TInsertParams:
         self.is_v_quant = is_v_quant
         self.saturate_inf = saturate_inf
         self.use_relu = use_relu
-        
+
 
 def gen_case_name(param, idx):
     return f"case_{idx}_{type2str(param.src_dtype)}_{type2str(param.dst_dtype)}"
+
 
 if __name__ == "__main__":
     case_params_list = [
@@ -268,7 +270,7 @@ if __name__ == "__main__":
     ]
 
     for idx, case_param in enumerate(case_params_list):
-        case_name = gen_case_name(case_param, idx+1)
+        case_name = gen_case_name(case_param, idx + 1)
         full_name = "TINSERTTest." + case_name
         if not os.path.exists(full_name):
             os.makedirs(full_name)
@@ -278,4 +280,3 @@ if __name__ == "__main__":
         gen_golden_data(case_name, case_param)
 
         os.chdir(original_dir)
-

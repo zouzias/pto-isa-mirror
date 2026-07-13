@@ -34,7 +34,6 @@ def gen_golden_data_tcolexpandop(param, kind: str):
     input1_valid = input1[:row, :col]
     input2_valid = input2[:1, :col]
 
-
     if kind == "div":
         if is_integer:
             golden[:row, :col] = input1_valid // input2_valid
@@ -73,9 +72,12 @@ class TColExpandOpParams:
 
 def generate_case_name(param, kind: str):
     dtype_str = {
-        np.float32: "float", np.float16: "half",
-        np.int16: "int16", np.int32: "int32",
-        np.uint16: "uint16", np.uint32: "uint32"
+        np.float32: "float",
+        np.float16: "half",
+        np.int16: "int16",
+        np.int32: "int32",
+        np.uint16: "uint16",
+        np.uint32: "uint32",
     }[param.dtype]
 
     def substring(a, b) -> str:

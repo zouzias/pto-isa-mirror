@@ -57,12 +57,7 @@ def attn_flops_matmul_softmax_scale(
     softmax_ops += rows * s_k  # normalize (div or mul)
 
     total = flops_matmul + flops_scale + softmax_ops
-    return {
-        "total": total,
-        "matmul": flops_matmul,
-        "scale": flops_scale,
-        "softmax": softmax_ops,
-    }
+    return {"total": total, "matmul": flops_matmul, "scale": flops_scale, "softmax": softmax_ops}
 
 
 def tflops(flops, ms):
@@ -142,13 +137,7 @@ def bench(
             v = torch.randn((sk, head_size), dtype=dtype).npu()
 
             # FLOPs: matmul + softmax (+scale)
-            flops_dict = attn_flops_matmul_softmax_scale(
-                batch_size,
-                sq,
-                sk,
-                head_size,
-                include_scale=scale,
-            )
+            flops_dict = attn_flops_matmul_softmax_scale(batch_size, sq, sk, head_size, include_scale=scale)
             flops_total = flops_dict["total"]
 
             ms_fused = time_npu(lambda: fused_fa_reference(q, k, v))
@@ -169,7 +158,7 @@ def bench(
                     head_size,
                     f"{ms_fused * 1000:.3f}",
                     f"{tflops(flops_total, ms_fused):.6f}",
-                    f"{ms_jit  * 1000:.3f}",
+                    f"{ms_jit * 1000:.3f}",
                     f"{tflops(flops_total, ms_jit):.6f}",
                     f"{speedup:.3f}",
                     int(flops_total),
@@ -178,8 +167,8 @@ def bench(
 
             print(
                 f"done sq={sq}, sk={sk} | "
-                f"fused {ms_fused*1000:.2f}us  "
-                f"jit {ms_jit*1000:.2f}us  "
+                f"fused {ms_fused * 1000:.2f}us  "
+                f"jit {ms_jit * 1000:.2f}us  "
                 f"speedup {speedup:.2f}x" + ("" if not check else "  (checked)")
             )
 

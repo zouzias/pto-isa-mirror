@@ -19,7 +19,7 @@ def check_golden_data(golden, threshold=0.1):
     total = golden.size
     infcnt = np.sum(np.isinf(golden))
     if float(infcnt) / float(total) > threshold:
-        raise ValueError('Too many inf value, please check golden generation.')
+        raise ValueError("Too many inf value, please check golden generation.")
 
 
 def gen_golden_data(case_name, param):
@@ -49,8 +49,9 @@ def gen_golden_data(case_name, param):
     dst.tofile("input_dst.bin")
 
     if is_int:
-        dst[0:h_valid, 0:w_valid] = input0[0:h_valid, 0:w_valid] * dst[0:h_valid, 0:w_valid] +\
-            input1[0:h_valid, 0:w_valid]
+        dst[0:h_valid, 0:w_valid] = (
+            input0[0:h_valid, 0:w_valid] * dst[0:h_valid, 0:w_valid] + input1[0:h_valid, 0:w_valid]
+        )
     else:
         for i in range(h_valid):
             for j in range(w_valid):
@@ -61,7 +62,7 @@ def gen_golden_data(case_name, param):
                 # 3. Cast back to half at the very end
                 dst[i, j] = np.float16(res)
     # Perform the operation
-    
+
     check_golden_data(dst)
 
     # Save the input and golden data to binary files
@@ -69,8 +70,18 @@ def gen_golden_data(case_name, param):
 
 
 class TestParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col,
-        src1_tile_row, src1_tile_col, valid_row, valid_col):
+    def __init__(
+        self,
+        dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src0_tile_row,
+        src0_tile_col,
+        src1_tile_row,
+        src1_tile_col,
+        valid_row,
+        valid_col,
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
@@ -81,18 +92,19 @@ class TestParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
         dtype_str = {
-            np.float32: 'float',
-            np.float16: 'half',
-            np.int8: 'int8',
-            np.int32: 'int32',
-            np.int16: 'int16',
-            np.uint32: 'uint32',
-            np.uint16: 'uint16',
-            np.uint8: 'uint8'
+            np.float32: "float",
+            np.float16: "half",
+            np.int8: "int8",
+            np.int32: "int32",
+            np.int16: "int16",
+            np.uint32: "uint32",
+            np.uint16: "uint16",
+            np.uint8: "uint8",
         }[dtype]
         self.name = f"TFUSEMULADDTest.case_{dtype_str}_{dst_tile_row}x{dst_tile_col}_\
 {src0_tile_row}x{src0_tile_col}_{src1_tile_row}x{src1_tile_col}_\
 {valid_row}x{valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

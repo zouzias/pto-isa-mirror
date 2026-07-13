@@ -31,10 +31,7 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
-    cases = [
-        ("TCI_Test.case_i32_asc_S0", START_S0, False),
-        ("TCI_Test.case_i32_desc_S100", START_S100, True),
-    ]
+    cases = [("TCI_Test.case_i32_asc_S0", START_S0, False), ("TCI_Test.case_i32_desc_S100", START_S100, True)]
 
     cwd = os.getcwd()
     for name, start, is_descending in cases:

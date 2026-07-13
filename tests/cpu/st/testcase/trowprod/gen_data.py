@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -53,16 +54,19 @@ class TrowprodParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
+
     name = f"TROWPRODTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
     return name
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

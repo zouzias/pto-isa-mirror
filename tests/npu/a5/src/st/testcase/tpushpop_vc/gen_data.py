@@ -103,29 +103,25 @@ if __name__ == "__main__":
     # M=16 fixed, K varies for K-tiling test, TILE_K=64
     case_params_list = [
         # TILE_UP_DOWN, int8: M=16, K varies, N=32, TILE_K=64
-        (16, 64, 32, np.int8, np.float32, np.float32),   # case1: K=64,  NUM_K_TILES=1
+        (16, 64, 32, np.int8, np.float32, np.float32),  # case1: K=64,  NUM_K_TILES=1
         (16, 128, 32, np.int8, np.float32, np.float32),  # case2: K=128, NUM_K_TILES=2
         (16, 256, 32, np.int8, np.float32, np.float32),  # case3: K=256, NUM_K_TILES=4 (FIFO wrapping)
         # TILE_UP_DOWN, int16: M=16, K varies, N=32, TILE_K=64
         (16, 64, 32, np.int16, np.float32, np.float32),  # case4: K=64,  NUM_K_TILES=1
-        (16, 128, 32, np.int16, np.float32, np.float32), # case5: K=128, NUM_K_TILES=2
-        (16, 256, 32, np.int16, np.float32, np.float32), # case6: K=256, NUM_K_TILES=4 (FIFO wrapping)
+        (16, 128, 32, np.int16, np.float32, np.float32),  # case5: K=128, NUM_K_TILES=2
+        (16, 256, 32, np.int16, np.float32, np.float32),  # case6: K=256, NUM_K_TILES=4 (FIFO wrapping)
         # TILE_LEFT_RIGHT, int8: N=64 so PROD_N=32 satisfies 32-byte alignment for QuantTile
-        (16, 64, 64, np.int8, np.float32, np.float32),   # case7: K=64,  NUM_K_TILES=1
+        (16, 64, 64, np.int8, np.float32, np.float32),  # case7: K=64,  NUM_K_TILES=1
         (16, 128, 64, np.int8, np.float32, np.float32),  # case8: K=128, NUM_K_TILES=2
         (16, 256, 64, np.int8, np.float32, np.float32),  # case9: K=256, NUM_K_TILES=4
         # TILE_LEFT_RIGHT, int16: N=32 OK (PROD_N=16, 16*2=32 bytes satisfies alignment)
         (16, 64, 32, np.int16, np.float32, np.float32),  # case10: K=64,  NUM_K_TILES=1
-        (16, 128, 32, np.int16, np.float32, np.float32), # case11: K=128, NUM_K_TILES=2
-        (16, 256, 32, np.int16, np.float32, np.float32), # case12: K=256, NUM_K_TILES=4
+        (16, 128, 32, np.int16, np.float32, np.float32),  # case11: K=128, NUM_K_TILES=2
+        (16, 256, 32, np.int16, np.float32, np.float32),  # case12: K=256, NUM_K_TILES=4
     ]
 
-    subblock_case_name_list = [
-        "TPushPopVCTest.case13_float_subblock_id_up_down",
-    ]
-    subblock_case_params_list = [
-        (128, 64, 64, np.float32),
-    ]
+    subblock_case_name_list = ["TPushPopVCTest.case13_float_subblock_id_up_down"]
+    subblock_case_params_list = [(128, 64, 64, np.float32)]
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):

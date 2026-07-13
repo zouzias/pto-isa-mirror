@@ -11,9 +11,8 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -28,7 +27,6 @@ def gen_golden_data(case_name, param):
     input1 = np.random.random(vr * vc).astype(dtype)
     input2 = np.random.random(vr * src1vc).astype(dtype)
     golden = np.zeros(vr * vc).astype(dtype)
-
 
     if param.src0eqdst:
         for i in range(vr):

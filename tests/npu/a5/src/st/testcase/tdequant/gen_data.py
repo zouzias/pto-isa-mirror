@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -35,15 +36,15 @@ def gen_golden_data(param):
     if flag:
         for i in range(valid_row):
             offset_arr[i, :] = 0
-    
+
     for i in range(valid_row):
         for j in range(valid_col):
             output_arr[i, j] = (temp_arr[i, j] - offset_arr[i, 0]) * scale_arr[i, 0]
 
-    input_arr.tofile('input.bin')
-    scale_arr.tofile('scale.bin')
-    offset_arr.tofile('offset.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    scale_arr.tofile("scale.bin")
+    offset_arr.tofile("offset.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TDequantParams:
@@ -56,6 +57,7 @@ class TDequantParams:
         self.col = col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     case_params_list = [

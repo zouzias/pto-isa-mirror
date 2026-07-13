@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kSrcRows, int kDstRows, int kCols>
-__global__ AICORE void runTMOV_nd2nz(__gm__ half __out__ *out, __gm__ half __in__ *src)
+__global__ AICORE void runTMOV_nd2nz(__gm__ half __out__* out, __gm__ half __in__* src)
 {
     using T = half;
     constexpr int c0 = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
@@ -59,11 +59,11 @@ __global__ AICORE void runTMOV_nd2nz(__gm__ half __out__ *out, __gm__ half __in_
 }
 
 template <int kSrcRows, int kDstRows, int kCols>
-void launchTMOV_nd2nz(aclFloat16 *out, aclFloat16 *src, void *stream)
+void launchTMOV_nd2nz(aclFloat16* out, aclFloat16* src, void* stream)
 {
-    runTMOV_nd2nz<kSrcRows, kDstRows, kCols><<<1, nullptr, stream>>>((half *)out, (half *)src);
+    runTMOV_nd2nz<kSrcRows, kDstRows, kCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
 }
 
-template void launchTMOV_nd2nz<1, 16, 128>(aclFloat16 *, aclFloat16 *, void *);
-template void launchTMOV_nd2nz<1, 16, 256>(aclFloat16 *, aclFloat16 *, void *);
-template void launchTMOV_nd2nz<16, 16, 256>(aclFloat16 *, aclFloat16 *, void *);
+template void launchTMOV_nd2nz<1, 16, 128>(aclFloat16*, aclFloat16*, void*);
+template void launchTMOV_nd2nz<1, 16, 256>(aclFloat16*, aclFloat16*, void*);
+template void launchTMOV_nd2nz<16, 16, 256>(aclFloat16*, aclFloat16*, void*);

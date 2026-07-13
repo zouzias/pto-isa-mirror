@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -55,15 +56,15 @@ class TAbsParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TABSTest.case_{dtype_str}" 
+
+    name = f"TABSTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -81,7 +82,7 @@ if __name__ == "__main__":
         TAbsParams(np.int32, 64, 64, 64, 64, 64, 64),
         TAbsParams(np.int16, 64, 64, 64, 64, 64, 64),
         TAbsParams(np.int8, 64, 64, 64, 64, 64, 64),
-        TAbsParams(np.float16, 16, 256, 16, 256, 16, 256)
+        TAbsParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TAbsParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))

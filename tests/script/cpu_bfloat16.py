@@ -21,7 +21,6 @@ import tempfile
 from pathlib import Path
 from typing import Iterable, Optional
 
-import numpy as np
 
 _BF16_PROBE_SOURCE = """#include <stdfloat>
 int main() {

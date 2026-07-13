@@ -15,6 +15,7 @@ import numpy as np
 
 np.random.seed(20260127)
 
+
 def gen_golden_data(case_name, param):
     a_type = param.atype
     b_type = param.btype

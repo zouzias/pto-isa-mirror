@@ -74,13 +74,13 @@ if __name__ == "__main__":
     # M=16 fixed, K varies for K-tiling test, TILE_K=64
     case_params_list = [
         # int8 cases: M=16, K varies, TILE_K=64, InT=float
-        (16, 64, 32, np.int8, np.float32, np.float32),   # case1: K=64,  NUM_K_TILES=1
+        (16, 64, 32, np.int8, np.float32, np.float32),  # case1: K=64,  NUM_K_TILES=1
         (16, 128, 32, np.int8, np.float32, np.float32),  # case2: K=128, NUM_K_TILES=2
         (16, 256, 32, np.int8, np.float32, np.float32),  # case3: K=256, NUM_K_TILES=4 (FIFO wrap-around)
         # int16 cases: M=16, K varies, TILE_K=64, InT=float
         (16, 64, 32, np.int16, np.float32, np.float32),  # case4: K=64,  NUM_K_TILES=1
-        (16, 128, 32, np.int16, np.float32, np.float32), # case5: K=128, NUM_K_TILES=2
-        (16, 256, 32, np.int16, np.float32, np.float32), # case6: K=256, NUM_K_TILES=4 (FIFO wrap-around)
+        (16, 128, 32, np.int16, np.float32, np.float32),  # case5: K=128, NUM_K_TILES=2
+        (16, 256, 32, np.int16, np.float32, np.float32),  # case6: K=256, NUM_K_TILES=4 (FIFO wrap-around)
     ]
 
     for i, case_name in enumerate(case_name_list):

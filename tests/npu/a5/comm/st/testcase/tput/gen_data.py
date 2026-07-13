@@ -12,10 +12,12 @@
 
 import os
 
+
 def main():
     # Comm testcases do not require golden data yet.
     # Keep a compatible entrypoint for run_st.py.
     os.makedirs("testcases", exist_ok=True)
+
 
 if __name__ == "__main__":
     main()

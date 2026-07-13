@@ -22,7 +22,7 @@ np.random.seed(19)
 
 def zero_pad(arr, target_shape, dtype):
     padded = np.zeros(target_shape, dtype=dtype)
-    padded[:arr.shape[0], :arr.shape[1]] = arr
+    padded[: arr.shape[0], : arr.shape[1]] = arr
     return padded
 
 
@@ -38,14 +38,14 @@ def extract_quant_params(quant_gm):
     """
     quant_gm = int(quant_gm)
     m1_bits = (quant_gm >> 13) & 0xFFFFF  # 提取M1的20位[31:13]，0xFFFFF是20位掩码
-    offset = (quant_gm >> 37) & 0x1FF # 提取offset的9位[45:37]，0x1FF是9位掩码
+    offset = (quant_gm >> 37) & 0x1FF  # 提取offset的9位[45:37]，0x1FF是9位掩码
     sign = (quant_gm >> 46) & 0x1  # 提取sign的一位[46]，0x1是1位掩码
     n = (quant_gm >> 32) & 0xF
     # 解析M1为(1,8,10)格式的浮点数
     sign_bit = (m1_bits >> 18) & 0x1
     exponent = (m1_bits >> 10) & 0xFF
     mantissa = m1_bits & 0x3FF
-    exponent_bias = 127 # 假设指数偏倚量为127，与float32一致
+    exponent_bias = 127  # 假设指数偏倚量为127，与float32一致
     m1 = (-1) ** sign_bit * (1 + mantissa / 1024) * (2 ** (exponent - exponent_bias))
     return m1, offset, sign, n
 
@@ -101,7 +101,7 @@ def vector_quant_non_int16(golden, dst_type, n, m, quant_type):
     temp_quant_tensor = np.random.randint(1, 3, n).astype(np.float32)
     temp_quant_tensor_api = copy.deepcopy(temp_quant_tensor).astype(np.uint64)
     for i, _ in enumerate(temp_quant_tensor_api):
-        temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor[i]))[0]
+        temp_quant_tensor_api[i] = struct.unpack("!I", struct.pack("!f", temp_quant_tensor[i]))[0]
         if dst_type == np.int8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
@@ -122,7 +122,7 @@ def vector_quant_non_int16(golden, dst_type, n, m, quant_type):
 def vector_quant_int16(golden, dst_type, n, m, quant_type):
     temp_quant_tensor = np.random.randint(1, 9, n).astype(np.int8)
     value = temp_quant_tensor - 1
-    quant_tensor = (value.astype(quant_type) << 32)
+    quant_tensor = value.astype(quant_type) << 32
     quant_tensor.tofile("./quant_gm.bin")
     quant_golden = np.zeros((m, n), dtype=dst_type)
     for i in range(m):
@@ -142,7 +142,6 @@ def scalar_quant_non_int16(golden, dst_type, scalar):
 
 def gen_golden_data(case_name, param):
     a_type = param.atype
-    b_type = param.btype
     c_type = param.ctype
     m, k, n = param.m, param.k, param.n
     is_v_quant, is_s_quant, dst_type, scalar = param.is_v_quant, param.is_s_quant, param.dst_type, param.scalar
@@ -176,32 +175,58 @@ def gen_golden_data(case_name, param):
     if is_relu:
         golden = np.maximum(golden, 0)
     block_cols = 16
-    if (dst_type == np.int8 or dst_type == np.uint8):
+    if dst_type == np.int8 or dst_type == np.uint8:
         block_cols = 32
-    
-    if (param.is_insert):
+
+    if param.is_insert:
         dst_data = np.zeros((param.dst_row, param.dst_col), dtype=dst_type)
         dst_data.astype(dst_type).tofile("./dst.bin")
-        dst_data[param.index_rows:(param.index_rows + m), param.index_cols:(param.index_cols + n)] = golden
-        golden = dst_data.reshape((int(param.dst_row / 16), 16,
-            int(param.dst_col / block_cols), block_cols)).transpose(2, 0, 1, 3).astype(dst_type)
+        dst_data[param.index_rows : (param.index_rows + m), param.index_cols : (param.index_cols + n)] = golden
+        golden = (
+            dst_data.reshape((int(param.dst_row / 16), 16, int(param.dst_col / block_cols), block_cols))
+            .transpose(2, 0, 1, 3)
+            .astype(dst_type)
+        )
     else:
         if param.index_rows != 0 or param.index_cols != 0:
-            golden = golden[param.index_rows:, param.index_cols:]
-        golden = golden.reshape((int((base_m - param.index_rows) / 16), 16,
-            int((base_n - param.index_cols) / block_cols), block_cols)).transpose(2, 0, 1, 3).astype(dst_type)
+            golden = golden[param.index_rows :, param.index_cols :]
+        golden = (
+            golden.reshape(
+                (int((base_m - param.index_rows) / 16), 16, int((base_n - param.index_cols) / block_cols), block_cols)
+            )
+            .transpose(2, 0, 1, 3)
+            .astype(dst_type)
+        )
     golden.astype(dst_type).tofile("./golden.bin")
 
 
 class TmovParams:
-    def __init__(self, atype, btype, dst_type, m, k, n, base_m=0, base_k=0, base_n=0,
-                 is_v_quant=False, is_s_quant=False, is_relu=False,
-                 quant_type=None, scalar=1, index_rows=0, index_cols=0,
-                 is_insert=False, dst_row=0, dst_col=0):
+    def __init__(
+        self,
+        atype,
+        btype,
+        dst_type,
+        m,
+        k,
+        n,
+        base_m=0,
+        base_k=0,
+        base_n=0,
+        is_v_quant=False,
+        is_s_quant=False,
+        is_relu=False,
+        quant_type=None,
+        scalar=1,
+        index_rows=0,
+        index_cols=0,
+        is_insert=False,
+        dst_row=0,
+        dst_col=0,
+    ):
         self.atype = atype
         self.btype = btype
         self.ctype = np.float32
-        if (atype == np.int8):
+        if atype == np.int8:
             self.ctype = np.int32
         self.m = m
         self.k = k
@@ -213,7 +238,7 @@ class TmovParams:
         self.is_s_quant = is_s_quant
         self.is_relu = is_relu
         self.dst_type = dst_type
-        if (quant_type):
+        if quant_type:
             self.quant_type = quant_type
         self.scalar = scalar
         self.index_rows = index_rows
@@ -221,6 +246,7 @@ class TmovParams:
         self.is_insert = is_insert
         self.dst_row = dst_row
         self.dst_col = dst_col
+
 
 if __name__ == "__main__":
     case_name_list = [
@@ -269,7 +295,7 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nz_fb_quant_extract",
         ##tinsert
         "TMOVTest.case_nz2nz_insert",
-        "TMOVTest.case_nz2nz_sc_quant_insert", 
+        "TMOVTest.case_nz2nz_sc_quant_insert",
         "TMOVTest.case_nz2nz_fb_quant_insert",
     ]
 
@@ -313,18 +339,56 @@ if __name__ == "__main__":
         ##int32->int16
         TmovParams(np.int8, np.int8, np.int16, 12, 32, 31, 16, 32, 32, False, True, True, None, 2),
         TmovParams(np.int8, np.int8, np.int16, 76, 128, 61, 80, 128, 64, True, False, True, np.uint64),
-        
         TmovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, False, False, False, None, 1, 16, 16),
         TmovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48),
-        TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
-            1, 32, 32),
-
-        TmovParams(np.float16, np.float16, np.float16, 32, 32, 32, 32, 32, 32, False, False, False, None, 1, 32, 32,
-            True, 128, 128),
-        TmovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48,
-            True, 256, 256),
-        TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
-            1, 32, 32, True, 256, 256), 
+        TmovParams(
+            np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64, 1, 32, 32
+        ),
+        TmovParams(
+            np.float16,
+            np.float16,
+            np.float16,
+            32,
+            32,
+            32,
+            32,
+            32,
+            32,
+            False,
+            False,
+            False,
+            None,
+            1,
+            32,
+            32,
+            True,
+            128,
+            128,
+        ),
+        TmovParams(
+            np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48, True, 256, 256
+        ),
+        TmovParams(
+            np.float16,
+            np.float16,
+            np.int8,
+            128,
+            64,
+            128,
+            128,
+            64,
+            128,
+            True,
+            False,
+            False,
+            np.uint64,
+            1,
+            32,
+            32,
+            True,
+            256,
+            256,
+        ),
     ]
 
     for i, case_name in enumerate(case_name_list):

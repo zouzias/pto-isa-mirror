@@ -13,14 +13,16 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
+
 
 def gen_golden_data_tcolsum(case_name, param):
     dtype = param.dtype
 
     srcRow, srcCols = [param.tile_row, param.tile_col]
     dstRow, dstCols = [1, param.tile_col]
-    row_valid, col_valid = [min(dstRow, param.valid_row), min(dstCols, param.valid_col)]
+    _row_valid, col_valid = [min(dstRow, param.valid_row), min(dstCols, param.valid_col)]
 
     # Generate random input arrays
     input1 = NumExt.astype(np.random.randint(low=-16, high=16, size=[srcRow, srcCols]), dtype)
@@ -33,6 +35,7 @@ def gen_golden_data_tcolsum(case_name, param):
 
     return input1, golden
 
+
 class TColsumParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
@@ -43,6 +46,7 @@ class TColsumParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
 
@@ -50,8 +54,9 @@ def generate_case_name(param):
     name += f"_{param.global_row}x{param.global_col}"
     name += f"_{param.tile_row}x{param.tile_col}"
     name += f"_{param.valid_row}x{param.valid_col}"
-    
+
     return name
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

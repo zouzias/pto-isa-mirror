@@ -107,24 +107,15 @@ def add(name, fn):
     CASES.append((name, fn))
 
 
-add("MGATHERGM2L1Test.case_row_float_16x16_64rows",
-    lambda n: case_row(n, np.float32, 16, 16, 64))
-add("MGATHERGM2L1Test.case_row_half_16x32_64rows",
-    lambda n: case_row(n, np.float16, 16, 32, 64))
-add("MGATHERGM2L1Test.case_row_bfloat16_16x16_64rows",
-    lambda n: case_row(n, np.uint16, 16, 16, 64))
-add("MGATHERGM2L1Test.case_row_int32_16x8_32rows",
-    lambda n: case_row(n, np.int32, 16, 8, 32))
-add("MGATHERGM2L1Test.case_row_uint32_16x16_64rows",
-    lambda n: case_row(n, np.uint32, 16, 16, 64))
-add("MGATHERGM2L1Test.case_row_int16_16x16_32rows",
-    lambda n: case_row(n, np.int16, 16, 16, 32))
-add("MGATHERGM2L1Test.case_row_uint16_16x32_48rows",
-    lambda n: case_row(n, np.uint16, 16, 32, 48))
-add("MGATHERGM2L1Test.case_row_int8_16x32_64rows",
-    lambda n: case_row(n, np.int8, 16, 32, 64))
-add("MGATHERGM2L1Test.case_row_uint8_32x32_64rows",
-    lambda n: case_row(n, np.uint8, 32, 32, 64))
+add("MGATHERGM2L1Test.case_row_float_16x16_64rows", lambda n: case_row(n, np.float32, 16, 16, 64))
+add("MGATHERGM2L1Test.case_row_half_16x32_64rows", lambda n: case_row(n, np.float16, 16, 32, 64))
+add("MGATHERGM2L1Test.case_row_bfloat16_16x16_64rows", lambda n: case_row(n, np.uint16, 16, 16, 64))
+add("MGATHERGM2L1Test.case_row_int32_16x8_32rows", lambda n: case_row(n, np.int32, 16, 8, 32))
+add("MGATHERGM2L1Test.case_row_uint32_16x16_64rows", lambda n: case_row(n, np.uint32, 16, 16, 64))
+add("MGATHERGM2L1Test.case_row_int16_16x16_32rows", lambda n: case_row(n, np.int16, 16, 16, 32))
+add("MGATHERGM2L1Test.case_row_uint16_16x32_48rows", lambda n: case_row(n, np.uint16, 16, 32, 48))
+add("MGATHERGM2L1Test.case_row_int8_16x32_64rows", lambda n: case_row(n, np.int8, 16, 32, 64))
+add("MGATHERGM2L1Test.case_row_uint8_32x32_64rows", lambda n: case_row(n, np.uint8, 32, 32, 64))
 add(
     "MGATHERGM2L1Test.case_row_float_clamp_16x16_8rows",
     lambda n: case_row(n, np.float32, 16, 16, 8, oob="clamp", idx_kind="oob"),
@@ -138,28 +129,18 @@ add(
     lambda n: case_row(n, np.float16, 16, 16, 8, oob="zero", idx_kind="oob"),
 )
 
-add("MGATHERGM2L1Test.case_elem_float_16x16_256size",
-    lambda n: case_elem(n, np.float32, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_half_16x16_256size",
-    lambda n: case_elem(n, np.float16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size",
-    lambda n: case_elem(n, np.uint16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_int32_16x8_128size",
-    lambda n: case_elem(n, np.int32, 16, 8, 128))
-add("MGATHERGM2L1Test.case_elem_uint32_16x16_256size",
-    lambda n: case_elem(n, np.uint32, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_int16_16x16_256size",
-    lambda n: case_elem(n, np.int16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_uint16_16x32_512size",
-    lambda n: case_elem(n, np.uint16, 16, 32, 512))
-add("MGATHERGM2L1Test.case_elem_int8_16x32_512size",
-    lambda n: case_elem(n, np.int8, 16, 32, 512))
-add("MGATHERGM2L1Test.case_elem_uint8_32x32_1024size",
-    lambda n: case_elem(n, np.uint8, 32, 32, 1024))
+add("MGATHERGM2L1Test.case_elem_float_16x16_256size", lambda n: case_elem(n, np.float32, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_half_16x16_256size", lambda n: case_elem(n, np.float16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size", lambda n: case_elem(n, np.uint16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_int32_16x8_128size", lambda n: case_elem(n, np.int32, 16, 8, 128))
+add("MGATHERGM2L1Test.case_elem_uint32_16x16_256size", lambda n: case_elem(n, np.uint32, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_int16_16x16_256size", lambda n: case_elem(n, np.int16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_uint16_16x32_512size", lambda n: case_elem(n, np.uint16, 16, 32, 512))
+add("MGATHERGM2L1Test.case_elem_int8_16x32_512size", lambda n: case_elem(n, np.int8, 16, 32, 512))
+add("MGATHERGM2L1Test.case_elem_uint8_32x32_1024size", lambda n: case_elem(n, np.uint8, 32, 32, 1024))
 add(
     "MGATHERGM2L1Test.case_elem_float_clamp_16x16_64size",
-    lambda n: case_elem(n, np.float32, 16, 16, 64,
-                        oob="clamp", idx_kind="oob"),
+    lambda n: case_elem(n, np.float32, 16, 16, 64, oob="clamp", idx_kind="oob"),
 )
 add(
     "MGATHERGM2L1Test.case_elem_int32_wrap_16x8_32size",
@@ -170,28 +151,18 @@ add(
     lambda n: case_elem(n, np.float16, 16, 16, 64, oob="zero", idx_kind="oob"),
 )
 
-add("MGATHERGM2L1Test.case_elem_simt_float_16x16_256size",
-    lambda n: case_elem(n, np.float32, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_simt_half_16x16_256size",
-    lambda n: case_elem(n, np.float16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_simt_bfloat16_16x16_256size",
-    lambda n: case_elem(n, np.uint16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_simt_int32_16x8_128size",
-    lambda n: case_elem(n, np.int32, 16, 8, 128))
-add("MGATHERGM2L1Test.case_elem_simt_uint32_16x16_256size",
-    lambda n: case_elem(n, np.uint32, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size",
-    lambda n: case_elem(n, np.int16, 16, 16, 256))
-add("MGATHERGM2L1Test.case_elem_simt_uint16_16x32_512size",
-    lambda n: case_elem(n, np.uint16, 16, 32, 512))
-add("MGATHERGM2L1Test.case_elem_simt_int8_16x32_512size",
-    lambda n: case_elem(n, np.int8, 16, 32, 512))
-add("MGATHERGM2L1Test.case_elem_simt_uint8_32x32_1024size",
-    lambda n: case_elem(n, np.uint8, 32, 32, 1024))
+add("MGATHERGM2L1Test.case_elem_simt_float_16x16_256size", lambda n: case_elem(n, np.float32, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_simt_half_16x16_256size", lambda n: case_elem(n, np.float16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_simt_bfloat16_16x16_256size", lambda n: case_elem(n, np.uint16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_simt_int32_16x8_128size", lambda n: case_elem(n, np.int32, 16, 8, 128))
+add("MGATHERGM2L1Test.case_elem_simt_uint32_16x16_256size", lambda n: case_elem(n, np.uint32, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size", lambda n: case_elem(n, np.int16, 16, 16, 256))
+add("MGATHERGM2L1Test.case_elem_simt_uint16_16x32_512size", lambda n: case_elem(n, np.uint16, 16, 32, 512))
+add("MGATHERGM2L1Test.case_elem_simt_int8_16x32_512size", lambda n: case_elem(n, np.int8, 16, 32, 512))
+add("MGATHERGM2L1Test.case_elem_simt_uint8_32x32_1024size", lambda n: case_elem(n, np.uint8, 32, 32, 1024))
 add(
     "MGATHERGM2L1Test.case_elem_simt_float_clamp_16x16_64size",
-    lambda n: case_elem(n, np.float32, 16, 16, 64,
-                        oob="clamp", idx_kind="oob"),
+    lambda n: case_elem(n, np.float32, 16, 16, 64, oob="clamp", idx_kind="oob"),
 )
 add(
     "MGATHERGM2L1Test.case_elem_simt_int32_wrap_16x8_32size",

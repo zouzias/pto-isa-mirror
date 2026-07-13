@@ -66,8 +66,9 @@ def gen_golden_data(param):
 
     # dequantize B per row: dequant_B[k, n] = (quantB[k, n] - offset[k]) * scale[k]
     # Use float64 for intermediate computation to minimise rounding error
-    dequant_B = (quant_B.astype(np.float64) - offset[:, np.newaxis].astype(np.float64)) * \
-                scale[:, np.newaxis].astype(np.float64)
+    dequant_B = (quant_B.astype(np.float64) - offset[:, np.newaxis].astype(np.float64)) * scale[:, np.newaxis].astype(
+        np.float64
+    )
 
     # golden matmul in float64, then cast to float32 to match hardware output type
     golden = np.matmul(srcA.astype(np.float64), dequant_B).astype(np.float32)
@@ -81,12 +82,12 @@ def gen_golden_data(param):
 
 if __name__ == "__main__":
     case_params_list = [
-        TPushPopVCNSParams("TPushPopVCNSTest.case1_int8_single_k_tile",  np.int8,  16,  64, 32),
-        TPushPopVCNSParams("TPushPopVCNSTest.case2_int8_two_k_tiles",    np.int8,  16, 128, 32),
-        TPushPopVCNSParams("TPushPopVCNSTest.case3_int8_four_k_tiles",   np.int8,  16, 256, 32),
-        TPushPopVCNSParams("TPushPopVCNSTest.case4_int16_single_k_tile", np.int16, 16,  64, 32),
-        TPushPopVCNSParams("TPushPopVCNSTest.case5_int16_two_k_tiles",   np.int16, 16, 128, 32),
-        TPushPopVCNSParams("TPushPopVCNSTest.case6_int16_four_k_tiles",  np.int16, 16, 256, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case1_int8_single_k_tile", np.int8, 16, 64, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case2_int8_two_k_tiles", np.int8, 16, 128, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case3_int8_four_k_tiles", np.int8, 16, 256, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case4_int16_single_k_tile", np.int16, 16, 64, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case5_int16_two_k_tiles", np.int16, 16, 128, 32),
+        TPushPopVCNSParams("TPushPopVCNSTest.case6_int16_four_k_tiles", np.int16, 16, 256, 32),
     ]
 
     for param in case_params_list:
@@ -96,5 +97,7 @@ if __name__ == "__main__":
         os.chdir(param.name)
         gen_golden_data(param)
         os.chdir(original_dir)
-        print(f"Generated: {param.name}  (M={param.M}, K={param.K}, N={param.N}, "
-              f"quant={'int8' if param.quant_type == np.int8 else 'int16'})")
+        print(
+            f"Generated: {param.name}  (M={param.M}, K={param.K}, N={param.N}, "
+            f"quant={'int8' if param.quant_type == np.int8 else 'int16'})"
+        )

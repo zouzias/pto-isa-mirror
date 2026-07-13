@@ -13,6 +13,7 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -33,7 +34,7 @@ def gen_golden(param):
 
     x1_gm = np.random.uniform(s_min + 5, s_max - 5, size=[m, n]).astype(param.srctype)
 
-    if param.saturation_mode == "SatMode::ON":     
+    if param.saturation_mode == "SatMode::ON":
         data_to_cast = np.clip(x1_gm, d_min, d_max)
     else:
         data_to_cast = x1_gm
@@ -57,6 +58,7 @@ class TCvtParams:
         self.mode = mode
         self.saturation_mode = saturation_mode
 
+
 if __name__ == "__main__":
     case_name_list = [
         "TCVTTest.case1",
@@ -68,15 +70,14 @@ if __name__ == "__main__":
         "TCVTTest.case7",
         "TCVTTest.case8",
         "TCVTTest.case9",
-
         "TCVTTest.case10",
         "TCVTTest.case11",
         "TCVTTest.case12",
         "TCVTTest.case13",
         "TCVTTest.case14",
-        "TCVTTest.case15"
+        "TCVTTest.case15",
     ]
-   
+
     case_params_list = [
         TCvtParams(np.float32, np.int32, 128, 128, "RoundMode::CAST_RINT"),
         TCvtParams(np.int32, np.float32, 256, 64, "RoundMode::CAST_RINT"),
@@ -87,13 +88,12 @@ if __name__ == "__main__":
         TCvtParams(np.int16, np.float32, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(np.float32, np.float16, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT"),
-
         TCvtParams(np.int32, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
         TCvtParams(np.int8, np.float32, 128, 128, "RoundMode::CAST_RINT", "SatMode::ON"),
         TCvtParams(np.float32, np.uint8, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
         TCvtParams(np.int32, np.int16, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
         TCvtParams(np.float16, np.int8, 32, 32, "RoundMode::CAST_RINT", "SatMode::ON"),
-        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON")
+        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
     ]
 
     for i, case_name in enumerate(case_name_list):

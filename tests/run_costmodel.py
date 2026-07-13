@@ -63,12 +63,7 @@ def _run_command_verbose(command: List[str], cwd_str: Optional[str]) -> None:
 
 def _run_command_quiet(command: List[str], cwd_str: Optional[str], always_print_patterns: Optional[List[str]]) -> None:
     completed = subprocess.run(
-        [str(x) for x in command],
-        cwd=cwd_str,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+        [str(x) for x in command], cwd=cwd_str, capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     if completed.returncode != 0:
         if completed.stdout:
@@ -159,18 +154,13 @@ def get_compiler_major_version(compiler_path: str) -> int:
         logging.debug("Checking version for compiler: %s", compiler_path)
         # check=False ensures that even if the command returns a non-zero status code,
         # it will not raise CalledProcessError, but judge by result.returncode.
-        result = subprocess.run(
-            [compiler_path, "--version"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        result = subprocess.run([compiler_path, "--version"], capture_output=True, text=True, check=False)
 
         if result.returncode != 0:
             logging.warning("Failed to run --version on: %s", compiler_path)
             return 0
 
-        match = re.search(r'(\d+)\.', result.stdout)
+        match = re.search(r"(\d+)\.", result.stdout)
         if match:
             version = int(match.group(1))
             logging.debug("Parsed version for %s: %d", compiler_path, version)
@@ -218,12 +208,7 @@ def _auto_detect_compilers() -> Tuple[str, Optional[str]]:
         return cxx, cc
 
     # 3. Fail
-    error_msg = (
-        "Could not find a suitable compiler.\n"
-        "Requirements:\n"
-        " - clang++ >= 15\n"
-        " - OR g++ >= 13"
-    )
+    error_msg = "Could not find a suitable compiler.\nRequirements:\n - clang++ >= 15\n - OR g++ >= 13"
     logging.error(error_msg)
     raise RuntimeError(error_msg)
 
@@ -343,8 +328,7 @@ def find_binaries(build_dir: Path, build_type: str) -> Dict[str, Path]:
     return binaries
 
 
-def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str,
-                     verbose: bool) -> None:
+def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str, verbose: bool) -> None:
     cmd: List[str] = [str(binary)]
     if gtest_filter:
         cmd.append(f"--gtest_filter={gtest_filter}")
@@ -364,12 +348,9 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
     run_command([str(binary)], cwd=run_cwd)
 
 
-def build_and_run_demo(demo_name: str,
-                       repo_root: Path,
-                       build_type: str,
-                       cxx: Optional[str],
-                       cc: Optional[str], *,
-                       verbose: bool) -> None:
+def build_and_run_demo(
+    demo_name: str, repo_root: Path, build_type: str, cxx: Optional[str], cc: Optional[str], *, verbose: bool
+) -> None:
     demos_root = repo_root / ".." / "demos" / "costmodel"
     demo_map: dict[str, tuple[Path, str]] = {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),
@@ -420,17 +401,18 @@ def build_and_run_demo(demo_name: str,
     if not exe.exists():
         raise RuntimeError(f"demo binary not found: {exe}")
 
-    run_command([str(exe)],
-                cwd=(exe.parent.parent if (os.name == "nt" and exe.parent.name.lower() == build_type.lower())
-                    else exe.parent),
-                title=f"[STEP] demo: run {exe_stem}",
-                verbose=verbose,
-                always_print_patterns=[r"^perf:"])
+    run_command(
+        [str(exe)],
+        cwd=(exe.parent.parent if (os.name == "nt" and exe.parent.name.lower() == build_type.lower()) else exe.parent),
+        title=f"[STEP] demo: run {exe_stem}",
+        verbose=verbose,
+        always_print_patterns=[r"^perf:"],
+    )
 
 
 def _format_seconds(seconds: float) -> str:
     if seconds < 1:
-        return f"{seconds*1000:.0f}ms"
+        return f"{seconds * 1000:.0f}ms"
     return f"{seconds:.2f}s"
 
 
@@ -461,7 +443,8 @@ def _parse_duration_seconds(s: str) -> float:
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Build & run costmodel simulator ST unit tests (tests/costmodel/st, st_fit, and st_a5_fit)",
-        epilog=("Examples:\n  python run_costmodel.py --build-type Release\n"
+        epilog=(
+            "Examples:\n  python run_costmodel.py --build-type Release\n"
             "  python run_costmodel.py --testcase tadd --build-type Release\n"
             "  python run_costmodel.py --testcase tadds_fit --suite st_fit --build-type Release\n"
             "  python run_costmodel.py --testcase tadd_fit --suite st_a5_fit --build-type Release\n"
@@ -473,21 +456,24 @@ def parse_arguments():
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("--verbose", action="store_true", help="Show full output from cmake/msbuild/gtest (default: \
-                        quiet, only structured logs).",)
-    parser.add_argument("-t", "--testcase", help="Run a single testcase (e.g. tadd). Default: run all built bin.",)
     parser.add_argument(
-        "--suite",
-        choices=["st", "st_fit", "st_a5_fit"],
-        default="st",
-        help="Test suite to run.",
+        "--verbose",
+        action="store_true",
+        help="Show full output from cmake/msbuild/gtest (default: \
+                        quiet, only structured logs).",
     )
-    parser.add_argument("-g", "--gtest_filter", help="Optional gtest filter (e.g. 'TADDTest.case1').",)
+    parser.add_argument("-t", "--testcase", help="Run a single testcase (e.g. tadd). Default: run all built bin.")
+    parser.add_argument("--suite", choices=["st", "st_fit", "st_a5_fit"], default="st", help="Test suite to run.")
+    parser.add_argument("-g", "--gtest_filter", help="Optional gtest filter (e.g. 'TADDTest.case1').")
     parser.add_argument("--cxx", help="C++ compiler (e.g. clang++). Default: $CXX or auto-detect.")
     parser.add_argument("--cc", help="C compiler (e.g. clang). Default: $CC or auto-detect.")
-    parser.add_argument("--build-type", default="Release", choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
-                        help="CMake build type.",)
-    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/<suite>/build",)
+    parser.add_argument(
+        "--build-type",
+        default="Release",
+        choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
+        help="CMake build type.",
+    )
+    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/<suite>/build")
     parser.add_argument("--no-clean", action="store_true", help="(Deprecated) No-op; kept for backward compatibility.")
     parser.add_argument("--clean", action="store_true", help="Delete build dir and rebuild.")
     parser.add_argument("--rebuild", action="store_true", help="Force re-configure and rebuild .")
@@ -495,9 +481,14 @@ def parse_arguments():
     parser.add_argument("--no-gen", action="store_true", help="Skip running testcase gen_data.py.")
     parser.add_argument("--xml-dir", default=None, help="If set, write gtest xml reports under this directory")
     parser.add_argument("--no-install", action="store_true", help="Do not auto-install missing tools/deps (numpy).")
-    parser.add_argument("--demo", choices=["gemm", "flash_attn", "mla", "all"], default=None, help="Build & run demo \
+    parser.add_argument(
+        "--demo",
+        choices=["gemm", "flash_attn", "mla", "all"],
+        default=None,
+        help="Build & run demo \
                         program (e.g. 'gemm', 'flash_attn'). \
-                        Note: demo runs alone (does not run costmodel ST).")
+                        Note: demo runs alone (does not run costmodel ST).",
+    )
     parser.add_argument("--demo-only", action="store_true", help="Same as --demo (demo runs without costmodel ST).")
     parser.add_argument("--generator", default=None, help="CMake generator(Windows required: 'MinGW Makefiles' etc..)")
     parser.add_argument("--cmake_prefix_path", default=None, help="-DCMAKE_PREFIX_PATH=<path> e.g. D:\\gtest")
@@ -640,15 +631,12 @@ def determine_need_build(args, source_dir: Path, build_dir: Path) -> bool:
             if missing:
                 have_requested_binary = False
 
-    need_build = (
-        (not args.no_build)
-        and (
-            config_mismatch
-            or args.rebuild
-            or args.clean
-            or not (build_dir / "CMakeCache.txt").exists()
-            or not have_requested_binary
-        )
+    need_build = (not args.no_build) and (
+        config_mismatch
+        or args.rebuild
+        or args.clean
+        or not (build_dir / "CMakeCache.txt").exists()
+        or not have_requested_binary
     )
     return need_build
 
@@ -657,7 +645,7 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
     build_dir.mkdir(parents=True, exist_ok=True)
     logging.info("\n== BUILD ==")
     if is_windows() and not args.generator:
-        logging.error("On Windows, must specify --generator (\"MinGW Makefiles\" or \"Ninja\", etc..)")
+        logging.error('On Windows, must specify --generator ("MinGW Makefiles" or "Ninja", etc..)')
         return False
     cfg_time = run_command(
         [
@@ -715,10 +703,7 @@ def run_selected_tests(args, source_dir, build_dir, selected) -> List[List[str]]
         t0 = time.perf_counter()
         try:
             run_gtest_binary(
-                binary=binary,
-                gtest_filter=args.gtest_filter,
-                build_type=args.build_type,
-                verbose=args.verbose
+                binary=binary, gtest_filter=args.gtest_filter, build_type=args.build_type, verbose=args.verbose
             )
             status = "PASS"
         except Exception:
@@ -753,5 +738,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s: %(message)s', level=logging.INFO)
+    logging.basicConfig(format="%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s: %(message)s", level=logging.INFO)
     raise SystemExit(main())

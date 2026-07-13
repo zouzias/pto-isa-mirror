@@ -31,10 +31,8 @@ def make_idx_random(rng, shape, max_val):
 
 
 def make_idx_with_oob(rng, shape, table_size, oob_count):
-    flat = rng.integers(0, table_size, size=int(
-        np.prod(shape)), dtype=np.int32)
-    flat[:oob_count] = rng.integers(
-        table_size, table_size * 2, size=oob_count, dtype=np.int32)
+    flat = rng.integers(0, table_size, size=int(np.prod(shape)), dtype=np.int32)
+    flat[:oob_count] = rng.integers(table_size, table_size * 2, size=oob_count, dtype=np.int32)
     rng.shuffle(flat)
     return flat.reshape(shape)
 
@@ -90,13 +88,11 @@ def golden_elem(table_flat, idx, oob):
 
 def case_row(name, dtype, dst_rows, dst_cols, table_rows, oob="undefined", idx_kind="random"):
     rng = np.random.default_rng(hash(name) & 0xFFFFFFFF)
-    table = make_table(dtype, table_rows *
-                       dst_cols).reshape(table_rows, dst_cols)
+    table = make_table(dtype, table_rows * dst_cols).reshape(table_rows, dst_cols)
     if idx_kind == "random":
         idx = make_idx_random(rng, (dst_rows, 1), table_rows)
     elif idx_kind == "oob":
-        idx = make_idx_with_oob(
-            rng, (dst_rows, 1), table_rows, max(1, dst_rows // 2))
+        idx = make_idx_with_oob(rng, (dst_rows, 1), table_rows, max(1, dst_rows // 2))
     else:
         raise ValueError(idx_kind)
     golden = golden_row(table, idx, dst_rows, dst_cols, oob)
@@ -136,76 +132,50 @@ def add(name, fn):
     CASES.append((name, fn))
 
 
-add("MGATHERTest.case_row_float_8x32_64rows",
-    lambda n: case_row(n, np.float32, 8, 32, 64))
-add("MGATHERTest.case_row_half_16x64_64rows",
-    lambda n: case_row(n, np.float16, 16, 64, 64))
-add("MGATHERTest.case_row_int32_8x16_32rows",
-    lambda n: case_row(n, np.int32, 8, 16, 32))
-add("MGATHERTest.case_row_uint8_8x32_32rows",
-    lambda n: case_row(n, np.uint8, 8, 32, 32))
-add("MGATHERTest.case_row_int16_8x16_32rows",
-    lambda n: case_row(n, np.int16, 8, 16, 32))
+add("MGATHERTest.case_row_float_8x32_64rows", lambda n: case_row(n, np.float32, 8, 32, 64))
+add("MGATHERTest.case_row_half_16x64_64rows", lambda n: case_row(n, np.float16, 16, 64, 64))
+add("MGATHERTest.case_row_int32_8x16_32rows", lambda n: case_row(n, np.int32, 8, 16, 32))
+add("MGATHERTest.case_row_uint8_8x32_32rows", lambda n: case_row(n, np.uint8, 8, 32, 32))
+add("MGATHERTest.case_row_int16_8x16_32rows", lambda n: case_row(n, np.int16, 8, 16, 32))
 add(
     "MGATHERTest.case_row_float_clamp_8x32_8rows",
     lambda n: case_row(n, np.float32, 8, 32, 8, oob="clamp", idx_kind="oob"),
 )
-add("MGATHERTest.case_row_int32_wrap_8x16_8rows", lambda n: case_row(
-    n, np.int32, 8, 16, 8, oob="wrap", idx_kind="oob"))
+add("MGATHERTest.case_row_int32_wrap_8x16_8rows", lambda n: case_row(n, np.int32, 8, 16, 8, oob="wrap", idx_kind="oob"))
 add(
-    "MGATHERTest.case_row_half_zero_8x32_8rows", lambda n: case_row(
-        n, np.float16, 8, 32, 8, oob="zero", idx_kind="oob")
+    "MGATHERTest.case_row_half_zero_8x32_8rows", lambda n: case_row(n, np.float16, 8, 32, 8, oob="zero", idx_kind="oob")
 )
 
-add("MGATHERTest.case_row_colidx_float_8x32_64rows",
-    lambda n: case_row(n, np.float32, 8, 32, 64))
+add("MGATHERTest.case_row_colidx_float_8x32_64rows", lambda n: case_row(n, np.float32, 8, 32, 64))
 add(
     "MGATHERTest.case_row_colidx_int32_clamp_8x16_8rows",
     lambda n: case_row(n, np.int32, 8, 16, 8, oob="clamp", idx_kind="oob"),
 )
-add("MGATHERTest.case_row_colidx_half_16x64_64rows",
-    lambda n: case_row(n, np.float16, 16, 64, 64))
+add("MGATHERTest.case_row_colidx_half_16x64_64rows", lambda n: case_row(n, np.float16, 16, 64, 64))
 
-add("MGATHERTest.case_elem_float_64_128size",
-    lambda n: case_elem(n, np.float32, 64, 128))
-add("MGATHERTest.case_elem_half_64_128size",
-    lambda n: case_elem(n, np.float16, 64, 128))
-add("MGATHERTest.case_elem_int32_32_64size",
-    lambda n: case_elem(n, np.int32, 32, 64))
-add("MGATHERTest.case_elem_uint8_64_128size",
-    lambda n: case_elem(n, np.uint8, 64, 128))
-add("MGATHERTest.case_elem_int16_32_64size",
-    lambda n: case_elem(n, np.int16, 32, 64))
+add("MGATHERTest.case_elem_float_64_128size", lambda n: case_elem(n, np.float32, 64, 128))
+add("MGATHERTest.case_elem_half_64_128size", lambda n: case_elem(n, np.float16, 64, 128))
+add("MGATHERTest.case_elem_int32_32_64size", lambda n: case_elem(n, np.int32, 32, 64))
+add("MGATHERTest.case_elem_uint8_64_128size", lambda n: case_elem(n, np.uint8, 64, 128))
+add("MGATHERTest.case_elem_int16_32_64size", lambda n: case_elem(n, np.int16, 32, 64))
 add(
     "MGATHERTest.case_elem_float_clamp_32_16size",
     lambda n: case_elem(n, np.float32, 32, 16, oob="clamp", idx_kind="oob"),
 )
-add("MGATHERTest.case_elem_int32_wrap_32_16size", lambda n: case_elem(
-    n, np.int32, 32, 16, oob="wrap", idx_kind="oob"))
-add("MGATHERTest.case_elem_half_zero_32_16size", lambda n: case_elem(
-    n, np.float16, 32, 16, oob="zero", idx_kind="oob"))
+add("MGATHERTest.case_elem_int32_wrap_32_16size", lambda n: case_elem(n, np.int32, 32, 16, oob="wrap", idx_kind="oob"))
+add("MGATHERTest.case_elem_half_zero_32_16size", lambda n: case_elem(n, np.float16, 32, 16, oob="zero", idx_kind="oob"))
 
-add("MGATHERTest.case_elem2d_float_8x32_256size",
-    lambda n: case_elem2d(n, np.float32, 8, 32, 256))
-add("MGATHERTest.case_elem2d_int32_8x16_256size",
-    lambda n: case_elem2d(n, np.int32, 8, 16, 256))
-add("MGATHERTest.case_elem2d_half_4x32_256size",
-    lambda n: case_elem2d(n, np.float16, 4, 32, 256))
+add("MGATHERTest.case_elem2d_float_8x32_256size", lambda n: case_elem2d(n, np.float32, 8, 32, 256))
+add("MGATHERTest.case_elem2d_int32_8x16_256size", lambda n: case_elem2d(n, np.int32, 8, 16, 256))
+add("MGATHERTest.case_elem2d_half_4x32_256size", lambda n: case_elem2d(n, np.float16, 4, 32, 256))
 
-add("MGATHERTest.case_elem2d_int32_unaligned_3x8_64size",
-    lambda n: case_elem2d(n, np.int32, 3, 8, 64))
-add("MGATHERTest.case_elem2d_uint8_unaligned_3x32_256size",
-    lambda n: case_elem2d(n, np.uint8, 3, 32, 256))
-add("MGATHERTest.case_elem2d_int32_unaligned_3x3_in_3x8_64size",
-    lambda n: case_elem2d(n, np.int32, 3, 3, 64))
-add("MGATHERTest.case_elem2d_int32_unaligned_9x9_in_9x16_256size",
-    lambda n: case_elem2d(n, np.int32, 9, 9, 256))
-add("MGATHERTest.case_elem2d_int32_scalar_1x1_in_1x8_8size",
-    lambda n: case_elem2d(n, np.int32, 1, 1, 8))
-add("MGATHERTest.case_row_int32_unaligned_3x8_8rows",
-    lambda n: case_row(n, np.int32, 3, 8, 8))
-add("MGATHERTest.case_row_int32_unaligned_9x16_16rows",
-    lambda n: case_row(n, np.int32, 9, 16, 16))
+add("MGATHERTest.case_elem2d_int32_unaligned_3x8_64size", lambda n: case_elem2d(n, np.int32, 3, 8, 64))
+add("MGATHERTest.case_elem2d_uint8_unaligned_3x32_256size", lambda n: case_elem2d(n, np.uint8, 3, 32, 256))
+add("MGATHERTest.case_elem2d_int32_unaligned_3x3_in_3x8_64size", lambda n: case_elem2d(n, np.int32, 3, 3, 64))
+add("MGATHERTest.case_elem2d_int32_unaligned_9x9_in_9x16_256size", lambda n: case_elem2d(n, np.int32, 9, 9, 256))
+add("MGATHERTest.case_elem2d_int32_scalar_1x1_in_1x8_8size", lambda n: case_elem2d(n, np.int32, 1, 1, 8))
+add("MGATHERTest.case_row_int32_unaligned_3x8_8rows", lambda n: case_row(n, np.int32, 3, 8, 8))
+add("MGATHERTest.case_row_int32_unaligned_9x16_16rows", lambda n: case_row(n, np.int32, 9, 16, 16))
 
 
 def case_elem2d_dyn(name, dtype, valid_r, valid_c, table_total, oob="undefined", idx_kind="random"):
@@ -214,8 +184,7 @@ def case_elem2d_dyn(name, dtype, valid_r, valid_c, table_total, oob="undefined",
     if idx_kind == "random":
         idx = make_idx_random(rng, (valid_r, valid_c), table_total)
     elif idx_kind == "oob":
-        idx = make_idx_with_oob(rng, (valid_r, valid_c),
-                                table_total, max(1, (valid_r * valid_c) // 2))
+        idx = make_idx_with_oob(rng, (valid_r, valid_c), table_total, max(1, (valid_r * valid_c) // 2))
     else:
         raise ValueError(idx_kind)
     golden = golden_elem(table, idx, oob)
@@ -238,10 +207,8 @@ add(
     "MGATHERTest.case_elem2d_dyn_half_8x16_in_8x16_4x32",
     lambda n: case_elem2d_dyn(n, np.float16, 8, 16, 4 * 32, idx_kind="random"),
 )
-add("MGATHERTest.case_row_dyn_int32_3x16_8rows",
-    lambda n: case_row(n, np.int32, 3, 16, 8))
-add("MGATHERTest.case_row_dyn_half_4x32_16rows",
-    lambda n: case_row(n, np.float16, 4, 32, 16))
+add("MGATHERTest.case_row_dyn_int32_3x16_8rows", lambda n: case_row(n, np.int32, 3, 16, 8))
+add("MGATHERTest.case_row_dyn_half_4x32_16rows", lambda n: case_row(n, np.float16, 4, 32, 16))
 
 
 if __name__ == "__main__":

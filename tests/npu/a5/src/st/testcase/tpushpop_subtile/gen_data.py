@@ -32,13 +32,9 @@ def gen_golden_data(case_params):
 
 
 if __name__ == "__main__":
-    case_name_list = [
-        "TPushTpopSubtileTest.case1_half_128x512",
-    ]
+    case_name_list = ["TPushTpopSubtileTest.case1_half_128x512"]
 
-    case_params_list = [
-        (128, 128, 128, 4, np.float16, np.float32),
-    ]
+    case_params_list = [(128, 128, 128, 4, np.float16, np.float32)]
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):

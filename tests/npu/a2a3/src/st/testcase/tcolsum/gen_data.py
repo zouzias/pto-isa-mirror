@@ -11,24 +11,22 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
 def gen_golden_data(case_name, param):
     data_type = param.data_type
     cols = param.col
-    src_row = param.src_row
     src_valid_row = param.src_valid_row
 
     input = np.random.rand(src_valid_row, cols) * 10
     input = input.astype(data_type)
     golden = np.zeros((1, cols), dtype=data_type)
     golden[0] = np.sum(input, axis=0)
-    input.tofile('input.bin')
-    golden.tofile('golden.bin')
+    input.tofile("input.bin")
+    golden.tofile("golden.bin")
 
 
 class TColSum:
@@ -38,8 +36,8 @@ class TColSum:
         self.src_row = src_row
         self.src_valid_row = src_valid_row
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     case_name_list = [
         "TCOLSUMTest.case1",
         "TCOLSUMTest.case2",
@@ -91,7 +89,7 @@ if __name__ == "__main__":
         original_dir = os.getcwd()
         os.chdir(case_name)
 
-        if (i > len(case_name_list) // 2 - 1):
+        if i > len(case_name_list) // 2 - 1:
             gen_golden_data(case_name, case_params_list[i - len(case_name_list) // 2])
         else:
             gen_golden_data(case_name, case_params_list[i])

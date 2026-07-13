@@ -30,21 +30,18 @@ def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2):
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
 
     if pad_m > 0 or pad_k > 0:
-        padded = np.pad(x1_mx_gm,
-                        ((0, pad_m), (0, pad_k)),
-                        mode='constant',
-                        constant_values=0)
+        padded = np.pad(x1_mx_gm, ((0, pad_m), (0, pad_k)), mode="constant", constant_values=0)
     else:
         padded = x1_mx_gm
 
     m_padded = m + pad_m
     k_padded = k + pad_k
 
-    x1_scale_gm = padded.reshape((int(m_padded / block_size), block_size,
-                                 int(k_padded / c0_size_mx), c0_size_mx))
+    x1_scale_gm = padded.reshape((int(m_padded / block_size), block_size, int(k_padded / c0_size_mx), c0_size_mx))
     x1_scale_gm = x1_scale_gm.transpose(0, 2, 1, 3)
-    x1_scale_gm = x1_scale_gm.reshape(x1_scale_gm.shape[0] * x1_scale_gm.shape[1],
-                                      x1_scale_gm.shape[2] * x1_scale_gm.shape[3])
+    x1_scale_gm = x1_scale_gm.reshape(
+        x1_scale_gm.shape[0] * x1_scale_gm.shape[1], x1_scale_gm.shape[2] * x1_scale_gm.shape[3]
+    )
 
     return x1_scale_gm
 
@@ -55,19 +52,16 @@ def convert_x2_scale_format(x2_mx_gm, block_size=16, c0_size_mx=2):
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
 
     if pad_n > 0 or pad_k > 0:
-        padded = np.pad(x2_mx_gm,
-                        ((0, pad_k), (0, pad_n)),
-                        mode='constant',
-                        constant_values=0)
+        padded = np.pad(x2_mx_gm, ((0, pad_k), (0, pad_n)), mode="constant", constant_values=0)
     else:
         padded = x2_mx_gm
 
     k_padded, n_padded = padded.shape
 
-    x2_scale_gm = padded.reshape(
-        (int(k_padded / c0_size_mx), c0_size_mx, int(n_padded / 16), 16)).transpose(2, 0, 3, 1)
-    x2_scale_gm = x2_scale_gm.reshape(x2_scale_gm.shape[1] * x2_scale_gm.shape[3],
-                                      x2_scale_gm.shape[0] * x2_scale_gm.shape[2])
+    x2_scale_gm = padded.reshape((int(k_padded / c0_size_mx), c0_size_mx, int(n_padded / 16), 16)).transpose(2, 0, 3, 1)
+    x2_scale_gm = x2_scale_gm.reshape(
+        x2_scale_gm.shape[1] * x2_scale_gm.shape[3], x2_scale_gm.shape[0] * x2_scale_gm.shape[2]
+    )
 
     return x2_scale_gm
 
@@ -81,8 +75,7 @@ def pack_two_fp4(scale_matrix):
     low_bits = (scale_matrix_low & 0x0F) << 4
     high_bits = scale_matrix_high & 0x0F
     combined = low_bits | high_bits
-    scale_matrix_bin = combined.reshape(
-        scale_matrix_row, scale_matrix_col // 2)
+    scale_matrix_bin = combined.reshape(scale_matrix_row, scale_matrix_col // 2)
     return scale_matrix_bin
 
 
@@ -91,14 +84,13 @@ def align_to_multiple(k, alignment=64):
 
 
 def gen_golden_data(case_name, param):
-
     a_type = param.atype
     b_type = param.btype
 
     dst_type = param.ctype
     bias_type = param.bias_type
 
-    m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
+    m, k, n, is_bias, _is_atrans, _is_btrans = param.m, param.k, param.n, param.is_bias, False, False
 
     original_k = k
     k_aligned = align_to_multiple(k, 64)
@@ -126,14 +118,12 @@ def gen_golden_data(case_name, param):
         x1_gm.tofile("./x1_gm.bin")
         x2_gm.tofile("./x2_gm.bin")
 
-    x1_mx_gm = np.random.randint(
-        127, 130, [m, math.ceil(k / 32)]).astype(np.uint8)
-    x2_mx_gm = np.random.randint(
-        127, 130, [math.ceil(k / 32), n]).astype(np.uint8)
+    x1_mx_gm = np.random.randint(127, 130, [m, math.ceil(k / 32)]).astype(np.uint8)
+    x2_mx_gm = np.random.randint(127, 130, [math.ceil(k / 32), n]).astype(np.uint8)
 
     ###################### compute ########################
-    x1_mx = 2**(x1_mx_gm.astype(np.float64) - 127)
-    x2_mx = 2**(x2_mx_gm.astype(np.float64) - 127)
+    x1_mx = 2 ** (x1_mx_gm.astype(np.float64) - 127)
+    x2_mx = 2 ** (x2_mx_gm.astype(np.float64) - 127)
     x1_full = np.zeros([m, k_aligned], dtype=np.float64)
     x2_full = np.zeros([k_aligned, n], dtype=np.float64)
 
@@ -147,19 +137,16 @@ def gen_golden_data(case_name, param):
     x1_mx_gm.tofile("./x1_mx_gm.bin")
     x2_mx_gm.tofile("./x2_mx_gm.bin")
     if is_bias:
-        bias_gm = np.random.randint(1, 10, [n, ]).astype(bias_type)
+        bias_gm = np.random.randint(1, 10, [n]).astype(bias_type)
         bias_gm.tofile("./bias_gm.bin")
-        golden = np.matmul(x1.astype(np.float64), x2.astype(
-            np.float64)).astype(dst_type) + bias_gm.astype(dst_type)
+        golden = np.matmul(x1.astype(np.float64), x2.astype(np.float64)).astype(dst_type) + bias_gm.astype(dst_type)
     else:
-        golden = np.matmul(x1.astype(np.float64),
-                           x2.astype(np.float64)).astype(dst_type)
+        golden = np.matmul(x1.astype(np.float64), x2.astype(np.float64)).astype(dst_type)
 
     golden.tofile("./golden.bin")
 
 
 class TmatmulmxParams:
-
     def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type=None):
         self.atype = atype
         self.btype = btype
@@ -168,7 +155,7 @@ class TmatmulmxParams:
         self.k = k
         self.n = n
         self.is_bias = is_bias
-        if (bias_type):
+        if bias_type:
             self.bias_type = bias_type
         else:
             self.bias_type = ctype
@@ -202,17 +189,12 @@ if __name__ == "__main__":
 
     case_params_list = [
         TmatmulmxParams(fp8_e5m2, fp8_e5m2, np.float32, 128, 64, 64, False),
-        TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn,
-                        np.float32, 127, 72, 64, False),
+        TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 127, 72, 64, False),
         TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 128, 110, 63, False),
-        TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2,
-                        np.float32, 128, 64, 64, False),
-        TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2,
-                        np.float32, 117, 64, 60, False),
-        TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2,
-                        np.float32, 128, 118, 64, False),
-        TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2,
-                        np.float32, 115, 64, 30, False),
+        TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 128, 64, 64, False),
+        TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 117, 64, 60, False),
+        TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 128, 118, 64, False),
+        TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 115, 64, 30, False),
         TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 16, 32, 16, False),
         TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 10, 50, 54, False),
         TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 4, 30, 8, False),
@@ -220,8 +202,7 @@ if __name__ == "__main__":
         TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 1, 256, 20, False),
         # bias test
         TmatmulmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 115, 64, 30, True),
-        TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn,
-                        np.float32, 200, 192, 95, True),
+        TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 200, 192, 95, True),
         TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 35, 128, 56, True),
         # bias + acc test
         TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 47, 128, 62, True),

@@ -13,7 +13,9 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
+
 
 def gen_golden_data_trowmax(case_name, param):
     dtype = param.dtype
@@ -52,12 +54,12 @@ def generate_case_name(param):
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TROWMAXTest.case_{dtype_str}" 
+
+    name = f"TROWMAXTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -75,7 +77,7 @@ if __name__ == "__main__":
         TRowmaxParams(np.float16, 64, 64, 64, 64, 64, 64),
         TRowmaxParams(np.float16, 161, 161, 32, 32, 161, 161),
         TRowmaxParams(np.float32, 77, 81, 32, 16, 77, 81),
-        TRowmaxParams(np.float32, 32, 32, 32, 16, 32, 32)
+        TRowmaxParams(np.float32, 32, 32, 32, 16, 32, 32),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TRowmaxParams(NumExt.bf16, 64, 64, 64, 64, 64, 64))

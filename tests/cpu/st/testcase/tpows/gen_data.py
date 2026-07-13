@@ -11,7 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
 import numpy as np
 
 np.random.seed(19)
@@ -23,10 +22,10 @@ def gen_golden_data(param):
     valid_col = param.valid_col
     kind = np.dtype(dtype).kind
 
-    if kind == 'i':
+    if kind == "i":
         input_arr = np.random.randint(1, 8, size=(param.in_row, param.in_col)).astype(dtype)
         scalar = np.random.randint(0, 5, size=(1,)).astype(dtype)[0]
-    elif kind == 'u':
+    elif kind == "u":
         input_arr = np.random.randint(1, 8, size=(param.in_row, param.in_col)).astype(dtype)
         scalar = np.random.randint(0, 5, size=(1,)).astype(dtype)[0]
     else:
@@ -56,7 +55,6 @@ class TPowSParams:
 
 
 if __name__ == "__main__":
-
     case_params_list = [
         TPowSParams("TPOWSTest.case1", np.float32, 32, 64),
         TPowSParams("TPOWSTest.case2", np.float16, 63, 64),

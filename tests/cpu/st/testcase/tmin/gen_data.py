@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -57,8 +58,10 @@ class TMinParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    return f"TMINTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
-           f"{param.valid_row}x{param.valid_col}"
+    return (
+        f"TMINTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"
+        + f"{param.valid_row}x{param.valid_col}"
+    )
 
 
 if __name__ == "__main__":

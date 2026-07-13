@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -20,7 +21,7 @@ def gen_golden_data_ttri(case_name, param):
     isUpperOrLower = param.isUpperOrLower
     diagonal = param.diagonal
 
-    h, w = [param.tile_row, param.tile_col]
+    _h, _w = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # generate upper or lower triangular matrix
@@ -47,19 +48,20 @@ class TTriParams:
 
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16',
-        np.uint32: 'uint32',
-        np.uint16: 'uint16'
+        np.float32: "float",
+        np.float16: "half",
+        np.int8: "int8",
+        np.int32: "int32",
+        np.int16: "int16",
+        np.uint32: "uint32",
+        np.uint16: "uint16",
     }[param.dtype]
     if param.diagonal >= 0:
         diagonal_str = str(param.diagonal)
     else:
         diagonal_str = f"_{abs(param.diagonal)}"
     return f"TTRITest.case_{dtype_str}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_{param.isUpperOrLower}_{diagonal_str}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -84,7 +86,7 @@ if __name__ == "__main__":
         TTriParams(np.float32, 128, 128, 128, 128, 0, 0),
         TTriParams(np.float32, 128, 128, 128, 125, 0, 0),
         TTriParams(np.uint32, 64, 64, 64, 64, 1, 0),
-        TTriParams(np.uint32,64, 64, 64, 64, 0, 0),
+        TTriParams(np.uint32, 64, 64, 64, 64, 0, 0),
         TTriParams(np.float32, 128, 128, 128, 111, 0, 2),
         TTriParams(np.float32, 128, 128, 128, 111, 0, -2),
         TTriParams(np.float32, 128, 128, 128, 111, 1, 2),

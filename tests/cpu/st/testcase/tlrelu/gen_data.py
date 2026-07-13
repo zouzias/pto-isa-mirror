@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -28,9 +29,9 @@ def gen_golden_data_tlrelu(case_name, param):
 
     # Perform the addbtraction
     golden = NumExt.zeros([row, col], dtype)
-    golden[:row_valid, :col_valid] = NumExt.astype(
-        np.where(input1 > 0, input1, input1 * scalar), dtype
-    )[:row_valid, :col_valid]
+    golden[:row_valid, :col_valid] = NumExt.astype(np.where(input1 > 0, input1, input1 * scalar), dtype)[
+        :row_valid, :col_valid
+    ]
 
     # Save the input and golden data to binary files
     NumExt.write_array("input1.bin", input1, dtype)
@@ -51,15 +52,15 @@ class TLreluParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TLRELUTest.case_{dtype_str}" 
+
+    name = f"TLRELUTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         TLreluParams(np.float32, 64, 64, 64, 64, 64, 64),
         TLreluParams(np.int32, 64, 64, 64, 64, 64, 64),
         TLreluParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TLreluParams(np.float16, 16, 256, 16, 256, 16, 256)
+        TLreluParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TLreluParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))

@@ -29,10 +29,7 @@ def gen_golden_data_tgatherb(case_name, param):
         ValueError(f"{dtype} unsupported data type!!")
     block_size_elem = int(32 / data_size)
 
-    src_shape = [param.src_s1, param.src_s0]
-    dst_shape = [param.dst_s1, param.dst_s0]
     offset_col = int(param.dst_s0 / block_size_elem)
-    offset_shape = [param.dst_s1, offset_col]
     offset_elt_num = param.dst_s1 * offset_col
     dst_elt_num = param.dst_s1 * param.dst_s0
 

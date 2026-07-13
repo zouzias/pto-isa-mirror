@@ -11,18 +11,17 @@
 # --------------------------------------------------------------------------------
 
 import torch
-import torch_npu
+import torch_npu  # noqa: F401
 from torch_npu.testing.testcase import TestCase, run_tests
 
-import op_extension
+import op_extension  # noqa: F401
 
 
 class TestPtoGemmBasic(TestCase):
-
     def test_pto_gemm_basic(self):
         m, k, n = 512, 2048, 1536
-        a = torch.rand((m, k), device='cpu', dtype=torch.float16)
-        b = torch.rand((k, n), device='cpu', dtype=torch.float16)
+        a = torch.rand((m, k), device="cpu", dtype=torch.float16)
+        b = torch.rand((k, n), device="cpu", dtype=torch.float16)
         b_dn = b.t().contiguous()
 
         a_npu = a.npu()
@@ -35,4 +34,3 @@ class TestPtoGemmBasic(TestCase):
 
 if __name__ == "__main__":
     run_tests()
-

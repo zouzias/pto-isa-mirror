@@ -12,7 +12,9 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_process_byte(mask, maskCol, i, j, col, golden, input0, input1):
     byte = mask[i * maskCol + j]
@@ -24,6 +26,7 @@ def gen_golden_process_byte(mask, maskCol, i, j, col, golden, input0, input1):
                 golden[idx] = input0[idx]
             else:
                 golden[idx] = input1[idx]
+
 
 def gen_golden_data_tsel(param):
     dtype = param.dtype
@@ -42,13 +45,14 @@ def gen_golden_data_tsel(param):
     for i in range(0, row):
         for j in range(0, maskCol):
             gen_golden_process_byte(mask, maskCol, i, j, col, golden, input0, input1)
-            
+
     input0.tofile("input0.bin")
     input1.tofile("input1.bin")
     mask.tofile("mask.bin")
     golden.tofile("golden.bin")
 
     return output, input0, input1, golden
+
 
 class TSelParams:
     def __init__(self, name, dtype, rows, cols, validRows, validCols):
@@ -58,6 +62,7 @@ class TSelParams:
         self.cols = cols
         self.validRows = validRows
         self.validCols = validCols
+
 
 if __name__ == "__main__":
     case_params_list = [

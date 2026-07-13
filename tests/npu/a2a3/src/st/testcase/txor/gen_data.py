@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -39,8 +40,18 @@ def gen_golden_data(case_name, param):
 
 
 class TXorParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col,
-        src1_tile_row, src1_tile_col, valid_row, valid_col):
+    def __init__(
+        self,
+        dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src0_tile_row,
+        src0_tile_col,
+        src1_tile_row,
+        src1_tile_col,
+        valid_row,
+        valid_col,
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
@@ -51,18 +62,19 @@ class TXorParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
         dtype_str = {
-            np.float32: 'float',
-            np.float16: 'half',
-            np.int8: 'int8',
-            np.int32: 'int32',
-            np.int16: 'int16',
-            np.uint32: 'uint32',
-            np.uint16: 'uint16',
-            np.uint8: 'uint8'
+            np.float32: "float",
+            np.float16: "half",
+            np.int8: "int8",
+            np.int32: "int32",
+            np.int16: "int16",
+            np.uint32: "uint32",
+            np.uint16: "uint16",
+            np.uint8: "uint8",
         }[dtype]
         self.name = f"TXORTest.case_{dtype_str}_{dst_tile_row}x{dst_tile_col}_\
 {src0_tile_row}x{src0_tile_col}_{src1_tile_row}x{src1_tile_col}_\
 {valid_row}x{valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

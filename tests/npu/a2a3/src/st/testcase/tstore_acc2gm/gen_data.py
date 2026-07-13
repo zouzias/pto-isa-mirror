@@ -34,16 +34,11 @@ def get_c0_size(data_type):
     return 32 // np.dtype(data_type).itemsize
 
 
-def saturation(arr, min_val, max_val, dtype):
-    arr = np.clip(arr, min_val, max_val)
-    return arr.astype(dtype)
-
-
 def saturation(value, min_val, max_val, target_type):
     """
     Saturate the input floating-point number and convert it to the target type.
     """
-    x_clamped = np.clip(value, min_val, max_val) # Saturation Processing
+    x_clamped = np.clip(value, min_val, max_val)  # Saturation Processing
     return np.round(x_clamped).astype(target_type).astype(target_type)
 
 
@@ -94,12 +89,12 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
     temp_quant_tensor = np.random.randint(1, 5, n).astype(np.float32)
     temp_quant_tensor_api = copy.deepcopy(temp_quant_tensor).astype(np.uint64)
     for i, _ in enumerate(temp_quant_tensor_api):
-        temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor[i]))[0]
+        temp_quant_tensor_api[i] = struct.unpack("!I", struct.pack("!f", temp_quant_tensor[i]))[0]
         if dst_data_type == np.int8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
         elif dst_data_type == np.uint8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] & np.uint64(0xFF)
-    
+
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
     quant_tensor = quant_tensor.astype(quant_type)
     quant_tensor.tofile("./quant_vector_gm.bin")
@@ -175,7 +170,7 @@ def gen_golden_data(case_name, g_info):
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
     elif format == 4:
         golden = nz_matrix_to_ndc1hwc0(golden, g_info)
-    
+
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
 
@@ -210,6 +205,7 @@ class TStoreAcc2gmParams:
         self.quant_type = quant_type
         self.relu_mode = relu_mode
         self.ndc1hwc0_shape = ndc1hwc0_shape
+
 
 if __name__ == "__main__":
     # 用例名称
@@ -261,7 +257,7 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case_ndc1hwc0_scalar_1",
         "TStoreAcc2gmTest.case_ndc1hwc0_scalar_2",
         "TStoreAcc2gmTest.case_ndc1hwc0_vector_1",
-        "TStoreAcc2gmTest.case_ndc1hwc0_vector_relu_1"
+        "TStoreAcc2gmTest.case_ndc1hwc0_vector_relu_1",
     ]
 
     case_params_list = [
@@ -271,18 +267,15 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.float16, np.float16, 1, 73, 64, 32),
         TStoreAcc2gmParams(np.float32, bfloat16, 1, 13, 32, 25),
         TStoreAcc2gmParams(bfloat16, bfloat16, 1, 100, 222, 60),
-
         TStoreAcc2gmParams(np.float32, np.float32, 2, 32, 64, 25),
         TStoreAcc2gmParams(np.float32, np.float32, 2, 48, 32, 45),
         TStoreAcc2gmParams(np.float32, np.float16, 2, 32, 64, 24),
         TStoreAcc2gmParams(np.float16, np.float16, 2, 96, 96, 23),
         TStoreAcc2gmParams(np.float32, bfloat16, 2, 48, 96, 22),
         TStoreAcc2gmParams(bfloat16, bfloat16, 2, 48, 256, 32),
-
         TStoreAcc2gmParams(np.int32, np.int8, 1, 44, 128, 27),
         TStoreAcc2gmParams(np.int32, np.int8, 2, 64, 96, 30),
         TStoreAcc2gmParams(np.float32, np.float32, 3, 64, 192, 43),
-
         TStoreAcc2gmParams(np.float16, np.int8, 1, 64, 64, 64, 1, 5),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 31, 32, 26, 1, 2),
         TStoreAcc2gmParams(np.uint8, np.int8, 1, 16, 32, 17, 1, 2),
@@ -293,8 +286,6 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.uint8, np.float32, 1, 16, 20, 25, 1, 1.5),
         TStoreAcc2gmParams(np.int8, np.float32, 2, 16, 64, 32, 1, 2.5),
         TStoreAcc2gmParams(np.uint8, bfloat16, 2, 32, 64, 16, 1, 2),
-        
-
         TStoreAcc2gmParams(np.float16, np.int8, 1, 55, 88, 32, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 34, 85, 19, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.uint8, np.int8, 1, 31, 32, 29, 2, quant_type=np.uint64),
@@ -304,49 +295,51 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.uint8, np.int8, 1, 19, 33, 23, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.uint8, np.int8, 2, 48, 64, 25, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.uint8, np.int8, 2, 128, 96, 17, 2, quant_type=np.uint64),
-
-        # relu        
+        # relu
         TStoreAcc2gmParams(np.float32, np.float32, 1, 128, 96, 61, relu_mode=1),
         TStoreAcc2gmParams(np.float32, np.float16, 2, 256, 64, 33, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 55, 27, 33, quant_mode=1, scalar=2, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.int8, 2, 80, 96, 114, quant_mode=1, scalar=2, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 79, 63, 33, quant_mode=2, quant_type=np.uint64, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.int8, 2, 80, 128, 90, quant_mode=2, quant_type=np.uint64, relu_mode=1),
-
         # NDC1HWC0
+        TStoreAcc2gmParams(np.float32, np.float32, 4, 128, 64, 31, ndc1hwc0_shape=(1, 2, 4, 16, 8, 8)),
+        TStoreAcc2gmParams(np.int32, np.int8, 4, 256, 48, 27, ndc1hwc0_shape=(1, 3, 1, 16, 16, 16)),
+        TStoreAcc2gmParams(bfloat16, bfloat16, 4, 40, 96, 23, ndc1hwc0_shape=(1, 2, 3, 10, 4, 16)),
+        TStoreAcc2gmParams(np.float32, np.float16, 4, 63, 64, 32, relu_mode=1, ndc1hwc0_shape=(1, 1, 8, 9, 7, 8)),
         TStoreAcc2gmParams(
-            np.float32, np.float32, 4, 128, 64, 31, ndc1hwc0_shape=(1, 2, 4, 16, 8, 8)
+            np.int8,
+            np.float16,
+            4,
+            100,
+            64,
+            33,
+            quant_mode=1,
+            scalar=2,
+            relu_mode=1,
+            ndc1hwc0_shape=(1, 2, 1, 20, 5, 32),
         ),
         TStoreAcc2gmParams(
-            np.int32, np.int8, 4, 256, 48, 27, ndc1hwc0_shape=(1, 3, 1, 16, 16, 16)
+            np.uint8, np.float32, 4, 70, 64, 25, quant_mode=1, scalar=1.5, ndc1hwc0_shape=(1, 1, 2, 7, 10, 32)
         ),
         TStoreAcc2gmParams(
-            bfloat16, bfloat16, 4, 40, 96, 23, ndc1hwc0_shape=(1, 2, 3, 10, 4, 16)
+            np.float16, np.int8, 4, 55, 64, 32, quant_mode=2, quant_type=np.uint64, ndc1hwc0_shape=(1, 2, 2, 11, 5, 16)
         ),
         TStoreAcc2gmParams(
-            np.float32, np.float16, 4, 63, 64, 32, relu_mode=1,
-            ndc1hwc0_shape=(1, 1, 8, 9, 7, 8)
+            np.int8,
+            np.int8,
+            4,
+            52,
+            64,
+            19,
+            quant_mode=2,
+            quant_type=np.uint64,
+            relu_mode=1,
+            ndc1hwc0_shape=(1, 1, 2, 13, 4, 32),
         ),
-        TStoreAcc2gmParams(
-            np.int8, np.float16, 4, 100, 64, 33, quant_mode=1, scalar=2, relu_mode=1,
-            ndc1hwc0_shape=(1, 2, 1, 20, 5, 32)
-        ),
-        TStoreAcc2gmParams(
-            np.uint8, np.float32, 4, 70, 64, 25, quant_mode=1, scalar=1.5,
-            ndc1hwc0_shape=(1, 1, 2, 7, 10, 32)
-        ),
-        TStoreAcc2gmParams(
-            np.float16, np.int8, 4, 55, 64, 32, quant_mode=2, quant_type=np.uint64,
-            ndc1hwc0_shape=(1, 2, 2, 11, 5, 16)
-        ),
-        TStoreAcc2gmParams(
-            np.int8, np.int8, 4, 52, 64, 19, quant_mode=2, quant_type=np.uint64, relu_mode=1,
-            ndc1hwc0_shape=(1, 1, 2, 13, 4, 32)
-        )
-
     ]
 
-    for i, case_name  in enumerate(case_name_list):
+    for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()

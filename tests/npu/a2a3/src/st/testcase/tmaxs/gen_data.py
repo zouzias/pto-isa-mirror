@@ -24,9 +24,7 @@ def gen_golden_data(param):
     dst_tile_row = param.dst_tile_row
     dst_tile_col = param.dst_tile_col
 
-    input_arr = np.random.uniform(low=-8000, high=8000, size=(rows, cols)).astype(
-        data_type
-    )
+    input_arr = np.random.uniform(low=-8000, high=8000, size=(rows, cols)).astype(data_type)
     scalar = np.random.uniform(low=-8000, high=8000, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
     for i in range(rows):

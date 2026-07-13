@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -53,12 +54,11 @@ class tunaryParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-    }[param.dtype]
-    return (f"TRSQRTTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_"
-            f"{param.src_row}x{param.src_col}_{param.valid_row}x{param.valid_col}")
+    dtype_str = {np.float32: "float", np.float16: "half"}[param.dtype]
+    return (
+        f"TRSQRTTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_"
+        f"{param.src_row}x{param.src_col}_{param.valid_row}x{param.valid_col}"
+    )
 
 
 if __name__ == "__main__":

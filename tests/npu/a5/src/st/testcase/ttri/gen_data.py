@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -20,12 +21,12 @@ def gen_golden_data_ttril(case_name, param):
     valid_row, valid_col = [param.valid_rows, param.valid_cols]
     upper_or_lower = param.upper_or_lower
     diagonal = param.diagonal
-    
-    if (upper_or_lower==0):  # lower triangular
+
+    if upper_or_lower == 0:  # lower triangular
         golden = np.tril(np.ones((valid_row, valid_col)).astype(dtype), k=diagonal)
-    else:                    # upper triangular
+    else:  # upper triangular
         golden = np.triu(np.ones((valid_row, valid_col)).astype(dtype), k=diagonal)
-        
+
     output = np.zeros([valid_row * valid_col]).astype(dtype)
     golden.tofile("golden.bin")
     return output, golden
@@ -49,39 +50,41 @@ class TTRIDynParams:
         self.valid_cols = valid_cols
         self.upper_or_lower = upper_or_lower
         self.diagonal = diagonal
-        
+
+
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'fp16',
-        np.int16:   'int16',
-        np.int32:   'int32',
-        np.uint16:  'uint16',
-        np.uint32:  'uint32',
-        np.int8:    'int8',
-        np.uint8:   'uint8'
+        np.float32: "float",
+        np.float16: "fp16",
+        np.int16: "int16",
+        np.int32: "int32",
+        np.uint16: "uint16",
+        np.uint32: "uint32",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }[param.dtype]
-    type_str = 'upper' if param.upper_or_lower == 1 else 'lower'
-    sign_diag = '' if param.diagonal >=0 else 'n'
+    type_str = "upper" if param.upper_or_lower == 1 else "lower"
+    sign_diag = "" if param.diagonal >= 0 else "n"
     diag_str = sign_diag + str(abs(param.diagonal))
     return f"TTRITest.case_{dtype_str}_{param.valid_rows}x{param.valid_cols}_{type_str}_diag_{diag_str}"
 
 
 def generate_dyn_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'fp16',
-        np.int16:   'int16',
-        np.int32:   'int32',
-        np.uint16:  'uint16',
-        np.uint32:  'uint32',
-        np.int8:    'int8',
-        np.uint8:   'uint8'
+        np.float32: "float",
+        np.float16: "fp16",
+        np.int16: "int16",
+        np.int32: "int32",
+        np.uint16: "uint16",
+        np.uint32: "uint32",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }[param.dtype]
-    type_str = 'upper' if param.upper_or_lower == 1 else 'lower'
-    sign_diag = '' if param.diagonal >= 0 else 'n'
+    type_str = "upper" if param.upper_or_lower == 1 else "lower"
+    sign_diag = "" if param.diagonal >= 0 else "n"
     diag_str = sign_diag + str(abs(param.diagonal))
     return f"TTRITest.case_{dtype_str}_s{param.static_rows}x{param.static_cols}_v{param.valid_rows}x{param.valid_cols}_{type_str}_diag_{diag_str}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -95,20 +98,20 @@ if __name__ == "__main__":
     case_params_list = [
         TTRIParams(np.float16, 20, 32, 0, 0),
         TTRIParams(np.uint8, 20, 32, 0, 0),
-        TTRIParams(np.float32,  32,   91, 0, 0),
-        TTRIParams(np.float32, 128,  128, 0, 0),
-        TTRIParams(np.float32,  32,   91, 0, 3),
-        TTRIParams(np.float32, 128,  128, 0, 3),
-        TTRIParams(np.float32,  32,   91, 0, -3),
-        TTRIParams(np.float32, 128,  128, 0, -3),
-        TTRIParams(np.float32,  32,   91, 1, 0),
-        TTRIParams(np.float32, 128,  128, 1, 0),
-        TTRIParams(np.float32,  32,   91, 1, 3),
-        TTRIParams(np.float32, 128,  128, 1, 3),
-        TTRIParams(np.float32,  32,   91, 1, -3),
-        TTRIParams(np.float32, 128,  128, 1, -3),
-        TTRIParams(np.float32, 763,   32, 0, -41),
-        TTRIParams(np.float32, 763,   32, 1, -41),
+        TTRIParams(np.float32, 32, 91, 0, 0),
+        TTRIParams(np.float32, 128, 128, 0, 0),
+        TTRIParams(np.float32, 32, 91, 0, 3),
+        TTRIParams(np.float32, 128, 128, 0, 3),
+        TTRIParams(np.float32, 32, 91, 0, -3),
+        TTRIParams(np.float32, 128, 128, 0, -3),
+        TTRIParams(np.float32, 32, 91, 1, 0),
+        TTRIParams(np.float32, 128, 128, 1, 0),
+        TTRIParams(np.float32, 32, 91, 1, 3),
+        TTRIParams(np.float32, 128, 128, 1, 3),
+        TTRIParams(np.float32, 32, 91, 1, -3),
+        TTRIParams(np.float32, 128, 128, 1, -3),
+        TTRIParams(np.float32, 763, 32, 0, -41),
+        TTRIParams(np.float32, 763, 32, 1, -41),
     ]
 
     for param in case_params_list:

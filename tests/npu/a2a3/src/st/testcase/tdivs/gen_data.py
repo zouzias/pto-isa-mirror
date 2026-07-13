@@ -12,9 +12,9 @@
 
 import os
 import struct
-import ctypes
 import re
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -22,6 +22,7 @@ def divide(dividend, divisor, dtype):
     if dtype in (np.float16, np.float32):
         return dividend / divisor
     return dividend // divisor
+
 
 def gen_golden_data(param):
     data_type = param.data_type
@@ -36,16 +37,16 @@ def gen_golden_data(param):
 
     for i in range(rows):
         for j in range(cols):
-            match = re.search(r'(\d+)$', param.name)
+            match = re.search(r"(\d+)$", param.name)
             if int(match.group(1)) < 10:
                 output_arr[i, j] = divide(input_arr[i, j], divider[0, 0], data_type)
             else:
                 output_arr[i, j] = divide(divider[0, 0], input_arr[i, j], data_type)
-    
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TDivsParams:
@@ -77,7 +78,7 @@ if __name__ == "__main__":
         TDivsParams("TDIVSTest.case15", np.float16, 63, 128, 63, 64),
         TDivsParams("TDIVSTest.case16", np.int16, 15, 192, 15, 64 * 3),
         TDivsParams("TDIVSTest.case17", np.float32, 7, 512, 7, 64 * 7),
-        TDivsParams("TDIVSTest.case18", np.float32, 256, 32, 256, 16)
+        TDivsParams("TDIVSTest.case18", np.float32, 256, 32, 256, 16),
     ]
 
     for case in case_params_list:

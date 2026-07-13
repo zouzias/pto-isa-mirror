@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -47,6 +48,7 @@ class TAndParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 if __name__ == "__main__":
     # Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,8 +68,8 @@ if __name__ == "__main__":
         TAndParams("TANDTest.case7", np.int8, 32, 32, 32, 32),
         TAndParams("TANDTest.case8", np.int16, 16, 16, 16, 16),
         TAndParams("TANDTest.case9", np.int32, 8, 8, 8, 8),
-        TAndParams("TANDTest.case10", np.int16, 16, 16, 16, 16), # half
-        TAndParams("TANDTest.case11", np.int32, 8, 8, 8, 8), # float
+        TAndParams("TANDTest.case10", np.int16, 16, 16, 16, 16),  # half
+        TAndParams("TANDTest.case11", np.int32, 8, 8, 8, 8),  # float
     ]
 
     for param in case_params_list:

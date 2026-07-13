@@ -11,8 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
 
 
@@ -32,15 +30,14 @@ def gen_golden_data(param):
         value_max = np.finfo(data_type).max / 100
         value_min = np.finfo(data_type).min / 100
 
-    input_arr = np.random.uniform(low=value_min, high=value_max,
-        size=(src_tile_row, src_tile_col)).astype(data_type)
+    input_arr = np.random.uniform(low=value_min, high=value_max, size=(src_tile_row, src_tile_col)).astype(data_type)
     divider = np.random.uniform(low=value_min, high=value_max, size=1).astype(data_type)
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
     output_arr[:rows, :cols] = input_arr[:rows, :cols] % divider[0]
 
-    input_arr.tofile('input.bin')
-    divider.tofile('divider.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    divider.tofile("divider.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TestParams:

@@ -44,7 +44,7 @@ class NumExt:
             NumExt._float32_to_bfloat16_bits(values).tofile(path)
         else:
             np.asarray(values).astype(dtype).tofile(path)
-        dtype_str = NumExt.get_short_type_name(dtype)
+        NumExt.get_short_type_name(dtype)
 
     @staticmethod
     def _float32_to_bfloat16_bits(values: np.ndarray) -> np.ndarray:
@@ -56,8 +56,7 @@ class NumExt:
 
     @staticmethod
     def _bfloat16_bits_to_float32(values: np.ndarray) -> np.ndarray:
-        bits = np.asarray(values, dtype=np.uint16).astype(
-            np.uint32) << np.uint32(16)
+        bits = np.asarray(values, dtype=np.uint16).astype(np.uint32) << np.uint32(16)
         return bits.view(np.float32)
 
     @staticmethod
@@ -65,12 +64,13 @@ class NumExt:
         if NumExt.is_bf16(dtype):
             return "bf16"
         else:
-            return {np.float32: 'float',
-                    np.float16: 'half',
-                    np.int8: 'int8',
-                    np.int16: 'int16',
-                    np.int32: 'int32',
-                    np.uint8: 'uint8',
-                    np.uint16: 'uint16',
-                    np.uint32: 'uint32'
-                    }[dtype]
+            return {
+                np.float32: "float",
+                np.float16: "half",
+                np.int8: "int8",
+                np.int16: "int16",
+                np.int32: "int32",
+                np.uint8: "uint8",
+                np.uint16: "uint16",
+                np.uint32: "uint32",
+            }[dtype]

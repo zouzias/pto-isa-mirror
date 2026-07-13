@@ -11,9 +11,8 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -48,7 +47,7 @@ def gen_golden_data(param):
 
 
 class TRowExpand:
-    def __init__(self, name, data_type, row, src_col, src_validcol, dst_col, dst_valid_col, is_brcb = False):
+    def __init__(self, name, data_type, row, src_col, src_validcol, dst_col, dst_valid_col, is_brcb=False):
         self.name = name
         self.data_type = data_type
         self.row = row

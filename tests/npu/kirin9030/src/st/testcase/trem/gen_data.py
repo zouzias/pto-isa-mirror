@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -34,7 +35,7 @@ def gen_golden_data_trem(case_name, param):
     golden = np.remainder(input1, input2)
 
     if np.issubdtype(dtype, np.integer):
-        zero_mask = (input2 == 0)
+        zero_mask = input2 == 0
         if np.issubdtype(dtype, np.signedinteger):
             golden[zero_mask] = -1
         else:
@@ -57,6 +58,7 @@ class TRemParams:
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

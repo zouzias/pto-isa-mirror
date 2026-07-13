@@ -24,15 +24,7 @@ def compile_cpp(kernel_cpp: str, verbose: bool = False, timeout: int = 120) -> s
 
     PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
 
-    flags = [
-        "-fPIC",
-        "-shared",
-        "-xcce",
-        "--npu-arch=dav-2201",
-        "-O2",
-        "-std=c++17",
-        f"-I{PTO_LIB_PATH}/include",
-    ]
+    flags = ["-fPIC", "-shared", "-xcce", "--npu-arch=dav-2201", "-O2", "-std=c++17", f"-I{PTO_LIB_PATH}/include"]
 
     command = ["bisheng", *flags, kernel_cpp, "-o", lib_path]
     if verbose:
@@ -74,14 +66,7 @@ def load_lib(lib_path, check_type=True):
     def add_func(x, y, z, block_dim=default_block_dim, stream_ptr=default_stream_ptr):
         N = x.numel()
         # TODO: customize call args according to cpp `void call_kernel` signature
-        lib.call_kernel(
-            block_dim,
-            stream_ptr,
-            torch_to_ctypes(x),
-            torch_to_ctypes(y),
-            torch_to_ctypes(z),
-            N,
-        )
+        lib.call_kernel(block_dim, stream_ptr, torch_to_ctypes(x), torch_to_ctypes(y), torch_to_ctypes(z), N)
 
     return add_func
 

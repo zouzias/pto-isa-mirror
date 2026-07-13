@@ -12,8 +12,10 @@
 
 import os
 
+
 def generate_case_name(iteration):
     return f"TDHRYSTONETest.case_{iteration}i"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -24,16 +26,7 @@ if __name__ == "__main__":
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
 
-    case_params_list = [
-        1000,
-        2000,
-        3000,
-        4000,
-        5000,
-        6000,
-        7000,
-        8000
-    ]
+    case_params_list = [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 
     for param in case_params_list:
         case_name = generate_case_name(param)

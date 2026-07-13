@@ -25,16 +25,16 @@ def gen_golden_data(case_name, param):
     # Generate random input arrays
     if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
         dtype_info = np.iinfo(dtype)
-        input1 = np.random.randint(dtype_info.min, dtype_info.max,
-            size=[src0_tile_row, src0_tile_col]).astype(dtype)
-        input2 = np.random.randint(dtype_info.min, dtype_info.max,
-            size=[src1_tile_row, src1_tile_col]).astype(dtype)
+        input1 = np.random.randint(dtype_info.min, dtype_info.max, size=[src0_tile_row, src0_tile_col]).astype(dtype)
+        input2 = np.random.randint(dtype_info.min, dtype_info.max, size=[src1_tile_row, src1_tile_col]).astype(dtype)
     else:
         dtype_info = np.finfo(dtype)
-        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
-            size=[src0_tile_row, src0_tile_col]).astype(dtype)
-        input2 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
-            size=[src1_tile_row, src1_tile_col]).astype(dtype)
+        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[src0_tile_row, src0_tile_col]).astype(
+            dtype
+        )
+        input2 = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[src1_tile_row, src1_tile_col]).astype(
+            dtype
+        )
 
     # Perform the operation
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)
@@ -47,8 +47,19 @@ def gen_golden_data(case_name, param):
 
 
 class TDivParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col,
-        src1_tile_row, src1_tile_col, valid_row, valid_col, high_precision=False):
+    def __init__(
+        self,
+        dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src0_tile_row,
+        src0_tile_col,
+        src1_tile_row,
+        src1_tile_col,
+        valid_row,
+        valid_col,
+        high_precision=False,
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
@@ -62,18 +73,15 @@ class TDivParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
     if param.high_precision:
-        dtype_str += '_hp'
+        dtype_str += "_hp"
     return f"TDIVTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.src1_tile_row}x{param.src1_tile_col}_\
 {param.valid_row}x{param.valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

@@ -19,7 +19,7 @@ import argparse
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
+        subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
         return ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
@@ -90,9 +90,8 @@ def main():
         default_soc_version = "Kirin9030"
     elif args.soc_version == "a6":
         default_soc_version = "dav_9201"
-    default_cases = "all"
-    if args.gtest_filter != None:
-        default_cases = args.gtest_filter
+    if args.gtest_filter is not None:
+        pass
 
     original_dir = os.getcwd()
     try:

@@ -111,10 +111,10 @@ class TestParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TestParams('TSORT32Test.test0', np.float16, 16, 16),
-        TestParams('TSORT32Test.test1', np.float32, 8, 32),
-        TestParams('TSORT32Test.test2', np.float32, 7, 32),
-        TestParams('TSORT32Test.test3', np.float16, 32, 16),
+        TestParams("TSORT32Test.test0", np.float16, 16, 16),
+        TestParams("TSORT32Test.test1", np.float32, 8, 32),
+        TestParams("TSORT32Test.test2", np.float32, 7, 32),
+        TestParams("TSORT32Test.test3", np.float16, 32, 16),
     ]
 
     for case in case_params_list:

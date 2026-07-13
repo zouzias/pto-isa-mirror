@@ -11,13 +11,13 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import math
 import numpy as np
+
 try:
     from ml_dtypes import bfloat16
 except ImportError:
     import numpy as np
+
     bfloat16 = np.float32  # fallback for golden generation
 
 np.random.seed(19)
@@ -63,7 +63,6 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
 
 
 def gen_golden_data_tquant(case_name, param):
-    dtype = param.dtype
     valid_rows, valid_cols = [param.valid_rows, param.valid_cols]
     mode = param.mode
     out_dtype_str = param.out_dtype_str

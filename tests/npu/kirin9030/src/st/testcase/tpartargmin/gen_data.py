@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -36,8 +37,12 @@ def gen_golden_data_tpartargmin(case_name, param):
     # Generate random input arrays
     src0_in[:src0_rows, :src0_cols] = np.random.uniform(low=-255, high=255, size=(src0_rows, src0_cols)).astype(dtype)
     src1_in[:src1_rows, :src1_cols] = np.random.uniform(low=-255, high=255, size=(src1_rows, src1_cols)).astype(dtype)
-    src0_idx_in[:src0_rows, :src0_cols] = np.random.uniform(low=0, high=src0_cols, size=(src0_rows, src0_cols)).astype(idx_type)
-    src1_idx_in[:src1_rows, :src1_cols] = np.random.uniform(low=0, high=src1_cols, size=(src1_rows, src1_cols)).astype(idx_type)
+    src0_idx_in[:src0_rows, :src0_cols] = np.random.uniform(low=0, high=src0_cols, size=(src0_rows, src0_cols)).astype(
+        idx_type
+    )
+    src1_idx_in[:src1_rows, :src1_cols] = np.random.uniform(low=0, high=src1_cols, size=(src1_rows, src1_cols)).astype(
+        idx_type
+    )
 
     pad_value = {
         np.float32: np.float32(np.inf),
@@ -50,7 +55,7 @@ def gen_golden_data_tpartargmin(case_name, param):
         np.int32: np.iinfo(np.int32).max,
     }.get(dtype)
 
-    pad_idx = {
+    {
         np.uint16: np.iinfo(np.uint16).max,
         np.int16: np.iinfo(np.int16).max,
         np.uint32: np.iinfo(np.uint32).max,
@@ -79,7 +84,7 @@ def gen_golden_data_tpartargmin(case_name, param):
     src1_in.tofile("input1_val.bin")
     src0_idx_in.tofile("input0_idx.bin")
     src1_idx_in.tofile("input1_idx.bin")
-    
+
     dst_out.tofile("golden_val.bin")
     dst_idx_out.tofile("golden_idx.bin")
 
@@ -88,7 +93,23 @@ def gen_golden_data_tpartargmin(case_name, param):
 
 
 class TPartArgMinParams:
-    def __init__(self, dtype, idx_type, dst_vr, dst_vc, src0_vr, src0_vc, src1_vr, src1_vc, dst_tr, dst_tc, src0_tr, src0_tc, src1_tr, src1_tc):
+    def __init__(
+        self,
+        dtype,
+        idx_type,
+        dst_vr,
+        dst_vc,
+        src0_vr,
+        src0_vc,
+        src1_vr,
+        src1_vc,
+        dst_tr,
+        dst_tc,
+        src0_tr,
+        src0_tc,
+        src1_tr,
+        src1_tc,
+    ):
         self.dtype = dtype
         self.idx_type = idx_type
         self.dst_vr = dst_vr
@@ -104,19 +125,22 @@ class TPartArgMinParams:
         self.src1_tr = src1_tr
         self.src1_tc = src1_tc
 
+
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'fp32',
-        np.float16: 'fp16',
-        np.int8: 's8',
-        np.int16: 's16',
-        np.int32: 's32',
-        np.uint8: 'u8',
-        np.uint16: 'u16',
-        np.uint32: 'u32',
+        np.float32: "fp32",
+        np.float16: "fp16",
+        np.int8: "s8",
+        np.int16: "s16",
+        np.int32: "s32",
+        np.uint8: "u8",
+        np.uint16: "u16",
+        np.uint32: "u32",
     }[param.dtype]
-    return (f"TPARTARGMINTest.case_{dtype_str}_{param.dst_vr}x{param.dst_vc}_{param.src0_vr}x{param.src0_vc}_"
-            f"{param.src1_vr}x{param.src1_vc}")
+    return (
+        f"TPARTARGMINTest.case_{dtype_str}_{param.dst_vr}x{param.dst_vc}_{param.src0_vr}x{param.src0_vc}_"
+        f"{param.src1_vr}x{param.src1_vc}"
+    )
 
 
 if __name__ == "__main__":

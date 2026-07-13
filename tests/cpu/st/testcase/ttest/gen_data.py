@@ -10,17 +10,19 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-import os 
-import numpy as np 
-import struct 
+import os
+import numpy as np
+import struct
+
 np.random.seed(25)
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
-    row, col = [param.tile_row, param.tile_col] 
-    row_valid, col_valid = [param.valid_row, param.valid_col]
+    row, col = [param.tile_row, param.tile_col]
+    _row_valid, _col_valid = [param.valid_row, param.valid_col]
 
-    #Generate input data
+    # Generate input data
     if param.cmp == "LE":
         input_arr = np.random.randint(1, 100, size=[row, col]).astype(dtype)
         threshold_true = input_arr.max()
@@ -34,47 +36,48 @@ def gen_golden_data(case_name, param):
         threshold_true = 1
         threshold_false = 2
 
-    with open("./cmp_file.bin", 'wb') as f:
-        f.write(struct.pack('ii', threshold_true, threshold_false))
+    with open("./cmp_file.bin", "wb") as f:
+        f.write(struct.pack("ii", threshold_true, threshold_false))
 
-    #Save the input and golden data to binary files
-    input_arr.tofile("input.bin") 
-    
-    with open("./golden.bin", 'wb') as f:
-        f.write(struct.pack('??', True, False))
+    # Save the input and golden data to binary files
+    input_arr.tofile("input.bin")
+
+    with open("./golden.bin", "wb") as f:
+        f.write(struct.pack("??", True, False))
 
 
 class TTestParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, cmp):
-        self.dtype = dtype 
-        self.global_row = global_row 
-        self.global_col = global_col 
-        self.tile_row = tile_row 
-        self.tile_col = tile_col 
-        self.valid_row = valid_row 
+        self.dtype = dtype
+        self.global_row = global_row
+        self.global_col = global_col
+        self.tile_row = tile_row
+        self.tile_col = tile_col
+        self.valid_row = valid_row
         self.valid_col = valid_col
         self.cmp = cmp
 
+
 if __name__ == "__main__":
-    #Get the absolute path of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__)) 
+    # Get the absolute path of the script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     testcases_dir = os.path.join(script_dir, "testcases")
 
-    #Ensure the testcases directory exists
+    # Ensure the testcases directory exists
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'LE'), 
-        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'GE'), 
-        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'EQ'), 
-        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, 'LE'),
-        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, 'GE'),
-        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, 'EQ'),
+        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, "LE"),
+        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, "GE"),
+        TTestParams(np.int32, 64, 64, 64, 64, 64, 64, "EQ"),
+        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, "LE"),
+        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, "GE"),
+        TTestParams(np.int32, 16, 256, 16, 256, 16, 256, "EQ"),
     ]
 
     for i, param in enumerate(case_params_list):
-        case_name = f"TTESTTest.case{i+1}"
+        case_name = f"TTESTTest.case{i + 1}"
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()

@@ -11,9 +11,10 @@
 # --------------------------------------------------------------------------------
 
 import os
-import math
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
@@ -29,12 +30,14 @@ def gen_golden_data(case_name, param):
         input2 = np.random.randint(dtype_info.min, dtype_info.max, size=[1]).astype(dtype)
     else:
         dtype_info = np.finfo(dtype)
-        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
-            size=[src_tile_row, src_tile_col]).astype(dtype)
+        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[src_tile_row, src_tile_col]).astype(
+            dtype
+        )
         input2 = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[1]).astype(dtype)
     mask_dtype_info = np.iinfo(param.dtype_mask)
-    mask = np.random.randint(mask_dtype_info.min, mask_dtype_info.max,
-        size=[mask_tile_row, mask_tile_col]).astype(param.dtype_mask)
+    mask = np.random.randint(mask_dtype_info.min, mask_dtype_info.max, size=[mask_tile_row, mask_tile_col]).astype(
+        param.dtype_mask
+    )
     mask_u8view = mask.view(np.uint8).reshape(mask.shape[0], -1)
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)
 
@@ -53,18 +56,29 @@ def gen_golden_data(case_name, param):
 
 class TestParams:
     DTYPE_STR_TABLE = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.uint32: 'uint32',
-        np.int16: 'int16',
-        np.uint16: 'uint16',
-        np.int8: 'int8',
-        np.uint8: 'uint8',
+        np.float32: "float",
+        np.float16: "half",
+        np.int32: "int32",
+        np.uint32: "uint32",
+        np.int16: "int16",
+        np.uint16: "uint16",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }
 
-    def __init__(self, dtype, dtype_mask, dst_tile_row, dst_tile_col, mask_tile_row, mask_tile_col,
-        src_tile_row, src_tile_col, valid_row, valid_col):
+    def __init__(
+        self,
+        dtype,
+        dtype_mask,
+        dst_tile_row,
+        dst_tile_col,
+        mask_tile_row,
+        mask_tile_col,
+        src_tile_row,
+        src_tile_col,
+        valid_row,
+        valid_col,
+    ):
         self.dtype = dtype
         self.dtype_mask = dtype_mask
         self.dst_tile_row = dst_tile_row
@@ -75,9 +89,12 @@ class TestParams:
         self.src_tile_col = src_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        self.name = f"TSELSTest.case_{self.DTYPE_STR_TABLE[dtype]}_{self.DTYPE_STR_TABLE[dtype_mask]}"\
-            f"_{dst_tile_row}x{dst_tile_col}_{mask_tile_row}x{mask_tile_col}"\
+        self.name = (
+            f"TSELSTest.case_{self.DTYPE_STR_TABLE[dtype]}_{self.DTYPE_STR_TABLE[dtype_mask]}"
+            f"_{dst_tile_row}x{dst_tile_col}_{mask_tile_row}x{mask_tile_col}"
             f"_{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
+        )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

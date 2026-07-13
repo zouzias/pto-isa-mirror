@@ -78,8 +78,6 @@ def scatter(src, indices):
     return dst
 
 
-
-
 class TScatterParams:
     def __init__(self, data_type, idx_type, row, col, idx_row, idx_col):
         self.data_type = data_type
@@ -121,7 +119,7 @@ def gen_case(param: TScatterParams):
     indices = np.random.randint(0, 2, (param.idx_row, param.idx_col)).astype(param.idx_type)
     indices = recalculate_indices(indices, param.col)
     golden = scatter(src_data, indices)
-    
+
     src_data.tofile("input1.bin")
     indices.tofile("input2.bin")
     golden.tofile("golden.bin")
@@ -223,82 +221,63 @@ if __name__ == "__main__":
 
     masked_cases = [
         # float
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P0101",
-                             np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P1010",
-                             np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P0001",
-                             np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P0010",
-                             np.float32, FLOAT_P0010_ROW, FLOAT_P0010_COL, P0010),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P0100",
-                             np.float32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P1000",
-                             np.float32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
-        TScatterParamsMasked("TSCATTERTest.case_masked_float_P1111",
-                             np.float32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P0101", np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P1010", np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P0001", np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P0010", np.float32, FLOAT_P0010_ROW, FLOAT_P0010_COL, P0010
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P0100", np.float32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P1000", np.float32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000
+        ),
+        TScatterParamsMasked(
+            "TSCATTERTest.case_masked_float_P1111", np.float32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111
+        ),
         # half
-        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0101",
-                             np.float16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
-        TScatterParamsMasked("TSCATTERTest.case_masked_half_P1010",
-                             np.float16, HALF_P1010_ROW, HALF_P1010_COL, P1010),
-        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0001",
-                             np.float16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
-        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0100",
-                             np.float16, HALF_P0100_ROW, HALF_P0100_COL, P0100),
-        TScatterParamsMasked("TSCATTERTest.case_masked_half_P1000",
-                             np.float16, HALF_P1000_ROW, HALF_P1000_COL, P1000),
+        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0101", np.float16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
+        TScatterParamsMasked("TSCATTERTest.case_masked_half_P1010", np.float16, HALF_P1010_ROW, HALF_P1010_COL, P1010),
+        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0001", np.float16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
+        TScatterParamsMasked("TSCATTERTest.case_masked_half_P0100", np.float16, HALF_P0100_ROW, HALF_P0100_COL, P0100),
+        TScatterParamsMasked("TSCATTERTest.case_masked_half_P1000", np.float16, HALF_P1000_ROW, HALF_P1000_COL, P1000),
         # uint16 / int16
-        TScatterParamsMasked("TSCATTERTest.case_masked_U16_P0101",
-                             np.uint16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
-        TScatterParamsMasked("TSCATTERTest.case_masked_U16_P1010",
-                             np.uint16, HALF_P1010_ROW, HALF_P1010_COL, P1010),
-        TScatterParamsMasked("TSCATTERTest.case_masked_I16_P0001",
-                             np.int16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
-        TScatterParamsMasked("TSCATTERTest.case_masked_I16_P0010",
-                             np.int16, HALF_P0010_ROW, HALF_P0010_COL, P0010),
+        TScatterParamsMasked("TSCATTERTest.case_masked_U16_P0101", np.uint16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
+        TScatterParamsMasked("TSCATTERTest.case_masked_U16_P1010", np.uint16, HALF_P1010_ROW, HALF_P1010_COL, P1010),
+        TScatterParamsMasked("TSCATTERTest.case_masked_I16_P0001", np.int16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
+        TScatterParamsMasked("TSCATTERTest.case_masked_I16_P0010", np.int16, HALF_P0010_ROW, HALF_P0010_COL, P0010),
         # uint32 / int32
-        TScatterParamsMasked("TSCATTERTest.case_masked_U32_P0100",
-                             np.uint32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100),
-        TScatterParamsMasked("TSCATTERTest.case_masked_I32_P1000",
-                             np.int32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
-        TScatterParamsMasked("TSCATTERTest.case_masked_I32_P1111",
-                             np.int32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
+        TScatterParamsMasked("TSCATTERTest.case_masked_U32_P0100", np.uint32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100),
+        TScatterParamsMasked("TSCATTERTest.case_masked_I32_P1000", np.int32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
+        TScatterParamsMasked("TSCATTERTest.case_masked_I32_P1111", np.int32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
     ]
 
     col_masked_cases = [
         # float
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0101",
-                                np.float32, 4, 64, 8, 64, P0101),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1010",
-                                np.float32, 4, 64, 8, 64, P1010),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0001",
-                                np.float32, 4, 64, 16, 64, P0001),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0010",
-                                np.float32, 4, 64, 16, 64, P0010),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0100",
-                                np.float32, 4, 64, 16, 64, P0100),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1000",
-                                np.float32, 4, 64, 16, 64, P1000),
-        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1111",
-                                np.float32, 7, 64, 7, 64, P1111),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0101", np.float32, 4, 64, 8, 64, P0101),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1010", np.float32, 4, 64, 8, 64, P1010),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0001", np.float32, 4, 64, 16, 64, P0001),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0010", np.float32, 4, 64, 16, 64, P0010),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P0100", np.float32, 4, 64, 16, 64, P0100),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1000", np.float32, 4, 64, 16, 64, P1000),
+        TScatterParamsColMasked("TSCATTERTest.case_col_float_P1111", np.float32, 7, 64, 7, 64, P1111),
         # half
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0101",
-                                np.float16, 5, 64, 10, 64, P0101),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1010",
-                                np.float16, 5, 64, 10, 64, P1010),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0001",
-                                np.float16, 4, 64, 16, 64, P0001),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0010",
-                                np.float16, 4, 64, 16, 64, P0010),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0100",
-                                np.float16, 4, 64, 16, 64, P0100),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1000",
-                                np.float16, 4, 64, 16, 64, P1000),
-        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1111",
-                                np.float16, 5, 64, 5, 64, P1111),
-]
-    
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0101", np.float16, 5, 64, 10, 64, P0101),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1010", np.float16, 5, 64, 10, 64, P1010),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0001", np.float16, 4, 64, 16, 64, P0001),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0010", np.float16, 4, 64, 16, 64, P0010),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P0100", np.float16, 4, 64, 16, 64, P0100),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1000", np.float16, 4, 64, 16, 64, P1000),
+        TScatterParamsColMasked("TSCATTERTest.case_col_half_P1111", np.float16, 5, 64, 5, 64, P1111),
+    ]
+
     for case in masked_cases:
         gen_masked_scatter_golden(case)
 

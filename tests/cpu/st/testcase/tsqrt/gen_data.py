@@ -13,7 +13,9 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
@@ -37,8 +39,9 @@ def gen_golden_data(case_name, param):
 
     return input1, golden
 
+
 class tunaryParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place = False):
+    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place=False):
         self.dtype = dtype
         self.global_row = global_row
         self.global_col = global_col
@@ -48,9 +51,11 @@ class tunaryParams:
         self.valid_col = valid_col
         self.in_place = in_place
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
     return f"TSQRTTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -67,7 +72,7 @@ if __name__ == "__main__":
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
         tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, False)
+        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, False),
     ]
 
     for i, param in enumerate(case_params_list):

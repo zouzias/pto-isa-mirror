@@ -19,7 +19,6 @@ np.random.seed(42)
 def gen_golden_data(param):
     data_type = param.data_type
     row = param.row
-    valid_row = param.valid_row
     col = param.col
     valid_col = param.valid_col
 

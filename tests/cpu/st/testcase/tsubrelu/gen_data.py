@@ -18,7 +18,7 @@ def check_golden_data(golden, threshold=0.3):
     total = golden.size
     infcnt = np.sum(np.isinf(golden))
     if float(infcnt) / float(total) > threshold:
-        raise ValueError(f'Too many inf value {infcnt}/{total}, please check golden generation.')
+        raise ValueError(f"Too many inf value {infcnt}/{total}, please check golden generation.")
 
 
 def gen_golden_data(case_name, param):
@@ -31,13 +31,13 @@ def gen_golden_data(case_name, param):
     # Generate random input arrays
     if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
         dtype_info = np.iinfo(dtype)
-        vmin, vmax = dtype_info.min, dtype_info.max
+        _vmin, vmax = dtype_info.min, dtype_info.max
         input0 = np.random.randint(0, vmax, size=[src0_tile_row, src0_tile_col]).astype(dtype)
         input1 = np.random.randint(0, vmax, size=[src1_tile_row, src1_tile_col]).astype(dtype)
         dst = np.random.randint(0, vmax, size=[dst_tile_row, dst_tile_col]).astype(dtype)
     else:
         dtype_info = np.finfo(dtype)
-        vmin, vmax = dtype_info.min / 2, dtype_info.max
+        _vmin, vmax = dtype_info.min / 2, dtype_info.max
         input0 = np.random.uniform(low=0, high=vmax, size=[src0_tile_row, src0_tile_col]).astype(dtype)
         input1 = np.random.uniform(low=0, high=vmax, size=[src1_tile_row, src1_tile_col]).astype(dtype)
         dst = np.random.uniform(low=0, high=vmax, size=[dst_tile_row, dst_tile_col]).astype(dtype)
@@ -55,8 +55,18 @@ def gen_golden_data(case_name, param):
 
 
 class TestParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col,
-        src1_tile_row, src1_tile_col, valid_row, valid_col):
+    def __init__(
+        self,
+        dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src0_tile_row,
+        src0_tile_col,
+        src1_tile_row,
+        src1_tile_col,
+        valid_row,
+        valid_col,
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
@@ -67,18 +77,19 @@ class TestParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
         dtype_str = {
-            np.float32: 'float',
-            np.float16: 'half',
-            np.int8: 'int8',
-            np.int32: 'int32',
-            np.int16: 'int16',
-            np.uint32: 'uint32',
-            np.uint16: 'uint16',
-            np.uint8: 'uint8'
+            np.float32: "float",
+            np.float16: "half",
+            np.int8: "int8",
+            np.int32: "int32",
+            np.int16: "int16",
+            np.uint32: "uint32",
+            np.uint16: "uint16",
+            np.uint8: "uint8",
         }[dtype]
         self.name = f"TSUBRELUTest.case_{dtype_str}_{dst_tile_row}x{dst_tile_col}_\
 {src0_tile_row}x{src0_tile_col}_{src1_tile_row}x{src1_tile_col}_\
 {valid_row}x{valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

@@ -19,7 +19,6 @@ np.random.seed(23)
 def gen_golden_data(param):
     data_type = param.data_type
     cols = param.col
-    src_row = param.src_row
     src_valid_row = param.src_valid_row
 
     input_arr = np.random.rand(src_valid_row, cols) * 10

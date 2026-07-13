@@ -111,37 +111,19 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
         _ws.clear()
         _ws["_shape"] = shape
         _ws["o_out"] = torch.empty((s0, head), device=device, dtype=torch.float32)
-        _ws["qk_tile_fifo"] = torch.empty(
-            (slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float32
-        )
-        _ws["p_tile_fifo"] = torch.empty(
-            (slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float16
-        )
-        _ws["exp_max_ififo"] = torch.empty(
-            (slots, _CUBE_S0), device=device, dtype=torch.float32
-        )
-        _ws["pv_tile_fifo"] = torch.empty(
-            (slots, _CUBE_S0, head), device=device, dtype=torch.float32
-        )
-        _ws["global_sum_out"] = torch.empty(
-            (num_s0_blocks, s0), device=device, dtype=torch.float32
-        )
-        _ws["exp_max_out"] = torch.empty(
-            (num_s0_blocks, s0), device=device, dtype=torch.float32
-        )
-        _ws["o_parts_out"] = torch.empty(
-            (num_s0_blocks, s0, head), device=device, dtype=torch.float32
-        )
+        _ws["qk_tile_fifo"] = torch.empty((slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float32)
+        _ws["p_tile_fifo"] = torch.empty((slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float16)
+        _ws["exp_max_ififo"] = torch.empty((slots, _CUBE_S0), device=device, dtype=torch.float32)
+        _ws["pv_tile_fifo"] = torch.empty((slots, _CUBE_S0, head), device=device, dtype=torch.float32)
+        _ws["global_sum_out"] = torch.empty((num_s0_blocks, s0), device=device, dtype=torch.float32)
+        _ws["exp_max_out"] = torch.empty((num_s0_blocks, s0), device=device, dtype=torch.float32)
+        _ws["o_parts_out"] = torch.empty((num_s0_blocks, s0, head), device=device, dtype=torch.float32)
 
     default_causal = False
     default_stream_ptr = torch.npu.current_stream()._as_parameter_
 
     def flash(
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        stream_ptr=default_stream_ptr,
-        is_causal=default_causal,
+        q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, stream_ptr=default_stream_ptr, is_causal=default_causal
     ) -> torch.Tensor:
         _alloc_workspace(q.shape[0], k.shape[0], q.shape[1], q.device)
 
@@ -168,11 +150,7 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
     return flash
 
 
-def jit_compile_flash(
-    verbose: bool = False,
-    clean_up: bool = True,
-    kernel_cpp: str = "fa_kernel.cpp",
-):
+def jit_compile_flash(verbose: bool = False, clean_up: bool = True, kernel_cpp: str = "fa_kernel.cpp"):
     """
     Builds the Flash/TFA kernel cpp into flash_jit.so,
     loads call_kernel, and returns flash(...) wrapper.

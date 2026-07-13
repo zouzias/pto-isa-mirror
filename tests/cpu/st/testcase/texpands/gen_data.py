@@ -14,6 +14,7 @@ import os
 import struct
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 PAD_VALUE_NULL = "PAD_VALUE_NULL"
@@ -41,11 +42,11 @@ def gen_golden_data(case_name, param):
         M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
 
     with open("scalar.bin", "wb") as f:
-        f.write(struct.pack('f', np.float32(M[0, 0])))
+        f.write(struct.pack("f", np.float32(M[0, 0])))
 
     golden = NumExt.zeros([height, width], dtype)
     golden[:h_valid, :w_valid] = NumExt.astype(np.full((h_valid, w_valid), M[0, 0]), dtype)
-    
+
     # Save the golden data to binary files
     NumExt.write_array("golden.bin", golden, dtype)
 
@@ -54,15 +55,7 @@ def gen_golden_data(case_name, param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col, 
-        pad_value_type=PAD_VALUE_NULL
+        self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, pad_value_type=PAD_VALUE_NULL
     ):
         self.dtype = dtype
         self.global_row = global_row
@@ -73,6 +66,7 @@ class TestParams:
         self.valid_col = valid_col
         self.pad_value_type = pad_value_type
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
     return (
@@ -82,6 +76,7 @@ def generate_case_name(param):
         f"{param.valid_row}x{param.valid_col}_"
         f"{param.pad_value_type}"
     )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -97,18 +92,18 @@ if __name__ == "__main__":
         TestParams(np.int32, 64, 64, 64, 64, 64, 64),
         TestParams(np.int16, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64),
-
         TestParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
         TestParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
-
         TestParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.extend([
-            TestParams(NumExt.bf16, 64, 64, 64, 64, 64, 64),
-            TestParams(NumExt.bf16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
-        ])
+        case_params_list.extend(
+            [
+                TestParams(NumExt.bf16, 64, 64, 64, 64, 64, 64),
+                TestParams(NumExt.bf16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
+            ]
+        )
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(42)
 
 
@@ -31,14 +31,14 @@ def gen_golden_data(param):
     divider[divider == 0] = 1
     input_arr[input_arr == 0] = 1
     if param.scalar_dividend:
-        output_arr[:rows, :cols] = divider[0] / input_arr [:rows, :cols]
+        output_arr[:rows, :cols] = divider[0] / input_arr[:rows, :cols]
     else:
-        output_arr[:rows, :cols] = input_arr [:rows, :cols] / divider[0]
+        output_arr[:rows, :cols] = input_arr[:rows, :cols] / divider[0]
 
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0])))
-    input_arr.tofile('input.bin')
-    output_arr.tofile('golden.bin')
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0])))
+    input_arr.tofile("input.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TDivsParams:
@@ -50,6 +50,7 @@ class TDivsParams:
         self.row = row
         self.col = col
         self.scalar_dividend = scalar_dividend
+
 
 if __name__ == "__main__":
     case_params_list = [

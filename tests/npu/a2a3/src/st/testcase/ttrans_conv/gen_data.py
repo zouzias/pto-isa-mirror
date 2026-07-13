@@ -88,11 +88,11 @@ def _golden_nchw2_nc1hwc0(g_info):
     g_whole_shape3 = g_info.g_whole_shape3
     g_whole_shape4 = g_info.g_whole_shape4
 
-    input_arr = np.random.randint(
-        1, 5, size=(g_whole_shape1, g_whole_shape2, g_whole_shape3, g_whole_shape4)
-    ).astype(data_type)
+    input_arr = np.random.randint(1, 5, size=(g_whole_shape1, g_whole_shape2, g_whole_shape3, g_whole_shape4)).astype(
+        data_type
+    )
     golden_nchw = np.zeros(shape=(g_shape0, g_shape1 * g_shape4, g_shape2, g_shape3), dtype=data_type)
-    golden_nchw = input_arr[0:g_shape0, 0:g_shape1 * g_shape4, 0:g_shape2, 0:g_shape3]
+    golden_nchw = input_arr[0:g_shape0, 0 : g_shape1 * g_shape4, 0:g_shape2, 0:g_shape3]
     pad_c1 = g_shape1 * g_shape4 - g_whole_shape2
     if pad_c1 > 0:
         pad_width1 = ((0, 0), (0, pad_c1), (0, 0), (0, 0))
@@ -143,7 +143,7 @@ def _golden_gnchw2_gnc1hwc0(g_info):
         1, 5, size=(g_shape6, g_whole_shape1, g_whole_shape2, g_whole_shape3, g_whole_shape4)
     ).astype(data_type)
     golden_gnchw = np.zeros(shape=(g_shape6, g_shape0, g_shape1 * g_shape4, g_shape2, g_shape3), dtype=data_type)
-    golden_gnchw = input_arr[0:g_shape6, 0:g_shape0, 0:g_shape1 * g_shape4, 0:g_shape2, 0:g_shape3]
+    golden_gnchw = input_arr[0:g_shape6, 0:g_shape0, 0 : g_shape1 * g_shape4, 0:g_shape2, 0:g_shape3]
     pad_c1 = g_shape1 * g_shape4 - g_whole_shape2
     if pad_c1 > 0:
         pad_width1 = ((0, 0), (0, 0), (0, pad_c1), (0, 0), (0, 0))
@@ -768,7 +768,7 @@ if __name__ == "__main__":
             1,
             2,
             4,
-            8
+            8,
         ),
         TTRANSParams(
             "TTRANSConvTest.float32_NC1HWC02NC1C0HW_1",
@@ -784,7 +784,7 @@ if __name__ == "__main__":
             2,
             2,
             4,
-            8
+            8,
         ),
         TTRANSParams(
             "TTRANSConvTest.float32_NC1HWC02NC1C0HW_2",
@@ -800,7 +800,7 @@ if __name__ == "__main__":
             2,
             3,
             4,
-            8
+            8,
         ),
         TTRANSParams(
             "TTRANSConvTest.float32_GNC1HWC02GNC1C0HW_0",
@@ -818,7 +818,7 @@ if __name__ == "__main__":
             2,
             4,
             1,
-            8
+            8,
         ),
         TTRANSParams(
             "TTRANSConvTest.float32_GNC1HWC02GNC1C0HW_1",
@@ -836,7 +836,7 @@ if __name__ == "__main__":
             2,
             4,
             1,
-            8
+            8,
         ),
         TTRANSParams(
             "TTRANSConvTest.float32_GNC1HWC02GNC1C0HW_2",
@@ -854,7 +854,7 @@ if __name__ == "__main__":
             3,
             4,
             1,
-            8
+            8,
         ),
     ]
 

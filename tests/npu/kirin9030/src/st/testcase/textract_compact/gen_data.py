@@ -17,10 +17,19 @@ np.random.seed(19)
 
 
 def create_padded_tensors(
-    x1_gm, x2_gm, m, n, k, base_m, base_n, base_k, src_type=np.int8, 
-    rand_range_right=(1, 5), 
-    rand_range_down=(1, 5), 
-    rand_range_corner=(1, 5)):
+    x1_gm,
+    x2_gm,
+    m,
+    n,
+    k,
+    base_m,
+    base_n,
+    base_k,
+    src_type=np.int8,
+    rand_range_right=(1, 5),
+    rand_range_down=(1, 5),
+    rand_range_corner=(1, 5),
+):
     assert base_m >= m, f"base_m ({base_m}) mast be >= m ({m})"
     assert base_n >= n, f"base_n ({base_n}) mast be >= n ({n})"
     assert base_k >= k, f"base_k ({base_k}) mast be >= k ({k})"
@@ -29,25 +38,29 @@ def create_padded_tensors(
     # origin data
     x1_gm_padded[:m, :k] = x1_gm
     # Right-side random value padding (k-direction extension)
-    right_fill = np.random.randint(rand_range_right[0], rand_range_right[1],
-                                    size=(m, base_k - k), dtype=np.int32).astype(src_type)
+    right_fill = np.random.randint(
+        rand_range_right[0], rand_range_right[1], size=(m, base_k - k), dtype=np.int32
+    ).astype(src_type)
     x1_gm_padded[:m, k:base_k] = right_fill
     # Add 0 to the bottom (extended in the m direction)
     x1_gm_padded[m:base_m, :k] = 0
 
     # Add random value in the bottom right corner
-    corner_fill = np.random.randint(rand_range_corner[0], rand_range_corner[1],
-                                    size=(base_m - m, base_k - k), dtype=np.int32).astype(src_type)
+    corner_fill = np.random.randint(
+        rand_range_corner[0], rand_range_corner[1], size=(base_m - m, base_k - k), dtype=np.int32
+    ).astype(src_type)
     x1_gm_padded[m:base_m, k:base_k] = corner_fill
-    #x2_gm_padded：base_k, base_n
+    # x2_gm_padded：base_k, base_n
     x2_gm_padded = np.zeros((base_k, base_n), dtype=np.int32).astype(src_type)
     x2_gm_padded[:k, :n] = x2_gm
-    down_fill = np.random.randint(rand_range_down[0], rand_range_down[1],
-                                    size=(base_k - k, n), dtype=np.int32).astype(src_type)
+    down_fill = np.random.randint(rand_range_down[0], rand_range_down[1], size=(base_k - k, n), dtype=np.int32).astype(
+        src_type
+    )
     x2_gm_padded[k:base_k, :n] = down_fill
     x2_gm_padded[:k, n:base_n] = 0
-    corner_fill2 = np.random.randint(rand_range_corner[0], rand_range_corner[1],
-                                     size=(base_k - k, base_n - n), dtype=np.int32).astype(src_type)
+    corner_fill2 = np.random.randint(
+        rand_range_corner[0], rand_range_corner[1], size=(base_k - k, base_n - n), dtype=np.int32
+    ).astype(src_type)
     x2_gm_padded[k:base_k, n:base_n] = corner_fill2
     return x1_gm_padded, x2_gm_padded
 
@@ -56,9 +69,19 @@ def gen_golden_data(case_name, param):
     src_type = param.atype
     dst_type = param.ctype
 
-    m, k, n, start_m, start_k, start_n, is_atrans, is_btrans, base_m, base_k, base_n = \
-        param.m, param.k, param.n, param.start_m, param.start_k, param.start_n, param.is_atrans, \
-        param.is_btrans, param.base_m, param.base_k, param.base_n
+    m, k, n, start_m, start_k, start_n, is_atrans, is_btrans, base_m, base_k, base_n = (
+        param.m,
+        param.k,
+        param.n,
+        param.start_m,
+        param.start_k,
+        param.start_n,
+        param.is_atrans,
+        param.is_btrans,
+        param.base_m,
+        param.base_k,
+        param.base_n,
+    )
 
     x1_gm = np.random.randint(1, 5, [m, k]).astype(src_type)
     x2_gm = np.random.randint(1, 5, [k, n]).astype(src_type)
@@ -71,8 +94,20 @@ def gen_golden_data(case_name, param):
         base_m = base_m if base_m > 0 else m
         base_n = base_n if base_n > 0 else n
         base_k = base_k if base_k > 0 else k
-        x1_gm, x2_gm = create_padded_tensors(x1_gm, x2_gm, m, n, k, base_m, base_n, base_k, src_type, \
-                    rand_range_right=(1, 5), rand_range_down=(1, 5), rand_range_corner=(1, 5))
+        x1_gm, x2_gm = create_padded_tensors(
+            x1_gm,
+            x2_gm,
+            m,
+            n,
+            k,
+            base_m,
+            base_n,
+            base_k,
+            src_type,
+            rand_range_right=(1, 5),
+            rand_range_down=(1, 5),
+            rand_range_corner=(1, 5),
+        )
     if is_atrans:
         x1_gm = x1_gm.transpose()
     if not is_btrans:
@@ -84,8 +119,23 @@ def gen_golden_data(case_name, param):
 
 
 class textractParams:
-    def __init__(self, atype, btype, ctype, m, k, n, start_m, start_k, start_n, \
-        is_atrans = 0, is_btrans = 0, base_m = 0, base_k = 0, base_n = 0):
+    def __init__(
+        self,
+        atype,
+        btype,
+        ctype,
+        m,
+        k,
+        n,
+        start_m,
+        start_k,
+        start_n,
+        is_atrans=0,
+        is_btrans=0,
+        base_m=0,
+        base_k=0,
+        base_n=0,
+    ):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
@@ -100,6 +150,7 @@ class textractParams:
         self.base_m = base_m
         self.base_k = base_k
         self.base_n = base_n
+
 
 if __name__ == "__main__":
     case_name_list = [

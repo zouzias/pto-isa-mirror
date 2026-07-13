@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -51,17 +52,18 @@ class TestParams:
 
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16',
-        np.uint8: 'uint8',
-        np.uint32: 'uint32',
-        np.uint16: 'uint16'
+        np.float32: "float",
+        np.float16: "half",
+        np.int8: "int8",
+        np.int32: "int32",
+        np.int16: "int16",
+        np.uint8: "uint8",
+        np.uint32: "uint32",
+        np.uint16: "uint16",
     }[param.dtype]
     return f"TANDSTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.valid_row}x{param.valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

@@ -21,12 +21,12 @@ def gen_golden_data_tsubview(case_name, param, row_idx, col_idx):
     dtype = param.dtype
 
     global_row, global_col = [param.global_row, param.global_col]
-    tile_row, tile_col = [param.tile_row, param.tile_col]
+    _tile_row, _tile_col = [param.tile_row, param.tile_col]
     sub_row, sub_col = [param.sub_row, param.sub_col]
 
     input_data = NumExt.astype(np.random.randn(global_row, global_col), dtype)
 
-    sub_tile = input_data[row_idx:row_idx + sub_row, col_idx:col_idx + sub_col]
+    sub_tile = input_data[row_idx : row_idx + sub_row, col_idx : col_idx + sub_col]
 
     NumExt.write_array("input.bin", input_data, dtype)
     NumExt.write_array("golden.bin", sub_tile, dtype)

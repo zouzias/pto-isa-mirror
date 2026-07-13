@@ -11,9 +11,8 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -40,14 +39,11 @@ class TRowExpandParam:
 
 
 def generate_case_name(idx, param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int16: 'int16',
-        np.int32: 'int32'
-    }[param.datatype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int16: "int16", np.int32: "int32"}[
+        param.datatype
+    ]
     return f"TROWEXPANDTest.case{idx}_{dtype_str}_{param.row}_{param.src_col}_{param.row}_{param.dst_valid_col}"
+
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))

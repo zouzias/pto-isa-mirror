@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -22,18 +22,18 @@ def gen_golden_data(param):
     rows = param.row
     cols = param.col
 
-    l = 0 if data_type in [np.uint8, np.uint16, np.uint32] else -8
+    low_val = 0 if data_type in [np.uint8, np.uint16, np.uint32] else -8
     h = 4 if data_type in [np.uint8] else 8
-    input_arr = np.random.uniform(low=l, high=h, size=(rows, cols)).astype(data_type)
-    divider = np.random.uniform(low=l, high=h, size=(1, 1)).astype(data_type)
+    input_arr = np.random.uniform(low=low_val, high=h, size=(rows, cols)).astype(data_type)
+    divider = np.random.uniform(low=low_val, high=h, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((rows, cols), dtype=data_type)
     for i in range(rows):
         for j in range(cols):
             output_arr[i, j] = input_arr[i, j] * divider[0, 0]
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TMulsParams:

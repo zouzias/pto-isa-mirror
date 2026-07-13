@@ -116,8 +116,8 @@ def gen_golden_data(case_name, param):
     a_type, b_type, c_type, dst_type = param.atype, param.btype, param.ctype, param.dst_type
     m, k, n = param.m, param.k, param.n
     base_m, base_k, base_n = param.base_m, param.base_k, param.base_n
-    s_fractal_size = param.s_fractal_size if hasattr(param, "s_fractal_size") else 512
-    dst_format = param.dst_format if hasattr(param, "dst_format") else "ND"
+    param.s_fractal_size if hasattr(param, "s_fractal_size") else 512
+    param.dst_format if hasattr(param, "dst_format") else "ND"
     base_m = base_m if base_m > m else m
     base_k = base_k if base_k > k else k
     base_n = base_n if base_n > n else n
@@ -157,7 +157,7 @@ def gen_golden_data(case_name, param):
         dstn = min(param.dst_col, param.index_cols + n)
         srcm = min(m, param.dst_row - param.index_rows)
         srcn = min(n, param.dst_col - param.index_cols)
-        dst_data[param.index_rows: dstm, param.index_cols: dstn] = golden[0: srcm, 0: srcn]
+        dst_data[param.index_rows : dstm, param.index_cols : dstn] = golden[0:srcm, 0:srcn]
         dst_data.astype(dst_type).tofile("./golden.bin")
     else:
         golden.astype(dst_type).tofile("./golden.bin")

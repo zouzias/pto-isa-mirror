@@ -34,9 +34,7 @@ def fa_reference(q, k, v, is_causal=False):
     scale = 1.0 / math.sqrt(q.shape[1])
     scores = q.float() @ k.float().T * scale
     if is_causal:
-        mask = torch.triu(
-            torch.ones(scores.shape, device=q.device, dtype=torch.bool), diagonal=1
-        )
+        mask = torch.triu(torch.ones(scores.shape, device=q.device, dtype=torch.bool), diagonal=1)
         scores = scores.masked_fill(mask, float("-inf"))
     attn = torch.softmax(scores, dim=-1)
     return attn @ v.float()

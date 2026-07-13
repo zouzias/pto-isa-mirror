@@ -6,8 +6,8 @@
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FOR A PARTICULAR PURPOSE.
-# See LICENSE in the software repository for the full text of the License.
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
 import os
@@ -44,7 +44,7 @@ def gen_golden_data(case_name, param):
         interleaved[0::2] = src0_row
         interleaved[1::2] = src1_row
         input1[r, 0:w_valid] = interleaved[0:w_valid]
-        input2[r, 0:w_valid] = interleaved[w_valid:2 * w_valid]
+        input2[r, 0:w_valid] = interleaved[w_valid : 2 * w_valid]
         golden0[r, 0:w_valid] = src0_row
         golden1[r, 0:w_valid] = src1_row
 

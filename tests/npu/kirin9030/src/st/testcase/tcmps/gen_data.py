@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -35,19 +36,19 @@ def gen_golden_data_tcmps(param):
     elif param.mode == "NE":
         bool_result = ~np.isclose(input1, input2[0], rtol=0, atol=1e-9)
     elif param.mode == "LT":
-        bool_result = (input1 < input2[0])
+        bool_result = input1 < input2[0]
     elif param.mode == "GT":
-        bool_result = (input1 > input2[0]) 
+        bool_result = input1 > input2[0]
     elif param.mode == "GE":
-        bool_result = (input1 >= input2[0]) 
+        bool_result = input1 >= input2[0]
     elif param.mode == "LE":
-        bool_result = (input1 <= input2[0]) 
+        bool_result = input1 <= input2[0]
 
     # Apply valid region constraints
     output = np.zeros((row, col), dtype=np.uint8)
     output[:valid_row, :valid_col] = bool_result[:valid_row, :valid_col]
 
-    golden = np.packbits(output, axis=1, bitorder='little')
+    golden = np.packbits(output, axis=1, bitorder="little")
 
     # Save the input and bool_result data to binary files
     input1.tofile("input1.bin")
@@ -64,14 +65,11 @@ class TcmpsParams:
         self.valid_col = valid_col
         self.mode = cmp_mode
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int32: "int32", np.int16: "int16"}[param.dtype]
     return f"TCMPSTest.case_{dtype_str}_{param.row}x{param.col}_{param.valid_row}x{param.valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -82,7 +80,7 @@ if __name__ == "__main__":
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
 
-    case_params_list = [ # Comment out test cases that do not handle size corectly
+    case_params_list = [  # Comment out test cases that do not handle size correctly
         TcmpsParams(np.float16, 32, 32, 32, 32, "EQ"),
         TcmpsParams(np.float32, 8, 64, 8, 64, "GT"),
         TcmpsParams(np.int32, 4, 64, 4, 64, "NE"),

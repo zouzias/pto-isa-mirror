@@ -14,11 +14,10 @@ import os
 import pathlib
 
 import torch
-import torch_npu
+import torch_npu  # noqa: F401
 
 
 def _load_opextension_so():
     pkg_path = pathlib.Path(__file__).parents[0]
-    so_path = os.path.join(pkg_path, 'lib', 'libop_extension.so')
+    so_path = os.path.join(pkg_path, "lib", "libop_extension.so")
     torch.ops.load_library(so_path)
-

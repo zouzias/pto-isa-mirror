@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 # Try to import PyTorch for golden data generation
 try:
     import torch
@@ -254,7 +255,6 @@ if __name__ == "__main__":
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-
         # U8/I8 conversions
         ("uint8_fp16", np.uint8, np.float16),
         ("int8_fp16", np.int8, np.float16),

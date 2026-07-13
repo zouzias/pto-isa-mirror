@@ -13,6 +13,7 @@
 import os
 import numpy as np
 import struct
+
 np.random.seed(19)
 
 
@@ -33,8 +34,8 @@ def gen_golden_data_taxpy(case_name, param):
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
-    with open("scalar.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(scalar[0, 0])))
+    with open("scalar.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(scalar[0, 0])))
     golden.tofile("golden.bin")
 
 
@@ -47,6 +48,7 @@ class TAxpyParams:
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

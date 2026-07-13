@@ -54,9 +54,7 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
-    cases = [
-        ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
-    ]
+    cases = [("TROWEXPAND_Test.case_expand_float_64x64", gen_expand)]
 
     cwd = os.getcwd()
     for name, fn in cases:

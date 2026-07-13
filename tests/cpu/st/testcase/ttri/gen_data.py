@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -21,7 +22,7 @@ def gen_golden_data_ttri(case_name, param):
     isUpperOrLower = param.isUpperOrLower
     diagonal = param.diagonal
 
-    h, w = [param.tile_row, param.tile_col]
+    _h, _w = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # generate upper or lower triangular matrix
@@ -55,6 +56,7 @@ def generate_case_name(param):
         diagonal_str = f"_{abs(param.diagonal)}"
     return f"TTRITest.case_{dtype_str}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_{param.isUpperOrLower}_{diagonal_str}"
 
+
 if __name__ == "__main__":
     # Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +80,7 @@ if __name__ == "__main__":
         TTriParams(np.float32, 128, 128, 128, 128, 0, 0),
         TTriParams(np.float32, 128, 128, 128, 125, 0, 0),
         TTriParams(np.uint32, 64, 64, 64, 64, 1, 0),
-        TTriParams(np.uint32,64, 64, 64, 64, 0, 0),
+        TTriParams(np.uint32, 64, 64, 64, 64, 0, 0),
         TTriParams(np.float32, 128, 128, 128, 111, 0, 2),
         TTriParams(np.float32, 128, 128, 128, 111, 0, -2),
         TTriParams(np.float32, 128, 128, 128, 111, 1, 2),
@@ -89,10 +91,9 @@ if __name__ == "__main__":
         TTriParams(np.float32, 128, 128, 128, 31, 0, -444),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.extend([
-            TTriParams(NumExt.bf16, 16, 256, 16, 256, 1, 0),
-            TTriParams(NumExt.bf16, 16, 256, 16, 256, 0, 0),
-        ])
+        case_params_list.extend(
+            [TTriParams(NumExt.bf16, 16, 256, 16, 256, 1, 0), TTriParams(NumExt.bf16, 16, 256, 16, 256, 0, 0)]
+        )
 
     for param in case_params_list:
         case_name = generate_case_name(param)

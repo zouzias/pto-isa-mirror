@@ -22,18 +22,18 @@ def gen_golden_data_tpow(case_name, param):
     dtype = param.dtype
     row, col = [param.tile_row, param.tile_col]
     row_valid, col_valid = [param.valid_row, param.valid_col]
-    
+
     if dtype == NumExt.bf16:
-        kind = 'f'
+        kind = "f"
     else:
         kind = np.dtype(dtype).kind
-    if kind == 'i':
+    if kind == "i":
         input1 = np.random.randint(0, 10, size=[row, col]).astype(dtype)
         input2 = np.random.randint(0, 7, size=[row, col]).astype(dtype)
-    elif kind == 'u':
+    elif kind == "u":
         input1 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
         input2 = np.random.randint(0, 5, size=[row, col]).astype(dtype)
-    elif kind == 'f':
+    elif kind == "f":
         if dtype == np.float16:
             input1 = np.random.uniform(0.5, 3.0, size=[row, col]).astype(dtype)
             input2 = np.random.uniform(0, 2.0, size=[row, col]).astype(dtype)
@@ -65,15 +65,15 @@ class TPowParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TPOWTest.case_{dtype_str}" 
+
+    name = f"TPOWTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         TPowParams(np.float32, 64, 64, 64, 64, 63, 63),
         TPowParams(np.int32, 64, 64, 64, 64, 63, 63),
         TPowParams(np.int16, 64, 64, 64, 64, 63, 63),
-        TPowParams(np.float16, 16, 256, 16, 256, 16, 256)
+        TPowParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
     if ENABLE_BF16:
         case_params_list.append(TPowParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))

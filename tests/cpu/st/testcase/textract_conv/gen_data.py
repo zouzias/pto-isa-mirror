@@ -26,30 +26,19 @@ def type2str(t):
         return "half"
     if t is np.float32:
         return "float"
-    return np.dtype(t).name + "_t" 
+    return np.dtype(t).name + "_t"
 
 
 class TextractParams:
-    def __init__(
-            self, 
-            dtype,
-            shape_0,
-            shape_1,
-            shape_2,
-            shape_3,
-            shape_4,
-            dst_row, 
-            dst_col, 
-            idx_row,
-            idx_col):
+    def __init__(self, dtype, shape_0, shape_1, shape_2, shape_3, shape_4, dst_row, dst_col, idx_row, idx_col):
         self.dtype = dtype
         self.shape_0 = shape_0
         self.shape_1 = shape_1
         self.shape_2 = shape_2
         self.shape_3 = shape_3
         self.shape_4 = shape_4
-        self.dst_row = dst_row 
-        self.dst_col = dst_col  
+        self.dst_row = dst_row
+        self.dst_col = dst_col
         self.idx_row = idx_row
         self.idx_col = idx_col
 
@@ -80,7 +69,7 @@ def gen_data(param: TextractParams):
     idx_row = (idx_row * dtype_size) // SHIFT_BLOCK_BYTE
     idx_col = idx_col // SHIFT_BLOCK_LEN
 
-    output = input1[idx_row:(idx_row + dst_row), idx_col:(idx_col + dst_col), :, :]
+    output = input1[idx_row : (idx_row + dst_row), idx_col : (idx_col + dst_col), :, :]
     output.tofile("golden.bin")
 
 
@@ -93,7 +82,7 @@ if __name__ == "__main__":
         TextractParams(np.float16, 1, 2, 2, 48, 16, 3 * 16, 2 * 16, 16, 16),
         TextractParams(np.uint16, 1, 2, 2, 48, 16, 3 * 16, 2 * 16, 16, 16),
         TextractParams(np.float32, 1, 2, 2, 48, 8, 3 * 8, 2 * 16, 8, 16),
-        TextractParams(np.int32, 1, 2, 2, 48, 8, 3 * 8, 2 * 16, 8, 16)
+        TextractParams(np.int32, 1, 2, 2, 48, 8, 3 * 8, 2 * 16, 8, 16),
     ]
 
     for i, param in enumerate(case_params_list):
@@ -107,4 +96,3 @@ if __name__ == "__main__":
         gen_data(param)
 
         os.chdir(original_dir)
-

@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -52,8 +53,8 @@ def gen_golden_data_tpartmin(case_name, param):
     # Save the input and golden data to binary files
     src0_in.tofile("input1.bin")
     src1_in.tofile("input2.bin")
-    
-    dst_out = np.minimum(padded_src0, padded_src1) # elemwise min
+
+    dst_out = np.minimum(padded_src0, padded_src1)  # elemwise min
     dst_out.tofile("golden.bin")
 
     output = np.zeros((dst_rows, dst_cols)).astype(dtype)
@@ -73,17 +74,19 @@ class TPartMinParams:
 
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'fp32',
-        np.float16: 'fp16',
-        np.int8: 's8',
-        np.int16: 's16',
-        np.int32: 's32',
-        np.uint8: 'u8',
-        np.uint16: 'u16',
-        np.uint32: 'u32',
+        np.float32: "fp32",
+        np.float16: "fp16",
+        np.int8: "s8",
+        np.int16: "s16",
+        np.int32: "s32",
+        np.uint8: "u8",
+        np.uint16: "u16",
+        np.uint32: "u32",
     }[param.dtype]
-    return (f"TPARTMINTest.case_{dtype_str}_{param.dst_vr}x{param.dst_vc}_{param.src0_vr}x"
-            f"{param.src0_vc}_{param.src1_vr}x{param.src1_vc}")
+    return (
+        f"TPARTMINTest.case_{dtype_str}_{param.dst_vr}x{param.dst_vc}_{param.src0_vr}x"
+        f"{param.src0_vc}_{param.src1_vr}x{param.src1_vc}"
+    )
 
 
 if __name__ == "__main__":

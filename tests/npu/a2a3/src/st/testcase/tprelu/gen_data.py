@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -26,8 +27,8 @@ def gen_golden_data_tshl(case_name, param):
 
     # Set specific values for input1 and input2
     for i in range(8):
-        input1[i] = dtype('inf')
-        input2[i] = dtype('-inf')
+        input1[i] = dtype("inf")
+        input2[i] = dtype("-inf")
 
     # Perform the andbtraction
     golden = np.where(input1 > 0, input1, input1 * input2).astype(dtype)
@@ -51,6 +52,7 @@ class TPreluParams:
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

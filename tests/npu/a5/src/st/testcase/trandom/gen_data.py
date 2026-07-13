@@ -18,10 +18,6 @@ np.random.seed(19)
 
 def gen_golden_data(param):
     data_type = param.data_type
-    row = param.row
-    valid_row = param.valid_row
-    col = param.col
-    valid_col = param.valid_col
 
     if np.issubdtype(data_type, np.integer):
         value_max = np.iinfo(data_type).max
@@ -48,9 +44,7 @@ class TRandomParams:
 
 
 if __name__ == "__main__":
-    case_params_list = [
-        TRandomParams("TRANDOMTest.case01", np.int32, 4, 256, 4, 256),
-    ]
+    case_params_list = [TRandomParams("TRANDOMTest.case01", np.int32, 4, 256, 4, 256)]
 
     for _, case in enumerate(case_params_list):
         if not os.path.exists(case.name):

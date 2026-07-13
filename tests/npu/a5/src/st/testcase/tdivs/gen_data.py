@@ -11,8 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
 
 
@@ -31,13 +29,13 @@ def gen_golden_data(param):
         dtype_info = np.finfo(dtype)
         input_arr = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[rows, cols]).astype(dtype)
         divider = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[1, 1]).astype(dtype)
-    
+
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=dtype)
     output_arr[0:rows, 0:cols] = input_arr[0:rows, 0:cols] / divider[0, 0]
 
-    input_arr.tofile('input.bin')
-    divider.tofile('divider.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    divider.tofile("divider.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TDivsParams:
@@ -60,7 +58,7 @@ if __name__ == "__main__":
         TDivsParams("TDIVSTest.case6", np.float32, 256, 32, 256, 16),
         TDivsParams("TDIVSTest.case7", np.float32, 1, 32, 1, 16),
         TDivsParams("TDIVSTest.caseHP1", np.float32, 2, 16, 2, 16),
-        TDivsParams("TDIVSTest.caseHP2", np.float16, 2, 32, 2, 32)
+        TDivsParams("TDIVSTest.caseHP2", np.float16, 2, 32, 2, 32),
     ]
 
     for _, case in enumerate(case_params_list):

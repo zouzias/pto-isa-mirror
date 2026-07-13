@@ -11,8 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
 
 np.random.seed(23)
@@ -31,8 +29,8 @@ def gen_golden_data(case_name, param):
     for i in range(dst_valid_row):
         for j in range(dst_valid_col):
             golden[i, j] = input_arr[0, j]
-    input_arr.tofile('input.bin')
-    golden.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    golden.tofile("golden.bin")
 
 
 class TColExpand:
@@ -43,8 +41,8 @@ class TColExpand:
         self.dst_valid_row = dst_valid_row
         self.dst_valid_col = dst_valid_col
 
+
 if __name__ == "__main__":
-    
     case_name_list = [
         "TCOLEXPANDTest.case1",
         "TCOLEXPANDTest.case2",
@@ -59,7 +57,7 @@ if __name__ == "__main__":
         "TCOLEXPANDTest.case11",
         "TCOLEXPANDTest.case12",
     ]
-    
+
     case_params_list = [
         TColExpand(np.int16, 32, 32, 16, 8),
         TColExpand(np.int32, 24, 16, 16, 8),

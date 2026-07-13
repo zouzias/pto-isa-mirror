@@ -71,9 +71,12 @@ class TRowExpandOpParams:
 
 def generate_case_name(param, element_op: str):
     dtype_str = {
-        np.float32: "float", np.float16: "half",
-        np.int16: "int16", np.int32: "int32",
-        np.uint16: "uint16", np.uint32: "uint32"
+        np.float32: "float",
+        np.float16: "half",
+        np.int16: "int16",
+        np.int32: "int32",
+        np.uint16: "uint16",
+        np.uint32: "uint32",
     }[param.dtype]
 
     def substring(a, b) -> str:

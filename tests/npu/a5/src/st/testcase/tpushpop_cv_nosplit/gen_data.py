@@ -35,7 +35,7 @@ np.random.seed(42)
 
 class CaseParams:
     def __init__(self, in_dtype, m, k, n):
-        self.in_dtype = in_dtype   # numpy dtype for A and B
+        self.in_dtype = in_dtype  # numpy dtype for A and B
         self.m = m
         self.k = k
         self.n = n
@@ -48,10 +48,10 @@ def gen_golden_data(params: CaseParams):
     x1_gm = np.random.randint(-5, 5, [m, k]).astype(in_dtype)
     x2_gm = np.random.randint(-5, 5, [k, n]).astype(in_dtype)
 
-#Bias has the same M x N shape as the output tile(element - wise TADD).
+    # Bias has the same M x N shape as the output tile(element - wise TADD).
     bias_gm = np.random.randint(-3, 3, [m, n]).astype(np.float32)
 
-#Golden : matmul in float32 + bias.
+    # Golden : matmul in float32 + bias.
     golden = (np.matmul(x1_gm.astype(np.float32), x2_gm.astype(np.float32)) + bias_gm).astype(np.float32)
 
     x1_gm.tofile("./x1_gm.bin")
@@ -61,19 +61,19 @@ def gen_golden_data(params: CaseParams):
 
 
 if __name__ == "__main__":
-#Case names must match the test suite and test case names in main.cpp so
-#that GetGoldenDir() resolves to the correct directory.
+    # Case names must match the test suite and test case names in main.cpp so
+    # that GetGoldenDir() resolves to the correct directory.
     case_name_list = [
         "TPushPopCVNoSplitTest.case1_half_single_tile",
         "TPushPopCVNoSplitTest.case2_half_two_tiles",
         "TPushPopCVNoSplitTest.case3_float_single_tile",
     ]
 
-#Parameters mirror the LaunchTPushPopMatmulAddNoSplit instantiations in
-#the kernel file(tilingKey-><InT, OutT, TOTAL_M, CASE_TILE_M, K, N>).
-#key = 1 : half->float, TOTAL_M = 16, K = 32, N = 32
-#key = 2 : half->float, TOTAL_M = 32, K = 32, N = 32
-#key = 3 : float->float, TOTAL_M = 16, K = 32, N = 32
+    # Parameters mirror the LaunchTPushPopMatmulAddNoSplit instantiations in
+    # the kernel file(tilingKey-><InT, OutT, TOTAL_M, CASE_TILE_M, K, N>).
+    # key = 1 : half->float, TOTAL_M = 16, K = 32, N = 32
+    # key = 2 : half->float, TOTAL_M = 32, K = 32, N = 32
+    # key = 3 : float->float, TOTAL_M = 16, K = 32, N = 32
     case_params_list = [
         CaseParams(np.float16, m=16, k=32, n=32),
         CaseParams(np.float16, m=32, k=32, n=32),

@@ -22,10 +22,8 @@ from cpu_bfloat16 import detect_bfloat16_cxx, derive_cc_from_cxx
 
 
 def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build and run all CPU-SIM STs.")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Print configure/build and passing test output.")
+    parser = argparse.ArgumentParser(description="Build and run all CPU-SIM STs.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print configure/build and passing test output.")
     parser.add_argument(
         "-c",
         "--compiler",
@@ -37,21 +35,9 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Enable BF16 CPU-SIM coverage. This switches to a compiler that supports std::bfloat16_t and C++23.",
     )
-    parser.add_argument("-g", "--generator", required=False,
-                        help="Optional CMake generator, for example Ninja.")
-    parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=max(1, os.cpu_count() or 1),
-        help="Parallel build jobs.",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=30,
-        help="Per-test timeout in seconds.",
-    )
+    parser.add_argument("-g", "--generator", required=False, help="Optional CMake generator, for example Ninja.")
+    parser.add_argument("-j", "--jobs", type=int, default=max(1, os.cpu_count() or 1), help="Parallel build jobs.")
+    parser.add_argument("--timeout", type=int, default=30, help="Per-test timeout in seconds.")
     return parser.parse_args()
 
 
@@ -71,15 +57,9 @@ g_lock = multiprocessing.Lock()
 
 
 def run_command(
-    cmd: list[str],
-    *,
-    cwd: Path,
-    env: dict[str, str],
-    verbose: bool,
-    check: bool = True,
+    cmd: list[str], *, cwd: Path, env: dict[str, str], verbose: bool, check: bool = True
 ) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run(cmd, cwd=cwd, env=env,
-                          text=True, stdout=subprocess.PIPE)
+    proc = subprocess.run(cmd, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE)
     with g_lock:
         if verbose:
             print(f"$ {' '.join(cmd)}")
@@ -87,8 +67,7 @@ def run_command(
             if proc.stdout:
                 print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n")
     if check and proc.returncode != 0:
-        raise subprocess.CalledProcessError(
-            proc.returncode, cmd, output=proc.stdout)
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout)
     return proc
 
 
@@ -124,10 +103,7 @@ def build_single_test(repo_root: Path, tests_path: Path, build_dir: Path, args: 
     run_command(build_cmd, cwd=repo_root, env=env, verbose=args.verbose)
 
 
-TEST_SOURCES = [
-    ("tests/cpu/st", "build/cpu_st"),
-    ("tests/cpu/comm/st", "build/cpu_st_comm"),
-]
+TEST_SOURCES = [("tests/cpu/st", "build/cpu_st"), ("tests/cpu/comm/st", "build/cpu_st_comm")]
 
 
 def build_all_cpu_tests(repo_root: Path, args: argparse.Namespace) -> None:
@@ -154,13 +130,13 @@ def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
         testcase_build_root.mkdir(parents=True, exist_ok=True)
 
         env = gen_env.copy()
-        env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + \
-            os.pathsep + env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            str(repo_root / src_rel) + os.pathsep + str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
+        )
 
         with multiprocessing.Pool(processes=args.jobs) as pool:
             run_args = [[sys.executable, str(script)] for script in sorted(testcase_src_root.glob("*/gen_data.py"))]
-            results = pool.map(partial(run_command, cwd=testcase_build_root,
-                                env=env, verbose=args.verbose), run_args)
+            pool.map(partial(run_command, cwd=testcase_build_root, env=env, verbose=args.verbose), run_args)
 
 
 def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
@@ -185,28 +161,19 @@ def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
             total += 1
             start = time.time()
             try:
-                proc = subprocess.run(
-                    [str(binary)],
-                    cwd=cwd,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                    timeout=args.timeout,
-                )
+                proc = subprocess.run([str(binary)], cwd=cwd, text=True, stdout=subprocess.PIPE, timeout=args.timeout)
                 duration = time.time() - start
                 passed = proc.returncode == 0
                 status = green("PASS:") if passed else red("FAIL:")
-                print(
-                    f"{status} {binary.name:<10} (RC={proc.returncode:<3} Duration={duration:.2f}s)")
+                print(f"{status} {binary.name:<10} (RC={proc.returncode:<3} Duration={duration:.2f}s)")
                 if args.verbose or not passed:
                     if proc.stdout:
-                        print(proc.stdout, end="\n" if proc.stdout.endswith(
-                            "\n") else "\n\n")
+                        print(proc.stdout, end="\n" if proc.stdout.endswith("\n") else "\n\n")
                 if not passed:
                     failed += 1
             except subprocess.TimeoutExpired as exc:
                 duration = time.time() - start
-                print(red("FAIL:") +
-                      f" {binary.name:<10} (RC=124 Duration={duration:.2f}s)")
+                print(red("FAIL:") + f" {binary.name:<10} (RC=124 Duration={duration:.2f}s)")
                 captured = exc.stdout if isinstance(exc.stdout, str) else ""
                 if captured:
                     print(captured, end="" if captured.endswith("\n") else "\n")

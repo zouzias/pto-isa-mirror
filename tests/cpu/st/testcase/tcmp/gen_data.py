@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -39,7 +40,7 @@ def gen_golden_data_tcmp(case_name, param):
         golden = NumExt.astype(np.greater_equal(input1, input2), dtype)
     elif param.cmp_mode == "LE":
         golden = NumExt.astype(np.less_equal(input1, input2), dtype)
-    else: # default EQ
+    else:  # default EQ
         golden = NumExt.astype(np.equal(input1, input2), dtype)
 
     # Apply valid region constraints
@@ -71,8 +72,10 @@ class TCmpParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    return f"TCMPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
-           f"{param.valid_row}x{param.valid_col}_{param.cmp_mode}"
+    return (
+        f"TCMPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"
+        + f"{param.valid_row}x{param.valid_col}_{param.cmp_mode}"
+    )
 
 
 if __name__ == "__main__":

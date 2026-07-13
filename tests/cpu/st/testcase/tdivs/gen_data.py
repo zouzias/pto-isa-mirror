@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -32,10 +32,10 @@ def gen_golden_data(param):
                 output_arr[i, j] = input_arr[i, j] / divider[0, 0]
             else:
                 output_arr[i, j] = divider[0, 0] / input_arr[i, j]
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TDivsParams:

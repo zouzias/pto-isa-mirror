@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -38,10 +38,10 @@ def gen_golden_data(param):
         for j in range(cols):
             output_arr[i, j] = input_arr[i, j] - divider[0, 0]
 
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TsubsParams:
@@ -52,6 +52,7 @@ class TsubsParams:
         self.dst_tile_col = dst_tile_col
         self.row = row
         self.col = col
+
 
 if __name__ == "__main__":
     case_params_list = [

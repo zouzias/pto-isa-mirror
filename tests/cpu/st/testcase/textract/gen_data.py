@@ -29,11 +29,19 @@ def type2str(t):
         return "bfloat16_t"
     return np.dtype(t).name + "_t"
 
+
 def gen_golden_data(case_name, param):
     src_type = param.src_type
     dst_type = param.dst_type
 
-    rows, cols, valid_rows, valid_cols, idx_row, idx_col = param.rows, param.cols, param.valid_rows, param.valid_cols, param.idx_row, param.idx_col
+    rows, cols, valid_rows, valid_cols, idx_row, idx_col = (
+        param.rows,
+        param.cols,
+        param.valid_rows,
+        param.valid_cols,
+        param.idx_row,
+        param.idx_col,
+    )
 
     gm = NumExt.astype(np.arange(1, valid_rows * valid_cols + 1).reshape([valid_rows, valid_cols]), src_type)
 
@@ -44,18 +52,31 @@ def gen_golden_data(case_name, param):
 
     if PRINT_C_CASE:
         print(f"TEST_F(TEXTRACTTest, {case_name}) " + "{")
-        print(f"    textract_test<{type2str(src_type)}, {type2str(dst_type)}, {rows}, {cols}, {valid_rows}, {valid_cols}, {idx_row}, {idx_col}, {param.src_layout}, {param.dst_layout}>();" + "\n}\n")
+        print(
+            f"    textract_test<{type2str(src_type)}, {type2str(dst_type)}, {rows}, {cols}, {valid_rows}, {valid_cols}, {idx_row}, {idx_col}, {param.src_layout}, {param.dst_layout}>();"
+            + "\n}\n"
+        )
 
 
 class textractParams:
-    def __init__(self, src_type, dst_type, rows, cols, valid_rows, valid_cols, idx_row, idx_col, src_layout, dst_layout):
+    def __init__(
+        self, src_type, dst_type, rows, cols, valid_rows, valid_cols, idx_row, idx_col, src_layout, dst_layout
+    ):
         self.src_type, self.dst_type = src_type, dst_type
-        self.rows, self.cols, self.valid_rows, self.valid_cols, self.idx_row, self.idx_col = rows, cols, valid_rows, valid_cols, idx_row, idx_col
+        self.rows, self.cols, self.valid_rows, self.valid_cols, self.idx_row, self.idx_col = (
+            rows,
+            cols,
+            valid_rows,
+            valid_cols,
+            idx_row,
+            idx_col,
+        )
         self.src_layout, self.dst_layout = src_layout, dst_layout
-        
+
 
 def gen_case_name(param):
     return f"case_{type2str(param.src_type)}_{type2str(param.dst_type)}_{param.rows}_{param.cols}_{param.valid_rows}_{param.valid_cols}_IDX_{param.idx_row}_{param.idx_col}_L_{param.src_layout}_{param.dst_layout}"
+
 
 if __name__ == "__main__":
     case_params_list = [
@@ -64,19 +85,16 @@ if __name__ == "__main__":
         textractParams(np.float32, np.float32, 128, 96, 128, 96, 0, 0, 0, 0),
         textractParams(np.int32, np.float32, 128, 96, 128, 96, 0, 0, 0, 0),
         textractParams(np.int8, np.int32, 128, 64, 128, 64, 0, 0, 0, 0),
-
         textractParams(np.float16, np.float16, 32, 32, 32, 32, 8, 16, 0, 0),
         textractParams(np.float16, np.float32, 32, 32, 32, 32, 8, 16, 0, 0),
         textractParams(np.float32, np.float32, 128, 96, 128, 96, 8, 16, 0, 0),
         textractParams(np.int32, np.float32, 128, 96, 128, 96, 8, 16, 0, 0),
         textractParams(np.int8, np.int32, 128, 64, 128, 64, 8, 16, 0, 0),
-
         textractParams(np.float16, np.float16, 32, 32, 31, 31, 8, 16, 0, 0),
         textractParams(np.float16, np.float32, 32, 32, 31, 31, 8, 16, 0, 0),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 0, 0),
         textractParams(np.int32, np.float32, 128, 96, 125, 93, 8, 16, 0, 0),
         textractParams(np.int8, np.int32, 128, 64, 125, 61, 8, 16, 0, 0),
-
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 0, 1),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 0, 2),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 1, 0),
@@ -101,4 +119,3 @@ if __name__ == "__main__":
         gen_golden_data(case_name, case_param)
 
         os.chdir(original_dir)
-

@@ -11,7 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
 import numpy as np
 import ml_dtypes
 from typing import Tuple

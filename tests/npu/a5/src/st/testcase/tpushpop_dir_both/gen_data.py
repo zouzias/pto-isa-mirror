@@ -39,15 +39,9 @@ def gen_golden_data(case_name, case_params):
 
 
 if __name__ == "__main__":
-    case_name_list = [
-        "TPushPopDirBothTest.case1_float_dir_both",
-        "TPushPopDirBothTest.case2_float_dir_both_left_right",
-    ]
+    case_name_list = ["TPushPopDirBothTest.case1_float_dir_both", "TPushPopDirBothTest.case2_float_dir_both_left_right"]
 
-    case_params_list = [
-        (128, 64, 128, np.float32),
-        (128, 64, 128, np.float32),
-    ]
+    case_params_list = [(128, 64, 128, np.float32), (128, 64, 128, np.float32)]
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):

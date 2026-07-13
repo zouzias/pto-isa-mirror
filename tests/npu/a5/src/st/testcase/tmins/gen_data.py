@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 PAD_VALUE_NULL = "PAD_VAL_NULL"
@@ -45,9 +46,7 @@ def gen_golden_data_tmins(case_name, param):
 
 
 class TestParams:
-    def __init__(self, dtype, dst_row, dst_col,
-                 tile_row, tile_col, valid_row, valid_col,
-                 pad_value=PAD_VALUE_NULL):
+    def __init__(self, dtype, dst_row, dst_col, tile_row, tile_col, valid_row, valid_col, pad_value=PAD_VALUE_NULL):
         self.dtype = dtype
         self.dst_row = dst_row
         self.dst_col = dst_col
@@ -57,19 +56,23 @@ class TestParams:
         self.valid_col = valid_col
         self.pad_value = pad_value
 
+
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.uint32: 'uint32',
-        np.int16: 'int16',
-        np.uint16: 'uint16',
-        np.int8: 'int8',
-        np.uint8: 'uint8',
+        np.float32: "float",
+        np.float16: "half",
+        np.int32: "int32",
+        np.uint32: "uint32",
+        np.int16: "int16",
+        np.uint16: "uint16",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }[param.dtype]
-    return f"TMINSTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_{param.tile_row}x{param.tile_col}"\
+    return (
+        f"TMINSTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_{param.tile_row}x{param.tile_col}"
         f"_{param.valid_row}x{param.valid_col}"
+    )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -88,7 +91,6 @@ if __name__ == "__main__":
         TestParams(np.float32, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.float16, 16, 256, 20, 224, 16, 200, PAD_VALUE_MAX),
         TestParams(np.float16, 1, 256, 1, 224, 1, 200, PAD_VALUE_MAX),
-
         TestParams(np.int32, 32, 32, 32, 32, 32, 32),
         TestParams(np.uint32, 32, 32, 32, 32, 32, 32),
         TestParams(np.int16, 32, 128, 32, 128, 32, 128),

@@ -28,20 +28,27 @@ def get_c0_size(data_type):
 def gen_golden_data(g_info):
     data_type = g_info.datatype
     c0 = get_c0_size(data_type)
-    
+
     # 6D shape: [N, D, C1, H, W, C0]
     # Note: C0 is automatically fixed by the data_type
-    shape = (g_info.g_whole_shape0, g_info.g_whole_shape1, g_info.g_whole_shape2, 
-             g_info.g_whole_shape3, g_info.g_whole_shape4, c0)
-    
+    shape = (
+        g_info.g_whole_shape0,
+        g_info.g_whole_shape1,
+        g_info.g_whole_shape2,
+        g_info.g_whole_shape3,
+        g_info.g_whole_shape4,
+        c0,
+    )
+
     input_arr = np.random.randint(-5, 5, size=shape).astype(data_type)
     output_arr = np.zeros(shape=shape, dtype=data_type)
-    
+
     # Slice using the fixed C0
-    output_arr[0:g_info.g_shape0, 0:g_info.g_shape1, 0:g_info.g_shape2, 
-               0:g_info.g_shape3, 0:g_info.g_shape4, 0:c0] = \
-    input_arr[0:g_info.g_shape0, 0:g_info.g_shape1, 0:g_info.g_shape2, 
-              0:g_info.g_shape3, 0:g_info.g_shape4, 0:c0]
+    output_arr[
+        0 : g_info.g_shape0, 0 : g_info.g_shape1, 0 : g_info.g_shape2, 0 : g_info.g_shape3, 0 : g_info.g_shape4, 0:c0
+    ] = input_arr[
+        0 : g_info.g_shape0, 0 : g_info.g_shape1, 0 : g_info.g_shape2, 0 : g_info.g_shape3, 0 : g_info.g_shape4, 0:c0
+    ]
 
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
@@ -54,16 +61,17 @@ class GlobalTensorInfo:
         self.g_whole_shape0, self.g_whole_shape1 = ws0, ws1
         self.g_whole_shape2, self.g_whole_shape3, self.g_whole_shape4 = ws2, ws3, ws4
 
+
 if __name__ == "__main__":
     # Test cases: [N, D, C1, H, W] (C0 is implicit)
     case_name_list = ["TStoreConvTest.NDC1HWC0_1", "TStoreConvTest.NDC1HWC0_2"]
     case_params_list = [
         GlobalTensorInfo(np.float32, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2),
-        GlobalTensorInfo(np.float32, 2, 3, 4, 1, 7, 2, 3, 4, 1, 7)
+        GlobalTensorInfo(np.float32, 2, 3, 4, 1, 7, 2, 3, 4, 1, 7),
     ]
 
     for i, case_name in enumerate(case_name_list):
-        if not os.path.exists(case_name): 
+        if not os.path.exists(case_name):
             os.makedirs(case_name)
         os.chdir(case_name)
         gen_golden_data(case_params_list[i])

@@ -21,7 +21,7 @@ import re
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
+        subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
         return ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
@@ -292,12 +292,12 @@ def main():
     elif args.soc_version == "a6":
         default_soc_version = "dav_9201"
     default_cases = "all"
-    if args.gtest_filter != None:
+    if args.gtest_filter is not None:
         default_cases = args.gtest_filter
     testcase = args.testcase
     is_comm = testcase.startswith("comm/")
     if is_comm:
-        testcase = testcase[len("comm/"):]
+        testcase = testcase[len("comm/") :]
         if not testcase:
             raise ValueError("comm/ 后必须指定用例名")
 

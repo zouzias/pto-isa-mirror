@@ -13,7 +13,9 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
+
 
 def gen_golden_data_texp(case_name, param):
     dtype = param.dtype
@@ -54,15 +56,15 @@ class TExpParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TEXPTest.case_{dtype_str}" 
+
+    name = f"TEXPTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -80,13 +82,12 @@ if __name__ == "__main__":
         TExpParams(np.float16, 64, 64, 64, 64, 64, 64),
         TExpParams(np.float16, 32, 32, 32, 32, 32, 32),
         TExpParams(np.float32, 32, 32, 32, 32, 32, 32),
-        TExpParams(np.float32, 32, 16, 32, 16, 32, 16)
+        TExpParams(np.float32, 32, 16, 32, 16, 32, 16),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.extend([
-            TExpParams(NumExt.bf16, 64, 64, 64, 64, 64, 64),
-            TExpParams(NumExt.bf16, 32, 32, 32, 32, 32, 32),
-        ])
+        case_params_list.extend(
+            [TExpParams(NumExt.bf16, 64, 64, 64, 64, 64, 64), TExpParams(NumExt.bf16, 32, 32, 32, 32, 32, 32)]
+        )
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

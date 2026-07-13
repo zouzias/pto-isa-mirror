@@ -11,7 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
 import numpy as np
 import ml_dtypes
 from typing import Tuple
@@ -57,12 +56,7 @@ class TexpandsParams:
 
 if __name__ == "__main__":
     # 用例名称
-    case_name_list = [
-        "TEXPANDSTest.case1",
-        "TEXPANDSTest.case2",
-        "TEXPANDSTest.case3",
-        "TEXPANDSTest.case4",
-    ]
+    case_name_list = ["TEXPANDSTest.case1", "TEXPANDSTest.case2", "TEXPANDSTest.case3", "TEXPANDSTest.case4"]
 
     case_params_list = [
         # tile

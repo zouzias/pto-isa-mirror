@@ -12,7 +12,9 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
@@ -31,8 +33,18 @@ def gen_golden_data(case_name, param):
 
 
 class tunaryParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place=False,
-        high_precision=False):
+    def __init__(
+        self,
+        dtype,
+        global_row,
+        global_col,
+        tile_row,
+        tile_col,
+        valid_row,
+        valid_col,
+        in_place=False,
+        high_precision=False,
+    ):
         self.dtype = dtype
         self.global_row = global_row
         self.global_col = global_col
@@ -43,21 +55,21 @@ class tunaryParams:
         self.in_place = in_place
         self.high_precision = high_precision
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
     if param.high_precision:
-        dtype_str += '_hp'
-    inplace_flag = ''
+        dtype_str += "_hp"
+    inplace_flag = ""
     if param.in_place:
-        inplace_flag = '_inPlace'
-    return f"TRECIPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"\
+        inplace_flag = "_inPlace"
+    return (
+        f"TRECIPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"
         f"{param.valid_row}x{param.valid_col}{inplace_flag}"
+    )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

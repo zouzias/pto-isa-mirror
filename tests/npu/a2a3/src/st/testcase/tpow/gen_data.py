@@ -2,7 +2,7 @@
 # coding=utf-8
 # --------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under terms and conditions of
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
@@ -15,22 +15,23 @@ import numpy as np
 
 np.random.seed(19)
 
+
 def gen_golden_data(param):
     dtype = param.dtype
     row, col = param.row, param.col
     valid_row, valid_col = param.valid_row, param.valid_col
 
     kind = np.dtype(dtype).kind
-    if kind == 'i':
-        dtype_info = np.iinfo(dtype)
+    if kind == "i":
+        np.iinfo(dtype)
         base_arr = np.random.randint(0, 10, size=[row, col]).astype(dtype)
         exp_arr = np.random.randint(0, 7, size=[row, col]).astype(dtype)
-    elif kind == 'u':
-        dtype_info = np.iinfo(dtype)
+    elif kind == "u":
+        np.iinfo(dtype)
         base_arr = np.random.randint(1, 10, size=[row, col]).astype(dtype)
         exp_arr = np.random.randint(0, 5, size=[row, col]).astype(dtype)
-    elif kind == 'f':
-        dtype_info = np.finfo(dtype)
+    elif kind == "f":
+        np.finfo(dtype)
         base_arr = np.random.uniform(0.1, 5.0, size=[row, col]).astype(dtype)
         exp_arr = np.random.uniform(0, 3.0, size=[row, col]).astype(dtype)
 

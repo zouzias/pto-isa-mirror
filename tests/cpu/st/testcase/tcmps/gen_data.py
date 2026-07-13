@@ -13,7 +13,9 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
+
 
 def gen_golden_data_tcmps(case_name, param):
     dtype = param.dtype
@@ -32,15 +34,15 @@ def gen_golden_data_tcmps(case_name, param):
     if param.mode == "CmpMode::EQ":
         golden = np.equal(input1, input2[0])
     if param.mode == "CmpMode::NE":
-        golden = np.not_equal(input1, input2[0]) 
+        golden = np.not_equal(input1, input2[0])
     if param.mode == "CmpMode::LT":
-        golden = np.less(input1, input2[0]) 
+        golden = np.less(input1, input2[0])
     if param.mode == "CmpMode::GT":
-        golden = np.greater(input1, input2[0]) 
+        golden = np.greater(input1, input2[0])
     if param.mode == "CmpMode::GE":
-        golden = np.greater_equal(input1, input2[0]) 
+        golden = np.greater_equal(input1, input2[0])
     if param.mode == "CmpMode::LE":
-        golden = np.less_equal(input1, input2[0]) 
+        golden = np.less_equal(input1, input2[0])
 
     # Apply valid region constraints
     output = NumExt.zeros([H, W], dtype)
@@ -49,13 +51,15 @@ def gen_golden_data_tcmps(case_name, param):
             if h >= h_valid or w >= w_valid:
                 golden[h][w] = np.uint8(output[h][w])
 
-    func_binar = lambda bits: sum(np.uint8(bit * 2 **(i)) for i, bit in enumerate(np.uint8(bits)))
+    def func_binary(bits):
+        return sum(np.uint8(bit * 2 ** (i)) for i, bit in enumerate(np.uint8(bits)))
+
     out_uint8 = []
     golden = golden.astype(np.uint8)
     bits_per_row = W // 8
     for row in golden:
         for i in range(bits_per_row):
-            out_uint8.append(func_binar(row[i*8:i*8+8]))
+            out_uint8.append(func_binary(row[i * 8 : i * 8 + 8]))
 
     # Save the input and golden data to binary files
     NumExt.write_array("input1.bin", input1, dtype)
@@ -63,6 +67,7 @@ def gen_golden_data_tcmps(case_name, param):
     np.array(out_uint8).astype(np.uint8).tofile("golden.bin")
 
     return input1, input2, golden
+
 
 class tcmpsParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, cmpMode):
@@ -75,9 +80,11 @@ class tcmpsParams:
         self.valid_col = valid_col
         self.mode = cmpMode
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
     return f"TCMPSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

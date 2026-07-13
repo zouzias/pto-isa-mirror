@@ -13,7 +13,9 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_trans_data(case_name, param):
     dtype = param.dtype
@@ -32,24 +34,27 @@ def gen_golden_trans_data(case_name, param):
     golden.tofile("golden.bin")
     return output, src, golden
 
+
 class TTRANSParams:
     def __init__(self, dtype, tile_row, tile_col, valid_row, valid_col):
-        self.dtype = dtype 
+        self.dtype = dtype
         self.tile_row = tile_row
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-    
+
+
 def generate_case_name(idx, param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.int16: 'int16',
-        np.int8: 'int8',
-        np.uint8: 'uint8',
+        np.float32: "float",
+        np.float16: "half",
+        np.int32: "int32",
+        np.int16: "int16",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }[param.dtype]
     return f"TTRANSTest.case{idx}_{dtype_str}_{param.tile_row}_{param.tile_col}_{param.valid_row}_{param.valid_col}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -83,7 +88,7 @@ if __name__ == "__main__":
     ]
 
     for i, param in enumerate(case_params_list):
-        case_name = generate_case_name(i+1, param)
+        case_name = generate_case_name(i + 1, param)
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()

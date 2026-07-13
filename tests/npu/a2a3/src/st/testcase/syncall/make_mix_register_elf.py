@@ -151,7 +151,7 @@ def raw_section_data(data: bytes, raw: tuple[int, int, int, int, int, int, int, 
     if typ == SHT_NULL or size == 0:
         return b""
     require(offset + size <= len(data), "section contents exceed ELF size")
-    return data[offset:offset + size]
+    return data[offset : offset + size]
 
 
 def read_c_string(data: bytes, offset: int) -> str:
@@ -225,10 +225,7 @@ def build_output(aic: ParsedElf, aiv: ParsedElf) -> bytes:
             if name.startswith(".ascend.meta."):
                 sections.append(Section(name, SHT_NOTE, 0, 4, source.sections[name]))
 
-    local_symbols = [
-        Symbol("", 0, 0, 0, 0, 0),
-        Symbol("", st_info(STB_LOCAL, STT_SECTION), 0, 1, 0, 0),
-    ]
+    local_symbols = [Symbol("", 0, 0, 0, 0, 0), Symbol("", st_info(STB_LOCAL, STT_SECTION), 0, 1, 0, 0)]
     all_symbols = local_symbols + funcs
     strtab, sym_name_offsets = make_strtab([sym.name for sym in all_symbols])
     symtab = bytearray()
@@ -238,8 +235,11 @@ def build_output(aic: ParsedElf, aiv: ParsedElf) -> bytes:
     symtab_index = len(sections)
     strtab_index = symtab_index + 1
     shstrtab_index = symtab_index + 2
-    sections.append(Section(".symtab", SHT_SYMTAB, 0, 8, bytes(symtab), link=strtab_index,
-                            info=len(local_symbols), entsize=SYMENT.size))
+    sections.append(
+        Section(
+            ".symtab", SHT_SYMTAB, 0, 8, bytes(symtab), link=strtab_index, info=len(local_symbols), entsize=SYMENT.size
+        )
+    )
     sections.append(Section(".strtab", SHT_STRTAB, 0, 1, strtab))
 
     shstrtab, section_name_offsets = make_strtab([section.name for section in sections] + [".shstrtab"])
@@ -294,7 +294,7 @@ def build_output(aic: ParsedElf, aiv: ParsedElf) -> bytes:
         len(sections),
         shstrtab_index,
     )
-    body[:EHDR.size] = header
+    body[: EHDR.size] = header
     return bytes(body)
 
 

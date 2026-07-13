@@ -136,7 +136,6 @@ def gen_golden_data(param: TGatherParamsBase):
         dst_row = param.src_row
         dst_col = param.k
         kvalue = param.kvalue
-        i_offset = param.i_offset
         cmpmode = param.cmpmode
         src_data = np.random.randint(0, 100, [src_row, src_col]).astype(src_type)
         golden = np.zeros((dst_row, dst_col)).astype(dst_type)

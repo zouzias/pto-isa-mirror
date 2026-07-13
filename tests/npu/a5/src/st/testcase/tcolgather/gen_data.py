@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(23)
 TYPE_MAP = {
     np.float32: "float",
@@ -54,7 +55,6 @@ def gather_mask(src, row, col, dst_row, dst_cols, pattern):
         for j in range(col):
             dst[i, j] = src[idx, j]
     return dst
-
 
 
 class TColGatherMaskParams:

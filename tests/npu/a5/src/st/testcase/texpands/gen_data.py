@@ -11,9 +11,9 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
 import numpy as np
 import ml_dtypes
+
 np.random.seed(19)
 bfloat16 = ml_dtypes.bfloat16
 
@@ -51,15 +51,7 @@ def gen_golden_data(param):
 
 class TestParams:
     def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col, 
-        pad_value_type=PAD_VALUE_NULL
+        self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, pad_value_type=PAD_VALUE_NULL
     ):
         self.dtype = dtype
         self.global_row = global_row
@@ -70,14 +62,15 @@ class TestParams:
         self.valid_col = valid_col
         self.pad_value_type = pad_value_type
 
+
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        bfloat16: 'bfloat16',
-        np.int16: 'int16'
+        np.float32: "float",
+        np.float16: "half",
+        np.int8: "int8",
+        np.int32: "int32",
+        bfloat16: "bfloat16",
+        np.int16: "int16",
     }[param.dtype]
     return (
         f"TEXPANDSTest.case_{dtype_str}_"
@@ -86,6 +79,7 @@ def generate_case_name(param):
         f"{param.valid_row}x{param.valid_col}_"
         f"{param.pad_value_type}"
     )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -102,7 +96,6 @@ if __name__ == "__main__":
         TestParams(np.int16, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64),
         TestParams(bfloat16, 64, 64, 64, 64, 64, 64),
-
         TestParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
         TestParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
         TestParams(bfloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),

@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -29,11 +29,11 @@ def gen_golden_data(param):
     for i in range(valid_row):
         for j in range(valid_col):
             output_arr[i, j] = input_dst_arr[i, j] + input_src_arr[i, j] * scalar[0, 0]
-    input_dst_arr.tofile('input_dst.bin')
-    input_src_arr.tofile('input_src.bin')
-    with open("scalar.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(scalar[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_dst_arr.tofile("input_dst.bin")
+    input_src_arr.tofile("input_src.bin")
+    with open("scalar.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(scalar[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TAxpyParams:
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         TAxpyParams("TAXPYTest.case2", np.float16, 63, 64),
         TAxpyParams("TAXPYTest.case3", np.float32, 7, 64 * 7),
         TAxpyParams("TAXPYTest.case4", np.float32, 256, 16),
-        TAxpyParams("TAXPYTest.case5", np.float32, 16, 16, 32, 32, 64, 64)
+        TAxpyParams("TAXPYTest.case5", np.float32, 16, 16, 32, 32, 64, 64),
     ]
 
     for _, case in enumerate(case_params_list):

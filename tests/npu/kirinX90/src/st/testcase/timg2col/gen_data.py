@@ -164,7 +164,6 @@ def gen_golden_data(case_name: str, params: ConvTestParams):
 
     # weight
     c1_weight, h_k, w_k, n_out, c0_weight = params.weight_shape
-    dtype = params.dtype
 
     if c1_input != c1_weight or c0_input != c0_weight:
         raise ValueError(

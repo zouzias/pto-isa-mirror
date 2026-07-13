@@ -13,6 +13,7 @@
 import os
 import numpy as np
 from utils import NumExt
+
 np.random.seed(19)
 
 
@@ -22,10 +23,8 @@ def gen_golden_data_tfmod(case_name, param):
     row, col = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = NumExt.astype(
-        np.random.randint(-100, 100, size=[row, col]), dtype)
-    input2 = NumExt.astype(
-        np.random.randint(-100, 100, size=[row, col]), dtype)
+    input1 = NumExt.astype(np.random.randint(-100, 100, size=[row, col]), dtype)
+    input2 = NumExt.astype(np.random.randint(-100, 100, size=[row, col]), dtype)
     input2[input2 == 0] = 1
 
     # Perform the operation
@@ -72,7 +71,7 @@ if __name__ == "__main__":
         TFmodParams(np.float32, 64, 64, 64, 64),
         TFmodParams(np.float16, 16, 256, 16, 256),
         TFmodParams(np.float32, 64, 512, 64, 64),
-        TFmodParams(np.float16, 32, 512, 16, 256)
+        TFmodParams(np.float16, 32, 512, 16, 256),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TFmodParams(NumExt.bf16, 16, 256, 16, 256))

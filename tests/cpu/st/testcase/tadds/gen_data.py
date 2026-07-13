@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -28,10 +28,10 @@ def gen_golden_data(param):
     for i in range(valid_row):
         for j in range(valid_col):
             output_arr[i, j] = input_arr[i, j] + divider[0, 0]
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TAddsParams:
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         TAddsParams("TADDSTest.case4", np.int16, 15, 64 * 3),
         TAddsParams("TADDSTest.case5", np.float32, 7, 64 * 7),
         TAddsParams("TADDSTest.case6", np.float32, 256, 16),
-        TAddsParams("TADDSTest.case7", np.float32, 16, 16, 32, 32, 64, 64)
+        TAddsParams("TADDSTest.case7", np.float32, 16, 16, 32, 32, 64, 64),
     ]
 
     for _, case in enumerate(case_params_list):

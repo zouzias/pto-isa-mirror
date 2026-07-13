@@ -23,12 +23,14 @@ def gen_golden_data(param):
     # Generate random input arrays
     if src_dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
         dtype_info = np.iinfo(src_dtype)
-        src_input = np.random.randint(dtype_info.min, dtype_info.max,
-            size=[src_tile_row, src_tile_col]).astype(src_dtype)
+        src_input = np.random.randint(dtype_info.min, dtype_info.max, size=[src_tile_row, src_tile_col]).astype(
+            src_dtype
+        )
     else:
         dtype_info = np.finfo(src_dtype)
-        src_input = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
-            size=[src_tile_row, src_tile_col]).astype(src_dtype)
+        src_input = np.random.uniform(
+            low=dtype_info.min, high=dtype_info.max, size=[src_tile_row, src_tile_col]
+        ).astype(src_dtype)
 
     # Apply valid region constraints
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dst_dtype)
@@ -46,18 +48,29 @@ def gen_golden_data(param):
 
 class TRowArgMaxParams:
     DTYPE_STR_TABLE = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.uint32: 'uint32',
-        np.int16: 'int16',
-        np.uint16: 'uint16',
-        np.int8: 'int8',
-        np.uint8: 'uint8',
+        np.float32: "float",
+        np.float16: "half",
+        np.int32: "int32",
+        np.uint32: "uint32",
+        np.int16: "int16",
+        np.uint16: "uint16",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }
 
-    def __init__(self, dst_dtype, src_dtype, dst_tile_row, dst_tile_col, src_tile_row, src_tile_col,
-        tmp_tile_row, tmp_tile_col, valid_row, valid_col):
+    def __init__(
+        self,
+        dst_dtype,
+        src_dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src_tile_row,
+        src_tile_col,
+        tmp_tile_row,
+        tmp_tile_col,
+        valid_row,
+        valid_col,
+    ):
         self.dst_dtype = dst_dtype
         self.src_dtype = src_dtype
         self.dst_tile_row = dst_tile_row
@@ -69,22 +82,50 @@ class TRowArgMaxParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
         self.output_val = False
-        self.name = f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
-            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_"\
+        self.name = (
+            f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"
+            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_"
             f"{tmp_tile_row}x{tmp_tile_col}_{valid_row}x{valid_col}"
+        )
 
 
 class TRowArgMaxValIdxParams(TRowArgMaxParams):
-    def __init__(self, dst_dtype, src_dtype, dst_val_tile_row, dst_val_tile_col, dst_tile_row, dst_tile_col,
-        src_tile_row, src_tile_col, tmp_tile_row, tmp_tile_col, valid_row, valid_col):
-        super().__init__(dst_dtype, src_dtype, dst_tile_row, dst_tile_col, src_tile_row, src_tile_col,
-            tmp_tile_row, tmp_tile_col, valid_row, valid_col)
+    def __init__(
+        self,
+        dst_dtype,
+        src_dtype,
+        dst_val_tile_row,
+        dst_val_tile_col,
+        dst_tile_row,
+        dst_tile_col,
+        src_tile_row,
+        src_tile_col,
+        tmp_tile_row,
+        tmp_tile_col,
+        valid_row,
+        valid_col,
+    ):
+        super().__init__(
+            dst_dtype,
+            src_dtype,
+            dst_tile_row,
+            dst_tile_col,
+            src_tile_row,
+            src_tile_col,
+            tmp_tile_row,
+            tmp_tile_col,
+            valid_row,
+            valid_col,
+        )
         self.dst_val_tile_row = dst_val_tile_row
         self.dst_val_tile_col = dst_val_tile_col
         self.output_val = True
-        self.name = f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
-            f"{dst_val_tile_row}x{dst_val_tile_col}_{dst_tile_row}x{dst_tile_col}_"\
+        self.name = (
+            f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"
+            f"{dst_val_tile_row}x{dst_val_tile_col}_{dst_tile_row}x{dst_tile_col}_"
             f"{src_tile_row}x{src_tile_col}_{tmp_tile_row}x{tmp_tile_col}_{valid_row}x{valid_col}"
+        )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

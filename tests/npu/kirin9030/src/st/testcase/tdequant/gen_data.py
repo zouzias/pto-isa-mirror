@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -35,15 +36,15 @@ def gen_golden_data(param):
     if flag:
         for i in range(valid_row):
             offset_arr[i, :] = 0
-    
+
     for i in range(valid_row):
         for j in range(valid_col):
             output_arr[i, j] = (temp_arr[i, j] - offset_arr[i, 0]) * scale_arr[i, 0]
 
-    input_arr.tofile('input.bin')
-    scale_arr.tofile('scale.bin')
-    offset_arr.tofile('offset.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    scale_arr.tofile("scale.bin")
+    offset_arr.tofile("offset.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TDequantParams:
@@ -57,6 +58,7 @@ class TDequantParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 if __name__ == "__main__":
     case_params_list = [
         TDequantParams("TDEQUANTTest.case1", np.int16, np.float32, True, 64, 64, 64, 64),
@@ -64,7 +66,7 @@ if __name__ == "__main__":
         TDequantParams("TDEQUANTTest.case3", np.int16, np.float32, False, 128, 128, 63, 63),
         TDequantParams("TDEQUANTTest.case4", np.int8, np.float32, True, 64, 64, 64, 64),
         TDequantParams("TDEQUANTTest.case5", np.int8, np.float32, False, 128, 128, 64, 64),
-        TDequantParams("TDEQUANTTest.case6", np.int8, np.float32, False, 128, 128, 63, 63)
+        TDequantParams("TDEQUANTTest.case6", np.int8, np.float32, False, 128, 128, 63, 63),
     ]
 
     for _, case in enumerate(case_params_list):

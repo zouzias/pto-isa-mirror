@@ -19,11 +19,11 @@ def hash_u32(x: np.ndarray) -> np.ndarray:
     A small 32-bit integer hash with wrap-around semantics, matching the C++ implementation.
     """
     x = x.astype(np.uint32, copy=False)
-    x ^= (x >> np.uint32(16))
+    x ^= x >> np.uint32(16)
     x *= np.uint32(0x7FEB352D)
-    x ^= (x >> np.uint32(15))
+    x ^= x >> np.uint32(15)
     x *= np.uint32(0x846CA68B)
-    x ^= (x >> np.uint32(16))
+    x ^= x >> np.uint32(16)
     return x
 
 
@@ -47,8 +47,15 @@ def build_linear_probe_table(keys: np.ndarray, values: np.ndarray, cap: int, emp
     return table_keys, table_vals
 
 
-def lookup_linear_probe(queries: np.ndarray, table_keys: np.ndarray, table_vals: np.ndarray, cap: int,
-                        empty_key: np.int32, not_found: np.int32, max_probe: int):
+def lookup_linear_probe(
+    queries: np.ndarray,
+    table_keys: np.ndarray,
+    table_vals: np.ndarray,
+    cap: int,
+    empty_key: np.int32,
+    not_found: np.int32,
+    max_probe: int,
+):
     mask = np.uint32(cap - 1)
     out = np.full(queries.shape, not_found, dtype=np.int32)
     for i in range(queries.size):
@@ -83,8 +90,9 @@ def gen_case(case_dir: str, tile_rows: int, tile_cols: int, cap: int, max_probe:
     # Queries: half hits, half misses.
     num_queries = tile_rows * tile_cols
     hits = rng.choice(keys, size=num_queries // 2, replace=False).astype(np.int32)
-    misses = rng.choice(np.arange(1_000_001, 2_000_000, dtype=np.int32), size=num_queries - hits.size,
-                        replace=False).astype(np.int32)
+    misses = rng.choice(
+        np.arange(1_000_001, 2_000_000, dtype=np.int32), size=num_queries - hits.size, replace=False
+    ).astype(np.int32)
     queries = rng.permutation(np.concatenate([hits, misses], axis=0)).astype(np.int32).reshape(tile_rows, tile_cols)
 
     out = lookup_linear_probe(
@@ -107,4 +115,3 @@ def gen_case(case_dir: str, tile_rows: int, tile_cols: int, cap: int, max_probe:
 
 if __name__ == "__main__":
     gen_case("HASHFINDTest.case_int32_16x16_cap512", tile_rows=16, tile_cols=16, cap=512, max_probe=64)
-
