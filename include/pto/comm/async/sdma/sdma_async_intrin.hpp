@@ -227,6 +227,20 @@ PTO_INTERNAL void SubmitDataTransferSqes(__gm__ BatchWriteChannelInfo *batchWrit
     }
 }
 
+PTO_INTERNAL void ClearEventRecord(__gm__ SdmaEventRecord *record, UbTmpBuf &tmpBuf, uint32_t syncId)
+{
+    // MTE3 min transfer is 8B: uint64 clears flag and sq_tail together.
+    // Do NOT write back channelInfo->sq_head here: taskId is (sq_tail - sq_head),
+    // and sq_head stays at host-init 0 (shmem SDMA model).
+    // dsb + dcci make the zero visible to later GetValue polls.
+    SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+    __asm__ __volatile__("");
+    dcci((__gm__ void *)record, SINGLE_CACHE_LINE);
+    __asm__ __volatile__("");
+}
+
 PTO_INTERNAL void SubmitFlagTransferSqes(__gm__ BatchWriteChannelInfo *batchWriteChannelInfo,
                                          const WorkspaceLayout &layout, const SdmaConfig &config, uint32_t *sqTail,
                                          UbTmpBuf &tmpBuf, uint32_t syncId)
@@ -237,9 +251,7 @@ PTO_INTERNAL void SubmitFlagTransferSqes(__gm__ BatchWriteChannelInfo *batchWrit
         __gm__ BatchWriteChannelInfo *channelInfo = batchWriteChannelInfo + queueId;
 
         __gm__ SdmaEventRecord *record = GetEventRecord(layout.recv_workspace, queueId);
-
-        // Clear both flag and sq_tail with a single 8-byte write (MTE3 min granularity).
-        SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
+        ClearEventRecord(record, tmpBuf, syncId);
 
         __gm__ uint8_t *sendBuf = layout.send_workspace + queueId * kMinSdmaTransferBytes;
         uint32_t nextTail = (sqTail[queueId] + 1) % kSqDepth;
@@ -347,18 +359,6 @@ PTO_INTERNAL bool PrepareEventCheck(const SdmaSession &session, UbTmpBuf &tmpBuf
     return true;
 }
 
-PTO_INTERNAL void HandleCompletedEventRecord(__gm__ SdmaEventRecord *record, UbTmpBuf &tmpBuf, uint32_t syncId)
-{
-    // Clear the completion record only. Do NOT write back channelInfo->sq_head:
-    // taskId is computed as (sq_tail - sq_head), and the STARS engine expects it to be a
-    // monotonically increasing slot index per channel (sq_head stays at its host-init 0,
-    // matching the shmem SDMA model). Advancing sq_head here reset taskId to 0 every round,
-    // which intermittently stalled the flag SQE and caused Wait timeouts / missing data.
-    // The persisted sq_tail is owned by UpdateSqTailState, so no channelInfo write is needed here.
-    // MTE3 minimum transfer is 8 bytes: writing uint64_t clears both flag and sq_tail atomically.
-    SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
-}
-
 PTO_INTERNAL bool SdmaTestEvent(uint64_t eventHandle, const SdmaSession &session)
 {
     if (eventHandle == 0) {
@@ -385,7 +385,7 @@ PTO_INTERNAL bool SdmaTestEvent(uint64_t eventHandle, const SdmaSession &session
         if (sendValue == 0) {
             return false;
         }
-        HandleCompletedEventRecord(record, tmpBuf, syncId);
+        ClearEventRecord(record, tmpBuf, syncId);
     }
     return true;
 }
@@ -420,7 +420,7 @@ PTO_INTERNAL bool SdmaWaitEvent(uint64_t eventHandle, const SdmaSession &session
         if (sendValue == 0) {
             return false;
         }
-        HandleCompletedEventRecord(record, tmpBuf, syncId);
+        ClearEventRecord(record, tmpBuf, syncId);
     }
     return true;
 }
