@@ -76,7 +76,7 @@ PTO-Auto（高层）：
 
 - 你描述数据流：`TLOAD → compute → TSTORE`。
 - Tile buffer 管理与部分同步可由编译器/运行时处理。
-- 在 API 模型中，当启用 `__PTO_AUTO__` 时，`TASSIGN(tile, addr)` 可能是 no-op（参见 [TASSIGN 指令](../isa/TASSIGN.md)）。
+- 在 API 模型中，当启用 `__PTO_AUTO__` 时，`TASSIGN(tile, addr)` 可能是 no-op（参见 [TASSIGN 指令](../isa/TASSIGN_zh.md)）。
 
 PTO-Manual（专家）：
 
