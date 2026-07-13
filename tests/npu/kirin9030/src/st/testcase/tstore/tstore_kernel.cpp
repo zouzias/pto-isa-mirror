@@ -178,3 +178,8 @@ template void LaunchTStore<0, uint16_t, 1, 1, 1, 97, 97, 1, 1, 1, 112, 112>(uint
 template void LaunchTStore<0, uint16_t, 1, 1, 1, 64, 65, 1, 1, 1, 64, 80>(uint16_t *out, uint16_t *src, void *stream);
 template void LaunchTStore<0, uint16_t, 1, 1, 1, 48, 65, 1, 1, 1, 48, 80>(uint16_t *out, uint16_t *src, void *stream);
 template void LaunchTStore<0, uint16_t, 1, 1, 1, 80, 49, 1, 1, 1, 80, 64>(uint16_t *out, uint16_t *src, void *stream);
+template void LaunchTStore<0, uint16_t, 1, 1, 1, 64, 81, 1, 1, 1, 64, 96>(uint16_t *out, uint16_t *src, void *stream);
+template void LaunchTStore<0, uint16_t, 1, 1, 1, 48, 97, 1, 1, 1, 48, 112>(uint16_t *out, uint16_t *src, void *stream);
+template void LaunchTStore<0, uint16_t, 1, 1, 1, 80, 83, 1, 1, 1, 80, 96>(uint16_t *out, uint16_t *src, void *stream);
+template void LaunchTStore<0, uint16_t, 1, 1, 1, 112, 73, 1, 1, 1, 112, 80>(uint16_t *out, uint16_t *src, void *stream);
+template void LaunchTStore<0, uint16_t, 1, 1, 1, 80, 79, 1, 1, 1, 80, 80>(uint16_t *out, uint16_t *src, void *stream);
