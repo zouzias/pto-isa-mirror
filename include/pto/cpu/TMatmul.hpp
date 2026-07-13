@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/tile_offsets.hpp"
 #include "pto/cpu/parallel.hpp"
 #include "pto/cpu/MXTypes.hpp"
+#include <cmath>
 
 namespace pto {
 
