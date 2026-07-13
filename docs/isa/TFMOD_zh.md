@@ -24,6 +24,8 @@ $$\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})$$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tfmod %src0, %src1 : !pto.tile<...>
 ```

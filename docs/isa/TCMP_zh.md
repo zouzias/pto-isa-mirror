@@ -26,6 +26,8 @@ $$ p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\ri
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```

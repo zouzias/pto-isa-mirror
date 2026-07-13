@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, 0) $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.trelu %src : !pto.tile<...> -> !pto.tile<...>
 ```

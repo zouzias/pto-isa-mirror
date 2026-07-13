@@ -36,6 +36,8 @@ Tile/标量形式：
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 %dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>

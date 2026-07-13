@@ -169,6 +169,8 @@ DN 数据的 FP8 mantissa 与 ND 共享相同的物理地址（`(r,c)` 元素完
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```

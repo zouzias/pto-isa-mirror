@@ -70,6 +70,8 @@ PTO AS 设计建议将 `TMOV` 拆分为一组操作：
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
 ```

@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,0} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
 ```

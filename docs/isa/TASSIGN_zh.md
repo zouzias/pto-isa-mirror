@@ -24,6 +24,8 @@ tassign %tile, %addr : !pto.tile<...>, index
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 pto.tassign %tile, %addr : !pto.tile<...>, dtype
 ```

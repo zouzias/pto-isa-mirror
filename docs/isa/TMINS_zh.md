@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{i,j} = \min(\mathrm{src}_{i,j}, \mathrm{scalar}) $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```

@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{i,j} = \frac{1}{\sqrt{\mathrm{src}_{i,j}}} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
 ```

@@ -117,6 +117,8 @@ struct MrgSortExecutedNumList {
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tmrgsort %src, %blockLen : (!pto.tile<...>, dtype) -> !pto.tile<...>
 %dst, %executed = pto.tmrgsort %src0, %src1, %src2, %src3 {exhausted = false}

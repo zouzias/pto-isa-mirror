@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{0,j} = \prod_{i=0}^{R-1} \mathrm{src}_{i,j} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tcolprod %src : !pto.tile<...> -> !pto.tile<...>
 ```

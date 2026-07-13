@@ -28,6 +28,8 @@ $$ \mathrm{dst}_{i,j} = \mathrm{base}_{i,j}^{\mathrm{exp}} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tpows %base, %exp, %tmp : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```

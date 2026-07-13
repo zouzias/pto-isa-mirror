@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
 !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>

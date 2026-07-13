@@ -49,6 +49,8 @@ $$ \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{b_i[\,j \bmod (32 / \mathit{s
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.trowexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```

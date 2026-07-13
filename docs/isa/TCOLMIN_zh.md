@@ -24,6 +24,8 @@ $$ \mathrm{dst}_{0,j} = \min_{0 \le i < R} \mathrm{src}_{i,j} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tcolmin %src : !pto.tile<...> -> !pto.tile<...>
 ```

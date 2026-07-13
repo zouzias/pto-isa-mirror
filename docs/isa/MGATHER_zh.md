@@ -56,6 +56,8 @@ enum class GatherOOB : uint8_t {
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.mgather %mem, %idx : (!pto.partition_tensor_view<MxNxdtype>, pto.tile<...>)
 -> !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>

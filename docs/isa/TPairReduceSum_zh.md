@@ -30,6 +30,8 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tpairreducesum %src : !pto.tile<...> -> !pto.tile<...>
 ```

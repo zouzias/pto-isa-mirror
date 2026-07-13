@@ -30,6 +30,8 @@ tprint %src : !pto.tile<...> | !pto.global<...>
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
 ```

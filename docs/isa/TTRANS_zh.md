@@ -27,6 +27,8 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{j,i} $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
 ```

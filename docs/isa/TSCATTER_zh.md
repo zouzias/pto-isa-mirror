@@ -65,6 +65,8 @@ $$ \mathrm{dst}_{P \cdot i + \mathrm{zeros}_P, j} = 0 $$
 
 ### AS Level 1（SSA）
 
+> 术语释义参见[术语表](../glossary_zh.md)。
+
 ```text
 %dst = pto.tscatter %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
