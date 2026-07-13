@@ -17,6 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // ============================================================================
 // 1D Vector Tile Tests (URMA true async GET on A5 3510)
+// Same API for all cases: RunGetAsyncUrmaRootGet<T, count[, blockDim]>.
+// blockDim defaults to 1 (qpNum=1); multi-AIV passes blockDim (== qpNum).
 // ============================================================================
 TEST(TGetAsyncUrma, Vec_FloatSmall)
 {
@@ -48,6 +50,27 @@ TEST(TGetAsyncUrma, Vec_Int32_MR_Over512MB)
     SKIP_IF_RANKS_LT(2);
     // 64M int32 → commBytesNeeded ≈ 768MB (3 buffers), exact alloc
     ASSERT_TRUE((RunGetAsyncUrmaRootGet<int32_t, 67108864>(2, 2, 0, 0)));
+}
+
+// ============================================================================
+// Multi-AIV: same runner, blockDim > 1 (qpNum == blockDim)
+// ============================================================================
+TEST(TGetAsyncUrma, MultiCore_Float_4Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<float, 1024, 4>(2, 2, 0, 0)));
+}
+
+TEST(TGetAsyncUrma, MultiCore_Int32_8Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<int32_t, 4096, 8>(2, 2, 0, 0)));
+}
+
+TEST(TGetAsyncUrma, MultiCore_Float_64Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<float, 4096, 64>(2, 2, 0, 0)));
 }
 
 int main(int argc, char **argv)

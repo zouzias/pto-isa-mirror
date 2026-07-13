@@ -17,6 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // ============================================================================
 // Basic correctness (URMA true async PUT on A5 3510)
+// Same API for all cases: RunPutAsyncUrmaRootPut<T, count[, blockDim]>.
+// blockDim defaults to 1 (qpNum=1); multi-AIV passes blockDim (== qpNum).
 // ============================================================================
 TEST(TPutAsyncUrma, Vec_FloatSmall)
 {
@@ -71,6 +73,27 @@ TEST(TPutAsyncUrma, Vec_Int32_MR_Over512MB)
     SKIP_IF_RANKS_LT(2);
     // 64M int32 → commBytesNeeded ≈ 512MB+256B, exact alloc
     ASSERT_TRUE((RunPutAsyncUrmaRootPut<int32_t, 67108864>(2, 2, 0, 0)));
+}
+
+// ============================================================================
+// Multi-AIV: same runner, blockDim > 1 (qpNum == blockDim)
+// ============================================================================
+TEST(TPutAsyncUrma, MultiCore_Float_4Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<float, 1024, 4>(2, 2, 0, 0)));
+}
+
+TEST(TPutAsyncUrma, MultiCore_Int32_8Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<int32_t, 4096, 8>(2, 2, 0, 0)));
+}
+
+TEST(TPutAsyncUrma, MultiCore_Float_64Blocks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<float, 4096, 64>(2, 2, 0, 0)));
 }
 
 int main(int argc, char **argv)
