@@ -303,14 +303,14 @@ void LaunchTMATMUL<20>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 template <>
 void LaunchTMATMUL<21>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    RunTMATMUL_ND<float, half, int8_t, 96, 128, 65><<<1, nullptr, stream>>>(
+    RunTMATMUL_ND<float, half, int8_t, 96, 128, 89><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
 }
 
 template <>
 void LaunchTMATMUL<22>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    RunTMATMUL_ND<float, half, int8_t, 129, 95, 33><<<1, nullptr, stream>>>(
+    RunTMATMUL_ND<float, half, int8_t, 129, 95, 63><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
 }
 
@@ -324,6 +324,6 @@ void LaunchTMATMUL<23>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 template <>
 void LaunchTMATMUL<24>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    RunTMATMUL_ND<float, half, int8_t, 2, 80, 48><<<1, nullptr, stream>>>(
+    RunTMATMUL_ND<float, half, int8_t, 2, 90, 31><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
 }
