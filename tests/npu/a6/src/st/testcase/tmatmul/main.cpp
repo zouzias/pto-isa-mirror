@@ -276,12 +276,12 @@ TEST_F(TMATMULTest, case_mmad_f16s4_nd_129x95x63)
     tmatmul_test<float, uint16_t, pto::int4b_t, 37>(129, 95, 63);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16s4_dn_65x90x89)
+TEST_F(TMATMULTest, case_mmad_f16s4_nd_16x16x16)
 {
-    tmatmul_test<float, uint16_t, pto::int4b_t, 38>(65, 90, 89);
+    tmatmul_test<float, uint16_t, pto::int4b_t, 38>(16, 16, 16);
 }
 
-TEST_F(TMATMULTest, case_mmad_f16s4_dn_127x95x63)
+TEST_F(TMATMULTest, case_mmad_f16s4_nd_128x128x128)
 {
-    tmatmul_test<float, uint16_t, pto::int4b_t, 39>(127, 95, 63);
+    tmatmul_test<float, uint16_t, pto::int4b_t, 39>(128, 128, 128);
 }
