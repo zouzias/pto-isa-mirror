@@ -98,7 +98,14 @@ def gen_golden_data(param):
         x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
 
     if param.b_int4:
-        x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
+        if param.a_type == np.int8:
+            x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
+        elif param.a_type == np.float16:
+            x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float16)
+        elif param.a_type == bfloat16:
+            if bfloat16 is None:
+                raise ImportError("ml_dtypes is required to generate bfloat16 test data")
+            x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float32).astype(bfloat16)
         x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
 
     golden = np.matmul(x1_gm.astype(param.out_type), x2_gm.astype(param.out_type)).astype(param.out_type)
@@ -162,6 +169,8 @@ if __name__ == "__main__":
         "TMATMULTest.case_mmad_bf16e4m3_dn_127x64x95",
         "TMATMULTest.case_mmad_bf16s8_nd_64x64x64",
         "TMATMULTest.case_mmad_bf16s8_dn_65x90x89",
+        "TMATMULTest.case_mmad_f16s4_nd_64x64x64",
+        "TMATMULTest.case_mmad_f16s4_nd_2x80x48",
     ]
 
     case_params_list = [
@@ -198,6 +207,8 @@ if __name__ == "__main__":
         TMatmulParams(bfloat16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
         TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd"),
         TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "dn"),
+        TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
+        TMatmulParams(np.float16, np.int8, np.float32, 2, 80, 48, "nd", b_int4=True),
     ]
 
     for i, case_name in enumerate(case_name_list):

@@ -255,3 +255,13 @@ TEST_F(TMATMULTest, case_mmad_bf16s8_dn_65x90x89)
 {
     tmatmul_test<float, uint16_t, int8_t, 33>(65, 90, 89);
 }
+
+TEST_F(TMATMULTest, case_mmad_f16s4_nd_64x64x64)
+{
+    tmatmul_test<float, uint16_t, pto::int4b_t, 34>(64, 64, 64);
+}
+
+TEST_F(TMATMULTest, case_mmad_f16s4_nd_2x80x48)
+{
+    tmatmul_test<float, uint16_t, pto::int4b_t, 35>(2, 80, 48);
+}
