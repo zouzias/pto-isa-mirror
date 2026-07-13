@@ -20,6 +20,7 @@ except ImportError:
 
 
 fp8_e4m3 = ml_dtypes.float8_e4m3fn if ml_dtypes is not None else None
+bfloat16 = ml_dtypes.bfloat16 if ml_dtypes is not None else None
 
 
 np.random.seed(19)
@@ -82,6 +83,14 @@ def gen_golden_data(param):
             x1_gm = x1_src.astype(fp8_e4m3)
         if param.b_type == fp8_e4m3:
             x2_gm = x2_src.astype(fp8_e4m3)
+
+    if param.a_type == bfloat16 or param.b_type == bfloat16:
+        if bfloat16 is None:
+            raise ImportError("ml_dtypes is required to generate bfloat16 test data")
+        if param.a_type == bfloat16:
+            x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float32).astype(bfloat16)
+        if param.b_type == bfloat16:
+            x2_gm = np.random.uniform(-8, 8, [param.k, param.n]).astype(np.float32).astype(bfloat16)
 
     # Use integer-friendly generation for int8 cases to keep deterministic results stable.
     if param.a_type == np.int8 and param.b_type == np.int8:
@@ -149,6 +158,8 @@ if __name__ == "__main__":
         "TMATMULTest.case_mmad_f16f32_dn_127x33x95",
         "TMATMULTest.case_mmad_f16e4m3_nd_64x64x64",
         "TMATMULTest.case_mmad_f16e4m3_dn_127x64x95",
+        "TMATMULTest.case_mmad_bf16e4m3_nd_64x64x64",
+        "TMATMULTest.case_mmad_bf16e4m3_dn_127x64x95",
     ]
 
     case_params_list = [
@@ -181,6 +192,8 @@ if __name__ == "__main__":
         TMatmulParams(np.float16, np.float16, np.float32, 127, 33, 95, "dn"),
         TMatmulParams(np.float16, fp8_e4m3, np.float32, 64, 64, 64, "nd"),
         TMatmulParams(np.float16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
+        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 64, 64, 64, "nd"),
+        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
     ]
 
     for i, case_name in enumerate(case_name_list):

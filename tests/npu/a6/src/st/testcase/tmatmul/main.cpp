@@ -235,3 +235,13 @@ TEST_F(TMATMULTest, case_mmad_f16e4m3_dn_127x64x95)
 {
     tmatmul_test<float, uint16_t, uint8_t, 29>(127, 64, 95);
 }
+
+TEST_F(TMATMULTest, case_mmad_bf16e4m3_nd_64x64x64)
+{
+    tmatmul_test<float, uint16_t, uint8_t, 30>(64, 64, 64);
+}
+
+TEST_F(TMATMULTest, case_mmad_bf16e4m3_dn_127x64x95)
+{
+    tmatmul_test<float, uint16_t, uint8_t, 31>(127, 64, 95);
+}
