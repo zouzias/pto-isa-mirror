@@ -83,6 +83,7 @@ pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>

@@ -70,6 +70,7 @@ pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_bu
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ### CPU 参考形式
 

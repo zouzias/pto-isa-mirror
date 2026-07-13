@@ -39,6 +39,7 @@ $$q_i = \mathrm{round}\!\left(\frac{x_i}{\mathrm{scale}}\right) + \mathrm{offset
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`。
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ### MX — 分组式（`grp_axis` + `MxQuantAlg`）— 推荐
 

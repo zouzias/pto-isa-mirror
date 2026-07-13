@@ -96,6 +96,7 @@ pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ### CPU 参考形式
 

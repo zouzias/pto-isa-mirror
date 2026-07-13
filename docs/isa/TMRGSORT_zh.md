@@ -134,6 +134,7 @@ outs(%dst, %executed : !pto.tile_buf<...>, vector<4xi16>)
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ### 单列表变体
 

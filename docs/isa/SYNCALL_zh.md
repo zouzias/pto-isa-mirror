@@ -42,6 +42,7 @@ flowchart TB
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`。软件模式接口使用类型安全的 `GlobalTensor` 和 `Tile` 参数（通过 SFINAE 约束）：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 // 硬件模式（所有 CoreType 通用）
