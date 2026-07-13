@@ -111,6 +111,10 @@ if __name__ == "__main__":
         "TMATMULTest.case_nd_int8_int4_to_int32_17x33x31",
         "TMATMULTest.case_nd_int8_int4_to_int32_2x80x48",
         "TMATMULTest.case_nd_fp16_int8_to_fp32_64x64x64",
+        "TMATMULTest.case_nd_fp16_int8_to_fp32_96x128x65",
+        "TMATMULTest.case_nd_fp16_int8_to_fp32_129x95x33",
+        "TMATMULTest.case_fp16_int8_to_fp32_65x90x89",
+        "TMATMULTest.case_nd_fp16_int8_to_fp32_2x80x48",
     ]
 
     case_params_list = [
@@ -134,6 +138,10 @@ if __name__ == "__main__":
         TMatmulParams(np.int8, np.int8, np.int32, 17, 33, 31, "nd", b_int4=True),
         TMatmulParams(np.int8, np.int8, np.int32, 2, 80, 48, "nd", b_int4=True),
         TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd"),
+        TMatmulParams(np.float16, np.int8, np.float32, 96, 128, 65, "nd"),
+        TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 33, "nd"),
+        TMatmulParams(np.float16, np.int8, np.float32, 65, 90, 89, "dn"),
+        TMatmulParams(np.float16, np.int8, np.float32, 2, 80, 48, "nd"),
     ]
 
     for i, case_name in enumerate(case_name_list):

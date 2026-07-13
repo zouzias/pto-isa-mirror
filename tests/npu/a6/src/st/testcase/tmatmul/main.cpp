@@ -190,3 +190,23 @@ TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_64x64x64)
 {
     tmatmul_test<float, uint16_t, int8_t, 20>(64, 64, 64);
 }
+
+TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_96x128x65)
+{
+    tmatmul_test<float, uint16_t, int8_t, 21>(96, 128, 65);
+}
+
+TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_129x95x33)
+{
+    tmatmul_test<float, uint16_t, int8_t, 22>(129, 95, 33);
+}
+
+TEST_F(TMATMULTest, case_fp16_int8_to_fp32_65x90x89)
+{
+    tmatmul_test<float, uint16_t, int8_t, 23>(65, 90, 89);
+}
+
+TEST_F(TMATMULTest, case_nd_fp16_int8_to_fp32_2x80x48)
+{
+    tmatmul_test<float, uint16_t, int8_t, 24>(2, 80, 48);
+}
