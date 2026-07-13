@@ -225,3 +225,9 @@ __global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
 }
 ```
 
+## 相关资源
+
+- [Tile 概念](../../coding/Tile_zh.md)
+- [编程模型](../../coding/ProgrammingModel_zh.md)
+- [错误码参考](../../coding/error-codes_zh.md)
+- [指令集总览](../../PTOISA_zh.md)

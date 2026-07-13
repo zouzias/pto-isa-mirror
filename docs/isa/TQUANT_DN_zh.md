@@ -142,3 +142,10 @@ TMOV<0>(e8ZzTile, e8DnTile, tmpTile);
 ```
 
 完整 ST 示例（阶段 1–3）见 `tests/npu/a5/src/st/testcase/tquant_dn/`。
+
+## 相关资源
+
+- [Tile 概念](../coding/Tile_zh.md)
+- [编程模型](../coding/ProgrammingModel_zh.md)
+- [错误码参考](../coding/error-codes_zh.md)
+- [指令集总览](../PTOISA_zh.md)

@@ -275,3 +275,10 @@ void example_soft_aiv(__gm__ int32_t *gmPtr) {
 ```
 
 MIX 软件模式需同时提供 UB 与 L1（Mat）Tile；A5 AIC 侧通过代理路径写 GM，详见「约束」一节。
+
+## 相关资源
+
+- [Tile 概念](../coding/Tile_zh.md)
+- [编程模型](../coding/ProgrammingModel_zh.md)
+- [错误码参考](../coding/error-codes_zh.md)
+- [指令集总览](../PTOISA_zh.md)

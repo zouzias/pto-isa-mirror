@@ -314,3 +314,10 @@ pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 # IR Level 2 (DPS) - 值 + 索引
 pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
+
+## 相关资源
+
+- [Tile 概念](../coding/Tile_zh.md)
+- [编程模型](../coding/ProgrammingModel_zh.md)
+- [错误码参考](../coding/error-codes_zh.md)
+- [指令集总览](../PTOISA_zh.md)

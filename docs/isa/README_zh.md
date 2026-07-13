@@ -174,3 +174,10 @@
 ## 通信
 
 完整的通信 ISA 指令参考（点对点、异步、同步原语及集合通信）见 [comm/README_zh.md](comm/README_zh.md)。
+
+## 相关资源
+
+- [Tile 概念](../coding/Tile_zh.md)
+- [编程模型](../coding/ProgrammingModel_zh.md)
+- [错误码参考](../coding/error-codes_zh.md)
+- [指令集总览](../PTOISA_zh.md)
