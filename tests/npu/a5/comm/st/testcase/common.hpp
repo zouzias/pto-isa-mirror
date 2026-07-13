@@ -413,7 +413,8 @@ struct UrmaTestContext {
         return true;
     }
 
-    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
+    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded,
+               uint32_t qpNum = 1)
     {
         if (n_devices <= 0 || n_ranks <= 0) {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
@@ -456,7 +457,8 @@ struct UrmaTestContext {
         }
         CommMpiBarrier();
 
-        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize)) {
+        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize,
+                          qpNum)) {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             aclrtFree(devBuf);
             devBuf = nullptr;
@@ -485,6 +487,46 @@ struct UrmaTestContext {
         }
     }
 };
+
+// Shared by tput_async_urma / tget_async_urma: qpNum must equal blockDim.
+template <typename T, size_t count, int blockDim>
+inline bool SetupUrmaCtxForBlocks(UrmaTestContext &ctx, int rank_id, int n_ranks, int n_devices, int first_device_id,
+                                  int root_rank, size_t commBytesNeeded)
+{
+    static_assert(blockDim >= 1, "blockDim must be >= 1");
+    static_assert(count % static_cast<size_t>(blockDim) == 0, "count must be divisible by blockDim");
+    if (!ctx.Setup(rank_id, n_ranks, n_devices, first_device_id, root_rank, commBytesNeeded,
+                   static_cast<uint32_t>(blockDim))) {
+        return false;
+    }
+    if (ctx.urmaMgr.GetQpNum() != static_cast<uint32_t>(blockDim)) {
+        std::cerr << "[ERROR] expected qpNum=" << blockDim << " got " << ctx.urmaMgr.GetQpNum() << std::endl;
+        ctx.Cleanup();
+        return false;
+    }
+    return true;
+}
+
+inline bool AllocUrmaHostPair(uint8_t *&input_host, uint8_t *&output_host, size_t inputBytes, size_t outputBytes)
+{
+    input_host = nullptr;
+    output_host = nullptr;
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), inputBytes);
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), outputBytes);
+    if (!input_host || !output_host) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        if (input_host) {
+            aclrtFreeHost(input_host);
+        }
+        if (output_host) {
+            aclrtFreeHost(output_host);
+        }
+        input_host = nullptr;
+        output_host = nullptr;
+        return false;
+    }
+    return true;
+}
 
 // ============================================================================
 // RunUrmaTestMpiLaunch: MPI-based multi-rank launch for standalone URMA tests.

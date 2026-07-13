@@ -219,7 +219,7 @@ AICORE inline bool UrmaWaitEvent(uint64_t eventHandle, const UrmaEventContext &e
     uint32_t destRankId = 0;
     uint32_t curHead = 0;
     DecodeHandle(eventHandle, destRankId, curHead);
-    uint32_t ret = UrmaPollCq(eventCtx.contextGm, destRankId, 0, curHead);
+    uint32_t ret = UrmaPollCq(eventCtx.contextGm, destRankId, eventCtx.qpIdx, curHead);
     return ret == 0;
 }
 
@@ -235,7 +235,7 @@ AICORE inline bool UrmaTestEvent(uint64_t eventHandle, const UrmaEventContext &e
     __gm__ UrmaInfo *urmaInfo = (__gm__ UrmaInfo *)eventCtx.contextGm;
     uint32_t qpNum = urmaInfo->qpNum;
     __gm__ UrmaCqCtx *cqCtxEntry =
-        (__gm__ UrmaCqCtx *)(urmaInfo->scqPtr + (destRankId * qpNum + 0) * sizeof(UrmaCqCtx));
+        (__gm__ UrmaCqCtx *)(urmaInfo->scqPtr + (destRankId * qpNum + eventCtx.qpIdx) * sizeof(UrmaCqCtx));
     uint32_t curTail = ld_dev((__gm__ uint32_t *)cqCtxEntry->tailAddr, 0);
     if (static_cast<int32_t>(curTail - curHead) >= 0) {
         return true;
@@ -283,10 +283,19 @@ AICORE inline uint64_t __urma_get_async(__gm__ uint8_t *dst, __gm__ uint8_t *src
 
 AICORE inline bool BuildUrmaSession(__gm__ uint8_t *contextGm, uint32_t destRankId, UrmaSession &session)
 {
+    __gm__ UrmaInfo *info = (__gm__ UrmaInfo *)contextGm;
+    const uint32_t qpNum = (info != nullptr && info->qpNum > 0) ? info->qpNum : 1U;
+
+    if (static_cast<uint32_t>(get_block_num()) > qpNum) {
+        trap();
+    }
+    const uint32_t qpIdx = static_cast<uint32_t>(get_block_idx()) % qpNum;
+
     session.execCtx.contextGm = contextGm;
     session.execCtx.destRankId = destRankId;
-    session.execCtx.qpIdx = 0;
+    session.execCtx.qpIdx = qpIdx;
     session.eventCtx.contextGm = contextGm;
+    session.eventCtx.qpIdx = qpIdx;
     session.valid = (contextGm != nullptr);
     return session.valid;
 }
