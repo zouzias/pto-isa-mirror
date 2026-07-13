@@ -182,3 +182,43 @@ TEST_F(TStoreTest, case19)
 {
     test_tstore<0, int16_t, 1, 1, 1, 32, 16, 2, 2, 2, 32, 32>();
 }
+
+TEST_F(TStoreTest, case20)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 111, 88, 1, 1, 1, 112, 96>();
+}
+
+TEST_F(TStoreTest, case21)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 97, 65, 1, 1, 1, 112, 80>();
+}
+
+TEST_F(TStoreTest, case22)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 112, 88, 1, 1, 1, 112, 96>();
+}
+
+TEST_F(TStoreTest, case23)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 112, 65, 1, 1, 1, 112, 80>();
+}
+
+TEST_F(TStoreTest, case24)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 97, 97, 1, 1, 1, 112, 112>();
+}
+
+TEST_F(TStoreTest, case25)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 64, 65, 1, 1, 1, 64, 80>();
+}
+
+TEST_F(TStoreTest, case26)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 48, 65, 1, 1, 1, 48, 80>();
+}
+
+TEST_F(TStoreTest, case27)
+{
+    test_tstore<0, uint16_t, 1, 1, 1, 80, 49, 1, 1, 1, 80, 64>();
+}
