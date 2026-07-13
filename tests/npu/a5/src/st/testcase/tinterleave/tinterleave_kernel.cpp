@@ -104,4 +104,5 @@ template void LaunchTInterleave<int32_t, 16, 32, 16, 31>(int32_t *out0, int32_t 
 template void LaunchTInterleave<int8_t, 32, 256, 32, 255>(int8_t *out0, int8_t *out1, int8_t *src0, int8_t *src1,
                                                           void *stream);
 template void LaunchTInterleave<uint8_t, 32, 256, 32, 255>(uint8_t *out0, uint8_t *out1, uint8_t *src0, uint8_t *src1,
-                                                           void *stream);
+                                                            void *stream);
+template void LaunchTInterleave<float, 2, 72, 2, 66>(float *out0, float *out1, float *src0, float *src1, void *stream);
