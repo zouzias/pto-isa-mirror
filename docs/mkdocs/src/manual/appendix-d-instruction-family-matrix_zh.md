@@ -156,6 +156,7 @@
 | 复杂指令 | [TGATHERB](../../../../docs/isa/TGATHERB_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TGATHERB_zh.md` |
 | 复杂指令 | [TSCATTER](../../../../docs/isa/TSCATTER_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TSCATTER_zh.md` |
 | 复杂指令 | [TQUANT](../../../../docs/isa/TQUANT_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TQUANT_zh.md` |
+| 复杂指令 | [TDEQUANT](../../../../docs/isa/TDEQUANT_zh.md) | `elementwise` | `dst, src, scale, offset` | `docs/isa/TDEQUANT_zh.md` |
 | 通信 | [TPUT](../../../../docs/isa/comm/TPUT_zh.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TPUT_zh.md` |
 | 通信 | [TGET](../../../../docs/isa/comm/TGET_zh.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TGET_zh.md` |
 | 通信 | [TPUT_ASYNC](../../../../docs/isa/comm/TPUT_ASYNC_zh.md) | `comm` | `dst, src, session` | `docs/isa/comm/TPUT_ASYNC_zh.md` |
