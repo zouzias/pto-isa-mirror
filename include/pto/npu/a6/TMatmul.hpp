@@ -42,7 +42,8 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     } else if constexpr (std::is_same_v<typename TileRes::DType, float> &&
                          std::is_same_v<typename TileLeft::DType, half> &&
                          std::is_same_v<typename TileRight::DType, int8_t>) {
-        mad_f16s8(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+        // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
+        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else {
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     }
@@ -67,7 +68,8 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix, type
     } else if constexpr (std::is_same_v<typename TileRes::DType, float> &&
                          std::is_same_v<typename TileLeft::DType, half> &&
                          std::is_same_v<typename TileRight::DType, int8_t>) {
-        mad_f16s8(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+        // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
+        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else {
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     }
