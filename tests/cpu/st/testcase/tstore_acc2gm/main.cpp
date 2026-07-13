@@ -151,6 +151,11 @@ void test_tstore_acc2gm_scalar_nz2nd(float scalarQuant)
     EXPECT_TRUE(ret);
 }
 
+TEST_F(TStoreAcc2gmTest, case0)
+{
+    test_tstore_acc2gm_nz2nd<0, float, float, 128, 128, 32>();
+}
+
 TEST_F(TStoreAcc2gmTest, case1)
 {
     test_tstore_acc2gm_nz2nd<1, float, float, 128, 128, 16>();
