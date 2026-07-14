@@ -599,7 +599,7 @@ void LaunchTQuantMXFP8_FP16_Exp2D(uint8_t *dst, uint16_t *src, uint8_t *dst_exp,
 PTO_INTERNAL void CompactFp4PackedRows(__ubuf__ uint8_t *dstPtr, __ubuf__ uint8_t *srcPtr, uint32_t rows,
                                        uint32_t validPackedCols, uint32_t srcStride, uint32_t dstStride)
 {
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(uint8_t);
+    constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(uint8_t);
     RegTensor<uint8_t> vreg;
     UnalignReg ureg;
     uint16_t repeatTimes = CeilDivision(validPackedCols, elementsPerRepeat);

@@ -694,7 +694,7 @@ __tf__ PTO_INTERNAL OP_NAME(TEXTRACT)
     __ubuf__ RegT *srcAddr = (__ubuf__ RegT *)__cce_get_tile_ptr(src);
     constexpr uint32_t dstRowStride = DstTileData::RowStride;
     constexpr uint32_t srcRowStride = SrcTileData::RowStride;
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(RegT);
+    constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(RegT);
     constexpr int32_t kStaticValidCol = DstTileData::ValidCol;
     constexpr bool kSingleChunkStatic =
         (kStaticValidCol > 0) && (static_cast<uint32_t>(kStaticValidCol) <= elementsPerRepeat);
@@ -760,7 +760,7 @@ __tf__ PTO_INTERNAL OP_NAME(TEXTRACT)
     constexpr uint32_t dstRowStride = DstTileData::RowStride;
     constexpr uint32_t srcRowStride = SrcTileData::RowStride;
     constexpr int32_t kStaticValidCol = DstTileData::ValidCol;
-    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(RegT);
+    constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(RegT);
     constexpr bool kSingleChunkStatic =
         (kStaticValidCol > 0) && (static_cast<uint32_t>(kStaticValidCol) <= elementsPerRepeat);
 
