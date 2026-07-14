@@ -207,7 +207,7 @@ run_comm_st() {
   else
     ARGS+="--a3 "
   fi
-  ARGS+="--$RUN_TYPE "
+  ARGS+="--$RUN_TYPE --simple "
   ./tests/run_st.sh ${ARGS}
   echo "execute comm samples success"
 }
