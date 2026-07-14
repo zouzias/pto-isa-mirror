@@ -109,6 +109,7 @@ if __name__ == "__main__":
         TestParams(np.float32, 32, 128, 32, 192, 32, 256, 32, 127),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 32, 128, 32, 192, 32, 256, 32, 127),
+        TestParams(np.float16, 1, 16384, 1, 16384, 1, 16384, 1, 16384),
     ]
 
     for param in case_list:
