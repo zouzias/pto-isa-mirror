@@ -127,7 +127,7 @@ if [ "$ENABLE_A3" = "false" ] && [ "$ENABLE_A5" = "false" ] && \
 fi
 
 if { [ "$ENABLE_A3" = "true" ] || [ "$ENABLE_A5" = "true" ]; } && \
-   [ "$ENABLE_SIMPLE" = "false" ] && [ "$ENABLE_ALL" = "false" ]; then
+   [ "$ENABLE_SIMPLE" = "false" ] && [ "$ENABLE_ALL" = "false" ] && [ "$ENABLE_COMM" = "false" ]; then
   echo "Error: --a3/--a5 requires a test mode: pass --simple or --all." >&2
   usage
   exit 1
@@ -914,18 +914,18 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t texpands_mat
 fi
 
-# if [ "$ENABLE_COMM" = "true" ]; then
-#   if [ "$ENABLE_A3" = "true" ]; then
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
-#     python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
-#   fi
-# fi
+if [ "$ENABLE_COMM" = "true" ]; then
+  if [ "$ENABLE_A3" = "true" ]; then
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
+    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
+  fi
+fi
