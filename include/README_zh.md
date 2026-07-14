@@ -43,7 +43,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TAND`](../docs/isa/TAND_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TANDS`](../docs/isa/TANDS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TASSIGN`](../docs/isa/TASSIGN_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TAXPY`]() | TODO | TODO | 是 | 是 | 是 | TODO |
+| [`TAXPY`](../docs/isa/TAXPY_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TBROADCAST`](../docs/isa/comm/TBROADCAST_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TCI`](../docs/isa/TCI_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TCMP`](../docs/isa/TCMP_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
@@ -84,6 +84,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TGET`](../docs/isa/comm/TGET_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TGET_SCALE_ADDR`](../docs/isa/TGET_SCALE_ADDR_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
+| [`THISTOGRAM`](../docs/isa/THISTOGRAM_zh.md) | 是 | TODO | 否 | 否 | 是 | 是 |
 | [`TIMG2COL`](../docs/isa/TIMG2COL_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TINSERT`](../docs/isa/TINSERT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TINSERT_FP`](../docs/isa/TINSERT_FP_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |

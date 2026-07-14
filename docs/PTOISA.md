@@ -145,6 +145,8 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Complex | [`TGATHERB`](isa/TGATHERB.md) | Gather elements using byte offsets. |
 | Complex | [`TSCATTER`](isa/TSCATTER.md) | Scatter rows of a source tile into a destination tile using per-element row indices. |
 | Complex | [`TQUANT`](isa/TQUANT.md) | Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs. |
+| Complex | [`TDEQUANT`](isa/TDEQUANT.md) | Affine dequantization of a quantized tile (S8/S16 -> FP32): dst = (src - offset) * scale. |
+| Complex | [`THISTOGRAM`](isa/THISTOGRAM.md) | Per-byte histogram (256 bins) over a selected byte of each source element, with optional cascaded upper-byte filtering; the radix-sort bucket-count primitive. |
 | Communication | [`TPUT`](isa/comm/TPUT.md) | Remote write: transfer local data to remote NPU memory (GM → UB → GM). |
 | Communication | [`TGET`](isa/comm/TGET.md) | Remote read: read remote NPU data to local memory (GM → UB → GM). |
 | Communication | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC.md) | Asynchronous remote write (local GM → DMA engine → remote GM). |
