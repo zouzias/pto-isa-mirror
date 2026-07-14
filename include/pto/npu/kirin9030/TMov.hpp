@@ -124,10 +124,12 @@ __tf__ PTO_INTERNAL void TMovCcToCb(typename DstTile::TileDType __out__ dst, typ
 
     constexpr bool enableNz2Nd = (DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Dn = (!DstTile::isRowMajor && DstTile::SFractal == SLayout::NoneBox);
-    if constexpr (enableNz2Nd || enableNz2Dn) {
+    if constexpr (enableNz2Nd) {
         SetLoop3Para();
+        validCol = CeilAlignment(validCol, c0Size);
     }
     if constexpr (enableNz2Dn) {
+        SetLoop3Para();
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
@@ -177,6 +179,7 @@ __tf__ PTO_INTERNAL void TMovCcToUb(typename DstTile::TileDType __out__ dst, typ
         }
     }
     if constexpr (enableNz2Nd) {
+        validCol = CeilAlignment(validCol, c0Size);
         SetLoop3Para();
     } else if constexpr (enableNz2Dn) {
         SetLoop3Para();
