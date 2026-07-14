@@ -162,7 +162,7 @@ PTO_INST RecordEvent TSCATTER(DstTileData& dst, SrcTileData& src, WaitEvents&...
         - `SrcTileData::ValidCol` 必须等于 `DstTileData::ValidCol / 扩展倍数`，扩展倍数取决于掩码模式（P1111 为 1，P1010/P0101 为 2，P0001/P0010/P0100/P1000 为 4）。
     - `SCATTER_COL` 模式运行时断言：
         - `SrcTileData::ValidCol` 必须等于 `DstTileData::ValidCol`。
-        - `SrcTileData::ValidRow` 必须等于 `DstTileData::ValidRow * 扩展倍数`，扩展倍数取决于掩码模式（P1111 为 1，P1010/P0101 为 2，P0001/P0010/P0100/P1000 为 4）。
+        - `SrcTileData::ValidRow` 必须等于 `DstTileData::ValidRow / 扩展倍数`，扩展倍数取决于掩码模式（P1111 为 1，P1010/P0101 为 2，P0001/P0010/P0100/P1000 为 4）。
 
 ## 重要提示
 
