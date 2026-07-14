@@ -143,11 +143,11 @@ void example_auto() {
   using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
-  DstT dst;
-  DstValT dst;
+  DstT dstIdx;
+  DstValT dstVal;
   TmpT tmp;
-  TROWARGMIN(dst, src, tmp);
-  TROWARGMIN(dstVal, dst, src, tmp);
+  TROWARGMIN(dstIdx, src, tmp);
+  TROWARGMIN(dstVal, dstIdx, src, tmp);
 }
 ```
 
@@ -164,15 +164,15 @@ void example_manual() {
   using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
-  DstT dst;
-  DstValT dst;
+  DstT dstIdx;
+  DstValT dstVal;
   TmpT tmp;
   TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
+  TASSIGN(dstIdx, 0x2000);
   TASSIGN(dstVal, 0x3000);
   TASSIGN(tmp, 0x4000);
-  TROWARGMIN(dst, src, tmp);
-  TROWARGMIN(dstVal, dst, src, tmp);
+  TROWARGMIN(dstIdx, src, tmp);
+  TROWARGMIN(dstVal, dstIdx, src, tmp);
 }
 ```
 

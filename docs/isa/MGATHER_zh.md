@@ -142,7 +142,7 @@ enum class GatherOOB : uint8_t {
 
 **形状约束：**
 - `dst.Rows == indexes.Rows`。
-- `indexes` 的形状必须为 `[N, 1]`（按行 gather）或 `[N, M]`（按元素 gather）。
+- `indexes` 的形状必须为 `[1, N]`（按行 gather）或 `[N, M]`（按元素 gather）。
 - `dst` 行宽必须满足 32 字节对齐，即 `dst.Cols * sizeof(T)` 必须是 32 的倍数。
 - `src` 的静态 shape 必须满足 `Shape<1, 1, 1, TableRows, RowWidth>`。
 
@@ -306,7 +306,7 @@ void example_auto() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
-  // src 是 GM 中的 GlobalTensor
+  GlobalData<float> src;  // GM 中的 GlobalTensor
   MGATHER(dst, src, idx);
 }
 ```
@@ -323,6 +323,7 @@ void example_manual() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
+  GlobalData<float> src;
   TASSIGN(dst, 0x1000);
   TASSIGN(idx, 0x2000);
   MGATHER(dst, src, idx);
