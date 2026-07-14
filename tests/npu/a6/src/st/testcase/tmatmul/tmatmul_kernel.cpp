@@ -432,3 +432,94 @@ void LaunchTMATMUL<39>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     RunTMATMUL_ND<float, half, int4b_t, 128, 128, 128><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
 }
+
+template <>
+void LaunchTMATMUL<40>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 64, 64, 64><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<41>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 65, 90, 89><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<42>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 96, 128, 89><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<43>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 129, 95, 63><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<44>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 16, 64, 32><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<45>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 128, 128, 128><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<46>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int8_t, 96, 128, 89><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<47>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int8_t, 129, 95, 63><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<48>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, int8_t, 2, 90, 31><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<49>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, float8_e4m3_t, 95, 64, 79><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<50>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, bfloat16_t, float8_e4m3_t, 2, 64, 31><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<51>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, half, half, 2, 80, 48><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
+}
+
+template <>
+void LaunchTMATMUL<52>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
+{
+    RunTMATMUL_ND<float, half, half, 128, 128, 128><<<1, nullptr, stream>>>(
+        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
+}

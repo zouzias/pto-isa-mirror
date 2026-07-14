@@ -43,6 +43,10 @@ inline constexpr bool kIsMmadBf16S8 = std::is_same_v<typename TileRes::DType, fl
     &&std::is_same_v<typename TileLeft::DType, bfloat16_t> &&std::is_same_v<typename TileRight::DType, int8_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
+inline constexpr bool kIsMmadBf16S4 = std::is_same_v<typename TileRes::DType, float>
+    &&std::is_same_v<typename TileLeft::DType, bfloat16_t> &&std::is_same_v<typename TileRight::DType, int4b_t>;
+
+template <typename TileRes, typename TileLeft, typename TileRight>
 inline constexpr bool kIsMmadS8S4 = std::is_same_v<typename TileRes::DType, int32_t>
     &&std::is_same_v<typename TileLeft::DType, int8_t> &&std::is_same_v<typename TileRight::DType, int4b_t>;
 } // namespace TMatmulInternel
@@ -77,6 +81,8 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     } else if constexpr (kIsMmadBf16S8<TileRes, TileLeft, TileRight>) {
         // A6 MMAD.bf16s8 uses the standard mad entry point on current toolchains.
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    } else if constexpr (kIsMmadBf16S4<TileRes, TileLeft, TileRight>) {
+        mad_bf16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else if constexpr (kIsMmadF16S4<TileRes, TileLeft, TileRight>) {
         mad_f16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
@@ -113,6 +119,8 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix, type
     } else if constexpr (kIsMmadBf16S8<TileRes, TileLeft, TileRight>) {
         // A6 MMAD.bf16s8 uses the standard mad entry point on current toolchains.
         mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    } else if constexpr (kIsMmadBf16S4<TileRes, TileLeft, TileRight>) {
+        mad_bf16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else if constexpr (kIsMmadF16S4<TileRes, TileLeft, TileRight>) {
         mad_f16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
     } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
@@ -218,6 +226,7 @@ PTO_INTERNAL void CheckMadValid()
                           (std::is_same_v<AType, half> && std::is_same_v<BType, float8_e4m3_t>) ||
                           (std::is_same_v<AType, half> && std::is_same_v<BType, int4b_t>) ||
                           (std::is_same_v<AType, bfloat16_t> && std::is_same_v<BType, float8_e4m3_t>) ||
+                          (std::is_same_v<AType, bfloat16_t> && std::is_same_v<BType, int4b_t>) ||
                           (std::is_same_v<AType, bfloat16_t> && std::is_same_v<BType, int8_t>) ||
                           (std::is_same_v<AType, half> && std::is_same_v<BType, int8_t>) ||
                           (std::is_same_v<AType, bfloat16_t> && std::is_same_v<BType, bfloat16_t>) ||
@@ -229,7 +238,7 @@ PTO_INTERNAL void CheckMadValid()
                           (std::is_same_v<AType, hifloat8_t> && std::is_same_v<BType, hifloat8_t>),
                       "For A6 float accumulation, supported input pairs include halfxhalf (MMAD.f16f32), "
                       "halfxfloat8_e4m3_t (MMAD.f16e4m3), bfloat16xfloat8_e4m3_t (MMAD.bf16e4m3), "
-                      "halfxint4b_t (MMAD.f16s4), "
+                      "halfxint4b_t (MMAD.f16s4), bfloat16xint4b_t (MMAD.bf16s4), "
                       "halfxint8 (MMAD.f16s8), bfloat16xint8 (MMAD.bf16s8), bfloat16xbfloat16, floatxfloat, "
                       "selected fp8 pairs, and hifloat8xhifloat8.");
     }

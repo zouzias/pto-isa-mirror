@@ -175,6 +175,19 @@ if __name__ == "__main__":
         "TMATMULTest.case_mmad_f16s4_nd_129x95x63",
         "TMATMULTest.case_mmad_f16s4_nd_16x64x32",
         "TMATMULTest.case_mmad_f16s4_nd_128x128x128",
+        "TMATMULTest.case_mmad_bf16s4_nd_64x64x64",
+        "TMATMULTest.case_mmad_bf16s4_nd_65x90x89",
+        "TMATMULTest.case_mmad_bf16s4_nd_96x128x89",
+        "TMATMULTest.case_mmad_bf16s4_nd_129x95x63",
+        "TMATMULTest.case_mmad_bf16s4_nd_16x64x32",
+        "TMATMULTest.case_mmad_bf16s4_nd_128x128x128",
+        "TMATMULTest.case_mmad_bf16s8_nd_96x128x89",
+        "TMATMULTest.case_mmad_bf16s8_nd_129x95x63",
+        "TMATMULTest.case_mmad_bf16s8_nd_2x90x31",
+        "TMATMULTest.case_mmad_bf16e4m3_nd_95x64x79",
+        "TMATMULTest.case_mmad_bf16e4m3_nd_2x64x31",
+        "TMATMULTest.case_mmad_f16f32_nd_2x80x48",
+        "TMATMULTest.case_mmad_f16f32_nd_128x128x128",
     ]
 
     case_params_list = [
@@ -217,6 +230,19 @@ if __name__ == "__main__":
         TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
         TMatmulParams(np.float16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
         TMatmulParams(np.float16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
+        TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd"),
+        TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd"),
+        TMatmulParams(bfloat16, np.int8, np.float32, 2, 90, 31, "nd"),
+        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 95, 64, 79, "nd"),
+        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 2, 64, 31, "nd"),
+        TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd"),
+        TMatmulParams(np.float16, np.float16, np.float32, 128, 128, 128, "nd"),
     ]
 
     for i, case_name in enumerate(case_name_list):
