@@ -1,0 +1,59 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# ============================================================================
+#
+# typos 配置：本项目专有领域词白名单（经核实均为合法术语，非拼写错误）。
+# These are confirmed Ascend / CANN / PTO-ISA domain terms — NOT typos.
+# 真正的拼写错误（valid / support / structure / internal 等被拼错的形式）不在白名单内，
+# 仍会被 typos 报出，需人工修复。
+
+[default.extend-words]
+# CANN 平台名（出现在每个 license 头里）
+"CANN" = "CANN"
+"cann" = "cann"
+# Ascend 张量格式 / fractal 布局（ND = Normal/Dense；Nd fractal Tile）
+"ND" = "ND"
+"nd" = "nd"
+"Nd" = "Nd"
+# Ascend 布局变换 ADN2ZZ / BND2NN（typos 把 ADN2ZZ 拆出 ADN 并建议 ADN→AND）
+"ADN" = "ADN"
+# TPE = Tensor Processing Engine（Ascend 域缩写，出现在 tpe*/TPE*/offsetTPE 等）
+"TPE" = "TPE"
+"tpe" = "tpe"
+# TTest 指令（TTEST / ttest / TTESTTest / TTEST_IMPL）
+"TTEST" = "TTEST"
+"ttest" = "ttest"
+# Flash-Attention softmax 中的 tmp_shw_* 变量（子词 shw）
+"shw" = "shw"
+# ACL 运行时 CMO（Cache-Memory Operation）API：aclrtCmoAsync / ACL_RT_CMO_TYPE_*
+"CMO" = "CMO"
+"Cmo" = "Cmo"
+# vor 指令（向量按位或）
+"vor" = "vor"
+# 算法文档中的缩写 Eles（Elements），如 tmpGapEles
+"Eles" = "Eles"
+# pn 来自 .png 图片路径（typos 误拆）
+"pn" = "pn"
+# typ 作为 ELF st_info(bind, typ) 参数名（用 type 会遮蔽内置）
+"typ" = "typ"
+# mis 作为合法前缀（mis-typed / mis-counts 等），typos 误报
+"mis" = "mis"
+# TBE（Tensor Boost Engine）算子类型
+"TBE" = "TBE"
+"tbe" = "tbe"
+# TBE 子分块（subtile）单位
+"subtile" = "subtile"
+"Subtile" = "Subtile"
+"subtiles" = "subtiles"
+"Subtiles" = "Subtiles"
+"SUBTILE" = "SUBTILE"
+"SUBTILES" = "SUBTILES"
+# TAnds 指令（typos 把 TAnds 拆成 T+Ands 并建议 Ands→And）
+"Ands" = "Ands"
+# FiFo / RingFiFo 标识符（typos 拆出 Fo 并建议 Fo→Of）
+"Fo" = "Fo"

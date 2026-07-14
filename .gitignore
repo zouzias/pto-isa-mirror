@@ -42,6 +42,15 @@ docs/mkdocs/src/manual/isa-reference_zh.md
 docs/mkdocs/src/scripts/
 docs/mkdocs/src/tests/
 kernels/**/**/**/build/
+<<<<<<< Updated upstream
 PROF*/
 .claude/
 .opencode/
+=======
+PROF*/
+
+oat_reports/
+oat_reports/
+
+log/
+>>>>>>> Stashed changes
