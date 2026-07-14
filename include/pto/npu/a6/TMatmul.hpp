@@ -57,6 +57,23 @@ PTO_INTERNAL constexpr bool GetGemvCtrl()
     return TileLeft::Rows != 1;
 }
 
+#define PTO_A6_DISPATCH_MAD(C_PTR, A_PTR, B_PTR, M_VAL, K_VAL, N_VAL)                                                  \
+    do {                                                                                                               \
+        if constexpr (kIsMmadS8S4<TileRes, TileLeft, TileRight>) {                                                     \
+            mad_s8s4(C_PTR, A_PTR, B_PTR, M_VAL, K_VAL, N_VAL, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource,   \
+                     cmatrixInitVal);                                                                                  \
+        } else if constexpr (kIsMmadBf16S4<TileRes, TileLeft, TileRight>) {                                            \
+            mad_bf16s4(C_PTR, A_PTR, B_PTR, M_VAL, K_VAL, N_VAL, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, \
+                       cmatrixInitVal);                                                                                \
+        } else if constexpr (kIsMmadF16S4<TileRes, TileLeft, TileRight>) {                                             \
+            mad_f16s4(C_PTR, A_PTR, B_PTR, M_VAL, K_VAL, N_VAL, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource,  \
+                      cmatrixInitVal);                                                                                 \
+        } else {                                                                                                       \
+            mad(C_PTR, A_PTR, B_PTR, M_VAL, K_VAL, N_VAL, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource,        \
+                cmatrixInitVal);                                                                                       \
+        }                                                                                                              \
+    } while (false)
+
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           bool cmatrixSource, bool cmatrixInitVal, bool gemvCtrl>
 __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename TileLeft::TileDType __in__ aMatrix,
@@ -67,30 +84,7 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType *b = (__cb__ typename TileRight::DType *)__cce_get_tile_ptr(bMatrix);
 
-    if constexpr (kIsMmadS8S4<TileRes, TileLeft, TileRight>) {
-        mad_s8s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16F32<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.f16f32 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16E4M3<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.f16e4m3 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16E4M3<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.bf16e4m3 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16S8<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.bf16s8 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16S4<TileRes, TileLeft, TileRight>) {
-        mad_bf16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16S4<TileRes, TileLeft, TileRight>) {
-        mad_f16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
-        // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else {
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    }
+    PTO_A6_DISPATCH_MAD(c, a, b, m, k, n);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
@@ -105,31 +99,10 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix, type
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType *)xd;
 
-    if constexpr (kIsMmadS8S4<TileRes, TileLeft, TileRight>) {
-        mad_s8s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16F32<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.f16f32 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16E4M3<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.f16e4m3 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16E4M3<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.bf16e4m3 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16S8<TileRes, TileLeft, TileRight>) {
-        // A6 MMAD.bf16s8 uses the standard mad entry point on current toolchains.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadBf16S4<TileRes, TileLeft, TileRight>) {
-        mad_bf16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16S4<TileRes, TileLeft, TileRight>) {
-        mad_f16s4(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else if constexpr (kIsMmadF16S8<TileRes, TileLeft, TileRight>) {
-        // Fallback for toolchains that do not expose mad_f16s8 symbol yet.
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    } else {
-        mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
-    }
+    PTO_A6_DISPATCH_MAD(c, a, b, m, k, n);
 }
+
+#undef PTO_A6_DISPATCH_MAD
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           bool biasBufferCtrl, bool cmatrixInitVal, bool gemvCtrl>
