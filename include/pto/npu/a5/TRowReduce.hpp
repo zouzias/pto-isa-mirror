@@ -437,7 +437,7 @@ template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
     using T = typename TileDataIn::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 
@@ -448,7 +448,7 @@ template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
     using T = typename TileDataIn::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 
@@ -459,7 +459,7 @@ template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
     using T = typename TileDataIn::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 

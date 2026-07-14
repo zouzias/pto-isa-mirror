@@ -402,7 +402,7 @@ AICORE void runTInsertNZLargeTile(__gm__ T *out, __gm__ T *src)
 
 #if defined(__DAV_VEC__)
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t dstElements = DstRows * Cols;
         constexpr uint16_t dstRepeats =
             static_cast<uint16_t>((dstElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -937,7 +937,7 @@ AICORE void runTInsertNZUnaligned(__gm__ T *out, __gm__ T *src)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t tmpElements = (AlignedRow + 1) * Cols;
         constexpr uint16_t tmpRepeats =
             static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1045,7 +1045,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t tmpElements = (MaxAlignedRow + 1) * Cols;
         constexpr uint16_t tmpRepeats =
             static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1083,7 +1083,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t tmpElements2 = (AlignedRow2 + 1) * Cols;
         constexpr uint16_t tmpRepeats2 =
             static_cast<uint16_t>((tmpElements2 + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1228,7 +1228,7 @@ AICORE void runTInsertNZOverwrite(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t tmpElements = (AlignedRow2 + 1) * Cols;
         constexpr uint16_t tmpRepeats =
             static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1311,7 +1311,7 @@ AICORE void runTInsertNZVecToVec(__gm__ T *out, __gm__ T *src)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t dstElements = DstRows * Cols;
         constexpr uint16_t dstRepeats =
             static_cast<uint16_t>((dstElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1379,7 +1379,7 @@ AICORE void runTInsertNZPlusOneVecToVec(__gm__ T *out, __gm__ T *src)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     {
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t dstElements = DstRows * Cols;
         constexpr uint16_t dstRepeats =
             static_cast<uint16_t>((dstElements + elementsPerRepeat - 1) / elementsPerRepeat);
@@ -1500,7 +1500,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     // after NZ conversion. TINSERT writes ALL alignedRows from tmpTile to L1.
     {
         constexpr uint32_t tmpTileBytes = burstNum * (DstRows + 1) * c0Size * sizeof(T);
-        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr uint32_t tmpElements = tmpTileBytes / sizeof(T);
         constexpr uint16_t zeroRepeats =
             static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);

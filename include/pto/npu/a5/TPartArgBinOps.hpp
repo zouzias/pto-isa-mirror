@@ -19,8 +19,8 @@ PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, 
                                   __ubuf__ U *srcIdxPtr, unsigned srcValStride, unsigned srcIdxStride, unsigned row,
                                   uint32_t &dstSReg, uint32_t repeatStart, uint32_t repeatEnd)
 {
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    constexpr unsigned elementsPerRepeatIdx = CCE_VL / sizeof(U);
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     constexpr auto distIndex =
@@ -56,7 +56,7 @@ PTO_INTERNAL void TPartArgProcRepeatIdx(__ubuf__ U *dstIdxPtr, __ubuf__ U *src0I
 {
     constexpr auto distIndex =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<U, DistVST::DIST_NORM>())>();
-    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
+    constexpr unsigned elementsPerRepeatIdx = CCE_VL / sizeof(U);
     RegTensor<U> dstIdxRegFinal, dstIdxReg, src0IdxReg, src1IdxReg;
     RegTensor<U> dstIdxRegFinal2, dstIdxReg2, src0IdxReg2, src1IdxReg2;
     MaskReg dstIdxMask = CreatePredicate<U>(dstIdxSreg);
@@ -101,8 +101,8 @@ PTO_INTERNAL void TPartArgProcRow(__ubuf__ T *dstValPtr, __ubuf__ U *dstIdxPtr, 
                                   unsigned srcBigIdxStride, unsigned row, uint32_t &dstSReg, uint32_t &srcSReg,
                                   uint32_t repeatEnd)
 {
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    constexpr unsigned elementsPerRepeatIdx = REPEAT_BYTE / sizeof(U);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    constexpr unsigned elementsPerRepeatIdx = CCE_VL / sizeof(U);
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     MaskReg dstMask, srcMask, selMask, selMask0, selMask1, srcIdxMask, dstIdxMask;
@@ -136,7 +136,7 @@ __tf__ PTO_INTERNAL void TPartArgProc(
 {
     using T = typename DstValTileData::DType;
     using U = typename DstIdxTileData::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     __ubuf__ T *src0ValPtr = (__ubuf__ T *)__cce_get_tile_ptr(src0Val);
     __ubuf__ T *src1ValPtr = (__ubuf__ T *)__cce_get_tile_ptr(src1Val);
     __ubuf__ T *dstValPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstVal);

@@ -251,7 +251,7 @@ __tf__ PTO_INTERNAL void TColReduceIdxImpl(typename TileDataOutVal::TileDType __
     using TOUT = typename TileDataOutIdx::DType;
 
     constexpr unsigned srcRowStride = TileDataIn::Cols;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TIN);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(TIN);
     uint16_t repeatTimes = CeilDivision(srcValidCol, elementsPerRepeat);
 
     __ubuf__ typename TileDataOutVal::DType *dstValPtr =

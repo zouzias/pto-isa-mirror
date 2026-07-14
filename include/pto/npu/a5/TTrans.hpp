@@ -370,7 +370,7 @@ PTO_INTERNAL void TTransConvNCHW2NC1HWC0Align(__ubuf__ T *dst, __ubuf__ T *src, 
     unsigned rows = dstC0;
     unsigned cols = srcH * srcW;
     unsigned dstC1 = (srcC + dstC0 - 1) / dstC0;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T); // REPEAT_BYTE = 256
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T); // CCE_VL = 256
     unsigned nStride = dstC1 * dstC0 * srcH * srcW;
     unsigned cStride = dstC0 * srcH * srcW;
     for (int n = 0; n < srcN; n++) {
@@ -443,7 +443,7 @@ PTO_INTERNAL void TTransConvGNCHW2GNC1HWC0Align(__ubuf__ T *dst, __ubuf__ T *src
     unsigned rows = dstC0;
     unsigned cols = srcH * srcW;
     unsigned dstC1 = (srcC + dstC0 - 1) / dstC0;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T); // REPEAT_BYTE = 256
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T); // CCE_VL = 256
     unsigned gStride = srcN * dstC1 * dstC0 * srcH * srcW;
     unsigned nStride = dstC1 * dstC0 * srcH * srcW;
     unsigned cStride = dstC0 * srcH * srcW;
@@ -518,7 +518,7 @@ PTO_INTERNAL void ConvNC1HWC02C1HWNC0Align(__ubuf__ T *dst, __ubuf__ T *src, uns
     unsigned validRow = srcC1HW;
     unsigned srcStride = srcC0;
     unsigned dstStride = dstN * srcC0;
-    constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
     uint16_t repeatTimes = CeilDivision(validCol, nRepeatElem);
     uint32_t tailEleNum = validCol % nRepeatElem;
     if (tailEleNum == 0) {
@@ -622,7 +622,7 @@ PTO_INTERNAL void ConvGNC1HWC02GC1HWNC0Align(__ubuf__ T *dst, __ubuf__ T *src, u
     unsigned validRow = srcC1HW;
     unsigned srcStride = srcC0;
     unsigned dstStride = dstN * srcC0;
-    constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
     uint16_t repeatTimes = CeilDivision(validCol, nRepeatElem);
     uint32_t tailEleNum = validCol % nRepeatElem;
     if (tailEleNum == 0) {
@@ -826,7 +826,7 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
         static_assert(TileDataSrc::Cols * sizeof(T) % 32 == 0, "Fix: TTRANS has inconsistent input shape.");
         static_assert(TileDataDst::Cols * sizeof(U) % 32 == 0, "Fix: TTRANS has inconsistent output shape.");
 
-        constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
         constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
 
         unsigned numRows = (unsigned)src.GetValidRow();
