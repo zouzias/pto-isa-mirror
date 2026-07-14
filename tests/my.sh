@@ -1,0 +1,12 @@
+git apply /tmp/patch_tcolmax_main.diff
+git apply /tmp/patch_tcolmin_main.diff
+git apply /tmp/patch_tpartmax_main.diff
+git apply /tmp/patch_tpartmin_main.diff
+git apply /tmp/patch_trowmax_main.diff
+git apply /tmp/patch_trowmin_main.diff
+git apply /tmp/patch_tcolmax_gen.diff
+git apply /tmp/patch_tcolmin_gen.diff
+git apply /tmp/patch_tpartmax_gen.diff
+git apply /tmp/patch_tpartmin_gen.diff
+git apply /tmp/patch_trowmax_gen.diff
+git apply /tmp/patch_trowmin_gen.diff

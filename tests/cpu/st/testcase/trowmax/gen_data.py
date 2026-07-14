@@ -1,7 +1,5 @@
-#!/usr/bin/python3
-# coding=utf-8
 # --------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -10,81 +8,93 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-import os
 import numpy as np
-from utils import NumExt
-np.random.seed(19)
+import sys
 
-def gen_golden_data_trowmax(case_name, param):
-    dtype = param.dtype
+def get_test_params():
+    params = []
+    # FP32 tile shapes
+    params.append({'type': np.float32, 'global_row': 64, 'global_col': 64, 'tile_row': 64, 'tile_col': 64, 'valid_row': 64, 'valid_col': 64})
+    params.append({'type': np.float32, 'global_row': 77, 'global_col': 81, 'tile_row': 32, 'tile_col': 16, 'valid_row': 32, 'valid_col': 16})
+    params.append({'type': np.float32, 'global_row': 32, 'global_col': 32, 'tile_row': 32, 'tile_col': 16, 'valid_row': 32, 'valid_col': 16})
+    # FP16 tile shapes
+    params.append({'type': np.float16, 'global_row': 64, 'global_col': 64, 'tile_row': 64, 'tile_col': 64, 'valid_row': 64, 'valid_col': 64})
+    params.append({'type': np.float16, 'global_row': 161, 'global_col': 161, 'tile_row': 32, 'tile_col': 32, 'valid_row': 32, 'valid_col': 32})
+    # BF16 tile shapes
+    params.append({'type': np.bfloat16, 'global_row': 64, 'global_col': 64, 'tile_row': 64, 'tile_col': 64, 'valid_row': 64, 'valid_col': 64})
+    # INT8 tile shapes
+    params.append({'type': np.int8, 'global_row': 64, 'global_col': 64, 'tile_row': 64, 'tile_col': 64, 'valid_row': 64, 'valid_col': 64})
+    params.append({'type': np.int8, 'global_row': 128, 'global_col': 128, 'tile_row': 32, 'tile_col': 32, 'valid_row': 32, 'valid_col': 32})
+    params.append({'type': np.int8, 'global_row': 64, 'global_col': 32, 'tile_row': 32, 'tile_col': 16, 'valid_row': 32, 'valid_col': 16})
+    params.append({'type': np.int8, 'global_row': 96, 'global_col': 96, 'tile_row': 48, 'tile_col': 48, 'valid_row': 48, 'valid_col': 48})
+    # UINT8 tile shapes
+    params.append({'type': np.uint8, 'global_row': 64, 'global_col': 64, 'tile_row': 64, 'tile_col': 64, 'valid_row': 64, 'valid_col': 64})
+    params.append({'type': np.uint8, 'global_row': 128, 'global_col': 128, 'tile_row': 32, 'tile_col': 32, 'valid_row': 32, 'valid_col': 32})
+    params.append({'type': np.uint8, 'global_row': 64, 'global_col': 32, 'tile_row': 32, 'tile_col': 16, 'valid_row': 32, 'valid_col': 16})
+    params.append({'type': np.uint8, 'global_row': 96, 'global_col': 96, 'tile_row': 48, 'tile_col': 48, 'valid_row': 48, 'valid_col': 48})
+    return params
 
-    row, col = [param.tile_row, param.tile_col]
-    h_valid, w_valid = [min(row, param.valid_row), min(col, param.valid_col)]
+def gen_golden_data_float(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
+    dst = np.zeros((global_row, global_col), dtype=np.float32)
+    golden = np.zeros(global_row, dtype=np.float32)
+    for i in range(global_row):
+        golden[i] = input_data[i * global_col]
+        for j in range(1, global_col):
+            golden[i] = max(golden[i], input_data[i * global_col + j])
+    return golden
 
-    # Generate random input array
-    input1 = NumExt.astype(np.random.uniform(low=-16, high=16, size=[row, col]), dtype)
+def gen_golden_data_float16(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
+    return gen_golden_data_float(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col)
 
-    # Apply valid region constraints
-    golden = NumExt.astype(np.full((h_valid), np.finfo(np.float32).min, dtype=np.float32), dtype)
-    for i in range(h_valid):
-        golden[i] = NumExt.astype(np.max(input1[i][:w_valid]), dtype)
+def gen_golden_data_bfloat16(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
+    return gen_golden_data_float(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col)
 
-    # Save the input and golden data to binary files
-    NumExt.write_array("input1.bin", input1, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+def gen_golden_data_int8(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
+    golden = np.zeros(global_row, dtype=np.int8)
+    for i in range(global_row):
+        golden[i] = input_data[i * global_col]
+        for j in range(1, global_col):
+            golden[i] = max(golden[i], input_data[i * global_col + j])
+    return golden
 
-    return input1, golden
+def gen_golden_data_uint8(input_data, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
+    golden = np.zeros(global_row, dtype=np.uint8)
+    for i in range(global_row):
+        golden[i] = input_data[i * global_col]
+        for j in range(1, global_col):
+            golden[i] = max(golden[i], input_data[i * global_col + j])
+    return golden
 
+def main():
+    params = get_test_params()
+    for param in params:
+        print("Generate test data for type:", param["type"])
+        if not np.issubdtype(param["type"], np.integer):
+            input_data = np.random.rand(param["global_row"], param["global_col"]).astype(param["type"])
+        else:
+            iinfo = np.iinfo(param["type"])
+            input_data = np.random.randint(iinfo.min, iinfo.max + 1, (param["global_row"], param["global_col"]), dtype=param["type"])
 
-class TRowmaxParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
-        self.dtype = dtype
-        self.global_row = global_row
-        self.global_col = global_col
-        self.tile_row = tile_row
-        self.tile_col = tile_col
-        self.valid_row = valid_row
-        self.valid_col = valid_col
+        if param["type"] == np.float32:
+            golden = gen_golden_data_float(input_data, param["global_row"], param["global_col"], param["tile_row"], param["tile_col"], param["valid_row"], param["valid_col"])
+        elif param["type"] == np.float16:
+            golden = gen_golden_data_float16(input_data, param["global_row"], param["global_col"], param["tile_row"], param["tile_col"], param["valid_row"], param["valid_col"])
+        elif param["type"] == np.bfloat16:
+            golden = gen_golden_data_bfloat16(input_data, param["global_row"], param["global_col"], param["tile_row"], param["tile_col"], param["valid_row"], param["valid_col"])
+        elif param["type"] == np.int8:
+            golden = gen_golden_data_int8(input_data, param["global_row"], param["global_col"], param["tile_row"], param["tile_col"], param["valid_row"], param["valid_col"])
+        elif param["type"] == np.uint8:
+            golden = gen_golden_data_uint8(input_data, param["global_row"], param["global_col"], param["tile_row"], param["tile_col"], param["valid_row"], param["valid_col"])
+        else:
+            print("Unsupported data type")
+            sys.exit(1)
 
+        input_path = "data/input1.bin"
+        golden_path = "data/golden.bin"
 
-def generate_case_name(param):
-    dtype_str = NumExt.get_short_type_name(param.dtype)
-
-    def substring(a, b) -> str:
-        return f"_{a}x{b}"
-        
-    name = f"TROWMAXTest.case_{dtype_str}" 
-    name += substring(param.global_row, param.global_col)
-    name += substring(param.tile_row, param.tile_col)
-    name += substring(param.valid_row, param.valid_col)
-    
-    return name
-
+        np.savetxt(input_path, input_data.reshape(-1), fmt='%g')
+        np.savetxt(golden_path, golden, fmt='%g')
+        print("Test data generated successfully")
 
 if __name__ == "__main__":
-    # Get the absolute path of the script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    testcases_dir = os.path.join(script_dir, "testcases")
-
-    # Ensure the testcases directory exists
-    if not os.path.exists(testcases_dir):
-        os.makedirs(testcases_dir)
-
-    case_params_list = [
-        TRowmaxParams(np.float32, 64, 64, 64, 64, 64, 64),
-        TRowmaxParams(np.float16, 64, 64, 64, 64, 64, 64),
-        TRowmaxParams(np.float16, 161, 161, 32, 32, 161, 161),
-        TRowmaxParams(np.float32, 77, 81, 32, 16, 77, 81),
-        TRowmaxParams(np.float32, 32, 32, 32, 16, 32, 32)
-    ]
-    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(TRowmaxParams(NumExt.bf16, 64, 64, 64, 64, 64, 64))
-
-    for i, param in enumerate(case_params_list):
-        case_name = generate_case_name(param)
-        if not os.path.exists(case_name):
-            os.makedirs(case_name)
-        original_dir = os.getcwd()
-        os.chdir(case_name)
-        gen_golden_data_trowmax(case_name, param)
-        os.chdir(original_dir)
+    main()

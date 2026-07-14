@@ -1,112 +1,202 @@
-/**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-*/
+// --------------------------------------------------------------------------------
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+// CANN Open Software License Agreement Version 2.0 (the "License").
+// Please refer to the License for details. You may not use this file except in compliance with the License.
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+// See LICENSE in the root of the software repository for the full text of the License.
+// --------------------------------------------------------------------------------
 
-#include "test_common.h"
-#include <pto/pto-inst.hpp>
-#include <gtest/gtest.h>
+#include <cfloat>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "common/common.h"
+#include "kernel.h"
 
-template <int32_t tilingKey>
-void launchTCOLMAX_demo(uint8_t *out, uint8_t *src, void *stream);
-
-class TCOLMAXTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
-
-std::string GetGoldenDir()
+template <typename T, int T_GROWS, int T_GCOLS, int T_ROWS, int T_COLS>
+TCOLMAXTest() : TestCase("tcolmax")
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
-}
+    int row = T_ROWS;
+    int col = T_COLS;
+    int global_row = T_GROWS;
+    int global_col = T_GCOLS;
+    int tile_row = T_ROWS;
+    int tile_col = T_COLS;
+    int valid_row = T_ROWS;
+    int valid_col = T_COLS;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void LaunchTCOLMAX(T *out, T *src, void *stream);
+    std::string data_dir = GetTestCaseDir();
+    std::string input1_path = data_dir + "/input1.bin";
+    std::string golden_path = data_dir + "/golden.bin";
 
-template <typename T, int kGSize_>
-inline void init_dst(T *dstHost)
-{
-    for (size_t i = 0; i < kGSize_; i++) {
-        dstHost[i] = 0;
+    T *input = nullptr;
+    T *golden = nullptr;
+    T *dst = nullptr;
+    T *dst_golden = nullptr;
+    T *dst_out = nullptr;
+
+    size_t input_size = global_row * global_col * sizeof(T);
+    size_t golden_size = global_col * sizeof(T);
+
+    if (ReadBinFile(input1_path.c_str(), input_size, (void **)&input) != 0) {
+        std::cerr << "ERROR: ReadBinFile failed" << std::endl;
+        throw std::runtime_error("ReadBinFile failed");
+    }
+
+    if (ReadBinFile(golden_path.c_str(), golden_size, (void **)&golden) != 0) {
+        std::cerr << "ERROR: ReadBinFile failed" << std::endl;
+        throw std::runtime_error("ReadBinFile failed");
+    }
+
+    dst = reinterpret_cast<T *>(malloc(input_size));
+    dst_out = reinterpret_cast<T *>(malloc(golden_size));
+    dst_golden = reinterpret_cast<T *>(malloc(golden_size));
+
+    if (dst == nullptr || dst_out == nullptr || dst_golden == nullptr) {
+        std::cerr << "ERROR: Malloc failed" << std::endl;
+        throw std::runtime_error("Malloc failed");
+    }
+
+    memset(dst, 0, input_size);
+    memset(dst_out, 0, golden_size);
+    memset(dst_golden, 0, golden_size);
+
+    for (int i = 0; i < global_row * global_col; i++) {
+        dst[i] = input[i];
+    }
+
+    LaunchTCOLMAX<T>(dst, dst_out, global_row, global_col, tile_row, tile_col, valid_row, valid_col);
+
+    for (int i = 0; i < global_col; i++) {
+        dst_golden[i] = golden[i];
+    }
+
+    if (std::is_same<T, float>::value) {
+        for (int i = 0; i < global_col; i++) {
+            if (fabsf(dst_out[i] - dst_golden[i]) > 1e-3f) {
+                std::cerr << "ERROR: Compare failed: dst_out[" << i << "]=" << dst_out[i]
+                          << " dst_golden[" << i << "]=" << dst_golden[i] << std::endl;
+                throw std::runtime_error("Compare failed");
+            }
+        }
+    } else if (std::is_same<T, aclFloat16>::value) {
+        for (int i = 0; i < global_col; i++) {
+            if (fabsf(Float2Float(dst_out[i]) - Float2Float(dst_golden[i])) > 1e-3f) {
+                std::cerr << "ERROR: Compare failed: dst_out[" << i << "]=" << dst_out[i]
+                          << " dst_golden[" << i << "]=" << dst_golden[i] << std::endl;
+                throw std::runtime_error("Compare failed");
+            }
+        }
+    } else {
+        for (int i = 0; i < global_col; i++) {
+            if (Float2Float(dst_out[i]) - Float2Float(dst_golden[i]) > FLT_EPSILON) {
+                std::cerr << "ERROR: Compare failed: dst_out[" << i << "]=" << dst_out[i]
+                          << " dst_golden[" << i << "]=" << dst_golden[i] << std::endl;
+                throw std::runtime_error("Compare failed");
+            }
+        }
+    }
+
+    std::cout << "Test case pass" << std::endl;
+
+    if (input) {
+        free(input);
+        input = nullptr;
+    }
+    if (golden) {
+        free(golden);
+        golden = nullptr;
+    }
+    if (dst) {
+        free(dst);
+        dst = nullptr;
+    }
+    if (dst_out) {
+        free(dst_out);
+        dst_out = nullptr;
+    }
+    if (dst_golden) {
+        free(dst_golden);
+        dst_golden = nullptr;
     }
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void test_tcolmax()
+// FP32 tile shapes
+TEST_F(TCOLMAXTest, case_float_64x64_64x64)
 {
-    size_t inputSize = kGRows_ * kGCols_ * sizeof(T);
-    size_t outputSize = kGCols_ * sizeof(T);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
-
-    aclrtMallocHost((void **)(&dstHost), outputSize);
-    aclrtMallocHost((void **)(&srcHost), inputSize);
-
-    aclrtMalloc((void **)(&srcDevice), inputSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)(&dstDevice), outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", inputSize, srcHost, inputSize));
-    init_dst<T, kGCols_>(dstHost);
-
-    aclrtMemcpy(srcDevice, inputSize, srcHost, inputSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTCOLMAX<T, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, outputSize, dstDevice, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, outputSize);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    std::vector<T> golden(outputSize);
-    std::vector<T> devFinal(outputSize);
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", outputSize, golden.data(), outputSize));
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", outputSize, devFinal.data(), outputSize));
-
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
-
-    EXPECT_TRUE(ret);
+    TCOLMAXTest<float, 64, 64, 64, 64>();
 }
 
-TEST_F(TCOLMAXTest, case_float_64x64_64x64_64x64)
+TEST_F(TCOLMAXTest, case_float_77x81_32x16)
 {
-    test_tcolmax<float, 64, 64, 64, 64>();
+    TCOLMAXTest<float, 77, 81, 32, 16>();
 }
-TEST_F(TCOLMAXTest, case_half_16x256_16x256_16x256)
+
+TEST_F(TCOLMAXTest, case_float_32x32_32x16)
 {
-    test_tcolmax<aclFloat16, 16, 256, 16, 256>();
+    TCOLMAXTest<float, 32, 32, 32, 16>();
 }
-#ifdef CPU_SIM_BFLOAT_ENABLED
-TEST_F(TCOLMAXTest, case_bf16_16x256_16x256_16x256)
+
+// FP16 tile shapes
+TEST_F(TCOLMAXTest, case_float16_64x64_64x64)
 {
-    test_tcolmax<bfloat16_t, 16, 256, 16, 256>();
+    TCOLMAXTest<aclFloat16, 64, 64, 64, 64>();
+}
+
+TEST_F(TCOLMAXTest, case_float16_161x161_32x32)
+{
+    TCOLMAXTest<aclFloat16, 161, 161, 32, 32>();
+}
+
+// BF16 tile shapes
+#if defined(CPU_SIM_BFLOAT_ENABLED)
+TEST_F(TCOLMAXTest, case_bfloat16_64x64_64x64)
+{
+    TCOLMAXTest<bfloat16_t, 64, 64, 64, 64>();
 }
 #endif
+
+// INT8 tile shapes
+TEST_F(TCOLMAXTest, case_int8_64x64_64x64)
+{
+    TCOLMAXTest<int8_t, 64, 64, 64, 64>();
+}
+
+TEST_F(TCOLMAXTest, case_int8_128x128_32x32)
+{
+    TCOLMAXTest<int8_t, 128, 128, 32, 32>();
+}
+
+TEST_F(TCOLMAXTest, case_int8_64x32_32x16)
+{
+    TCOLMAXTest<int8_t, 64, 32, 32, 16>();
+}
+
+TEST_F(TCOLMAXTest, case_int8_96x96_48x48)
+{
+    TCOLMAXTest<int8_t, 96, 96, 48, 48>();
+}
+
+// UINT8 tile shapes
+TEST_F(TCOLMAXTest, case_uint8_64x64_64x64)
+{
+    TCOLMAXTest<uint8_t, 64, 64, 64, 64>();
+}
+
+TEST_F(TCOLMAXTest, case_uint8_128x128_32x32)
+{
+    TCOLMAXTest<uint8_t, 128, 128, 32, 32>();
+}
+
+TEST_F(TCOLMAXTest, case_uint8_64x32_32x16)
+{
+    TCOLMAXTest<uint8_t, 64, 32, 32, 16>();
+}
+
+TEST_F(TCOLMAXTest, case_uint8_96x96_48x48)
+{
+    TCOLMAXTest<uint8_t, 96, 96, 48, 48>();
+}
