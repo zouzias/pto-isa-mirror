@@ -278,41 +278,34 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     TASSIGN<0x0>(srcTileData);
     TASSIGN<0x0>(dstTileData);
 
-    if constexpr (layoutType == Layout::ND && !isRelu && indexRow == 0 && indexCol == 0 && !isInsert) {
-        TMOV(dstTileData, cTile);
-
-        set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+    if constexpr (isRelu) {
+        TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
     } else {
-        if constexpr (isRelu) {
-            TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
+        if constexpr (indexRow == 0 && indexCol == 0) {
+            TMOV(srcTileData, cTile);
+        } else if constexpr (!isInsert) {
+            TEXTRACT(srcTileData, cTile, indexRow, indexCol);
         } else {
-            if constexpr (indexRow == 0 && indexCol == 0) {
-                TMOV(srcTileData, cTile);
-            } else if constexpr (!isInsert) {
-                TEXTRACT(srcTileData, cTile, indexRow, indexCol);
-            } else {
-                using GlobalDataSrc2 =
-                    GlobalTensor<OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
-                                 pto::Stride<copyOutM * copyOutN, copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
-                GlobalDataSrc2 src2Global(src2);
-                set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-                TLOAD(srcTileData, src2Global);
-                set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
-                wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
-                TINSERT(srcTileData, cTile, indexRow, indexCol);
-            }
+            using GlobalDataSrc2 =
+                GlobalTensor<OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
+                             pto::Stride<copyOutM * copyOutN, copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
+            GlobalDataSrc2 src2Global(src2);
+            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            TLOAD(srcTileData, src2Global);
+            set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+            TINSERT(srcTileData, cTile, indexRow, indexCol);
         }
-
-        set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-
-        TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
-
-        set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     }
+
+    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+
+    TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
+
+    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
 
     RunTSTORE<OutType, DstTileData, copyOutM, copyOutN, layoutType, sfractalSize>(out, dstTileData);
 }
@@ -373,134 +366,6 @@ void LaunchTMOVAcc2MatNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, void *st
         RunTMOV<half, half, half, 6, 7, 8, 32, 32>
             <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
                                      reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 5) {
-        RunTMOV<half, half, half, 64, 33, 64, 64, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 6) {
-        RunTMOV<half, half, half, 97, 33, 65, 112, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 7) {
-        RunTMOV<half, half, half, 112, 96, 112, 112, 112>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 8) {
-        RunTMOV<half, half, half, 32, 48, 112, 32, 112>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 9) {
-        RunTMOV<half, half, half, 112, 48, 32, 112, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 10) {
-        RunTMOV<half, half, half, 48, 112, 48, 48, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 11) {
-        RunTMOV<half, half, half, 111, 48, 96, 112, 96>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 12) {
-        RunTMOV<half, half, half, 112, 48, 88, 112, 96>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 13) {
-        RunTMOV<half, half, half, 97, 48, 80, 112, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 14) {
-        RunTMOV<half, half, half, 112, 48, 65, 112, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 15) {
-        RunTMOV<half, half, half, 64, 48, 33, 64, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 16) {
-        RunTMOV<half, half, half, 80, 48, 49, 80, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 17) {
-        RunTMOV<half, half, half, 97, 48, 97, 112, 112>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 18) {
-        RunTMOV<half, half, half, 64, 48, 64, 64, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 19) {
-        RunTMOV<half, half, half, 80, 48, 57, 80, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 20) {
-        RunTMOV<half, half, half, 80, 48, 63, 80, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 21) {
-        RunTMOV<half, half, half, 64, 48, 65, 64, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 22) {
-        RunTMOV<half, half, half, 48, 48, 65, 48, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 23) {
-        RunTMOV<half, half, half, 112, 48, 64, 112, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 24) {
-        RunTMOV<half, half, half, 64, 48, 64, 64, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 25) {
-        RunTMOV<half, half, half, 80, 48, 48, 80, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 26) {
-        RunTMOV<half, half, half, 48, 48, 48, 48, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 27) {
-        RunTMOV<half, half, half, 64, 48, 81, 64, 96>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 28) {
-        RunTMOV<half, half, half, 48, 48, 97, 48, 112>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 29) {
-        RunTMOV<half, half, half, 80, 48, 83, 80, 96>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 30) {
-        RunTMOV<half, half, half, 112, 48, 73, 112, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 31) {
-        RunTMOV<half, half, half, 80, 48, 79, 80, 80>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 32) {
-        RunTMOV<half, half, half, 64, 48, 17, 64, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 33) {
-        RunTMOV<half, half, half, 48, 48, 35, 48, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 34) {
-        RunTMOV<half, half, half, 80, 48, 51, 80, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 35) {
-        RunTMOV<half, half, half, 64, 48, 41, 64, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
-    } else if constexpr (tilingKey == 36) {
-        RunTMOV<half, half, half, 48, 48, 59, 48, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
-                                     reinterpret_cast<half *>(src1), reinterpret_cast<half *>(out));
     }
 }
 
@@ -508,35 +373,3 @@ template void LaunchTMOVAcc2MatNZ2ND<1>(uint8_t *out, uint8_t *src0, uint8_t *sr
 template void LaunchTMOVAcc2MatNZ2ND<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2MatNZ2ND<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMOVAcc2MatNZ2ND<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<9>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<10>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<11>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<12>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<13>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<14>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<15>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<16>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<17>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<18>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<19>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<20>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<21>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<22>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<23>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<24>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<25>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<26>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<27>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<28>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<29>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<30>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<31>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<32>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<33>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<34>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<35>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
-template void LaunchTMOVAcc2MatNZ2ND<36>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
