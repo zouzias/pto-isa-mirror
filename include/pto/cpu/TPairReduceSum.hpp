@@ -26,11 +26,11 @@ void TPairReduceSum_Impl(typename TileDataDst::TileDType dst, typename TileDataS
     std::fill(dst, dst + elemNum, 0);
     size_t mid = (validCol + 1) / 2;
     for (size_t r = 0; r < validRow; r++) {
-        for (size_t c = 0; c < mid; c++) {
-            typename TileDataSrc::DType pair =
-                (2 * c + 1) < validCol ? src[GetTileElementOffset<TileDataSrc>(r, 2 * c + 1)] : 0;
-            dst[GetTileElementOffset<TileDataDst>(r, c)] = src[GetTileElementOffset<TileDataSrc>(r, 2 * c)] + pair;
+        size_t c = 0;
+        for (; c < mid-1; c++) {
+            dst[GetTileElementOffset<TileDataDst>(r, c)] = src[GetTileElementOffset<TileDataSrc>(r, 2 * c)] + src[GetTileElementOffset<TileDataSrc>(r, 2 * c + 1)];
         }
+        dst[GetTileElementOffset<TileDataDst>(r, c)] = src[GetTileElementOffset<TileDataSrc>(r, 2 * c)] + (2*c + 1 < validCol ? src[GetTileElementOffset<TileDataSrc>(r, 2 * c + 1)] : 0)
     }
 }
 
