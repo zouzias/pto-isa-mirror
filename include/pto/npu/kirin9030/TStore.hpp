@@ -133,26 +133,7 @@ PTO_INTERNAL void TStoreVecND(typename GlobalData::DType *dstAddr, __ubuf__ type
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
-    uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(gShape3 * TileData::Cols);
-    uint32_t loop1DstStride = GetByteSize<typename TileData::DType>(gStride2);
-    uint32_t loop2SrcStride = GetByteSize<typename TileData::DType>(gShape2 * gShape3 * TileData::Cols);
-    uint32_t loop2DstStride = GetByteSize<typename TileData::DType>(gStride1);
 
-    uint64_t loopSizeConfig = 0;
-    uint64_t loop1Size = gShape2 & 0x1FFFFF;
-    loopSizeConfig |= loop1Size;
-    uint64_t loop2Size = (static_cast<uint64_t>(gShape1) & 0x3FFFFF) << 21;
-    loopSizeConfig |= loop2Size;
-    // set_loop_size_ubtoout(loopSizeConfig);
-
-    uint64_t loop1Config = 0;
-    loop1Config |= ((uint64_t)loop1SrcStride) << 40;
-    loop1Config |= (uint64_t)loop1DstStride;
-    // set_loop1_stride_ubtoout(loop1Config);
-    uint64_t loop2Config = 0;
-    loop2Config |= ((uint64_t)loop2SrcStride) << 40;
-    loop2Config |= (uint64_t)loop2DstStride;
-    // set_loop2_stride_ubtoout(loop2Config);
     uint64_t srcStride0 = gShape1 * gShape2 * gShape3 * TileData::Cols;
     if constexpr (caps::IsFP4<typename TileData::DType>()) {
         srcStride0 = srcStride0 >> 1; // fp4 srcAddr offset need divide 2 as use b8 to move
@@ -164,14 +145,16 @@ PTO_INTERNAL void TStoreVecND(typename GlobalData::DType *dstAddr, __ubuf__ type
     uint64_t burstDstStride = GetByteSize<typename TileData::DType>(gStride3);
     uint32_t burstSrcStride = GetByteSize<typename TileData::DType>(TileData::Cols);
     for (uint32_t k = 0; k < gShape0; k++) {
-    for (uint32_t i = 0; i < gShape1; i++) {
-    for (uint32_t j = 0; j < gShape2; j++) {
-
-        dstGlobalAddr = dstAddr + k * gStride0 + i * gStride1 + j * gStride2;
-        srcTileAddr = srcAddr + k * srcStride0 + i * gShape2 * gShape3 * TileData::Cols + j * gShape3 * TileData::Cols;
-        TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
-    }}}
-    // set_loop_size_ubtoout(1 << 21 | 1); // resume to normal mode
+        for (uint32_t i = 0; i < gShape1; i++) {
+            for (uint32_t j = 0; j < gShape2; j++) {
+                dstGlobalAddr = dstAddr + k * gStride0 + i * gStride1 + j * gStride2;
+                srcTileAddr =
+                    srcAddr + k * srcStride0 + i * gShape2 * gShape3 * TileData::Cols + j * gShape3 * TileData::Cols;
+                TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride,
+                                                  burstSrcStride);
+            }
+        }
+    }
 }
 
 template <typename GlobalData, typename TileData>
@@ -184,26 +167,6 @@ PTO_INTERNAL void TStoreVecDN(typename GlobalData::DType *dstAddr, __ubuf__ type
                "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
-    uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(TileData::Rows * gShape4);
-    uint32_t loop1DstStride = GetByteSize<typename TileData::DType>(gStride2);
-    uint32_t loop2SrcStride = GetByteSize<typename TileData::DType>(gShape2 * TileData::Rows * gShape4);
-    uint32_t loop2DstStride = GetByteSize<typename TileData::DType>(gStride1);
-
-    uint64_t loop1Config = 0;
-    loop1Config |= ((uint64_t)loop1SrcStride) << 40;
-    loop1Config |= (uint64_t)loop1DstStride;
-    // set_loop1_stride_ubtoout(loop1Config);
-    uint64_t loop2Config = 0;
-    loop2Config |= ((uint64_t)loop2SrcStride) << 40;
-    loop2Config |= (uint64_t)loop2DstStride;
-    // set_loop2_stride_ubtoout(loop2Config);
-
-    uint64_t loopSizeConfig = 0;
-    uint64_t loop1Size = gShape2 & 0x1FFFFF;
-    loopSizeConfig |= loop1Size;
-    uint64_t loop2Size = (static_cast<uint64_t>(gShape1) & 0x3FFFFF) << 21;
-    loopSizeConfig |= loop2Size;
-    // set_loop_size_ubtoout(loopSizeConfig);
 
     uint64_t srcStride0 = gShape1 * gShape2 * gShape4 * TileData::Rows;
     uint32_t nBurst = gShape4;
@@ -216,14 +179,16 @@ PTO_INTERNAL void TStoreVecDN(typename GlobalData::DType *dstAddr, __ubuf__ type
     }
 
     for (uint32_t k = 0; k < gShape0; k++) {
-    for (uint32_t i = 0; i < gShape1; i++) {
-    for (uint32_t j = 0; j < gShape2; j++) {
-
-        dstGlobalAddr = dstAddr + k * gStride0  + i * gStride1 + j * gStride2;
-        srcTileAddr = srcAddr + k * srcStride0 + i * gShape2 * TileData::Rows * gShape4 + j * TileData::Rows * gShape4;
-        TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
-    }}}
-    // set_loop_size_ubtoout(1 << 21 | 1); // resume to normal mode
+        for (uint32_t i = 0; i < gShape1; i++) {
+            for (uint32_t j = 0; j < gShape2; j++) {
+                dstGlobalAddr = dstAddr + k * gStride0 + i * gStride1 + j * gStride2;
+                srcTileAddr =
+                    srcAddr + k * srcStride0 + i * gShape2 * TileData::Rows * gShape4 + j * TileData::Rows * gShape4;
+                TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride,
+                                                  burstSrcStride);
+            }
+        }
+    }
 }
 
 template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
