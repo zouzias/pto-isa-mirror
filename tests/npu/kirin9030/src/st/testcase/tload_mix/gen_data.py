@@ -175,7 +175,7 @@ if __name__ == "__main__":
         "TLOADMIXTest.FZ2FZ_float16_48_3_3_8_16_256_3_3_8_16",  # cut C1
         "TLOADMIXTest.FZ2FZ_int8_t_2_3_3_64_32_3_3_3_128_32",  # cut N C1
         "TLOADMIXTest.FZ2FZ_int8_t_4_5_5_32_32_8_5_5_128_32",  # cut N
-        "TLOADMIXTest.FZ2FZ_float_70_7_7_2_4_256_7_7_256_8",  # cut C1 N
+        "TLOADMIXTest.FZ2FZ_float_35_7_7_2_8_256_7_7_256_8",  # cut C1 N
         "TLOADMIXTest.FZ4D2FZ4D_float16_1_32_7_16_16_1_980_32_16_16",  # cut C1HW N
         "TLOADMIXTest.FZ4D2FZ4D_float16_1_81_3_16_16_1_90_3_16_16",  # cut C1HW
         "TLOADMIXTest.FZ4D2FZ4D_int8_t_1_63_3_16_32_1_63_9_16_32",  # cut N
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         TloadParams(np.float16, 48, 3, 3, 8, 16, 256, 3, 3, 8, 16, 1, 1, DataFormat["FZ2FZ"].value),
         TloadParams(np.int8, 2, 3, 3, 64, 32, 3, 3, 3, 128, 32, 1, 1, DataFormat["FZ2FZ"].value),
         TloadParams(np.int8, 4, 5, 5, 32, 32, 8, 5, 5, 128, 32, 1, 1, DataFormat["FZ2FZ"].value),
-        TloadParams(np.float32, 70, 7, 7, 2, 4, 256, 7, 7, 256, 8, 1, 1, DataFormat["FZ2FZ"].value),
+        TloadParams(np.float32, 35, 7, 7, 2, 8, 256, 7, 7, 256, 8, 1, 1, DataFormat["FZ2FZ"].value),
         TloadParams(np.float16, 1, 32, 7, 16, 16, 1, 980, 32, 16, 16, 1, 1, DataFormat["FZ4D2FZ4D"].value),
         TloadParams(np.float16, 1, 81, 3, 16, 16, 1, 90, 3, 16, 16, 1, 1, DataFormat["FZ4D2FZ4D"].value),
         TloadParams(np.int8, 1, 63, 3, 16, 32, 1, 63, 9, 16, 32, 1, 1, DataFormat["FZ4D2FZ4D"].value),

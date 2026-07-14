@@ -357,7 +357,7 @@ template void launchTLOADMIX<uint16_t, 7, 32, 7, 7, 2, 16, 256, 7, 7, 16, 16, 1,
                                                                                     uint8_t *src1, void *stream);
 template void launchTLOADMIX<uint16_t, 7, 48, 3, 3, 8, 16, 256, 3, 3, 8, 16, 1, 1>(uint8_t *out, uint8_t *src0,
                                                                                    uint8_t *src1, void *stream);
-template void launchTLOADMIX<float, 7, 70, 7, 7, 2, 4, 256, 7, 7, 256, 8, 1, 1>(uint8_t *out, uint8_t *src0,
+template void launchTLOADMIX<float, 7, 35, 7, 7, 2, 8, 256, 7, 7, 256, 8, 1, 1>(uint8_t *out, uint8_t *src0,
                                                                                 uint8_t *src1, void *stream);
 
 // 8 FZ4D
