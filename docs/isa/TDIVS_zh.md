@@ -88,7 +88,7 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
 - **除零**:
     - 行为由目标定义；在 A5 上，Tile/标量形式映射到乘以倒数，并对 `scalar == 0` 使用 `1/0 -> +inf`。
 - **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
+    - 仅在A5上有效，`PrecisionType`选项在A3上将被忽略。
 
 ## 示例
 
