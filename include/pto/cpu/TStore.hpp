@@ -221,8 +221,9 @@ template <typename TileData, typename GlobalData, QuantMode_t quantMode, bool ap
 PTO_INTERNAL void TSTORE_IMPL(GlobalData &dst, TileData &src, const std::vector<uint64_t> &scalars = {})
 {
     static_assert(GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN ||
-                      GlobalData::layout == pto::Layout::NZ || GlobalData::layout == pto::Layout::NDC1HWC0,
-                  "Only ND, DN, NZ and NDC1HWC0 GLobal Tensors are currently supported");
+                  GlobalData::layout == pto::Layout::NZ || GlobalData::layout == pto::Layout::NDC1HWC0 ||
+                  GlobalData::layout == pto::Layout::NC1HWC0,
+                      "Only ND, DN, NZ and NC1HWC0, NDC1HWC0 GLobal Tensors are currently supported");
     if constexpr (GlobalData::layout == pto::Layout::NDC1HWC0 && is_conv_tile_v<TileData>) {
         TStore6HD<TileData, GlobalData>(dst.data(), src.data(), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2),
                                         dst.GetShape(3), dst.GetShape(4), dst.GetStride(0), dst.GetStride(1),
