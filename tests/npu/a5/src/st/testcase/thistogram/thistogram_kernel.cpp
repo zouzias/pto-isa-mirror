@@ -10,8 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Define missing constants needed by THistogram.hpp (they live locally in TTopK.hpp)
 namespace pto {
-constexpr unsigned ElemPerRepeatB8 = 256;  // REPEAT_BYTE / sizeof(uint8_t)
-constexpr unsigned ElemPerRepeatB16 = 128; // REPEAT_BYTE / sizeof(uint16_t)
+constexpr unsigned ElemPerRepeatB8 = 256;  // CCE_VL / sizeof(uint8_t)
+constexpr unsigned ElemPerRepeatB16 = 128; // CCE_VL / sizeof(uint16_t)
 } // namespace pto
 
 #include <pto/pto-inst.hpp>
@@ -20,7 +20,7 @@ constexpr unsigned ElemPerRepeatB16 = 128; // REPEAT_BYTE / sizeof(uint16_t)
 
 using namespace pto;
 
-#define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
+#define PTO_DIV_ROUNDUP(x, y) (((x) + (y) - 1) / (y))
 #define PTO_CEIL(x, y) (PTO_DIV_ROUNDUP(x, y) * (y))
 
 // ---------------------------------------------------------------------------

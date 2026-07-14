@@ -165,7 +165,7 @@ __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
     using T = typename TileDataOut::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-    constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(typename TileDataIn::DType);
     uint16_t repeatTimes = CeilDivision(dstValidCol, nRepeatElem);
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
@@ -189,7 +189,7 @@ __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
     using T = typename TileDataOut::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     uint16_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
     constexpr unsigned srcRowStride = TileDataIn::Cols;
     constexpr unsigned dstRowStride = TileDataOut::RowStride;
