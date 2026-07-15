@@ -113,7 +113,7 @@ PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDat
     - 单源形式：`dst0`/`dst1` 的 `validCols` 必须为 `src` 的 `validCols` 的一半。
 - **有效区域**:
     - 双源形式：该操作使用 `dst0.GetValidRow()` / `dst0.GetValidCol()` 作为迭代域。`dst0/dst1` 每行持有 `validCols` 个元素。
-    - 单源形式：`dst0/dst1` 每行持有 `validCols / 2` 个有效元素。每行中超出 `halfValidCols` 的元素是**未指定的**。
+    - 单源形式：`dst0/dst1` 每行持有 `src.GetValidCol() / 2` 个有效元素。每行中超出 `halfValidCols` 的元素是**未指定的**。
 
 ## 示例
 

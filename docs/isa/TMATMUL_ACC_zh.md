@@ -54,7 +54,7 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLe
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events); // 注：该重载默认将cMatrix清零后执行累加，或直接覆盖原值（请根据实际实现补充说明）
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events); // 注：该重载将 cMatrix 同时作为累加器输入与输出（原地），读取其现有值作为 C0，写回 C1 = C0 + A·B；既不清零也不覆盖
 ```
 
 ## 约束
