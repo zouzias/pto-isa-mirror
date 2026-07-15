@@ -90,7 +90,7 @@ PTO_INST RecordEvent TCOLARGMAX(TileDataOutVal& dstVal, TileDataOutIdx& dstIdx, 
 ### 通用约束或检查
 
 - `dstIdx` 和 `src` 必须为 `TileType::Vec`。
-- `src` 可使用 ND 或 DN 的非分形布局（`SLayout::NoneBox`）。
+- `src` 可使用 ND 或 DN 的非分形布局（`SLayout::NoneBox`）。`BLayout` 可为 `RowMajor`（与 `SLayout::NoneBox` 正交；示例中省略 `SLayout` 时默认为 `SLayout::NoneBox`）。
 - `dstIdx` 必须使用标准 ND 布局：行主且非分形（`BLayout::RowMajor`、`SLayout::NoneBox`）。
 - 支持的索引目标元素类型：`uint16_t`、`int16_t`、`uint32_t`、`int32_t`（具体取决于源元素大小）。
 - 运行时检查：
