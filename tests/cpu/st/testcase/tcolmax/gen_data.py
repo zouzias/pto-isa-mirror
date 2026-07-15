@@ -75,6 +75,8 @@ if __name__ == "__main__":
     case_params_list = [
         tcolmaxParams(np.float32, 64, 64, 64, 64, 64, 64),
         tcolmaxParams(np.float16, 16, 256, 16, 256, 16, 256),
+        tcolmaxParams(np.int8, 64, 64, 64, 64, 64, 64),
+        tcolmaxParams(np.uint8, 64, 64, 64, 64, 64, 64),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(tcolmaxParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))

@@ -24,8 +24,7 @@ def gen_golden_data_tcolmin(param):
 
     input1 = NumExt.astype(np.random.uniform(low=-16, high=16, size=[row, col]), dtype)
 
-    max_value = np.finfo(np.float32).max if dtype == NumExt.bf16 else np.finfo(dtype).max
-    golden = NumExt.astype(np.full((w_valid,), max_value, dtype=np.float32), dtype)
+    golden = NumExt.astype(np.full((w_valid,), 0, dtype=np.float32), dtype)
     for j in range(w_valid):
         golden[j] = NumExt.astype(np.min(input1[:h_valid, j]), dtype)
 
@@ -62,6 +61,8 @@ if __name__ == "__main__":
         TColminParams(np.float32, 64, 64, 64, 64, 64, 64),
         TColminParams(np.float16, 64, 64, 64, 64, 64, 64),
         TColminParams(np.float32, 32, 32, 32, 16, 32, 32),
+        TColminParams(np.int8, 64, 64, 64, 64, 64, 64),
+        TColminParams(np.uint8, 64, 64, 64, 64, 64, 64),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TColminParams(NumExt.bf16, 64, 64, 64, 64, 64, 64))

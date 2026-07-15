@@ -100,3 +100,11 @@ TEST_F(TCOLMINTest, case_float_32x32_32x16_32x32)
 {
     test_tcolmin<float, 32, 32, 32, 16>();
 }
+TEST_F(TCOLMINTest, case_int8_64x64_64x64_64x64)
+{
+    test_tcolmin<int8_t, 64, 64, 64, 64>();
+}
+TEST_F(TCOLMINTest, case_uint8_64x64_64x64_64x64)
+{
+    test_tcolmin<uint8_t, 64, 64, 64, 64>();
+}

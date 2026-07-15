@@ -108,3 +108,11 @@ TEST_F(TROWMINTest, case_float_32x32_32x16_32x32)
 {
     test_trowmin<float, 32, 32, 32, 16>();
 }
+TEST_F(TROWMINTest, case_int8_64x64_64x64_64x64)
+{
+    test_trowmin<int8_t, 64, 64, 64, 64>();
+}
+TEST_F(TROWMINTest, case_uint8_64x64_64x64_64x64)
+{
+    test_trowmin<uint8_t, 64, 64, 64, 64>();
+}
