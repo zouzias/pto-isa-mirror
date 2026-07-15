@@ -31,7 +31,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define U32P0100 25
 #define I32P1000 26
 #define I32P1111 27
-#define FP1010_I32 42
 
 #define HALF_P0101_ROW 5
 #define HALF_P0101_COL 128
