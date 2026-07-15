@@ -74,32 +74,49 @@ __tf__ PTO_INTERNAL void TInterleaveAlign(
         RegTensor<T> src0Reg, src1Reg, dst0Reg, dst1Reg;
         MaskReg preg;
         for (uint16_t i = 0; i < (uint16_t)validRows; ++i) {
-            uint32_t sreg = validCols;
             // Interleave src0(first half) and src1(first half) into dst0
             for (uint16_t j = 0; j < repeatTime; ++j) {
+                uint32_t remaining = validCols - j * 2 * ElementsPerRepeat;
+                uint32_t lowerMask = remaining > ElementsPerRepeat ? ElementsPerRepeat : remaining;
+                uint32_t upperMask = remaining > ElementsPerRepeat ? remaining - ElementsPerRepeat : 0;
+                upperMask = upperMask > ElementsPerRepeat ? ElementsPerRepeat : upperMask;
+
                 vlds(src0Reg, src0Ptr, i * srcRowStride + j * ElementsPerRepeat, NORM);
                 vlds(src1Reg, src1Ptr, i * srcRowStride + j * ElementsPerRepeat, NORM);
                 vintlv(dst0Reg, dst1Reg, src0Reg, src1Reg);
-                preg = CreatePredicate<T>(sreg);
+
+                preg = CreatePredicate<T>(lowerMask);
                 vsts(dst0Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat, distValue, preg);
-                preg = CreatePredicate<T>(sreg);
-                vsts(
-                    dst1Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
-                    preg);
+
+                if (upperMask > 0) {
+                    preg = CreatePredicate<T>(upperMask);
+                    vsts(
+                        dst1Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
+                        preg);
+                }
             }
+
             // Interleave src0(second half) and src1(second half) into dst1
-            sreg = validCols;
             // validCols is block aligned, so we can use aligned load
             for (uint16_t j = 0; j < repeatTime; ++j) {
+                uint32_t remaining = validCols - j * 2 * ElementsPerRepeat;
+                uint32_t lowerMask = remaining > ElementsPerRepeat ? ElementsPerRepeat : remaining;
+                uint32_t upperMask = remaining > ElementsPerRepeat ? remaining - ElementsPerRepeat : 0;
+                upperMask = upperMask > ElementsPerRepeat ? ElementsPerRepeat : upperMask;
+
                 vlds(src0Reg, src0Ptr, i * srcRowStride + halfValidCols + j * ElementsPerRepeat, NORM);
                 vlds(src1Reg, src1Ptr, i * srcRowStride + halfValidCols + j * ElementsPerRepeat, NORM);
                 vintlv(dst0Reg, dst1Reg, src0Reg, src1Reg);
-                preg = CreatePredicate<T>(sreg);
+
+                preg = CreatePredicate<T>(lowerMask);
                 vsts(dst0Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat, distValue, preg);
-                preg = CreatePredicate<T>(sreg);
-                vsts(
-                    dst1Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
-                    preg);
+
+                if (upperMask > 0) {
+                    preg = CreatePredicate<T>(upperMask);
+                    vsts(
+                        dst1Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
+                        preg);
+                }
             }
         } // end loop i
     } // end vec scope
@@ -131,34 +148,50 @@ __tf__ PTO_INTERNAL void TInterleaveUnalign(
         RegTensor<T> src0Reg, src1Reg, dst0Reg, dst1Reg;
         for (uint16_t i = 0; i < (uint16_t)validRows; ++i) {
             // Interleave src0(first half) and src1(first half) into dst0
-            uint32_t sreg = validCols;
             for (uint16_t j = 0; j < repeatTime; ++j) {
+                uint32_t remaining = validCols - j * 2 * ElementsPerRepeat;
+                uint32_t lowerMask = remaining > ElementsPerRepeat ? ElementsPerRepeat : remaining;
+                uint32_t upperMask = remaining > ElementsPerRepeat ? remaining - ElementsPerRepeat : 0;
+                upperMask = upperMask > ElementsPerRepeat ? ElementsPerRepeat : upperMask;
+
                 vlds(src0Reg, src0Ptr, i * srcRowStride + j * ElementsPerRepeat, NORM);
                 vlds(src1Reg, src1Ptr, i * srcRowStride + j * ElementsPerRepeat, NORM);
                 vintlv(dst0Reg, dst1Reg, src0Reg, src1Reg);
-                preg = CreatePredicate<T>(sreg);
+
+                preg = CreatePredicate<T>(lowerMask);
                 vsts(dst0Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat, distValue, preg);
-                preg = CreatePredicate<T>(sreg);
-                vsts(
-                    dst1Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
-                    preg);
+
+                if (upperMask > 0) {
+                    preg = CreatePredicate<T>(upperMask);
+                    vsts(
+                        dst1Reg, dst0Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
+                        preg);
+                }
             }
 
             // Interleave src0(second half) and src1(second half) into dst1
-            sreg = validCols;
             // validCols is block unaligned, so we use unaligned load
             for (uint16_t j = 0; j < repeatTime; ++j) {
+                uint32_t remaining = validCols - j * 2 * ElementsPerRepeat;
+                uint32_t lowerMask = remaining > ElementsPerRepeat ? ElementsPerRepeat : remaining;
+                uint32_t upperMask = remaining > ElementsPerRepeat ? remaining - ElementsPerRepeat : 0;
+                upperMask = upperMask > ElementsPerRepeat ? ElementsPerRepeat : upperMask;
+
                 vldas(ureg, src0Ptr + i * srcRowStride + halfValidCols + j * ElementsPerRepeat);
                 vldus(src0Reg, ureg, src0Ptr + i * srcRowStride + halfValidCols + j * ElementsPerRepeat);
                 vldas(ureg, src1Ptr + i * srcRowStride + halfValidCols + j * ElementsPerRepeat);
                 vldus(src1Reg, ureg, src1Ptr + i * srcRowStride + halfValidCols + j * ElementsPerRepeat);
                 vintlv(dst0Reg, dst1Reg, src0Reg, src1Reg);
-                preg = CreatePredicate<T>(sreg);
+
+                preg = CreatePredicate<T>(lowerMask);
                 vsts(dst0Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat, distValue, preg);
-                preg = CreatePredicate<T>(sreg);
-                vsts(
-                    dst1Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
-                    preg);
+
+                if (upperMask > 0) {
+                    preg = CreatePredicate<T>(upperMask);
+                    vsts(
+                        dst1Reg, dst1Ptr, i * dstRowStride + j * 2 * ElementsPerRepeat + ElementsPerRepeat, distValue,
+                        preg);
+                }
             }
         } // end loop i
     } // end vec scope
@@ -170,7 +203,7 @@ PTO_INTERNAL void TINTERLEAVE_IMPL(TileDataDst& dst1, TileDataDst& dst0, TileDat
     using T = typename TileDataDst::DType;
     TInterleaveCheck<TileDataDst, TileDataSrc>(dst1, dst0, src1, src0);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
 
     const bool isValicColAlign = ((dst0.GetValidCol() * sizeof(T) >> 1) % BLOCK_BYTE_SIZE == 0);
     if (isValicColAlign) {
