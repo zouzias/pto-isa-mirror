@@ -23,6 +23,7 @@ $$ \mathrm{dst}_{i,j} = \bigl(\mathrm{src}_{i,j} - \mathrm{offset}_{i}\bigr) \cd
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`。
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
@@ -51,7 +52,7 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
 | `scale` | `float32_t` | $M \times 1$（每行） | ColMajor / 行广播 | 沿列广播（`BRC_B32`） |
 | `offset` | `float32_t` | $M \times 1$（每行） | ColMajor / 行广播 | 沿列广播（`BRC_B32`） |
 
-> `scale`/`offset` 的有效行数必须等于 `dst` 的有效行数；列方向以 32 字节块为单位广播，故典型用法为每行 1 个标量（形状 $M \times 1$）。
+> `scale`/`offset` 的有效行数必须等于 `dst` 的有效行数；列方向以 32字节块为单位广播，故典型用法为每行 1 个标量（形状 $M \times 1$）。
 
 ## 支持的输入 dtype
 
@@ -67,7 +68,7 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
 TDEQUANT 在向量流水线（`PIPE_V`）上执行，无需 `tmp` scratch Tile（与 `TQUANT` 在 A2/A3 上的 5 阶段类型转换链不同）：
 
 1. **加载并解包 `src`**：`S8` 经 `UNPK4_B8`、`S16` 经 `UNPK_B16` 解包，再 `vcvt` 转为 FP32（kirinX90 上 `S8` 走 `US_B8` + 交错路径）。
-2. **广播加载参数**：`scale`、`offset` 经 `vlds ... BRC_B32` 以 32 字节块广播到整行。
+2. **广播加载参数**：`scale`、`offset` 经 `vlds ... BRC_B32` 以 32字节块广播到整行。
 3. **计算**：`vsub(dst, src, offset)` 后 `vmul(dst, dst, scale)`，即先去偏移、再反缩放。
 
 ## 编码
