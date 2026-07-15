@@ -135,120 +135,173 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    case_name_list = [
-        "TMATMULTest.case_fp16_fp16_to_fp32_31x96x47",
-        "TMATMULTest.case_int8_int8_to_int32_65x90x89",
-        "TMATMULTest.case_fp32_fp32_to_fp32_16x32x64",
-        "TMATMULTest.case_fp16_fp16_to_fp32_1x256x64",
-        "TMATMULTest.case_nd_fp16_fp16_to_fp32_64x64x64",
-        "TMATMULTest.case_nd_int8_int8_to_int32_96x128x65",
-        "TMATMULTest.case_nd_fp32_fp32_to_fp32_33x63x31",
-        "TMATMULTest.case_nd_fp16_fp16_to_fp32_2x80x48",
-        "TMATMULTest.case_fp16_fp16_to_fp32_127x33x95",
-        "TMATMULTest.case_int8_int8_to_int32_17x33x31",
-        "TMATMULTest.case_fp32_fp32_to_fp32_63x31x15",
-        "TMATMULTest.case_nd_fp16_fp16_to_fp32_95x33x79",
-        "TMATMULTest.case_nd_int8_int8_to_int32_129x95x33",
-        "TMATMULTest.case_nd_fp32_fp32_to_fp32_47x29x25",
-        "TMATMULTest.case_mmad_s8s4_nd_64x64x64",
-        "TMATMULTest.case_mmad_s8s4_nd_96x128x65",
-        "TMATMULTest.case_mmad_s8s4_nd_129x95x33",
-        "TMATMULTest.case_mmad_s8s4_nd_17x33x31",
-        "TMATMULTest.case_mmad_s8s4_nd_2x80x48",
-        "TMATMULTest.case_mmad_f16s8_nd_64x64x64",
-        "TMATMULTest.case_mmad_f16s8_nd_96x128x89",
-        "TMATMULTest.case_mmad_f16s8_nd_129x95x63",
-        "TMATMULTest.case_mmad_f16s8_dn_65x90x89",
-        "TMATMULTest.case_mmad_f16s8_nd_2x90x31",
-        "TMATMULTest.case_mmad_f16f32_nd_64x64x64",
-        "TMATMULTest.case_mmad_f16f32_nd_95x33x79",
-        "TMATMULTest.case_mmad_f16f32_dn_127x33x95",
-        "TMATMULTest.case_mmad_f16e4m3_nd_64x64x64",
-        "TMATMULTest.case_mmad_f16e4m3_dn_127x64x95",
-        "TMATMULTest.case_mmad_bf16e4m3_nd_64x64x64",
-        "TMATMULTest.case_mmad_bf16e4m3_dn_127x64x95",
-        "TMATMULTest.case_mmad_bf16s8_nd_64x64x64",
-        "TMATMULTest.case_mmad_bf16s8_dn_65x90x89",
-        "TMATMULTest.case_mmad_f16s4_nd_64x64x64",
-        "TMATMULTest.case_mmad_f16s4_nd_65x90x89",
-        "TMATMULTest.case_mmad_f16s4_nd_96x128x89",
-        "TMATMULTest.case_mmad_f16s4_nd_129x95x63",
-        "TMATMULTest.case_mmad_f16s4_nd_16x64x32",
-        "TMATMULTest.case_mmad_f16s4_nd_128x128x128",
-        "TMATMULTest.case_mmad_bf16s4_nd_64x64x64",
-        "TMATMULTest.case_mmad_bf16s4_nd_65x90x89",
-        "TMATMULTest.case_mmad_bf16s4_nd_96x128x89",
-        "TMATMULTest.case_mmad_bf16s4_nd_129x95x63",
-        "TMATMULTest.case_mmad_bf16s4_nd_16x64x32",
-        "TMATMULTest.case_mmad_bf16s4_nd_128x128x128",
-        "TMATMULTest.case_mmad_bf16s8_nd_96x128x89",
-        "TMATMULTest.case_mmad_bf16s8_nd_129x95x63",
-        "TMATMULTest.case_mmad_bf16s8_nd_2x90x31",
-        "TMATMULTest.case_mmad_bf16e4m3_nd_95x64x95",
-        "TMATMULTest.case_mmad_bf16e4m3_nd_2x64x31",
-        "TMATMULTest.case_mmad_f16f32_nd_2x80x48",
-        "TMATMULTest.case_mmad_f16f32_nd_128x128x128",
+    cases = [
+        (
+            "TMATMULTest.case_fp16_fp16_to_fp32_31x96x47",
+            TMatmulParams(np.float16, np.float16, np.float32, 31, 96, 47, "dn"),
+        ),
+        ("TMATMULTest.case_int8_int8_to_int32_65x90x89", TMatmulParams(np.int8, np.int8, np.int32, 65, 90, 89, "dn")),
+        (
+            "TMATMULTest.case_fp32_fp32_to_fp32_16x32x64",
+            TMatmulParams(np.float32, np.float32, np.float32, 16, 32, 64, "dn"),
+        ),
+        (
+            "TMATMULTest.case_fp16_fp16_to_fp32_1x256x64",
+            TMatmulParams(np.float16, np.float16, np.float32, 1, 256, 64, "dn"),
+        ),
+        (
+            "TMATMULTest.case_nd_fp16_fp16_to_fp32_64x64x64",
+            TMatmulParams(np.float16, np.float16, np.float32, 64, 64, 64, "nd"),
+        ),
+        (
+            "TMATMULTest.case_nd_int8_int8_to_int32_96x128x65",
+            TMatmulParams(np.int8, np.int8, np.int32, 96, 128, 65, "nd"),
+        ),
+        (
+            "TMATMULTest.case_nd_fp32_fp32_to_fp32_33x63x31",
+            TMatmulParams(np.float32, np.float32, np.float32, 33, 63, 31, "nd"),
+        ),
+        (
+            "TMATMULTest.case_nd_fp16_fp16_to_fp32_2x80x48",
+            TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd"),
+        ),
+        (
+            "TMATMULTest.case_fp16_fp16_to_fp32_127x33x95",
+            TMatmulParams(np.float16, np.float16, np.float32, 127, 33, 95, "dn"),
+        ),
+        ("TMATMULTest.case_int8_int8_to_int32_17x33x31", TMatmulParams(np.int8, np.int8, np.int32, 17, 33, 31, "dn")),
+        (
+            "TMATMULTest.case_fp32_fp32_to_fp32_63x31x15",
+            TMatmulParams(np.float32, np.float32, np.float32, 63, 31, 15, "dn"),
+        ),
+        (
+            "TMATMULTest.case_nd_fp16_fp16_to_fp32_95x33x79",
+            TMatmulParams(np.float16, np.float16, np.float32, 95, 33, 79, "nd"),
+        ),
+        (
+            "TMATMULTest.case_nd_int8_int8_to_int32_129x95x33",
+            TMatmulParams(np.int8, np.int8, np.int32, 129, 95, 33, "nd"),
+        ),
+        (
+            "TMATMULTest.case_nd_fp32_fp32_to_fp32_47x29x25",
+            TMatmulParams(np.float32, np.float32, np.float32, 47, 29, 25, "nd"),
+        ),
+        (
+            "TMATMULTest.case_mmad_s8s4_nd_64x64x64",
+            TMatmulParams(np.int8, np.int8, np.int32, 64, 64, 64, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_s8s4_nd_96x128x65",
+            TMatmulParams(np.int8, np.int8, np.int32, 96, 128, 65, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_s8s4_nd_129x95x33",
+            TMatmulParams(np.int8, np.int8, np.int32, 129, 95, 33, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_s8s4_nd_17x33x31",
+            TMatmulParams(np.int8, np.int8, np.int32, 17, 33, 31, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_s8s4_nd_2x80x48",
+            TMatmulParams(np.int8, np.int8, np.int32, 2, 80, 48, "nd", b_int4=True),
+        ),
+        ("TMATMULTest.case_mmad_f16s8_nd_64x64x64", TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd")),
+        ("TMATMULTest.case_mmad_f16s8_nd_96x128x89", TMatmulParams(np.float16, np.int8, np.float32, 96, 128, 89, "nd")),
+        ("TMATMULTest.case_mmad_f16s8_nd_129x95x63", TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 63, "nd")),
+        ("TMATMULTest.case_mmad_f16s8_dn_65x90x89", TMatmulParams(np.float16, np.int8, np.float32, 65, 90, 89, "dn")),
+        ("TMATMULTest.case_mmad_f16s8_nd_2x90x31", TMatmulParams(np.float16, np.int8, np.float32, 2, 90, 31, "nd")),
+        (
+            "TMATMULTest.case_mmad_f16f32_nd_64x64x64",
+            TMatmulParams(np.float16, np.float16, np.float32, 64, 64, 64, "nd"),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16f32_nd_95x33x79",
+            TMatmulParams(np.float16, np.float16, np.float32, 95, 33, 79, "nd"),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16f32_dn_127x33x95",
+            TMatmulParams(np.float16, np.float16, np.float32, 127, 33, 95, "dn"),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16e4m3_nd_64x64x64",
+            TMatmulParams(np.float16, fp8_e4m3, np.float32, 64, 64, 64, "nd"),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16e4m3_dn_127x64x95",
+            TMatmulParams(np.float16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
+        ),
+        ("TMATMULTest.case_mmad_bf16e4m3_nd_64x64x64", TMatmulParams(bfloat16, fp8_e4m3, np.float32, 64, 64, 64, "nd")),
+        (
+            "TMATMULTest.case_mmad_bf16e4m3_dn_127x64x95",
+            TMatmulParams(bfloat16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
+        ),
+        ("TMATMULTest.case_mmad_bf16s8_nd_64x64x64", TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd")),
+        ("TMATMULTest.case_mmad_bf16s8_dn_65x90x89", TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "dn")),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_64x64x64",
+            TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_65x90x89",
+            TMatmulParams(np.float16, np.int8, np.float32, 65, 90, 89, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_96x128x89",
+            TMatmulParams(np.float16, np.int8, np.float32, 96, 128, 89, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_129x95x63",
+            TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_16x64x32",
+            TMatmulParams(np.float16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_f16s4_nd_128x128x128",
+            TMatmulParams(np.float16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_64x64x64",
+            TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_65x90x89",
+            TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_96x128x89",
+            TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_129x95x63",
+            TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_16x64x32",
+            TMatmulParams(bfloat16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
+        ),
+        (
+            "TMATMULTest.case_mmad_bf16s4_nd_128x128x128",
+            TMatmulParams(bfloat16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
+        ),
+        ("TMATMULTest.case_mmad_bf16s8_nd_96x128x89", TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd")),
+        ("TMATMULTest.case_mmad_bf16s8_nd_129x95x63", TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd")),
+        ("TMATMULTest.case_mmad_bf16s8_nd_2x90x31", TMatmulParams(bfloat16, np.int8, np.float32, 2, 90, 31, "nd")),
+        ("TMATMULTest.case_mmad_bf16e4m3_nd_95x64x95", TMatmulParams(bfloat16, fp8_e4m3, np.float32, 95, 64, 95, "nd")),
+        ("TMATMULTest.case_mmad_bf16e4m3_nd_2x64x31", TMatmulParams(bfloat16, fp8_e4m3, np.float32, 2, 64, 31, "nd")),
+        ("TMATMULTest.case_mmad_f16f32_nd_2x80x48", TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd")),
+        (
+            "TMATMULTest.case_mmad_f16f32_nd_128x128x128",
+            TMatmulParams(np.float16, np.float16, np.float32, 128, 128, 128, "nd"),
+        ),
     ]
 
-    case_params_list = [
-        TMatmulParams(np.float16, np.float16, np.float32, 31, 96, 47, "dn"),
-        TMatmulParams(np.int8, np.int8, np.int32, 65, 90, 89, "dn"),
-        TMatmulParams(np.float32, np.float32, np.float32, 16, 32, 64, "dn"),
-        TMatmulParams(np.float16, np.float16, np.float32, 1, 256, 64, "dn"),
-        TMatmulParams(np.float16, np.float16, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(np.int8, np.int8, np.int32, 96, 128, 65, "nd"),
-        TMatmulParams(np.float32, np.float32, np.float32, 33, 63, 31, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 127, 33, 95, "dn"),
-        TMatmulParams(np.int8, np.int8, np.int32, 17, 33, 31, "dn"),
-        TMatmulParams(np.float32, np.float32, np.float32, 63, 31, 15, "dn"),
-        TMatmulParams(np.float16, np.float16, np.float32, 95, 33, 79, "nd"),
-        TMatmulParams(np.int8, np.int8, np.int32, 129, 95, 33, "nd"),
-        TMatmulParams(np.float32, np.float32, np.float32, 47, 29, 25, "nd"),
-        TMatmulParams(np.int8, np.int8, np.int32, 64, 64, 64, "nd", b_int4=True),
-        TMatmulParams(np.int8, np.int8, np.int32, 96, 128, 65, "nd", b_int4=True),
-        TMatmulParams(np.int8, np.int8, np.int32, 129, 95, 33, "nd", b_int4=True),
-        TMatmulParams(np.int8, np.int8, np.int32, 17, 33, 31, "nd", b_int4=True),
-        TMatmulParams(np.int8, np.int8, np.int32, 2, 80, 48, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(np.float16, np.int8, np.float32, 96, 128, 89, "nd"),
-        TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 63, "nd"),
-        TMatmulParams(np.float16, np.int8, np.float32, 65, 90, 89, "dn"),
-        TMatmulParams(np.float16, np.int8, np.float32, 2, 90, 31, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 95, 33, 79, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 127, 33, 95, "dn"),
-        TMatmulParams(np.float16, fp8_e4m3, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(np.float16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
-        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 127, 64, 95, "dn"),
-        TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd"),
-        TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "dn"),
-        TMatmulParams(np.float16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 65, 90, 89, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 96, 128, 89, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
-        TMatmulParams(np.float16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 64, 64, 64, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 65, 90, 89, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 16, 64, 32, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 128, 128, 128, "nd", b_int4=True),
-        TMatmulParams(bfloat16, np.int8, np.float32, 96, 128, 89, "nd"),
-        TMatmulParams(bfloat16, np.int8, np.float32, 129, 95, 63, "nd"),
-        TMatmulParams(bfloat16, np.int8, np.float32, 2, 90, 31, "nd"),
-        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 95, 64, 95, "nd"),
-        TMatmulParams(bfloat16, fp8_e4m3, np.float32, 2, 64, 31, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 2, 80, 48, "nd"),
-        TMatmulParams(np.float16, np.float16, np.float32, 128, 128, 128, "nd"),
-    ]
-
-    for i, case_name in enumerate(case_name_list):
+    for case_name, case_params in cases:
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_params_list[i])
+        gen_golden_data(case_params)
         os.chdir(original_dir)

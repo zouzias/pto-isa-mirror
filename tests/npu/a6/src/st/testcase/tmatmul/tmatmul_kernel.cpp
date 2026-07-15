@@ -161,365 +161,74 @@ __global__ AICORE void RunTMATMUL_ND(__gm__ OutType *out, __gm__ AType *src0, __
 template <int32_t tilingKey>
 void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
-template <>
-void LaunchTMATMUL<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, half, 31, 96, 47><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
+#define DEFINE_TMATMUL_LAUNCH_ND(KEY, OUT_T, A_T, B_T, M, K, N)                                            \
+    template <>                                                                                            \
+    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void *stream)                   \
+    {                                                                                                      \
+        RunTMATMUL_ND<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                   \
+            reinterpret_cast<OUT_T *>(out), reinterpret_cast<A_T *>(src0), reinterpret_cast<B_T *>(src1)); \
+    }
 
-template <>
-void LaunchTMATMUL<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<int32_t, int8_t, int8_t, 65, 90, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
+#define DEFINE_TMATMUL_LAUNCH_DN(KEY, OUT_T, A_T, B_T, M, K, N)                                            \
+    template <>                                                                                            \
+    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void *stream)                   \
+    {                                                                                                      \
+        RunTMATMUL_DN<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                   \
+            reinterpret_cast<OUT_T *>(out), reinterpret_cast<A_T *>(src0), reinterpret_cast<B_T *>(src1)); \
+    }
 
-template <>
-void LaunchTMATMUL<15>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int4b_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-template <>
-void LaunchTMATMUL<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, float, float, 16, 32, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1));
-}
+DEFINE_TMATMUL_LAUNCH_DN(1, float, half, half, 31, 96, 47)
+DEFINE_TMATMUL_LAUNCH_DN(2, int32_t, int8_t, int8_t, 65, 90, 89)
+DEFINE_TMATMUL_LAUNCH_DN(3, float, float, float, 16, 32, 64)
+DEFINE_TMATMUL_LAUNCH_DN(4, float, half, half, 1, 256, 64)
+DEFINE_TMATMUL_LAUNCH_ND(5, float, half, half, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(6, int32_t, int8_t, int8_t, 96, 128, 65)
+DEFINE_TMATMUL_LAUNCH_ND(7, float, float, float, 33, 63, 31)
+DEFINE_TMATMUL_LAUNCH_ND(8, float, half, half, 2, 80, 48)
+DEFINE_TMATMUL_LAUNCH_DN(9, float, half, half, 127, 33, 95)
+DEFINE_TMATMUL_LAUNCH_DN(10, int32_t, int8_t, int8_t, 17, 33, 31)
+DEFINE_TMATMUL_LAUNCH_DN(11, float, float, float, 63, 31, 15)
+DEFINE_TMATMUL_LAUNCH_ND(12, float, half, half, 95, 33, 79)
+DEFINE_TMATMUL_LAUNCH_ND(13, int32_t, int8_t, int8_t, 129, 95, 33)
+DEFINE_TMATMUL_LAUNCH_ND(14, float, float, float, 47, 29, 25)
+DEFINE_TMATMUL_LAUNCH_ND(15, int32_t, int8_t, int4b_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(16, int32_t, int8_t, int4b_t, 96, 128, 65)
+DEFINE_TMATMUL_LAUNCH_ND(17, int32_t, int8_t, int4b_t, 129, 95, 33)
+DEFINE_TMATMUL_LAUNCH_ND(18, int32_t, int8_t, int4b_t, 17, 33, 31)
+DEFINE_TMATMUL_LAUNCH_ND(19, int32_t, int8_t, int4b_t, 2, 80, 48)
+DEFINE_TMATMUL_LAUNCH_ND(20, float, half, int8_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(21, float, half, int8_t, 96, 128, 89)
+DEFINE_TMATMUL_LAUNCH_ND(22, float, half, int8_t, 129, 95, 63)
+DEFINE_TMATMUL_LAUNCH_DN(23, float, half, int8_t, 65, 90, 89)
+DEFINE_TMATMUL_LAUNCH_ND(24, float, half, int8_t, 2, 90, 31)
+DEFINE_TMATMUL_LAUNCH_ND(25, float, half, half, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(26, float, half, half, 95, 33, 79)
+DEFINE_TMATMUL_LAUNCH_DN(27, float, half, half, 127, 33, 95)
+DEFINE_TMATMUL_LAUNCH_ND(28, float, half, float8_e4m3_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_DN(29, float, half, float8_e4m3_t, 127, 64, 95)
+DEFINE_TMATMUL_LAUNCH_ND(30, float, bfloat16_t, float8_e4m3_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_DN(31, float, bfloat16_t, float8_e4m3_t, 127, 64, 95)
+DEFINE_TMATMUL_LAUNCH_ND(32, float, bfloat16_t, int8_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_DN(33, float, bfloat16_t, int8_t, 65, 90, 89)
+DEFINE_TMATMUL_LAUNCH_ND(34, float, half, int4b_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(35, float, half, int4b_t, 65, 90, 89)
+DEFINE_TMATMUL_LAUNCH_ND(36, float, half, int4b_t, 96, 128, 89)
+DEFINE_TMATMUL_LAUNCH_ND(37, float, half, int4b_t, 129, 95, 63)
+DEFINE_TMATMUL_LAUNCH_ND(38, float, half, int4b_t, 16, 64, 32)
+DEFINE_TMATMUL_LAUNCH_ND(39, float, half, int4b_t, 128, 128, 128)
+DEFINE_TMATMUL_LAUNCH_ND(40, float, bfloat16_t, int4b_t, 64, 64, 64)
+DEFINE_TMATMUL_LAUNCH_ND(41, float, bfloat16_t, int4b_t, 65, 90, 89)
+DEFINE_TMATMUL_LAUNCH_ND(42, float, bfloat16_t, int4b_t, 96, 128, 89)
+DEFINE_TMATMUL_LAUNCH_ND(43, float, bfloat16_t, int4b_t, 129, 95, 63)
+DEFINE_TMATMUL_LAUNCH_ND(44, float, bfloat16_t, int4b_t, 16, 64, 32)
+DEFINE_TMATMUL_LAUNCH_ND(45, float, bfloat16_t, int4b_t, 128, 128, 128)
+DEFINE_TMATMUL_LAUNCH_ND(46, float, bfloat16_t, int8_t, 96, 128, 89)
+DEFINE_TMATMUL_LAUNCH_ND(47, float, bfloat16_t, int8_t, 129, 95, 63)
+DEFINE_TMATMUL_LAUNCH_ND(48, float, bfloat16_t, int8_t, 2, 90, 31)
+DEFINE_TMATMUL_LAUNCH_ND(49, float, bfloat16_t, float8_e4m3_t, 95, 64, 95)
+DEFINE_TMATMUL_LAUNCH_ND(50, float, bfloat16_t, float8_e4m3_t, 2, 64, 31)
+DEFINE_TMATMUL_LAUNCH_ND(51, float, half, half, 2, 80, 48)
+DEFINE_TMATMUL_LAUNCH_ND(52, float, half, half, 128, 128, 128)
 
-template <>
-void LaunchTMATMUL<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, half, 1, 256, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int8_t, 96, 128, 65><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, float, float, 33, 63, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 2, 80, 48><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<9>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, half, 127, 33, 95><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<10>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<int32_t, int8_t, int8_t, 17, 33, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<11>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, float, float, 63, 31, 15><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<12>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 95, 33, 79><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<13>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int8_t, 129, 95, 33><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<14>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, float, float, 47, 29, 25><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<16>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int4b_t, 96, 128, 65><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<17>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int4b_t, 129, 95, 33><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<18>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int4b_t, 17, 33, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<19>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<int32_t, int8_t, int4b_t, 2, 80, 48><<<1, nullptr, stream>>>(
-        reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<20>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int8_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<21>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int8_t, 96, 128, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<22>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int8_t, 129, 95, 63><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<23>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, int8_t, 65, 90, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<24>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int8_t, 2, 90, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<25>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<26>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 95, 33, 79><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<27>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, half, 127, 33, 95><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<28>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, float8_e4m3_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<29>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, half, float8_e4m3_t, 127, 64, 95><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<30>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, float8_e4m3_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<31>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, bfloat16_t, float8_e4m3_t, 127, 64, 95><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<32>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int8_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<33>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_DN<float, bfloat16_t, int8_t, 65, 90, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<34>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<35>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 65, 90, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<36>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 96, 128, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<37>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 129, 95, 63><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<38>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 16, 64, 32><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<39>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, int4b_t, 128, 128, 128><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<40>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 64, 64, 64><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<41>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 65, 90, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<42>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 96, 128, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<43>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 129, 95, 63><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<44>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 16, 64, 32><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<45>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int4b_t, 128, 128, 128><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int4b_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<46>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int8_t, 96, 128, 89><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<47>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int8_t, 129, 95, 63><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<48>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, int8_t, 2, 90, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<int8_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<49>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, float8_e4m3_t, 95, 64, 95><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<50>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, bfloat16_t, float8_e4m3_t, 2, 64, 31><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<bfloat16_t *>(src0), reinterpret_cast<float8_e4m3_t *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<51>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 2, 80, 48><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
-
-template <>
-void LaunchTMATMUL<52>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    RunTMATMUL_ND<float, half, half, 128, 128, 128><<<1, nullptr, stream>>>(
-        reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
-}
+#undef DEFINE_TMATMUL_LAUNCH_DN
+#undef DEFINE_TMATMUL_LAUNCH_ND
