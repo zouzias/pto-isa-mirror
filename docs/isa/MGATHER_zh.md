@@ -307,7 +307,7 @@ void example_auto() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
-  GlobalData<float> src;  // GM 中的 GlobalTensor
+  // src 是 GM 中的 GlobalTensor
   MGATHER(dst, src, idx);
 }
 ```
@@ -324,7 +324,7 @@ void example_manual() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
-  GlobalData<float> src;
+  // src 是 GM 中的 GlobalTensor
   TASSIGN(dst, 0x1000);
   TASSIGN(idx, 0x2000);
   MGATHER(dst, src, idx);

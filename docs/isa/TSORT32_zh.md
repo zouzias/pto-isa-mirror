@@ -90,13 +90,13 @@ PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &id
 
 ### `tmp` 尺寸公式（4 参数）
 
-设 $C$ = `validCol`，$B$ = `sizeof(T)` 字节数，$G$ = 32（块大小）。实现根据整行（字节数）是否满足 `MAX_UB_TMP = 8160` 进行分支：
+设 $C$ = `validCol`，$B$ = `sizeof(T)` 字节数，$G$ = 32（块大小）。实现根据整行大小是否满足 `MAX_UB_TMP = 8160` 进行分支（A2A3 按元素数，A5 按字节数）：
 
 $$
 \mathrm{tmpSize} =
 \begin{cases}
-\mathrm{ceil}_{G}(C) & \text{A2A3：} C \le 8160 \text{（元素数）} \quad \text{或} \quad \text{A5：} C \cdot b \le 8160 \text{（字节）} \\
-G = 32 & \text{A2A3：} C > 8160 \text{（元素数）} \quad \text{或} \quad \text{A5：} C \cdot b > 8160 \text{（字节）}
+\mathrm{ceil}_{G}(C) & \text{A2A3：} C \le 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot b \le 8160 \text{（字节））} \\
+G = 32 & \text{A2A3：} C > 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot b > 8160 \text{（字节））}
 \end{cases}
 $$
 
@@ -107,7 +107,7 @@ $$
 - Path A（$C \cdot b \le 8160$，小行）：从行首**整行**复制到 tmp，然后原地填充最后 32 个元素。
 - Path B（$C \cdot b > 8160$，大行）：仅复制**尾块**到 tmp；完整块直接从 `src` 排序。
 - VBS32 硬件上限：每次调用 `repeat ≤ REPEAT_MAX = 255` 块（≤ 8160 元素）；超过 255 块的行拆分为多次 `vbitsort` 调用。
-- **UB 布局：** `tmp` 应放置在 `dst` 之后（32Byte 对齐），大小为 `ceil(ALIGN_C·b, 32)` 字节——不应使用固定的 8KB 偏移，因为 Path A（A2A3）在接近阈值时对 float 需要最多 ~32KB（$C \le 8160$ 元素 = float 32KB）。
+- **UB 布局：** `tmp` 应放置在 `dst` 之后（32Byte 对齐），大小为 `ceil(C·b, 32)` 字节（等价于 `ceil(ceil(C, 32)·b, 32)`，因 $b \in \{2,4\}$ 整除 32）——不应使用固定的 8KB 偏移，因为 Path A（A2A3）在接近阈值时对 float 需要最多 ~32KB（$C \le 8160$ 元素 = float 32KB）。
 
 ### 4 参数尾部处理
 

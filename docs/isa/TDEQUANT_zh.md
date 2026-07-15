@@ -15,7 +15,7 @@ $$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} - \mathrm{offset}_{i}) \cdot \mathrm
 $$ \mathrm{dst}_{i,j} = \bigl(\mathrm{src}_{i,j} - \mathrm{offset}_{i}\bigr) \cdot \mathrm{scale}_{i} $$
 
 - `src`：量化后的整数码（`S8` 或 `S16`）。
-- `scale`、`offset`：每行的 FP32 反量化参数；`scale` 的有效列数 `paraCols = max(1, scale.GetValidCol())`，参数列下标 `paraCol = min(j, paraCols - 1)`，即参数沿列方向广播。
+- `scale`、`offset`：每行的 FP32 反量化参数（按行索引 `i` 选取参数组，沿列方向广播到整行）；`scale` 的有效列数 `paraCols = max(1, scale.GetValidCol())`，参数列下标 `paraCol = min(j, paraCols - 1)` 仅用于在参数 Tile 多列时钳位读取列下标（典型用法每行 1 个标量，`paraCols = 1`），参数组本身由行 `i` 决定。
 - 与 `TQUANT` 整数仿射量化互逆：`TQUANT` 中 $q = \mathrm{round}(x / \mathrm{scale}) + \mathrm{offset}$，故 $x = (q - \mathrm{offset}) \cdot \mathrm{scale}$。
 
 > 除非另有说明，语义在有效区域内定义，目标相关行为标记为实现定义。`scale` 与 `offset` 均为 ISA 可见的 Tile 操作数（非编译器 scratch）。

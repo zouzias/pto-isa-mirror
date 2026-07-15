@@ -61,8 +61,8 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 - `dst` 和 `src` 的元素类型必须一致。
 - 运行时检查：
     - `src.GetValidCol() == dst.GetValidCol()`
-    - `src.GetValidRow() != 0`
-    - `src.GetValidCol() != 0`
+    - `src.GetValidRow() != 0`（为零时实现静默返回，不执行计算）
+    - `src.GetValidCol() != 0`（为零时实现静默返回，不执行计算）
     - `src.GetValidCol()` 必须不大于按 `src` 元素计的 `tmp` 行跨度
 - `isBinary` 选择已检查到的后端路径：
     - `true`：使用 `tmp` 做二叉树累加
