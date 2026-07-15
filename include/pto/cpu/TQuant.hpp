@@ -285,7 +285,7 @@ inline float ComputeMxGroupMax(TileDataSrc& src, int axis, int group)
     constexpr int groupSize = 32;
     for (int inner = 0; inner < groupSize; ++inner) {
         int row = grp_axis == 1 ? axis : (group * groupSize + inner);
-        int col = grp_axis == 0 ? axis : (group * groupSize + inner);
+        int col = grp_axis == 1 ? (group * groupSize + inner) : axis;
         const float value = src.data()[GetTileElementOffset<TileDataSrc>(row, col)];
         if constexpr (
             quant_type == QuantType::MXFP8 || (quant_type == QuantType::MXFP4_E2M1 && scale_alg == QuantScaleAlg::NV)) {
@@ -381,7 +381,7 @@ inline void QuantizeMxGroup(
     constexpr int groupSize = 32;
     for (int inner = 0; inner < groupSize; ++inner) {
         int row = grp_axis == 1 ? axis : (group * groupSize + inner);
-        int col = grp_axis == 0 ? axis : (group * groupSize + inner);
+        int col = grp_axis == 1 ? (group * groupSize + inner) : axis;
         StoreMxEncodedValue<quant_type, scale_alg>(dst, src, flatScaling, row, col, flatGroupIdx, groupScaling);
     }
 }
@@ -463,37 +463,29 @@ template <
 inline void QuantizeMxTile(
     TileDataOut& dst, TileDataSrc& src, TileDataExp& exp, FlatMaxTile& flatMax, FlatScalingTile& flatScaling)
 {
-    if constexpr (grp_axis == 1) {
-        const int rows = src.GetValidRow();
-        const int cols = TileDataSrc::Cols;
-        const int groupCols = cols / 32;
-        for (int row = 0; row < rows; ++row) {
-            for (int group = 0; group < groupCols; ++group) {
-                const int flatGroupIdx = row * groupCols + group;
-                const float maxAbsValue = ComputeMxGroupMax<grp_axis, quant_type, scale_alg>(src, row, group);
-                const uint8_t e8m0 = ComputeMxSharedExponent<quant_type, scale_alg>(maxAbsValue);
-                const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
-                flatMax.data()[flatGroupIdx] = static_cast<typename FlatMaxTile::DType>(maxAbsValue);
-                exp.data()[GetTileElementOffset<TileDataExp>(row, group)] = e8m0;
-                QuantizeMxGroup<grp_axis, quant_type, scale_alg>(
-                    dst, src, flatScaling, row, group, flatGroupIdx, groupScaling);
-            }
-        }
-    } else {
-        const int rows = TileDataSrc::Rows;
-        const int cols = src.GetValidCols();
-        const int groupRows = rows / 32;
-        for (int group = 0; group < groupRows; ++group) {
-            for (int col = 0; col < cols; ++col) {
-                const int flatGroupIdx = group * cols + col;
-                const float maxAbsValue = ComputeMxGroupMax<grp_axis, quant_type, scale_alg>(src, col, group);
-                const uint8_t e8m0 = ComputeMxSharedExponent<quant_type, scale_alg>(maxAbsValue);
-                const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
-                flatMax.data()[flatGroupIdx] = static_cast<typename FlatMaxTile::DType>(maxAbsValue);
-                exp.data()[GetTileElementOffset<TileDataExp>(group, col)] = e8m0;
-                QuantizeMxGroup<grp_axis, quant_type, scale_alg>(
-                    dst, src, flatScaling, col, group, flatGroupIdx, groupScaling);
-            }
+    const int rows = (grp_axis == 1) ? src.GetValidRow() : TileDataSrc::Rows;
+    const int cols = (grp_axis == 1) ? TileDataSrc::Cols : src.GetValidCol();
+
+    const int numGroupsAlongAxis = (grp_axis == 1) ? (cols / 32) : (rows / 32);
+    const int numElementsAlongAxis = (grp_axis == 1) ? rows : cols;
+
+    for (int i = 0; i < numElementsAlongAxis; ++i) {
+        for (int group = 0; group < numGroupsAlongAxis; ++group) {
+            const int row = (grp_axis == 1) ? i : group; // This needs careful mapping logic
+            const int col = (grp_axis == 1) ? group : i;
+
+            const int flatGroupIdx =
+                (grp_axis == 1) ? (i * numGroupsAlongAxis + group) : (group * numElementsAlongAxis + i);
+
+            const float maxAbsValue = ComputeMxGroupMax<grp_axis, quant_type, scale_alg>(src, i, group);
+            const uint8_t e8m0 = ComputeMxSharedExponent<quant_type, scale_alg>(maxAbsValue);
+            const float groupScaling = ComputeMxGroupScaling<quant_type, scale_alg>(maxAbsValue, e8m0);
+
+            flatMax.data()[flatGroupIdx] = static_cast<typename FlatMaxTile::DType>(maxAbsValue);
+            exp.data()[GetTileElementOffset<TileDataExp>(row, col)] = e8m0;
+
+            QuantizeMxGroup<grp_axis, quant_type, scale_alg>(
+                dst, src, flatScaling, i, group, flatGroupIdx, groupScaling);
         }
     }
 }
@@ -567,10 +559,12 @@ template <
 PTO_INTERNAL void TQUANT_IMPL(
     TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
 {
-    constexpr QuantScaleAlg quant_type =
-        (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::OcpMxFp8E4M3) ? QuantScaleAlg::OCP : QuantScaleAlg::NV;
-    constexpr QuantType scale_alg =
-        (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::NvMxFp4E2M1) ? QuantType::MXFP4_E2M1 : QuantType::MXFP8;
+    constexpr QuantScaleAlg quant_type = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::OcpMxFp8E4M3) ?
+                                             QuantScaleAlg::OCP :
+                                             QuantScaleAlg::NV;
+    constexpr QuantType scale_alg = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::NvMxFp4E2M1) ?
+                                        QuantType::MXFP4_E2M1 :
+                                        QuantType::MXFP8;
     TQuantMxCpuImpl<grp_axis, quant_type, scale_alg>(dst, src, exp, max, scaling);
 }
 
