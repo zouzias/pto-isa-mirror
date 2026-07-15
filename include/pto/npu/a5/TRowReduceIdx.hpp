@@ -72,7 +72,7 @@ PTO_INTERNAL void UpdateIdxValue(
     RegTensor<TDst>& vregIdxOrig, RegTensor<TSrc>& vregValOrig, RegTensor<TSrc>& vregVal, RegTensor<TSrc>& vregZero,
     RegTensor<TDst>& vregIdxOffset, MaskReg& pRegOneElem)
 {
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TSrc);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(TSrc);
     MaskReg pregCmp;
     RegTensor<TDst> vregIdx;
     vdintlv(vregVal, (RegTensor<TSrc>&)vregIdx, vregVal, vregZero);
@@ -93,7 +93,7 @@ PTO_INTERNAL void TRowReduceIdxProc(
     using TDstVal = typename TileDataOutVal::DType;
     using TDstIdx = typename TileDataOutIdx::DType;
     using TSrc = typename TileDataIn::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TSrc);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(TSrc);
     __VEC_SCOPE__
     {
         constexpr auto distValueVal =
@@ -150,7 +150,7 @@ PTO_INTERNAL void TRowReduceIdxImpl(
     using TDstVal = typename TileDataOutVal::DType;
     using TDstIdx = typename TileDataOutIdx::DType;
     using TSrc = typename TileDataIn::DType;
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TSrc);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(TSrc);
     int32_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
     if (version == VFIMPL_2D_NO_POST_UPDATE) {
         TRowReduceIdxProc<ReduceIdxOp, TileDataOutVal, TileDataOutIdx, TileDataIn, outputVal, false>(
