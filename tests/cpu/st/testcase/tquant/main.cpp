@@ -621,7 +621,7 @@ void ExpectMxFp4Result(SrcTile& src, DstTile& dst, ExpTile& exp, MaxTile& max, M
     const auto* dstBytes = reinterpret_cast<const uint8_t*>(dst.data());
     for (int row = 0; row < SrcTile::Rows; ++row) {
         for (int group = 0; group < groupCols; ++group) {
-            const float expectedMax = cpu_quant::ComputeMxGroupMax<QuantType::MXFP4_E2M1, scaleAlg>(src, row, group);
+            const float expectedMax = cpu_quant::ComputeMxGroupMax<1, QuantType::MXFP4_E2M1, scaleAlg>(src, row, group);
             const uint8_t expectedExp =
                 cpu_quant::ComputeMxSharedExponent<QuantType::MXFP4_E2M1, scaleAlg>(expectedMax);
             const float expectedScaling =

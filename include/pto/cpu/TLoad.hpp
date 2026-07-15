@@ -134,18 +134,10 @@ __tf__ AICORE void TLoad(
 
     // Filling data
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
-<<<<<<< HEAD
         ForEachNZElement<TileData>(validRow, validCol, gShape1, gShape3, gShape4, gStride0, gStride1, gStride2,
                                    gStride3, gStride4, [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
                                        dst[tile_idx] = src[gd_idx];
                                    });
-=======
-        ForEachNZElement<TileData>(
-            validRow, validCol, gShape1, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
-            [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-                dst[tile_idx] = getProperDataPart(src, gd_idx);
-            });
->>>>>>> 9e8f6628 (Repo-wide pre-commit: reflow all C++ under updated .clang-format and modernize pre-commit/OAT config)
     } else if (TileData::SFractal == SLayout::NoneBox) {
         LoadPlain<GlobalData, TileData>(
             dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
