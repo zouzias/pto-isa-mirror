@@ -46,6 +46,7 @@ $$
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 // 3 参数：src 必须 32 对齐（validCol % 32 == 0）
@@ -68,7 +69,7 @@ PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &id
 | `dst` | $T$ | $R \times (2C)$ float，$R \times (4C)$ half | 排序后的值-索引对（见下方扩展因子） |
 | `tmp`（仅 4 参数） | $T$ | 见下方 tmp 尺寸公式 | 尾部填充 scratch |
 
-**`dst` 扩展因子**（`typeCoef`）：每个输入元素生成一个 8 字节的 tuple `[value (4 B), index (4 B)]`——`float` 的 value 占满 4 B；`half` 的 2 B value 零扩展至 4 B。因此 `dst` 恒为 $C \times 8$ 字节。
+**`dst` 扩展因子**（`typeCoef`）：每个输入元素生成一个 8字节的 tuple `[value (4Byte), index (4Byte)]`——`float` 的 value 占满 4Byte；`half` 的 2Byte value 零扩展至 4Byte。因此 `dst` 恒为 $C \times 8$ 字节。
 
 | dtype | 每个 `src` 列对应的 `dst` 列数（dtype 单位） | tuple 布局 | 字节/tuple |
 |-------|-------------------------------------------|--------------|------------|
@@ -105,7 +106,7 @@ $$
 - Path A（$C \cdot b \le 8160$，小行）：从行首**整行**复制到 tmp，然后原地填充最后 32 个元素。
 - Path B（$C \cdot b > 8160$，大行）：仅复制**尾块**到 tmp；完整块直接从 `src` 排序。
 - VBS32 硬件上限：每次调用 `repeat ≤ REPEAT_MAX = 255` 块（≤ 8160 元素）；超过 255 块的行拆分为多次 `vbitsort` 调用。
-- **UB 布局：** `tmp` 应放置在 `dst` 之后（32 B 对齐），大小为 `ceil(ALIGN_C·b, 32)` 字节——不应使用固定的 8 KB 偏移，因为 Path A 在接近阈值时对 float 需要最多 ~32 KB。
+- **UB 布局：** `tmp` 应放置在 `dst` 之后（32 B 对齐），大小为 `ceil(C·b, 32)` 字节（等价于 `ceil(ceil(C, 32)·b, 32)`，因 $b \in \{2,4\}$ 整除 32）——不应使用固定的 8 KB 偏移，因为 Path A 在接近阈值时对 float 需要最多 ~32 KB。
 
 ### 4 参数尾部处理
 

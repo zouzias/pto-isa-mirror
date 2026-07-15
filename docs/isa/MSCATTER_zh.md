@@ -39,6 +39,7 @@ pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
@@ -64,7 +65,7 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 - **形状约束**：
     - `src.Rows == indexes.Rows`。
     - `indexes` 的形状必须为 `[N, 1]`（按行 scatter）或 `[N, M]`（按元素 scatter）。
-    - `src` 的行宽必须满足 32 字节对齐，即 `src.Cols * sizeof(DType)` 必须是 32 的倍数。
+    - `src` 的行宽必须满足 32字节对齐，即 `src.Cols * sizeof(DType)` 必须是 32 的倍数。
     - `dst` 的静态 shape 必须满足 `Shape<1, 1, 1, TableRows, RowWidth>`。
 - **索引解释**：
     - 索引解释由目标定义。CPU 模拟器将索引视为 `dst.data()` 中的线性元素索引。
