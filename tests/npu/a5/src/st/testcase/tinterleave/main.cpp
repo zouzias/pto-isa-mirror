@@ -178,3 +178,7 @@ TEST_F(TINTERLEAVETest, case_uint8_32x256_32x255)
 {
     test_tinterleave<uint8_t, 32, 256, 32, 255>();
 }
+TEST_F(TINTERLEAVETest, case_float_2x72_2x66)
+{
+    test_tinterleave<float, 2, 72, 2, 66>();
+}
