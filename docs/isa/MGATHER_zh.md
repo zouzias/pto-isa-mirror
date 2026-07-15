@@ -70,6 +70,7 @@ pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_bu
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ### CPU 参考形式
 
@@ -142,8 +143,8 @@ enum class GatherOOB : uint8_t {
 
 **形状约束：**
 - `dst.Rows == indexes.Rows`。
-- `indexes` 的形状必须为 `[N, 1]`（按行 gather）或 `[N, M]`（按元素 gather）。
-- `dst` 行宽必须满足 32 字节对齐，即 `dst.Cols * sizeof(T)` 必须是 32 的倍数。
+- `indexes` 的形状必须为 `[1, N]`（按行 gather）或 `[N, M]`（按元素 gather）。
+- `dst` 行宽必须满足 32字节对齐，即 `dst.Cols * sizeof(T)` 必须是 32 的倍数。
 - `src` 的静态 shape 必须满足 `Shape<1, 1, 1, TableRows, RowWidth>`。
 
 ### Tile 约束（A2/A3）
@@ -159,14 +160,14 @@ enum class GatherOOB : uint8_t {
 - `src` 必须是位于 GM 内存中的 `GlobalTensor`；`GlobalTable::DType == __gm__ T`。
 - 目标 tile 的 bulk + sub 布局必须与表布局精确配对：
     - `GlobalTable::layout == Layout::ND` ⇒ `TileDst` 是 `BLayout::RowMajor + SLayout::NoneBox`。
-    - `GlobalTable::layout == Layout::NZ` ⇒ `TileDst` 是 `BLayout::ColMajor + SLayout::RowMajor + SFractalSize == TileConfig::fractalABSize`（= 512 B）。
+    - `GlobalTable::layout == Layout::NZ` ⇒ `TileDst` 是 `BLayout::ColMajor + SLayout::RowMajor + SFractalSize == TileConfig::fractalABSize`（= 512Byte）。
 
 **形状约束：**
-- 填充后的 `TileDst::Cols * sizeof(T)` 必须在两种布局中均为 32 字节对齐。`ValidRow` / `ValidCol` 不受此规则约束。
+- 填充后的 `TileDst::Cols * sizeof(T)` 必须在两种布局中均为 32字节对齐。`ValidRow` / `ValidCol` 不受此规则约束。
 - 对于 `Coalesce::Row`：`TileIdx::ValidRow == 1` 且 `TileIdx::ValidCol == TileDst::ValidRow`。
 - 对于 `Coalesce::Elem`：`TileIdx::ValidRow == TileDst::ValidRow` 且 `TileIdx::ValidCol == TileDst::ValidCol`。
 - 两种模式均要求 `TileDst::ValidRow >= 1` 且 `TileDst::ValidCol >= 1`。
-- NZ 表额外要求 `GlobalTable::staticShape[3] == FRACTAL_NZ_ROW`（= 16）、`GlobalTable::staticShape[4] == C0_SIZE_BYTE / sizeof(T)`（= 32 B / 元素宽度）、`TileDst::Cols % (C0_SIZE_BYTE / sizeof(T)) == 0` 且 `TileDst::Rows % FRACTAL_NZ_ROW == 0`。
+- NZ 表额外要求 `GlobalTable::staticShape[3] == FRACTAL_NZ_ROW`（= 16）、`GlobalTable::staticShape[4] == C0_SIZE_BYTE / sizeof(T)`（= 32Byte / 元素宽度）、`TileDst::Cols % (C0_SIZE_BYTE / sizeof(T)) == 0` 且 `TileDst::Rows % FRACTAL_NZ_ROW == 0`。
 
 ### Tile 约束（A5）
 
@@ -182,7 +183,7 @@ enum class GatherOOB : uint8_t {
 - **GM 表布局：仅 `Layout::ND`。** A5 SIMT 内核将 GM 寻址为扁平行主序缓冲区，行步长硬编码为 `validCols`；`MGatherCheck` 强制 `GlobalTable::staticShape[4] == TileDst::ValidCol`，因此表不能有任何行间填充。
 
 **形状约束：**
-- 填充后的 `TileDst::Cols * sizeof(T)`（RowMajor）或 `TileDst::Rows * sizeof(T)`（ColMajor）必须 32 字节对齐。
+- 填充后的 `TileDst::Cols * sizeof(T)`（RowMajor）或 `TileDst::Rows * sizeof(T)`（ColMajor）必须 32字节对齐。
 - 对于 `Coalesce::Row`：索引 tile 的有效形状为 `[1, R]`（`BLayout::RowMajor`）**或** `[R, 1]`（`BLayout::ColMajor`）。
 - 对于 `Coalesce::Elem`：`TileIdx::ValidRow == TileDst::ValidRow` 且 `TileIdx::ValidCol == TileDst::ValidCol`。`TileIdx` 的 `BLayout` 与 `TileDst` 无关。
 - 两种模式均要求 `TileDst::ValidRow >= 1` 且 `TileDst::ValidCol >= 1`。Elem 模式中退化的 `(1, 1)` 形状绕过 SIMT 启动。
@@ -248,10 +249,10 @@ A5:
 
 当 `GlobalTable::layout == Layout::NZ` 且 `TileDst` 是匹配的 `BLayout::ColMajor + SLayout::RowMajor + SFractalSize = 512` tile 时，`MGATHER`（A2/A3）运行专用的 NZ 路径（`MGatherRowNzImpl`、`MGatherElemNzImpl`）。
 
-- **常量。** `kC0 = C0_SIZE_BYTE / sizeof(T)`；`kFRow = FRACTAL_NZ_ROW = 16`。每个分形块为 `kFRow × kC0` 元素（= 512 B）。
+- **常量。** `kC0 = C0_SIZE_BYTE / sizeof(T)`；`kFRow = FRACTAL_NZ_ROW = 16`。每个分形块为 `kFRow × kC0` 元素（= 512Byte）。
 - **逻辑形状。** 逻辑行 = `gShape2 * kFRow`。逻辑列 = `gShape0 * gShape1 * kC0`。Row 模式的 OOB 以逻辑行数进行夹制/取模；Elem 模式以总元素数进行。
 - **Row 模式。** 对每个逻辑行 `r`，内核将 `idx[r]` 映射到 `(srcBlockRow, srcRowInBlock)`，将 `r` 映射到 `(dstBlockRow, dstRowInBlock)`，然后对每个外层批次发出 **一次多 burst MTE2 传输**。当 `Oob == GatherOOB::Zero` 时，内核在 DMA 循环前对整个 tile 预填 `T(0)` 并跳过 OOB 行的 DMA。
-- **Elem 模式。** 对每个 `(r, c)`，内核将 `idx` 映射到 `(logicalRow, logicalCol) = (idx / nLogicalCols, idx % nLogicalCols)`，然后通过 `MGatherNZGmOffset` 转换为 NZ 物理偏移。遍历顺序为**块列 → 行 → 块内列**，确保连续写入目标连续 32 B UB 块。
+- **Elem 模式。** 对每个 `(r, c)`，内核将 `idx` 映射到 `(logicalRow, logicalCol) = (idx / nLogicalCols, idx % nLogicalCols)`，然后通过 `MGatherNZGmOffset` 转换为 NZ 物理偏移。遍历顺序为**块列 → 行 → 块内列**，确保连续写入目标连续 32Byte UB 块。
 
 ## Pipe / 同步模型
 
@@ -279,18 +280,18 @@ A5 实现将几乎整个 pipe 模型隐藏在 `cce::async_invoke` 之后。唯�
 
 ### A2/A3
 
-AIV 向量核心具有标准的 CANN 192 KB UB 布局。`MGATHER` 不从内核内部分配任何 UB scratch — 唯一的 UB 消费者是调用者分配的目标 tile 和索引 tile。
+AIV 向量核心具有标准的 CANN 192KB UB 布局。`MGATHER` 不从内核内部分配任何 UB scratch — 唯一的 UB 消费者是调用者分配的目标 tile 和索引 tile。
 
 ### A5
 
-A5 SIMT 内核在 AIV 向量核心上运行。所有用户 tile 必须适应 AIV 的 256 KB Unified Buffer，加上两个固定的运行时预留：8 KB 保留区域和 Data Cache（最少 32 KB）。因此最大可用为：
+A5 SIMT 内核在 AIV 向量核心上运行。所有用户 tile 必须适应 AIV 的 256KB Unified Buffer，加上两个固定的运行时预留：8KB 保留区域和 Data Cache（最少 32KB）。因此最大可用为：
 
 ```text
 max dynUBufSize = 256 KB - 8 KB - 32 KB - static_memory
                 = 216 KB - static_memory
 ```
 
-当使用 `TASSIGN` 手动放置 tile 时，编译器看到 `static_memory ≈ 0`，全部 **216 KB** 可作为 `dynUBufSize` 使用。当工作集在默认预算下超过 128 KB 时，通过 `kernel_name<<<numBlocks, dynUBufSize, stream>>>(args...)` 显式声明。
+当使用 `TASSIGN` 手动放置 tile 时，编译器看到 `static_memory ≈ 0`，全部 **216KB** 可作为 `dynUBufSize` 使用。当工作集在默认预算下超过 128KB 时，通过 `kernel_name<<<numBlocks, dynUBufSize, stream>>>(args...)` 显式声明。
 
 ## 示例
 
@@ -306,7 +307,7 @@ void example_auto() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
-  // src 是 GM 中的 GlobalTensor
+  GlobalData<float> src;  // GM 中的 GlobalTensor
   MGATHER(dst, src, idx);
 }
 ```
@@ -323,6 +324,7 @@ void example_manual() {
   using IdxT = Tile<TileType::Vec, int32_t, 16, 16>;
   DstT dst;
   IdxT idx;
+  GlobalData<float> src;
   TASSIGN(dst, 0x1000);
   TASSIGN(idx, 0x2000);
   MGATHER(dst, src, idx);

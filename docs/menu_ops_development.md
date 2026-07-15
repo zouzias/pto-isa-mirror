@@ -20,7 +20,7 @@
   - [TNOT](isa/TNOT_zh.md)
   - [TNEG](isa/TNEG_zh.md)
   - [TRELU](isa/TRELU_zh.md)
-- [逐元素超越函数](menu/transcendental_zh.md)
+- [逐元素算术与超越函数](menu/transcendental_zh.md)
   - [TDIV](isa/TDIV_zh.md)
   - [TREM](isa/TREM_zh.md)
   - [TSQRT](isa/TSQRT_zh.md)
