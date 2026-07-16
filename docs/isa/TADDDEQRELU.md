@@ -1,39 +1,47 @@
-# TADDDEQRELU
+# TAddDeqRelu
 
 ## Tile Operation Diagram
 
-![TADDDEQRELU tile operation](../figures/isa/TADDDEQRELU.svg)
+![TAddDeqRelu tile operation](../figures/isa/TAddDeqRelu.svg)
 
 ## Introduction
 
-Fused Add + Dequantize + ReLU: elementwise addition of two int32 tiles, followed by dequantization scaling and ReLU activation, outputting a half-precision tile.
+Fused elementwise add, dequantization scale, and ReLU clamp. Per element: `dst = max(0, (src0 + src1) * deqScale)` converted to `half`.
+
+At the ISA level, this is a single fused instruction (TADDDEQRELU): add two `int32_t` source tiles, apply the floating-point dequantization scale, clamp negative results to zero, and narrow the result to `half` in one semantic step. Backend realization is architecture-dependent, but user-visible semantics are identical.
 
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
 
-$$ \mathrm{dst}_{i,j} = \max(0, (\mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}) \times \mathrm{deqScale}) $$
+$$ \mathrm{dst}_{i,j} = \mathrm{half}\!\left(\max\!\left(0,\;\left(\mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}\right) \cdot \mathrm{deqScale}\right)\right) $$
 
-The dequantization uses precision-compensated scaling: `(x >> 17) * deqScale << 17` which is mathematically equivalent to `x * deqScale` but avoids precision loss for large int32 intermediate values.
+The implementation uses a precision-compensated scaling sequence:
+
+$$ \left(x \cdot 2^{-17}\right) \cdot \mathrm{deqScale} \cdot 2^{17} $$
+
+which is mathematically equivalent to `x * deqScale` for the add result `x = src0 + src1`, while avoiding precision loss for large `int32_t` intermediates. The final conversion to `half` uses saturating behavior; rounding follows round-to-nearest-even.
 
 ## Assembly Syntax
+
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
+%dst = tadddeqrelu %src0, %src1, %deqScale, %tmp : !pto.tile<...>, !pto.tile<...>, f32, !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
+%dst = pto.tadddeqrelu %src0, %src1, %deqScale, %tmp : (!pto.tile<...>, !pto.tile<...>, f32, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
+pto.tadddeqrelu ins(%src0, %src1, %deqScale, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, f32, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic
@@ -49,47 +57,16 @@ PTO_INST RecordEvent TADDDEQRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataS
 
 ## Constraints
 
-### General constraints / checks
-
-- `src0` and `src1` must be `TileType::Vec` with element type `int32_t`.
-- `dst` must be `TileType::Vec` with element type `half`.
-- All tiles must use row-major layout (`TileData::isRowMajor`).
-- Runtime valid-region checks:
-    - `dst.GetValidRow() > 0` and `dst.GetValidCol() > 0`
-    - `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`
-    - `src1.GetValidRow() == dst.GetValidRow()` and `src1.GetValidCol() == dst.GetValidCol()`
-- `deqScale` is a `float` scalar.
-
-### A2A3 implementation checks
-
-- `tmp` must be `TileType::Vec` with element type `int32_t`.
-- `tmp` must be row-major.
-- `tmp.GetValidRow() >= dst.GetValidRow()` and `tmp.GetValidCol() >= dst.GetValidCol()`.
-
-### A5 implementation checks
-
-- `tmp` is accepted by the interface but not validated or used on A5.
-- All intermediate values stay in vector registers.
-
-## Temporary Space
-
-### A2A3
-
-`tmp` **is used** as intermediate scratch storage. The A2A3 implementation performs the fused operation in multiple steps:
-
-1. `tmp = src0 + src1` (vadd)
-2. Convert `tmp` from int32 to float
-3. Apply precision-compensated scaling: `floatBuf = (tmp / 131072.0) * deqScale * 131072.0`
-4. `reluBuf = max(floatBuf, 0.0)`
-5. Convert result to half and store to `dst`
-
-- `tmp` element type must be `int32_t`.
-- `tmp` must be row-major and `TileType::Vec`.
-- `tmp.GetValidRow() >= dst.GetValidRow()` and `tmp.GetValidCol() >= dst.GetValidCol()`.
-
-### A5
-
-`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses the register-compute model (`__VEC_SCOPE__`) where all intermediate values stay in vector registers. No separate UB tmp buffer is needed. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
+- **Source types**: `src0` and `src1` must be `int32_t`.
+- **Destination type**: `dst` must be `half`.
+- **Temporary type**: `tmp` must be `int32_t`.
+- **Layout**: All tiles must be row-major (`TileData::isRowMajor`).
+- **Location**: All tiles must live in `TileType::Vec`.
+- **Valid region**: `validRow > 0` and `validCol > 0`; `src0` and `src1` valid shapes must match `dst` valid shapes.
+- **Temporary shape**: `tmp` must be at least as large as the valid region of `dst`.
+- **Scale**: `deqScale` is a scalar `float` applied uniformly to every valid element.
+- **Implementation notes (A2A3)**: Adds into the `int32_t` temporary tile, converts the temporary result to `float`, applies `2^-17`, `deqScale`, and `2^17`, performs ReLU with zero, then converts `float` to `half`.
+- **Implementation notes (A5)**: Keeps intermediates in VF registers and does not need a separate UB scratch buffer internally. The public intrinsic still accepts `tmp` for interface parity with A2/A3.
 
 ## Examples
 
@@ -100,14 +77,13 @@ PTO_INST RecordEvent TADDDEQRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataS
 
 using namespace pto;
 
-void example_auto() {
-  using SrcT = Tile<TileType::Vec, int32_t, 16, 16>;
-  using DstT = Tile<TileType::Vec, half, 16, 16>;
-  using TmpT = Tile<TileType::Vec, int32_t, 16, 16>;
-  SrcT src0, src1;
-  DstT dst;
-  TmpT tmp;
-  float deqScale = 0.5f;
+void example_auto(float deqScale) {
+  using SrcTileT = Tile<TileType::Vec, int32_t, 16, 16>;
+  using DstTileT = Tile<TileType::Vec, half, 16, 16>;
+  using TmpTileT = Tile<TileType::Vec, int32_t, 16, 16>;
+  SrcTileT src0, src1;
+  DstTileT dst;
+  TmpTileT tmp;
   TADDDEQRELU(dst, src0, src1, deqScale, tmp);
 }
 ```
@@ -119,18 +95,17 @@ void example_auto() {
 
 using namespace pto;
 
-void example_manual() {
-  using SrcT = Tile<TileType::Vec, int32_t, 16, 16>;
-  using DstT = Tile<TileType::Vec, half, 16, 16>;
-  using TmpT = Tile<TileType::Vec, int32_t, 16, 16>;
-  SrcT src0, src1;
-  DstT dst;
-  TmpT tmp;
-  float deqScale = 0.5f;
-  TASSIGN(src0, 0x1000);
-  TASSIGN(src1, 0x2000);
-  TASSIGN(dst,  0x3000);
-  TASSIGN(tmp,  0x4000);
+void example_manual(float deqScale) {
+  using SrcTileT = Tile<TileType::Vec, int32_t, 16, 16>;
+  using DstTileT = Tile<TileType::Vec, half, 16, 16>;
+  using TmpTileT = Tile<TileType::Vec, int32_t, 16, 16>;
+  SrcTileT src0, src1;
+  DstTileT dst;
+  TmpTileT tmp;
+  TASSIGN(src0, 0x0000);
+  TASSIGN(src1, 0x0800);
+  TASSIGN(tmp,  0x1000);
+  TASSIGN(dst,  0x1800);
   TADDDEQRELU(dst, src0, src1, deqScale, tmp);
 }
 ```
@@ -141,7 +116,7 @@ void example_manual() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
+%dst = pto.tadddeqrelu %src0, %src1, %deqScale, %tmp : (!pto.tile<...>, !pto.tile<...>, f32, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
@@ -149,15 +124,16 @@ void example_manual() {
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
 # Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tadddeqrelu %src0, %src1, %deqScale : (!pto.tile<...>, !pto.tile<...>, f32) -> !pto.tile<...>
+# pto.tassign %arg0, @tile(0x0000)
+# pto.tassign %arg1, @tile(0x0800)
+# pto.tassign %tmp,  @tile(0x1000)
+%dst = pto.tadddeqrelu %src0, %src1, %deqScale, %tmp : (!pto.tile<...>, !pto.tile<...>, f32, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### PTO Assembly Form
 
 ```text
-%dst = tadddeqrelu %src0, %src1, %deqScale : !pto.tile<...>
+%dst = tadddeqrelu %src0, %src1, %deqScale, %tmp : !pto.tile<...>, !pto.tile<...>, f32, !pto.tile<...>
 # AS Level 2 (DPS)
-pto.tadddeqrelu ins(%src0, %src1, %deqScale : !pto.tile_buf<...>, !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
+pto.tadddeqrelu ins(%src0, %src1, %deqScale, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>, f32, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
