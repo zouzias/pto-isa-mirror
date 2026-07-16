@@ -353,7 +353,7 @@ __global__ AICORE void RunTMOVFBQuant(
 #if defined(__DAV_CUBE__)
     using TileMatFbData = Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     TileMatFbData fbMatTile;
-    TASSIGN<M * K * sizeof(AType) + K * N * sizeof(BType)>(fbMatTile);
+    TASSIGN<0x0>(fbMatTile);
     if (src2 != nullptr) {
         using GlobalDataSrc2 = GlobalTensor<
             fbType, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
