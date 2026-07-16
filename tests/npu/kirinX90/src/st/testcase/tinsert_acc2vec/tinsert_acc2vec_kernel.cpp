@@ -71,8 +71,8 @@ AICORE inline void RunMATMUL(__gm__ AType* src0, __gm__ BType* src1, __gm__ fbTy
     using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x20000);
-    TASSIGN(bMatTile, 0x10000);
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(AType)>(bMatTile);
 
     using LeftTile = TileLeft<AType, M, K, validM, validK>;
     using RightTile = TileRight<BType, K, N, validK, validN>;
@@ -80,9 +80,9 @@ AICORE inline void RunMATMUL(__gm__ AType* src0, __gm__ BType* src1, __gm__ fbTy
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
 #if defined(__DAV_CUBE__)
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -125,8 +125,8 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType* src0, __gm__ BType* src1, _
     using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x20000);
-    TASSIGN(bMatTile, 0x10000);
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(AType)>(bMatTile);
 
     using LeftTile = TileLeft<AType, M, K, M, K>;
     using RightTile = TileRight<BType, K, N, K, N>;
@@ -134,9 +134,9 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType* src0, __gm__ BType* src1, _
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
 #if defined(__DAV_CUBE__)
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -262,7 +262,7 @@ __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ B
     }
     using AccTile = TileAcc<CType<AType>, M, N, validM, validN>;
     AccTile cTile;
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(cTile);
 
     uint8_t syncId = 0;
     using DstTileData = std::conditional_t<
@@ -274,7 +274,7 @@ __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ B
             TileType::Vec, OutType, staticRow, staticCol, GetTileBLayout<layoutType>(), copyOutM, copyOutN,
             GetTileSLayout<layoutType>(), sfractalSize>>;
     DstTileData dstTileData;
-    TASSIGN(dstTileData, 0x0);
+    TASSIGN<0x0>(dstTileData);
 
 #if defined(__DAV_VEC__)
     using GlobalDataSrc2 = GlobalTensor<
@@ -282,7 +282,7 @@ __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ B
         pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
     GlobalDataSrc2 src2Global(src2);
     DstTileData dstTile1Data;
-    TASSIGN(dstTile1Data, 0x0);
+    TASSIGN<0x0>(dstTile1Data);
     TLOAD(dstTile1Data, src2Global);
 #endif
 
@@ -346,14 +346,14 @@ __global__ AICORE void RunTMOVFBQuant(
         pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
     GlobalDataSrc2 src2Global(src3);
     DstTileData dstTile1Data;
-    TASSIGN(dstTile1Data, 0x0);
+    TASSIGN<0x0>(dstTile1Data);
     TLOAD(dstTile1Data, src2Global);
 #endif
 
 #if defined(__DAV_CUBE__)
     using TileMatFbData = Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     TileMatFbData fbMatTile;
-    TASSIGN(fbMatTile, 0x0);
+    TASSIGN<0x0>(fbMatTile);
     if (src2 != nullptr) {
         using GlobalDataSrc2 = GlobalTensor<
             fbType, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
@@ -370,14 +370,14 @@ __global__ AICORE void RunTMOVFBQuant(
 
     using AccTile = TileAcc<CType<AType>, M, N, validM, validN>;
     AccTile cTile;
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(cTile);
     uint8_t syncId = 0;
 
     using FbTile = Tile<TileType::Scaling, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     FbTile fbTile;
-    TASSIGN(fbTile, 0x0);
+    TASSIGN<0x0>(fbTile);
     DstTileData dstTileData;
-    TASSIGN(dstTileData, 0x0);
+    TASSIGN<0x0>(dstTileData);
 
 #if defined(__DAV_CUBE__)
     TMOV(fbTile, fbMatTile);
@@ -419,7 +419,7 @@ __global__ AICORE void RunTMOVSCQuant(
     }
     using AccTile = TileAcc<CType<AType>, M, N, validM, validN>;
     AccTile cTile;
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(cTile);
     uint8_t syncId = 0;
     constexpr int copyOutM = isInsert ? dstRow : (validM - indexRow);
     constexpr int copyOutN = isInsert ? dstCol : (validN - indexCol);
@@ -434,7 +434,7 @@ __global__ AICORE void RunTMOVSCQuant(
             TileType::Vec, OutType, staticRow, staticCol, GetTileBLayout<layoutType>(), copyOutM, copyOutN,
             GetTileSLayout<layoutType>(), sfractalSize>>;
     DstTileData dstTileData;
-    TASSIGN(dstTileData, 0x0);
+    TASSIGN<0x0>(dstTileData);
 
 #if defined(__DAV_VEC__)
     using GlobalDataSrc2 = GlobalTensor<
@@ -442,7 +442,7 @@ __global__ AICORE void RunTMOVSCQuant(
         pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
     GlobalDataSrc2 src2Global(src2);
     DstTileData dstTile1Data;
-    TASSIGN(dstTile1Data, 0x0);
+    TASSIGN<0x0>(dstTile1Data);
     TLOAD(dstTile1Data, src2Global);
 #endif
 
