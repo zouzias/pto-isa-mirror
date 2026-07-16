@@ -609,7 +609,7 @@ void ExpectMxFp4PackedBytes(SrcTile &src, DstTile &dst, int row, int group, floa
         const int col0 = group * 32 + col;
         const uint8_t expected = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
             src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
-        const uint8_t actual = dst.data()[GetTileElementOffset<SrcTile>(row, col0)].RawData();
+        const uint8_t actual = dst.GetElement(row, col0).RawData();
         EXPECT_EQ(actual, actual);
     }
 }
