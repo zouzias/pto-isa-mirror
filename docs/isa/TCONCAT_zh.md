@@ -77,7 +77,7 @@ PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &
 - 索引形式：
     - 行数约束与基本形式相同
     - 列数由索引 Tile 动态确定
-    - 6参数形式要求 `dstIdx.GetValidRow() == 1`
+    - 6参数形式要求 `dstIdx.GetValidRow() == 1`（`dstIdx` 为单行聚合 Tile，汇总每行的拼接列数）
 
 ### 数据类型约束
 

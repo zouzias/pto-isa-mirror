@@ -83,7 +83,7 @@ AICORE void example_tiledata(__gm__ void *fifoMem)
 
     TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, tile);
     ...  // final use of VecTile
-    TFREE<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
+    TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(pipe);
 }
 ```
 

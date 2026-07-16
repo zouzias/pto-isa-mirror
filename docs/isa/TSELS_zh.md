@@ -53,13 +53,13 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - `sizeof(TileDataDst::DType)` 必须是 `2` 或 `4` 字节。
+    - `sizeof(TileDataDst::DType)` 必须是 `2`或`4`字节。
     - 支持的数据类型为 `half`、`float16_t`、`float` 和 `float32_t`。
     - `dst` 和 `src` 必须使用相同的元素类型。
     - `dst` 和 `src` 必须是行主序。
     - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。
 - **实现检查 (A5)**:
-    - `sizeof(TileDataDst::DType)` 可以是 `1`、`2` 或 `4` 字节。
+    - `sizeof(TileDataDst::DType)` 可以是 `1`、`2`或`4`字节。
     - 支持的数据类型为 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half` 和 `float`。
     - `dst` 和 `src` 必须使用相同的元素类型。
     - `dst`、`mask` 和 `src` 必须是行主序。

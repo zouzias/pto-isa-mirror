@@ -34,7 +34,7 @@ $$ \mathrm{dst}_{i, P \cdot j + \mathrm{pos}_P} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{i, P \cdot j + \mathrm{zeros}_P} = 0 $$
 
 其中：
-- `SrcTileData::ValidCol` = `DstTileData::ValidCol` × 扩展倍数
+- `SrcTileData::ValidCol` = `DstTileData::ValidCol` / 扩展倍数
 - `SrcTileData::ValidRow` = `DstTileData::ValidRow`
 
 #### SCATTER_COL
@@ -46,7 +46,7 @@ $$ \mathrm{dst}_{P \cdot i + \mathrm{pos}_P, j} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{P \cdot i + \mathrm{zeros}_P, j} = 0 $$
 
 其中：
-- `SrcTileData::ValidRow` = `DstTileData::ValidRow` × 扩展倍数
+- `SrcTileData::ValidRow` = `DstTileData::ValidRow` / 扩展倍数
 - `SrcTileData::ValidCol` = `DstTileData::ValidCol`
 
 #### 扩展倍数

@@ -10,7 +10,7 @@
 
 ## 数学语义
 
-符号表示取决于 `GlobalTensor` 的形状/步长和 `Tile` 的布局。概念上（二维视图，带基础偏移量）：
+符号表示取决于 `GlobalTensor` 的形状/步长和 `Tile` 的布局。概念上（二维视图，带基础偏移量 `r_0` 和 `c_0`）：
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
@@ -68,7 +68,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
     - `TileType::Mat` 加载还处理 mx 格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ（用于 scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN（用于 scalarB）。
     - 对于 `MX_A_ZZ/MX_B_NN`：`GlobalData::staticShape[3] == 16` 且 `GlobalData::staticShape[4] == 2`。
-    - 对于 `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
+    - 对于 `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
     - 对于 scaleA，`dst.GetValidCol() % 2 == 0`。
     - 对于 scaleB，`dst.GetValidRow() % 2 == 0`。
 
