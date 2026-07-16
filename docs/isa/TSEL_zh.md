@@ -74,7 +74,7 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
 `tmp` **被使用**作为小型缓冲区，用于存放从掩码 Tile 复制到每行的比较掩码（`cmpmask`）。A2A3 实现使用 `set_cmpmask`，要求掩码数据位于特定的 UB 位置。
 
 - `tmp` 的元素类型必须是 `uint32_t`。
-- `tmp` 大小要求：每行至少 `cmpmaskLen` 个 `uint32_t` 元素，其中 16 位数据类型（`half`、`bfloat16_t`）的 `cmpmaskLen = 4`（16 字节，128 位），32 位数据类型（`float`、`int32_t`、`uint32_t`）的 `cmpmaskLen = 2`（8 字节，64 位）。
+- `tmp` 大小要求：每行至少 `cmpmaskLen` 个 `uint32_t` 元素，其中 16位数据类型（`half`、`bfloat16_t`）的 `cmpmaskLen = 4`（16字节，128位），32位数据类型（`float`、`int32_t`、`uint32_t`）的 `cmpmaskLen = 2`（8字节，64位）。
 - 典型的 `tmp` Tile 声明：`Tile<TileType::Vec, uint32_t, 1, 16>` 可满足大多数使用场景。
 
 ### A5

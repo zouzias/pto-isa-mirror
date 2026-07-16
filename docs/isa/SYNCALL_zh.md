@@ -225,8 +225,8 @@ Hard 与 Soft kernel **不可共用同一 `.so`**（AIV-only / AIC-only 等场�
 
 ### 2. 每核 slot 按 cache line 独占：避免 false sharing 丢写
 
-- `dcci` / DMA 以 **32 Byte cache line** 为粒度操作；若相邻核 slot 共享同一条 cache line，跨核刷新会互相覆盖 / 丢写。
-- 每核 slot 应按 32B 对齐并**独占一条 cache line**（`int32` 场景即 stride = 8，而非 4）。
+- `dcci` / DMA 以 **32Byte cache line** 为粒度操作；若相邻核 slot 共享同一条 cache line，跨核刷新会互相覆盖 / 丢写。
+- 每核 slot 应按 32Byte 对齐并**独占一条 cache line**（`int32` 场景即 stride = 8，而非 4）。
 - `SYNCALL` 自身的同步槽位即按此设计：`SYNCALL_SOFT_SLOT_INT32 = 8`（见 `include/pto/common/type.hpp`），调用方的业务 workspace 也应遵循同样的隔离原则。
 
 ## 示例
