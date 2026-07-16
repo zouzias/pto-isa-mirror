@@ -57,7 +57,6 @@ def pack_int4_rows_with_stride(values_2d: np.ndarray, row_stride_bytes: int) -> 
     rows, cols = values_2d.shape
     packed_cols = (cols + 1) // 2
     out = np.zeros((rows, row_stride_bytes), dtype=np.uint8)
-
     for r in range(rows):
         row = values_2d[r].astype(np.int16)
         if row.size % 2 != 0:
@@ -70,9 +69,19 @@ def pack_int4_rows_with_stride(values_2d: np.ndarray, row_stride_bytes: int) -> 
     return out.reshape(-1)
 
 
-def gen_golden_data(param):
+def _gen_base_inputs(param):
     x1_gm = np.random.uniform(-5, 5, [param.m, param.k]).astype(param.a_type)
     x2_gm = np.random.uniform(-5, 5, [param.k, param.n]).astype(param.b_type)
+
+    # Use integer-friendly generation for int8 cases to keep deterministic results stable.
+    if param.a_type == np.int8 and param.b_type == np.int8:
+        x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
+        x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
+
+    return x1_gm, x2_gm
+
+
+def _apply_fp8_or_bf16_override(param, x1_gm, x2_gm):
 
     if param.a_type == fp8_e4m3 or param.b_type == fp8_e4m3:
         if fp8_e4m3 is None:
@@ -92,24 +101,27 @@ def gen_golden_data(param):
         if param.b_type == bfloat16:
             x2_gm = np.random.uniform(-8, 8, [param.k, param.n]).astype(np.float32).astype(bfloat16)
 
-    # Use integer-friendly generation for int8 cases to keep deterministic results stable.
-    if param.a_type == np.int8 and param.b_type == np.int8:
+    return x1_gm, x2_gm
+
+
+def _apply_b_int4_override(param, x1_gm, x2_gm):
+    if not param.b_int4:
+        return x1_gm, x2_gm
+
+    if param.a_type == np.int8:
         x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
-        x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
+    elif param.a_type == np.float16:
+        x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float16)
+    elif param.a_type == bfloat16:
+        if bfloat16 is None:
+            raise ImportError("ml_dtypes is required to generate bfloat16 test data")
+        x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float32).astype(bfloat16)
 
-    if param.b_int4:
-        if param.a_type == np.int8:
-            x1_gm = np.random.randint(-8, 8, [param.m, param.k], dtype=np.int8)
-        elif param.a_type == np.float16:
-            x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float16)
-        elif param.a_type == bfloat16:
-            if bfloat16 is None:
-                raise ImportError("ml_dtypes is required to generate bfloat16 test data")
-            x1_gm = np.random.uniform(-8, 8, [param.m, param.k]).astype(np.float32).astype(bfloat16)
-        x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
+    x2_gm = np.random.randint(-8, 8, [param.k, param.n], dtype=np.int8)
+    return x1_gm, x2_gm
 
-    golden = np.matmul(x1_gm.astype(param.out_type), x2_gm.astype(param.out_type)).astype(param.out_type)
 
+def _write_inputs(param, x1_gm, x2_gm):
     if param.layout == "dn":
         # DN layout: store transposed bytes to preserve the same logical matrix values.
         write_tensor("x1_gm.bin", x1_gm.T)
@@ -118,16 +130,26 @@ def gen_golden_data(param):
             x2_dn = x2_gm.T
             x2_store = pack_int4_rows_with_stride(x2_dn, row_stride_bytes=param.k)
             x2_store.tofile("x2_gm.bin")
-        else:
-            write_tensor("x2_gm.bin", x2_gm.T)
-    else:
-        # ND layout: write plain row-major tensors.
-        write_tensor("x1_gm.bin", x1_gm)
-        if param.b_int4:
-            x2_store = pack_int4_rows_with_stride(x2_gm, row_stride_bytes=param.n)
-            x2_store.tofile("x2_gm.bin")
-        else:
-            write_tensor("x2_gm.bin", x2_gm)
+            return
+        write_tensor("x2_gm.bin", x2_gm.T)
+        return
+
+    # ND layout: write plain row-major tensors.
+    write_tensor("x1_gm.bin", x1_gm)
+    if param.b_int4:
+        x2_store = pack_int4_rows_with_stride(x2_gm, row_stride_bytes=param.n)
+        x2_store.tofile("x2_gm.bin")
+        return
+    write_tensor("x2_gm.bin", x2_gm)
+
+
+def gen_golden_data(param):
+    x1_gm, x2_gm = _gen_base_inputs(param)
+    x1_gm, x2_gm = _apply_fp8_or_bf16_override(param, x1_gm, x2_gm)
+    x1_gm, x2_gm = _apply_b_int4_override(param, x1_gm, x2_gm)
+
+    golden = np.matmul(x1_gm.astype(param.out_type), x2_gm.astype(param.out_type)).astype(param.out_type)
+    _write_inputs(param, x1_gm, x2_gm)
     golden.tofile("golden.bin")
 
 
