@@ -559,10 +559,10 @@ template <
 PTO_INTERNAL void TQUANT_IMPL(
     TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
 {
-    constexpr QuantScaleAlg quant_type = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::OcpMxFp8E4M3) ?
+    constexpr QuantScaleAlg scale_alg = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::OcpMxFp8E4M3) ?
                                              QuantScaleAlg::OCP :
                                              QuantScaleAlg::NV;
-    constexpr QuantType scale_alg = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::NvMxFp4E2M1) ?
+    constexpr QuantType quant_type = (mx_alg == MxQuantAlg::OcpMxFp4E2M1 || mx_alg == MxQuantAlg::NvMxFp4E2M1) ?
                                         QuantType::MXFP4_E2M1 :
                                         QuantType::MXFP8;
     TQuantMxCpuImpl<grp_axis, quant_type, scale_alg>(dst, src, exp, max, scaling);
