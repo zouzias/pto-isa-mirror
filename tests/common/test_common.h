@@ -26,6 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #endif
 #include <pto/common/type.hpp>
+#include <pto/cpu/MXTypes.hpp>
 
 namespace PtoTestCommon {
 
@@ -302,6 +303,104 @@ bool ResultCmp(
     return ResultCmp(
         outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
 }
+
+inline bool ResultCmp(const std::vector<pto::int4b_t> &outDataValExp, const pto::int4b_t *outDataValAct, float eps,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    std::vector<int8_t> expInt(outDataValExp.size());
+    std::vector<int8_t> actInt(outDataValExp.size());
+
+    for (size_t i = 0; i < outDataValExp.size(); ++i) {
+        expInt[i] = static_cast<int8_t>(outDataValExp[i]);
+        actInt[i] = static_cast<int8_t>(outDataValAct[i]);
+    }
+    return ResultCmp<int8_t>(expInt, actInt.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
+}
+
+inline bool ResultCmp(const std::vector<pto::int4b_t> &outDataValExp, const std::vector<pto::int4b_t> &outDataValAct, float eps,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    if (outDataValExp.size() != outDataValAct.size()) {
+        std::cout << "out size is not eq, golden: " << outDataValExp.size() << ", act: " << outDataValAct.size() << std::endl;
+        return false;
+    }
+    return ResultCmp(outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr,
+                     testNum);
+}
+
+#ifdef PTO_CPU_MXTYPES_HPP
+
+inline bool ResultCmp(const std::vector<pto::float4_e2m1x2_t> &outDataValExp, const pto::float4_e2m1x2_t *outDataValAct, float,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    (void)threshold;
+    (void)zeroCountThreshold;
+    (void)printAll;
+    (void)printErr;
+    (void)testNum;
+    
+    for (size_t i = 0; i < outDataValExp.size(); ++i) {
+        if (outDataValExp[i].RawData() != outDataValAct[i].RawData()) {
+            if (printAll || printErr) {
+                std::cout << BOLD_RED << "idx: 0x" << i << ", exp raw: 0x" << std::hex << (int)outDataValExp[i].RawData() 
+                          << ", act raw: 0x" << (int)outDataValAct[i].RawData() << std::dec << " [ERROR]" RESET 
+                          << std::endl;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool ResultCmp(const std::vector<pto::float4_e1m2x2_t> &outDataValExp, const pto::float4_e1m2x2_t *outDataValAct, float,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    (void)threshold;
+    (void)zeroCountThreshold;
+    (void)printAll;
+    (void)printErr;
+    (void)testNum;
+    
+    for (size_t i = 0; i < outDataValExp.size(); ++i) {
+        if (outDataValExp[i].RawData() != outDataValAct[i].RawData()) {
+            if (printAll || printErr) {
+                std::cout << BOLD_RED << "idx: 0x" << i << ", exp raw: 0x" << std::hex << (int)outDataValExp[i].RawData() 
+                          << ", act raw: 0x" << (int)outDataValAct[i].RawData() << std::dec << " [ERROR]" RESET 
+                          << std::endl;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool ResultCmp(const std::vector<pto::float4_e2m1x2_t> &outDataValExp, const std::vector<pto::float4_e2m1x2_t> &outDataValAct, float eps,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    if (outDataValExp.size() != outDataValAct.size()) {
+        std::cout << "out size is not eq, golden: " << outDataValExp.size() << ", act: " << outDataValAct.size() << std::endl;
+        return false;
+    }
+    return ResultCmp(outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
+}
+
+inline bool ResultCmp(const std::vector<pto::float4_e1m2x2_t> &outDataValExp, const std::vector<pto::float4_e1m2x2_t> &outDataValAct, float eps,
+                      size_t threshold = 0, size_t zeroCountThreshold = 1000, bool printAll = false, bool printErr = false,
+                      size_t testNum = 0)
+{
+    if (outDataValExp.size() != outDataValAct.size()) {
+        std::cout << "out size is not eq, golden: " << outDataValExp.size() << ", act: " << outDataValAct.size() << std::endl;
+        return false;
+    }
+    return ResultCmp(outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
+}
+
+#endif // PTO_CPU_MXTYPES_HPP
 
 #if (defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)) && defined(PTO_RUN_MODE_NPU)
 ACL_FUNC_VISIBILITY aclError aclrtMemset(void* devPtr, size_t maxCount, int32_t value, size_t count) { return; }
