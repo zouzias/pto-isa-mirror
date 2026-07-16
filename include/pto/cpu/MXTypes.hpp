@@ -71,6 +71,13 @@ public:
         }
 
         data = (dblSign << (MAN_SZ + EXP_SZ)) | (outExponent << MAN_SZ) | outMantissa;
+
+        static int debugCnt = 0;
+        if (debugCnt < 20) {
+            printf("[MXType] in=%8.3f sign=%llu exp=%lld mant=%llu raw=%llx\n", value, (unsigned long long)dblSign, (long long)outExponent,
+                    (unsigned long long)outMantissa, (unsigned long long)data);
+            debugCnt++;
+        }
     }
 
     operator double() const
