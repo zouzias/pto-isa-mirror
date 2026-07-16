@@ -22,8 +22,13 @@ AICORE constexpr typename TileData::DType getPadValue()
 {
     switch (TileData::PadVal) {
         case PadValue::Null:
-        case PadValue::Zero:
-            return typename TileData::DType(0);
+        case PadValue::Zero: {
+            if constexpr (std::is_same_v<typename TileData::DType, int4b_t>) {
+                return int4b_t(0);
+            } else {
+                return typename TileData::DType(0);
+            }
+        }
         case PadValue::Min:
             if constexpr (std::numeric_limits<typename TileData::DType>::has_infinity) {
                 return -std::numeric_limits<typename TileData::DType>::infinity();
@@ -37,7 +42,11 @@ AICORE constexpr typename TileData::DType getPadValue()
                 return std::numeric_limits<typename TileData::DType>::max();
             }
     }
-    return 0;
+    if constexpr (std::is_same_v<typename TileData::DType, int4b_t>) {
+        return int4b_t(0);
+    } else {
+        return 0;
+    }
 }
 
 template <typename GlobalData, typename TileData>
