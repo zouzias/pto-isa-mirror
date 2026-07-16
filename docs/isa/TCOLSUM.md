@@ -60,8 +60,8 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 - `dst` and `src` must use the same element type.
 - Runtime checks:
     - `src.GetValidCol() == dst.GetValidCol()`
-    - `src.GetValidRow() != 0`
-    - `src.GetValidCol() != 0`
+    - `src.GetValidRow() != 0` (implementation silently returns early when zero, no computation performed)
+    - `src.GetValidCol() != 0` (implementation silently returns early when zero, no computation performed)
     - `src.GetValidCol() <= tmp` row stride measured in `src` elements
 - `isBinary` selects the checked backend path:
     - `true`: binary-tree accumulation using `tmp`
@@ -171,4 +171,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tcolsum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

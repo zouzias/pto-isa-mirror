@@ -16,7 +16,7 @@ using namespace std;
 using namespace pto;
 
 template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::SaturationMode saturation>
-__global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
+__global__ AICORE void runTCVT(__gm__ T* out, __gm__ S* src)
 {
     using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim4 = pto::Stride<1, 1, 1, kGCols_, 1>;
@@ -55,12 +55,12 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
 }
 
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::SaturationMode saturation>
-void launchTCVT(D *dst, S *src, void *stream)
+void launchTCVT(D* dst, S* src, void* stream)
 {
     if constexpr (std::is_same_v<D, aclFloat16>) {
-        runTCVT<half, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>((half *)dst, src);
+        runTCVT<half, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>((half*)dst, src);
     } else if constexpr (std::is_same_v<S, aclFloat16>) {
-        runTCVT<D, half, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dst, (half *)src);
+        runTCVT<D, half, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dst, (half*)src);
     } else {
         runTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dst, src);
     }
