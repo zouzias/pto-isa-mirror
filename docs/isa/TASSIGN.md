@@ -73,15 +73,15 @@ Tile's `TileType` (i.e. `Loc` template parameter):
 
 | TileType | Memory | Capacity (A2A3) | Capacity (A5) | Capacity (Kirin9030) | Capacity (KirinX90) | Alignment |
 |----------|--------|-----------------|---------------|----------------------|---------------------|-----------|
-| Vec | UB | 192 KB | 256 KB | 128 KB | 128 KB | 32 B |
-| Mat | L1 | 512 KB | 512 KB | 512 KB | 1024 KB | 32 B |
-| Left | L0A | 64 KB | 64 KB | 32 KB | 64 KB | 32 B |
-| Right | L0B | 64 KB | 64 KB | 32 KB | 64 KB | 32 B |
-| Acc | L0C | 128 KB | 256 KB | 64 KB | 128 KB | 32 B |
-| Bias | Bias | 1 KB | 4 KB | 1 KB | 1 KB | 32 B |
-| Scaling | FBuffer | 2 KB | 4 KB | 7 KB | 6 KB | 32 B |
-| ScaleLeft | L0A | N/A | 4 KB | N/A | N/A | 32 B |
-| ScaleRight | L0B | N/A | 4 KB | N/A | N/A | 32 B |
+| Vec | UB | 192KB | 256KB | 128KB | 128KB | 32 B |
+| Mat | L1 | 512KB | 512KB | 512KB | 1024KB | 32 B |
+| Left | L0A | 64KB | 64KB | 32KB | 64KB | 32 B |
+| Right | L0Byte | 64KB | 64KB | 32KB | 64KB | 32 B |
+| Acc | L0C | 128KB | 256KB | 64KB | 128KB | 32 B |
+| Bias | Bias | 1KB | 4KB | 1KB | 1KB | 32 B |
+| Scaling | FBuffer | 2KB | 4KB | 7KB | 6KB | 32 B |
+| ScaleLeft | L0A | N/A | 4KB | N/A | N/A | 32 B |
+| ScaleRight | L0Byte | N/A | 4KB | N/A | N/A | 32 B |
 
 Capacities can be overridden at build time via `-D` flags (e.g.
 `-DPTO_UBUF_SIZE_BYTES=262144`). See `include/pto/common/buffer_limits.hpp`.
@@ -165,15 +165,15 @@ void example_oob_addr() {
 ```cpp
 void example_pingpong() {
   using L0ATile = TileLeft<half, 64, 128>;   // L0A tile
-  using L0BTile = TileRight<half, 128, 64>;  // L0B tile
+  using L0BTile = TileRight<half, 128, 64>;  // L0Byte tile
 
   L0ATile a0, a1;
   L0BTile b0, b1;
 
   TASSIGN<0x0000>(a0);   // L0A ping
   TASSIGN<0x8000>(a1);   // L0A pong
-  TASSIGN<0x0000>(b0);   // L0B ping  (separate physical memory from L0A)
-  TASSIGN<0x8000>(b1);   // L0B pong
+  TASSIGN<0x0000>(b0);   // L0Byte ping  (separate physical memory from L0A)
+  TASSIGN<0x8000>(b1);   // L0Byte pong
 }
 ```
 

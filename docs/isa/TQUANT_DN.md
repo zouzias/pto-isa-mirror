@@ -73,7 +73,7 @@ reused unchanged. Only the exponent needs a new transform: **DN→ZZ**.
 Verified from A5 sim logs (`LOAD_2Dv2` + `LOAD_MX_2Dv2` + `MMAD_MX`):
 
 ```
-FP8 data   → L0A/L0B  as NZ fractal   (LOAD_2Dv2  Dtype:B8)
+FP8 data   → L0A/L0Byte  as NZ fractal   (LOAD_2Dv2  Dtype:B8)
 E8M0 scale → L0AMX/L0BMX as ZZ fractal (LOAD_MX_2Dv2 Dtype:B16)
 MMAD_MX pairs them by fractal byte position.
 ```

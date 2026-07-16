@@ -71,15 +71,15 @@ PTO_INST void TASSIGN(T& obj);
 
 | TileType | 内存空间 | 容量 (A2A3) | 容量 (A5) | 容量 (Kirin9030) | 容量 (KirinX90) | 对齐 |
 |----------|----------|-------------|-----------|------------------|-----------------|------|
-| Vec | UB | 192KB | 256KB | 128KB | 128KB | 32B |
+| Vec | UB | 192KB | 256KB | 128KB | 128KB | 32Byte |
 | Mat | L1 | 512KB | 512KB | 512KB | 1024KB | 32Byte |
 | Left | L0A | 64KB | 64KB | 32KB | 64KB | 32Byte |
-| Right | L0B | 64KB | 64KB | 32KB | 64KB | 32Byte |
+| Right | L0Byte | 64KB | 64KB | 32KB | 64KB | 32Byte |
 | Acc | L0C | 128KB | 256KB | 64KB | 128KB | 32Byte |
 | Bias | Bias | 1KB | 4KB | 1KB | 1KB | 32Byte |
 | Scaling | FBuffer | 2KB | 4KB | 7KB | 6KB | 32Byte |
 | ScaleLeft | L0A | N/A | 4KB | N/A | N/A | 32Byte |
-| ScaleRight | L0B | N/A | 4KB | N/A | N/A | 32Byte |
+| ScaleRight | L0Byte | N/A | 4KB | N/A | N/A | 32Byte |
 
 容量可通过编译标志 `-D` 覆盖（如 `-DPTO_UBUF_SIZE_BYTES=262144`）。详见 `include/pto/common/buffer_limits.hpp`。
 
@@ -161,15 +161,15 @@ void example_oob_addr() {
 ```cpp
 void example_pingpong() {
   using L0ATile = TileLeft<half, 64, 128>;   // L0A tile
-  using L0BTile = TileRight<half, 128, 64>;  // L0B tile
+  using L0BTile = TileRight<half, 128, 64>;  // L0Byte tile
 
   L0ATile a0, a1;
   L0BTile b0, b1;
 
   TASSIGN<0x0000>(a0);   // L0A ping
   TASSIGN<0x8000>(a1);   // L0A pong
-  TASSIGN<0x0000>(b0);   // L0B ping（与 L0A 为不同物理内存）
-  TASSIGN<0x8000>(b1);   // L0B pong
+  TASSIGN<0x0000>(b0);   // L0Byte ping（与 L0A 为不同物理内存）
+  TASSIGN<0x8000>(b1);   // L0Byte pong
 }
 ```
 
