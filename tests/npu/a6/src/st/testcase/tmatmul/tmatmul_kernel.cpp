@@ -23,24 +23,22 @@ AICORE constexpr inline T CeilAlign(T num1, T num2)
 }
 
 template <typename OutType, typename AType, typename BType, int validM, int validK, int validN>
-__global__ AICORE void RunTMATMUL_DN(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1)
+__global__ AICORE void RunTMATMUL_DN(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1)
 {
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(AType);
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
 
-    using GlobalDataSrc0 =
-        GlobalTensor<AType, pto::Shape<1, 1, 1, validM, validK>,
-                     pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, 1, validM>,
-                     pto::Layout::DN>;
-    using GlobalDataSrc1 =
-        GlobalTensor<BType, pto::Shape<1, 1, 1, validK, validN>,
-                     pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, 1, validK>,
-                     pto::Layout::DN>;
-    using GlobalDataOut =
-        GlobalTensor<OutType, pto::Shape<1, 1, 1, validM, validN>,
-                     pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    using GlobalDataSrc0 = GlobalTensor<
+        AType, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, 1, validM>, pto::Layout::DN>;
+    using GlobalDataSrc1 = GlobalTensor<
+        BType, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, 1, validK>, pto::Layout::DN>;
+    using GlobalDataOut = GlobalTensor<
+        OutType, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
 
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
@@ -92,22 +90,22 @@ __global__ AICORE void RunTMATMUL_DN(__gm__ OutType *out, __gm__ AType *src0, __
 }
 
 template <typename OutType, typename AType, typename BType, int validM, int validK, int validN>
-__global__ AICORE void RunTMATMUL_ND(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1)
+__global__ AICORE void RunTMATMUL_ND(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1)
 {
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(AType);
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);
 
-    using GlobalDataSrc0 =
-        GlobalTensor<AType, pto::Shape<1, 1, 1, validM, validK>,
-                     pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
-    using GlobalDataSrc1 =
-        GlobalTensor<BType, pto::Shape<1, 1, 1, validK, validN>,
-                     pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
-    using GlobalDataOut =
-        GlobalTensor<OutType, pto::Shape<1, 1, 1, validM, validN>,
-                     pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    using GlobalDataSrc0 = GlobalTensor<
+        AType, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<
+        BType, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+    using GlobalDataOut = GlobalTensor<
+        OutType, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
 
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
@@ -159,22 +157,22 @@ __global__ AICORE void RunTMATMUL_ND(__gm__ OutType *out, __gm__ AType *src0, __
 }
 
 template <int32_t tilingKey>
-void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+void LaunchTMATMUL(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
-#define DEFINE_TMATMUL_LAUNCH_ND(KEY, OUT_T, A_T, B_T, M, K, N)                                            \
-    template <>                                                                                            \
-    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void *stream)                   \
-    {                                                                                                      \
-        RunTMATMUL_ND<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                   \
-            reinterpret_cast<OUT_T *>(out), reinterpret_cast<A_T *>(src0), reinterpret_cast<B_T *>(src1)); \
+#define DEFINE_TMATMUL_LAUNCH_ND(KEY, OUT_T, A_T, B_T, M, K, N)                                         \
+    template <>                                                                                         \
+    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void* stream)                \
+    {                                                                                                   \
+        RunTMATMUL_ND<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                \
+            reinterpret_cast<OUT_T*>(out), reinterpret_cast<A_T*>(src0), reinterpret_cast<B_T*>(src1)); \
     }
 
-#define DEFINE_TMATMUL_LAUNCH_DN(KEY, OUT_T, A_T, B_T, M, K, N)                                            \
-    template <>                                                                                            \
-    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void *stream)                   \
-    {                                                                                                      \
-        RunTMATMUL_DN<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                   \
-            reinterpret_cast<OUT_T *>(out), reinterpret_cast<A_T *>(src0), reinterpret_cast<B_T *>(src1)); \
+#define DEFINE_TMATMUL_LAUNCH_DN(KEY, OUT_T, A_T, B_T, M, K, N)                                         \
+    template <>                                                                                         \
+    void LaunchTMATMUL<KEY>(uint8_t * out, uint8_t * src0, uint8_t * src1, void* stream)                \
+    {                                                                                                   \
+        RunTMATMUL_DN<OUT_T, A_T, B_T, M, K, N><<<1, nullptr, stream>>>(                                \
+            reinterpret_cast<OUT_T*>(out), reinterpret_cast<A_T*>(src0), reinterpret_cast<B_T*>(src1)); \
     }
 
 DEFINE_TMATMUL_LAUNCH_DN(1, float, half, half, 31, 96, 47)

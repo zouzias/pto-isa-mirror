@@ -16,19 +16,17 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <int32_t tilingKey>
-void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+void LaunchTMATMUL(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 class TMATMULTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -50,13 +48,13 @@ void tmatmul_test(uint32_t m, uint32_t k, uint32_t n)
     uint8_t *dstHost, *src0Host, *src1Host;
     uint8_t *dstDevice, *src0Device, *src1Device;
 
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
 
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
@@ -92,10 +90,7 @@ void tmatmul_test(uint32_t m, uint32_t k, uint32_t n)
 }
 
 #define DEFINE_TMATMUL_CASE(CASE_NAME, OUT_T, A_T, B_T, KEY, M, K, N) \
-    TEST_F(TMATMULTest, CASE_NAME)                                    \
-    {                                                                 \
-        tmatmul_test<OUT_T, A_T, B_T, KEY>(M, K, N);                  \
-    }
+    TEST_F(TMATMULTest, CASE_NAME) { tmatmul_test<OUT_T, A_T, B_T, KEY>(M, K, N); }
 
 DEFINE_TMATMUL_CASE(case_fp16_fp16_to_fp32_31x96x47, float, uint16_t, uint16_t, 1, 31, 96, 47)
 DEFINE_TMATMUL_CASE(case_int8_int8_to_int32_65x90x89, int32_t, int8_t, int8_t, 2, 65, 90, 89)
