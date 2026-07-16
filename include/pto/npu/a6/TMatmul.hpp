@@ -19,36 +19,44 @@ inline namespace TMatmulInternel {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadF16F32 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, half>&& std::is_same_v<typename TileRight::DType, half>;
+inline constexpr bool kIsMmadF16F32 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, half> &&
+    std::is_same_v<typename TileRight::DType, half>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadF16S8 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, half>&& std::is_same_v<typename TileRight::DType, int8_t>;
+inline constexpr bool kIsMmadF16S8 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, half> &&
+    std::is_same_v<typename TileRight::DType, int8_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadF16S4 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, half>&& std::is_same_v<typename TileRight::DType, int4b_t>;
+inline constexpr bool kIsMmadF16S4 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, half> &&
+    std::is_same_v<typename TileRight::DType, int4b_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadF16E4M3 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, half>&& std::is_same_v<typename TileRight::DType, float8_e4m3_t>;
+inline constexpr bool kIsMmadF16E4M3 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, half> &&
+    std::is_same_v<typename TileRight::DType, float8_e4m3_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadBf16E4M3 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, bfloat16_t>&& std::is_same_v<typename TileRight::DType, float8_e4m3_t>;
+inline constexpr bool kIsMmadBf16E4M3 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, bfloat16_t> &&
+    std::is_same_v<typename TileRight::DType, float8_e4m3_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadBf16S8 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, bfloat16_t>&& std::is_same_v<typename TileRight::DType, int8_t>;
+inline constexpr bool kIsMmadBf16S8 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, bfloat16_t> &&
+    std::is_same_v<typename TileRight::DType, int8_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadBf16S4 = std::is_same_v<typename TileRes::DType, float>&&
-    std::is_same_v<typename TileLeft::DType, bfloat16_t>&& std::is_same_v<typename TileRight::DType, int4b_t>;
+inline constexpr bool kIsMmadBf16S4 =
+    std::is_same_v<typename TileRes::DType, float> && std::is_same_v<typename TileLeft::DType, bfloat16_t> &&
+    std::is_same_v<typename TileRight::DType, int4b_t>;
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-inline constexpr bool kIsMmadS8S4 = std::is_same_v<typename TileRes::DType, int32_t>&&
-    std::is_same_v<typename TileLeft::DType, int8_t>&& std::is_same_v<typename TileRight::DType, int4b_t>;
+inline constexpr bool kIsMmadS8S4 =
+    std::is_same_v<typename TileRes::DType, int32_t> && std::is_same_v<typename TileLeft::DType, int8_t> &&
+    std::is_same_v<typename TileRight::DType, int4b_t>;
 } // namespace TMatmulInternel
 
 template <typename TileLeft>
