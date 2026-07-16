@@ -41,7 +41,7 @@ function(pack_built_in)
       ${CANN_CMAKE_DIR}/scripts/install/common_interface.sh
       ${CANN_CMAKE_DIR}/scripts/install/common_interface.csh
       ${CANN_CMAKE_DIR}/scripts/install/common_interface.fish
-      ${CANN_CMAKE_DIR}/scripts/install/version_compatiable.inc
+      ${CANN_CMAKE_DIR}/scripts/install/version_compatible.inc
       ${CANN_CMAKE_DIR}/scripts/package/merge_binary_info_config.py
   )
 
