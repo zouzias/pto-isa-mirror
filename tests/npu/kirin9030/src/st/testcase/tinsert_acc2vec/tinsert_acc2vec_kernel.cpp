@@ -311,11 +311,13 @@ __global__ AICORE void RunTMOVFBQuant(
 
     using TileMatFbData = Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     TileMatFbData fbMatTile;
-    TASSIGN<0x0>(fbMatTile);
+    TASSIGN<M * K * sizeof(AType) + K * N * sizeof(BType)>(fbMatTile);
     if (src2 != nullptr) {
         using GlobalDataSrc2 = GlobalTensor<
             fbType, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
         GlobalDataSrc2 src2Global(src2);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
         TLOAD(fbMatTile, src2Global);
     }
 
