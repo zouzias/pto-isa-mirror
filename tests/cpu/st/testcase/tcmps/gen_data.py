@@ -99,6 +99,16 @@ if __name__ == "__main__":
         tcmpsParams(np.float32, 128, 128, 128, 128, 128, 128, "CmpMode::LE"),
         tcmpsParams(np.int32, 77, 81, 32, 32, 77, 81, "CmpMode::EQ"),
         tcmpsParams(np.int32, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
+        tcmpsParams(np.int8, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
+        tcmpsParams(np.int8, 16, 32, 16, 32, 16, 32, "CmpMode::GT"),
+        tcmpsParams(np.uint8, 32, 32, 32, 32, 32, 32, "CmpMode::NE"),
+        tcmpsParams(np.uint8, 16, 32, 16, 32, 16, 32, "CmpMode::EQ"),
+        tcmpsParams(np.int16, 32, 32, 32, 32, 32, 32, "CmpMode::GE"),
+        tcmpsParams(np.int16, 16, 32, 16, 32, 16, 32, "CmpMode::LT"),
+        tcmpsParams(np.uint16, 32, 32, 32, 32, 32, 32, "CmpMode::EQ"),
+        tcmpsParams(np.uint16, 16, 32, 16, 32, 16, 32, "CmpMode::GT"),
+        tcmpsParams(np.uint32, 32, 32, 32, 32, 32, 32, "CmpMode::NE"),
+        tcmpsParams(np.uint32, 16, 32, 16, 32, 16, 32, "CmpMode::GE")
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(tcmpsParams(NumExt.bf16, 32, 32, 32, 32, 32, 32, "CmpMode::GE"))

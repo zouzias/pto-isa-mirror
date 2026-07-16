@@ -35,6 +35,7 @@ AICORE void runTCmps(__gm__ uint8_t __out__* out, __gm__ T __in__* src0, __gm__ 
 
     TLOAD(src0Tile, src0Global);
     TCMPS(dstTile, src0Tile, src1[0], cmpMode);
+    std::cout << dstTile.GetValidRow() << " " << dstTile.GetValidCol() << std::endl;
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -64,3 +65,13 @@ template void LaunchTCmps<int32_t, 16, 32, 16, 32, 0>(uint8_t* out, int32_t* src
 template void LaunchTCmps<float, 128, 128, 128, 128, 3>(uint8_t* out, float* src0, float* src1, void* stream);
 template void LaunchTCmps<int32_t, 13, 14, 32, 32, 0>(uint8_t* out, int32_t* src0, int32_t* src1, void* stream);
 template void LaunchTCmps<int32_t, 32, 32, 32, 32, 0>(uint8_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTCmps<int8_t, 32, 32, 32, 32, 0>(uint8_t* out, int8_t* src0, int8_t* src1, void* stream);
+template void LaunchTCmps<int8_t, 16, 32, 16, 32, 4>(uint8_t* out, int8_t* src0, int8_t* src1, void* stream);
+template void LaunchTCmps<uint8_t, 32, 32, 32, 32, 1>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTCmps<uint8_t, 16, 32, 16, 32, 3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTCmps<int16_t, 32, 32, 32, 32, 5>(uint8_t* out, int16_t* src0, int16_t* src1, void* stream);
+template void LaunchTCmps<int16_t, 16, 32, 16, 32, 2>(uint8_t* out, int16_t* src0, int16_t* src1, void* stream);
+template void LaunchTCmps<uint16_t, 32, 32, 32, 32, 0>(uint8_t* out, uint16_t* src0, uint16_t* src1, void* stream);
+template void LaunchTCmps<uint16_t, 16, 32, 16, 32, 4>(uint8_t* out, uint16_t* src0, uint16_t* src1, void* stream);
+template void LaunchTCmps<uint32_t, 32, 32, 32, 32, 1>(uint8_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+template void LaunchTCmps<uint32_t, 16, 32, 16, 32, 5>(uint8_t* out, uint32_t* src0, uint32_t* src1, void* stream);
