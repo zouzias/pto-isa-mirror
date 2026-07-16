@@ -6,7 +6,7 @@
 
 ## 简介
 
-将 Tile 与**标量**或**另一个 Tile的首元素**进行比较，并写入逐元素比较结果。
+将 Tile 与**标量**或**另一个 Tile 的首元素**进行比较，并写入逐元素比较结果。
 
 提供两种重载形式：
 
@@ -84,7 +84,7 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0,
     - `src` 和 `dst` 的 Tile 位置都必须是向量（`TileData::Loc == TileType::Vec`）。
     - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
     - 运行时：`src0` 和 `dst` 的有效行列数必须相同。
-    - 数据类型：`src0` 和 `src1` 的 数据类型必须相同。
+    - 数据类型：`src0` 和 `src1` 的数据类型必须相同。
 - **有效区域**:
     - 该操作使用 `src0.GetValidRow()` / `src0.GetValidCol()` 作为迭代域。
 - **比较模式**:
