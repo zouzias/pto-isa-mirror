@@ -358,7 +358,7 @@ inline void StoreMxEncodedValue(
     if constexpr (quant_type == QuantType::MXFP8) {
         const float value = static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, col)]);
         const uint8_t encoded = EncodeE4M3Fn<scale_alg>(value * groupScaling);
-        dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = static_cast<int8_t>(encoded);
+        dst.SetElement(row, col, static_cast<DstT>(encoded));
     } else {
         uint8_t finalEncoded = NvMxFp4E2M1Spec::PS_MAX;
         if (std::isinf(groupScaling)) {
@@ -367,7 +367,7 @@ inline void StoreMxEncodedValue(
             const float value = static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, col)]);
             finalEncoded = EncodeE2M1Magic(ApplyE2M1ScaleForSource<SrcT>(static_cast<SrcT>(value), groupScaling));
         }
-        dst.data()[GetTileElementOffset<TileDataOut>(row, col)] = DstT::FromRaw(finalEncoded);
+        dst.SetElement(row, col, DstT::FromRaw(finalEncoded));
     }
 }
 
