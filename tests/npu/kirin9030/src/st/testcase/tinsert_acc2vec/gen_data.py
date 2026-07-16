@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
     case_params_list = [
         TMovParams(np.float16, np.float16, np.float16, 60, 127, 120, 0, 0, 0, 'ND', 512, False, False, True, None, 1,
-                   0, 8, True, 60, 128),
+                   0, 16, True, 60, 144),
         TMovParams(np.float16, np.float16, np.float16, 110, 100, 80, 0, 0, 0, 'ND', 512, False, False, True, None, 1,
                    5, 0, True, 120, 96),
         TMovParams(np.float16, np.float16, np.float16, 6, 7, 8, 0, 0, 0, 'ND', 512, False, False, True, None, 1,
