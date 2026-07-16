@@ -4,7 +4,7 @@
 
 阻塞等待，直到信号满足比较条件。与 `TNOTIFY` 配合使用，实现基于标志的同步。
 
-支持单个信号或多维信号 tensor（最高 5 维，形状由 GlobalTensor 决定）。
+支持单个信号或多维信号 tensor（最高 5 维，形状由 GlobalSignalData 决定）。
 
 ## 数学语义
 
