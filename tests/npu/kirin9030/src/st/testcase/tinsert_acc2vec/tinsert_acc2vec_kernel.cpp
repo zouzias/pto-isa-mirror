@@ -417,7 +417,7 @@ void LaunchTMOVAcc2VecNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t*
         // subBlockId = 0, isNZUnalign = false, isRelu = false, layoutType = Layout::ND, sfractalSize = 512,
         // indexRow = 0, indexCol = 0, isInsert = false, dstRow = 0, dstCol = 0
         // kirin9030: AccType=half (CType<half>=half), non-quant requires DstType==SrcType==half
-        RunTMOV<half, half, half, 60, 127, 120, 64, 128, 0, false, true, Layout::ND, 512, 0, 8, true, 60, 128>
+        RunTMOV<half, half, half, 60, 127, 120, 64, 128, 0, false, true, Layout::ND, 512, 0, 16, true, 60, 144>
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
                 reinterpret_cast<half*>(src2));
