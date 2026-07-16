@@ -148,7 +148,7 @@ PTO_SYNCALL_MIX_AIC_KERNEL_META(MyKernel_mix_aiv, 1, 1);
 | AIC-only | Hard | `aic` | **`dav-c220`**（MIX 自动拆分，AIV 空 stub） | 由 Bisheng 自动生成 | chevron `<<<aic>>>` | `syncall_aic_hard_kernel.cpp` |
 | AIC-only | Soft | `aic` | `dav-c220-cube` | `PTO_SYNCALL_AIC_KERNEL_META` | chevron `<<<aic>>>` | `syncall_aic_kernel.cpp` |
 | MIX 1:2 | Hard / Soft | `aic×3` | **`dav-c220`** | 由 Bisheng 自动生成 | chevron `<<<aic>>>`（hard/soft 同一 `.so`） | `syncall_mix_1_2_kernel.cpp` |
-| MIX 1:1 | Soft | `aic×2` | cube + vec 各编一份 `.o` | 无 | **双流** chevron：AIC `<<<aic>>>` + AIV `<<<aic>>>` | `syncall_mix_1_1_soft_kernel.cpp` |
+| MIX 1:1 | Soft | `aic×2` | cube + vec 各编一份 `.o` | 无 | **双流** chevron：AIC `<<<aic>>>` + AIV `<<<aiv>>>` | `syncall_mix_1_1_soft_kernel.cpp` |
 | MIX 1:1 | Hard | `aic×2` | cube + vec 各编一份 `.o` | **`PTO_SYNCALL_MIX_AIC_KERNEL_META(..., 1, 1)`** | **register ELF** + `rtKernelLaunchWithHandleV2` | `syncall_mix_1_1_kernel.cpp` |
 
 Hard 与 Soft kernel **不可共用同一 `.so`**（AIV-only / AIC-only 等场景下 soft 会污染 hard 的 FFTS 配置导致 hang）；MIX 1:2 的 hard 与 soft 因均走 dav-c220 自动拆分，可放在同一源文件的同一 `.so` 中。

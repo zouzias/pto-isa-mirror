@@ -22,12 +22,6 @@ $$ \mathrm{C1}_{i,j} = \mathrm{C0}_{i,j} + \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cd
 
 ## 汇编语法
 
-同步形式：
-
-```text
-%acc1 = tmatmul.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
 ### AS Level 1（SSA）
 
 ```text
