@@ -127,7 +127,7 @@ if [ "$ENABLE_A3" = "false" ] && [ "$ENABLE_A5" = "false" ] && \
 fi
 
 if { [ "$ENABLE_A3" = "true" ] || [ "$ENABLE_A5" = "true" ]; } && \
-   [ "$ENABLE_SIMPLE" = "false" ] && [ "$ENABLE_ALL" = "false" ]; then
+   [ "$ENABLE_SIMPLE" = "false" ] && [ "$ENABLE_ALL" = "false" ] && [ "$ENABLE_COMM" = "false" ]; then
   echo "Error: --a3/--a5 requires a test mode: pass --simple or --all." >&2
   usage
   exit 1
@@ -275,7 +275,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics      
+      # besides, auto-sync doesn't work with CCE intrinsics
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv -g TPushPopCVTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc -g TPushPopVCTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCVNoSplitTest.case1_half_single_tile
@@ -444,7 +444,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d
       python3 tests/script/run_st.py $ARGS -w -v a3 -t mscatter
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics
+      # besides, auto-sync doesn't work with CCE intrinsics
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit
@@ -492,7 +492,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics
+      # besides, auto-sync doesn't work with CCE intrinsics
       python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat -g TEXPANDSTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_cv -g TPushPopCVTest.case1_half_single_tile
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc -g TPushPopVCTest.case1_int8_single_k_tile
@@ -630,7 +630,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter -g MSCATTERTest.case_elem2d_float_3072x8_last_256size
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_lower_diag_n3
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64 
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_aligned_6
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_unaligned_validcol_2
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nd_unaligned_indexcol_2
@@ -697,7 +697,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
-      # besides, auto-sync doesn't work with CCE intrisics
+      # besides, auto-sync doesn't work with CCE intrinsics
       python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_cv
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc
@@ -809,6 +809,9 @@ fi
 
 if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/build_st.py $ARGS -v kirin9030 -t all
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t taxpy
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tfmod
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tfmods
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsubs
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmaxs
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tci
@@ -905,6 +908,7 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tquant
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tdequant
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpow
+  python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tpows
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcatdstidx
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcatidx
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tconcat

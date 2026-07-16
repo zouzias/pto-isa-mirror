@@ -27,6 +27,7 @@ TODO
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -47,7 +48,7 @@ PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src, WaitEve
 
 using namespace pto;
 
-template <typename T, int ARows, int ACols, int BRows, int BCols> 
+template <typename T, int ARows, int ACols, int BRows, int BCols>
 void example() {
     using LeftTile = TileLeft<T, ARows, ACols>;
     using RightTile = TileRight<T, BRows, BCols>;

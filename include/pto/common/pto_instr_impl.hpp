@@ -333,6 +333,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_NPU_ARCH_KIRINX90
 #include "pto/npu/kirinX90/header.hpp"
 #endif
+#ifdef PTO_NPU_ARCH_KIRINDEV0000
+#include "pto/npu/kirinDev0000/header.hpp"
+#endif
 
 // Async L2 cache prefetch via SDMA CMO. Dispatched per-arch like other NPU
 // instruction headers; both wrappers pull in the same arch-neutral SDMA-backed
@@ -372,6 +375,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TMov.hpp"
 #include "pto/cpu/TExtract.hpp"
 #include "pto/cpu/TInsert.hpp"
+#include "pto/cpu/TInterleave.hpp"
+#include "pto/cpu/TDeinterleave.hpp"
 #include "pto/cpu/TSqrt.hpp"
 #include "pto/cpu/TReshape.hpp"
 #include "pto/cpu/TRowSum.hpp"
@@ -395,6 +400,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TPartMax.hpp"
 #include "pto/cpu/TPartArgMin.hpp"
 #include "pto/cpu/TPartMin.hpp"
+#include "pto/cpu/TPairReduceSum.hpp"
 #include "pto/cpu/TPow.hpp"
 #include "pto/cpu/TConcat.hpp"
 #include "pto/cpu/TRowExpand.hpp"

@@ -37,6 +37,7 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
@@ -129,4 +130,3 @@ tstore.fp %src, %fp, %sv_out[%c0, %c0]
 # AS Level 2 (DPS)
 pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
-
