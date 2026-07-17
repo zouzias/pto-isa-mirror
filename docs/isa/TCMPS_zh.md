@@ -88,7 +88,7 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0,
 - **有效区域**:
     - 该操作使用 `src0.GetValidRow()` / `src0.GetValidCol()` 作为迭代域。
 - **比较模式**:
-    - 支持 `CmpMode::EQ`、`CmpMode::NE`、`CmpMode::LT`、`CmpMode::GT`、`CmpMode::LE`、`CmpMode::GE`。
+    - 支持 `CmpMode::EQ`、`CmpMode::NE`、`CmpMode::LT`、`CmpMode::GT`、`CmpMode::LE`、`CmpMode::GE`（注：A2A3 上当输入类型为 `int32_t` 时，仅支持 `CmpMode::EQ`，其他模式会回退至 `EQ`；A5 支持全部模式）。
 
 ## 示例
 

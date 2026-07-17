@@ -29,7 +29,9 @@
 
 对于 `0 <= i < R` 和 `0 <= j < C`：
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot s_i $$
+$$ \mathrm{dst}_{i,j} = \mathrm{full}_{i,j} \cdot s_i $$
+
+其中 `full` 指代与 `dst` 形状匹配的全尺寸操作数（可为 `src0` 或 `src1`）。
 
 ### 模式 2
 
@@ -37,7 +39,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot s_i $$
 
 对于 `0 <= i < R` 和 `0 <= j < C`：
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot b_i[\,j \bmod (32 / \mathit{sizeof}(T))\,] $$
+$$ \mathrm{dst}_{i,j} = \mathrm{full}_{i,j} \cdot b_i[\,j \bmod (32 / \mathit{sizeof}(T))\,] $$
 
 ## 汇编语法
 

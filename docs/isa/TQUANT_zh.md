@@ -138,7 +138,7 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 | $M \bmod 64 = 0$ | DN MX + ZZ 转换 | δ 配对（$\hat M / 2$ 为整数） |
 | $N \bmod 32 = 0$ | 所有 MX | 组大小 $G = 32$ |
 | $N \bmod 64 = 0$ | ND MX + ZZ 转换 | 指数组数为偶数 |
-| $R \cdot C \le 59461$ | MX（UB 256KB） | 复用后的缓冲预算 |
+| $M \cdot N \le 59461$ | MX（UB 256KB） | 复用后的缓冲预算 |
 | BF16/FP16：`validCols % 32 != 0` → 零填充至 `StaticCols` | MX B16 路径 | 组对齐 |
 
 ## 输出布局与布局转换
