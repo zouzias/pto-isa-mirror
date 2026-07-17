@@ -69,7 +69,7 @@ PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &id
 | `dst` | $T$ | $R \times (2C)$ float，$R \times (4C)$ half | 排序后的值-索引对（见下方扩展因子） |
 | `tmp`（仅 4 参数） | $T$ | 见下方 tmp 尺寸公式 | 尾部填充 scratch |
 
-**`dst` 扩展因子**（`typeCoef`）：每个输入元素生成一个 8字节的 tuple `[value (4Byte), index (4Byte)]`——`float` 的 value 占满 4Byte；`half` 的 2Byte value 零扩展至 4Byte。因此 `dst` 恒为 $C \times 8$ 字节。
+**`dst` 扩展因子**（`typeCoef`）：每个输入元素生成一个 8Byte 的 tuple `[value (4Byte), index (4Byte)]`——`float` 的 value 占满 4Byte；`half` 的 2Byte value 零扩展至 4Byte。因此 `dst` 恒为 $C \times 8$ 字节。
 
 | dtype | 每个 `src` 列对应的 `dst` 列数（dtype 单位） | tuple 布局 | 字节/tuple |
 |-------|-------------------------------------------|--------------|------------|
@@ -95,26 +95,26 @@ PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &id
 $$
 \mathrm{tmpSize} =
 \begin{cases}
-\mathrm{ceil}_{G}(C) & \text{A2A3：} C \le 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot b \le 8160 \text{（字节））} \\
-G = 32 & \text{A2A3：} C > 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot b > 8160 \text{（字节））}
+\mathrm{ceil}_{G}(C) & \text{A2A3：} C \le 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot B \le 8160 \text{（字节））} \\
+G = 32 & \text{A2A3：} C > 8160 \text{（元素数）} \;\; \text{（A5：} C \cdot B > 8160 \text{（字节））}
 \end{cases}
 $$
 
 - `ceil_G(C)` = $C$ 向上取整到 32 的倍数。
 - **A2A3**：阈值单位为**元素数**（`srcShapeBytesPerRow / sizeof(T) <= MAX_UB_TMP`），即 $C \le 8160$，与 dtype 无关（float → $C \le 8160$，half → $C \le 8160$）。
-- **A5**：阈值单位为**字节**（`srcShapeBytesPerRow <= MAX_UB_TMP`），即 $C \cdot b \le 8160$（float → $C \le 2040$，half → $C \le 4080$）。该阈值为 `pto_copy_ubuf_to_ubuf`（MOV_UB_TO_UB）的 repeat 上限 = 255 块 × 32Byte。
+- **A5**：阈值单位为**字节**（`srcShapeBytesPerRow <= MAX_UB_TMP`），即 $C \cdot B \le 8160$（float → $C \le 2040$，half → $C \le 4080$）。该阈值为 `pto_copy_ubuf_to_ubuf`（MOV_UB_TO_UB）的 repeat 上限 = 255 块 × 32Byte。
 - 尾块 = $t = C \bmod G$ 个元素（末尾不完整块），扩展至 $G$ 并以 $-\infty$ 填充。
-- Path A（$C \cdot b \le 8160$，小行）：从行首**整行**复制到 tmp，然后原地填充最后 32 个元素。
-- Path B（$C \cdot b > 8160$，大行）：仅复制**尾块**到 tmp；完整块直接从 `src` 排序。
+- Path A（$C \cdot B \le 8160$，小行）：从行首**整行**复制到 tmp，然后原地填充最后 32 个元素。
+- Path B（$C \cdot B > 8160$，大行）：仅复制**尾块**到 tmp；完整块直接从 `src` 排序。
 - VBS32 硬件上限：每次调用 `repeat ≤ REPEAT_MAX = 255` 块（≤ 8160 元素）；超过 255 块的行拆分为多次 `vbitsort` 调用。
-- **UB 布局：** `tmp` 应放置在 `dst` 之后（32Byte 对齐），大小为 `ceil(C·b, 32)` 字节（等价于 `ceil(ceil(C, 32)·b, 32)`，因 $b \in \{2,4\}$ 整除 32）——不应使用固定的 8KB 偏移，因为 Path A（A2A3）在接近阈值时对 float 需要最多 ~32KB（$C \le 8160$ 元素 = float 32KB）。
+- **UB 布局：** `tmp` 应放置在 `dst` 之后（32Byte 对齐），大小为 `ceil(C·B, 32)` 字节（等价于 `ceil(ceil(C, 32)·B, 32)`，因 $B \in \{2,4\}$ 整除 32）——不应使用固定的 8KB 偏移，因为 Path A（A2A3）在接近阈值时对 float 需要最多 ~32KB（$C \le 8160$ 元素 = float 32KB）。
 
 ### 4 参数尾部处理
 
 当 `validCol % 32 != 0` 时，末尾不完整块（$t = C \bmod 32$ 个元素）须填充为完整的 32 元素块后才能送入 `vbitsort`。两条路径：
 
-- **A2A3：$C \le 8160$（元素数）** / **A5：$C \cdot b \le 8160$（字节）**（小行）：**整行**复制到 `tmp`，然后通过 `vdup` 原地覆盖最后 32 个元素为 $-\infty$ 填充；从 `tmp` 排序整行。
-- **A2A3：$C > 8160$（元素数）** / **A5：$C \cdot b > 8160$（字节）**（大行）：仅复制**尾块**到 `tmp` 并填充；完整块直接从 `src` 排序，仅尾块从 `tmp` 排序。
+- **A2A3：$C \le 8160$（元素数）** / **A5：$C \cdot B \le 8160$（字节）**（小行）：**整行**复制到 `tmp`，然后通过 `vdup` 原地覆盖最后 32 个元素为 $-\infty$ 填充；从 `tmp` 排序整行。
+- **A2A3：$C > 8160$（元素数）** / **A5：$C \cdot B > 8160$（字节）**（大行）：仅复制**尾块**到 `tmp` 并填充；完整块直接从 `src` 排序，仅尾块从 `tmp` 排序。
 
 填充值（$-\infty$ = `-1.0/0.0` 或 `std::numeric_limits<T>::lowest()`）落在降序排序的底部。若 `validCol > 32 × 255`，行按 `REPEAT_MAX` 大小的组拆分，每组通过独立的 `vbitsort` 调用排序。
 
