@@ -10,7 +10,7 @@
 
 ## 数学语义
 
-符号表示取决于 `GlobalTensor` 的形状/步长和 `Tile` 的布局。概念上（二维视图，带基础偏移量）：
+符号表示取决于 `GlobalTensor` 的形状/步长和 `Tile` 的布局。概念上（二维视图，带基础偏移量 `r_0` 和 `c_0`）：
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
@@ -56,8 +56,7 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - `TileType::Mat` 加载支持：ND->ND、DN->DN、NZ->NZ，以及 ND->NZ 和 DN->ZN。
     - 对于 ND->NZ 或 DN->ZN：`GlobalData::staticShape[0..2] == 1` 且 `TileData::SFractalSize == 512`。
     - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
-    - Vec tile（UB 路径）：`1 <= TileData::Rows <= 4095`。
-    - Mat tile（L1 路径）：`1 <= TileData::Rows <= 16384`。
+    - `TileData::Rows` 取值范围：`1 <= Rows <= 4095`。
 - **实现检查 (A5)**:
     - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，且必须匹配 `sizeof(GlobalData::DType)`。
     - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
@@ -68,8 +67,8 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
     - 对于使用编译时已知形状的行主序 ND->ND，`TileData::ValidCol` 必须等于 `GlobalData::staticShape[4]`，且 `TileData::ValidRow` 必须等于 `GlobalData::staticShape[0..3]` 的乘积。
     - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
     - `TileType::Mat` 加载还处理 mx 格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ（用于 scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN（用于 scalarB）。
-    - 对于 `MX_A_ZZ/MX_B_NN`：`(GlobalData::staticShape[3] == 16 || GlobalData::staticShape[3] == -1)` 且 `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`。
-    - 对于 `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`：`(GlobalData::staticShape[0] == 1 || GlobalData::staticShape[0] == -1)` 且 `(GlobalData::staticShape[1] == 1 || GlobalData::staticShape[1] == -1)` 且 `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`。
+    - 对于 `MX_A_ZZ/MX_B_NN`：`GlobalData::staticShape[3] == 16` 且 `GlobalData::staticShape[4] == 2`。
+    - 对于 `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
     - 对于 scaleA，`dst.GetValidCol() % 2 == 0`。
     - 对于 scaleB，`dst.GetValidRow() % 2 == 0`。
 
@@ -145,3 +144,4 @@ void example_manual(__gm__ T* in) {
 # AS Level 2 (DPS)
 pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.tile_buf<...>)
 ```
+
