@@ -89,6 +89,21 @@ void test_tands()
     EXPECT_TRUE(ret);
 }
 
+const int NUM_1 = 1;
+const int NUM_8 = 8;
+const int NUM_16 = 16;
+const int NUM_32 = 32;
 const int NUM_64 = 64;
-TEST_F(TANDSTest, case_int32_64x64_64x64_64x64) { test_tands<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }
+const int NUM_77 = 77;
+const int NUM_96 = 96;
+const int NUM_128 = 128;
+const int NUM_256 = 256;
 TEST_F(TANDSTest, case_int16_64x64_64x64_64x64) { test_tands<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }
+TEST_F(TANDSTest, case_int32_64x64_64x64_64x64) { test_tands<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }
+TEST_F(TANDSTest, case_int32_16x256_16x256_16x256) { test_tands<int32_t, NUM_16, NUM_256, NUM_16, NUM_256>(); }
+TEST_F(TANDSTest, case_int32_77x96_77x96_77x96) { test_tands<int32_t, NUM_77, NUM_96, NUM_77, NUM_96>(); }
+TEST_F(TANDSTest, case_int32_1x32_1x32_1x32) { test_tands<int32_t, NUM_1, NUM_32, NUM_1, NUM_32>(); }
+TEST_F(TANDSTest, case_uint32_32x32_32x32_32x32) { test_tands<uint32_t, NUM_32, NUM_32, NUM_32, NUM_32>(); }
+TEST_F(TANDSTest, case_uint32_8x64_8x64_8x64) { test_tands<uint32_t, NUM_8, NUM_64, NUM_8, NUM_64>(); }
+TEST_F(TANDSTest, case_uint32_128x128_128x128_128x128) { test_tands<uint32_t, NUM_128, NUM_128, NUM_128, NUM_128>(); }
+TEST_F(TANDSTest, case_uint32_16x32_16x32_16x32) { test_tands<uint32_t, NUM_16, NUM_32, NUM_16, NUM_32>(); }
