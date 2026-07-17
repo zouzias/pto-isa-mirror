@@ -26,6 +26,16 @@ void LaunchTQuantDN_fp32(
     uint32_t* src, int8_t* fp8_nd, uint8_t* e8_dn, int8_t* fp8_nz, uint8_t* e8_zz, uint32_t* max_dn, void* stream);
 
 template <int M, int N, int N_pad>
+void LaunchTQuantDN_fp32_interleaved(
+    uint32_t* src, int8_t* fp8_nd, uint8_t* e8_dn, int8_t* fp8_nz, uint8_t* e8_zz, uint32_t* max_dn,
+    void* stream);
+
+template <int M, int N, int N_pad>
+void LaunchTQuantDNInterleaved(
+    uint16_t* src, int8_t* fp8_nd, uint8_t* e8_dn, int8_t* fp8_nz, uint8_t* e8_zz, uint16_t* max_dn,
+    void* stream);
+
+template <int M, int N, int N_pad>
 void LaunchTQuantDN_MXFP4_bf16(
     uint16_t* src, uint8_t* fp4_nd, uint8_t* e8_dn, uint8_t* fp4_nz, uint16_t* max_dn, void* stream);
 
@@ -58,7 +68,7 @@ void ExpectGoldenMatch(
     EXPECT_TRUE(ResultCmp<T>(golden, output, 0.0f)) << stageName << ": " << tensorName << " mismatch vs golden";
 }
 
-template <int M, int N, int N_pad>
+template <int M, int N, int N_pad, bool InterleaveExp = false>
 void test_tquant_dn_bf16()
 {
     constexpr int grpSize = 32;
@@ -114,8 +124,13 @@ void test_tquant_dn_bf16()
     const std::string goldenDir = GetGoldenDir();
 
     // Full DN pipeline: TQUANT(DN) + TMOV(ND->NZ) + TMOV<0>(DN->ZZ).
-    TQuantDNTest::LaunchTQuantDN<M, N, N_pad>(
-        srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    if constexpr (InterleaveExp) {
+        TQuantDNTest::LaunchTQuantDNInterleaved<M, N, N_pad>(
+            srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    } else {
+        TQuantDNTest::LaunchTQuantDN<M, N, N_pad>(
+            srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    }
     aclError syncRet = aclrtSynchronizeStream(stream);
     ASSERT_EQ(syncRet, ACL_SUCCESS) << "DN pipeline sync failed: " << aclGetRecentErrMsg();
 
@@ -141,7 +156,8 @@ void test_tquant_dn_bf16()
     std::vector<uint8_t> outE8Zz(e8ZZFileSize);
     std::vector<uint16_t> outGroupMax(maxDNFileSize / sizeof(uint16_t));
     ReadFile(goldenDir + "/golden_fp8_nd.bin", fp8NDFileSize, goldenFp8Nd.data(), fp8NDFileSize);
-    ReadFile(goldenDir + "/golden_e8_dn.bin", e8DNFileSize, goldenE8Dn.data(), e8DNFileSize);
+    const std::string e8GoldenName = InterleaveExp ? "/golden_e8_dn_interleaved.bin" : "/golden_e8_dn.bin";
+    ReadFile(goldenDir + e8GoldenName, e8DNFileSize, goldenE8Dn.data(), e8DNFileSize);
     ReadFile(goldenDir + "/golden_fp8_nz.bin", fp8NZFileSize, goldenFp8Nz.data(), fp8NZFileSize);
     ReadFile(goldenDir + "/golden_e8_zz.bin", e8ZZFileSize, goldenE8Zz.data(), e8ZZFileSize);
     ReadFile(goldenDir + "/golden_group_max.bin", maxDNFileSize, goldenGroupMax.data(), maxDNFileSize);
@@ -153,7 +169,9 @@ void test_tquant_dn_bf16()
     ExpectGoldenMatch("DN_Pipeline", "fp8_nd", goldenFp8Nd, outFp8Nd);
     ExpectGoldenMatch("DN_Pipeline", "e8_dn (exponents)", goldenE8Dn, outE8Dn);
     ExpectGoldenMatch("DN_Pipeline", "fp8_nz", goldenFp8Nz, outFp8Nz);
-    ExpectGoldenMatch("DN_Pipeline", "e8_zz", goldenE8Zz, outE8Zz);
+    if constexpr (!InterleaveExp) {
+        ExpectGoldenMatch("DN_Pipeline", "e8_zz", goldenE8Zz, outE8Zz);
+    }
     ExpectGoldenMatch("DN_Pipeline", "group_max", goldenGroupMax, outGroupMax);
 
     aclrtFree(srcDevice);
@@ -181,8 +199,17 @@ TEST_F(TQUANTDNTest, case_bf16_64x256) { test_tquant_dn_bf16<64, 256, 256>(); }
 TEST_F(TQUANTDNTest, case_bf16_128x256) { test_tquant_dn_bf16<128, 256, 256>(); }
 TEST_F(TQUANTDNTest, case_bf16_256x64) { test_tquant_dn_bf16<256, 64, 64>(); }
 TEST_F(TQUANTDNTest, case_bf16_256x128) { test_tquant_dn_bf16<256, 128, 128>(); }
+TEST_F(TQUANTDNTest, case_bf16_64x64_interleaved) { test_tquant_dn_bf16<64, 64, 64, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x128_interleaved) { test_tquant_dn_bf16<128, 128, 128, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x256_interleaved) { test_tquant_dn_bf16<128, 256, 256, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x32_interleaved) { test_tquant_dn_bf16<128, 32, 32, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x96_interleaved) { test_tquant_dn_bf16<128, 96, 96, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x160_interleaved) { test_tquant_dn_bf16<128, 160, 160, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x224_interleaved) { test_tquant_dn_bf16<128, 224, 224, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x288_interleaved) { test_tquant_dn_bf16<128, 288, 288, true>(); }
+TEST_F(TQUANTDNTest, case_bf16_128x352_interleaved) { test_tquant_dn_bf16<128, 352, 352, true>(); }
 
-template <int M, int N, int N_pad>
+template <int M, int N, int N_pad, bool InterleaveExp = false>
 void test_tquant_dn_fp32()
 {
     constexpr int grpSize = 32;
@@ -238,8 +265,13 @@ void test_tquant_dn_fp32()
     const std::string goldenDir = GetGoldenDir();
 
     // Full DN pipeline: TQUANT(DN) + TMOV(ND->NZ) + TMOV<0>(DN->ZZ).
-    TQuantDNTest::LaunchTQuantDN_fp32<M, N, N_pad>(
-        srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    if constexpr (InterleaveExp) {
+        TQuantDNTest::LaunchTQuantDN_fp32_interleaved<M, N, N_pad>(
+            srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    } else {
+        TQuantDNTest::LaunchTQuantDN_fp32<M, N, N_pad>(
+            srcDevice, fp8NDDevice, e8DNDevice, fp8NZDevice, e8ZZDevice, maxDNDevice, stream);
+    }
     aclError syncRet = aclrtSynchronizeStream(stream);
     ASSERT_EQ(syncRet, ACL_SUCCESS) << "DN pipeline fp32 sync failed: " << aclGetRecentErrMsg();
 
@@ -265,7 +297,8 @@ void test_tquant_dn_fp32()
     std::vector<uint8_t> outE8Zz(e8ZZFileSize);
     std::vector<uint32_t> outGroupMax(maxDNFileSize / sizeof(uint32_t));
     ReadFile(goldenDir + "/golden_fp8_nd.bin", fp8NDFileSize, goldenFp8Nd.data(), fp8NDFileSize);
-    ReadFile(goldenDir + "/golden_e8_dn.bin", e8DNFileSize, goldenE8Dn.data(), e8DNFileSize);
+    const std::string e8GoldenName = InterleaveExp ? "/golden_e8_dn_interleaved.bin" : "/golden_e8_dn.bin";
+    ReadFile(goldenDir + e8GoldenName, e8DNFileSize, goldenE8Dn.data(), e8DNFileSize);
     ReadFile(goldenDir + "/golden_fp8_nz.bin", fp8NZFileSize, goldenFp8Nz.data(), fp8NZFileSize);
     ReadFile(goldenDir + "/golden_e8_zz.bin", e8ZZFileSize, goldenE8Zz.data(), e8ZZFileSize);
     ReadFile(goldenDir + "/golden_group_max.bin", maxDNFileSize, goldenGroupMax.data(), maxDNFileSize);
@@ -277,7 +310,9 @@ void test_tquant_dn_fp32()
     ExpectGoldenMatch("DN_Pipeline_fp32", "fp8_nd", goldenFp8Nd, outFp8Nd);
     ExpectGoldenMatch("DN_Pipeline_fp32", "e8_dn (exponents)", goldenE8Dn, outE8Dn);
     ExpectGoldenMatch("DN_Pipeline_fp32", "fp8_nz", goldenFp8Nz, outFp8Nz);
-    ExpectGoldenMatch("DN_Pipeline_fp32", "e8_zz", goldenE8Zz, outE8Zz);
+    if constexpr (!InterleaveExp) {
+        ExpectGoldenMatch("DN_Pipeline_fp32", "e8_zz", goldenE8Zz, outE8Zz);
+    }
     ExpectGoldenMatch("DN_Pipeline_fp32", "group_max", goldenGroupMax, outGroupMax);
 
     aclrtFree(srcDevice);
@@ -300,6 +335,7 @@ void test_tquant_dn_fp32()
 TEST_F(TQUANTDNTest, case_fp32_64x128) { test_tquant_dn_fp32<64, 128, 128>(); }
 TEST_F(TQUANTDNTest, case_fp32_128x128) { test_tquant_dn_fp32<128, 128, 128>(); }
 TEST_F(TQUANTDNTest, case_fp32_64x256) { test_tquant_dn_fp32<64, 256, 256>(); }
+TEST_F(TQUANTDNTest, case_fp32_128x128_interleaved) { test_tquant_dn_fp32<128, 128, 128, true>(); }
 
 // MXFP4 (E2M1) DN tests. Both bf16 and fp16 sources share the same UB/GM shape:
 //   fp4_nd : M * packedCols bytes       (packedCols = paddedCols/2)

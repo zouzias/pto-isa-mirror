@@ -102,6 +102,11 @@ def dn2zz_e8m0(e8m0_dn, hat_m, n):
     return zz
 
 
+def interleave_e8m0_dn(e8m0_dn, hat_m, n):
+    """aclnnDynamicMxQuant non-tail-axis scale layout: [hat_m / 2, n, 2]."""
+    return e8m0_dn.reshape(hat_m // 2, 2, n).transpose(0, 2, 1).reshape(-1).astype(np.uint8)
+
+
 def quant_bf16_to_mxfp8_dn(src_bf16_fp32, m, n_pad):
     src_fp32 = src_bf16_fp32
     padded_cols = int(math.ceil(n_pad / 32) * 32)
@@ -272,12 +277,22 @@ CASE_PARAMS = [
     ("TQUANTDNTest.case_bf16_128x256", 128, 256),
     ("TQUANTDNTest.case_bf16_256x64", 256, 64),
     ("TQUANTDNTest.case_bf16_256x128", 256, 128),
+    ("TQUANTDNTest.case_bf16_64x64_interleaved", 64, 64),
+    ("TQUANTDNTest.case_bf16_128x128_interleaved", 128, 128),
+    ("TQUANTDNTest.case_bf16_128x256_interleaved", 128, 256),
+    ("TQUANTDNTest.case_bf16_128x32_interleaved", 128, 32),
+    ("TQUANTDNTest.case_bf16_128x96_interleaved", 128, 96),
+    ("TQUANTDNTest.case_bf16_128x160_interleaved", 128, 160),
+    ("TQUANTDNTest.case_bf16_128x224_interleaved", 128, 224),
+    ("TQUANTDNTest.case_bf16_128x288_interleaved", 128, 288),
+    ("TQUANTDNTest.case_bf16_128x352_interleaved", 128, 352),
 ]
 
 FP32_CASE_PARAMS = [
     ("TQUANTDNTest.case_fp32_64x128", 64, 128),
     ("TQUANTDNTest.case_fp32_128x128", 128, 128),
     ("TQUANTDNTest.case_fp32_64x256", 64, 256),
+    ("TQUANTDNTest.case_fp32_128x128_interleaved", 128, 128),
 ]
 
 # MXFP4 (E2M1) DN: 3 shapes each for bf16 and fp16 sources.
@@ -366,6 +381,8 @@ def gen_golden_data(case_name, m, n):
         e8_zz=e8_zz,
     )
     _write_golden(out_dir, golden)
+    with open(os.path.join(out_dir, "golden_e8_dn_interleaved.bin"), "wb") as f:
+        f.write(interleave_e8m0_dn(e8_dn, m // 32, n_pad).tobytes())
 
 
 def gen_golden_data_fp32(case_name, m, n):
@@ -388,6 +405,8 @@ def gen_golden_data_fp32(case_name, m, n):
         e8_zz=e8_zz,
     )
     _write_golden(out_dir, golden)
+    with open(os.path.join(out_dir, "golden_e8_dn_interleaved.bin"), "wb") as f:
+        f.write(interleave_e8m0_dn(e8_dn, m // 32, n_pad).tobytes())
 
 
 def _write_golden_mxfp4(out_dir, golden):
