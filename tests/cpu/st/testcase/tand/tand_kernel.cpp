@@ -46,10 +46,31 @@ void LaunchTAnd(T* out, T* src0, T* src1, void* stream)
     else
         runTAnd<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src0, src1);
 }
+const int NUM_4 = 4;
+const int NUM_8 = 8;
+const int NUM_12 = 12;
 const int NUM_16 = 16;
+const int NUM_32 = 32;
 const int NUM_64 = 64;
+const int NUM_77 = 77;
+const int NUM_96 = 96;
+const int NUM_128 = 128;
 const int NUM_256 = 256;
 template void LaunchTAnd<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int16_t* out, int16_t* src0, int16_t* src1, void* stream);
 template void LaunchTAnd<int32_t, NUM_16, NUM_256, NUM_16, NUM_256>(
     int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAnd<int32_t, NUM_32, NUM_32, NUM_32, NUM_32>(
+    int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAnd<int32_t, NUM_77, NUM_96, NUM_77, NUM_96>(
+    int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAnd<int32_t, NUM_8, NUM_64, NUM_8, NUM_64>(
+    int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAnd<uint32_t, NUM_64, NUM_64, NUM_64, NUM_64>(
+    uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+template void LaunchTAnd<uint32_t, NUM_16, NUM_32, NUM_16, NUM_32>(
+    uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+template void LaunchTAnd<uint32_t, NUM_12, NUM_128, NUM_12, NUM_128>(
+    uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+template void LaunchTAnd<uint32_t, NUM_4, NUM_64, NUM_4, NUM_64>(
+    uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);

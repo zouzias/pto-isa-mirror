@@ -42,7 +42,7 @@ def gen_golden_data_tor(case_name, param):
     return output, input1, input2, golden
 
 
-class TORParams:
+class TOrParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.global_row = global_row
@@ -58,14 +58,15 @@ def generate_case_name(param):
         np.float32: 'float',
         np.float16: 'half',
         np.int8: 'int8',
+        np.int16: 'int16',
         np.int32: 'int32',
-        np.int16: 'int16'
+        np.uint32: 'uint32'
     }[param.dtype]
     
     def substring(a, b) -> str:
         return f"_{a}x{b}"
         
-    name = f"TORTest.case_{dtype_str}" 
+    name = f"TOrTest.case_{dtype_str}" 
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
@@ -83,8 +84,15 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TORParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TORParams(np.int32, 16, 256, 16, 256, 16, 256)
+        TOrParams(np.int16, 64, 64, 64, 64, 64, 64),
+        TOrParams(np.int32, 16, 256, 16, 256, 16, 256),
+        TOrParams(np.int32, 64, 64, 64, 64, 64, 64),
+        TOrParams(np.int32, 77, 96, 77, 96, 77, 96),
+        TOrParams(np.int32, 32, 32, 32, 32, 32, 32),
+        TOrParams(np.uint32, 64, 64, 64, 64, 64, 64),
+        TOrParams(np.uint32, 16, 32, 16, 32, 16, 32),
+        TOrParams(np.uint32, 77, 96, 77, 96, 77, 96),
+        TOrParams(np.uint32, 32, 64, 32, 64, 32, 64)
     ]
 
     for i, param in enumerate(case_params_list):
