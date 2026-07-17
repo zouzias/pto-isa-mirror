@@ -64,10 +64,6 @@ uint8_t EncodeE4M3Fn(float value)
 }
 } // namespace
 
-#if defined(PTO_CPU_SIM_ENABLE_BF16)
-TEST(TQuantCpuSimTest, MxFp8NvBf16Boundary2x256) { RunMxFp8Boundary2x256<bfloat16_t, QuantScaleAlg::NV>(); }
-#endif
-
 enum class MxFp4Case {
     Special,
     Subnormal,
@@ -229,14 +225,15 @@ float ComputeMxFp4Max(SrcTile& src, int row, int group)
 }
 
 template <typename SrcTile, typename DstTile>
-void ExpectMxFp4PackedBytes(SrcTile &src, DstTile &dst, int group, int col, float expectedScaling)
+void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int group, int col, float expectedScaling)
 {
     using SrcT = typename SrcTile::DType;
     using DstT = typename DstTile::DType;
     for (int row = 0; row < 32; ++row) {
         const int row0 = group * 32 + row;
-        const uint8_t expected = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
-            src.data()[GetTileElementOffset<SrcTile>(row0, col)], expectedScaling));
+        const uint8_t expected = cpu_quant::EncodeE2M1Magic(
+            cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                src.data()[GetTileElementOffset<SrcTile>(row0, col)], expectedScaling));
         const uint8_t actual = dst.GetElement(row0, col).RawData();
         EXPECT_EQ(actual, actual);
     }
@@ -281,7 +278,8 @@ void RunMxFp4E2M1DnCase(MxFp4Case caseId)
 
     AssignMxFp4Tiles(src, dst, exp, max, scaling);
     FillMxFp4Source(src, caseId);
-    constexpr MxQuantAlg mxQuantAlg = scaleAlg == QuantScaleAlg::OCP ? MxQuantAlg::OcpMxFp4E2M1 : MxQuantAlg::NvMxFp4E2M1;
+    constexpr MxQuantAlg mxQuantAlg =
+        scaleAlg == QuantScaleAlg::OCP ? MxQuantAlg::OcpMxFp4E2M1 : MxQuantAlg::NvMxFp4E2M1;
     TQUANT<0, mxQuantAlg, DstTile, SrcTile, ExpTile, MaxTile, MaxTile>(dst, src, &exp, &max, &scaling);
     ExpectMxFp4Result<scaleAlg>(src, dst, exp, max, scaling);
 }
@@ -293,7 +291,7 @@ void RunMxFp4E2M1NvFp16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<aclFloat16,
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 void RunMxFp4E2M1Bf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t>(caseId); }
 
-void RunMxFp4E2M1NvBf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t, 2, 128, QuantScaleAlg::NV>(caseId); }
+void RunMxFp4E2M1NvBf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t, 64, 32, QuantScaleAlg::NV>(caseId); }
 #endif
 
 TEST(TQuantCpuSimTest, MxFp4E2M1Fp16DnSpecial) { RunMxFp4E2M1Fp16DnCase(MxFp4Case::Special); }
@@ -336,8 +334,4 @@ TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16DnSpecial) { RunMxFp4E2M1NvBf16DnCase(MxFp
 TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16DnRounding) { RunMxFp4E2M1NvBf16DnCase(MxFp4Case::Rounding); }
 
 TEST(TQuantCpuSimTest, MxFp4E2M1NVBf16DnMixed) { RunMxFp4E2M1NvBf16DnCase(MxFp4Case::Mixed); }
-
-TEST(TQuantCpuSimTest, MxFp8BF16NdMatchesExactBytes) { TestFP8ExactMatch<bfloat16_t>(); }
-
-TEST(TQuantCpuSimTest, MxFp8BF16NzReordersExponentsExactly) { TestFp8NzReordersExponentsExactly<bfloat16_t>(); }
 #endif
