@@ -26,6 +26,10 @@ constexpr uint32_t kSdmaFlagLength = 128U;
 constexpr uint32_t kUbAlignSize = 256U;
 constexpr uint32_t kSdmaEventRecordBytes = 16U;
 constexpr uint32_t kSdmaEventSlotCount = kSdmaFlagLength / kSdmaEventRecordBytes;
+constexpr uint32_t kSdmaContextWorkspaceBytes = 16U * 1024U;
+constexpr uint32_t kSdmaPayloadBytesPerGroup = 16U * 1024U;
+constexpr uint32_t kSdmaMaxChannelGroups = 48U;
+constexpr uint32_t kSdmaWorkspaceBytes = kSdmaContextWorkspaceBytes + kSdmaMaxChannelGroups * kSdmaPayloadBytesPerGroup;
 
 constexpr uint32_t SDMA_FLAG_LENGTH = kSdmaFlagLength;
 constexpr uint32_t UB_ALIGN_SIZE = kUbAlignSize;
@@ -63,12 +67,32 @@ struct SdmaEventContext {
     uint32_t syncId;
 };
 
+namespace detail {
+
+constexpr uint32_t kGenerationStateMaxQueues = 48U;
+constexpr uint32_t kGenerationStatePayloadDepth = 256U;
+
+struct SdmaRuntimeContext {
+    uint64_t nextGeneration;
+    uint64_t completedGeneration[kGenerationStateMaxQueues];
+    // Per-slot metadata for the shared payload ring. Slot index is generation % payload depth.
+    uint8_t payloadActiveQueues[kGenerationStatePayloadDepth];
+    uint32_t sqTail[kGenerationStateMaxQueues];
+    uint32_t sqHead[kGenerationStateMaxQueues];
+    __gm__ uint8_t* completionBase;
+    bool initialized;
+    bool tailInitialized;
+};
+
+} // namespace detail
+
 // ============================================================================
 // SdmaSession: bundles ExecContext + EventContext for convenient async usage.
 // ============================================================================
 struct SdmaSession {
     SdmaExecContext execCtx{};
     SdmaEventContext eventCtx{};
+    mutable detail::SdmaRuntimeContext runtimeCtx{};
     bool valid{false};
 };
 
