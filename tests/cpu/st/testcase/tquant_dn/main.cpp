@@ -229,7 +229,7 @@ float ComputeMxFp4Max(SrcTile& src, int row, int group)
 }
 
 template <typename SrcTile, typename DstTile>
-void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int group, int col, float expectedScaling)
+void ExpectMxFp4PackedBytes(SrcTile &src, DstTile &dst, int group, int col, float expectedScaling)
 {
     using SrcT = typename SrcTile::DType;
     using DstT = typename DstTile::DType;
@@ -281,8 +281,7 @@ void RunMxFp4E2M1DnCase(MxFp4Case caseId)
 
     AssignMxFp4Tiles(src, dst, exp, max, scaling);
     FillMxFp4Source(src, caseId);
-    constexpr MxQuantAlg mxQuantAlg =
-        scaleAlg == QuantScaleAlg::OCP ? MxQuantAlg::OcpMxFp4E2M1 : MxQuantAlg::NvMxFp4E2M1;
+    constexpr MxQuantAlg mxQuantAlg = scaleAlg == QuantScaleAlg::OCP ? MxQuantAlg::OcpMxFp4E2M1 : MxQuantAlg::NvMxFp4E2M1;
     TQUANT<0, mxQuantAlg, DstTile, SrcTile, ExpTile, MaxTile, MaxTile>(dst, src, &exp, &max, &scaling);
     ExpectMxFp4Result<scaleAlg>(src, dst, exp, max, scaling);
 }
