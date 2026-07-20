@@ -601,7 +601,7 @@ float ComputeMxFp4Max(SrcTile& src, int row, int group)
 }
 
 template <typename SrcTile, typename DstTile>
-void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int row, int group, float expectedScaling)
+void ExpectMxFp4PackedBytes(SrcTile &src, DstTile &dst, int row, int group, float expectedScaling)
 {
     using SrcT = typename SrcTile::DType;
     using DstT = typename DstTile::DType;
