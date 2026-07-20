@@ -281,7 +281,7 @@ void RunMxFp4E2M1DnCase(MxFp4Case caseId)
 
     AssignMxFp4Tiles(src, dst, exp, max, scaling);
     FillMxFp4Source(src, caseId);
-    constexpr MxQuantAlg mxQuantAlg =
+    constexpr MxQuantAlg mxQuantAlg = 
         scaleAlg == QuantScaleAlg::OCP ? MxQuantAlg::OcpMxFp4E2M1 : MxQuantAlg::NvMxFp4E2M1;
     TQUANT<0, mxQuantAlg, DstTile, SrcTile, ExpTile, MaxTile, MaxTile>(dst, src, &exp, &max, &scaling);
     ExpectMxFp4Result<scaleAlg>(src, dst, exp, max, scaling);
