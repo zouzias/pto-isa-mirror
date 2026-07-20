@@ -8,7 +8,25 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#pragma once
+#ifndef ASYNC_GENERATION_STABILITY_KERNEL_H_
+#define ASYNC_GENERATION_STABILITY_KERNEL_H_
 
-bool RunTGetBandwidthSweep(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunTGetDeviceBaseline(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+#include <cstdint>
+
+enum class AsyncTransferKind : uint32_t {
+    TGet = 0,
+    TPut = 1,
+};
+
+enum class AsyncCheckMode : uint32_t {
+    Immediate = 0,
+    Deferred = 1,
+};
+
+bool IsAsyncGenerationStabilityDeviceRangeAvailable(int nRanks, int firstDeviceId);
+
+bool RunAsyncGenerationStability(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, AsyncTransferKind transferKind,
+    AsyncCheckMode checkMode, uint32_t postCount, uint32_t rounds, uint32_t queueNum);
+
+#endif
