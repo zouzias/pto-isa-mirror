@@ -21,6 +21,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <utility>
 #include <vector>
 
+// A5 CCE mock:PTO 指令结算时把该指令内全部 VF 的 VfInfo 交给后端算 cycle。
+// 用 __NPU_ARCH__(编译选项 -D,始终可见)gate,而非派生宏 PTO_NPU_ARCH_A5
+// (trace.hpp 可能早于 arch_macro.hpp 被 include,派生宏此时未定义)。
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+#include "pto/costmodel/a5/cce_costmodel/vf_info.hpp"
+#include "pto/costmodel/a5/cce_costmodel/vf_cost.hpp"
+#endif
+
 #include <pto/costmodel/arch_config.hpp>
 
 namespace pto::mocker {
@@ -45,6 +53,11 @@ struct PtoInstrRecord {
     std::string name;
     std::vector<CceCallRecord> cce_calls;
     uint64_t total_cycles = 0;
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+    // A5:本 PTO 指令期间经过的所有 VF(每个 __VEC_SCOPE__ 一个)。ScopeSentinel 析构时 push,
+    // EndPtoInstr(PTO 结束)时交后端 PredictVfCycles(vector<VfInfo>) 结算(含跨 VF overlap)。
+    std::vector<vf::VfInfo> vf_infos;
+#endif
 };
 
 struct TraceState {
@@ -229,6 +242,16 @@ inline void EndPtoInstr()
     if (!stack.empty()) {
         if (stack.size() == 1) {
             FlushAllPendingTailsExceptVector();
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+            // A5 结算:本 PTO 指令结束,把它期间攒下的所有 VfInfo 交后端统一算 cycle
+            //(含跨 VF overlap,占位先求和)。VF cycle 叠加到 total_cycles 上(而非覆盖):
+            // 上面 FlushAllPendingTailsExceptVector 可能已把非 VF 的搬运/同步/标量 CCE cycle
+            // 累加进来,覆盖会丢这部分 → 混合指令被低估。
+            auto &pto = g_trace_state.executed_pto[stack.back()];
+            if (!pto.vf_infos.empty()) {
+                pto.total_cycles += vf::PredictVfCycles(pto.vf_infos);
+            }
+#endif
         }
         stack.pop_back();
     }

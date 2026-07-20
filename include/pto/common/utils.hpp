@@ -41,6 +41,13 @@ PTO_INTERNAL void SetContinuousMask(unsigned n)
 template <int index>
 PTO_INTERNAL void movemask(uint64_t mask)
 {
+#if defined(__COSTMODEL)
+    // __COSTMODEL(CPU 侧 costmodel/mock 编译):MOVEMASK 是 Ascend 专有指令,内联 asm 的
+    // 'l' 约束在非 x86 host(如 CANN Lab aarch64)上前端解析即报错,且本路径在 mock 下
+    // 从不执行。置空体保留签名,使 utils.hpp 在任意 host(x86/aarch64)上都可编译。
+    (void)mask;
+    PTO_STATIC_ASSERT((index <= 1), "movemask: error mask index.");
+#else
     if constexpr (index == 0) {
         asm volatile("MOVEMASK 	MASK[0],  %0\n" ::"l"(mask));
     } else if constexpr (index == 1) {
@@ -48,6 +55,7 @@ PTO_INTERNAL void movemask(uint64_t mask)
     } else {
         PTO_STATIC_ASSERT((index <= 1), "movemask: error mask index.");
     }
+#endif
 }
 
 PTO_INTERNAL void SetVectorCount(uint64_t n)
