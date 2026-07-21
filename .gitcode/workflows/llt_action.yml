@@ -44,17 +44,7 @@ jobs:
           export WORKSPACE=${{ steps.process_checkout.outputs.path }}
           cd ${{ steps.process_checkout.outputs.path }}
           export ut_type=${{ inputs.ut_type }}
-          bash ut.sh 
-      -
-        name: ut_cov
-        identifier: ut_cov
-        uses: cann/.gitcode/actions/ut-cov-report@master
-        with:
-          ut_process: ${{ steps.ut.outputs.ut_process }}
-          workspace: ${{ steps.process_checkout.outputs.path }}
-          ut_type: ${{ inputs.ut_type }}
-          target_branch: ${{ env.TARGET_BRANCH }}
-          git_token: ${{secrets.GIT_TOKEN}}
+          bash ut.sh
       -
         name: upload
         uses: obs-upload
