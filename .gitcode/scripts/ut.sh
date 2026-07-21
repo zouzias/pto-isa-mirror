@@ -16,23 +16,6 @@ echo "${ut_type:-}"
 echo "${TARGET_BRANCH:-}"
 echo "${obs_path:-}"
 
-export USE_CCACHE=1
-export PATH=/usr/local/ccache/bin:$PATH
-export CCACHE_SECONDARY_STORAGE=redis://10.0.0.135:6379
-export CCACHE_COMPILERCHECK=content
-export CCACHE_SLOPPINESS=include_file_mtime,time_macros,include_file_ctime
-export CCACHE_UMASK=002
-export CMAKE_CXX_COMPILER_LAUNCHER=/usr/local/ccache/bin/ccache
-
-sudo apt update
-sudo apt install -y redis-tools libhiredis-dev libhiredis0.14
-if redis-cli -h 10.0.0.135 -p 6379 ping >/dev/null 2>&1; then
-    echo "Redis connection OK"
-else
-    echo "Redis connection FAILED"
-fi
-/usr/local/ccache/bin/ccache -V
-/usr/local/ccache/bin/ccache -z
 grep -E "^VERSION_ID=" /etc/os-release | cut -d'"' -f2
 sudo update-alternatives --set gcc /usr/bin/gcc-14
 gcc --version
@@ -41,11 +24,6 @@ gcc --version
 Purple="\033[0;35m"
 BPurple="\033[1;35m"
 Color_Off="\033[0m"
-
-# Print a section header
-function LOG_HEAD() {
-    echo -e "${BPurple}[Header]${Color_Off} ${Purple}$*${Color_Off}"
-}
 
 # Print and execute a command, capturing its exit code in the global variable ${ret}
 function LOG_DO() {

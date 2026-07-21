@@ -38,6 +38,9 @@ jobs:
             ${{ env.obs_path }}/ut.sh
           path: ${{ steps.process_checkout.outputs.path }}
       -
+        name: redis-cache
+        uses: cann/.gitcode/actions/redis-cache@master
+      -
         name: ut_acc
         identifier: ut
         run: |
