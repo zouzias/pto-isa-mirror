@@ -37,7 +37,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_NPU_ARCH_A6
 #endif
 
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_KIRINDEV0000)
 #define __tf__
 #define __in__
 #define __out__
