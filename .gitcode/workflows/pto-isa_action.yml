@@ -33,9 +33,7 @@ stages:
     select: selected_by_default
     jobs:
       JOB_image:
-        name: image
-        select: selected_by_default
-        needs: []
+        name: Test_image
         steps:
           - name: revise_image
             identifier: revise_image
@@ -47,13 +45,12 @@ stages:
           -
             name: show_output
             run: |
-              echo "image: ${{ steps.revise_image.outputs.Compile_Ascend_X86  }}"
+              echo "Compile_Ascend_X86: ${{ steps.revise_image.outputs.Compile_Ascend_X86 }}"
+              echo ${org_name}
         if: "${{ default() }}"
         runs-on: ["codearts-hosted", "ubuntu-latest", "x64", "large"]
       JOB_pr:
-        name: get_pr_files
-        select: selected_by_default
-        needs: []
+        name: Test_get-pr
         steps:
           -
             name: Checkout
@@ -61,7 +58,7 @@ stages:
             uses: checkout
             with:
               ref: ${{ atomgit.event.pull_request.merge_commit_sha || atomgit.sha }}
-              token: ${{secrets.GIT_TOKEN}}
+              token: ${{ secrets.GIT_TOKEN }}
           -
             name: get_pr
             identifier: get_pr
@@ -69,15 +66,15 @@ stages:
             with:
               workspace: ${{ steps.process_checkout.outputs.path }}
               target_branch: ${{ env.TARGET_BRANCH }}
-              git_token: ${{secrets.GIT_TOKEN}}
+              git_token: ${{ secrets.GIT_TOKEN }}
           -
             name: upload
             uses: obs-upload
             with:
               endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
               bucket: "ascend-ci"
-              access-key: ${{secrets.AK}}
-              secret-key: ${{secrets.SK}}
+              access-key: ${{ secrets.AK }}
+              secret-key: ${{ secrets.SK }}
               artifact-path: |
                 ${{ steps.process_checkout.outputs.path }}/pr_filelist.txt
                 ${{ steps.process_checkout.outputs.path }}/pr_filelist_mod.txt
@@ -88,9 +85,7 @@ stages:
         runs-on:
         - default
       JOB_shell:
-        name: get_shell_files
-        select: selected_by_default
-        needs: []
+        name: Test_get-shell
         steps:
           -
             name: Checkout
@@ -98,15 +93,15 @@ stages:
             uses: checkout
             with:
               ref: master
-              token: ${{secrets.GIT_TOKEN}}
+              token: ${{ secrets.GIT_TOKEN }}
           -
             name: upload
             uses: obs-upload
             with:
               endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
               bucket: "ascend-ci"
-              access-key: ${{secrets.AK}}
-              secret-key: ${{secrets.SK}}
+              access-key: ${{ secrets.AK }}
+              secret-key: ${{ secrets.SK }}
               artifact-path: |
                 ${{ steps.process_checkout.outputs.path }}/.gitcode/scripts/*
               object-prefix: ${{ env.obs_path }}/
@@ -122,8 +117,6 @@ stages:
     jobs:
       Compile_Ascend_X86:
         name: Compile_Ascend_X86
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/x86_compile_action.yml
         with:
           task_name: 'Compile_Ascend_X86'
@@ -131,8 +124,6 @@ stages:
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_X86 }}
       Compile_Ascend_ARM:
         name: Compile_Ascend_ARM
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/arm_compile_action.yml
         with:
           task_name: 'Compile_Ascend_ARM'
@@ -140,8 +131,6 @@ stages:
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM }}
       Compile_Ascend_X86_A5:
         name: Compile_Ascend_X86_A5
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/x86_compile_action.yml
         with:
           task_name: 'Compile_Ascend_X86_A5'
@@ -149,53 +138,47 @@ stages:
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_X86_A5_ubuntu24 }}
       Compile_Ascend_ARM_A5:
         name: Compile_Ascend_ARM_A5
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/arm_compile_action.yml
         with:
           task_name: 'Compile_Ascend_ARM_A5'
           package_name: 'cann-pto-isa_linux-aarch64-A5.run'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM_A5 }}
-      CodeCheck_action:
-        name: CodeCheck_action
-        select: selected_by_default
-        needs: []
+      JOB_codecheck:
+        name: CodeCheck
         uses: .gitcode/workflows/codecheck_action.yml
-      StaticCheck_markdown:
-        name: StaticCheck_markdown
-        select: selected_by_default
-        needs: []
+        with:
+          precommit_image_version: ${{ jobs.JOB_image.outputs.precommit }}
+          codecheck_image_version: ${{ jobs.JOB_image.outputs.codecheck }}
+      JOB_staticcheck_markdown:
+        name: CodeCheck_staticcheck_markdown
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'markdown'
-      StaticCheck_codespell_check:
-        name: StaticCheck_codespell_check
-        select: selected_by_default
-        needs: []
+          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
+      JOB_staticcheck_codespell_check:
+        name: CodeCheck_staticcheck_codespell
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'codespell_check'
-      StaticCheck_tag_closed_check:
-        name: StaticCheck_tag_closed_check
-        select: selected_by_default
-        needs: []
+          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
+      JOB_staticcheck_tag_closed_check:
+        name: CodeCheck_staticcheck_tag_closed
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'tag_closed_check'
-      StaticCheck_resource_existence_check:
-        name: StaticCheck_resource_existence_check
-        select: selected_by_default
-        needs: []
+          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
+      JOB_staticcheck_resource_existence_check:
+        name: CodeCheck_staticcheck_resource_existence
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'resource_existence_check'
-      StaticCheck_link_validity_check:
-        name: StaticCheck_link_validity_check
-        select: selected_by_default
-        needs: []
+          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
+      JOB_staticcheck_link_validity_check:
+        name: CodeCheck_staticcheck_link_validity
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'link_validity_check'
+          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
     pre:
     - type: auto
   stage3:

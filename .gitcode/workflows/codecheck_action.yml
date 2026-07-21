@@ -6,9 +6,8 @@ on:
 
 jobs:
   PreCommit:
-    name: PreCommit
+    name: CodeCheck_precommit
     select: selected_by_default
-    needs: []
     steps:
       -
         name: Checkout
@@ -48,7 +47,7 @@ jobs:
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu20.04.05_x86:alpha113
   Check_pr:
-    name: Check_pr
+    name: CodeCheck_check-pr
     select: selected_by_default
     needs: []
     steps:
