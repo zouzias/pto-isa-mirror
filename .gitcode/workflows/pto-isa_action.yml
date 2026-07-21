@@ -145,7 +145,7 @@ stages:
         uses: .gitcode/workflows/x86_compile_action.yml
         with:
           task_name: 'Compile_Ascend_X86_A5'
-          package_name: 'cann-pto-isa_linux-x86_64-a5.run'
+          package_name: 'cann-pto-isa_linux-x86_64-A5.run'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_X86_A5_ubuntu24 }}
       Compile_Ascend_ARM_A5:
         name: Compile_Ascend_ARM_A5
@@ -154,7 +154,7 @@ stages:
         uses: .gitcode/workflows/arm_compile_action.yml
         with:
           task_name: 'Compile_Ascend_ARM_A5'
-          package_name: 'cann-pto-isa_linux-aarch64-a5.run'
+          package_name: 'cann-pto-isa_linux-aarch64-A5.run'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM_A5 }}
       JOB_codecheck_action:
         name: codecheck_action

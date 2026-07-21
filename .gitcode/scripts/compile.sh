@@ -70,21 +70,25 @@ if [[ -z "${compile_package_name}" ]]; then
     echo "ERROR: no .run package found in ${WORKSPACE}/build_out/"
     exit 1
 fi
-echo "compile package name is: ${compile_package_name}"
-chmod +x "./build_out/${compile_package_name}"
+# 防止A5包上传OBS覆盖普通包，统一改名
+mv ${compile_package_name} ${package_name}
+
+echo "compile original package name is: ${compile_package_name}"
+echo "compile package name is: ${package_name}"
+chmod +x "./build_out/${package_name}"
 
 # Install and verify the package
-echo "Start to verify the package: ${compile_package_name}"
-echo "y" | "./build_out/${compile_package_name}" --full --install-path="${WORKSPACE}/tmp" 2>&1 | tee "${WORKSPACE}/compile_log.txt"
+echo "Start to verify the package: ${package_name}"
+echo "y" | "./build_out/${package_name}" --full --install-path="${WORKSPACE}/tmp" 2>&1 | tee "${WORKSPACE}/compile_log.txt"
 if grep -q "ERROR" "${WORKSPACE}/compile_log.txt"; then
     echo "find key word 'ERROR' in install logs"
     exit 1
 else
-    echo "verify the package: ${compile_package_name} success"
+    echo "verify the package: ${package_name} success"
 fi
 
 # Uninstall and verify
-echo "y" | "./build_out/${compile_package_name}" --uninstall --install-path="${WORKSPACE}/tmp" 2>&1 | tee "${WORKSPACE}/compile_uninstall_log.txt"
+echo "y" | "./build_out/${package_name}" --uninstall --install-path="${WORKSPACE}/tmp" 2>&1 | tee "${WORKSPACE}/compile_uninstall_log.txt"
 if grep -q "ERROR" "${WORKSPACE}/compile_uninstall_log.txt"; then
     echo "find key word 'ERROR' in uninstall logs"
     exit 1

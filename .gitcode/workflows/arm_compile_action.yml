@@ -60,7 +60,6 @@ jobs:
         uses: cann/.gitcode/actions/verify-package@master
         with:
           workspace: ${{ steps.process_checkout.outputs.path }}
-          package_type: whl
       - name: upload
         uses: obs-upload
         with:
