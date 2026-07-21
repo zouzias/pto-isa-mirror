@@ -100,6 +100,7 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tput_async
 tget_async
+async_generation_stability
 # Signal-Based Synchronization
 tnotify
 twait

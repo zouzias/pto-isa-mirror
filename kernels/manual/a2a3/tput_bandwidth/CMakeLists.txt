@@ -92,12 +92,12 @@ elseif(EXISTS "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
     set(PTO_ASCENDC_KERNEL_INCLUDE "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
 endif()
 
-add_library(tget_bandwidth_kernel SHARED tget_bandwidth_kernel.cpp)
-target_compile_options(tget_bandwidth_kernel PRIVATE
+add_library(tput_bandwidth_kernel SHARED tput_bandwidth_kernel.cpp)
+target_compile_options(tput_bandwidth_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17
     -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init
 )
-target_include_directories(tget_bandwidth_kernel PRIVATE
+target_include_directories(tput_bandwidth_kernel PRIVATE
     ${PTO_INCLUDE_DIR}
     ${COMM_TESTCASE_DIR}
     ${ASCEND_HOME_PATH}/pkg_inc/
@@ -115,33 +115,33 @@ target_include_directories(tget_bandwidth_kernel PRIVATE
     ${PTO_TOOLKIT_DIR}/asc/include/utils
     ${PTO_ASCENDC_KERNEL_INCLUDE}
 )
-target_link_directories(tget_bandwidth_kernel PRIVATE
+target_link_directories(tput_bandwidth_kernel PRIVATE
     ${ASCEND_HOME_PATH}/lib64
 )
-target_link_libraries(tget_bandwidth_kernel PRIVATE
+target_link_libraries(tput_bandwidth_kernel PRIVATE
     hccl hcomm runtime nnopbase
 )
-target_link_options(tget_bandwidth_kernel PRIVATE --cce-fatobj-link)
+target_link_options(tput_bandwidth_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(tget_bandwidth main.cpp)
-target_compile_options(tget_bandwidth PRIVATE
+add_executable(tput_bandwidth main.cpp)
+target_compile_options(tput_bandwidth PRIVATE
     ${CMAKE_CPP_COMPILE_OPTIONS}
     -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init
 )
-target_include_directories(tget_bandwidth PRIVATE
+target_include_directories(tput_bandwidth PRIVATE
     ${PTO_INCLUDE_DIR}
     ${COMM_TESTCASE_DIR}
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
 )
 
-target_link_directories(tget_bandwidth PUBLIC
+target_link_directories(tput_bandwidth PUBLIC
     ${ASCEND_HOME_PATH}/lib64
     ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
 )
 
-target_link_libraries(tget_bandwidth PRIVATE
-    tget_bandwidth_kernel
+target_link_libraries(tput_bandwidth PRIVATE
+    tput_bandwidth_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
     stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase pthread
