@@ -231,8 +231,8 @@ stages:
   stage5:
     name: PreSmoke
     jobs:
-      A2_smoke:
-        name: A2_pre_smoke
+      PreSmoke_A2:
+        name: PreSmoke
         steps:
           -
             name: Checkout
