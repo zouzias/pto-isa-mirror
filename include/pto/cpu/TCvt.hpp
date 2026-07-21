@@ -160,32 +160,35 @@ inline D convert_value(S val, RoundMode mode)
     if constexpr (is_fp4_v<S> && is_fp4_v<D>) {
         return D::FromRaw(val.RawData());
     } else if constexpr (is_fp4_v<S> && is_float_like_v<D>) {
-        double dval = static_cast<double>(val);
-        dval = applyRoundingToIntegral(dval, mode);
-        return static_cast<D>(dval);
+        const volatile double dval = static_cast<double>(val);
+        double dval_2 = applyRoundingToIntegral(dval, mode);
+        return static_cast<D>(dval_2);
     } else if constexpr (is_float_like_v<S> && is_fp4_v<D>) {
-        double dval = static_cast<double>(val);
-        dval = applyRoundingToIntegral(dval, mode);
-        D tmp = static_cast<D>(dval);
+        const volatile double dval = static_cast<double>(val);
+        double dval_2 = applyRoundingToIntegral(dval, mode);
+        D tmp = static_cast<D>(dval_2);
         return tmp;
     } else if constexpr (std::is_same_v<S, int4b_t>) {
         int8_t ival = static_cast<int8_t>(val);
+        const volatile double dval = static_cast<double>(ival);
         if constexpr (std::is_integral_v<D> && !std::is_same_v<D, int4b_t>)
             return static_cast<D>(ival);
         else
-            return static_cast<D>(static_cast<double>(ival));
+            return static_cast<D>(dval);
     } else if constexpr (std::is_same_v<D, int4b_t>) {
-        double dval = static_cast<double>(val);
+        const volatile double dval = static_cast<double>(val);
+        double dval_2 = dval;
         if constexpr (is_float_like_v<S>)
-            dval = applyRoundingToIntegral(dval, mode);
-        dval = clamp_value(dval, -8.0, 7.0);
-        return int4b_t(static_cast<int8_t>(dval));
+            dval_2 = applyRoundingToIntegral(dval, mode);
+        dval_2 = clamp_value(dval_2, -8.0, 7.0);
+        return int4b_t(static_cast<int8_t>(dval_2));
     } else if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
-        double dval = static_cast<double>(val);
-        dval = applyRoundingToIntegral(dval, mode);
-        return static_cast<D>(dval);
+        const volatile double dval = static_cast<double>(val);
+        double dval_2 = applyRoundingToIntegral(dval, mode);
+        return static_cast<D>(dval_2);
     } else if constexpr (std::is_integral_v<S> && is_float_like_v<D>) {
-        return static_cast<D>(static_cast<double>(val));
+        const volatile double dval = static_cast<double>(val);
+        return static_cast<D>(dval);
     } else {
         return static_cast<D>(val);
     }
@@ -202,15 +205,15 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
             S val = src.GetElement(i, j);
             if constexpr (satMode == SaturationMode::ON) {
                 if constexpr (!is_fp4_v<S>) {
-                    const volatile double dval = to_double_value(val);
-                    const volatile double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
-                    const volatile double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
+                    double dval = to_double_value(val);
+                    double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
+                    double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
                     dval = clamp_value(dval, min_limit, max_limit);
                     val = from_double_value<S>(dval);
                 }
             }
 
-            const volatile D result = convert_value<D, S>(val, mode);
+            D result = convert_value<D, S>(val, mode);
             dst.SetElement(i, j, result);
         }
     }
