@@ -43,8 +43,8 @@ npu-smi info
 echo "4. checking test results ..."
 date_time=$(date +%Y%m%d.%H%M%S)
 if grep -w -e "execute comm samples success" "./run_test.log" && grep -w -e "execute samples success" "./run_test.log"; then
-echo "$date_time : run test case success"
+    echo "$date_time : run test case success"
 else
-echo "$date_time : run test case failed"
-exit 1
+    echo "$date_time : run test case failed"
+    exit 1
 fi

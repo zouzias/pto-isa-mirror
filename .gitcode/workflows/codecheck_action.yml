@@ -5,8 +5,8 @@ on:
 
 
 jobs:
-  JOB_precommit:
-    name: precommit
+  PreCommit:
+    name: PreCommit
     select: selected_by_default
     needs: []
     steps:
@@ -47,8 +47,8 @@ jobs:
     runs-on: [dedicate-hosted, x64, small]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu20.04.05_x86:alpha113
-  JOB_check_pr:
-    name: check_pr
+  Check_pr:
+    name: Check_pr
     select: selected_by_default
     needs: []
     steps:
@@ -79,8 +79,8 @@ jobs:
     runs-on: [dedicate-hosted, x64, small]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
-  JOB_sca:
-    name: sca
+  SCA:
+    name: SCA
     select: selected_by_default
     needs: []
     steps:
@@ -109,8 +109,8 @@ jobs:
     runs-on: [dedicate-hosted, x64, small]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
-  JOB_antiposion:
-    name: antiposion
+  Antiposion:
+    name: Antiposion
     select: selected_by_default
     needs: []
     steps:
@@ -139,8 +139,8 @@ jobs:
     runs-on: [dedicate-hosted, x64, small]
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
-  JOB_codecheck:
-    name: codecheck
+  CodeCheck:
+    name: CodeCheck
     select: selected_by_default
     needs: []
     steps:
