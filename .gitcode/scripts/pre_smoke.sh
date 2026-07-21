@@ -16,20 +16,23 @@ echo "start run test case, please wait ..."
 export ASCEND_GLOBAL_LOG_LEVEL=2
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 
+sudo apt update && sudo apt install -y mpich libmpich-dev
+sudo apt install -y openmpi-bin openmpi-common libopenmpi-dev
+mpicc --version
+mpirun --version
+rm -rf /opt/rh/devtoolset-7
 source /usr/local/Ascend/cann/set_env.sh
-wget -nv "${download_path}"
-mv cann-pyasc_linux-aarch64.whl pyasc-1.1.1+ge7eeb79-cp310-cp310-linux_aarch64.whl
-source /opt/conda/bin/activate python310
-pip3 install --force-reinstall pyasc-1.1.1+ge7eeb79-cp310-cp310-linux_aarch64.whl 2>&1 | tee -a ./run_test.log
-source /usr/local/Ascend/ascend-toolkit/latest/bin/setenv.bash
-bash test/run_presmoke_npu_test.sh 2>&1 | tee -a ./run_test.log
-deactivate
+echo "bash build.sh --run_simple"
+bash build.sh --run_simple --a3 2>&1 | tee -a ./run_test.log
+source /usr/local/Ascend/cann/set_env.sh
+echo "bash build.sh --comm --a3 --npu"
+bash build.sh --comm --a3 --npu 2>&1 | tee -a ./run_test.log
 
 # Package slog
 mkdir -p /root/ascend
 slog_name="slog.tar.gz"
 tar -zcf slog.tar.gz -C /root/ascend log
-OBS_KEY="${repo_name}/package/${pr_id}/gitcode/${slog_name}"
+OBS_KEY="${obs_smoke_path}/plog/${slog_name}"
 # Upload slog
 if python3 /home/upload.py --bucket-name "ascend-ci" --action upload --local-file "slog.tar.gz" --obs-object-key "${OBS_KEY}"; then
     echo "::set-output var=plog_url:https://ascend-ci.obs.cn-north-4.myhuaweicloud.com/${OBS_KEY}"
@@ -38,9 +41,9 @@ fi
 npu-smi info
 echo "4. checking test results ..."
 date_time=$(date +%Y%m%d.%H%M%S)
-if grep -w -e "Run all examples success" "./run_test.log"; then
-    echo "${date_time} : run test case success"
-else
-    echo "${date_time} : run test case failed"
+  if grep -w -e "execute comm samples success" "./run_test.log" && grep -w -e "execute samples success" "./run_test.log"; then
+    echo "$date_time : run test case success"
+  else
+    echo "$date_time : run test case failed"
     exit 1
-fi
+  fi

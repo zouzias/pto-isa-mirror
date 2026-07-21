@@ -356,16 +356,8 @@ stages:
               repository: "https://gitcode.com/cann/.gitcode.git"
               ref: master
               path: "./runner/ci"
-          - name: download run file
-            identifier: process_download
-            uses: obs-download
-            with:
-              endpoint: "obs.cn-north-4.myhuaweicloud.com"
-              bucket: "ascend-ci"
-              key: "${{jobs.JOB_arm_compile_ubuntu24.outputs.arm_run_key}}"
-              path: ${{ steps.process_checkout.outputs.path }}
           -
-            name: download
+            name: download pr files
             uses: obs-download
             with:
               endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
@@ -410,6 +402,7 @@ stages:
                 export download_path=${{ steps.process_download.outputs.download-path }}
                 export repo_name=${{env.repo_name}}
                 export pr_id=${{ env.MERGE_ID }}
+                export obs_smoke_path=${{ env.obs_smoke_path }}
                 export AK=${{secrets.AK}}
                 export SK=${{secrets.SK}}
                 mkdir -p /home/taskspace && cd /home/taskspace
