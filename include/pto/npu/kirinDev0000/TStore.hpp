@@ -11,8 +11,74 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TSTORE_HPP
 #define TSTORE_HPP
 #include "pto/npu/kirin9030/common.hpp"
+#include "pto/common/arch_cce_intrinsic.hpp"
 #include "pto/common/arch/register/tstore_common.hpp"
+
 namespace pto {
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreMatViaUb(
+    typename GlobalData::DType* dstAddr, __cbuf__ typename TileData::DType* srcAddr,
+    __ubuf__ typename TileData::DType* ubAddr, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4,
+    int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+{
+    static_assert(
+        GlobalData::staticShape[3] == FRACTAL_NZ_ROW &&
+            GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename TileData::DType),
+        "When TileData is NZ format, the last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+    PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096");
+    PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
+    PTO_ASSERT(
+        validCol == gShape0 * gShape1 * gShape4,
+        "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
+
+    uint32_t totalBytes = TileData::Rows * TileData::Cols * sizeof(typename TileData::DType);
+    uint32_t burstLen = totalBytes / BLOCK_BYTE_SIZE;
+    uint64_t fixpNzPara =
+        static_cast<uint64_t>(1) | (static_cast<uint64_t>(burstLen) << 16) | (static_cast<uint64_t>(1) << 32);
+    set_fixp_nz_para(fixpNzPara);
+    pto_copy_cbuf_to_ubuf((__ubuf__ void*)ubAddr, (__cbuf__ void*)srcAddr, 0, 1, burstLen, 0, 0);
+    set_fixp_nz_para(0);
+    pipe_barrier(PIPE_ALL);
+
+    uint16_t nBurst = gShape1;
+    uint32_t lenBurstBytes = validRow * sizeof(typename TileData::DType);
+    uint32_t srcGap = (TileData::Rows - validRow) * sizeof(typename TileData::DType) / BLOCK_BYTE_SIZE;
+    uint32_t dstGap = (gStride1 - gShape2 * gShape3 * gShape4) * sizeof(typename TileData::DType);
+
+    typename GlobalData::DType* dstAddrP = dstAddr;
+    __ubuf__ typename TileData::DType* ubSrcP = ubAddr;
+
+    int64_t tileStride = TileData::Rows * gShape1 * gShape4;
+
+    for (uint32_t i = 0; i < gShape0; i++) {
+        dstAddrP = dstAddr + i * gStride0;
+        ubSrcP = ubAddr + i * tileStride;
+        pto_copy_ubuf_to_gm_align_v2(
+            reinterpret_cast<__gm__ typename GlobalData::RawDType*>(dstAddrP),
+            reinterpret_cast<__ubuf__ typename TileData::DType*>(ubSrcP), 0, nBurst, lenBurstBytes, 0,
+            srcGap * BLOCK_BYTE_SIZE, dstGap);
+    }
+}
+
+template <typename GlobalData, typename TileData, typename UbTile, AtomicType atomicType = AtomicType::AtomicNone>
+__tf__ AICORE void TStoreMat(
+    typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src,
+    typename UbTile::TileDType __in__ ubTmp, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4,
+    int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+{
+    __cbuf__ typename TileData::DType* srcAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(src);
+    __ubuf__ typename TileData::DType* ubAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(ubTmp);
+    typename GlobalData::DType* dstAddr = dst;
+
+    static_assert(
+        !TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor),
+        "TStoreMat: only support NZ fractal layout.");
+    TStoreMatViaUb<GlobalData, TileData>(
+        dstAddr, srcAddr, ubAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
+        gStride4, validRow, validCol);
+}
+
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantModeGm()
 {
@@ -199,6 +265,47 @@ PTO_INTERNAL void TStoreVecDN(
     }
 }
 
+//
+//
+//
+//
+template <typename GlobalData, typename TileData>
+__tf__ AICORE void TStoreVecNZFractalSplit(
+    typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src, int gShape0, int gShape1,
+    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int validRow, int validCol)
+{
+    __ubuf__ typename TileData::DType* srcAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(src);
+    typename GlobalData::DType* dstAddr = dst;
+
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    constexpr uint32_t srcInnerCols = TileData::InnerCols;
+    constexpr uint32_t subBlocksPerFractal = srcInnerCols / c0Size;
+    constexpr uint32_t dstRowBytes = c0Size * sizeof(typename TileData::DType);
+    constexpr uint32_t srcRowBytes = srcInnerCols * sizeof(typename TileData::DType);
+    constexpr uint32_t srcFractalElems = FRACTAL_NZ_ROW * srcInnerCols;
+
+    //
+    //
+    //
+    //
+    //
+    int mOuter = gShape2;
+    for (int k = 0; k < gShape0; k++) {
+        int srcFractal = k / static_cast<int>(subBlocksPerFractal);
+        int subBlock = k % static_cast<int>(subBlocksPerFractal);
+        for (int m = 0; m < mOuter; m++) {
+            __ubuf__ typename TileData::DType* srcP =
+                srcAddr + srcFractal * mOuter * static_cast<int>(srcFractalElems) +
+                m * static_cast<int>(srcFractalElems) + subBlock * static_cast<int>(c0Size);
+            typename GlobalData::DType* dstP = dstAddr + k * gStride0 + m * static_cast<int>(FRACTAL_NZ_ROW * c0Size);
+            TStoreInstr<TileData, GlobalData>(
+                dstP, srcP, static_cast<uint32_t>(FRACTAL_NZ_ROW), dstRowBytes, static_cast<uint64_t>(dstRowBytes),
+                srcRowBytes);
+        }
+    }
+}
+
 template <
     typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
     STPhase Phase = STPhase::Unspecified>
@@ -210,26 +317,32 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
     constexpr int dim3 = pto::GlobalTensorDim::DIM_3;
     constexpr int dim4 = pto::GlobalTensorDim::DIM_4;
     static_assert(
-        TileData::Loc == pto::TileType::Vec || TileData::Loc == pto::TileType::Acc,
-        "Source TileType only support Vec/Acc!");
+        TileData::Loc == pto::TileType::Vec || TileData::Loc == pto::TileType::Acc ||
+            TileData::Loc == pto::TileType::Mat,
+        "Source TileType only support Vec/Acc/Mat!");
     static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on Dev0000.");
-    if constexpr (TileData::Loc == pto::TileType::Acc) {
-        using L0cT = typename TileData::DType;
-        using DstT = typename GlobalData::RawDType;
-        CheckStaticAcc<TileData, GlobalData, false>();
-
-        constexpr QuantMode_t quantPre = GetCastPreQuantModeGm<L0cT, DstT>();
-        TStoreAcc<GlobalData, TileData, quantPre, ReluPreMode::NoRelu, Phase>(
-            dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
-            dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
-            dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+    if constexpr (TileData::Loc == pto::TileType::Mat) {
+        static_assert(sizeof(TileData::DType) == 0, "TSTORE(Mat2GM): use TMOV(Mat->Vec) then TSTORE(Vec2GM) instead.");
+    } else if constexpr (TileData::Loc == pto::TileType::Acc) {
+        static_assert(sizeof(TileData::DType) == 0, "TSTORE(Acc2GM): use TMOV(Acc->Vec) then TSTORE(Vec2GM) instead.");
     } else if constexpr (TileData::Loc == pto::TileType::Vec) {
         CheckStaticVec<TileData, GlobalData>();
 
-        TStore<GlobalData, TileData>(
-            dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
-            dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
-            dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+        //
+        //
+        constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+        if constexpr (
+            (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor)) && (TileData::InnerCols > c0Size)) {
+            TStoreVecNZFractalSplit<GlobalData, TileData>(
+                dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
+                dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
+                dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+        } else {
+            TStore<GlobalData, TileData>(
+                dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
+                dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
+                dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+        }
     }
 }
 
@@ -238,21 +351,7 @@ template <
     STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
-    static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
-    static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on Dev0000.");
-    using L0cT = typename TileData::DType;
-    using DstT = typename GlobalData::RawDType;
-    CheckStaticAcc<TileData, GlobalData, false>();
-    constexpr QuantMode_t quantPre = GetCastPreQuantModeGm<L0cT, DstT>();
-    constexpr int dim0 = pto::GlobalTensorDim::DIM_0;
-    constexpr int dim1 = pto::GlobalTensorDim::DIM_1;
-    constexpr int dim2 = pto::GlobalTensorDim::DIM_2;
-    constexpr int dim3 = pto::GlobalTensorDim::DIM_3;
-    constexpr int dim4 = pto::GlobalTensorDim::DIM_4;
-    TStoreAcc<GlobalData, TileData, quantPre, reluPreMode, Phase>(
-        dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
-        dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
-        dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+    static_assert(sizeof(TileData::DType) == 0, "TSTORE(Acc2GM): use TMOV(Acc->Vec) then TSTORE(Vec2GM) instead.");
 }
 
 template <
@@ -260,23 +359,7 @@ template <
     ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantScalar)
 {
-    static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
-    static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on Dev0000.");
-
-    using L0cT = typename TileData::DType;
-    using DstT = typename GlobalData::RawDType;
-    CheckStaticAcc<TileData, GlobalData, true>();
-    constexpr QuantMode_t quantPre = GetScalarPreQuantModeGm<L0cT, DstT>();
-    set_quant_pre(preQuantScalar);
-    constexpr int dim0 = pto::GlobalTensorDim::DIM_0;
-    constexpr int dim1 = pto::GlobalTensorDim::DIM_1;
-    constexpr int dim2 = pto::GlobalTensorDim::DIM_2;
-    constexpr int dim3 = pto::GlobalTensorDim::DIM_3;
-    constexpr int dim4 = pto::GlobalTensorDim::DIM_4;
-    TStoreAcc<GlobalData, TileData, quantPre, reluPreMode, Phase>(
-        dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
-        dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
-        dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+    static_assert(sizeof(TileData::DType) == 0, "TSTORE(Acc2GM): use TMOV(Acc->Vec) then TSTORE(Vec2GM) instead.");
 }
 
 template <
@@ -284,21 +367,7 @@ template <
     ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
-    static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
-    static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on Dev0000.");
-    using DstT = typename GlobalData::RawDType;
-    using L0cT = typename TileData::DType;
-    CheckStaticAcc<TileData, GlobalData, true>();
-    constexpr QuantMode_t quantPre = GetVectorPreQuantModeGm<L0cT, DstT>();
-    constexpr int dim0 = pto::GlobalTensorDim::DIM_0;
-    constexpr int dim1 = pto::GlobalTensorDim::DIM_1;
-    constexpr int dim2 = pto::GlobalTensorDim::DIM_2;
-    constexpr int dim3 = pto::GlobalTensorDim::DIM_3;
-    constexpr int dim4 = pto::GlobalTensorDim::DIM_4;
-    TStoreAccFp<GlobalData, TileData, FpTileData, quantPre, reluPreMode>(
-        dst.data(), src.data(), fp.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2),
-        dst.GetShape(dim3), dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2),
-        dst.GetStride(dim3), dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+    static_assert(sizeof(TileData::DType) == 0, "TSTORE(Acc2GM): use TMOV(Acc->Vec) then TSTORE(Vec2GM) instead.");
 }
 } // namespace pto
 #endif
