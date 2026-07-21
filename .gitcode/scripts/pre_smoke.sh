@@ -26,6 +26,7 @@ echo "bash build.sh --run_simple"
 bash build.sh --run_simple --a3 2>&1 | tee -a ./run_test.log
 source /usr/local/Ascend/cann/set_env.sh
 echo "bash build.sh --comm --a3 --npu"
+sleep 10000
 bash build.sh --comm --a3 --npu 2>&1 | tee -a ./run_test.log
 
 # Package slog
@@ -41,9 +42,9 @@ fi
 npu-smi info
 echo "4. checking test results ..."
 date_time=$(date +%Y%m%d.%H%M%S)
-  if grep -w -e "execute comm samples success" "./run_test.log" && grep -w -e "execute samples success" "./run_test.log"; then
-    echo "$date_time : run test case success"
-  else
-    echo "$date_time : run test case failed"
-    exit 1
-  fi
+if grep -w -e "execute comm samples success" "./run_test.log" && grep -w -e "execute samples success" "./run_test.log"; then
+echo "$date_time : run test case success"
+else
+echo "$date_time : run test case failed"
+exit 1
+fi
