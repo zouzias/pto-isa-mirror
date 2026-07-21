@@ -202,15 +202,15 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
             S val = src.GetElement(i, j);
             if constexpr (satMode == SaturationMode::ON) {
                 if constexpr (!is_fp4_v<S>) {
-                    double dval = to_double_value(val);
-                    double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
-                    double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
+                    volatile double dval = to_double_value(val);
+                    volatile double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
+                    volatile double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
                     dval = clamp_value(dval, min_limit, max_limit);
                     val = from_double_value<S>(dval);
                 }
             }
 
-            D result = convert_value<D, S>(val, mode);
+            volatile D result = convert_value<D, S>(val, mode);
             dst.SetElement(i, j, result);
         }
     }
