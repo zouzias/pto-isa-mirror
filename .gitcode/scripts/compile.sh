@@ -71,7 +71,7 @@ if [[ -z "${compile_package_name}" ]]; then
     exit 1
 fi
 # 防止A5包上传OBS覆盖普通包，统一改名
-mv ${compile_package_name} ${package_name}
+mv "./build_out/${compile_package_name}" "./build_out/${package_name}"
 
 echo "compile original package name is: ${compile_package_name}"
 echo "compile package name is: ${package_name}"
