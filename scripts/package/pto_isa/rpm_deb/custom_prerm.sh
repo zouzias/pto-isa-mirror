@@ -10,16 +10,12 @@
 # -----------------------------------------------------------------------------------------------------------
 #
 # Appended to the auto-generated prerm by cann-cmake gen_postinst_prerm.py for the rpm/deb package.
-# Mirror the postinst side: remove the top-level cann_uninstall.sh entry and the install-info record
-# created by custom_postinst.sh, so uninstall is clean and symmetric with the run package.
-
-sourcedir="${INSTALL_PATH}"
-PTO_PLATFORM_DIR="pto_isa"
-
-# remove the top-level uninstall entry created by custom_postinst.sh
-rm -f "${sourcedir}/cann_uninstall.sh" 2>/dev/null || true
-
-# remove the install-info record so re-install stays clean
-rm -f "${sourcedir}/share/info/${PTO_PLATFORM_DIR}/ascend_install.info" 2>/dev/null || true
+#
+# pto-isa is a header-only library: nothing pto-specific is created by custom_postinst.sh, so there is
+# nothing pto-specific to tear down here. The symlinks and the package database are cleaned up by the
+# cann-cmake-generated prerm body.
+#
+# Keep this script free of any literal percent sign: cann-cmake inlines it into the RPM preun section,
+# where RPM's spec macro processor would expand it.
 
 exit 0
