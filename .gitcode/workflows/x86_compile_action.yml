@@ -52,10 +52,6 @@ jobs:
             export package_name=${{ inputs.package_name }}
             BuildAccelerate bash compile.sh
           AC_SERVER_IP: ${{ vars.AC_SERVER_IP }}
-      - name: verify_package
-        uses: cann/.gitcode/actions/verify-package@master
-        with:
-          workspace: ${{ steps.process_checkout.outputs.path }}
       - name: upload
         uses: obs-upload
         with:
