@@ -120,7 +120,7 @@ stages:
     name: compile
     select: selected_by_default
     jobs:
-      Compile_Ascend_ARM:
+      Compile_Ascend_X86:
         name: Compile_Ascend_X86
         select: selected_by_default
         needs: []
