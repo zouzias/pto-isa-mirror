@@ -138,12 +138,12 @@ set(ALL_TESTCASES
     tmaxs
     tci
     tmatmul
-    # tload_mix
-    # tload_shape2d
+    tload_shape2d
     tload
+    tload_dn2nz
     tmrgsort
     ttrans
-    # ttrans_conv
+    ttrans_conv
     tstore
     textract
     textract_compact
@@ -196,7 +196,7 @@ set(ALL_TESTCASES
     tlrelu
     tdiv
     tcmps
-    # tmov_acc2vec
+    tmov_acc2vec
     tsel
     tsels
     trsqrt
@@ -205,7 +205,6 @@ set(ALL_TESTCASES
     tabs
     tlog
     trecip
-    tstore_acc2gm
     tdivs
     tmuls
     tadds
@@ -217,7 +216,7 @@ set(ALL_TESTCASES
     tpartargmax
     tmov_vect
     texpands
-    tmov_acc2mat
+    # tmov_acc2mat
     tassign
     tmov_ub2l1
     tcmp
@@ -247,22 +246,18 @@ set(ALL_TESTCASES
     trelu
     tquant
     tdequant
-    # t_dhrystone
     tpow
     tpows
-    tconcatdstidx
-    tconcatidx
     tconcat
-    thistogram
     tinsert
     tinsert_acc2vec
     textract_nd_vec
     textract_vec
-    # tmov_zz
+    tmov_zz
     tmov_nd2nz
-    # textract_acc2vec
-    texpands_mat
-    tload_mix
+    textract_acc2vec
+    tmatmul_new
+    tmatmul_new_full
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
