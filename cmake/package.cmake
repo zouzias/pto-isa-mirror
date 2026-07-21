@@ -25,6 +25,7 @@ function(pack_built_in)
   set(script_prefix ${CMAKE_SOURCE_DIR}/scripts/package/pto_isa/scripts)
   install(DIRECTORY ${script_prefix}/
       DESTINATION share/info/pto_isa/script
+      COMPONENT pto-isa
       FILE_PERMISSIONS
       OWNER_READ OWNER_WRITE OWNER_EXECUTE  # 文件权限
       GROUP_READ GROUP_EXECUTE
@@ -47,6 +48,7 @@ function(pack_built_in)
 
   install(FILES ${SCRIPTS_FILES}
       DESTINATION share/info/pto_isa/script
+      COMPONENT pto-isa
   )
   set(COMMON_FILES
       ${CANN_CMAKE_DIR}/scripts/install/install_common_parser.sh
@@ -60,23 +62,20 @@ function(pack_built_in)
       ${COMMON_FILES}
       ${CANN_CMAKE_DIR}/scripts/install/multi_version.inc
   )
-  set(CONF_FILES
-      ${CANN_CMAKE_DIR}/scripts/package/cfg/path.cfg
-  )
   install(FILES ${CMAKE_BINARY_DIR}/version.pto-isa.info
       DESTINATION share/info/pto_isa
       RENAME version.info
-  )
-  install(FILES ${CONF_FILES}
-      DESTINATION ${CMAKE_SYSTEM_PROCESSOR}-linux/conf
+      COMPONENT pto-isa
   )
   install(FILES ${PACKAGE_FILES}
       DESTINATION share/info/pto_isa/script
+      COMPONENT pto-isa
   )
 
   set(pto_source ${CMAKE_SOURCE_DIR}/include)
   install(DIRECTORY ${pto_source}/
       DESTINATION ${CMAKE_SYSTEM_PROCESSOR}-linux/include
+      COMPONENT pto-isa
       FILE_PERMISSIONS
       OWNER_READ OWNER_WRITE
       GROUP_READ GROUP_EXECUTE
@@ -99,9 +98,9 @@ function(pack_built_in)
   message(STATUS "current compute_unit is: ${compute_unit}")
 
   set_cann_cpack_config(pto-isa
-      NO_COMPONENT_INSTALL
       COMPUTE_UNIT "${compute_unit}"
       SHARE_INFO_NAME pto_isa
       OUTPUT "${CMAKE_SOURCE_DIR}/build_out"
+      PACKAGE_TYPE "${PACKAGE_TYPE}"
   )
 endfunction()
