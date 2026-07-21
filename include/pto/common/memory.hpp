@@ -43,10 +43,18 @@ struct MemoryQualifier<TileType::Mat, DType> {
 
 template <typename DType>
 struct MemoryQualifier<TileType::Left, DType> {
+#if defined(PTO_NPU_ARCH_KIRINDEV0000)
+#ifdef __PTO_AUTO__
+    using type = __cbuf__ DType;
+#else
+    using type = __cbuf__ DType*;
+#endif
+#else
 #ifdef __PTO_AUTO__
     using type = __ca__ DType;
 #else
     using type = __ca__ DType*;
+#endif
 #endif
 };
 
@@ -61,10 +69,18 @@ struct MemoryQualifier<TileType::Right, DType> {
 
 template <typename DType>
 struct MemoryQualifier<TileType::Acc, DType> {
+#if defined(PTO_NPU_ARCH_KIRINDEV0000)
+#ifdef __PTO_AUTO__
+    using type = __cbuf__ DType;
+#else
+    using type = __cbuf__ DType*;
+#endif
+#else
 #ifdef __PTO_AUTO__
     using type = __cc__ DType;
 #else
     using type = __cc__ DType*;
+#endif
 #endif
 };
 
