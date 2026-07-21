@@ -10,12 +10,16 @@
 # -----------------------------------------------------------------------------------------------------------
 #
 # Appended to the auto-generated prerm by cann-cmake gen_postinst_prerm.py for the rpm/deb package.
-# pto-isa is a header-only library: nothing to tear down beyond the install-info record.
+# Mirror the postinst side: remove the top-level cann_uninstall.sh entry and the install-info record
+# created by custom_postinst.sh, so uninstall is clean and symmetric with the run package.
 
 sourcedir="${INSTALL_PATH}"
 PTO_PLATFORM_DIR="pto_isa"
-INFO_FILE="${sourcedir}/share/info/${PTO_PLATFORM_DIR}/ascend_install.info"
 
-rm -f "${INFO_FILE}" 2>/dev/null || true
+# remove the top-level uninstall entry created by custom_postinst.sh
+rm -f "${sourcedir}/cann_uninstall.sh" 2>/dev/null || true
+
+# remove the install-info record so re-install stays clean
+rm -f "${sourcedir}/share/info/${PTO_PLATFORM_DIR}/ascend_install.info" 2>/dev/null || true
 
 exit 0

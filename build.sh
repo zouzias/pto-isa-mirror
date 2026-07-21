@@ -34,7 +34,7 @@ usage() {
   echo ""
   echo "    -h, --help  Print usage"
   echo "    --pkg Build package (type controlled by --pkg-type, default run)"
-  echo "    --pkg-type=<TYPE>  Specify package type (TYPE option: run/rpm/deb), Default: run"
+  echo "    --pkg-type=<TYPE>  Specify package type (TYPE option: run/rpm/deb/all), Default: run"
   echo "    --run_all run all st on sim"
   echo "    --run_simple run some st on board"
   echo "    --cpu_bf16 Enable BF16 CPU-SIM STs with a C++23 std::bfloat16_t toolchain"
@@ -45,7 +45,7 @@ usage() {
 # usage: check_pkg_type pkg-type
 check_pkg_type() {
   arg_value="$1"
-  if [ "X$arg_value" != "Xrun" ] && [ "X$arg_value" != "Xrpm" ] && [ "X$arg_value" != "Xdeb" ]; then
+  if [ "X$arg_value" != "Xrun" ] && [ "X$arg_value" != "Xrpm" ] && [ "X$arg_value" != "Xdeb" ] && [ "X$arg_value" != "Xall" ]; then
     echo "Invalid value $arg_value for option --$2"
     usage
     exit 1
