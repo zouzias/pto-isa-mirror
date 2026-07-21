@@ -157,40 +157,40 @@ stages:
           package_name: 'cann-pto-isa_linux-aarch64-A5.run'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM_A5 }}
       CodeCheck_action:
-        name: codecheck_action
+        name: CodeCheck_action
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/codecheck_action.yml
       StaticCheck_markdown:
-        name: staticcheck_markdown
+        name: StaticCheck_markdown
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'markdown'
       StaticCheck_codespell_check:
-        name: staticcheck_codespell_check
+        name: StaticCheck_codespell_check
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'codespell_check'
       StaticCheck_tag_closed_check:
-        name: staticcheck_tag_closed_check
+        name: StaticCheck_tag_closed_check
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'tag_closed_check'
       StaticCheck_resource_existence_check:
-        name: staticcheck_resource_existence_check
+        name: StaticCheck_resource_existence_check
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
           check_type: 'resource_existence_check'
       StaticCheck_link_validity_check:
-        name: staticcheck_link_validity_check
+        name: StaticCheck_link_validity_check
         select: selected_by_default
         needs: []
         uses: .gitcode/workflows/staticcheck_action.yml
