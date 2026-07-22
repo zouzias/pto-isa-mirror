@@ -10,8 +10,9 @@
 // 强断言(cycle 是占位常数不与真机对齐,只验结构):
 //   - vf_infos 恰好 1 个 VfInfo;树顶层 1 个 LOOP、嵌套深度 1(1D NoPostUpdate 路径)。
 //   - loop count = ceil(640 / 64) = 10(ElementsPerRepeat = CCE_VL/sizeof(float) = 256/4 = 64)。
-//   - 典范 body(均匀循环各轮同构)= [plt_b32, vlds, vlds, vadd, vsts]。
-//   - cycles == count × ΣVecCycle(body):验证 loop 倍率正确乘进叶子(不硬编码占位常数)。
+//   - 典范 body(均匀循环各轮同构)= [vlds, vlds, vadd, vsts]。
+//   - plt_b32 是 predicate 设置，不记为 micro-op。
+//   - vlds/vadd/vsts 的 dst/src 名称、location 和 dtype 被 mock 完整捕获。
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include "pto/costmodel/trace.hpp"
@@ -24,14 +25,6 @@
 
 namespace vf = ::pto::mocker::vf;
 using namespace pto;
-
-// 单轮 body 叶子的 VecCycle 之和(用占位表自身求和,与 PredictVfCycles 同源 → 只验「倍率×遍历」)。
-static uint64_t SumVecCycle(const std::vector<std::string> &leaves)
-{
-    uint64_t s = 0;
-    for (const std::string &n : leaves) s += vf::VecCycle(n);
-    return s;
-}
 
 int main()
 {
@@ -51,9 +44,9 @@ int main()
     const auto &pto_rec = trace.executed_pto.back();
     const std::size_t nvf = pto_rec.vf_infos.size();
 
-    // TADD 1×640 f32:EPR=256/4=64 → repeat=ceil(640/64)=10;每轮 plt_b32+vlds+vlds+vadd+vsts。
+    // TADD 1×640 f32:EPR=256/4=64 → repeat=ceil(640/64)=10;每轮 vlds+vlds+vadd+vsts。
     constexpr uint64_t kExpectedRepeat = 10;
-    const std::vector<std::string> kExpectedBody = {"plt_b32", "vlds", "vlds", "vadd", "vsts"};
+    const std::vector<std::string> kExpectedBody = {"vlds", "vlds", "vadd", "vsts"};
 
     int fails = 0;
     auto check = [&](bool cond, const char *msg) {
@@ -72,9 +65,27 @@ int main()
             const vf::VfLoop &lp = vf::AsLoop(info.tree[0]);
             check(lp.count == kExpectedRepeat, "loop count == 10(1x640 f32 / EPR 64)");
             const std::vector<std::string> body = vf::FlattenLeafInstrs(lp.body);
-            check(body == kExpectedBody, "典范 body == [plt_b32,vlds,vlds,vadd,vsts]");
-            // cycles 必须等于 loop 倍率 × 单轮 body 之和(验倍率正确乘进叶子,不依赖占位数值)。
-            check(cycles == lp.count * SumVecCycle(body), "cycles == count * ΣVecCycle(body)");
+            check(body == kExpectedBody, "典范 body == [vlds,vlds,vadd,vsts]");
+            check(lp.body.size() == 4, "body 节点数 == 4");
+            if (lp.body.size() == 4) {
+                const vf::VfInst &load0 = vf::AsInst(lp.body[0]);
+                const vf::VfInst &load1 = vf::AsInst(lp.body[1]);
+                const vf::VfInst &add = vf::AsInst(lp.body[2]);
+                const vf::VfInst &store = vf::AsInst(lp.body[3]);
+                check(load0.dst.size() == 1 && load0.src.size() == 1 &&
+                          load0.dst[0].location == vf::MemLocation::PhyRegister &&
+                          load0.src[0].location == vf::MemLocation::UB && load0.dst[0].dtype == "fp32" &&
+                          load0.src[0].dtype == "fp32",
+                      "vlds 捕获 PhyRegister dst + UB src + fp32 dtype");
+                check(add.dst.size() == 1 && add.src.size() >= 2 && load0.dst.size() == 1 && load1.dst.size() == 1 &&
+                          add.src[0].name == load0.dst[0].name && add.src[1].name == load1.dst[0].name,
+                      "vadd src 名称延续两条 vlds dst 依赖");
+                check(store.dst.size() == 1 && store.src.size() == 1 && add.dst.size() == 1 &&
+                          store.dst[0].location == vf::MemLocation::UB &&
+                          store.src[0].name == add.dst[0].name,
+                      "vsts 捕获 UB dst 且 src 延续 vadd dst 依赖");
+            }
+            check(cycles > 0, "全部 micro-op 受支持时 VfSim 返回正 cycle");
         }
     }
 

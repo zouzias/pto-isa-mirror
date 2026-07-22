@@ -3,6 +3,7 @@
 // 占位常量阶段(vec_cycle_generated.hpp)数值不对齐 formula;Phase 3b NNLS 标定后换真值。
 #pragma once
 
+#include "pto/costmodel/a5/VfSim/VfSimCostModel.h"
 #include "vec_cycle_generated.hpp"
 #include "vf_info.hpp"
 
@@ -24,7 +25,7 @@ inline void WalkNodes(const std::vector<VfNode> &nodes, uint64_t mul, uint64_t &
             const VfLoop &lp = AsLoop(n);
             WalkNodes(lp.body, mul * lp.count, total);  // 进循环体,乘上本层 count
         } else if (IsInst(n)) {
-            total += VecCycle(AsInst(n).name) * mul;
+            total += VecCycle(AsInst(n).opName) * mul;
         } else {  // MEMBAR
             total += kMemBarPenaltyPlaceholder * mul;
         }
@@ -36,17 +37,13 @@ inline void WalkNodes(const std::vector<VfNode> &nodes, uint64_t mul, uint64_t &
 // 树遍历总 cycle(占位常量;3b 标定后变真值)。
 inline uint64_t PredictVfCycles(const VfInfo &vf)
 {
-    uint64_t total = 0;
-    detail::WalkNodes(vf.tree, 1, total);
-    return total;
+    return PredictVfCyclesWithVfSim(std::vector<VfInfo>{vf});
 }
 
 // 一个 PTO-ISA 指令内多个 VF 的结算。占位实现 = 各 VF cycle 之和(真实建模应考虑跨 VF overlap)。
 inline uint64_t PredictVfCycles(const std::vector<VfInfo> &vfs)
 {
-    uint64_t total = 0;
-    for (const VfInfo &vf : vfs) total += PredictVfCycles(vf);
-    return total;
+    return PredictVfCyclesWithVfSim(vfs);
 }
 
 // ── 供单测/报告用的辅助 ──
@@ -72,7 +69,7 @@ inline std::vector<std::string> FlattenLeafInstrs(const std::vector<VfNode> &nod
             auto sub = FlattenLeafInstrs(AsLoop(n).body);
             out.insert(out.end(), sub.begin(), sub.end());
         } else if (IsInst(n)) {
-            out.push_back(AsInst(n).name);
+            out.push_back(AsInst(n).opName);
         }
     }
     return out;

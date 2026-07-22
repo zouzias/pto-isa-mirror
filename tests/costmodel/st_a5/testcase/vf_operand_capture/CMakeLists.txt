@@ -1,0 +1,5 @@
+get_filename_component(_repo_inc "${CMAKE_SOURCE_DIR}/../../../include" ABSOLUTE)
+add_executable(vf_operand_capture main.cpp)
+target_include_directories(vf_operand_capture PRIVATE ${_repo_inc})
+target_link_libraries(vf_operand_capture PRIVATE pto_a5_vfsim)
+add_test(NAME vf_operand_capture COMMAND vf_operand_capture)

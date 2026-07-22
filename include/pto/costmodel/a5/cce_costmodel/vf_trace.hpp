@@ -2,7 +2,7 @@
 // 配合 PtoLoopTracePass(给 for 插桩)使用:pass 插 __pto_trace_loop_{enter,iter,exit},
 // VF body 走 a5_vf_stub.hpp::capture::rec() 追加 Op 事件。本头维护 thread-local 事件流,
 // BuildVfInfo() 把它折叠成 VfInfo 嵌套树(纯函数,可喂合成事件流单测)。
-// 生命周期:VfInfo 各 name/op/dtype/shape 持 owning std::string(见 vf_info.hpp),折叠时从
+// 生命周期:VfInfo/VfInst/MemInfo 中的字符串持 owning std::string(见 vf_info.hpp),折叠时从
 //    Events() 拷出。故 ~ScopeSentinel 内 Reset() 清空 Events() 后,VfInfo 仍可安全活到
 //    EndPtoInstr→PredictVfCycles 消费,无悬空引用。
 #pragma once
@@ -30,6 +30,7 @@ struct Event {
     EvKind kind;
     uint64_t loopId = 0;    // loop 事件的 loopId(Op/MemBar 不用)
     std::string opName;     // Op/MemBar 的微指令名(loop 事件为空)
+    VfInst inst;            // Op 的完整 operand 信息
 };
 
 inline std::vector<Event> &Events() {
@@ -44,8 +45,11 @@ inline bool &Armed() {
 inline void Reset() { Events().clear(); }
 inline void Arm(bool v) { Armed() = v; }
 
+inline void RecordOp(VfInst inst) {
+    if (Armed()) Events().push_back({EvKind::Op, 0, inst.opName, std::move(inst)});
+}
 inline void RecordOp(std::string name) {
-    if (Armed()) Events().push_back({EvKind::Op, 0, std::move(name)});
+    RecordOp(VfInst{std::move(name), {}, {}});
 }
 inline void RecordMemBar(std::string name) {
     if (Armed()) Events().push_back({EvKind::MemBar, 0, std::move(name)});
@@ -93,7 +97,7 @@ inline bool NodesEqual(const std::vector<VfNode> &a, const std::vector<VfNode> &
 inline bool NodeEqual(const VfNode &a, const VfNode &b) {
     if (a.kind != b.kind) return false;
     switch (a.kind) {
-        case VfNodeKind::INST:  return AsInst(a).name == AsInst(b).name;
+        case VfNodeKind::INST:  return AsInst(a) == AsInst(b);
         case VfNodeKind::MEMBAR: return AsMemBar(a).name == AsMemBar(b).name;
         case VfNodeKind::LOOP: {
             const VfLoop &la = AsLoop(a), &lb = AsLoop(b);
@@ -131,7 +135,7 @@ struct Parser {
                 return nodes;
             }
             if (e.kind == EvKind::Op) {
-                nodes.push_back(MakeInst(e.opName));
+                nodes.push_back(MakeInst(e.inst));
                 ++i;
             } else if (e.kind == EvKind::MemBar) {
                 nodes.push_back(MakeMemBar(e.opName));
@@ -198,7 +202,7 @@ struct BuildResult {
 };
 
 // 把当前事件流折叠成 VfInfo。失败(非均匀循环/非法流)→ ok=false + err,不兜底。
-inline BuildResult BuildVfInfo(std::string_view op, std::string_view dtype, std::string_view shape) {
+inline BuildResult BuildVfInfo(std::string_view op, std::string_view shape) {
     BuildResult r;
     detail::Parser p(Events());
     std::vector<VfNode> tree = p.parseBody(detail::kNoEnclosing);
@@ -210,7 +214,6 @@ inline BuildResult BuildVfInfo(std::string_view op, std::string_view dtype, std:
     }
     r.ok = true;
     r.info.op = op;
-    r.info.dtype = dtype;
     r.info.shape = shape;
     r.info.tree = std::move(tree);
     return r;
@@ -225,7 +228,7 @@ inline void FormatNodes(const std::vector<VfNode> &nodes, int depth, std::string
             out += ind + "loop{n=" + std::to_string(lp.count) + "}\n";
             FormatNodes(lp.body, depth + 1, out);
         } else if (IsInst(n)) {
-            out += ind + "op(" + AsInst(n).name + ")\n";
+            out += ind + "op(" + AsInst(n).opName + ")\n";
         } else {
             out += ind + "membar(" + AsMemBar(n).name + ")\n";
         }

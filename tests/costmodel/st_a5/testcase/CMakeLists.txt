@@ -1,2 +1,4 @@
 add_subdirectory(tadd)
 add_subdirectory(multi_vf)
+add_subdirectory(vfsim_dispatch)
+add_subdirectory(vf_operand_capture)

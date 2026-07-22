@@ -307,11 +307,22 @@ public:
 
     ~PtoInstrScope()
     {
-        EndPtoInstr();
+        Finish();
+    }
+
+    void Finish()
+    {
+        if (!finished_) {
+            EndPtoInstr();
+            finished_ = true;
+        }
     }
 
     PtoInstrScope(const PtoInstrScope &) = delete;
     PtoInstrScope &operator=(const PtoInstrScope &) = delete;
+
+private:
+    bool finished_ = false;
 };
 
 } // namespace pto::mocker

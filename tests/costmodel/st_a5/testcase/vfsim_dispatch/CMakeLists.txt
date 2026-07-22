@@ -1,0 +1,5 @@
+get_filename_component(_repo_inc "${CMAKE_SOURCE_DIR}/../../../include" ABSOLUTE)
+add_executable(vfsim_dispatch main.cpp)
+target_include_directories(vfsim_dispatch PRIVATE ${_repo_inc})
+target_link_libraries(vfsim_dispatch PRIVATE pto_a5_vfsim)
+add_test(NAME vfsim_dispatch COMMAND vfsim_dispatch)

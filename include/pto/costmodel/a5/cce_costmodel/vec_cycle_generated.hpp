@@ -9,6 +9,7 @@
 namespace pto::mocker::vf {
 
 inline constexpr uint64_t kMemBarPenaltyPlaceholder = 20;  // membar 固定惩罚(占位;3b 重新标定)
+inline constexpr uint64_t kUnknownInstructionFallbackCycles = 5;
 
 inline uint64_t VecCycle(std::string_view name)
 {
@@ -39,7 +40,14 @@ inline uint64_t VecCycle(std::string_view name)
     if (name == "pipe_barrier") {
         return kMemBarPenaltyPlaceholder;
     }
-    return 5;  // 兜底(未列名):中等
+    return kUnknownInstructionFallbackCycles;
+}
+
+// Unsupported VfSim programs use the A2/A3-style repeat-times * per-op-cycle
+// calculation. Keep the unknown-op value explicit so it is visible to callers.
+inline uint64_t FallbackVecCycle(std::string_view name)
+{
+    return VecCycle(name);
 }
 
 }  // namespace pto::mocker::vf

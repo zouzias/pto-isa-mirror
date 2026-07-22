@@ -15,7 +15,13 @@ See LICENSE in the full text of the License in the software repository.
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
+#include <tuple>
+#include <type_traits>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <pto/common/type.hpp>
@@ -38,6 +44,11 @@ struct vector_u64 {};
 struct vector_bool {};
 struct vector_address {};
 struct vector_align {};
+
+namespace pto {
+template <typename T>
+struct RegTensor;
+}
 
 // 2) 地址/作用域宏,guarded 防与真实头/type.hpp 冲突。
 #ifndef __ubuf__
@@ -96,20 +107,27 @@ struct vector_align {};
 #ifndef __VEC_SCOPE__
 extern "C" __attribute__((used)) void __pto_vf_scope_enter();
 extern "C" __attribute__((used)) void __pto_vf_scope_exit();
+namespace pto::mocker::vf::capture {
+void ResetOperands();
+}
 namespace pto::mocker::vf {
 struct ScopeSentinel {
     ScopeSentinel() {
         __pto_vf_scope_enter();
         trace::Arm(true);
+        capture::ResetOperands();
     }
     ~ScopeSentinel() {
         __pto_vf_scope_exit();
         trace::Arm(false);
         // 本 VF(__VEC_SCOPE__)结束:事件流折叠成一个 VfInfo,push 进当前 PTO 的 vf_infos。
         // 一个 PTO 可含多个 __VEC_SCOPE__(如 2D_PostUpdate=FullRepeats+Tail),各自折叠攒着。
-        trace::BuildResult br = trace::BuildVfInfo("", "", "");
+        auto &ts = ::pto::mocker::g_trace_state;
+        const std::string_view op = ts.active_pto_stack.empty()
+                                        ? std::string_view{}
+                                        : ts.executed_pto[ts.active_pto_stack.back()].name;
+        trace::BuildResult br = trace::BuildVfInfo(op, "");
         if (br.ok) {
-            auto &ts = ::pto::mocker::g_trace_state;
             if (!ts.active_pto_stack.empty())
                 ts.executed_pto[ts.active_pto_stack.back()].vf_infos.push_back(std::move(br.info));
         }
@@ -156,6 +174,10 @@ inline constexpr uint32_t CeilDivision(T a, U b)
 namespace pto::mocker::vf::capture {
 struct Ctx {
     std::vector<std::string> seq;
+    std::unordered_map<uintptr_t, std::string> registers;
+    std::unordered_map<uintptr_t, std::string> ubAddresses;
+    uint64_t nextRegister = 0;
+    uint64_t nextUbAddress = 0;
     bool on = false;
 };
 inline Ctx &cur()
@@ -163,14 +185,27 @@ inline Ctx &cur()
     thread_local Ctx c;
     return c;
 }
-inline void rec(const char *name)
+inline void ResetOperands()
+{
+    Ctx &c = cur();
+    c.registers.clear();
+    c.ubAddresses.clear();
+    c.nextRegister = 0;
+    c.nextUbAddress = 0;
+}
+
+inline void rec(VfInst inst)
 {
     Ctx &c = cur();
     if (c.on) {
-        c.seq.emplace_back(name);
+        c.seq.emplace_back(inst.opName);
     }
     // op 事件挂到 vf_trace 事件流(由 Arm() 门控),与 pass 的 loop 事件交织 → BuildVfInfo 建树。
-    ::pto::mocker::vf::trace::RecordOp(name);
+    ::pto::mocker::vf::trace::RecordOp(std::move(inst));
+}
+inline void rec(const char *name)
+{
+    rec(VfInst{std::string{name}, {}, {}});
 }
 inline void clear()
 {
@@ -185,14 +220,119 @@ inline void stop()
 {
     cur().on = false;
 }
+
+template <typename T>
+struct RegTensorTraits {
+    static constexpr bool value = false;
+};
+
+template <typename T>
+struct RegTensorTraits<::pto::RegTensor<T>> {
+    static constexpr bool value = true;
+    using DType = T;
+};
+
+template <typename T>
+inline std::string DTypeName()
+{
+    using U = std::remove_cv_t<T>;
+    if constexpr (std::is_same_v<U, float> || std::is_same_v<U, vector_f32>) return "fp32";
+    if constexpr (std::is_same_v<U, half> || std::is_same_v<U, vector_f16>) return "fp16";
+    if constexpr (std::is_same_v<U, bfloat16_t>) return "bf16";
+    if constexpr (std::is_same_v<U, int8_t> || std::is_same_v<U, vector_s8>) return "int8";
+    if constexpr (std::is_same_v<U, uint8_t> || std::is_same_v<U, vector_u8>) return "uint8";
+    if constexpr (std::is_same_v<U, int16_t> || std::is_same_v<U, vector_s16>) return "int16";
+    if constexpr (std::is_same_v<U, uint16_t> || std::is_same_v<U, vector_u16>) return "uint16";
+    if constexpr (std::is_same_v<U, int32_t> || std::is_same_v<U, vector_s32>) return "int32";
+    if constexpr (std::is_same_v<U, uint32_t> || std::is_same_v<U, vector_u32>) return "uint32";
+    if constexpr (std::is_same_v<U, vector_bool>) return "bool";
+    return "unknown";
+}
+
+inline std::string NameFor(std::unordered_map<uintptr_t, std::string> &names, uintptr_t key,
+                           uint64_t &next, const char *prefix)
+{
+    const auto [it, inserted] = names.try_emplace(key);
+    if (inserted) it->second = std::string(prefix) + std::to_string(next++);
+    return it->second;
+}
+
+template <typename T>
+inline std::optional<MemInfo> Operand(T &&value)
+{
+    using U = std::remove_cv_t<std::remove_reference_t<T>>;
+    Ctx &c = cur();
+    if constexpr (RegTensorTraits<U>::value) {
+        using DType = typename RegTensorTraits<U>::DType;
+        const auto key = reinterpret_cast<uintptr_t>(std::addressof(value));
+        return MemInfo{NameFor(c.registers, key, c.nextRegister, "V"), MemLocation::PhyRegister,
+                       DTypeName<DType>()};
+    } else if constexpr (std::is_pointer_v<U>) {
+        using DType = std::remove_cv_t<std::remove_pointer_t<U>>;
+        const auto key = reinterpret_cast<uintptr_t>(value);
+        return MemInfo{NameFor(c.ubAddresses, key, c.nextUbAddress, "mem"), MemLocation::UB,
+                       DTypeName<DType>()};
+    } else if constexpr (std::is_same_v<U, vector_f32> || std::is_same_v<U, vector_f16> ||
+                         std::is_same_v<U, vector_s8> || std::is_same_v<U, vector_u8> ||
+                         std::is_same_v<U, vector_s16> || std::is_same_v<U, vector_u16> ||
+                         std::is_same_v<U, vector_s32> || std::is_same_v<U, vector_u32>) {
+        const auto key = reinterpret_cast<uintptr_t>(std::addressof(value));
+        return MemInfo{NameFor(c.registers, key, c.nextRegister, "V"), MemLocation::PhyRegister, DTypeName<U>()};
+    }
+    return std::nullopt;
+}
+
+template <typename... A>
+inline void RecordCompute(const char *name, A &&...args)
+{
+    VfInst inst{std::string{name}, {}, {}};
+    auto operands = std::forward_as_tuple(std::forward<A>(args)...);
+    if constexpr (sizeof...(A) > 0) {
+        if (auto dst = Operand(std::get<0>(operands))) inst.dst.push_back(std::move(*dst));
+    }
+    [&]<std::size_t... I>(std::index_sequence<I...>) {
+        ([&] {
+            if (auto src = Operand(std::get<I + 1>(operands))) inst.src.push_back(std::move(*src));
+        }(), ...);
+    }(std::make_index_sequence<(sizeof...(A) > 0 ? sizeof...(A) - 1 : 0)>{});
+    rec(std::move(inst));
+}
+
+template <typename... A>
+inline void RecordLoad(const char *name, A &&...args)
+{
+    VfInst inst{std::string{name}, {}, {}};
+    auto operands = std::forward_as_tuple(std::forward<A>(args)...);
+    if constexpr (sizeof...(A) > 0) {
+        if (auto dst = Operand(std::get<0>(operands))) inst.dst.push_back(std::move(*dst));
+    }
+    if constexpr (sizeof...(A) > 1) {
+        if (auto src = Operand(std::get<1>(operands))) inst.src.push_back(std::move(*src));
+    }
+    rec(std::move(inst));
+}
+
+template <typename... A>
+inline void RecordStore(const char *name, A &&...args)
+{
+    VfInst inst{std::string{name}, {}, {}};
+    auto operands = std::forward_as_tuple(std::forward<A>(args)...);
+    if constexpr (sizeof...(A) > 0) {
+        if (auto src = Operand(std::get<0>(operands))) inst.src.push_back(std::move(*src));
+    }
+    if constexpr (sizeof...(A) > 1) {
+        if (auto dst = Operand(std::get<1>(operands))) inst.dst.push_back(std::move(*dst));
+    }
+    rec(std::move(inst));
+}
 }  // namespace pto::mocker::vf::capture
 
 // 5) 变参记录型 intrinsic 桩(全局命名空间,匹配 CCE 内建查找)。VOID 返回 void,MASK 返回 vector_bool。
-//    签名无关:任何实参绑定,只记名字。slice 仅用 vlds/vsts/vadd/plt_b*/PSetWithType,余为泛化预留。
+//    slice 仅用 vlds/vsts/vadd/plt_b*/PSetWithType；plt_b* 只生成 predicate，不记 micro-op。
 #define PTO_VF_RECORD_VOID(NAME)                                  \
-    template <class... A> inline void NAME(A &&...)               \
+    template <class... A> inline void NAME(A &&...args)           \
     {                                                             \
-        ::pto::mocker::vf::capture::rec(#NAME);                   \
+        ::pto::mocker::vf::capture::RecordCompute(#NAME, std::forward<A>(args)...); \
     }
 #define PTO_VF_RECORD_MASK(NAME)                                  \
     template <class... A> inline ::vector_bool NAME(A &&...)      \
@@ -201,8 +341,14 @@ inline void stop()
         return ::vector_bool{};                                   \
     }
 
-PTO_VF_RECORD_VOID(vlds)
-PTO_VF_RECORD_VOID(vsts)
+template <class... A> inline void vlds(A &&...args)
+{
+    ::pto::mocker::vf::capture::RecordLoad("vlds", std::forward<A>(args)...);
+}
+template <class... A> inline void vsts(A &&...args)
+{
+    ::pto::mocker::vf::capture::RecordStore("vsts", std::forward<A>(args)...);
+}
 PTO_VF_RECORD_VOID(vdup)
 PTO_VF_RECORD_VOID(vadd)
 PTO_VF_RECORD_VOID(vsub)
@@ -250,9 +396,19 @@ PTO_VF_RECORD_VOID(vcmps_ne)
 PTO_VF_RECORD_VOID(pand)
 PTO_VF_RECORD_VOID(por)
 PTO_VF_RECORD_VOID(pnot)
-PTO_VF_RECORD_MASK(plt_b8)
-PTO_VF_RECORD_MASK(plt_b16)
-PTO_VF_RECORD_MASK(plt_b32)
+// plt_b* 只设置 predicate，不是 VF micro-op，不进入 VfInfo。
+template <class... A> inline ::vector_bool plt_b8(A &&...)
+{
+    return ::vector_bool{};
+}
+template <class... A> inline ::vector_bool plt_b16(A &&...)
+{
+    return ::vector_bool{};
+}
+template <class... A> inline ::vector_bool plt_b32(A &&...)
+{
+    return ::vector_bool{};
+}
 // pset_b*:PSetWithType<T>(utils.hpp)内部调用,桩这几个即可;PSetWithType 本身复用真实定义。
 PTO_VF_RECORD_MASK(pset_b8)
 PTO_VF_RECORD_MASK(pset_b16)

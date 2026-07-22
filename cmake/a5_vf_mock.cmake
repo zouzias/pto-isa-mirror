@@ -6,21 +6,46 @@
 # 缓存本文件目录:macro/function 执行时 CMAKE_CURRENT_LIST_DIR 会变成调用者目录(不指向本文件),
 # 导致 _pass_src 拼错。在文件作用域(include 时)固化。
 set(_pto_a5_self_dir "${CMAKE_CURRENT_LIST_DIR}")
+set(_pto_a5_repo_dir "${CMAKE_CURRENT_LIST_DIR}/..")
 
-# 探测 LLVM + 配对 clang(只做一次)。
-# 注:guard 用 if(NOT DEFINED)/if(NOT TARGET) 包裹而非 return()——macro 里的 return() 会退出
-# 调用它的 function(target_enable_a5_vf_mock),导致后续 add_library/-fpass-plugin 全跳过。
+function(_pto_a5_build_vfsim)
+    if(TARGET pto_a5_vfsim)
+        return()
+    endif()
+    set(_vfsim_dir "${_pto_a5_repo_dir}/include/pto/costmodel/a5/VfSim")
+    add_library(pto_a5_vfsim STATIC
+        ${_vfsim_dir}/VfInfo.cpp
+        ${_vfsim_dir}/JsonVfInfoAdapter.cpp
+        ${_vfsim_dir}/Json.cpp
+        ${_vfsim_dir}/ParamDB.cpp
+        ${_vfsim_dir}/ISATraits.cpp
+        ${_vfsim_dir}/ProgramAnalysis.cpp
+        ${_vfsim_dir}/ProgramCanonicalization.cpp
+        ${_vfsim_dir}/ProgramFlatten.cpp
+        ${_vfsim_dir}/IFU.cpp
+        ${_vfsim_dir}/IDU.cpp
+        ${_vfsim_dir}/OOO.cpp
+        ${_vfsim_dir}/SimulatorRunner.cpp
+        ${_vfsim_dir}/VfSimCostModel.cpp)
+    target_include_directories(pto_a5_vfsim PUBLIC "${_pto_a5_repo_dir}/include")
+    target_compile_features(pto_a5_vfsim PUBLIC cxx_std_20)
+    target_compile_definitions(pto_a5_vfsim PRIVATE PTO_VFSIM_SOURCE_ROOT="${_vfsim_dir}")
+endfunction()
+
+# 探测 LLVM + 配对 clang。llvm-config 路径可缓存，但 version/bindir/cxxflags 必须
+# 每次 configure 重新查询，因为它们不是 cache 变量。
 macro(_pto_a5_find_llvm)
-    if(NOT DEFINED PTO_A5_LLVM_CONFIG)
-    if(DEFINED ENV{LLVM_CONFIG} AND EXISTS "$ENV{LLVM_CONFIG}")
-        set(PTO_A5_LLVM_CONFIG "$ENV{LLVM_CONFIG}")
-    else()
-        file(GLOB _pto_a5_bindirs /usr/lib/llvm-*/bin
-             /usr/local/opt/llvm@*/bin /usr/local/opt/llvm/bin)
-        find_program(PTO_A5_LLVM_CONFIG
-            NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18
-                  llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14
-            PATHS ${_pto_a5_bindirs} /usr/local/bin /usr/bin)
+    if(NOT PTO_A5_LLVM_CONFIG)
+        if(DEFINED ENV{LLVM_CONFIG} AND EXISTS "$ENV{LLVM_CONFIG}")
+            set(PTO_A5_LLVM_CONFIG "$ENV{LLVM_CONFIG}")
+        else()
+            file(GLOB _pto_a5_bindirs /usr/lib/llvm-*/bin
+                 /usr/local/opt/llvm@*/bin /usr/local/opt/llvm/bin)
+            find_program(PTO_A5_LLVM_CONFIG
+                NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18
+                      llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14
+                PATHS ${_pto_a5_bindirs} /usr/local/bin /usr/bin)
+        endif()
     endif()
     if(NOT PTO_A5_LLVM_CONFIG)
         message(FATAL_ERROR "a5_vf_mock: llvm-config 未找到。Mac: brew install llvm@18; "
@@ -31,14 +56,21 @@ macro(_pto_a5_find_llvm)
     execute_process(COMMAND ${PTO_A5_LLVM_CONFIG} --bindir
         OUTPUT_VARIABLE PTO_A5_LLVM_BINDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
     string(REGEX MATCH "^([0-9]+)" PTO_A5_LLVM_MAJOR "${PTO_A5_LLVM_VERSION}")
-    find_program(PTO_A5_CLANGXX NAMES clang++-${PTO_A5_LLVM_MAJOR} clang++
-        PATHS ${PTO_A5_LLVM_BINDIR} /usr/bin /usr/local/bin NO_DEFAULT_PATH)
-    find_program(PTO_A5_CLANGXX NAMES clang++-${PTO_A5_LLVM_MAJOR} clang++)
+    if(NOT PTO_A5_CLANGXX OR NOT EXISTS "${PTO_A5_CLANGXX}")
+        unset(PTO_A5_CLANGXX CACHE)
+        find_program(PTO_A5_CLANGXX NAMES clang++-${PTO_A5_LLVM_MAJOR} clang++
+            PATHS ${PTO_A5_LLVM_BINDIR} /usr/bin /usr/local/bin NO_DEFAULT_PATH)
+        if(NOT PTO_A5_CLANGXX)
+            find_program(PTO_A5_CLANGXX NAMES clang++-${PTO_A5_LLVM_MAJOR} clang++)
+        endif()
+    endif()
+    if(NOT PTO_A5_CLANGXX)
+        message(FATAL_ERROR "a5_vf_mock: 未找到与 LLVM ${PTO_A5_LLVM_MAJOR} 匹配的 clang++")
+    endif()
     execute_process(COMMAND ${PTO_A5_LLVM_CONFIG} --cxxflags
         OUTPUT_VARIABLE PTO_A5_LLVM_CXXFLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
     separate_arguments(PTO_A5_LLVM_CXXFLAGS NATIVE_COMMAND "${PTO_A5_LLVM_CXXFLAGS}")
     message(STATUS "a5_vf_mock: LLVM ${PTO_A5_LLVM_VERSION} (${PTO_A5_LLVM_CONFIG})")
-    endif()
 endmacro()
 
 # 编 PtoLoopTracePass(MODULE,只做一次)。
@@ -76,7 +108,9 @@ endmacro()
 # 公开:给 target 启用 A5 VF pass 插桩。
 function(target_enable_a5_vf_mock target)
     _pto_a5_build_pass()
+    _pto_a5_build_vfsim()
     add_dependencies(${target} PtoLoopTracePass)
+    target_link_libraries(${target} PRIVATE pto_a5_vfsim)
     target_compile_options(${target} PRIVATE
         -O0 -g -fpass-plugin=$<TARGET_FILE:PtoLoopTracePass>)
     message(STATUS "a5_vf_mock: ${target} 已启用 pass 插桩(-O0 -g -fpass-plugin)")
