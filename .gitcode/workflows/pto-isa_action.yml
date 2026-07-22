@@ -20,7 +20,7 @@ on:
 
 env:
   org_name: "opencann"
-  repo_name: "pt-isa_8448"
+  repo_name: "pto-isa_8448"
   MERGE_ID: ${{atomgit.event.pull_request.number}}
   TARGET_BRANCH: ${{atomgit.base_ref}}
   SOURCE_BRANCH: ${{atomgit.head_ref}}
