@@ -37,7 +37,7 @@ function LOG_DO() {
 main() {
     cd "${WORKSPACE}" || exit
 
-    LOG_HEAD "Start run c++ testcase"
+    echo "Start run c++ testcase"
     echo "Y" | apt install libgtest-dev libgmock-dev
     gcc --version
     rm -rf /opt/rh/devtoolset-7

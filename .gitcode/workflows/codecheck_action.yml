@@ -2,7 +2,13 @@ name: codecheck_action
 
 on:
   workflow_call:
-
+    inputs:
+      precommit_image_version:
+        required: true
+        type: string
+      codecheck_image_version:
+          required: true
+          type: string
 
 jobs:
   PreCommit:

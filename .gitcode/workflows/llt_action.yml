@@ -12,6 +12,9 @@ on:
       image_version:
         required: true
         type: string
+      task_name:
+        required: true
+        type: string
 
 jobs:
   JOB_ut:
@@ -47,6 +50,7 @@ jobs:
           export WORKSPACE=${{ steps.process_checkout.outputs.path }}
           cd ${{ steps.process_checkout.outputs.path }}
           export ut_type=${{ inputs.ut_type }}
+          export task_name=${{ inputs.task_name }}
           bash ut.sh
       -
         name: upload

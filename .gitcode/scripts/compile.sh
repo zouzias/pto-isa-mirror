@@ -9,7 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set -e
+set +e
 
 REPOSITORY_NAME="pto-isa"
 
@@ -17,11 +17,6 @@ REPOSITORY_NAME="pto-isa"
 Purple="\033[0;35m"
 BPurple="\033[1;35m"
 Color_Off="\033[0m"
-
-# Print a section header
-function LOG_HEAD() {
-    echo -e "${BPurple}[Header]${Color_Off} ${Purple}$*${Color_Off}"
-}
 
 # Print and execute a command, capturing its exit code in the global variable ${ret}
 function LOG_DO() {
@@ -41,7 +36,6 @@ source /home/jenkins/Ascend/cann/bin/setenv.bash
 #########
 # Build
 #########
-LOG_HEAD "Build ${REPOSITORY_NAME}."
 echo "Y" | apt install libgtest-dev libgmock-dev
 gcc --version
 rm -rf /opt/rh/devtoolset-7
