@@ -14,7 +14,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/domain/device/comm_context_device.hpp"
 #include "../common.hpp"
+
+namespace domain = pto::comm::domain;
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -58,7 +61,7 @@ __global__ AICORE void TPutKernelImpl(
         set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
@@ -84,9 +87,12 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
 {
     if (n_ranks <= 0)
         return false;
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -114,29 +120,29 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Allocate window memory for shared buffer (sync buffer + data buffer)
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << ": pre-barrier before Phase 0");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << ": launching Phase 0 kernel (TPUT send)");
     TPutKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << ": Phase 0 kernel launched, syncing stream ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << ": Phase 0 stream sync done");
 
     COMM_DBG("Rank " << rank_id << ": inter-phase barrier (wait for all TPUTs to land)");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << ": launching Phase 1 kernel (read recv buffer)");
     TPutKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << ": Phase 1 kernel launched, syncing stream ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-    COMM_DBG("Rank " << rank_id << ": Phase 1 stream sync done (status=" << ctx.aclStatus << ")");
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
+    COMM_DBG("Rank " << rank_id << ": Phase 1 stream sync done (status=" << aclStatus << ")");
 
     aclrtMemcpy(output_host, count * sizeof(T), output_ptr, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -150,7 +156,7 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         }
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
             is_ok = false;
@@ -173,12 +179,13 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -223,7 +230,7 @@ __global__ AICORE void TPutAtomicAddKernelImpl(
         TileData stagingTile(1, count);
         TASSIGN(stagingTile, 0x0);
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, 0);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, 0);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT<pto::AtomicType::AtomicAdd>(remoteRecvG, srcG, stagingTile);
@@ -250,9 +257,12 @@ __global__ AICORE void TPutAtomicAddKernelImpl(
 template <typename T, size_t count>
 bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -278,32 +288,32 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
     aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + count * sizeof(T));
 
     // Zero-initialize the recv buffer in shmem (only rank 0 needs this, but all do for simplicity)
     uint8_t* shmem_data = reinterpret_cast<uint8_t*>(shmem_ptr) + 64 * sizeof(int32_t);
     aclrtMemset(shmem_data, count * sizeof(T), 0, count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " AtomicAdd: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " AtomicAdd: launching Phase 0");
     TPutAtomicAddKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " AtomicAdd: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " AtomicAdd: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " AtomicAdd: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " AtomicAdd: launching Phase 1");
     TPutAtomicAddKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " AtomicAdd: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " AtomicAdd: Phase 1 sync done");
 
     bool is_ok = true;
@@ -315,7 +325,7 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
             const int64_t expected = static_cast<int64_t>(n_ranks) * base + 10000LL * sum_ranks;
             T value = reinterpret_cast<T*>(output_host)[i];
             if (value != static_cast<T>(expected)) {
-                std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus
+                std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus
                           << std::endl;
                 std::cout << "Expected value: " << (float)expected << std::endl;
                 std::cout << "Actual value: " << (float)value << std::endl;
@@ -340,12 +350,13 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -405,7 +416,7 @@ __global__ AICORE void TPutKernel2DImpl(
         set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, shape, stride);
 
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
@@ -434,9 +445,12 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         return false;
     constexpr size_t total_count = rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -467,28 +481,28 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Allocate window memory for shared buffer (sync buffer + data buffer)
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " 2D: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " 2D: launching Phase 0 (" << rows << "x" << cols << ")");
     TPutKernel2DImpl<T, rows, cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " 2D: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " 2D: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " 2D: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " 2D: launching Phase 1");
     TPutKernel2DImpl<T, rows, cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " 2D: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " 2D: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -505,7 +519,7 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
             }
             T expected = static_cast<T>(idx + (rank_id + 1) % n_ranks * 10000);
             if (value != expected) {
-                std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus
+                std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus
                           << std::endl;
                 std::cout << "At [" << r << ", " << c << "] (idx=" << idx << "):" << std::endl;
                 std::cout << "Expected value: " << (float)expected << std::endl;
@@ -530,12 +544,13 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t rows, size_t cols>
@@ -605,7 +620,7 @@ __global__ AICORE void TPutLargeShapeKernelImpl(
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -635,9 +650,12 @@ bool RunPutRingLargeShapeKernel(
         return false;
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -662,30 +680,30 @@ bool RunPutRingLargeShapeKernel(
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " LargeShape: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG(
         "Rank " << rank_id << " LargeShape: launching Phase 0 (" << total_rows << "x" << cols << " tile=" << tile_rows
                 << ")");
     TPutLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " LargeShape: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " LargeShape: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " LargeShape: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " LargeShape: launching Phase 1");
     TPutLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " LargeShape: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " LargeShape: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -699,7 +717,7 @@ bool RunPutRingLargeShapeKernel(
         }
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "At index " << i << ":" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -724,12 +742,13 @@ bool RunPutRingLargeShapeKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
@@ -824,7 +843,7 @@ __global__ AICORE void TPutMultiDimKernelImpl(
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -854,9 +873,12 @@ bool RunPutRingMultiDimKernel(
         return false;
     constexpr size_t total_count = d0 * d1 * d2 * d3 * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -881,28 +903,28 @@ bool RunPutRingMultiDimKernel(
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " MultiDim: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " MultiDim: launching Phase 0");
     TPutMultiDimKernelImpl<T, d0, d1, d2, d3, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " MultiDim: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " MultiDim: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " MultiDim: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " MultiDim: launching Phase 1");
     TPutMultiDimKernelImpl<T, d0, d1, d2, d3, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " MultiDim: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " MultiDim: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -916,7 +938,7 @@ bool RunPutRingMultiDimKernel(
         }
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "At index " << i << ":" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -940,12 +962,13 @@ bool RunPutRingMultiDimKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
@@ -1024,7 +1047,7 @@ __global__ AICORE void TPutIrregularShapeKernelImpl(
 
         stagingTile.RowMaskInternal = tile_rows;
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -1062,9 +1085,12 @@ bool RunPutRingIrregularShapeKernel(
         return false;
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -1089,28 +1115,28 @@ bool RunPutRingIrregularShapeKernel(
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " IrregShape: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " IrregShape: launching Phase 0");
     TPutIrregularShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " IrregShape: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " IrregShape: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " IrregShape: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " IrregShape: launching Phase 1");
     TPutIrregularShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " IrregShape: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " IrregShape: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -1124,7 +1150,7 @@ bool RunPutRingIrregularShapeKernel(
         }
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "At index " << i << " (row=" << (i / cols) << ", col=" << (i % cols) << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1156,12 +1182,13 @@ bool RunPutRingIrregularShapeKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
@@ -1253,7 +1280,7 @@ __global__ AICORE void TPut2DSlidingKernelImpl(
         stagingTile.RowMaskInternal = tile_rows;
         stagingTile.ColMaskInternal = tile_cols;
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
 
@@ -1295,9 +1322,12 @@ bool RunPutRing2DSlidingKernel(
         return false;
     constexpr size_t total_count = total_rows * total_cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -1322,30 +1352,30 @@ bool RunPutRing2DSlidingKernel(
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " 2DSliding: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG(
         "Rank " << rank_id << " 2DSliding: launching Phase 0 (" << total_rows << "x" << total_cols
                 << " tile=" << tile_rows << "x" << tile_cols << ")");
     TPut2DSlidingKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " 2DSliding: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " 2DSliding: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " 2DSliding: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " 2DSliding: launching Phase 1");
     TPut2DSlidingKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " 2DSliding: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " 2DSliding: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -1361,7 +1391,7 @@ bool RunPutRing2DSlidingKernel(
         if (value != expected) {
             size_t row = i / total_cols;
             size_t col = i % total_cols;
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "At [" << row << ", " << col << "] (idx=" << i << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1393,12 +1423,13 @@ bool RunPutRing2DSlidingKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
@@ -1508,7 +1539,7 @@ __global__ AICORE void TPutPingPongKernelImpl(
         pongTile.RowMaskInternal = tile_rows;
         pongTile.ColMaskInternal = tile_cols;
 
-        __gm__ T* remote_recv_shmem = CommRemotePtr(hcclCtx, recv_shmem, prev_rank);
+        __gm__ T* remote_recv_shmem = domain::RemotePtr(hcclCtx, recv_shmem, prev_rank);
         Global remoteRecvG(remote_recv_shmem, fullShape, fullStride);
         pto::comm::TPUT(remoteRecvG, sendG, pingTile, pongTile);
 
@@ -1550,9 +1581,12 @@ bool RunPutRingPingPongKernel(
         return false;
     constexpr size_t total_count = total_rows * total_cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     void* input_ptr = nullptr;
     void* output_ptr = nullptr;
@@ -1577,30 +1611,30 @@ bool RunPutRingPingPongKernel(
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* shmem_ptr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
+    void* shmem_ptr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 4 * total_count * sizeof(T));
 
     COMM_DBG("Rank " << rank_id << " PingPong: pre-barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG(
         "Rank " << rank_id << " PingPong: launching Phase 0 (" << total_rows << "x" << total_cols
                 << " tile=" << tile_rows << "x" << tile_cols << ")");
     TPutPingPongKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 0);
     COMM_DBG("Rank " << rank_id << " PingPong: Phase 0 launched, syncing ...");
-    aclrtSynchronizeStream(ctx.stream);
+    aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " PingPong: Phase 0 sync done");
 
     COMM_DBG("Rank " << rank_id << " PingPong: inter-phase barrier");
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     COMM_DBG("Rank " << rank_id << " PingPong: launching Phase 1");
     TPutPingPongKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
-        <<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, ctx.deviceCtx, 1);
+        <<<1, nullptr, commCtx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks, devCtx, 1);
     COMM_DBG("Rank " << rank_id << " PingPong: Phase 1 launched, syncing ...");
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
     COMM_DBG("Rank " << rank_id << " PingPong: Phase 1 sync done");
 
     aclrtMemcpy(output_host, total_count * sizeof(T), output_ptr, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -1616,7 +1650,7 @@ bool RunPutRingPingPongKernel(
         if (value != expected) {
             size_t row = i / total_cols;
             size_t col = i % total_cols;
-            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus << std::endl;
             std::cout << "At [" << row << ", " << col << "] (idx=" << i << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1643,12 +1677,13 @@ bool RunPutRingPingPongKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    ctx.aclStatus |= aclrtFree(input_ptr);
-    ctx.aclStatus |= aclrtFree(output_ptr);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFree(input_ptr);
+    aclStatus |= aclrtFree(output_ptr);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>

@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #pragma once
 
 #include <cstdint>
+#include "pto/comm/domain/comm_device_context.hpp"
 
 // ============================================================================
 // CommDeviceContext
@@ -21,17 +22,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // addresses).
 // On RING topology (A3), we build this struct manually on the host by
 // extracting remote RDMA addresses from CommOpResParam's remoteRes array.
+//
+// Now aliased to pto::comm::domain::CommDeviceContext which has identical
+// layout, allowing tests to directly use domain device APIs.
 // ============================================================================
 
-static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
+static constexpr uint32_t HCCL_MAX_RANK_NUM = pto::comm::domain::kMaxRankNum;
 
-struct CommDeviceContext {
-    uint64_t workSpace;
-    uint64_t workSpaceSize;
-
-    uint32_t rankId;
-    uint32_t rankNum;
-    uint64_t winSize;
-    uint64_t windowsIn[HCCL_MAX_RANK_NUM];
-    uint64_t windowsOut[HCCL_MAX_RANK_NUM];
-};
+using CommDeviceContext = pto::comm::domain::CommDeviceContext;

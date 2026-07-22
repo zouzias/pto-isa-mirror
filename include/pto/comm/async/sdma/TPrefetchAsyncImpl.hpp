@@ -161,14 +161,14 @@ PTO_INTERNAL bool InitPrefetchAsyncSession(Context& ctx)
     }
 
     ctx.session.engine = comm::DmaEngine::SDMA;
-    ctx.session.sdmaSession.execCtx.contextGm = ctx.workspace;
-    ctx.session.sdmaSession.execCtx.tmpBuf = tmpBuf;
-    ctx.session.sdmaSession.execCtx.syncId = syncId;
-    ctx.session.sdmaSession.execCtx.channelGroupIdx = channelGroupIdx;
-    ctx.session.sdmaSession.execCtx.baseConfig = baseConfig;
-    ctx.session.sdmaSession.eventCtx.tmpBuf = tmpBuf;
-    ctx.session.sdmaSession.eventCtx.syncId = syncId;
-    ctx.session.sdmaSession.valid = true;
+    ctx.session.contextGm = ctx.workspace;
+    ctx.session.tmpBufAddr = tmpBuf.addr;
+    ctx.session.tmpBufSize = tmpBuf.size;
+    ctx.session.syncId = syncId;
+    ctx.session.channelGroupIdx = channelGroupIdx;
+    ctx.session.blockBytes = baseConfig.block_bytes;
+    ctx.session.commBlockOffset = baseConfig.comm_block_offset;
+    ctx.session.queueNum = baseConfig.queue_num;
     ctx.session.valid = true;
     return true;
 }
@@ -192,7 +192,11 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData& srcGlobalData, Pr
             return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
         }
     }
-    return detail::TPrefetchAsyncSdmaImpl(srcGlobalData, ctx.session.sdmaSession.execCtx);
+    comm::sdma::SdmaExecContext execCtx;
+    if (!comm::sdma::detail::MakeSdmaExecContext(ctx.session, execCtx)) {
+        return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
+    }
+    return detail::TPrefetchAsyncSdmaImpl(srcGlobalData, execCtx);
 }
 
 } // namespace pto

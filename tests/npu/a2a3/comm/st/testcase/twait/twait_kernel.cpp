@@ -19,8 +19,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/domain/device/comm_context_device.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
+
+namespace domain = pto::comm::domain;
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -59,7 +62,7 @@ __global__ AICORE void TWaitBasicKernel(__gm__ int32_t* shmem_signal, __gm__ Com
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t* remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t* remote_signal = domain::RemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
@@ -82,7 +85,7 @@ __global__ AICORE void TWaitCompareKernel(
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t* remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t* remote_signal = domain::RemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, notifyValue, pto::comm::NotifyOp::Set);
@@ -105,7 +108,7 @@ __global__ AICORE void TWaitAtomicKernel(
 {
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
-    __gm__ int32_t* remote_counter = CommRemotePtr(hcclCtx, shmem_counter, 0);
+    __gm__ int32_t* remote_counter = domain::RemotePtr(hcclCtx, shmem_counter, 0);
     pto::comm::Signal counterSignal(remote_counter);
 
     if (my_rank != 0) {
@@ -131,7 +134,7 @@ __global__ AICORE void TWaitMatrixKernel(__gm__ int32_t* shmem_matrix, __gm__ Co
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t* remote_matrix = CommRemotePtr(hcclCtx, shmem_matrix, 1);
+        __gm__ int32_t* remote_matrix = domain::RemotePtr(hcclCtx, shmem_matrix, 1);
         for (int r = 0; r < Rows; ++r) {
             for (int c = 0; c < Cols; ++c) {
                 __gm__ int32_t* remote_elem = remote_matrix + r * Cols + c;
@@ -161,7 +164,7 @@ __global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t* shmem_matrix, __gm__
     constexpr int startCol = 4;
 
     if (my_rank == 0) {
-        __gm__ int32_t* remote_matrix = CommRemotePtr(hcclCtx, shmem_matrix, 1);
+        __gm__ int32_t* remote_matrix = domain::RemotePtr(hcclCtx, shmem_matrix, 1);
         for (int r = 0; r < SubRows; ++r) {
             for (int c = 0; c < SubCols; ++c) {
                 __gm__ int32_t* elem = remote_matrix + (startRow + r) * FullCols + (startCol + c);
@@ -187,7 +190,7 @@ __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t* shmem_signal, __gm_
     int my_rank = static_cast<int>(hcclCtx->rankId);
 
     if (my_rank == 0) {
-        __gm__ int32_t* remote_signal = CommRemotePtr(hcclCtx, shmem_signal, 1);
+        __gm__ int32_t* remote_signal = domain::RemotePtr(hcclCtx, shmem_signal, 1);
         pto::comm::Signal targetSignal(remote_signal);
 
         if (phase == 0) {
@@ -219,33 +222,35 @@ __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t* shmem_signal, __gm_
 
 bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    int32_t* shmem_signal = (int32_t*)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+    int32_t* shmem_signal = (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, sizeof(int32_t));
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_signal, 0, 1);
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_signal, 0, 1);
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TWaitBasicKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TWaitBasicKernel<<<1, nullptr, commCtx.stream>>>(shmem_signal, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
 
     if (rank_id == 1) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_signal, 1);
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_signal, 1);
+        aclrtSynchronizeStream(commCtx.stream);
 
         int32_t result = 0;
         aclrtMemcpy(&result, sizeof(int32_t), result_dev, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -259,39 +264,42 @@ bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_devi
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 bool RunTWaitCompareKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo, int32_t notifyValue)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    int32_t* shmem_signal = (int32_t*)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+    int32_t* shmem_signal = (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, sizeof(int32_t));
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_signal, 0, 1);
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_signal, 0, 1);
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TWaitCompareKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, notifyValue, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TWaitCompareKernel<<<1, nullptr, commCtx.stream>>>(shmem_signal, notifyValue, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
 
     if (rank_id == 1) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_signal, 1);
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_signal, 1);
+        aclrtSynchronizeStream(commCtx.stream);
 
         int32_t result = 0;
         aclrtMemcpy(&result, sizeof(int32_t), result_dev, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -305,40 +313,43 @@ bool RunTWaitCompareKernel(
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    int32_t* shmem_counter = (int32_t*)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+    int32_t* shmem_counter = (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, sizeof(int32_t));
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_counter, 0, 1);
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_counter, 0, 1);
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     constexpr int kAtomicIters = 50;
     const int threshold = (n_ranks - 1) * kAtomicIters;
-    TWaitAtomicKernel<<<1, nullptr, ctx.stream>>>(shmem_counter, threshold, kAtomicIters, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TWaitAtomicKernel<<<1, nullptr, commCtx.stream>>>(shmem_counter, threshold, kAtomicIters, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
 
     if (rank_id == 0) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_counter, 1);
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_counter, 1);
+        aclrtSynchronizeStream(commCtx.stream);
 
         int32_t result = 0;
         aclrtMemcpy(&result, sizeof(int32_t), result_dev, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -353,40 +364,43 @@ bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_dev
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <int Rows, int Cols>
 bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
     constexpr size_t total = Rows * Cols;
-    int32_t* shmem_matrix = (int32_t*)WindowAlloc(localWinBase, winOffset, total * sizeof(int32_t));
+    int32_t* shmem_matrix =
+        (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total * sizeof(int32_t));
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_matrix, 0, static_cast<int>(total));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_matrix, 0, static_cast<int>(total));
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TWaitMatrixKernel<Rows, Cols><<<1, nullptr, ctx.stream>>>(shmem_matrix, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TWaitMatrixKernel<Rows, Cols><<<1, nullptr, commCtx.stream>>>(shmem_matrix, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
     if (rank_id == 1) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), total * sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_matrix, static_cast<int>(total));
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_matrix, static_cast<int>(total));
+        aclrtSynchronizeStream(commCtx.stream);
 
         std::vector<int32_t> result(total, 0);
         aclrtMemcpy(
@@ -402,40 +416,42 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 bool RunTWaitMultiPhaseKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    int32_t* shmem_signal = (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, sizeof(int32_t));
 
-    int32_t* shmem_signal = (int32_t*)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_signal, 0, 1);
+    aclrtSynchronizeStream(commCtx.stream);
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_signal, 0, 1);
-    aclrtSynchronizeStream(ctx.stream);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     for (int phase = 0; phase < 3; ++phase) {
-        TWaitMultiPhaseKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, ctx.deviceCtx, phase);
-        ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-        HcclHostBarrier(ctx.comm, ctx.stream);
+        TWaitMultiPhaseKernel<<<1, nullptr, commCtx.stream>>>(shmem_signal, devCtx, phase);
+        aclStatus = aclrtSynchronizeStream(commCtx.stream);
+        domain::HostBarrier(commCtx);
     }
 
     bool is_ok = true;
     if (rank_id == 1) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_signal, 1);
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_signal, 1);
+        aclrtSynchronizeStream(commCtx.stream);
 
         int32_t result = 0;
         aclrtMemcpy(&result, sizeof(int32_t), result_dev, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -447,41 +463,44 @@ bool RunTWaitMultiPhaseKernel(
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <int FullCols, int SubRows, int SubCols>
 bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
     constexpr size_t totalRows = 8;
     constexpr size_t total = totalRows * FullCols;
-    int32_t* shmem_matrix = (int32_t*)WindowAlloc(localWinBase, winOffset, total * sizeof(int32_t));
+    int32_t* shmem_matrix =
+        (int32_t*)WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total * sizeof(int32_t));
 
-    WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_matrix, 0, static_cast<int>(total));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemInit<<<1, nullptr, commCtx.stream>>>(shmem_matrix, 0, static_cast<int>(total));
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TWaitSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, ctx.stream>>>(shmem_matrix, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TWaitSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, commCtx.stream>>>(shmem_matrix, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
     if (rank_id == 1) {
         int32_t* result_dev = nullptr;
         aclrtMalloc(reinterpret_cast<void**>(&result_dev), total * sizeof(int32_t), ACL_MEM_MALLOC_HUGE_FIRST);
-        WindowMemRead<<<1, nullptr, ctx.stream>>>(result_dev, shmem_matrix, static_cast<int>(total));
-        aclrtSynchronizeStream(ctx.stream);
+        WindowMemRead<<<1, nullptr, commCtx.stream>>>(result_dev, shmem_matrix, static_cast<int>(total));
+        aclrtSynchronizeStream(commCtx.stream);
 
         std::vector<int32_t> result(total, 0);
         aclrtMemcpy(
@@ -505,7 +524,8 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
         }
     }
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 // ============================================================================

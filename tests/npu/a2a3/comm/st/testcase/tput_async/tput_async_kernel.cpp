@@ -14,8 +14,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include "pto/comm/async/sdma/sdma_types.hpp"
+#include "pto/comm/domain/device/comm_context_device.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
+
+namespace domain = pto::comm::domain;
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -63,7 +66,7 @@ __global__ AICORE void TPutAsyncKernelImpl(
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T* remoteRecvBuf = CommRemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
+            __gm__ T* remoteRecvBuf = domain::RemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
             Global remoteRecvG(remoteRecvBuf, shape, stride);
             lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
         }
@@ -77,9 +80,12 @@ template <typename T, size_t count>
 bool RunPutAsyncRootPutKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo, int root_rank)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     uint8_t* input_host = nullptr;
     uint8_t* output_host = nullptr;
@@ -94,9 +100,9 @@ bool RunPutAsyncRootPutKernel(
         reinterpret_cast<T*>(output_host)[i] = static_cast<T>(-1);
     }
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
+    void* commBufPtr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
 
     uint8_t* commBytes = reinterpret_cast<uint8_t*>(commBufPtr);
     T* sendBuf = reinterpret_cast<T*>(commBytes + 64 * sizeof(int32_t));
@@ -111,14 +117,13 @@ bool RunPutAsyncRootPutKernel(
         return false;
     }
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TPutAsyncKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, 0, static_cast<int>(count), ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(),
-        0);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TPutAsyncKernelImpl<T, count><<<1, nullptr, commCtx.stream>>>(
+        sendBuf, n_ranks, root_rank, 0, static_cast<int>(count), devCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     aclrtMemcpy(output_host, count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -128,7 +133,7 @@ bool RunPutAsyncRootPutKernel(
             T value = reinterpret_cast<T*>(output_host)[i];
             T expected = static_cast<T>(i + root_rank * 10000);
             if (value != expected) {
-                std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus
+                std::cout << "Rank " << rank_id << " Device " << commCtx.deviceId << " Status " << aclStatus
                           << std::endl;
                 std::cout << "Expected value: " << (float)expected << std::endl;
                 std::cout << "Actual value: " << (float)value << std::endl;
@@ -153,11 +158,12 @@ bool RunPutAsyncRootPutKernel(
     }
 #endif
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
     sdmaMgr.Finalize();
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -220,7 +226,7 @@ __global__ AICORE void TPutAsyncConfigKernelImpl(
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T* remoteRecvBuf = CommRemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
+            __gm__ T* remoteRecvBuf = domain::RemotePtr(hcclCtx, recvBuf, target_rank) + elem_offset;
             Global remoteRecvG(remoteRecvBuf, shape, stride);
             lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
         }
@@ -235,9 +241,12 @@ bool RunPutAsyncWithConfigKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo, int root_rank,
     uint64_t blockBytes, uint64_t commBlockOffset, uint32_t queueNum)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     uint8_t* input_host = nullptr;
     uint8_t* output_host = nullptr;
@@ -252,9 +261,9 @@ bool RunPutAsyncWithConfigKernel(
         reinterpret_cast<T*>(output_host)[i] = static_cast<T>(-1);
     }
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
+    void* commBufPtr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
 
     uint8_t* commBytes = reinterpret_cast<uint8_t*>(commBufPtr);
     T* sendBuf = reinterpret_cast<T*>(commBytes + 64 * sizeof(int32_t));
@@ -273,14 +282,14 @@ bool RunPutAsyncWithConfigKernel(
     const int elemCount =
         (commBlockOffset > 0 && offsetElems < count) ? static_cast<int>(count - offsetElems) : static_cast<int>(count);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TPutAsyncConfigKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, 0, elemCount, ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0, blockBytes,
+    TPutAsyncConfigKernelImpl<T, count><<<1, nullptr, commCtx.stream>>>(
+        sendBuf, n_ranks, root_rank, 0, elemCount, devCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0, blockBytes,
         commBlockOffset, queueNum);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     aclrtMemcpy(output_host, count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -298,11 +307,12 @@ bool RunPutAsyncWithConfigKernel(
         }
     }
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
     sdmaMgr.Finalize();
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -378,7 +388,7 @@ __global__ AICORE void TPutAsyncMultiCoreKernelImpl(
             if (target_rank == root_rank) {
                 continue;
             }
-            __gm__ T* remoteRecvBuf = CommRemotePtr(hcclCtx, recvBuf, target_rank);
+            __gm__ T* remoteRecvBuf = domain::RemotePtr(hcclCtx, recvBuf, target_rank);
             Global remoteRecvG(remoteRecvBuf, shape, stride);
             lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
         }
@@ -393,9 +403,12 @@ bool RunPutAsyncMultiCoreKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo, int root_rank,
     int blockDim, int multiCoreMode)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     uint8_t* input_host = nullptr;
     uint8_t* output_host = nullptr;
@@ -410,9 +423,9 @@ bool RunPutAsyncMultiCoreKernel(
         reinterpret_cast<T*>(output_host)[i] = static_cast<T>(-1);
     }
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    void* commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
+    void* commBufPtr =
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
 
     uint8_t* commBytes = reinterpret_cast<uint8_t*>(commBufPtr);
     T* sendBuf = reinterpret_cast<T*>(commBytes + 64 * sizeof(int32_t));
@@ -427,14 +440,14 @@ bool RunPutAsyncMultiCoreKernel(
         return false;
     }
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TPutAsyncMultiCoreKernelImpl<T, count><<<blockDim, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, static_cast<int>(count), ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0,
+    TPutAsyncMultiCoreKernelImpl<T, count><<<blockDim, nullptr, commCtx.stream>>>(
+        sendBuf, n_ranks, root_rank, static_cast<int>(count), devCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0,
         multiCoreMode);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     aclrtMemcpy(output_host, count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -452,11 +465,12 @@ bool RunPutAsyncMultiCoreKernel(
         }
     }
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
     sdmaMgr.Finalize();
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -514,7 +528,7 @@ __global__ AICORE void TPutAsyncConcurrentRankKernelImpl(
 
     const int dst_rank = coreIdx;
     int my_rank = static_cast<int>(hcclCtx->rankId);
-    __gm__ T* remoteRecvBase = CommRemotePtr(hcclCtx, recvBuf, dst_rank) + static_cast<size_t>(my_rank) * count;
+    __gm__ T* remoteRecvBase = domain::RemotePtr(hcclCtx, recvBuf, dst_rank) + static_cast<size_t>(my_rank) * count;
 
     pipe_barrier(PIPE_ALL);
 
@@ -549,9 +563,12 @@ bool RunPutAsyncConcurrentRankKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo* rootInfo, int iters,
     int freshSession)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
     const size_t recv_elems = static_cast<size_t>(n_ranks) * count;
 
@@ -570,10 +587,9 @@ bool RunPutAsyncConcurrentRankKernel(
         reinterpret_cast<T*>(output_host)[i] = static_cast<T>(-1);
     }
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
     size_t commBytesNeeded = 64 * sizeof(int32_t) + (static_cast<size_t>(n_ranks) + 1) * count * sizeof(T);
-    void* commBufPtr = WindowAlloc(localWinBase, winOffset, commBytesNeeded);
+    void* commBufPtr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, commBytesNeeded);
 
     uint8_t* commBytes = reinterpret_cast<uint8_t*>(commBufPtr);
     T* dataBase = reinterpret_cast<T*>(commBytes + 64 * sizeof(int32_t));
@@ -589,13 +605,13 @@ bool RunPutAsyncConcurrentRankKernel(
         return false;
     }
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    TPutAsyncConcurrentRankKernelImpl<T, count><<<n_ranks, nullptr, ctx.stream>>>(
-        dataBase, n_ranks, ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), iters, freshSession);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TPutAsyncConcurrentRankKernelImpl<T, count><<<n_ranks, nullptr, commCtx.stream>>>(
+        dataBase, n_ranks, devCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), iters, freshSession);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     aclrtMemcpy(output_host, recv_elems * sizeof(T), recvBuf, recv_elems * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -624,11 +640,12 @@ bool RunPutAsyncConcurrentRankKernel(
                   << " (iters=" << iters << " fresh=" << freshSession << ")" << std::endl;
     }
 
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
+    aclStatus |= aclrtFreeHost(input_host);
+    aclStatus |= aclrtFreeHost(output_host);
     sdmaMgr.Finalize();
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>

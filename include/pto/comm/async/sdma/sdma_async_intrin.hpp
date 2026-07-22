@@ -308,6 +308,34 @@ PTO_INTERNAL void UpdateSqTailState(
     }
 }
 
+PTO_INTERNAL bool MakeSdmaExecContext(const AsyncSession& session, SdmaExecContext& execCtx)
+{
+    if (session.engine != DmaEngine::SDMA || !session.valid) {
+        return false;
+    }
+    execCtx.contextGm = session.contextGm;
+    execCtx.tmpBuf.addr = session.tmpBufAddr;
+    execCtx.tmpBuf.size = session.tmpBufSize;
+    execCtx.syncId = session.syncId;
+    execCtx.channelGroupIdx = session.channelGroupIdx;
+    execCtx.baseConfig.block_bytes = session.blockBytes;
+    execCtx.baseConfig.comm_block_offset = session.commBlockOffset;
+    execCtx.baseConfig.queue_num = session.queueNum;
+    return true;
+}
+
+PTO_INTERNAL bool MakeSdmaSession(const AsyncSession& asyncSession, SdmaSession& session)
+{
+    if (!MakeSdmaExecContext(asyncSession, session.execCtx)) {
+        session.valid = false;
+        return false;
+    }
+    session.eventCtx.tmpBuf = session.execCtx.tmpBuf;
+    session.eventCtx.syncId = session.execCtx.syncId;
+    session.valid = true;
+    return true;
+}
+
 PTO_INTERNAL bool PrepareEventCheck(
     const SdmaSession& session, UbTmpBuf& tmpBuf, uint32_t& syncId, __gm__ uint8_t*& recvWorkspace, uint32_t& queueNum)
 {
@@ -395,6 +423,12 @@ PTO_INTERNAL bool SdmaTestEvent(uint64_t eventHandle, const SdmaSession& session
     return true;
 }
 
+PTO_INTERNAL bool SdmaTestEvent(uint64_t eventHandle, const AsyncSession& session)
+{
+    SdmaSession sdmaSession;
+    return MakeSdmaSession(session, sdmaSession) && SdmaTestEvent(eventHandle, sdmaSession);
+}
+
 PTO_INTERNAL bool SdmaWaitEvent(uint64_t eventHandle, const SdmaSession& session)
 {
     if (eventHandle == 0) {
@@ -428,6 +462,12 @@ PTO_INTERNAL bool SdmaWaitEvent(uint64_t eventHandle, const SdmaSession& session
         HandleCompletedEventRecord(record, tmpBuf, syncId);
     }
     return true;
+}
+
+PTO_INTERNAL bool SdmaWaitEvent(uint64_t eventHandle, const AsyncSession& session)
+{
+    SdmaSession sdmaSession;
+    return MakeSdmaSession(session, sdmaSession) && SdmaWaitEvent(eventHandle, sdmaSession);
 }
 
 PTO_INTERNAL uint64_t SdmaPostSendAsyncWithCtx(
@@ -538,6 +578,37 @@ PTO_INTERNAL bool BuildSdmaSession(
     return session.valid;
 }
 
+template <typename ScratchTile>
+PTO_INTERNAL bool BuildSdmaSession(
+    ScratchTile& scratchTile, __gm__ uint8_t* workspace, AsyncSession& session, uint32_t syncId = 0,
+    const SdmaBaseConfig& baseConfig = {kDefaultSdmaBlockBytes, 0, 1}, uint32_t channelGroupIdx = kAutoChannelGroupIdx)
+{
+    if (channelGroupIdx == kAutoChannelGroupIdx) {
+        channelGroupIdx = static_cast<uint32_t>(get_block_idx());
+    }
+    if (syncId > 7 || baseConfig.queue_num == 0 || baseConfig.queue_num > kSdmaMaxChannel ||
+        channelGroupIdx >= (kSdmaMaxChannel / baseConfig.queue_num) || workspace == nullptr) {
+        session.valid = false;
+        return false;
+    }
+    TmpBuffer tmpBuf;
+    if (!detail::MakeTmpBufferFromTile(scratchTile, tmpBuf)) {
+        session.valid = false;
+        return false;
+    }
+    session.engine = DmaEngine::SDMA;
+    session.valid = true;
+    session.contextGm = workspace;
+    session.tmpBufAddr = tmpBuf.addr;
+    session.tmpBufSize = tmpBuf.size;
+    session.syncId = syncId;
+    session.channelGroupIdx = channelGroupIdx;
+    session.blockBytes = baseConfig.block_bytes;
+    session.commBlockOffset = baseConfig.comm_block_offset;
+    session.queueNum = baseConfig.queue_num;
+    return true;
+}
+
 // ============================================================================
 // Async SDMA intrinsics (standalone re-implementation)
 // ============================================================================
@@ -553,9 +624,37 @@ __sdma_put_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const Sdm
 
 template <typename T>
 PTO_INTERNAL uint64_t
+__sdma_put_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const AsyncSession& session)
+{
+    if (transfer_size == 0) {
+        return 0;
+    }
+    SdmaExecContext execCtx;
+    if (!detail::MakeSdmaExecContext(session, execCtx)) {
+        return 0;
+    }
+    return detail::SdmaWrite(dst, src, transfer_size, execCtx);
+}
+
+template <typename T>
+PTO_INTERNAL uint64_t
 __sdma_get_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const SdmaExecContext& execCtx)
 {
     if (transfer_size == 0) {
+        return 0;
+    }
+    return detail::SdmaWrite(dst, src, transfer_size, execCtx);
+}
+
+template <typename T>
+PTO_INTERNAL uint64_t
+__sdma_get_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const AsyncSession& session)
+{
+    if (transfer_size == 0) {
+        return 0;
+    }
+    SdmaExecContext execCtx;
+    if (!detail::MakeSdmaExecContext(session, execCtx)) {
         return 0;
     }
     return detail::SdmaWrite(dst, src, transfer_size, execCtx);
