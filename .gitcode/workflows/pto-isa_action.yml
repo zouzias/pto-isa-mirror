@@ -29,7 +29,7 @@ env:
 
 stages:
   stage1:
-    name: image
+    name: PreBuild
     select: selected_by_default
     jobs:
       JOB_image:
@@ -117,31 +117,39 @@ stages:
     jobs:
       Compile_Ascend_X86:
         name: Compile_Ascend_X86
-        uses: .gitcode/workflows/x86_compile_action.yml
+        uses: .gitcode/workflows/compile_action.yml
         with:
           task_name: 'Compile_Ascend_X86'
           package_name: 'cann-pto-isa_linux-x86_64.run'
+          arch: 'x64'
+          spec: 'large'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_X86 }}
       Compile_Ascend_ARM:
         name: Compile_Ascend_ARM
-        uses: .gitcode/workflows/arm_compile_action.yml
+        uses: .gitcode/workflows/compile_action.yml
         with:
           task_name: 'Compile_Ascend_ARM'
           package_name: 'cann-pto-isa_linux-aarch64.run'
+          arch: 'arm64'
+          spec: 'xlarge'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM }}
       Compile_Ascend_X86_A5:
         name: Compile_Ascend_X86_A5
-        uses: .gitcode/workflows/x86_compile_action.yml
+        uses: .gitcode/workflows/compile_action.yml
         with:
           task_name: 'Compile_Ascend_X86_A5'
           package_name: 'cann-pto-isa_linux-x86_64-A5.run'
+          arch: 'x64'
+          spec: 'large'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_X86_A5_ubuntu24 }}
       Compile_Ascend_ARM_A5:
         name: Compile_Ascend_ARM_A5
-        uses: .gitcode/workflows/arm_compile_action.yml
+        uses: .gitcode/workflows/compile_action.yml
         with:
           task_name: 'Compile_Ascend_ARM_A5'
           package_name: 'cann-pto-isa_linux-aarch64-A5.run'
+          arch: 'arm64'
+          spec: 'xlarge'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM_A5 }}
       JOB_codecheck:
         name: CodeCheck
@@ -297,3 +305,21 @@ stages:
     pre:
     - type: auto
     fail-fast: true
+post:
+  jobs:
+    job_post:
+      name: Test_finish
+      steps:
+        -
+          name: query_pipeline
+          uses: cann/.gitcode/actions/query-pipeline@master
+          with:
+            owner: ${{ env.org_name }}
+            repo: ${{ env.repo_name }}
+            run_id: ${{atomgit. workflow_run_id}}
+            token: ${{ secrets.GIT_TOKEN }}
+            pr_number: ${{ env.MERGE_ID }}
+            apply_label: ${{ vars.APPLY_LABEL }}
+      runs-on: [dedicate-hosted, x64, small]
+      container:
+        image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ jobs.JOB_image.outputs.codecheck }}

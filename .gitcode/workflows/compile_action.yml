@@ -9,6 +9,14 @@ on:
       package_name:
         required: true
         type: string
+      arch:
+        required: false
+        type: string
+        default: 'x64'
+      spec:
+        required: false
+        type: string
+        default: 'large'
       image_version:
         required: true
         type: string
@@ -17,7 +25,8 @@ on:
         value: ${{jobs.JOB_compile.outputs.primary-url}}
       arm_run_key:
         value: ${{jobs.JOB_compile.outputs.primary-key}}
-
+      package_name:
+        value: ${{jobs.JOB_compile.outputs.package_name}}
 jobs:
   JOB_compile:
     name: compile
@@ -47,6 +56,7 @@ jobs:
           path: ${{ steps.process_checkout.outputs.path }}
       -
         name: arm_compile_acc
+        identifier: compile
         uses: build-accelerate
         with:
           command: |
@@ -56,6 +66,11 @@ jobs:
             export package_name=${{ inputs.package_name }}
             BuildAccelerate bash compile.sh
           AC_SERVER_IP: ${{ vars.AC_SERVER_IP }}
+      - name: verify_package
+        uses: cann/.gitcode/actions/verify-package@master
+        with:
+          workspace: ${{ steps.process_checkout.outputs.path }}
+          package_type: whl
       - name: upload
         uses: obs-upload
         with:
@@ -63,9 +78,12 @@ jobs:
           bucket: "ascend-ci"
           access-key: ${{ secrets.AK }}
           secret-key: ${{ secrets.SK }}
-          artifact-path: "${{ steps.process_checkout.outputs.path }}/build_out/*.run"
+          artifact-path: "${{ steps.process_checkout.outputs.path }}/build_out/${{ steps.compile.outputs.package_name }}"
           object-prefix: ${{ env.obs_path }}/
     if: "${{ default() }}"
-    runs-on: [dedicate-hosted, arm64, xlarge]
+    runs-on:
+      - dedicate-hosted
+      - ${{ inputs.arch }}
+      - ${{ inputs.spec }}
     container:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.image_version }}
