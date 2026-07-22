@@ -30,6 +30,21 @@ TEST_F(TPrefetchAsyncTest, case_int32_4096_globaltensor)
     ASSERT_TRUE((RunPrefetchAsyncCorrectness<int32_t, 4096>(0)));
 }
 
+TEST_F(TPrefetchAsyncTest, case_float_4096_multi_post_wait_last)
+{
+    ASSERT_TRUE((RunPrefetchAsyncCorrectness<float, 4096>(0, 65U, false)));
+}
+
+TEST_F(TPrefetchAsyncTest, case_int32_4096_multi_post_wait_each)
+{
+    ASSERT_TRUE((RunPrefetchAsyncCorrectness<int32_t, 4096>(0, 16U, true)));
+}
+
+TEST_F(TPrefetchAsyncTest, case_float_4096_shared_external_session)
+{
+    ASSERT_TRUE((RunPrefetchAsyncCorrectness<float, 4096>(0, 16U, true, true)));
+}
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
