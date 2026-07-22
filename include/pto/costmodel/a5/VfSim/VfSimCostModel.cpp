@@ -66,11 +66,10 @@ std::string PublicDType(const MemInfo &mem)
     return mem.dtype;
 }
 
-bool RegisterValue(vfsim::VfInfo &target, const MemInfo &mem, std::size_t vfIndex,
-                   std::string &loweredName)
+bool RegisterValue(vfsim::VfInfo &target, const MemInfo &mem, std::string &loweredName)
 {
     if (mem.name.empty()) return false;
-    loweredName = "vf" + std::to_string(vfIndex) + "." + mem.name;
+    loweredName = mem.name;
 
     vfsim::ValueInfo value;
     value.valueId = loweredName;
@@ -88,8 +87,8 @@ bool RegisterValue(vfsim::VfInfo &target, const MemInfo &mem, std::size_t vfInde
     return true;
 }
 
-std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, std::size_t vfIndex,
-                                           uint64_t &loopIndex, vfsim::VfInfo &target,
+std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, uint64_t &loopIndex,
+                                           vfsim::VfInfo &target,
                                            bool &ok)
 {
     std::vector<vfsim::ProgramNode> result;
@@ -100,8 +99,8 @@ std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, std
             vfsim::ProgramLoopNode loop;
             loop.iters = std::to_string(source.count);
             loop.unroll = "1";
-            loop.name = "vf" + std::to_string(vfIndex) + "_loop" + std::to_string(loopIndex++);
-            loop.body = LowerNodes(source.body, vfIndex, loopIndex, target, ok);
+            loop.name = "loop" + std::to_string(loopIndex++);
+            loop.body = LowerNodes(source.body, loopIndex, target, ok);
             result.push_back(vfsim::ProgramNode::makeLoop(std::move(loop)));
             continue;
         }
@@ -119,7 +118,7 @@ std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, std
         lowered.op = Upper(inst.opName);
         for (const MemInfo &mem : inst.dst) {
             std::string name;
-            if (!RegisterValue(target, mem, vfIndex, name)) {
+            if (!RegisterValue(target, mem, name)) {
                 ok = false;
                 continue;
             }
@@ -127,7 +126,7 @@ std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, std
         }
         for (const MemInfo &mem : inst.src) {
             std::string name;
-            if (!RegisterValue(target, mem, vfIndex, name)) {
+            if (!RegisterValue(target, mem, name)) {
                 ok = false;
                 continue;
             }
@@ -136,6 +135,15 @@ std::vector<vfsim::ProgramNode> LowerNodes(const std::vector<VfNode> &nodes, std
         result.push_back(vfsim::ProgramNode::makeInst(std::move(lowered)));
     }
     return result;
+}
+
+vfsim::VfInfo LowerVf(const VfInfo &vf, bool &ok)
+{
+    vfsim::VfInfo program;
+    program.defaultDtype = "fp32";
+    uint64_t loopIndex = 0;
+    program.body = LowerNodes(vf.tree, loopIndex, program, ok);
+    return program;
 }
 
 bool FormsSupported(const std::vector<vfsim::ProgramNode> &nodes, const vfsim::ParamDB &db)
@@ -160,24 +168,27 @@ uint64_t PredictVfCyclesWithVfSim(const std::vector<VfInfo> &vfs)
 
     try {
         static const vfsim::ParamDB db(std::filesystem::path(PTO_VFSIM_SOURCE_ROOT));
-        vfsim::VfInfo program;
-        program.defaultDtype = "fp32";
-        bool ok = true;
-        for (std::size_t i = 0; i < vfs.size(); ++i) {
-            uint64_t loopIndex = 0;
-            auto lowered = LowerNodes(vfs[i].tree, i, loopIndex, program, ok);
-            program.body.insert(program.body.end(), std::make_move_iterator(lowered.begin()),
-                                std::make_move_iterator(lowered.end()));
+        uint64_t total = 0;
+        for (const VfInfo &vf : vfs) {
+            bool ok = true;
+            vfsim::VfInfo program = LowerVf(vf, ok);
+            if (!ok) {
+                total += FallbackNodes(vf.tree, 1);
+                continue;
+            }
+            if (program.body.empty()) continue;
+
+            vfsim::VfInfo canonical = program;
+            vfsim::canonicalizeVfInfo(canonical);
+            if (!FormsSupported(canonical.body, db)) {
+                total += FallbackNodes(vf.tree, 1);
+                continue;
+            }
+
+            const auto result = vfsim::runVfInfo(program, db);
+            total += static_cast<uint64_t>(std::max<int64_t>(0, result.vfEndCycle));
         }
-        if (!ok) return Fallback(vfs);
-        if (program.body.empty()) return 0;
-
-        vfsim::VfInfo canonical = program;
-        vfsim::canonicalizeVfInfo(canonical);
-        if (!FormsSupported(canonical.body, db)) return Fallback(vfs);
-
-        const auto result = vfsim::runVfInfo(program, db);
-        return static_cast<uint64_t>(std::max<int64_t>(0, result.vfEndCycle));
+        return total;
     } catch (const std::exception &) {
         return Fallback(vfs);
     }

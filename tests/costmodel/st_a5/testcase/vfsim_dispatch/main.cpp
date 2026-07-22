@@ -82,9 +82,9 @@ int main()
     }
 
     const uint64_t combined = vf::PredictVfCycles(std::vector<vf::VfInfo>{supported, unsupported});
-    const uint64_t expectedCombined = simple + expectedFallback;
+    const uint64_t expectedCombined = simulated + expectedFallback;
     if (combined != expectedCombined) {
-        std::fprintf(stderr, "multi-VF all-or-nothing fallback mismatch: actual=%llu expected=%llu\n",
+        std::fprintf(stderr, "multi-VF per-VF sum mismatch: actual=%llu expected=%llu\n",
                      static_cast<unsigned long long>(combined),
                      static_cast<unsigned long long>(expectedCombined));
         return 1;
