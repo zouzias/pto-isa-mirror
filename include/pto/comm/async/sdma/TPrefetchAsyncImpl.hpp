@@ -26,6 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async_common/prefetch_async_context.hpp"
 #include "pto/comm/async_common/async_types.hpp"
 
 #ifdef __PTO_AUTO__
@@ -35,23 +36,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // prefetch unnecessary. Provide a no-op implementation so the public API
 // compiles but does nothing.
 // ---------------------------------------------------------------------------
-namespace pto {
-
-struct PrefetchAsyncContext {
-    __gm__ uint8_t* workspace{nullptr};
-    comm::AsyncSession session;
-
-    AICORE PrefetchAsyncContext() = default;
-    AICORE explicit PrefetchAsyncContext(__gm__ uint8_t* workspace_) : workspace(workspace_) {}
-};
-
-template <typename GlobalData>
-PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData& /*srcGlobalData*/, PrefetchAsyncContext& /*ctx*/)
-{
-    return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
-}
-
-} // namespace pto
+#include "pto/comm/async_common/prefetch_async_noop.hpp"
 
 #else // !__PTO_AUTO__ -- full manual-mode implementation
 // ---------------------------------------------------------------------------
@@ -61,28 +46,14 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData& /*srcGlobalData*/
 
 namespace pto {
 
-struct PrefetchAsyncContext {
+struct PrefetchAsyncContext : detail::PrefetchAsyncContextBase {
     using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using detail::PrefetchAsyncContextBase::PrefetchAsyncContextBase;
 
-    __gm__ uint8_t* workspace{nullptr};
     ScratchTile scratchTile;
-    comm::AsyncSession session;
-
-    AICORE PrefetchAsyncContext() = default;
-    AICORE explicit PrefetchAsyncContext(__gm__ uint8_t* workspace_) : workspace(workspace_) {}
 };
 
 namespace detail {
-
-template <typename ScratchTile>
-PTO_INTERNAL bool MakePrefetchTmpBufferFromTile(ScratchTile& scratchTile, comm::sdma::TmpBuffer& tmpBuf)
-{
-    static_assert(is_tile_data_v<ScratchTile>, "scratchTile must be a pto::Tile type");
-    static_assert(ScratchTile::Loc == TileType::Vec, "scratchTile must be in Vec(UB) memory");
-    tmpBuf.addr = reinterpret_cast<__ubuf__ uint8_t*>(scratchTile.data());
-    tmpBuf.size = static_cast<uint32_t>(ScratchTile::Numel * sizeof(typename ScratchTile::DType));
-    return tmpBuf.addr != nullptr && tmpBuf.size >= sizeof(uint64_t);
-}
 
 template <typename GlobalData>
 PTO_INTERNAL bool TPrefetchAsyncIsFlatContiguous1D(GlobalData& globalData)
@@ -118,8 +89,7 @@ PTO_INTERNAL uint64_t TPrefetchAsyncGetTotalBytes(GlobalData& globalData)
 }
 
 template <typename GlobalData>
-PTO_INTERNAL comm::AsyncEvent TPrefetchAsyncSdmaImpl(
-    GlobalData& srcGlobalData, const comm::sdma::SdmaExecContext& execCtx)
+PTO_INTERNAL comm::AsyncEvent TPrefetchAsyncSdmaImpl(GlobalData& srcGlobalData, const comm::sdma::SdmaSession& session)
 {
     if (srcGlobalData.data() == nullptr) {
         return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
@@ -134,43 +104,23 @@ PTO_INTERNAL comm::AsyncEvent TPrefetchAsyncSdmaImpl(
         return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
     }
 
-    const uint64_t eventHandle = comm::sdma::__sdma_cmo_prefetch(srcGlobalData.data(), totalBytes, execCtx);
-    return comm::AsyncEvent(eventHandle, comm::DmaEngine::SDMA);
+    return comm::sdma::__sdma_cmo_prefetch(srcGlobalData.data(), totalBytes, session);
 }
 
 template <typename Context>
-PTO_INTERNAL bool InitPrefetchAsyncSession(Context& ctx)
+PTO_INTERNAL bool InitPrefetchAsyncSession(Context& ctx, comm::AsyncSession& session)
 {
     if (ctx.workspace == nullptr) {
-        ctx.session.valid = false;
+        session.valid = false;
         return false;
     }
 
-    constexpr uint32_t syncId = 0;
+    constexpr uint32_t syncId = 0U;
     constexpr comm::sdma::SdmaBaseConfig baseConfig{comm::sdma::kDefaultSdmaBlockBytes, 0, 1};
-    const uint32_t channelGroupIdx = static_cast<uint32_t>(get_block_idx());
-    if (channelGroupIdx >= (comm::sdma::kSdmaMaxChannel / baseConfig.queue_num)) {
-        ctx.session.valid = false;
-        return false;
-    }
-
-    comm::sdma::TmpBuffer tmpBuf{};
-    if (!MakePrefetchTmpBufferFromTile(ctx.scratchTile, tmpBuf)) {
-        ctx.session.valid = false;
-        return false;
-    }
-
-    ctx.session.engine = comm::DmaEngine::SDMA;
-    ctx.session.sdmaSession.execCtx.contextGm = ctx.workspace;
-    ctx.session.sdmaSession.execCtx.tmpBuf = tmpBuf;
-    ctx.session.sdmaSession.execCtx.syncId = syncId;
-    ctx.session.sdmaSession.execCtx.channelGroupIdx = channelGroupIdx;
-    ctx.session.sdmaSession.execCtx.baseConfig = baseConfig;
-    ctx.session.sdmaSession.eventCtx.tmpBuf = tmpBuf;
-    ctx.session.sdmaSession.eventCtx.syncId = syncId;
-    ctx.session.sdmaSession.valid = true;
-    ctx.session.valid = true;
-    return true;
+    session.engine = comm::DmaEngine::SDMA;
+    session.valid = comm::sdma::BuildSdmaSession(
+        ctx.scratchTile, ctx.workspace, session.sdmaSession, syncId, baseConfig, comm::sdma::kAutoChannelGroupIdx);
+    return session.valid;
 }
 
 } // namespace detail
@@ -178,21 +128,22 @@ PTO_INTERNAL bool InitPrefetchAsyncSession(Context& ctx)
 template <typename GlobalData>
 PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData& srcGlobalData, PrefetchAsyncContext& ctx)
 {
-    // Build the SDMA session once per ctx and reuse on subsequent calls. None
-    // of the fields populated by InitPrefetchAsyncSession (workspace, scratch
-    // UB ptr, syncId, channelGroupIdx, baseConfig) depend on the per-call
-    // src/length, so caching is functionally equivalent and skips redundant
-    // TASSIGN + tmpBuf wiring on every TPREFETCH_ASYNC invocation.
-    if (!ctx.session.valid) {
+    comm::AsyncSession& session = ctx.GetSession();
+    // Reuse an external session when supplied; otherwise build and cache the
+    // context-owned session on the first call.
+    if (!session.valid) {
         // Fully-qualified TASSIGN_IMPL avoids two-phase lookup: the public
         // TASSIGN wrapper in `pto/common/pto_instr.hpp` is not yet declared
         // when this template is defined, but the per-arch TASSIGN_IMPL is.
         TASSIGN_IMPL(ctx.scratchTile, 0x0);
-        if (!detail::InitPrefetchAsyncSession(ctx)) {
+        if (!detail::InitPrefetchAsyncSession(ctx, session)) {
             return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
         }
     }
-    return detail::TPrefetchAsyncSdmaImpl(srcGlobalData, ctx.session.sdmaSession.execCtx);
+    if (session.engine != comm::DmaEngine::SDMA) {
+        return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
+    }
+    return detail::TPrefetchAsyncSdmaImpl(srcGlobalData, session.sdmaSession);
 }
 
 } // namespace pto
