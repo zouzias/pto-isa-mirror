@@ -8,12 +8,65 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <gtest/gtest.h>
 
 #include "tput_async_kernel.h"
+#include "../async_post_stability_kernel.h"
 #include "../comm_mpi.h"
+
+namespace {
+
+int FirstDeviceId()
+{
+    const char* value = std::getenv("PTO_COMM_ST_FIRST_DEVICE_ID");
+    if (value == nullptr || *value == '\0') {
+        return 0;
+    }
+    errno = 0;
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    return errno == 0 && end != value && *end == '\0' && parsed >= 0 ? static_cast<int>(parsed) : 0;
+}
+
+bool RunPostStabilityCase(int nRanks, AsyncCheckMode checkMode, uint32_t postCount, uint32_t rounds, uint32_t queueNum)
+{
+    return RunAsyncPostStability(
+        nRanks, nRanks, 0, FirstDeviceId(), AsyncTransferKind::TPut, checkMode, postCount, rounds, queueNum);
+}
+
+class TPutAsyncPostStability2Ranks : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        constexpr int kRanks = 2;
+        if (CommMpiSize() != kRanks) {
+            GTEST_SKIP() << "Requires exactly 2 MPI ranks";
+        }
+        if (!IsAsyncPostStabilityDeviceRangeAvailable(kRanks, FirstDeviceId())) {
+            GTEST_SKIP() << "Requested device range is unavailable";
+        }
+    }
+};
+
+class TPutAsyncPostStability3Ranks : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        constexpr int kRanks = 3;
+        if (CommMpiSize() != kRanks) {
+            GTEST_SKIP() << "Requires exactly 3 MPI ranks";
+        }
+        if (!IsAsyncPostStabilityDeviceRangeAvailable(kRanks, FirstDeviceId())) {
+            GTEST_SKIP() << "Requested device range is unavailable";
+        }
+    }
+};
+
+} // namespace
 
 // ============================================================================
 // 1D Vector Tile Tests
@@ -67,6 +120,31 @@ TEST(TPutAsync, ConcurrentRank_FloatIter16Reuse_8Ranks)
 TEST(TPutAsync, ConcurrentRank_FloatIter16Fresh_8Ranks)
 {
     ASSERT_TRUE((RunPutAsyncConcurrentRank<float, 8192>(8, 8, 0, 0, 16, 1)));
+}
+
+TEST_F(TPutAsyncPostStability2Ranks, Immediate_P4_Q1)
+{
+    ASSERT_TRUE(RunPostStabilityCase(2, AsyncCheckMode::Immediate, 4, 1, 1));
+}
+
+TEST_F(TPutAsyncPostStability2Ranks, Deferred_P16_Q4)
+{
+    ASSERT_TRUE(RunPostStabilityCase(2, AsyncCheckMode::Deferred, 16, 1, 4));
+}
+
+TEST_F(TPutAsyncPostStability2Ranks, Immediate_512Posts_Q4)
+{
+    ASSERT_TRUE(RunPostStabilityCase(2, AsyncCheckMode::Immediate, 8, 64, 4));
+}
+
+TEST_F(TPutAsyncPostStability2Ranks, UsedQueueCount_Q4ThenQ1_LastWaitOnly)
+{
+    ASSERT_TRUE(RunPostStabilityCase(2, AsyncCheckMode::LastWaitOnly, 1, 1, 4));
+}
+
+TEST_F(TPutAsyncPostStability3Ranks, Deferred_P8_Q4_3Ranks)
+{
+    ASSERT_TRUE(RunPostStabilityCase(3, AsyncCheckMode::Deferred, 8, 1, 4));
 }
 
 int main(int argc, char** argv)
