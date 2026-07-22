@@ -112,7 +112,7 @@ stages:
     - type: auto
     fail-fast: true
   stage2:
-    name: Compile StaticCheck
+    name: Compile
     select: selected_by_default
     jobs:
       Compile_Ascend_X86:
