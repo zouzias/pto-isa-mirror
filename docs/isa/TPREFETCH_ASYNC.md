@@ -17,6 +17,7 @@ GM / HBM  ──(SDMA CMO prefetch)──>  L2 Cache
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`, namespace `pto`:
+> The public include is `<pto/pto-inst.hpp>`; the internal declaration is in `pto/common/pto_instr.hpp`.
 
 ```cpp
 namespace pto {
@@ -28,34 +29,56 @@ PTO_INST comm::AsyncEvent TPREFETCH_ASYNC(GlobalData &src, PrefetchAsyncContext 
 } // namespace pto
 ```
 
-`PrefetchAsyncContext` contains the SDMA workspace pointer prepared host-side via `SdmaWorkspaceManager::Init`:
+`PrefetchAsyncContext` contains the SDMA workspace pointer prepared host-side via `SdmaWorkspaceManager::Init`.
+When used independently, it builds and owns an internal session:
 
 ```cpp
 pto::PrefetchAsyncContext ctx(workspace);
 auto evt = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
-evt.Wait(ctx.session);
+evt.Wait(ctx.GetSession());
 ```
 
-The instruction builds and stores an SDMA session inside `PrefetchAsyncContext` with default parameters (`channelGroupIdx = get_block_idx()`, `syncId = 0`, `queue_num = 1`). Use the returned `comm::AsyncEvent` with `ctx.session` to wait for completion when a dependent consumer must observe the prefetch.
+The context uses a default single-queue session.
+Use the returned `comm::AsyncEvent` with `ctx.GetSession()` to wait for completion when a dependent consumer must
+observe the prefetch.
+
+When `TPREFETCH_ASYNC` shares a channel group with `TGET_ASYNC` or `TPUT_ASYNC`, pass their previously built session
+to the context so all three instructions preserve submission order and completion semantics:
+
+```cpp
+pto::comm::AsyncSession sharedSession;
+pto::comm::BuildAsyncSession(scratchTile, workspace, sharedSession, syncId, baseConfig, channelGroupIdx);
+
+pto::PrefetchAsyncContext ctx(workspace, &sharedSession);
+auto getEvt = TGET_ASYNC(dstGlobal, srcGlobal, sharedSession);
+auto prefetchEvt = TPREFETCH_ASYNC(prefetchGlobal, ctx);
+auto putEvt = TPUT_ASYNC(remoteGlobal, localGlobal, sharedSession);
+prefetchEvt.Wait(ctx.GetSession());
+```
+
+Waiting for an event from a shared session guarantees completion of that prefetch and every earlier SDMA operation
+in the session.
 
 ### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `src` | `GlobalData&` | Source GlobalTensor region to prefetch into L2 |
-| `ctx` | `PrefetchAsyncContext&` | Compute-side prefetch context containing the SDMA workspace base and internally built `comm::AsyncSession` |
+| `ctx` | `PrefetchAsyncContext&` | Compute-side context containing the workspace and either an internal session or a pointer to a shared external session |
 | `events...` | `WaitEvents&...` | Optional wait events for synchronization |
 
 ### Return Value
 
-`comm::AsyncEvent` - handle for asynchronous completion tracking. Call `evt.Wait(ctx.session)` before a dependent `TLOAD` when the consumer must observe prefetched data.
+`comm::AsyncEvent` - handle for asynchronous completion tracking. Call `evt.Wait(ctx.GetSession())` before a dependent `TLOAD` when the consumer must observe prefetched data.
 
 ## Constraints
 
 - Source data must be in Global Memory (GM/HBM address space).
 - For the GlobalTensor overload, the tensor must be flat contiguous (packed 1D layout).
 - The SDMA workspace must be initialized by host code before the kernel launch and passed into the kernel.
-- `PrefetchAsyncContext` owns a 256-byte UB scratch tile and an `AsyncSession` used while constructing and waiting on SDMA metadata.
+- When sharing a channel group with `TGET_ASYNC` or `TPUT_ASYNC`, reuse their session.
+- An external session must remain alive for the lifetime of the context and asynchronous event operations.
+- Concurrent independent contexts must use separate workspaces or be serialized.
 - SDMA CMO operates at cache-line granularity; non-aligned prefetch ranges are rounded by hardware.
 - On CPU simulation backend, this instruction is a no-op (returns an empty `AsyncEvent`).
 
@@ -65,8 +88,8 @@ The instruction builds and stores an SDMA session inside `PrefetchAsyncContext` 
 |-----------|-----------|--------------|
 | Data flow | GM → UB | GM → L2 Cache |
 | Hardware path | MTE (`copy_gm_to_ubuf`) | SDMA CMO (opcode=6) |
-| UB consumption | Yes (requires dst Tile) | No (only 256Byte scratch for SQE construction) |
-| Synchronization | Synchronous (pipeline barrier) | Asynchronous (`AsyncEvent`) |
+| UB consumption | Yes (requires dst Tile) | No data-buffer UB usage |
+| Synchronization | Synchronous | Asynchronous (`AsyncEvent`) |
 | Use case | Small data preload to UB | Large data L2 warm-up |
 
 ## Examples
@@ -87,7 +110,7 @@ __global__ AICORE void my_kernel(__gm__ half *src, __gm__ half *dst,
 
     PrefetchAsyncContext ctx(workspace);
     auto evt = TPREFETCH_ASYNC(srcGlobal, ctx);
-    evt.Wait(ctx.session);
+    evt.Wait(ctx.GetSession());
 
     using TileData = Tile<TileType::Vec, half, 128, 128, BLayout::RowMajor>;
     TileData tile;

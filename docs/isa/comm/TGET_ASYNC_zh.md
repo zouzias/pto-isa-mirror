@@ -55,7 +55,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `session` | — | 输出的 `AsyncSession` 对象。|
 | `syncId` | `0` | MTE3/MTE2管道同步事件ID（0-7）。若kernel在相同ID上使用了其他管道屏障，则需覆盖此值。|
 | `baseConfig` | `{kDefaultSdmaBlockBytes, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`。适用于大多数单队列传输场景。|
-| `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA通道组索引。默认内部使用 `get_block_idx()` 映射到当前AI Core。多block或自定义通道映射场景下需覆盖此值。|
+| `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA通道组索引。多Block、并发或自定义通道映射场景应显式指定。|
 
 ### URMA构建（仅NPU_ARCH 3510）
 
@@ -81,25 +81,20 @@ URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直�
 
 ## 约束
 
-- `GlobalSrcData::RawDType == GlobalDstData::RawDType`
-- `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA和URMA路径均要求源tensor为**扁平连续的逻辑一维**
-- SDMA workspace必须是由主机侧 `SdmaWorkspaceManager` 分配的有效GM指针
-- URMA workspace必须是由主机侧 `UrmaWorkspaceManager` 分配的有效GM指针
-- URMA仅在NPU_ARCH 3510（Ascend 950PR/Ascend 950DT）上可用
-- URMA要求CANN Toolkit **>= 9.1.0**
-- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层MR注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到4KB小页，导致注册失败
-
-若不满足一维连续要求，当前实现返回无效async event（`handle == 0`）。
+- 源和目的 tensor 必须使用相同的数据类型与布局。
+- SDMA 和 URMA 均要求源和目的 tensor 为扁平、连续的逻辑一维，且目的空间足够大。
+- Kernel 启动前，必须使用对应的 Host 侧 Workspace Manager 完成 workspace 初始化。
+- Session 和 workspace 的生命周期必须覆盖相关 Event 的完成阶段。
+- URMA 仅在 NPU_ARCH 3510（Ascend 950PR/Ascend 950DT）上可用
+- URMA 要求 CANN Toolkit **>= 9.1.0**
+- 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑，应使用
+  `aclrtMalloc(..., ACL_MEM_MALLOC_HUGE_ONLY)` 分配。不要使用 `ACL_MEM_MALLOC_HUGE_FIRST`：小尺寸分配
+  可能静默回退到 4 KB 小页，导致底层 MR 注册失败。
 
 ## scratchTile的作用
 
 `scratchTile` **不是**用于传输数据负载的暂存缓冲区。
-它被转换为 `TmpBuffer`，用作临时UB工作区，用于：
-
-- 写入/读取SDMA控制字（flag、sq_tail、channel_info）
-- 轮询事件完成标志
-- 完成时提交队列尾部
+它临时保存提交传输和检查完成状态所需的 SDMA 控制信息，包括 Queue 状态、完成状态和通知值。
 
 实际数据路径为远端GM → DMA引擎 → 本地GM；`scratchTile` 仅用于控制和同步元数据。
 
@@ -111,18 +106,26 @@ URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直�
 
 推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>`（256Byte）。
 
-## 完成语义（Quiet语义）
+## 完成语义
 
-不同引擎的底层完成机制不同，但用户侧的quiet语义行为一致：
+### SDMA 完成语义
 
-- **SDMA**：`TGET_ASYNC` 仅提交数据传输SQE，flag SQE延迟到 `Wait` 时提交，通过轮询flag判断完成。
-- **URMA**：`TGET_ASYNC` 立即提交RDMA READ WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
+对 Event 调用 `Wait`，或 `Test` 返回成功，可以保证本次传输以及同一 Session 中此前提交的所有 SDMA
+操作均已完成。该保证只覆盖 Session 实际使用过的 Queue。
 
-- `event.Wait(session)` —阻塞，直到**自上次Wait以来所有已发出的异步操作**全部完成
+一个 Session 最多可保留 64 个未复用的完成记录。继续提交仍能保证正确性，但复用记录前可能等待较早的
+操作完成。
 
-这意味着多次 `TGET_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有pending操作完成（类似shmem的quiet语义）。
+### URMA 完成协议
 
-wait成功后，所有已发出的 `dstGlobalData` 读入数据均已全部就绪。
+URMA 立即提交 RDMA READ WQE 并敲门铃。`Wait`/`Test` 检查返回 Event 所表示的 Completion Queue 状态。
+
+## SDMA 并发与 Session 所有权
+
+- 同一个 Session 不能被多个执行流并发使用。
+- 共用同一 Channel Group 的操作必须共享同一个 Session。
+- 并发 Kernel 或 Kernel 内多个独立 Session 必须使用隔离的 Channel Group。
+- 重新构建 Session 或复用 Channel Group 前，必须先完成此前所有 Event。
 
 ## 示例
 
@@ -161,7 +164,7 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
 }
 ```
 
-### 批量传输（Quiet语义）
+### 单 Queue 多次 Post
 
 ```cpp
 template <typename T>
@@ -190,7 +193,7 @@ __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
         GT srcG(remoteSrcBase + rank * 1024, shape, stride);
         lastEvent = comm::TGET_ASYNC(dstG, srcG, session);
     }
-    (void)lastEvent.Wait(session);  // 一次 Wait 等待所有 pending 操作
+    (void)lastEvent.Wait(session);  // 同时覆盖本 Session 内此前所有 SDMA Post
 }
 ```
 
