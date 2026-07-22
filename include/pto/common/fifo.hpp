@@ -16,8 +16,10 @@ namespace pto {
 
 enum TileSplitAxis : uint8_t {
     TILE_NO_SPLIT = 0,   // 1:1 mode, no split, using AIV0
-    TILE_UP_DOWN = 1,    // Split/combine along rows: AIV0=upper half, AIV1=lower half
-    TILE_LEFT_RIGHT = 2, // Split/combine along cols: AIV0=left half, AIV1=right half
+    TILE_UP_DOWN = 1,    // Split along rows: AIV0=upper half, AIV1=lower half, row axis must be even number
+    TILE_LEFT_RIGHT = 2, // Split along cols: AIV0=left half, AIV1=right half, column axis must be even number
+    TILE_UP_DOWN_ODD = 3, // Split along rows: AIV0=rows/2 + 1, AIV1=rows/2, row axis must be odd number
+    TILE_LEFT_RIGHT_ODD = 4, // Split along cols: AIV0=cols/2 + 1, AIV1=cols/2, column axis must be odd number
 };
 
 enum Direction : uint8_t {
