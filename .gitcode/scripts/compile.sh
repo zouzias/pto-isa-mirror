@@ -107,4 +107,5 @@ else
     ls -la "${WORKSPACE}/tmp"
     exit 1
 fi
+echo "package_name=${package_name}" >> "${ATOMGIT_OUTPUT}"
 exit 0
