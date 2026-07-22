@@ -1,9 +1,12 @@
-name: staticheck_action
+name: staticcheck_action
 
 on:
   workflow_call:
     inputs:
       check_type:
+        required: true
+        type: string
+    image_version:
         required: true
         type: string
 
@@ -59,4 +62,4 @@ jobs:
     if: "${{ default() }}"
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/static_check/ubuntu24.04.03:v1.0
+      image: swr.cn-north-4.myhuaweicloud.com/static_check/${{ inputs.image_version }}
