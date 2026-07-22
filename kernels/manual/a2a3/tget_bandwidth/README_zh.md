@@ -40,12 +40,21 @@ Peer NPU GM ──TGET──▶ Local UB ──TSTORE──▶ Local GM
 Peer NPU GM ──SDMA──▶ Local GM   (直传，无 UB 中转)
 ```
 
+当前SDMA异步完成协议使用kernel-local post ID。Session会累计记录使用过的Queue数，每次Post都在这些
+Queue上追加8B flag SQE，因此等待最后一个Event也会覆盖该Session内此前所有Post。Wait/Test只轮询对应
+post ID，不再在Wait阶段提交SQE。每个channel group拥有独立的64槽Payload arena（每槽8B，共512B），
+Post Done Record按64B间隔复用该group的`recv_workspace`。Host侧
+`SdmaWorkspaceManager`统一管理STARS context和所有group的Payload，kernel调用方不需要额外分配控制区。
+
 ### 测试流程
 
 1. 每个 rank 在 HCCL shared memory 中准备发送数据（`PrepareSendBufferKernel`）
 2. root rank 对每种传输规模分别执行 TGET 和 TGET_ASYNC
 3. Host 侧计时测量带宽，device 侧通过 `SYS_CNT` 测量 cycle 数
 4. 验证接收数据正确性
+
+两条计时路径都只测量 Peer 对称内存 `sendShmem` 到 Root 对称内存 `recvShmem` 的传输。计时结束后仅将
+接收结果复制一次到普通 GM 校验缓冲区，因此 Host 带宽和 Device cycle 均不包含 CopyOut。
 
 ### 规格
 
@@ -62,17 +71,17 @@ Peer NPU GM ──SDMA──▶ Local GM   (直传，无 UB 中转)
 
 | 传输大小 | TGET 带宽 (GB/s) | TGET_ASYNC 带宽 (GB/s) | TGET device 平均 cycles | TGET_ASYNC device 平均 cycles |
 | -------- | ----------------: | ----------------------: | ----------------------: | ----------------------------: |
-| 4 KB     | 0.21              | 0.19                    | 50.85                   | 118.18                        |
-| 16 KB    | 0.72              | 0.75                    | 202.05                  | 166.42                        |
-| 64 KB    | 1.75              | 2.55                    | 780.73                  | 338.10                        |
-| 256 KB   | 3.01              | 6.08                    | 3347.12                 | 1094.37                       |
-| 1 MB     | 3.75              | 10.48                   | 12703.39                | 3791.18                       |
-| 4 MB     | 3.99              | 12.95                   | 52878.12                | 14834.47                      |
+| 4 KB     | 0.20              | 0.18                    | 36.28                   | 136.51                        |
+| 16 KB    | 0.77              | 0.64                    | 149.98                  | 161.40                        |
+| 64 KB    | 1.50              | 2.44                    | 579.62                  | 277.25                        |
+| 256 KB   | 2.40              | 7.90                    | 2409.72                 | 745.54                        |
+| 1 MB     | 2.63              | 8.98                    | 9317.93                 | 2624.24                       |
+| 4 MB     | 4.85              | 10.49                   | 37924.12                | 10273.68                      |
 
 ### 分析
 
 - **TGET** 随传输规模增大，带宽逐步上升但在约 **4 GB/s** 处饱和——这是 UB 暂存路径的单核带宽上限。
-- **TGET_ASYNC** 在大传输量（≥256 KB）时显著超越 TGET，4 MB 时达到约 **13 GB/s**，接近 SDMA 引擎的理论带宽。
+- **TGET_ASYNC** 在大传输量（≥256 KB）时显著超越 TGET，4 MB 时 Host 观测带宽约为 **10.5 GB/s**。
 - 在极小传输量（4 KB）下，TGET_ASYNC 由于 SDMA 启动开销反而略慢于 TGET。
 
 ### 带宽对比图
@@ -146,9 +155,39 @@ peer_rank=1 dtype=float tile_elems=1024
 test success
 ```
 
+### 固定版SDMA Device Baseline
+
+使用`device_baseline`模式可配置SQE大小、queue、channel group和多Post场景。每轮都会更新源数据、
+将目的区域填为哨兵，并逐block、逐Post验证结果。
+
+```bash
+export TGET_BENCH_MODE=device_baseline
+export TGET_DEVICE_BASELINE_FIRST_DEVICE_ID=5
+export TGET_DEVICE_BASELINE_BYTES=131072
+export TGET_DEVICE_BASELINE_BLOCK_DIVISOR=4  # SQE=128KiB/4=32KiB
+export TGET_DEVICE_BASELINE_QUEUE_NUM=4
+export TGET_DEVICE_BASELINE_BLOCK_NUM=1      # 每个block使用独立channel group
+export TGET_DEVICE_BASELINE_POST_COUNT=1
+export TGET_DEVICE_BASELINE_OUTER_WARMUP=2
+export TGET_DEVICE_BASELINE_OUTER_ITERS=20
+export TGET_DEVICE_BASELINE_INNER_WARMUP=50
+export TGET_DEVICE_BASELINE_INNER_ITERS=300
+export TGET_DEVICE_BASELINE_WAIT_EACH_EVENT=0
+
+mpirun -n 2 ./build/tget_bandwidth
+```
+
+约束：
+
+- `BLOCK_NUM * QUEUE_NUM <= 48`；
+- 单group最多保留64个无需等待的Payload槽；
+- 每次Post在单queue产生的data SQE与flag SQE总数不得超过该SQ深度；跨Post累计在途SQE容量沿用原接口约束，由调用者保证；
+- `WAIT_EACH_EVENT=1`会逐个检查Event；默认只Wait最后一个Event，但仍验证所有Post的数据。
+
 ## 变更记录
 
 | 日期       | 变更 |
 | ---------- | ------ |
+| 2026-07-16 | 固定post ID Event实现；增加queue、channel group和多Post测试 |
 | 2026-06-01 | 文档与 `run.sh` 对齐 MPICH；移除 OpenMPI 专用 `mpirun` 参数 |
 | 2026-04-02 | 从 ST 测试迁移为独立性能示例 |

@@ -9,7 +9,7 @@
 # --------------------------------------------------------------------------------
 
 function(pto_comm_st NAME)
-    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp ${ARGN})
 
     # Determine aicore arch and memory model from SOC_VERSION.
     # Default: A2A3-compatible (works on A5 hardware via backward compat).
