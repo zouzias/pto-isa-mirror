@@ -90,8 +90,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_MTE_FALLBACK(
 
 #ifdef PTO_URMA_SUPPORTED
 template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent
-TPUT_ASYNC_URMA_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const urma::UrmaExecContext& execCtx)
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const urma::UrmaExecContext& execCtx, uint32_t peer)
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
@@ -116,8 +116,15 @@ TPUT_ASYNC_URMA_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData,
 
     const uint64_t eventHandle = urma::__urma_put_async(
         reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
-        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), transferSize, execCtx);
+        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), transferSize, execCtx, peer);
     return AsyncEvent(eventHandle, DmaEngine::URMA);
+}
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_URMA_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const urma::UrmaExecContext& execCtx)
+{
+    return TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, execCtx, execCtx.destRankId);
 }
 #endif
 
@@ -143,6 +150,29 @@ TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, cons
 #endif
     } else {
         PTO_ASSERT(false, "TPUT_ASYNC: unsupported engine");
+        return AsyncEvent(0, engine);
+    }
+}
+
+// peer overload: URMA uses peer for SQ/CQ/MemInfo; SDMA ignores peer.
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer)
+{
+    if constexpr (engine == DmaEngine::SDMA) {
+        (void)peer;
+        return detail::TPUT_ASYNC_MTE_FALLBACK(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+    } else if constexpr (engine == DmaEngine::URMA) {
+#ifdef PTO_URMA_SUPPORTED
+        return detail::TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx, peer);
+#else
+        static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC: URMA engine requires NPU_ARCH 3510");
+        (void)peer;
+        return AsyncEvent(0, engine);
+#endif
+    } else {
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported engine");
+        (void)peer;
         return AsyncEvent(0, engine);
     }
 }

@@ -260,37 +260,59 @@ AICORE inline bool UrmaTestEvent(uint64_t eventHandle, const UrmaEventContext& e
 
 // ============================================================================
 // Public API: __urma_put_async / __urma_get_async
+// peer selects SQ/CQ/MemInfo; preferred over execCtx.destRankId for multi-peer reuse.
 // ============================================================================
+
+AICORE inline uint64_t __urma_put_async(
+    __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const UrmaExecContext& execCtx, uint32_t peer)
+{
+    uint32_t curHead =
+        detail::UrmaPostSend(execCtx.contextGm, dst, src, peer, execCtx.qpIdx, UrmaOpcode::WRITE, transferSize);
+    return detail::EncodeHandle(peer, curHead);
+}
+
+AICORE inline uint64_t __urma_get_async(
+    __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const UrmaExecContext& execCtx, uint32_t peer)
+{
+    // RDMA READ: remote addr = src (SQE remote field), local addr = dst (SGE.va)
+    uint32_t curHead =
+        detail::UrmaPostSend(execCtx.contextGm, src, dst, peer, execCtx.qpIdx, UrmaOpcode::READ, transferSize);
+    return detail::EncodeHandle(peer, curHead);
+}
 
 AICORE inline uint64_t __urma_put_async(
     __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const UrmaExecContext& execCtx)
 {
-    uint32_t curHead = detail::UrmaPostSend(
-        execCtx.contextGm, dst, src, execCtx.destRankId, execCtx.qpIdx, UrmaOpcode::WRITE, transferSize);
-    return detail::EncodeHandle(execCtx.destRankId, curHead);
+    return __urma_put_async(dst, src, transferSize, execCtx, execCtx.destRankId);
 }
 
 AICORE inline uint64_t __urma_get_async(
     __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const UrmaExecContext& execCtx)
 {
-    // RDMA READ: remote addr = src (SQE remote field), local addr = dst (SGE.va)
-    uint32_t curHead = detail::UrmaPostSend(
-        execCtx.contextGm, src, dst, execCtx.destRankId, execCtx.qpIdx, UrmaOpcode::READ, transferSize);
-    return detail::EncodeHandle(execCtx.destRankId, curHead);
+    return __urma_get_async(dst, src, transferSize, execCtx, execCtx.destRankId);
 }
 
 // ============================================================================
-// BuildUrmaSession — fill UrmaSession from workspace and destRankId
+// BuildUrmaSession — fill UrmaSession from workspace (peer at TPUT_ASYNC / TGET_ASYNC)
 // ============================================================================
 
-AICORE inline bool BuildUrmaSession(__gm__ uint8_t* contextGm, uint32_t destRankId, UrmaSession& session)
+AICORE inline bool BuildUrmaSession(__gm__ uint8_t* contextGm, UrmaSession& session)
 {
     session.execCtx.contextGm = contextGm;
-    session.execCtx.destRankId = destRankId;
+    session.execCtx.destRankId = 0;
     session.execCtx.qpIdx = 0;
     session.eventCtx.contextGm = contextGm;
     session.valid = (contextGm != nullptr);
     return session.valid;
+}
+
+AICORE inline bool BuildUrmaSession(__gm__ uint8_t* contextGm, uint32_t destRankId, UrmaSession& session)
+{
+    if (!BuildUrmaSession(contextGm, session)) {
+        return false;
+    }
+    session.execCtx.destRankId = destRankId;
+    return true;
 }
 
 // ============================================================================

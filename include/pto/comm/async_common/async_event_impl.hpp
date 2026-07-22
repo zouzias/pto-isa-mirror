@@ -42,6 +42,15 @@ PTO_INTERNAL bool BuildAsyncSession(
 
 #ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
+PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& session)
+{
+    static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
+    session.engine = engine;
+    session.valid = urma::BuildUrmaSession(workspace, session.urmaSession);
+    return session.valid;
+}
+
+template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, uint32_t destRankId, AsyncSession& session)
 {
     static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
