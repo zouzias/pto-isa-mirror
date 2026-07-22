@@ -17,6 +17,7 @@ GM / HBM  ──(SDMA CMO prefetch)──>  L2 Cache
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`, namespace `pto`:
+> The public include is `<pto/pto-inst.hpp>`; the internal declaration is in `pto/common/pto_instr.hpp`.
 
 ```cpp
 namespace pto {
@@ -87,8 +88,8 @@ in the session.
 |-----------|-----------|--------------|
 | Data flow | GM → UB | GM → L2 Cache |
 | Hardware path | MTE (`copy_gm_to_ubuf`) | SDMA CMO (opcode=6) |
-| UB consumption | Yes (requires dst Tile) | No (only 256Byte scratch for SQE construction) |
-| Synchronization | Synchronous (pipeline barrier) | Asynchronous (`AsyncEvent`) |
+| UB consumption | Yes (requires dst Tile) | No data-buffer UB usage |
+| Synchronization | Synchronous | Asynchronous (`AsyncEvent`) |
 | Use case | Small data preload to UB | Large data L2 warm-up |
 
 ## Examples

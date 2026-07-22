@@ -158,31 +158,30 @@ test success
 ### 固定版SDMA Device Baseline
 
 使用`device_baseline`模式可配置SQE大小、queue、channel group和多Post场景。每轮都会更新源数据、
-将目的区域填为哨兵，并逐block、逐Post验证结果。
+将目的区域填为哨兵，并验证所有Post的结果。只需设置需要覆盖的参数：
 
 ```bash
 export TGET_BENCH_MODE=device_baseline
-export TGET_DEVICE_BASELINE_FIRST_DEVICE_ID=5
 export TGET_DEVICE_BASELINE_BYTES=131072
-export TGET_DEVICE_BASELINE_BLOCK_DIVISOR=4  # SQE=128KiB/4=32KiB
-export TGET_DEVICE_BASELINE_QUEUE_NUM=4
-export TGET_DEVICE_BASELINE_BLOCK_NUM=1      # 每个block使用独立channel group
+export TGET_DEVICE_BASELINE_BLOCK_DIVISOR=1
+export TGET_DEVICE_BASELINE_QUEUE_NUM=1
 export TGET_DEVICE_BASELINE_POST_COUNT=1
-export TGET_DEVICE_BASELINE_OUTER_WARMUP=2
 export TGET_DEVICE_BASELINE_OUTER_ITERS=20
-export TGET_DEVICE_BASELINE_INNER_WARMUP=50
 export TGET_DEVICE_BASELINE_INNER_ITERS=300
-export TGET_DEVICE_BASELINE_WAIT_EACH_EVENT=0
 
-mpirun -n 2 ./build/tget_bandwidth
+bash run.sh -r npu -v a3 -n 2
 ```
+
+`BLOCK_DIVISOR=1`表示`block_bytes=total_bytes`，即每次Post只生成一个data SQE。计时范围只包含对称内存
+传输和Post完成过程，数据校验位于计时区间之外。
 
 约束：
 
 - `BLOCK_NUM * QUEUE_NUM <= 48`；
 - 单group最多保留64个无需等待的Payload槽；
-- 每次Post在单queue产生的data SQE与flag SQE总数不得超过该SQ深度；跨Post累计在途SQE容量沿用原接口约束，由调用者保证；
-- `WAIT_EACH_EVENT=1`会逐个检查Event；默认只Wait最后一个Event，但仍验证所有Post的数据。
+- 每次Post在单queue产生的数据和完成SQE总数不得超过该SQ深度；
+- 默认只Wait最后一个Event，但仍验证所有Post的数据；设置`TGET_DEVICE_BASELINE_WAIT_EACH_EVENT=1`
+  可逐个等待Event。
 
 ## 变更记录
 

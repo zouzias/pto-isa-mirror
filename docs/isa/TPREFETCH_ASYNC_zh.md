@@ -4,7 +4,8 @@
 
 `TPREFETCH_ASYNC` 通过 SDMA CMO（Cache Maintenance Operation, opcode=6）将 Global Memory (GM/HBM) 中的数据异步预取到 NPU L2 Cache。与将数据搬入 UB 的 `TPREFETCH` 不同，`TPREFETCH_ASYNC` 只将数据预热到 L2 Cache，不占用数据对应的 UB 空间，后续依赖的 `TLOAD` 可以从 L2 命中。
 
-该指令是面向计算侧的内存访问/缓存提示接口。虽然内部使用 SDMA CMO 路径，公开 API 仍位于 `pto` 命名空间中。
+该指令是面向计算侧的内存访问/缓存提示接口。虽然内部使用 SDMA CMO 路径，公开 API 仍位于 `pto`
+命名空间中，与`pto::TPREFETCH`同级。
 
 ## 数据流
 
@@ -73,12 +74,12 @@ prefetchEvt.Wait(ctx.GetSession());
 ## 约束
 
 - 源数据必须位于 Global Memory (GM/HBM)。
-- GlobalTensor 必须是平坦连续的一维布局。
+- 对于GlobalTensor重载，Tensor必须是平坦连续的紧凑一维布局。
 - SDMA workspace 需要在 kernel 启动前由 Host 侧初始化，并传入 kernel。
 - 与 `TGET_ASYNC` 或 `TPUT_ASYNC` 共用 Channel Group 时，必须复用其 Session。
 - 外部 Session 的生命周期必须覆盖 Context 及相关异步 Event 的使用阶段。
 - 并发使用的独立 Context 必须采用不同的 workspace，或保证串行执行。
-- SDMA CMO 按 cache line 粒度工作，非对齐范围由硬件处理。
+- SDMA CMO 按 cache line 粒度工作，非对齐范围由硬件按规则对齐。
 - CPU simulation 后端中该指令为空操作，返回空 `AsyncEvent`。
 
 ## 与 TPREFETCH 对比
@@ -87,9 +88,9 @@ prefetchEvt.Wait(ctx.GetSession());
 |------|------------------|------------------------|
 | 数据流 | GM 到 UB | GM 到 L2 Cache |
 | 硬件路径 | MTE (`copy_gm_to_ubuf`) | SDMA CMO (opcode=6) |
-| UB 占用 | 需要目标 Tile | 数据不占用 UB，仅内部使用 scratch |
+| UB 占用 | 需要目标 Tile | 数据不占用 UB |
 | 同步方式 | 同步 | 异步 (`AsyncEvent`) |
-| 典型用途 | 小数据预取到 UB | 大数据或跨阶段数据预热到 L2 |
+| 典型用途 | 小数据预取到 UB | 大数据预热到 L2 |
 
 ## 示例
 
