@@ -308,6 +308,21 @@ MXFP4_FP16_CASE_PARAMS = [
     ("TQUANTDNTest.case_mxfp4_fp16_64x256", 64, 256),
 ]
 
+VALID_SHAPE_CASE_PARAMS = [
+    ("fp16", 896, 896, 34),
+    ("fp16", 512, 512, 34),
+    ("fp16", 512, 64, 34),
+    ("fp16", 896, 896, 24),
+    ("fp16", 512, 512, 24),
+    ("fp16", 512, 64, 24),
+    ("bf16", 896, 896, 34),
+    ("bf16", 512, 512, 34),
+    ("bf16", 512, 64, 34),
+    ("bf16", 896, 896, 24),
+    ("bf16", 512, 512, 24),
+    ("bf16", 512, 64, 24),
+]
+
 GOLDEN_DIR = os.environ.get("PTO_GOLDEN_DIR", ".")
 
 
@@ -486,6 +501,38 @@ def gen_golden_data_mxfp4_fp16(case_name, m, n):
     _write_golden_mxfp4(out_dir, golden)
 
 
+def gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols):
+    case_name = f"TQUANTDNTest.case_validshape_{dtype}_s{static_rows}x48_v{valid_rows}x{valid_cols}"
+    src = np.random.uniform(-1.0, 1.0, size=(valid_rows, valid_cols)).astype(np.float32)
+    if dtype == "fp16":
+        src_fp16 = src.astype(np.float16)
+        input_bytes = src_fp16.view(np.uint16).reshape(-1).tobytes()
+        src_numeric = src_fp16.astype(np.float32)
+        # Fp16ToBf16PreserveSpecial uses ROUND_Z before the DN max reduction.
+        max_input_bits = fp32_to_bf16_bits(src_numeric)
+        max_input = bf16_bits_to_fp32(max_input_bits.reshape(-1)).reshape(valid_rows, valid_cols)
+    else:
+        src_bits = fp32_to_bf16_bits(src)
+        input_bytes = src_bits.reshape(-1).tobytes()
+        src_numeric = bf16_bits_to_fp32(src_bits.reshape(-1)).reshape(valid_rows, valid_cols)
+        max_input = src_numeric
+
+    group_max = get_group_max_dn(max_input, group_size=32)
+    e8m0, scaling = fp32_maxes_to_fp8(group_max)
+    scaled = scale_data_dn(src_numeric, scaling, group_size=32)
+    fp8_nd = fp32_to_e4m3(scaled).reshape(valid_rows, valid_cols)
+    e8_interleaved = e8m0.reshape(valid_rows // 64, 2, valid_cols).transpose(0, 2, 1)
+
+    out_dir = os.path.join(GOLDEN_DIR, case_name)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "input.bin"), "wb") as f:
+        f.write(input_bytes)
+    with open(os.path.join(out_dir, "golden_fp8_nd.bin"), "wb") as f:
+        f.write(fp8_nd.tobytes())
+    with open(os.path.join(out_dir, "golden_e8_dn_interleaved.bin"), "wb") as f:
+        f.write(e8_interleaved.tobytes())
+
+
 if __name__ == "__main__":
     np.random.seed(42)
     for case_name, m, n in CASE_PARAMS:
@@ -500,4 +547,7 @@ if __name__ == "__main__":
     for case_name, m, n in MXFP4_FP16_CASE_PARAMS:
         print(f"Generating {case_name}...")
         gen_golden_data_mxfp4_fp16(case_name, m, n)
+    for dtype, static_rows, valid_rows, valid_cols in VALID_SHAPE_CASE_PARAMS:
+        print(f"Generating {dtype} validShape static=[{static_rows},48] valid=[{valid_rows},{valid_cols}]...")
+        gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols)
     print("Done.")

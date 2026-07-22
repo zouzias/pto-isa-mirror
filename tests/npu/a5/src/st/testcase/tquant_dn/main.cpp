@@ -43,6 +43,12 @@ template <int M, int N, int N_pad>
 void LaunchTQuantDN_MXFP4_fp16(
     uint16_t* src, uint8_t* fp4_nd, uint8_t* e8_dn, uint8_t* fp4_nz, uint16_t* max_dn, void* stream);
 
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeFP16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream);
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeBF16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream);
+
 } // namespace TQuantDNTest
 
 class TQUANTDNTest : public testing::Test {
@@ -67,6 +73,85 @@ void ExpectGoldenMatch(
     ASSERT_EQ(golden.size(), output.size()) << tensorName << " size mismatch";
     EXPECT_TRUE(ResultCmp<T>(golden, output, 0.0f)) << stageName << ": " << tensorName << " mismatch vs golden";
 }
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols, bool IsFP16>
+void test_tquant_dn_valid_shape()
+{
+    constexpr size_t srcElements = ValidRows * ValidCols;
+    constexpr size_t dstElements = srcElements;
+    constexpr size_t expElements = (ValidRows / 64) * ValidCols * 2;
+    size_t srcFileSize = srcElements * sizeof(uint16_t);
+    size_t dstFileSize = dstElements;
+    size_t expFileSize = expElements;
+    const std::string goldenDir = GetGoldenDir();
+
+    std::vector<uint16_t> srcHost(srcElements);
+    std::vector<int8_t> dstHost(dstElements);
+    std::vector<uint8_t> expHost(expElements);
+    std::vector<int8_t> goldenDst(dstElements);
+    std::vector<uint8_t> goldenExp(expElements);
+    ReadFile(goldenDir + "/input.bin", srcFileSize, srcHost.data(), srcFileSize);
+    ReadFile(goldenDir + "/golden_fp8_nd.bin", dstFileSize, goldenDst.data(), dstFileSize);
+    ReadFile(goldenDir + "/golden_e8_dn_interleaved.bin", expFileSize, goldenExp.data(), expFileSize);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    uint16_t* srcDevice;
+    int8_t* dstDevice;
+    uint8_t* expDevice;
+    aclrtMalloc((void**)&srcDevice, srcElements * sizeof(uint16_t), ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, dstElements, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&expDevice, expElements, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemcpy(
+        srcDevice, srcElements * sizeof(uint16_t), srcHost.data(), srcElements * sizeof(uint16_t),
+        ACL_MEMCPY_HOST_TO_DEVICE);
+
+    if constexpr (IsFP16) {
+        TQuantDNTest::LaunchTQuantDNValidShapeFP16<StaticRows, StaticCols, ValidRows, ValidCols>(
+            srcDevice, dstDevice, expDevice, stream);
+    } else {
+        TQuantDNTest::LaunchTQuantDNValidShapeBF16<StaticRows, StaticCols, ValidRows, ValidCols>(
+            srcDevice, dstDevice, expDevice, stream);
+    }
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "DN validShape sync failed: " << aclGetRecentErrMsg();
+    aclrtMemcpy(dstHost.data(), dstElements, dstDevice, dstElements, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(expHost.data(), expElements, expDevice, expElements, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(goldenDir + "/output_fp8_nd.bin", dstHost.data(), dstElements);
+    WriteFile(goldenDir + "/output_e8_dn.bin", expHost.data(), expElements);
+    ExpectGoldenMatch("DN_validShape", "fp8_nd", goldenDst, dstHost);
+    ExpectGoldenMatch("DN_validShape", "e8_dn_interleaved", goldenExp, expHost);
+
+    aclrtFree(srcDevice);
+    aclrtFree(dstDevice);
+    aclrtFree(expDevice);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+}
+
+#define TQUANT_DN_VALID_SHAPE_CASE(DTYPE, IS_FP16, SR, VR, VC) \
+    TEST_F(TQUANTDNTest, case_validshape_##DTYPE##_s##SR##x48_v##VR##x##VC) \
+    { \
+        test_tquant_dn_valid_shape<SR, 48, VR, VC, IS_FP16>(); \
+    }
+
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 896, 896, 34)
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 512, 512, 34)
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 512, 64, 34)
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 896, 896, 24)
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 512, 512, 24)
+TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 512, 64, 24)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 896, 896, 34)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 512, 512, 34)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 512, 64, 34)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 896, 896, 24)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 512, 512, 24)
+TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 512, 64, 24)
+
+#undef TQUANT_DN_VALID_SHAPE_CASE
 
 template <int M, int N, int N_pad, bool InterleaveExp = false>
 void test_tquant_dn_bf16()
