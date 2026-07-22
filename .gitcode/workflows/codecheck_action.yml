@@ -2,7 +2,12 @@ name: codecheck_action
 
 on:
   workflow_call:
-
+    precommit_image_version:
+      required: true
+      type: string
+    codecheck_image_version:
+        required: true
+        type: string
 
 jobs:
   PreCommit:
@@ -45,7 +50,7 @@ jobs:
     if: "${{ default() }}"
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu20.04.05_x86:alpha113
+      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.precommit_image_version }}
   Check_pr:
     name: CodeCheck_check-pr
     select: selected_by_default
@@ -77,7 +82,7 @@ jobs:
           workspace: ${{ steps.process_checkout.outputs.path }}
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
+      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   SCA:
     name: SCA
     select: selected_by_default
@@ -107,7 +112,7 @@ jobs:
     if: "${{ default() }}"
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
+      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   Antiposion:
     name: Antiposion
     select: selected_by_default
@@ -137,7 +142,7 @@ jobs:
     if: "${{ default() }}"
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
+      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   CodeCheck:
     name: CodeCheck
     select: selected_by_default
@@ -167,4 +172,4 @@ jobs:
     if: "${{ default() }}"
     runs-on: [dedicate-hosted, x64, small]
     container:
-      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu24.04_x86:lv1_v1.1032
+      image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
