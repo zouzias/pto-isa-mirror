@@ -1,1 +1,1 @@
-pto_comm_st(tput_async)
+pto_comm_st(tput_async ../async_generation_stability/async_generation_stability_kernel.cpp)

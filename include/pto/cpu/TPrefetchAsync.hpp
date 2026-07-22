@@ -31,9 +31,19 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession& /*session*/) const { retu
 struct PrefetchAsyncContext {
     __gm__ uint8_t* workspace{nullptr};
     comm::AsyncSession session;
+    comm::AsyncSession* externalSession{nullptr};
 
     constexpr PrefetchAsyncContext() = default;
     constexpr explicit PrefetchAsyncContext(__gm__ uint8_t* workspace_) : workspace(workspace_) {}
+    constexpr PrefetchAsyncContext(__gm__ uint8_t* workspace_, comm::AsyncSession* externalSession_)
+        : workspace(workspace_), externalSession(externalSession_)
+    {}
+
+    constexpr comm::AsyncSession& GetSession() { return externalSession != nullptr ? *externalSession : session; }
+    constexpr const comm::AsyncSession& GetSession() const
+    {
+        return externalSession != nullptr ? *externalSession : session;
+    }
 };
 
 template <typename GlobalData>

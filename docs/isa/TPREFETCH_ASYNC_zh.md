@@ -29,34 +29,55 @@ PTO_INST comm::AsyncEvent TPREFETCH_ASYNC(GlobalData &src, PrefetchAsyncContext 
 } // namespace pto
 ```
 
-`PrefetchAsyncContext` 保存由 Host 侧 `SdmaWorkspaceManager::Init` 初始化后的 SDMA workspace 指针：
+`PrefetchAsyncContext` 保存由 Host 侧 `SdmaWorkspaceManager::Init` 初始化后的 SDMA workspace 指针。
+独立使用时，Context 会构造并持有内部 Session：
 
 ```cpp
 pto::PrefetchAsyncContext ctx(workspace);
 auto evt = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
-evt.Wait(ctx.session);
+evt.Wait(ctx.GetSession());
 ```
 
-指令内部使用默认参数构造 SDMA session（`channelGroupIdx = get_block_idx()`、`syncId = 0`、`queue_num = 1`），并保存在 `PrefetchAsyncContext` 中。后续消费者依赖预取结果时，使用返回的 `comm::AsyncEvent` 和 `ctx.session` 等待完成。
+Context 默认使用单 Queue Session。
+后续消费者依赖预取结果时，使用返回的 `comm::AsyncEvent` 和 `ctx.GetSession()` 等待完成。
+
+当 `TPREFETCH_ASYNC` 与 `TGET_ASYNC` 或 `TPUT_ASYNC` 共用 Channel Group 时，需要把已经构造的共享 Session
+传给 Context，使三类指令保持正确的提交顺序和完成语义：
+
+```cpp
+pto::comm::AsyncSession sharedSession;
+pto::comm::BuildAsyncSession(scratchTile, workspace, sharedSession, syncId, baseConfig, channelGroupIdx);
+
+pto::PrefetchAsyncContext ctx(workspace, &sharedSession);
+auto getEvt = TGET_ASYNC(dstGlobal, srcGlobal, sharedSession);
+auto prefetchEvt = TPREFETCH_ASYNC(prefetchGlobal, ctx);
+auto putEvt = TPUT_ASYNC(remoteGlobal, localGlobal, sharedSession);
+prefetchEvt.Wait(ctx.GetSession());
+```
+
+等待共享 Session 返回的 Event，可以保证本次预取以及该 Session 中此前所有 SDMA 操作均已完成。
 
 ### 参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `src` | `GlobalData&` | 需要预取到 L2 的 GlobalTensor 区域 |
-| `ctx` | `PrefetchAsyncContext&` | 计算侧预取上下文，包含 SDMA workspace 基址以及内部构造的 `comm::AsyncSession` |
+| `ctx` | `PrefetchAsyncContext&` | 计算侧预取上下文，包含 workspace 以及内部 Session 或共享外部 Session 指针 |
 | `events...` | `WaitEvents&...` | 可选同步事件 |
 
 ### 返回值
 
-返回 `comm::AsyncEvent`，用于跟踪异步预取完成状态。后续 `TLOAD` 依赖预取结果时，调用 `evt.Wait(ctx.session)` 等待完成。
+返回 `comm::AsyncEvent`，用于跟踪异步预取完成状态。后续 `TLOAD` 依赖预取结果时，调用
+`evt.Wait(ctx.GetSession())` 等待完成。
 
 ## 约束
 
 - 源数据必须位于 Global Memory (GM/HBM)。
 - GlobalTensor 必须是平坦连续的一维布局。
 - SDMA workspace 需要在 kernel 启动前由 Host 侧初始化，并传入 kernel。
-- `PrefetchAsyncContext` 内部持有 256-Byte UB scratch tile 和 `AsyncSession`，用于构造 SDMA 元数据并等待事件完成。
+- 与 `TGET_ASYNC` 或 `TPUT_ASYNC` 共用 Channel Group 时，必须复用其 Session。
+- 外部 Session 的生命周期必须覆盖 Context 及相关异步 Event 的使用阶段。
+- 并发使用的独立 Context 必须采用不同的 workspace，或保证串行执行。
 - SDMA CMO 按 cache line 粒度工作，非对齐范围由硬件处理。
 - CPU simulation 后端中该指令为空操作，返回空 `AsyncEvent`。
 
@@ -88,7 +109,7 @@ __global__ AICORE void my_kernel(__gm__ half *src, __gm__ half *dst,
 
     PrefetchAsyncContext ctx(workspace);
     auto evt = TPREFETCH_ASYNC(srcGlobal, ctx);
-    evt.Wait(ctx.session);
+    evt.Wait(ctx.GetSession());
 
     using TileData = Tile<TileType::Vec, half, 128, 128, BLayout::RowMajor>;
     TileData tile;

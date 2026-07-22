@@ -1,1 +1,1 @@
-pto_comm_st(tget_async)
+pto_comm_st(tget_async ../async_generation_stability/async_generation_stability_kernel.cpp)

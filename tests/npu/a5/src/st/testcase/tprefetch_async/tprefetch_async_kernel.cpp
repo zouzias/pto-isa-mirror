@@ -82,21 +82,37 @@ PTO_INTERNAL void CopyViaTile(__gm__ T* src, __gm__ T* dst, int elem_count)
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TPrefetchAsyncCorrectnessKernel(
-    __gm__ T* src, __gm__ T* dst, int elem_count, __gm__ uint8_t* sdmaWorkspace)
+    __gm__ T* src, __gm__ T* dst, int elem_count, uint32_t postCount, bool waitEachEvent, bool useExternalSession,
+    __gm__ uint8_t* sdmaWorkspace)
 {
-    if (!BoundsOkOrFinalize<count>(elem_count)) {
+    if (!BoundsOkOrFinalize<count>(elem_count) || postCount == 0U) {
         return;
     }
 
     KernelShapeDyn shape(1, 1, 1, 1, elem_count);
     KernelStrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
     KernelGlobal<T> srcGlobal(src, shape, stride);
-    pto::PrefetchAsyncContext ctx(sdmaWorkspace);
-
-    auto evt = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
-    (void)evt.Wait(ctx.session);
-
-    CopyViaTile<T, count>(src, dst, elem_count);
+    pto::comm::AsyncSession sharedSession;
+    pto::PrefetchAsyncContext ctx(sdmaWorkspace, useExternalSession ? &sharedSession : nullptr);
+    pto::comm::AsyncEvent lastEvent;
+    bool success = true;
+    if (useExternalSession) {
+        TASSIGN(ctx.scratchTile, 0x0);
+        success = pto::comm::BuildAsyncSession(ctx.scratchTile, sdmaWorkspace, sharedSession);
+    }
+    for (uint32_t post = 0U; post < postCount && success; ++post) {
+        lastEvent = pto::TPREFETCH_ASYNC(srcGlobal, ctx);
+        success = lastEvent.valid();
+        if (success && waitEachEvent) {
+            success = lastEvent.Wait(ctx.GetSession());
+        }
+    }
+    if (success && !waitEachEvent) {
+        success = lastEvent.Wait(ctx.GetSession());
+    }
+    if (success) {
+        CopyViaTile<T, count>(src, dst, elem_count);
+    }
     pipe_barrier(PIPE_ALL);
 }
 
@@ -181,7 +197,7 @@ inline bool VerifyOutputAndPrint(const SingleCardTestEnv& env, size_t count, int
 // Host-side test runner
 // ============================================================================
 template <typename T, size_t count>
-bool RunPrefetchAsyncCorrectness(int deviceId)
+bool RunPrefetchAsyncCorrectness(int deviceId, uint32_t postCount, bool waitEachEvent, bool useExternalSession)
 {
     constexpr size_t dataBytes = count * sizeof(T);
     SingleCardTestEnv env;
@@ -199,7 +215,8 @@ bool RunPrefetchAsyncCorrectness(int deviceId)
     uint8_t* wsAddr = sdmaOk ? reinterpret_cast<uint8_t*>(sdmaMgr.GetWorkspaceAddr()) : nullptr;
 
     TPrefetchAsyncCorrectnessKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T*>(env.srcDevice), reinterpret_cast<T*>(env.dstDevice), static_cast<int>(count), wsAddr);
+        reinterpret_cast<T*>(env.srcDevice), reinterpret_cast<T*>(env.dstDevice), static_cast<int>(count), postCount,
+        waitEachEvent, useExternalSession, wsAddr);
     env.SyncAndReadBack();
 
     bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "TPREFETCH_ASYNC GlobalTensor correctness");
@@ -208,5 +225,7 @@ bool RunPrefetchAsyncCorrectness(int deviceId)
     return is_ok && (env.aclStatus == 0);
 }
 
-template bool RunPrefetchAsyncCorrectness<float, 4096>(int deviceId);
-template bool RunPrefetchAsyncCorrectness<int32_t, 4096>(int deviceId);
+template bool RunPrefetchAsyncCorrectness<float, 4096>(
+    int deviceId, uint32_t postCount, bool waitEachEvent, bool useExternalSession);
+template bool RunPrefetchAsyncCorrectness<int32_t, 4096>(
+    int deviceId, uint32_t postCount, bool waitEachEvent, bool useExternalSession);
