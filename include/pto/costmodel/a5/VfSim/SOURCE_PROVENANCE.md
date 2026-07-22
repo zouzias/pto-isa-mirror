@@ -1,14 +1,14 @@
 # VfSim Source Provenance
 
 - Upstream: `https://github.com/wang-chonghao/VfSimulator`
-- Upstream branch: `master`
-- Imported commit: `613f24b6f52e102c7a2e37bb5746cf2685cb88f6`
+- Upstream branch: `vfinfo-core-api-unification`
+- Imported commit: `38f974a5b4e89cdb69fcd1dc02329b448d759eea`
 - Imported on: `2026-07-22`
 
-The native core implementation, typed `VfInfo` API, and `configs/` are vendored
-here so the PTO-ISA cost model has no runtime dependency on the upstream
-repository. Includes were rewritten from `native/...` and `api/native/...` to
-`pto/costmodel/a5/VfSim/...`.
+The native core implementation, typed `VfInfo` API, explicit value-storage
+lookup, and `configs/` are vendored here so the PTO-ISA cost model has no
+runtime dependency on the upstream repository. Includes were rewritten from
+`native/...` and `api/native/...` to `pto/costmodel/a5/VfSim/...`.
 
 PTO-specific changes are intentionally limited to:
 

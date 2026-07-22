@@ -265,19 +265,19 @@ inline std::optional<MemInfo> Operand(T &&value)
     if constexpr (RegTensorTraits<U>::value) {
         using DType = typename RegTensorTraits<U>::DType;
         const auto key = reinterpret_cast<uintptr_t>(std::addressof(value));
-        return MemInfo{NameFor(c.registers, key, c.nextRegister, "V"), MemLocation::PhyRegister,
+        return MemInfo{NameFor(c.registers, key, c.nextRegister, "reg"), MemLocation::PhyRegister,
                        DTypeName<DType>()};
     } else if constexpr (std::is_pointer_v<U>) {
         using DType = std::remove_cv_t<std::remove_pointer_t<U>>;
         const auto key = reinterpret_cast<uintptr_t>(value);
-        return MemInfo{NameFor(c.ubAddresses, key, c.nextUbAddress, "mem"), MemLocation::UB,
+        return MemInfo{NameFor(c.ubAddresses, key, c.nextUbAddress, "ub"), MemLocation::UB,
                        DTypeName<DType>()};
     } else if constexpr (std::is_same_v<U, vector_f32> || std::is_same_v<U, vector_f16> ||
                          std::is_same_v<U, vector_s8> || std::is_same_v<U, vector_u8> ||
                          std::is_same_v<U, vector_s16> || std::is_same_v<U, vector_u16> ||
                          std::is_same_v<U, vector_s32> || std::is_same_v<U, vector_u32>) {
         const auto key = reinterpret_cast<uintptr_t>(std::addressof(value));
-        return MemInfo{NameFor(c.registers, key, c.nextRegister, "V"), MemLocation::PhyRegister, DTypeName<U>()};
+        return MemInfo{NameFor(c.registers, key, c.nextRegister, "reg"), MemLocation::PhyRegister, DTypeName<U>()};
     }
     return std::nullopt;
 }

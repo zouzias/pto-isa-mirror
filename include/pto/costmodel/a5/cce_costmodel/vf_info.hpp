@@ -29,7 +29,7 @@ enum class MemLocation : uint8_t {
 // dtype 只属于 operand。VfInst/VfInfo 不保存全局 dtype，适配层会从 operand 校验并推导
 // VfSim 当前要求的统一 form。
 struct MemInfo {
-    std::string name;  // VfSim 命名：物理寄存器以 V 开头，UB 地址以 mem 开头
+    std::string name;  // 公开 value id；storage 由 location 显式表达，不依赖 V/mem 前缀。
     MemLocation location = MemLocation::PhyRegister;
     std::string dtype;
 };

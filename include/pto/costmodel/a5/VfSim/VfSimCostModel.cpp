@@ -54,20 +54,6 @@ uint64_t Fallback(const std::vector<VfInfo> &vfs)
     return total;
 }
 
-bool ValidateName(const MemInfo &mem)
-{
-    if (mem.location == MemLocation::PhyRegister) return !mem.name.empty() && mem.name.front() == 'V';
-    return mem.name.rfind("mem", 0) == 0;
-}
-
-std::string ScopedName(const MemInfo &mem, std::size_t vfIndex)
-{
-    if (mem.location == MemLocation::PhyRegister) {
-        return "V" + std::to_string(vfIndex) + "_" + mem.name.substr(1);
-    }
-    return "mem" + std::to_string(vfIndex) + "_" + mem.name.substr(3);
-}
-
 vfsim::ValueStorageKind ToVfSimStorage(MemLocation location)
 {
     return location == MemLocation::PhyRegister ? vfsim::ValueStorageKind::Register
@@ -83,8 +69,8 @@ std::string PublicDType(const MemInfo &mem)
 bool RegisterValue(vfsim::VfInfo &target, const MemInfo &mem, std::size_t vfIndex,
                    std::string &loweredName)
 {
-    if (!ValidateName(mem)) return false;
-    loweredName = ScopedName(mem, vfIndex);
+    if (mem.name.empty()) return false;
+    loweredName = "vf" + std::to_string(vfIndex) + "." + mem.name;
 
     vfsim::ValueInfo value;
     value.valueId = loweredName;

@@ -40,8 +40,8 @@ int main()
     vf::VfInfo supported;
     supported.op = "synthetic_supported";
     supported.tree.push_back(vf::MakeLoop(
-        4, {Inst("vlds", {Reg("V0")}, {Ub("mem0")}), Inst("vlds", {Reg("V1")}, {Ub("mem1")}),
-            Inst("vadd", {Reg("V2")}, {Reg("V0"), Reg("V1")}), Inst("vsts", {Ub("mem2")}, {Reg("V2")})}));
+        4, {Inst("vlds", {Reg("lhs")}, {Ub("input_a")}), Inst("vlds", {Reg("rhs")}, {Ub("input_b")}),
+            Inst("vadd", {Reg("sum")}, {Reg("lhs"), Reg("rhs")}), Inst("vsts", {Ub("output")}, {Reg("sum")})}));
 
     const uint64_t simulated = vf::PredictVfCycles(supported);
     const uint64_t simple = Fallback(supported);
@@ -54,13 +54,13 @@ int main()
     vf::VfInfo mixedDtype;
     mixedDtype.op = "synthetic_mixed_dtype";
     mixedDtype.tree.push_back(vf::MakeLoop(
-        16, {Inst("vlds", {Reg("V0", "fp32")}, {Ub("mem0", "fp32")}),
-             Inst("vlds", {Reg("V1", "fp32")}, {Ub("mem1", "fp32")}),
-             Inst("vadd", {Reg("V2", "fp32")}, {Reg("V0", "fp32"), Reg("V1", "fp32")}),
-             Inst("vcvt_f32_to_f16", {Reg("V3", "fp16")}, {Reg("V2", "fp32")}),
-             Inst("vlds", {Reg("V4", "fp16")}, {Ub("mem2", "fp16")}),
-             Inst("vadd", {Reg("V5", "fp16")}, {Reg("V3", "fp16"), Reg("V4", "fp16")}),
-             Inst("vsts", {Ub("mem3", "fp16")}, {Reg("V5", "fp16")})}));
+        16, {Inst("vlds", {Reg("lhs32", "fp32")}, {Ub("input_a", "fp32")}),
+             Inst("vlds", {Reg("rhs32", "fp32")}, {Ub("input_b", "fp32")}),
+             Inst("vadd", {Reg("sum32", "fp32")}, {Reg("lhs32", "fp32"), Reg("rhs32", "fp32")}),
+             Inst("vcvt_f32_to_f16", {Reg("sum16", "fp16")}, {Reg("sum32", "fp32")}),
+             Inst("vlds", {Reg("extra16", "fp16")}, {Ub("input_c", "fp16")}),
+             Inst("vadd", {Reg("result16", "fp16")}, {Reg("sum16", "fp16"), Reg("extra16", "fp16")}),
+             Inst("vsts", {Ub("output", "fp16")}, {Reg("result16", "fp16")})}));
     const uint64_t mixedSimulated = vf::PredictVfCycles(mixedDtype);
     const uint64_t mixedFallback = Fallback(mixedDtype);
     if (mixedSimulated == 0 || mixedSimulated == mixedFallback) {
