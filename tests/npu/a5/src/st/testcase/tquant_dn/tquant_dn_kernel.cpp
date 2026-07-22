@@ -19,6 +19,100 @@ using namespace pto;
 
 namespace TQuantDNTest {
 
+// Reproduce the static tile and runtime validShape combinations emitted by
+// PyPTO for actual=[1472,1010], view=[1408,34], tile=[896,1212].
+template <typename T, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+__global__ AICORE void runTQuantDNValidShape(
+    __gm__ T __in__* src, __gm__ int8_t __out__* dst, __gm__ uint8_t __out__* exp)
+{
+    static_assert(StaticRows % 64 == 0, "DN static rows must be 64-aligned.");
+    static_assert(ValidRows % 64 == 0, "DN valid rows must be 64-aligned.");
+    static_assert(ValidRows <= StaticRows && ValidCols <= StaticCols, "validShape must fit in the static tile.");
+
+    constexpr int fp8StaticCols = PTO_CEIL(StaticCols, 32);
+    constexpr int expStaticRows = StaticRows / 64;
+    constexpr int expStaticCols = StaticCols * 2;
+    constexpr int maxStaticRows = StaticRows / 32;
+    constexpr int expValidRows = ValidRows / 64;
+    constexpr int expValidCols = ValidCols * 2;
+    constexpr int maxValidRows = ValidRows / 32;
+
+    using SrcTile = Tile<
+        TileType::Vec, T, StaticRows, StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using DstTile = Tile<
+        TileType::Vec, int8_t, StaticRows, fp8StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using ExpTile = Tile<
+        TileType::Vec, uint8_t, expStaticRows, expStaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using MaxTile = Tile<
+        TileType::Vec, T, maxStaticRows, StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using ScalingTile = MaxTile;
+
+    using SrcGlobal =
+        GlobalTensor<T, Shape<1, 1, 1, ValidRows, ValidCols>, pto::Stride<1, 1, 1, ValidCols, 1>>;
+    using DstGlobal =
+        GlobalTensor<int8_t, Shape<1, 1, 1, ValidRows, ValidCols>, pto::Stride<1, 1, 1, ValidCols, 1>>;
+    using ExpGlobal = GlobalTensor<
+        uint8_t, Shape<1, 1, 1, expValidRows, expValidCols>, pto::Stride<1, 1, 1, expValidCols, 1>>;
+
+    constexpr uint32_t srcAddr = 0;
+    constexpr uint32_t srcBytes = StaticRows * StaticCols * sizeof(T);
+    constexpr uint32_t dstAddr = PTO_CEIL(srcAddr + srcBytes, 32);
+    constexpr uint32_t dstBytes = StaticRows * fp8StaticCols;
+    constexpr uint32_t expAddr = PTO_CEIL(dstAddr + dstBytes, 32);
+    constexpr uint32_t expBytes = expStaticRows * expStaticCols;
+    constexpr uint32_t maxAddr = PTO_CEIL(expAddr + expBytes, 32);
+    constexpr uint32_t maxBytes = maxStaticRows * StaticCols * sizeof(T);
+    constexpr uint32_t scalingAddr = PTO_CEIL(maxAddr + maxBytes, 32);
+    constexpr uint32_t scalingBytes = maxBytes;
+    static_assert(scalingAddr + scalingBytes <= 0x40000, "validShape test UB layout exceeds 256 KB.");
+
+    SrcTile srcTile(ValidRows, ValidCols);
+    DstTile dstTile(ValidRows, ValidCols);
+    ExpTile expTile(expValidRows, expValidCols);
+    MaxTile maxTile(maxValidRows, ValidCols);
+    ScalingTile scalingTile(maxValidRows, ValidCols);
+    SrcGlobal srcGlobal(src);
+    DstGlobal dstGlobal(dst);
+    ExpGlobal expGlobal(exp);
+
+    TASSIGN(srcTile, srcAddr);
+    TASSIGN(dstTile, dstAddr);
+    TASSIGN(expTile, expAddr);
+    TASSIGN(maxTile, maxAddr);
+    TASSIGN(scalingTile, scalingAddr);
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TQUANT<0, MxQuantAlg::OcpMxFp8E4M3, true>(dstTile, srcTile, &expTile, &maxTile, &scalingTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dstGlobal, dstTile);
+    TSTORE(expGlobal, expTile);
+}
+
+template <typename T, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShape(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    runTQuantDNValidShape<T, StaticRows, StaticCols, ValidRows, ValidCols>
+        <<<1, nullptr, stream>>>((T*)src, dst, exp);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeFP16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<half, StaticRows, StaticCols, ValidRows, ValidCols>(src, dst, exp, stream);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeBF16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<bfloat16_t, StaticRows, StaticCols, ValidRows, ValidCols>(src, dst, exp, stream);
+}
+
 // Full DN vector pipeline: TQUANT(DN) + TMOV(ND->NZ) + TMOV<0>(DN->ZZ).
 // Stores FP8 ND, E8M0 DN, per-group max, FP8 NZ, and E8M0 ZZ to GM for comparison.
 template <
@@ -418,6 +512,20 @@ INSTANTIATE_TQUANT_DN_INTERLEAVED(128, 352, 352);
 INSTANTIATE_TQUANT_DN_FP32_INTERLEAVED(128, 128, 128);
 INSTANTIATE_TQUANT_DN_NV_INTERLEAVED(128, 128, 128);
 
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, SR, SC, VR, VC) \
+    template void LaunchTQuantDNValidShape##DTYPE<SR, SC, VR, VC>(uint16_t*, int8_t*, uint8_t*, void*)
+
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPES(DTYPE) \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 896, 48, 896, 34); \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 512, 48, 512, 34); \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 512, 48, 64, 34);  \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 896, 48, 896, 24); \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 512, 48, 512, 24); \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, 512, 48, 64, 24)
+
+INSTANTIATE_TQUANT_DN_VALID_SHAPES(FP16);
+INSTANTIATE_TQUANT_DN_VALID_SHAPES(BF16);
+
 #define INSTANTIATE_TQUANT_DN_MXFP4_BF16(M, N, NP) \
     template void LaunchTQuantDN_MXFP4_bf16<M, N, NP>(uint16_t*, uint8_t*, uint8_t*, uint8_t*, uint16_t*, void*)
 
@@ -442,5 +550,7 @@ INSTANTIATE_TQUANT_DN_MXFP4_BF16_INTERLEAVED(128, 128, 128);
 INSTANTIATE_TQUANT_DN_MXFP4_FP16_INTERLEAVED(128, 128, 128);
 
 #undef INSTANTIATE_TQUANT_DN
+#undef INSTANTIATE_TQUANT_DN_VALID_SHAPE
+#undef INSTANTIATE_TQUANT_DN_VALID_SHAPES
 
 } // namespace TQuantDNTest
