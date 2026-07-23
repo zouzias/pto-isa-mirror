@@ -9,7 +9,7 @@
 同步 PTO 执行（等待事件或插入每操作流水线屏障）。
 
 - `TSYNC(events...)` 等待一组显式事件令牌。
-- `TSYNC<Op>()` 为单个向量操作类插入流水线屏障。
+- `TSYNC<Op>()` 为指定 `Op` 所属的流水线插入屏障（pipe barrier）。
 
 `include/pto/common/pto_instr.hpp` 中的许多内建函数在发射指令前会在内部调用 `TSYNC(events...)`。
 
@@ -20,6 +20,7 @@
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <Op OpCode>

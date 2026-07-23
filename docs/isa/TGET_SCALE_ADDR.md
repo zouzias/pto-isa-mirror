@@ -14,6 +14,16 @@ The scaling factor is defined by a right-shift amount `SHIFT_MX_ADDR` in `includ
 
 Address(`dst`) = Address(`src`) >> `SHIFT_MX_ADDR`
 
+## Assembly Syntax
+
+### IR Level 1 (SSA)
+
+TODO
+
+### IR Level 2 (DPS)
+
+TODO
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -37,7 +47,7 @@ Enforced by `TGET_SCALE_ADDR_IMPL` (A5 only; no A2A3 implementation):
 
 using namespace pto;
 
-template <typename T, int ARows, int ACols, int BRows, int BCols> 
+template <typename T, int ARows, int ACols, int BRows, int BCols>
 void example() {
     using LeftTile = TileLeft<T, ARows, ACols>;
     using RightTile = TileRight<T, BRows, BCols>;
@@ -54,3 +64,17 @@ void example() {
     TGET_SCALE_ADDR(bScaleTile, bTile);
 }
 ```
+
+## asm form examples
+
+### Auto Mode
+
+TODO
+
+### Manual Mode
+
+TODO
+
+### PTO Assembly Form
+
+TODO

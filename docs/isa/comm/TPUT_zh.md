@@ -2,9 +2,9 @@
 
 ## 简介
 
-远程写操作：将本地数据写入远端 NPU 的内存。数据通过 UB Tile 作为中间暂存缓冲区进行传输。
+远程写操作：将本地数据写入远端NPU的内存。数据通过UB Tile作为中间暂存缓冲区进行传输。
 
-当 GlobalTensor 超出 UB Tile 容量时，TPUT 将自动执行**二维滑动**——沿行（DIM_3）和列（DIM_4）分块以适配 Tile，并遍历所有外层维度（DIM_0、DIM_1、DIM_2）。
+当GlobalTensor超出UB Tile容量时，TPUT将自动执行**二维滑动**——沿行（DIM_3）和列（DIM_4）分块以适配Tile，并遍历所有外层维度（DIM_0、DIM_1、DIM_2）。
 
 ## 数学语义
 
@@ -12,13 +12,23 @@
 
 $$\mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j}$$
 
-数据流：`srcGlobalData (本地 GM)` → `stagingTileData (UB)` → `dstGlobalData (远端 GM)`
+数据流：`srcGlobalData（本地 GM）` → `stagingTileData（UB）` → `dstGlobalData（远端 GM）`
 
-## C++ 内建接口
+## 汇编语法
+
+同步形式：
+
+```text
+tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
+```
+
+降级时会为GM→UB→GM数据路径引入UB暂存Tile；C++内建接口需要显式传入 `stagingTileData`（或 `pingTile` / `pongTile`）操作数。
+
+## C++内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`
 
-### 单 Tile (自动分块)
+### 单Tile（自动分块）
 
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
@@ -27,9 +37,9 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
                           TileData &stagingTileData, WaitEvents&... events);
 ```
 
-### Ping-pong 双缓冲
+### 乒乓双缓冲
 
-使用两个暂存 Tile，将相邻块的 TLOAD 与 TSTORE 重叠执行，隐藏 DMA 传输延迟。
+使用两个暂存Tile，将相邻块的TLOAD与TSTORE重叠执行，隐藏DMA传输延迟。
 
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
@@ -53,16 +63,16 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
     - `TileData::DType` 必须等于 `GlobalSrcData::RawDType`。
     - `GlobalSrcData::layout` 必须等于 `GlobalDstData::layout`。
 - **内存约束**：
-    - `dstGlobalData` 必须指向远端地址（目标 NPU）。
-    - `srcGlobalData` 必须指向本地地址（当前 NPU）。
-    - `stagingTileData` / `pingTile` / `pongTile` 必须预先在 UB（统一缓冲区）中分配。
+    - `dstGlobalData` 必须指向远端地址（目标NPU）。
+    - `srcGlobalData` 必须指向本地地址（当前NPU）。
+    - `stagingTileData` / `pingTile` / `pongTile` 必须预先在统一缓冲区中分配。
 - **有效区域**：
-    - 传输大小由 `GlobalTensor` 的形状决定（自动分块以适配 Tile）。
+    - 传输大小由 `GlobalTensor` 的形状决定（自动分块以适配Tile）。
 - **原子操作**：
     - `atomicType` 支持 `AtomicNone` 和 `AtomicAdd`。
-- **Ping-pong 约束**：
+- **乒乓约束**：
     - `pingTile` 和 `pongTile` 必须具有相同的类型和维度。
-    - 必须位于不重叠的 UB 偏移处。
+    - 必须位于不重叠的UB偏移处。
 
 ## 示例
 
@@ -79,11 +89,6 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT   = Tile<TileType::Vec, T, 16, 16>;
     using GShape  = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
-    /*
-    如果 GlobalTensor 大于 UB Tile，TPUT 会自动执行二维滑动。
-    using GShape  = Shape<1, 1, 1, 4096, 4096>;
-    using GStride = BaseShape2D<T, 4096, 4096, Layout::ND>;
-    */
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
     GTensor srcG(local_data);
@@ -99,7 +104,7 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
 }
 ```
 
-### Ping-pong 双缓冲
+### 乒乓双缓冲
 
 ```cpp
 constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
@@ -118,4 +123,3 @@ comm::TPUT(dstG, srcG, pingTile, pongTile);
 // 在运行时而非编译期模板参数中选择原子类型
 comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```
-

@@ -6,16 +6,17 @@
 
 ## 简介
 
-带显式累加器输入 Tile（`cInMatrix`）和输出 Tile（`cOutMatrix`）的 GEMV。
+带显式累加器输入Tile（`cInMatrix`）和输出Tile（`cOutMatrix`）的GEMV。
 
 ## 另请参见
 
-- 基础 GEMV 指令：`docs/isa/TGEMV.md`。
+- 基础GEMV指令：`docs/isa/TGEMV.md`。
 - 偏置变体：`docs/isa/TGEMV_BIAS.md`。
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -33,11 +34,31 @@ PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft
 - `K = bMatrix.GetValidRow()`
 - `N = bMatrix.GetValidCol()`
 
-对于 `0 <= j < N`（累加到已有输出 Tile）：
+对于 `0 <= j < N`（累加到已有输出Tile）：
 
 $$ \mathrm{C}_{0,j} \gets \mathrm{C}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
 **注意：** 精确的累加器行为和数据类型提升由目标/实现定义。
+
+## 汇编语法
+
+同步形式：
+
+```text
+%acc1 = tgemv.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 1（SSA）
+
+```text
+%c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2（DPS）
+
+```text
+pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
+```
 
 ## 约束
 
@@ -47,7 +68,7 @@ $$ \mathrm{C}_{0,j} \gets \mathrm{C}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \
     - `TileLeft::Rows == TileRes::Rows`
     - `TileLeft::Cols == TileRight::Rows`
     - `TileRight::Cols == TileRes::Cols`
-- Tile 位置约束：
+- Tile位置约束：
     - `TileLeft::Loc == Left`
     - `TileRight::Loc == Right`
     - `TileRes::Loc == Acc`
@@ -57,21 +78,21 @@ $$ \mathrm{C}_{0,j} \gets \mathrm{C}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \
 
 ### 数据类型约束
 
-- **实现检查 (A2A3)**:
+- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**:
     - 支持的 `(CType, AType, BType)` 三元组：
         - `(int32_t, int8_t, int8_t)`
         - `(float, half, half)`
         - `(float, float, float)`
         - `(float, bfloat16_t, bfloat16_t)`
-- **实现检查 (A5)**:
+- **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - 累加器类型必须是 `int32_t` 或 `float`。
     - 如果为 `int32_t`：`AType == int8_t` 且 `BType == int8_t`。
-    - 如果为 `float`：支持 `half`、`bfloat16_t`、`float`、选定的 fp8 组合以及 `hifloat8_t/hifloat8_t`（目标定义）。
+    - 如果为 `float`：支持 `half`、`bfloat16_t`、`float`、选定的fp8组合以及 `hifloat8_t/hifloat8_t`（目标定义）。
     - 会强制执行以下分形/布局约束：
         - Left：`Loc == Left`、`!isRowMajor`、`SFractal == RowMajor`
         - Right：`Loc == Right`、`isRowMajor`、`SFractal == ColMajor`
         - Acc：`Loc == Acc`、`!isRowMajor`、`SFractal == RowMajor`
-    - 除上述 GEMV 约定外，底层 A5 matmul 实现不会再单独补充一组显式的 `m/k/n` 运行时断言。
+    - 除上述GEMV约定外，底层Ascend 950PR/Ascend 950DT matmul实现不会再单独补充一组显式的 `m/k/n` 运行时断言。
 
 ## 示例
 
@@ -113,4 +134,31 @@ void example_manual() {
   TASSIGN(c1, 0x4000);
   TGEMV_ACC(c1, c0, a, b);
 }
+```
+
+## 汇编示例（ASM）
+
+### 自动模式
+
+```text
+# 自动模式：由编译器/运行时负责资源放置与调度。
+%c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### 手动模式
+
+```text
+# 手动模式：先显式绑定资源，再发射指令。
+# 可选（当该指令包含 tile 操作数时）：
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO汇编形式
+
+```text
+%acc1 = tgemv.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
 ```

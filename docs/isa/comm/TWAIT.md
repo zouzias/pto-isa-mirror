@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Blocking wait until the signal (or all signals in a signal tensor) satisfies the given comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
+Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
 
 Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor).
 
@@ -21,6 +21,13 @@ $$ \forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;
 
 where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 
+## Assembly Syntax
+
+```text
+twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
+twait %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
@@ -35,20 +42,19 @@ PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 - **Type constraints**:
     - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-    - `signalData` must point to local address (on current NPU).
+    - `signalData` must point to the current NPU's local GM/HBM address (`__gm__`); a remote NPU writes into it via `TNOTIFY`. "Local" refers to NPU ownership (current NPU's GM vs. a remote NPU's GM), not the CCE address-space qualifier.
 - **Shape semantics**:
     - For single signal: Shape is `<1,1,1,1,1>`.
     - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
-**Comparison operators** (WaitCmp):
-
-| Value | Condition |
-|-------|-----------|
-| `EQ` | `signal == cmpValue` |
-| `NE` | `signal != cmpValue` |
-| `GT` | `signal > cmpValue` |
-| `GE` | `signal >= cmpValue` |
-| `LT` | `signal < cmpValue` |
-| `LE` | `signal <= cmpValue` |
+- **Comparison operators** (WaitCmp):
+  | Value | Condition |
+  |-------|-----------|
+  | `EQ` | `signal == cmpValue` |
+  | `NE` | `signal != cmpValue` |
+  | `GT` | `signal > cmpValue` |
+  | `GE` | `signal >= cmpValue` |
+  | `LT` | `signal < cmpValue` |
+  | `LE` | `signal <= cmpValue` |
 
 ## Examples
 

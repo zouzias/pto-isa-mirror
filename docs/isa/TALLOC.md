@@ -125,3 +125,8 @@ AICORE void example_v2c_split(__gm__ void *fifoMem)
     TPUSH<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
 }
 ```
+
+## ASM Form Examples
+
+The current public assembly reference does not define a stable PTO-AS spelling for `TALLOC`. Use the C++ intrinsic form for manual CV FIFO programming.
+```

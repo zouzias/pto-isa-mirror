@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef MXTYPES_HPP
 #define MXTYPES_HPP
+#include <cstring>
 
 constexpr unsigned int MAN_DBL = 52;
 constexpr unsigned int EXP_DBL = 11;
@@ -19,26 +20,19 @@ constexpr int RESERVED_EXPONENT_COUNT = 2;
 template <int EXP_SZ, int MAN_SZ, int EXP_BIAS, bool IS_X2>
 class MXType {
 public:
-    MXType() : data(0)
-    {}
+    MXType() : data(0) {}
 
-    static inline MXType FromRaw(uint8_t rawData)
+    static inline MXType FromRaw(uint8_t rawData) { return MXType(rawData, true); }
+
+    MXType(double value) : data(0)
     {
-        return MXType(rawData, true);
-    }
-
-    MXType(double value)
-    {
-        uint64_t data = 0;
-
         // Handle zero explicitly
         if (value == 0.0) {
-            data = 0;
             return;
         }
 
         // Extract bits from the double
-        uint64_t &dblBits = *((uint64_t *)&value);
+        uint64_t& dblBits = *((uint64_t*)&value);
 
         uint64_t dblSign = (dblBits >> (MAN_DBL + EXP_DBL)) & 1;
         int64_t dblExponent = ((dblBits >> MAN_DBL) & ((1ULL << EXP_DBL) - 1));
@@ -65,7 +59,6 @@ public:
             if (outExponent < 0) {
                 outMantissa = (outMantissa | (1 << MAN_SZ)) >> (1 - outExponent);
                 outExponent = 0;
-                return;
             }
         } else {
             // Subnormals of double are too small to fit into new number
@@ -74,7 +67,9 @@ public:
             return;
         }
 
-        data = (dblSign << (MAN_SZ + EXP_SZ)) | (outExponent << MAN_SZ) | outMantissa;
+        data = static_cast<uint8_t>(
+            (dblSign << (MAN_SZ + EXP_SZ)) | ((outExponent & ((1ULL << EXP_SZ) - 1)) << MAN_SZ) |
+            (outMantissa & ((1ULL << MAN_SZ) - 1)));
     }
 
     operator double() const
@@ -87,8 +82,8 @@ public:
 
         if (exponent > 0 || MAN_SZ == 0) {
             // Normal representation
-            *((uint64_t *)&retVal) = (sign << (MAN_DBL + EXP_DBL)) | ((exponent + EXP_DBL_BIAS - EXP_BIAS) << MAN_DBL) |
-                                     (mantissa << (MAN_DBL - MAN_SZ));
+            *((uint64_t*)&retVal) = (sign << (MAN_DBL + EXP_DBL)) | ((exponent + EXP_DBL_BIAS - EXP_BIAS) << MAN_DBL) |
+                                    (mantissa << (MAN_DBL - MAN_SZ));
         } else if (data == 0) {
             retVal = 0;
         } else if (data == 1ULL << (MAN_SZ + EXP_SZ)) {
@@ -98,51 +93,47 @@ public:
             for (; i >= 0 && !((mantissa >> i) & 1); i--)
                 ;
             // Subnormal representation
-            *((uint64_t *)&retVal) = (sign << (MAN_DBL + EXP_DBL)) |
-                                     (((uint64_t)(EXP_DBL_BIAS - EXP_BIAS + 1 + (i - MAN_SZ))) << MAN_DBL) |
-                                     ((mantissa & ((1 << i) - 1)) << (MAN_DBL - i));
+            *((uint64_t*)&retVal) = (sign << (MAN_DBL + EXP_DBL)) |
+                                    (((uint64_t)(EXP_DBL_BIAS - EXP_BIAS + 1 + (i - MAN_SZ))) << MAN_DBL) |
+                                    ((mantissa & ((1 << i) - 1)) << (MAN_DBL - i));
         }
         return retVal;
     }
 
-    uint8_t RawData() const
-    {
-        return data;
-    }
+    uint8_t RawData() const { return data; }
 
-    friend std::ostream &operator<<(std::ostream &stream, const MXType<EXP_SZ, MAN_SZ, EXP_BIAS, IS_X2> &value)
+    friend std::ostream& operator<<(std::ostream& stream, const MXType<EXP_SZ, MAN_SZ, EXP_BIAS, IS_X2>& value)
     {
         return stream << static_cast<double>(value);
         // << std::hex << "(Raw: " << (uint32_t)value.RawData() << std::dec << ")";
     }
 
     template <typename SECOND_TYPE>
-    double operator*(const SECOND_TYPE &op2) const
+    double operator*(const SECOND_TYPE& op2) const
     {
         return static_cast<double>(*this) * static_cast<double>(op2);
     }
 
     template <typename SECOND_TYPE>
-    double operator/(const SECOND_TYPE &op2) const
+    double operator/(const SECOND_TYPE& op2) const
     {
         return static_cast<double>(*this) / static_cast<double>(op2);
     }
 
     template <typename SECOND_TYPE>
-    double operator+(const SECOND_TYPE &op2) const
+    double operator+(const SECOND_TYPE& op2) const
     {
         return static_cast<double>(*this) + static_cast<double>(op2);
     }
 
     template <typename SECOND_TYPE>
-    double operator-(const SECOND_TYPE &op2) const
+    double operator-(const SECOND_TYPE& op2) const
     {
         return static_cast<double>(*this) - static_cast<double>(op2);
     }
 
 protected:
-    explicit MXType(uint8_t rawValue, bool dummy) : data(rawValue)
-    {}
+    explicit MXType(uint8_t rawValue, bool dummy) : data(rawValue) {}
 
     uint8_t data;
 };
@@ -182,7 +173,7 @@ using float8_e4m3_t = MXType<kFloat8E4M3ExponentBits, kFloat8E4M3MantissaBits, k
 using float8_e5m2_t = MXType<kFloat8E5M2ExponentBits, kFloat8E5M2MantissaBits, kFloat8E5M2Bias, false>;
 
 template <typename T>
-constexpr bool isTwinType()
+constexpr bool IsTwinType()
 {
     return std::is_same_v<T, float4_e2m1x2_t> || std::is_same_v<T, float4_e1m2x2_t>;
 }
@@ -191,10 +182,9 @@ constexpr bool isTwinType()
 #define HALF_BYTE_SHIFT 4
 
 template <typename T>
-inline T getProperDataPart(T *buf, size_t offset)
+inline T GetProperDataPart(T* buf, size_t offset)
 {
-    if constexpr (isTwinType<T>()) {
-        // For FP4 data types we split byte into 2 parts at load operation and then operate with them as single bytes
+    if constexpr (IsTwinType<T>()) {
         return T::FromRaw((buf[offset / 2].RawData() >> ((offset % 2) ? HALF_BYTE_SHIFT : 0)) & HALF_BYTE_MASK);
     } else {
         return buf[offset];
@@ -202,9 +192,9 @@ inline T getProperDataPart(T *buf, size_t offset)
 }
 
 template <typename T>
-inline void setProperDataPart(T *buf, size_t offset, T val)
+inline void SetProperDataPart(T* buf, size_t offset, T val)
 {
-    if constexpr (isTwinType<T>()) {
+    if constexpr (IsTwinType<T>()) {
         uint16_t shiftByte = (offset % 2) ? HALF_BYTE_SHIFT : 0;
         uint8_t rawVal = (val.RawData() & HALF_BYTE_MASK) << shiftByte;
         buf[offset / 2] = T::FromRaw((buf[offset / 2].RawData() & ~(HALF_BYTE_MASK << shiftByte)) | rawVal);

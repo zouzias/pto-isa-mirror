@@ -23,6 +23,25 @@ For a linearized index `k` over the valid elements:
 
 The linearization order depends on the tile layout (implementation-defined).
 
+## Assembly Syntax
+
+Synchronous form:
+
+```text
+%dst = tci %S {descending = false} : !pto.tile<...>
+```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -49,7 +68,7 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &.
       The vectorized path uses two float sub-buffers within `tmp`: `tmp0` at offset 0 and `tmp1` at offset +128 floats. `tmp0` holds up to 64 float elements (256 bytes) for the initial fractional sequence, and `tmp1` holds up to 64 float elements (256 bytes) for the accumulated result. The highest accessed byte is offset 128 × 4 + 64 × 4 = **768 bytes** (192 float elements).
     - **b16 element types** (`int16_t`, `uint16_t`): minimum tmp size = 1792 bytes (448 float elements).
       The vectorized path uses four sub-buffers within `tmp`: `tmp0/tmp1` (float) at offsets 0 and +128, and `tmp2/tmp3` (half) at offsets +256 and +384 (in float-index units). `tmp0/tmp1` each hold up to 64 floats (256 bytes) for the fractional sequence generation. `tmp2` holds up to 16 half elements (32 bytes) for the float-to-half conversion. `tmp3` holds up to 128 half elements (256 bytes) for the final half-precision accumulation. The highest accessed byte is offset 384 × 4 + 128 × 2 = **1792 bytes** (448 float elements).
-    - A convenient shape-independent allocation is 2048 bytes (2 KiB), e.g., `Tile<TileType::Vec, float, 1, 512>`.
+    - A convenient shape-independent allocation is 2048 bytes (2KiB), e.g., `Tile<TileType::Vec, float, 1, 512>`.
     - **A5**: The `tmp` tile is accepted and ignored. A5 hardware uses the `vci` vector instruction directly without requiring a scratch buffer.
 
 ## Examples
@@ -115,4 +134,31 @@ void example_manual_tmp() {
   TASSIGN(tmp, 0x2000);
   TCI<TileT, TmpT, int32_t, /*descending=*/1>(dst, /*S=*/100, tmp);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tci %S {descending = false} : !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
 ```

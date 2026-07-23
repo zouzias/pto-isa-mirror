@@ -52,15 +52,15 @@ Tile's `TileType` (i.e. `Loc` template parameter):
 
 | TileType | Memory | Capacity (A2A3) | Capacity (A5) | Capacity (Kirin9030) | Capacity (KirinX90) | Alignment |
 |----------|--------|-----------------|---------------|----------------------|---------------------|-----------|
-| Vec | UB | 192 KB | 256 KB | 128 KB | 128 KB | 32 B |
-| Mat | L1 | 512 KB | 512 KB | 512 KB | 1024 KB | 32 B |
-| Left | L0A | 64 KB | 64 KB | 32 KB | 64 KB | 32 B |
-| Right | L0B | 64 KB | 64 KB | 32 KB | 64 KB | 32 B |
-| Acc | L0C | 128 KB | 256 KB | 64 KB | 128 KB | 32 B |
-| Bias | Bias | 1 KB | 4 KB | 1 KB | 1 KB | 32 B |
-| Scaling | FBuffer | 2 KB | 4 KB | 7 KB | 6 KB | 32 B |
-| ScaleLeft | L0A | N/A | 4 KB | N/A | N/A | 32 B |
-| ScaleRight | L0B | N/A | 4 KB | N/A | N/A | 32 B |
+| Vec | UB | 192KB | 256KB | 128KB | 128KB | 32 B |
+| Mat | L1 | 512KB | 512KB | 512KB | 1024KB | 32 B |
+| Left | L0A | 64KB | 64KB | 32KB | 64KB | 32 B |
+| Right | L0B | 64KB | 64KB | 32KB | 64KB | 32 B |
+| Acc | L0C | 128KB | 256KB | 64KB | 128KB | 32 B |
+| Bias | Bias | 1KB | 4KB | 1KB | 1KB | 32 B |
+| Scaling | FBuffer | 2KB | 4KB | 7KB | 6KB | 32 B |
+| ScaleLeft | L0A | N/A | 4KB | N/A | N/A | 32 B |
+| ScaleRight | L0B | N/A | 4KB | N/A | N/A | 32 B |
 
 Capacities can be overridden at build time via `-D` flags (e.g.
 `-DPTO_UBUF_SIZE_BYTES=262144`). See `include/pto/common/buffer_limits.hpp`.
@@ -71,12 +71,12 @@ Capacities can be overridden at build time via `-D` flags (e.g.
 ## Constraints
 
 - **Implementation checks**:
-    - If `obj` is a Tile:
-    - In manual mode (when `__PTO_AUTO__` is not defined), `addr` must be an integral type and is reinterpreted as the tile's storage address.
-    - In auto mode (when `__PTO_AUTO__` is defined), `TASSIGN(tile, addr)` is a no-op.
+    - If `obj` is a Tile (including ConvTile):
+        - In manual mode (when `__PTO_AUTO__` is not defined), `addr` must be an integral type and is reinterpreted as the tile's storage address.
+        - In auto mode (when `__PTO_AUTO__` is defined), `TASSIGN(tile, addr)` is a no-op.
     - If `obj` is a `GlobalTensor`:
-    - `addr` must be a pointer type.
-    - The pointed-to element type must match `GlobalTensor::DType`.
+        - `addr` must be a pointer type.
+        - The pointed-to element type must match `GlobalTensor::DType`.
 
 ## Examples
 
@@ -123,7 +123,8 @@ void example_oob() {
   using BigTile = Tile<TileType::Vec, float, 256, 256>;
   BigTile t;
 
-  // static_assert fires: tile_size (256KB) > UB capacity (192KB on A2A3)
+  // Primarily fires [SA-0352]: tile_size (256KB) > UB capacity (192KB on A2A3)
+  // (the tile exceeds the whole buffer, so the SA-0353 out-of-bounds assert also holds)
   TASSIGN<0x0>(t);
 }
 ```
@@ -133,9 +134,8 @@ void example_oob_addr() {
   using TileT = Tile<TileType::Vec, float, 128, 128>;  // 64KB
   TileT t;
 
-  // static_assert fires: 0x20000 (128KB) + 64KB = 192KB,
-  //                       but 0x20001 + 64KB > 192KB
-  TASSIGN<0x20001>(t);
+  // static_assert fires [SA-0353]: 0x20020 + 64KB > 192KB (address is aligned, only out of bounds)
+  TASSIGN<0x20020>(t);
 }
 ```
 

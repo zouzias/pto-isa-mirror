@@ -15,6 +15,26 @@ Notation depends on the `GlobalTensor` shape/stride and the `Tile` layout. Conce
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
+## Assembly Syntax
+
+Synchronous form:
+
+```text
+%t0 = tload %sv[%c0, %c0] : (!pto.memref<...>, index, index) -> !pto.tile<...>
+```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+!pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -96,4 +116,31 @@ void example_manual(__gm__ T* in) {
   TASSIGN(t, 0x1000);
   TLOAD(t, gin);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNxdtype> ->
+```
+
+### PTO Assembly Form
+
+```text
+%t0 = tload %sv[%c0, %c0] : (!pto.memref<...>, index, index) -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.tile_buf<...>)
 ```

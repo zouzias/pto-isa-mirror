@@ -94,8 +94,8 @@ Let $C$ = `validCol`, $b$ = `sizeof(T)` bytes, $G$ = 32 (block size). The implem
 $$
 \mathrm{tmpSize} =
 \begin{cases}
-\mathrm{ceil}_{G}(C) & \text{A2A3: } C \le 8160 \text{ (elements)} \quad \text{or} \quad \text{A5: } C \cdot b \le 8160 \text{ (bytes)} \\
-G = 32 & \text{A2A3: } C > 8160 \text{ (elements)} \quad \text{or} \quad \text{A5: } C \cdot b > 8160 \text{ (bytes)}
+\mathrm{ceil}_{G}(C) & \text{A2A3: } C \le 8160 \text{ (elements)} \;\; \text{(A5: } C \cdot b \le 8160 \text{ (bytes))} \\
+G = 32 & \text{A2A3: } C > 8160 \text{ (elements)} \;\; \text{(A5: } C \cdot b > 8160 \text{ (bytes))}
 \end{cases}
 $$
 
@@ -106,7 +106,7 @@ $$
 - Path A ($C \cdot b \le 8160$) copies the **entire row** from its start into tmp, then pads the last 32 elements in place.
 - Path B ($C \cdot b > 8160$) copies **only the tail block** into tmp; full blocks are sorted directly from `src`.
 - VBS32 hard cap: `repeat ≤ REPEAT_MAX = 255` blocks per call (≤ 8160 elements); rows longer than 255 blocks are split across multiple `vbitsort` calls.
-- **UB placement:** `tmp` should be placed right after `dst` (32-B aligned), sized `ceil(ALIGN_C·b, 32)` bytes — not at a fixed 8 KB offset, since Path A (A2A3) needs up to ~32 KB for float near the threshold ($C \le 8160$ elements = 32 KB for float).
+- **UB placement:** `tmp` should be placed right after `dst` (32-B aligned), sized `ceil(C·b, 32)` bytes (equivalently `ceil(ceil(C, 32)·b, 32)` since $b \in \{2,4\}$ divides 32) — not at a fixed 8KB offset, since Path A (A2A3) needs up to ~32KB for float near the threshold ($C \le 8160$ elements = 32 KB for float).
 
 ### 4-arg tail handling
 
@@ -116,6 +116,20 @@ When `validCol % 32 != 0`, the trailing partial block ($t = C \bmod 32$ elements
 - **A2A3: $C > 8160$ (elements)** / **A5: $C \cdot b > 8160$ (bytes)** (large row): only the **tail block** is copied to `tmp` and padded; full blocks are sorted directly from `src`, only the tail is sorted from `tmp`.
 
 Padding values ($-\infty$ = `-(0.0/0.0)`) land at the bottom of the descending order. If `validCol > 32 × 255`, the row is chunked into `REPEAT_MAX`-sized groups, each sorted via a separate `vbitsort` call.
+
+## Assembly Syntax
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 
 ## Examples
 
@@ -136,4 +150,29 @@ using IdxT2 = Tile<TileType::Vec, uint32_t, 1, 100>;
 using DstT2 = Tile<TileType::Vec, half, 1, 400>;  // 4× src cols (half)
 using TmpT  = Tile<TileType::Vec, half, 1, 128>;  // ≥ ceil32(100)=128
 TSort32(dst2, src2, idx2, tmp);
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+# pto.tassign %arg2, @tile(0x3000)
+%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

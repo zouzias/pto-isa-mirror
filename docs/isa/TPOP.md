@@ -148,3 +148,8 @@ AICORE void example_globaldata(__gm__ void *fifoMem)
     TFREE<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
 }
 ```
+
+## ASM Form Examples
+
+The current public assembly reference does not define a stable PTO-AS spelling for `TPOP`. Use the C++ intrinsic form for manual CV FIFO programming.
+```

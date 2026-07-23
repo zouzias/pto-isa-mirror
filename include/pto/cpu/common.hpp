@@ -15,8 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum QuantMode_t
-{
+enum QuantMode_t {
     NoQuant = 0,        // 不使能量化功能
     F322F16 = 1,        // float量化成half, scalar量化
     F322BF16 = 16,      // float量化成bfloat16_t, scalar量化
@@ -99,9 +98,7 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantMode()
 template <typename T>
 inline T ReLU(T val)
 {
-    if (val < 0)
-        return 0;
-    return val;
+    return (val > 0) ? val : 0;
 }
 
 inline float extract_m1_from_quant(uint64_t quant)
@@ -132,8 +129,9 @@ DstType quantize_element(SrcType src_val, uint64_t scalar)
 
     float result_f = static_cast<float>(src_val) * f_scale;
 
-    if constexpr (mode == QuantMode_t::QF322B8_PRE || mode == QuantMode_t::VQF322B8_PRE || mode == QuantMode_t::REQ8 ||
-                  mode == QuantMode_t::VREQ8) {
+    if constexpr (
+        mode == QuantMode_t::QF322B8_PRE || mode == QuantMode_t::VQF322B8_PRE || mode == QuantMode_t::REQ8 ||
+        mode == QuantMode_t::VREQ8) {
         float rounded = std::nearbyint(result_f + offset);
         float min = sign == 1 ? -128.0f : 0.0f;
         float max = sign == 1 ? 127.0f : 255.0f;
@@ -180,7 +178,7 @@ PTO_INLINE D ConvertStoreValue(S value, uint64_t scalar)
 }
 
 template <typename D, typename S, typename TileData, QuantMode_t quantMode, bool applyRelu>
-PTO_INLINE void StoreElement(D *dst, size_t dstIdx, S value, size_t r, size_t c, const std::vector<uint64_t> &scalars)
+PTO_INLINE void StoreElement(D* dst, size_t dstIdx, S value, size_t r, size_t c, const std::vector<uint64_t>& scalars)
 {
     size_t scalarIndex = TileData::isRowMajor ? c : r;
     uint64_t scalar = 0;

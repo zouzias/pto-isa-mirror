@@ -72,38 +72,26 @@ struct TraceState {
 
 inline thread_local TraceState g_trace_state;
 
-inline void ResetTrace()
-{
-    g_trace_state = {};
-}
+inline void ResetTrace() { g_trace_state = {}; }
 
-inline TraceState &GetMutableTrace()
-{
-    return g_trace_state;
-}
+inline TraceState& GetMutableTrace() { return g_trace_state; }
 
-inline const TraceState &GetTrace()
-{
-    return g_trace_state;
-}
+inline const TraceState& GetTrace() { return g_trace_state; }
 
 inline uint64_t GetLastPtoInstrCycles()
 {
-    const auto &trace = g_trace_state;
+    const auto& trace = g_trace_state;
     return trace.executed_pto.empty() ? 0 : trace.executed_pto.back().total_cycles;
 }
 
-inline constexpr std::size_t ToPipeIndex(evaluator::PipeKey pipe)
-{
-    return static_cast<std::size_t>(pipe);
-}
+inline constexpr std::size_t ToPipeIndex(evaluator::PipeKey pipe) { return static_cast<std::size_t>(pipe); }
 
-inline CcePipeTraceState &GetPipeTrace(TraceState &trace, evaluator::PipeKey pipe)
+inline CcePipeTraceState& GetPipeTrace(TraceState& trace, evaluator::PipeKey pipe)
 {
     return trace.cce_pipe_traces[ToPipeIndex(pipe)];
 }
 
-inline const CcePipeTraceState &GetPipeTrace(const TraceState &trace, evaluator::PipeKey pipe)
+inline const CcePipeTraceState& GetPipeTrace(const TraceState& trace, evaluator::PipeKey pipe)
 {
     return trace.cce_pipe_traces[ToPipeIndex(pipe)];
 }
@@ -126,8 +114,9 @@ inline uint64_t ToTraceValue(T value)
         return static_cast<uint64_t>(std::bit_cast<uint32_t>(value));
     } else if constexpr (std::is_floating_point_v<Decayed> && sizeof(Decayed) == sizeof(uint64_t)) {
         return std::bit_cast<uint64_t>(value);
-    } else if constexpr (sizeof(Decayed) == sizeof(uint16_t) && !std::is_integral_v<Decayed> &&
-                         !std::is_enum_v<Decayed> && !std::is_pointer_v<Decayed>) {
+    } else if constexpr (
+        sizeof(Decayed) == sizeof(uint16_t) && !std::is_integral_v<Decayed> && !std::is_enum_v<Decayed> &&
+        !std::is_pointer_v<Decayed>) {
         // Handles _Float16 / __fp16 / half which may not satisfy std::is_floating_point_v
         return static_cast<uint64_t>(std::bit_cast<uint16_t>(value));
     } else {
@@ -138,7 +127,7 @@ inline uint64_t ToTraceValue(T value)
 
 inline bool IsPipeQueueEmpty(evaluator::PipeKey pipe)
 {
-    const auto &trace = g_trace_state;
+    const auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         return true;
     }
@@ -147,33 +136,27 @@ inline bool IsPipeQueueEmpty(evaluator::PipeKey pipe)
 
 inline void SetLastCceTail(evaluator::PipeKey pipe, uint64_t tail)
 {
-    auto &trace = g_trace_state;
+    auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         return;
     }
-    auto &pipe_trace = GetPipeTrace(trace, pipe);
+    auto& pipe_trace = GetPipeTrace(trace, pipe);
     pipe_trace.last_cce_tail = tail;
     pipe_trace.has_pending_tail = (tail != 0);
 }
 
-inline bool IsVectorCountMode()
-{
-    return g_trace_state.vector_count_mode;
-}
+inline bool IsVectorCountMode() { return g_trace_state.vector_count_mode; }
 
-inline void SetVectorCountMode(bool active)
-{
-    g_trace_state.vector_count_mode = active;
-}
+inline void SetVectorCountMode(bool active) { g_trace_state.vector_count_mode = active; }
 
 inline void FlushPendingTail(evaluator::PipeKey pipe)
 {
-    auto &trace = g_trace_state;
+    auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         return;
     }
 
-    auto &pipe_trace = GetPipeTrace(trace, pipe);
+    auto& pipe_trace = GetPipeTrace(trace, pipe);
     if (pipe_trace.has_pending_tail) {
         trace.executed_pto[trace.active_pto_stack.back()].total_cycles += pipe_trace.last_cce_tail;
         pipe_trace.last_cce_tail = 0;
@@ -210,8 +193,8 @@ inline void FlushAllPendingTailsExceptVector()
 // never pay its own stream-start latency.
 inline void ResetVectorStream()
 {
-    auto &trace = g_trace_state;
-    auto &vec_trace = GetPipeTrace(trace, evaluator::PipeKey::VECTOR);
+    auto& trace = g_trace_state;
+    auto& vec_trace = GetPipeTrace(trace, evaluator::PipeKey::VECTOR);
     vec_trace.queue.clear();
     vec_trace.last_cce_tail = 0;
     vec_trace.has_pending_tail = false;
@@ -219,7 +202,7 @@ inline void ResetVectorStream()
 
 inline void BeginPtoInstr(std::string_view name)
 {
-    auto &trace = g_trace_state;
+    auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         trace.executed_pto.push_back(PtoInstrRecord{std::string(name), {}, 0});
         // Reset all pipe traces EXCEPT VECTOR. The vector pipe queue must persist across
@@ -238,7 +221,7 @@ inline void BeginPtoInstr(std::string_view name)
 
 inline void EndPtoInstr()
 {
-    auto &stack = g_trace_state.active_pto_stack;
+    auto& stack = g_trace_state.active_pto_stack;
     if (!stack.empty()) {
         if (stack.size() == 1) {
             FlushAllPendingTailsExceptVector();
@@ -260,9 +243,9 @@ inline void EndPtoInstr()
 inline constexpr std::size_t kInvalidCceCallIndex = static_cast<std::size_t>(-1);
 
 template <typename... Args>
-inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args &&...args)
+inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args&&... args)
 {
-    auto &trace = g_trace_state;
+    auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         return kInvalidCceCallIndex;
     }
@@ -275,22 +258,22 @@ inline std::size_t AppendCceCall(std::string_view name, uint64_t cycles, Args &&
         (call.args.push_back(ToTraceValue(std::forward<Args>(args))), ...);
     }
 
-    auto &pto = trace.executed_pto[trace.active_pto_stack.back()];
+    auto& pto = trace.executed_pto[trace.active_pto_stack.back()];
     pto.total_cycles += cycles;
     pto.cce_calls.push_back(std::move(call));
     return pto.cce_calls.size() - 1;
 }
 
 template <typename... Args>
-inline void RecordCceCall(std::string_view name, uint64_t cycles, Args &&...args)
+inline void RecordCceCall(std::string_view name, uint64_t cycles, Args&&... args)
 {
     (void)AppendCceCall(name, cycles, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-inline void RecordCceCall(evaluator::PipeKey pipe, std::string_view name, uint64_t cycles, Args &&...args)
+inline void RecordCceCall(evaluator::PipeKey pipe, std::string_view name, uint64_t cycles, Args&&... args)
 {
-    auto &trace = g_trace_state;
+    auto& trace = g_trace_state;
     const std::size_t call_index = AppendCceCall(name, cycles, std::forward<Args>(args)...);
     if (call_index == kInvalidCceCallIndex) {
         return;
@@ -300,10 +283,7 @@ inline void RecordCceCall(evaluator::PipeKey pipe, std::string_view name, uint64
 
 class PtoInstrScope {
 public:
-    explicit PtoInstrScope(std::string_view name)
-    {
-        BeginPtoInstr(name);
-    }
+    explicit PtoInstrScope(std::string_view name) { BeginPtoInstr(name); }
 
     ~PtoInstrScope()
     {

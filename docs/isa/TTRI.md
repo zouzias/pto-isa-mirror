@@ -45,6 +45,20 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
     - Lower (`upperOrLower == 0`) and upper (`upperOrLower == 1`) are distinguished by `if constexpr` branches.
 - Valid region is obtained via `dst.GetValidRow()` / `dst.GetValidCol()`.
 
+## Assembly Syntax
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## Examples
 
 ```cpp
@@ -65,4 +79,29 @@ void example_upper() {
   TASSIGN(dst, 0x1000);
   TTRI<1>(dst, /*diagonal=*/-1);  // upper triangular
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.ttri {isUpperOrLower = 0} : i32 -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# pto.tassign %arg0, @tile(0x1000)
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
 ```

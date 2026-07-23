@@ -18,6 +18,16 @@ For each element `(i, j)` in the valid region of `dst`:
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{rowIdx} + i,\mathrm{colIdx} + j} $$
 
+## Assembly Syntax
+
+
+### IR Level 1 (SSA)
+TODO
+
+### IR Level 2 (DPS)
+TODO
+
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -60,3 +70,17 @@ void example() {
   TSUBVIEW(dst3, src, 2, 32);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+TODO
+
+### Manual Mode
+
+TODO
+
+### PTO Assembly Form
+
+TODO

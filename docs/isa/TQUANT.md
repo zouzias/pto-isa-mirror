@@ -137,7 +137,7 @@ Same as MXFP8 except:
 | $M \bmod 64 = 0$ | DN MX + ZZ conversion | δ-pairing ($\hat M / 2$ integer) |
 | $N \bmod 32 = 0$ | all MX | group size $G = 32$ |
 | $N \bmod 64 = 0$ | ND MX + ZZ conversion | even number of exponent groups |
-| $R \cdot C \le 59461$ | MX (UB 256 KB) | buffer budget with reuse |
+| $R \cdot C \le 59461$ | MX (UB 256KB) | buffer budget with reuse |
 | BF16/FP16: `validCols % 32 != 0` → zero-padded to `StaticCols` | MX B16 path | group alignment |
 
 ## Output Layout & Layout Conversion
@@ -163,6 +163,47 @@ DN data FP8 mantissas share the same physical addresses as ND (the `(r,c)` eleme
 ## Math Interpretation
 
 Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+
+## Assembly Syntax
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 
 ## Examples
 

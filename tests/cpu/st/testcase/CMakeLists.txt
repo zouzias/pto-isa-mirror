@@ -44,6 +44,7 @@ mscatter
 setgetval
 tabs
 tadd
+tadddeqrelu
 taddc
 tadds
 taddsc
@@ -63,6 +64,7 @@ tcolsum
 tconcat
 tcvt
 tdequant
+tdeinterleave
 tdiv
 tdivs
 texp
@@ -85,6 +87,7 @@ thistogram
 timg2col
 tinsert
 tinsert_quant
+tinterleave
 tload
 tloadconv
 tlog
@@ -106,6 +109,7 @@ tnot
 tnotify
 tor
 tors
+tpairreducesum
 tpartadd
 tpartargmax
 tpartargmin
@@ -121,6 +125,7 @@ tpushpop_fixpipe
 tput
 tput_async
 tquant
+tquant_dn
 trandom
 trecip
 treduce
@@ -145,6 +150,7 @@ tshrs
 tsort32
 tsqrt
 tstore
+tstore_acc2gm
 tstore_quant
 tstore_conv
 tsub

@@ -28,6 +28,25 @@ $$
 `pad` is determined by `TileDataDst::PadVal` and the element type (e.g., `+inf/-inf` for floating types when available,
 otherwise `std::numeric_limits<T>::max()/min()`).
 
+## Assembly Syntax
+
+Synchronous form (conceptual):
+
+```text
+%dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Implemented in the backend headers pulled in by `include/pto/common/pto_instr_impl.hpp`:
@@ -42,11 +61,11 @@ PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &..
 
 ## Constraints
 
-- `TileDataDst::PadVal != PadValue::Null`.
+- `TileDataDst::PadVal != PadValue::Null` (Vec-type overload).
 - `sizeof(TileDataDst::DType) == sizeof(TileDataSrc::DType)` and element size must be `1`, `2`, or `4` bytes.
 - `TFILLPAD`: `TileDataDst::Rows/Cols` must match `TileDataSrc::Rows/Cols`.
 - `TFILLPAD_EXPAND`: `TileDataDst::Rows >= TileDataSrc::Rows` and `TileDataDst::Cols >= TileDataSrc::Cols`.
-- `TFILLPAD(TileData &dst, TileData &src)`: `if TileData::TileType is Mat, layout only support (!TileData::isRowMajor && TileData::Slayout::RowMajor), and PadVal only support PadValue::Zero or PadValue::Null`
+- `TFILLPAD(TileData &dst, TileData &src)`: `if TileData::TileType is Mat, layout only support (!TileData::isRowMajor && TileData::Slayout::RowMajor), and PadVal only support PadValue::Zero or PadValue::Null` (Mat-type overload; the first constraint's Vec restriction and this Mat allowance belong to separate SFINAE overloads and are not contradictory)
 
 ## Examples
 
@@ -70,4 +89,31 @@ void example2() {
   TileMatData matTile;
   TFILLPAD(matTile, matTile);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: resources must be bound explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
