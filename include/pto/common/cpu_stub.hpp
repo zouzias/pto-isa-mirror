@@ -70,6 +70,9 @@ static inline int aclrtMallocHost(void** p, size_t sz)
             reinterpret_cast<char*>(dst)[i] = reinterpret_cast<char*>(src)[i]; \
     }
 
+#if defined(__CPU_SIM)
+// aclrtMemset 仅 CPU 模拟(__CPU_SIM)需要;costmodel 走 aclrt_stub.hpp 的同名桩,
+// 两者同 TU 都激活会 redefinition(Linux libstdc++ 严格)。
 inline int aclrtMemset(void* dst, size_t dstSize, int value, size_t count)
 {
     constexpr int ACL_SUCCESS = 0;
@@ -84,6 +87,7 @@ inline int aclrtMemset(void* dst, size_t dstSize, int value, size_t count)
     std::fill_n(reinterpret_cast<uint8_t*>(dst), count, static_cast<uint8_t>(value));
     return ACL_SUCCESS;
 }
+#endif
 
 #define aclrtSynchronizeStream(x) (0)
 #define aclrtFree(x) free(x)
@@ -248,6 +252,9 @@ struct is_event : std::false_type {};
 template <typename... Ts>
 inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
 
+// 这些 SYNCALL 桩仅用于 CPU 模拟(__CPU_SIM)。costmodel 走 arch 桩(a2a3/SyncAll、a5/SyncAll),
+// 不该激活这里——否则与 a5/SyncAll 的模板版同名同默认参数 → ODR 冲突(A2A3 因用非模板恰好不撞)。
+#if defined(__CPU_SIM)
 namespace pto {
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 inline void SYNCALL_IMPL()
@@ -281,5 +288,6 @@ inline void SYNCALL_SOFT_MIX_IMPL(int32_t* gmWorkspace, int32_t* ubWorkspace, in
     (void)usedCores;
 }
 } // namespace pto
+#endif  // __CPU_SIM
 
 #endif

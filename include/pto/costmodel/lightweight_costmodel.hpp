@@ -369,7 +369,9 @@ inline bool EstimateCycles(
 {
     if (input.arch == CostModelArch::A5) {
         uint64_t cycles = 0;
-        if (!a5::TryEstimateA5VfCycles(input, cycles)) {
+        // A5 cycle 走 formula 后端;CCE mock(逐微指令)经 PTO-ISA 入口(st_a5),不经 lightweight。
+        const bool ok = a5::TryEstimateA5VfCycles(input, cycles);
+        if (!ok) {
             return WarnAndFallbackToZero(input, result, "unsupported A5 VF curve key");
         }
         result.cycles = static_cast<double>(cycles);
