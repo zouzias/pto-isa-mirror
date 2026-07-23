@@ -121,7 +121,7 @@ struct ScopeSentinel {
         __pto_vf_scope_exit();
         trace::Arm(false);
         // 本 VF(__VEC_SCOPE__)结束:事件流折叠成一个 VfInfo,push 进当前 PTO 的 vf_infos。
-        // 一个 PTO 可含多个 __VEC_SCOPE__(如 2D_PostUpdate=FullRepeats+Tail),各自折叠攒着。
+        // 一个 PTO 理论上可含多个 __VEC_SCOPE__,各自折叠攒着。
         auto &ts = ::pto::mocker::g_trace_state;
         const std::string_view op = ts.active_pto_stack.empty()
                                         ? std::string_view{}

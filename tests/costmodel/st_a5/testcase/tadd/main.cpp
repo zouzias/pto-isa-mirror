@@ -9,7 +9,7 @@
 //
 // 强断言(cycle 是占位常数不与真机对齐,只验结构):
 //   - vf_infos 恰好 1 个 VfInfo;树顶层 1 个 LOOP、嵌套深度 1(1D NoPostUpdate 路径)。
-//   - loop count = ceil(640 / 64) = 10(ElementsPerRepeat = CCE_VL/sizeof(float) = 256/4 = 64)。
+//   - loop count = ceil(cols / 64)(ElementsPerRepeat = CCE_VL/sizeof(float) = 256/4 = 64)。
 //   - 典范 body(均匀循环各轮同构)= [vlds, vlds, vadd, vsts]。
 //   - plt_b32 是 predicate 设置，不记为 micro-op。
 //   - vlds/vadd/vsts 的 dst/src 名称、location 和 dtype 被 mock 完整捕获。
@@ -26,12 +26,15 @@
 namespace vf = ::pto::mocker::vf;
 using namespace pto;
 
-int main()
+namespace {
+
+template <unsigned Cols, uint64_t ExpectedRepeat>
+int RunTaddCase()
 {
-    using TileData = Tile<TileType::Vec, float, 1, 640, BLayout::RowMajor, -1, -1>;
-    TileData src0Tile(1, 640);
-    TileData src1Tile(1, 640);
-    TileData dstTile(1, 640);
+    using CaseTileData = Tile<TileType::Vec, float, 1, Cols, BLayout::RowMajor, -1, -1>;
+    CaseTileData src0Tile(1, Cols);
+    CaseTileData src1Tile(1, Cols);
+    CaseTileData dstTile(1, Cols);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, 0x4000);
     TASSIGN(dstTile, 0x8000);
@@ -44,8 +47,6 @@ int main()
     const auto &pto_rec = trace.executed_pto.back();
     const std::size_t nvf = pto_rec.vf_infos.size();
 
-    // TADD 1×640 f32:EPR=256/4=64 → repeat=ceil(640/64)=10;每轮 vlds+vlds+vadd+vsts。
-    constexpr uint64_t kExpectedRepeat = 10;
     const std::vector<std::string> kExpectedBody = {"vlds", "vlds", "vadd", "vsts"};
 
     int fails = 0;
@@ -63,7 +64,7 @@ int main()
         check(one_loop, "顶层恰好一个根 LOOP 节点");
         if (one_loop) {
             const vf::VfLoop &lp = vf::AsLoop(info.tree[0]);
-            check(lp.count == kExpectedRepeat, "loop count == 10(1x640 f32 / EPR 64)");
+            check(lp.count == ExpectedRepeat, "loop count == expected repeat(1xCols f32 / EPR 64)");
             const std::vector<std::string> body = vf::FlattenLeafInstrs(lp.body);
             check(body == kExpectedBody, "典范 body == [vlds,vlds,vadd,vsts]");
             check(lp.body.size() == 4, "body 节点数 == 4");
@@ -89,8 +90,23 @@ int main()
         }
     }
 
-    std::printf("st_a5 TADD f32 1x640: cycles=%llu vf_infos=%zu\n",
-                static_cast<unsigned long long>(cycles), nvf);
+    std::printf("st_a5 TADD f32 1x%u repeat=%llu: cycles=%llu vf_infos=%zu\n", Cols,
+                static_cast<unsigned long long>(ExpectedRepeat), static_cast<unsigned long long>(cycles), nvf);
+    return fails;
+}
+
+} // namespace
+
+int main()
+{
+    int fails = 0;
+    fails += RunTaddCase<64, 1>();
+    fails += RunTaddCase<512, 8>();
+    fails += RunTaddCase<1024, 16>();
+    fails += RunTaddCase<2048, 32>();
+    fails += RunTaddCase<4096, 64>();
+    fails += RunTaddCase<6144, 96>();
+
     std::printf("%s\n", fails == 0 ? "PASS" : "FAIL");
     return fails == 0 ? 0 : 1;
 }

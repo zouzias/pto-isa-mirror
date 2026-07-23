@@ -243,8 +243,8 @@ inline void EndPtoInstr()
         if (stack.size() == 1) {
             FlushAllPendingTailsExceptVector();
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
-            // A5 结算:本 PTO 指令结束,把它期间攒下的所有 VfInfo 交后端统一算 cycle
-            //(含跨 VF overlap,占位先求和)。VF cycle 叠加到 total_cycles 上(而非覆盖):
+            // A5 结算:本 PTO 指令结束,把它期间攒下的所有 VfInfo 交后端算 cycle。
+            // 多 VF 逐个预测后求和。VF cycle 叠加到 total_cycles 上(而非覆盖):
             // 上面 FlushAllPendingTailsExceptVector 可能已把非 VF 的搬运/同步/标量 CCE cycle
             // 累加进来,覆盖会丢这部分 → 混合指令被低估。
             auto &pto = g_trace_state.executed_pto[stack.back()];
