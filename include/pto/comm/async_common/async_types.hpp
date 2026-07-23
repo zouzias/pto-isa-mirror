@@ -101,6 +101,38 @@ struct UrmaSession {
 } // namespace urma
 
 // ============================================================================
+// RDMA context types. The backend selected at build time is recorded in the
+// device workspace and copied into the session. HNS1825 WQE/CQE details remain
+// under async/rdma/backends/hns_1825/.
+// ============================================================================
+namespace rdma {
+
+struct RdmaExecContext {
+    __gm__ uint8_t* contextGm{nullptr}; // device address of the RdmaInfo table
+    RdmaBackend backend{RdmaBackend::NONE};
+    uint32_t destRankId{0};
+    uint32_t qpIdx{0};
+    uint32_t myPe{0};         // local rank id (indexes local RdmaMemInfo for lkey)
+    sdma::TmpBuffer tmpBuf{}; // backend WQE/CQE scratch
+    uint32_t syncId{0};       // pipe sync event id (0-7 for HNS_1825)
+};
+
+struct RdmaEventContext {
+    __gm__ uint8_t* contextGm{nullptr};
+    RdmaBackend backend{RdmaBackend::NONE};
+    sdma::TmpBuffer tmpBuf{};
+    uint32_t syncId{0};
+};
+
+struct RdmaSession {
+    RdmaExecContext execCtx{};
+    RdmaEventContext eventCtx{};
+    bool valid{false};
+};
+
+} // namespace rdma
+
+// ============================================================================
 // AsyncSession: engine-agnostic session for async DMA operations.
 // Users build via comm::BuildAsyncSession<engine>() and pass to
 // TPUT_ASYNC / TGET_ASYNC / event.Wait() without knowing engine internals.
@@ -109,6 +141,7 @@ struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};
     sdma::SdmaSession sdmaSession{};
     urma::UrmaSession urmaSession{};
+    rdma::RdmaSession rdmaSession{};
     bool valid{false};
 };
 

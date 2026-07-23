@@ -101,3 +101,52 @@ dcci((__gm__ void *)&shared_data, SINGLE_CACHE_LINE);
 __asm__ __volatile__("");  // 编译器屏障
 int32_t value = shared_data;
 ```
+
+---
+
+## 7. RDMA/HNS1825 未编入或初始化失败
+
+### 编译时提示 RDMA 未使能
+
+`DmaEngine::RDMA` 是编译期路径。首次 CMake 配置前执行：
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+```
+
+然后重新配置/构建。`run_st.py -w` 会复用旧二进制，不能让新的后端选择生效。未设置、空值和当前不支持的
+值都会生成不含 RDMA 的产物。
+
+### `Preflight()` 返回 `ERROR`
+
+当前 HNS1825 后端仅支持 A5。若编入 HNS1825 后端但运行在其他架构上，PTO 会打印明确错误并拒绝进入
+建链；网卡、provider 或网络配置不可用则在后续 HCOMM 初始化阶段报错。
+
+### HCOMM endpoint/MR/channel 创建失败
+
+按顺序检查：
+
+1. HNS1825 网卡和驱动是否可见；provider 不在默认路径时设置
+   `IBV_EXTEND_DRIVERS=<path>/libhrn5-rdmav34.so`。
+2. 每个 rank 的 RDMA IPv4、物理设备 id 和注册缓冲区 Device VA 是否正确交换。
+3. `HCCL_RDMA_TC`/`HCCL_RDMA_SL` 是否与网络配置一致。
+4. 同一 RDMA NIC IPv4 是否超过 16 个 rank，或 rank 对 base port 映射是否冲突。
+5. 设置 `PTO_ROCE_VERBOSE=1`，查看 endpoint、MR、channel readiness 与释放阶段。
+
+`RdmaWorkspaceManager` 不负责 MPI/HCCL bootstrap；应用必须先收集一致的 peer 信息再调用 `Init()`。
+
+---
+
+## 8. RDMA event ready 但 `Wait` 失败
+
+HNS1825 的正常非零传输在提交成功后应返回有效 event。`event.Test(session)` 只检查是否 ready，不推进
+CQ，也不能替代最终的 `event.Wait(session)`；应检查 `Wait` 返回值。
+失败时重点检查：
+
+- 本地与远端完整传输范围是否都位于注册 MR 内；
+- RDMA scratch 是否至少 64B，`syncId` 是否在 `[0, 7]` 且未与其他 pipe event 冲突；
+- 单次传输是否超过 `0x7fffffff` 字节；
+- CQE syndrome 或 CQ polling timeout 日志。
+
+释放顺序必须是所有 Kernel/Wait 完成后调用 `Finalize()`，再释放注册通信缓冲区。重复测试应保持正常
+`Init → 使用 → Finalize`，不应通过跳过建链或析构来规避错误。

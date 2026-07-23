@@ -27,11 +27,31 @@ for (int r = 0; r < nranks; ++r) {
 comm::ParallelGroup<GlobalData> group(tensors, nranks, my_rank);
 ```
 
+### 方式 3：通过 RDMA 注册 MR（仅 A5）
+
+Host 先用 `RdmaWorkspaceManager` 注册每个 rank 的通信缓冲区并交换 Device
+虚拟地址。Device 侧从 workspace 读取 peer MR base，再叠加应用定义的逻辑
+offset；不要求各 rank 的通信缓冲区具有相同虚拟地址：
+
+```cpp
+uint64_t peerBase = comm::rdma::PeerMrBaseAddr(rdmaWorkspace, peerRank);
+if (peerBase == 0) {
+    return;
+}
+__gm__ T *remotePtr =
+    reinterpret_cast<__gm__ T *>(peerBase + remoteOffsetBytes);
+```
+
+`remoteOffsetBytes` 及完整远端访问范围必须落在 peer 注册 MR 内；本地操作数
+范围也必须落在本地注册 MR 内。当前该路径要求构建阶段选择
+`PTO_RDMA_BACKEND=HNS_1825`。
+
 ### 地址对齐要求
 
 - 所有 GM 地址必须满足 32 字节对齐
 - Signal 地址必须 4 字节对齐
 - TPUT_ASYNC/TGET_ASYNC 的 workspace 由专用 Manager 管理，无需额外对齐
+- RDMA payload 地址除满足接口对齐要求外，还必须完整位于已注册 MR 内
 
 ---
 
