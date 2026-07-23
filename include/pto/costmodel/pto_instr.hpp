@@ -208,6 +208,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     do {                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                   \
         API##_IMPL(__VA_ARGS__);                                     \
+        _scope.Finish();                                              \
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
     } while (0)
@@ -217,6 +218,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     do {                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                   \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                       \
+        _scope.Finish();                                              \
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
     } while (0)
@@ -227,6 +229,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     do {                                                                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                                                                   \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                                                       \
+        _scope.Finish();                                                                                            \
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                                 \
         /* Call RecordTPushSync or RecordTPopSync for FFTS sync */                                                   \
         if constexpr (IS_TPUSH) {                                                                                    \
@@ -243,6 +246,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     do {                                                                                                         \
         ::pto::mocker::PtoInstrScope _scope(#API);                                                               \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                                                   \
+        _scope.Finish();                                                                                         \
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                             \
         ::RecordTPushSync(                                                                                       \
             PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), PTO_FIRST_ARG(__VA_ARGS__).prod.tileIndex); \
@@ -254,6 +258,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     do {                                                                                                         \
         ::pto::mocker::PtoInstrScope _scope(#API);                                                               \
         API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                                                                   \
+        _scope.Finish();                                                                                         \
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                             \
         ::RecordTPopSync(                                                                                        \
             PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), PTO_FIRST_ARG(__VA_ARGS__).cons.tileIndex); \
