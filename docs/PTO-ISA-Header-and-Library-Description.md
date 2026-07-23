@@ -1,10 +1,10 @@
-# PTO-ISA对外头文件和库文件说明
+# 头文件和库文件说明
 
 #### 接口分类
 
 PTO 全称 Parallel Tile Operation，即并行 Tile 操作，是 Ascend CANN 定义的面向 Tile 编程的虚拟指令集架构。本仓在该架构下共提供 124 条 Tile 指令，其中包含一套片间通信扩展指令。这些指令覆盖逐元素计算、归约、广播、矩阵乘与 GEMV、数据搬运、类型转换、布局变换、排序、Union 计算等计算与变换场景，以及同步、资源配置等系统控制场景，可供上层框架、算子实现与编译工具链统一调用。
 
-PTO 指令统一采用 Tile 块级抽象，命名风格为：指令类别前缀+计算名称，整体首字母大写，采用 PascalCase 风格。其中绝大多数指令以 `T` 为前缀，表示面向 Tile 对象的操作；矩阵级不规则访存指令以 `M` 为前缀，如 `MGATHER`、`MSCATTER`；跨核同步屏障为 `SYNCALL`。下文为了描述方便，将本文中的接口统称为 PTO 接口。
+PTO 指令统一采用 Tile 块级抽象，命名风格为：指令类别前缀+计算名称，整体首字母大写，采用 PascalCase 风格。其中绝大多数指令以 `T` 为前缀，表示面向 Tile 对象的操作；不规则访存指令以 `M` 为前缀，`M` 表示 memory，如 `MGATHER`、`MSCATTER`；跨核同步屏障为 `SYNCALL`。下文为了描述方便，将本文中的接口统称为 PTO 接口。
 
 **表 1 关键指令类别**
 
@@ -12,7 +12,7 @@ PTO 指令统一采用 Tile 块级抽象，命名风格为：指令类别前缀+
 | --- | --- |
 | 计算与搬运 | 以 `T` 为前缀的 Tile 级核心指令，涵盖 Tile 与 Tile、Tile 与标量的元素计算、类型转换、选择、行/列/部分归约、矩阵乘与 GEMV、数据搬运 Load/Store/Mov/Gather/Scatter/Extract/Insert 等，如 `TADD`、`TMUL`、`TMATMUL`、`TGEMV`、`TLOAD`、`TSTORE`、`TMOV`、`TGATHER`、`TSCATTER`、`TCVT`。 |
 | 片间通信 | 同样以 `T` 为前缀的 NPU 间通信与同步指令，覆盖点对点通信、信号同步与集合通信，支持同步与异步两种形式，如 `TGET`、`TGET_ASYNC`、`TPUT`、`TPUT_ASYNC`、`TNOTIFY`、`TWAIT`、`TTEST`、`TBROADCAST`、`TREDUCE`。 |
-| 矩阵级访存 | 以 `M` 为前缀的矩阵级 Gather/Scatter 指令，如 `MGATHER`、`MSCATTER`。 |
+| 不规则访存 | 以 `M` 为前缀的不规则 Gather/Scatter 访存指令，如 `MGATHER`、`MSCATTER`。 |
 | 资源绑定 | `TASSIGN`，将 Tile 对象手动绑定到实现定义的片上地址，对应 Manual 手动放置模式。 |
 | 同步屏障 | `SYNCALL`，跨核同步屏障指令，用于多核间的执行同步。 |
 
