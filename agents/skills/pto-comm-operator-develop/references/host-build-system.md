@@ -2,6 +2,9 @@
 
 ## 标准初始化流程
 
+下面流程适用于现有同步指令以及 SDMA/URMA 路径。异步 RDMA 还需要独立的
+Host 控制面，见后文“RDMA/HNS1825 异步路径”。
+
 ```cpp
 int main(int argc, char **argv) {
     // 1. MPI 初始化
@@ -48,6 +51,81 @@ int main(int argc, char **argv) {
     MPI_Finalize();
 }
 ```
+
+---
+
+## RDMA/HNS1825 异步路径
+
+`DmaEngine::RDMA` 与 SDMA/URMA 可以同时存在；它不是 HCCL 通信域的别名。
+当前 PTO 只实现 HNS1825 后端，并且只支持 A5。
+
+### 构建选择
+
+当前 A5 通信 ST 在首次 CMake 配置时读取：
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+```
+
+CMake 必须把该选择同时转换为 Host 与 Device 的
+`PTO_RDMA_SUPPORTED`、`PTO_RDMA_BACKEND_HNS_1825_SUPPORTED` 编译定义。
+生成的二进制不再读取 `PTO_RDMA_BACKEND`。未设置、空值或不支持的值均表示
+不编入 RDMA 后端；改变取值后必须重新配置构建目录。
+
+集成自己的 CMake 工程时，还需要：
+
+- Host 和 Device 都能包含 PTO 头文件；
+- Host 侧链接 `ascendcl`、`hcomm`、`dl`（并按工程现有方式链接 CANN Runtime）；Device 数据面不直接调用
+  HCOMM API；
+- 若 HNS1825 verbs provider 不在默认路径，通过 `IBV_EXTEND_DRIVERS` 指向
+  `libhrn5-rdmav34.so`。
+
+### Host 生命周期
+
+应用负责在各 rank 间交换网卡与注册内存信息，然后由
+`RdmaWorkspaceManager` 创建 HCOMM endpoint、注册本地通信缓冲区、建立
+peer channel 并发布 Device workspace：
+
+```cpp
+#include "pto/comm/async/rdma/rdma_workspace_manager.hpp"
+
+namespace rdma = pto::comm::rdma;
+
+rdma::RdmaWorkspaceManager manager;
+if (manager.Preflight() != rdma::WorkspaceInitResult::READY) {
+    return HandleRdmaUnavailable();
+}
+
+rdma::WorkspaceConfig config;
+config.rankId = rank;
+config.rankCount = nranks;
+config.phyId = localPhyId;
+config.localIp = localRdmaIp;
+config.basePort = basePort;
+config.peerIps = peerRdmaIps;
+config.peerPhyIds = peerPhyIds;
+config.peerSymAddrs = peerDeviceAddrs;
+config.symmetricAddr = localDeviceAddr;
+config.symmetricSize = registeredBytes;
+
+if (manager.Init(config) != rdma::WorkspaceInitResult::READY) {
+    return HandleRdmaInitFailure();
+}
+
+void *rdmaWorkspace = manager.GetWorkspaceAddr();
+// 将 rdmaWorkspace 传给 kernel，并用它构建 DmaEngine::RDMA AsyncSession。
+LaunchAndSynchronizeKernel(rdmaWorkspace);
+
+// 必须先释放 HCOMM channel/MR/endpoint，再释放已注册的 Device buffer。
+if (!manager.Finalize()) {
+    return HandleRdmaFinalizeFailure();
+}
+```
+
+应用层 bootstrap 可以使用 MPI，但 Manager 本身不创建 MPI/HCCL 通信域。每个
+rank 必须提供自身和所有 peer 的物理设备 id、RDMA IPv4 与已注册 Device
+虚拟地址；各 rank 地址可以不同。`Preflight()` 会拒绝在非 A5 架构上使用
+HNS1825；网卡、provider 或网络配置问题由后续 HCOMM 初始化返回错误。
 
 ---
 

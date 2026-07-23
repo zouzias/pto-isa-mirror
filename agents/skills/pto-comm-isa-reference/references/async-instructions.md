@@ -51,6 +51,19 @@ bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
 bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session);
 ```
 
+### RDMA 构建（HNS1825，仅 Ascend950 / NPU_ARCH 3510）
+
+```cpp
+template <DmaEngine engine, typename ScratchTile>
+bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
+                       uint32_t destRankId, uint32_t myPe,
+                       AsyncSession &session, uint32_t syncId = 0);
+```
+
+`workspace` 由 Host 侧 `rdma::RdmaWorkspaceManager` 创建；`destRankId` 为远端 rank，
+`myPe` 为本地 rank。HNS1825 要求 UB/Vec `scratchTile` 至少 64B，`syncId` 范围为 `[0, 7]`。
+Host 必须按 `Preflight → Init → Kernel → Finalize` 管理生命周期。
+
 ---
 
 ## 异步约束
@@ -60,6 +73,10 @@ bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSess
 - URMA workspace 必须由 Host 侧 `UrmaWorkspaceManager` 分配
 - URMA 需要大页内存（`ACL_MEM_MALLOC_HUGE_ONLY`），小页分配导致注册失败
 - `scratchTile` 仅用于控制元数据，不是数据暂存缓冲
+- RDMA 必须在 CMake 配置前通过 `PTO_RDMA_BACKEND=HNS_1825` 使能，当前仅支持 Ascend950 /
+  NPU_ARCH 3510
+- RDMA 的本地和远端完整传输范围都必须位于 `RdmaWorkspaceManager::Init` 注册的通信缓冲区
+- HNS1825 单次传输最多 `0x7fffffff` 字节，scratch 至少 64B
 
 ---
 

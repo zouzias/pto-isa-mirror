@@ -33,7 +33,7 @@ using namespace pto::comm;
 | 点对点（同步） | `TPUT`、`TGET` | 通过 UB 暂存 Tile 的远程写/读，支持单缓冲和 ping-pong 双缓冲 |
 | 信号同步 | `TNOTIFY`、`TWAIT`、`TTEST` | 基于标志的跨 NPU 同步，信号为 `int32_t` 标量或二维网格 |
 | 集合通信 | `TGATHER`、`TSCATTER`、`TBROADCAST`、`TREDUCE` | 基于 `ParallelGroup` 的多 rank 操作，由 root 发起 |
-| 异步通信 | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA/URMA 引擎的 GM→GM DMA 传输，返回 `AsyncEvent` |
+| 异步通信 | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA/URMA/RDMA 引擎的 GM→GM DMA 传输，返回 `AsyncEvent` |
 
 ### 数据流模型
 
@@ -42,7 +42,7 @@ using namespace pto::comm;
   本地 GM → UB Tile（暂存） → 远端 GM
 
 异步点对点（TPUT_ASYNC/TGET_ASYNC）：
-  本地 GM → DMA 引擎（SDMA/URMA） → 远端 GM（不经过 UB）
+  本地 GM → DMA 引擎（SDMA/URMA/RDMA） → 远端 GM（payload 不经过 UB）
 
 集合通信（TGATHER/TSCATTER/TBROADCAST/TREDUCE）：
   多 rank GM → UB Tile（暂存） → 本地 GM（自动二维分块滑动）
@@ -60,7 +60,9 @@ using namespace pto::comm;
 │   │   └── 从远端读 → TGET（不支持原子操作）
 │   └── 大块 GM→GM 直传（不经 UB） → TPUT_ASYNC / TGET_ASYNC
 │       ├── SDMA 引擎（通用） → DmaEngine::SDMA
-│       └── URMA 引擎（仅 A5） → DmaEngine::URMA
+│       ├── URMA 引擎（仅 A5） → DmaEngine::URMA
+│       └── RDMA 引擎（仅 A5） → DmaEngine::RDMA
+│           └── 当前唯一网卡后端 → RdmaBackend::HNS_1825
 │
 ├── 多 rank 操作
 │   ├── 收集 → TGATHER
@@ -87,7 +89,8 @@ using namespace pto::comm;
 | `WaitCmp` | 比较运算符 | EQ / NE / GT / GE / LT / LE |
 | `ReduceOp` | 归约运算符 | Sum / Max / Min |
 | `AtomicType` | 原子操作类型 | `AtomicNone`（默认）/ `AtomicAdd` |
-| `DmaEngine` | DMA 引擎选择 | `SDMA`（通用）/ `URMA`（仅 A5） |
+| `DmaEngine` | DMA 引擎选择 | `SDMA`（通用）/ `URMA`（仅 A5）/ `RDMA`（仅 A5） |
+| `RdmaBackend` | RDMA 具体网卡后端 | 当前为 `NONE` / `HNS_1825`，每个二进制最多一个有效后端 |
 | `AsyncEvent` | 异步事件句柄 | `Wait` 使用 Quiet 语义（等待所有 pending） |
 | `AsyncSession` | 异步会话 | 通过 `BuildAsyncSession` 构建 |
 
@@ -134,6 +137,8 @@ using namespace pto::comm;
 | 4 | 异步传输使用非一维 tensor | TPUT_ASYNC/TGET_ASYNC 仅支持扁平连续一维 |
 | 5 | Signal 类型不是 int32_t | Signal/Signal2D 元素类型必须为 `int32_t` |
 | 6 | ParallelGroup tensors 未初始化 | 远端地址必须正确设置 |
+| 7 | 直接使用 `DmaEngine::RDMA` 但构建未使能后端 | 配置阶段设置 `PTO_RDMA_BACKEND=HNS_1825`，并让 Host/Device 使用一致编译定义 |
+| 8 | RDMA 地址超出已注册 MR | 本地和远端完整传输范围都必须位于 `RdmaWorkspaceManager::Init` 注册的通信缓冲区 |
 
 ---
 

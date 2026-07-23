@@ -41,6 +41,9 @@ tests/
 │   ├── tgather/ tscatter/ tbroadcast/ treduce/
 │   └── tput_async/ tget_async/
 └── npu/a5/comm/st/testcase/    # NPU A5 测试
+    ├── tput_async/ tget_async/ # SDMA
+    ├── tput_async_urma/ tget_async_urma/
+    └── tput_async_hns1825/ tget_async_hns1825/ # 可独立选择的 RDMA PUT/GET
 ```
 
 ---
@@ -68,6 +71,8 @@ tests/
 | 接近但不精确 | FP16 精度限制 | 放宽 atol/rtol |
 | 第二次运行异常 | 信号残留 | 每次运行前清零信号矩阵 |
 | 读到陈旧数据 | 缓存一致性 | `dcci` + 编译器屏障 |
+| RDMA 路径未编入 | 配置阶段未选择后端或复用了旧 build | 首次 CMake 前设置 `PTO_RDMA_BACKEND=HNS_1825` 并重新构建 |
+| HNS1825 初始化失败 | 架构、provider、RDMA IP/phyId/MR 信息不一致 | `Preflight()`、HCOMM 错误和 `PTO_ROCE_VERBOSE=1` |
 
 ---
 
@@ -118,6 +123,9 @@ tests/
 - [ ] 连续多次运行均通过（排除信号残留）
 - [ ] 不同数据模式（全零、全一、随机、极端值）
 - [ ] 不同 Block 配置（1/4/8/24 blocks）
+- [ ] RDMA 用例在每轮正常执行 `Init → Kernel/Wait → Finalize`
+- [ ] RDMA 注册缓冲区只在 `Finalize` 成功返回后释放
+- [ ] PUT 与 GET 均做独立硬件回归并分别记录结果，便于区分 READ/WRITE 问题
 
 ### 性能测试
 

@@ -9,7 +9,11 @@
 # --------------------------------------------------------------------------------
 
 function(pto_comm_st NAME)
-    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    set(_PTO_COMM_KERNEL_SOURCE "${NAME}_kernel.cpp")
+    if(ARGC GREATER 1)
+        set(_PTO_COMM_KERNEL_SOURCE "${ARGV1}")
+    endif()
+    add_library(${NAME}_kernel SHARED ${_PTO_COMM_KERNEL_SOURCE})
 
     # Align comm ST kernels with the A5 vec ST configuration by default.
     # Allow external override when a different arch or memory model is needed.
@@ -253,6 +257,7 @@ tget
 tget_async
 tput_async
 tput_async_urma
+tput_async_hns1825
 tget_async_urma
 # Signal-Based Synchronization
 tnotify
@@ -270,15 +275,28 @@ tbroadcast_ccu
 tgather_ccu
 )
 
-if(TEST_CASE IN_LIST ALL_TESTCASES)
+# Direction-specific tests that must be selected explicitly. They are normal
+# GTests once selected; keeping them separate makes PUT and GET regressions
+# independently selectable and diagnosable.
+set(EXPLICIT_TESTCASES
+tget_async_hns1825
+)
+
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE IN_LIST EXPLICIT_TESTCASES))
 message(STATUS "run : ${TEST_CASE}")
 else()
-message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
+message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES} ${EXPLICIT_TESTCASES}")
 endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
 if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
+    add_subdirectory(${TESTCASE})
+endif()
+endforeach()
+
+foreach(TESTCASE ${EXPLICIT_TESTCASES})
+if(DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE)
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()

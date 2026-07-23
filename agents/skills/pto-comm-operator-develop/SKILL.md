@@ -33,6 +33,7 @@ Host 侧                          Device 侧
 
 **关键原则**：
 - **Host 侧**：负责 MPI/HCCL 通信域初始化、内存分配、远端地址获取、kernel 启动和结果验证
+- **RDMA 路径**：Host 侧还负责应用级 bootstrap、RDMA 控制面初始化与资源释放
 - **Device 侧**：使用 PTO-COMM 指令执行实际的数据传输和同步
 - 计算和通信可以分别编译为独立的 `.so` 文件
 
@@ -122,6 +123,7 @@ kernels/manual/<platform>/<operator_name>/
 - 所有 GM 地址必须满足 32 字节对齐
 - Signal 地址必须 4 字节对齐
 - TPUT_ASYNC/TGET_ASYNC 的 workspace 由专用 Manager 管理
+- RDMA 路径必须在释放注册缓冲区前显式 `Finalize()`
 
 ### 多核切分策略
 
@@ -172,6 +174,8 @@ Host 侧标准初始化流程、CMakeLists 模板、SOC_VERSION 映射、kernel 
 
 - [ ] 信号矩阵每次运行前清零
 - [ ] Host 侧 `aclrtSynchronizeStream` 确保 kernel 执行完成
+- [ ] RDMA 后端在首次 CMake 配置前选定，Host/Device 编译定义一致
+- [ ] RDMA 的 peer 网卡与注册内存信息已交换，并在释放注册缓冲区前成功 `Finalize()`
 - [ ] 内存大小与 Tile 配置一致
 - [ ] CMakeLists 中 Vec/Cube 架构选择正确
 

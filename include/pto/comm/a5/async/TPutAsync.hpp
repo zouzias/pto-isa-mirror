@@ -15,6 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_URMA_SUPPORTED
 #include "pto/comm/async/urma/urma_async_intrin.hpp"
 #endif
+#ifdef PTO_RDMA_SUPPORTED
+#include "pto/comm/async/rdma/rdma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {
@@ -121,11 +124,43 @@ TPUT_ASYNC_URMA_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData,
 }
 #endif
 
+#ifdef PTO_RDMA_SUPPORTED
+// RDMA PUT: async remote write. dst is remote, src is local.
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_RDMA_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const rdma::RdmaExecContext& execCtx)
+{
+    (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+
+    PTO_ASSERT(
+        TPutAsyncIsFlatContiguous1D(srcGlobalData),
+        "TPUT_ASYNC RDMA: src tensor must be flat contiguous 1D (packed layout, single logical line).");
+    PTO_ASSERT(
+        TPutAsyncIsFlatContiguous1D(dstGlobalData),
+        "TPUT_ASYNC RDMA: dst tensor must be flat contiguous 1D (packed layout, single logical line).");
+
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC RDMA: dst buffer too small for src data");
+
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
+    if (transferSize == 0) {
+        return AsyncEvent(0, DmaEngine::RDMA);
+    }
+
+    const uint64_t eventHandle = rdma::Write(
+        execCtx, reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
+        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), transferSize);
+    return AsyncEvent(eventHandle, DmaEngine::RDMA);
+}
+#endif
+
 } // namespace detail
 
 // ============================================================================
 // Main TPUT_ASYNC_IMPL with DmaEngine template parameter
-// A5: SDMA uses MTE fallback for PUT direction; URMA is also supported
+// A5: SDMA uses MTE fallback for PUT direction; URMA and RDMA are also supported
 // ============================================================================
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
@@ -139,6 +174,13 @@ TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, cons
         return detail::TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
 #else
         static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC: URMA engine requires NPU_ARCH 3510");
+        return AsyncEvent(0, engine);
+#endif
+    } else if constexpr (engine == DmaEngine::RDMA) {
+#ifdef PTO_RDMA_SUPPORTED
+        return detail::TPUT_ASYNC_RDMA_IMPL(dstGlobalData, srcGlobalData, session.rdmaSession.execCtx);
+#else
+        static_assert(engine != DmaEngine::RDMA, "TPUT_ASYNC: RDMA support is not enabled for this build");
         return AsyncEvent(0, engine);
 #endif
     } else {

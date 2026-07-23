@@ -19,12 +19,12 @@ Usage: $(basename "$0") [-n NPU_COUNT] [-v VERSION] [-t TESTCASE] [-a] [-d]
 Options:
   -n NPU_COUNT   Number of NPUs (devices) available: 2, 4, or 8 (default: 8)
                  Only test cases requiring <= NPU_COUNT ranks will run.
-  -v VERSION     SoC version: a3 (Ascend910B, default) or a5 (Ascend910_9599).
+  -v VERSION     SoC version: a3 (Ascend 910B, default) or a5 (Ascend 950).
   -t TESTCASE    Run only the specified testcase (e.g. tput, treduce).
                  Can be specified multiple times. Default: run all.
-  -a             Include async testcases (e.g. tput_async, tget_async).
-                 Async tests are excluded by default as they require a
-                 newer CANN version with SDMA opapi support.
+  -a             Include regular async testcases (including engine-specific
+                 variants). Async tests are excluded by default.
+                 Direction-specific tests still require explicit -t.
   -d             Enable debug mode (extra logging at each sync point).
   -h             Show this help message.
 
@@ -106,7 +106,8 @@ if [[ ! -d "${ST_DIR}" ]]; then
   exit 1
 fi
 
-is_async_test() { [[ "$1" == *_async ]]; }
+is_async_test() { [[ "$1" == *"_async"* ]]; }
+is_explicit_test() { [[ "$1" == "tget_async_hns1825" ]]; }
 
 declare -a tests=()
 if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then
@@ -114,6 +115,9 @@ if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then
 else
   while IFS= read -r -d '' dir; do
     name="$(basename "${dir}")"
+    if is_explicit_test "$name"; then
+      continue
+    fi
     if is_async_test "$name" && ! $INCLUDE_ASYNC; then
       continue
     fi
