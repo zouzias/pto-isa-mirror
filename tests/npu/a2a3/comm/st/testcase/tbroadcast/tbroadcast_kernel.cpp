@@ -19,7 +19,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/domain/device/comm_context_device.hpp"
 #include "../common.hpp"
+
+namespace domain = pto::comm::domain;
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -63,7 +66,7 @@ __global__ AICORE void TBroadCastKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteDst = CommRemotePtr(hcclCtx, output, i);
+        __gm__ T* remoteDst = domain::RemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, shape, stride);
     }
 
@@ -85,16 +88,18 @@ bool RunBroadCastKernel(
 {
     if (n_ranks <= 0)
         return false;
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
-    void* output_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, count * sizeof(T));
+    void* output_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, count * sizeof(T));
 
     T* input_host = nullptr;
     if (aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T)) != 0) {
@@ -120,12 +125,12 @@ bool RunBroadCastKernel(
     T* staging = nullptr;
     aclrtMalloc(reinterpret_cast<void**>(&staging), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(staging, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
+    aclrtSynchronizeStream(commCtx.stream);
 
     aclrtMemcpy(staging, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)output_ptr, staging, static_cast<int>(count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)output_ptr, staging, static_cast<int>(count));
+    aclrtSynchronizeStream(commCtx.stream);
 
 #if ENABLE_DEBUG_PRINT
     if (rank_id == root) {
@@ -136,16 +141,16 @@ bool RunBroadCastKernel(
     }
 #endif
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TBroadCastKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_ptr, ctx.deviceCtx, n_ranks, root);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_ptr, devCtx, n_ranks, root);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(staging, (T*)output_ptr, static_cast<int>(count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyOut<T><<<1, nullptr, commCtx.stream>>>(staging, (T*)output_ptr, static_cast<int>(count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtMemcpy(output_host, count * sizeof(T), staging, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(staging);
 
@@ -184,7 +189,8 @@ bool RunBroadCastKernel(
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count>
@@ -226,7 +232,7 @@ __global__ AICORE void TBroadCastLargeShapeKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteDst = CommRemotePtr(hcclCtx, output, i);
+        __gm__ T* remoteDst = domain::RemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, fullShape, fullStride);
     }
 
@@ -250,16 +256,18 @@ bool RunBroadCastLargeShapeKernel(
         return false;
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
-    void* output_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
+    void* output_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
 
     T* input_host = nullptr;
     if (aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T)) != 0) {
@@ -285,12 +293,12 @@ bool RunBroadCastLargeShapeKernel(
     T* staging = nullptr;
     aclrtMalloc(reinterpret_cast<void**>(&staging), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(staging, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
 
     aclrtMemcpy(staging, total_count * sizeof(T), output_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)output_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)output_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
 
 #if ENABLE_DEBUG_PRINT
     if (rank_id == root) {
@@ -301,16 +309,16 @@ bool RunBroadCastLargeShapeKernel(
     }
 #endif
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TBroadCastLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_ptr, ctx.deviceCtx, n_ranks, root);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_ptr, devCtx, n_ranks, root);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(staging, (T*)output_ptr, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyOut<T><<<1, nullptr, commCtx.stream>>>(staging, (T*)output_ptr, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtMemcpy(output_host, total_count * sizeof(T), staging, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(staging);
 
@@ -356,7 +364,8 @@ bool RunBroadCastLargeShapeKernel(
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
@@ -417,7 +426,7 @@ __global__ AICORE void TBroadCastPingPongKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteDst = CommRemotePtr(hcclCtx, output, i);
+        __gm__ T* remoteDst = domain::RemotePtr(hcclCtx, output, i);
         tensors[i] = Global(remoteDst, fullShape, fullStride);
     }
 
@@ -445,16 +454,18 @@ bool RunBroadCastPingPongKernel(
         return false;
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-    WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+    WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
 
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
-    void* output_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
+    void* output_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
 
     T* input_host = nullptr;
     if (aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T)) != 0) {
@@ -480,23 +491,23 @@ bool RunBroadCastPingPongKernel(
     T* staging = nullptr;
     aclrtMalloc(reinterpret_cast<void**>(&staging), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(staging, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
 
     aclrtMemcpy(staging, total_count * sizeof(T), output_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)output_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)output_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TBroadCastPingPongKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_ptr, ctx.deviceCtx, n_ranks, root);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_ptr, devCtx, n_ranks, root);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(staging, (T*)output_ptr, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyOut<T><<<1, nullptr, commCtx.stream>>>(staging, (T*)output_ptr, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtMemcpy(output_host, total_count * sizeof(T), staging, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(staging);
 
@@ -542,7 +553,8 @@ bool RunBroadCastPingPongKernel(
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>

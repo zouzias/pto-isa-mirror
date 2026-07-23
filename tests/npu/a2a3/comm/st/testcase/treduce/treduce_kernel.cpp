@@ -17,7 +17,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include "pto/comm/comm_types.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/domain/device/comm_context_device.hpp"
 #include "../common.hpp"
+
+namespace domain = pto::comm::domain;
 
 static constexpr size_t HCCL_WIN_SYNC_PREFIX = 64 * sizeof(int32_t);
 
@@ -56,7 +59,7 @@ __global__ AICORE void TReduceKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteInput = CommRemotePtr(hcclCtx, input, i);
+        __gm__ T* remoteInput = domain::RemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -102,17 +105,19 @@ template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int root, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
     if (n_ranks > 1) {
-        WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
     }
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, count * sizeof(T));
 
     T* input_host = nullptr;
     T* output_host = nullptr;
@@ -131,25 +136,22 @@ bool RunReduceKernel(
     }
 
     aclrtMemcpy(staging, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtFree(staging);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TReduceKernelImpl<T, count, op>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    // Barrier after kernel execution
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    // Only root verifies result
     bool is_ok = true;
     if (rank_id == root) {
         aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
-        // Verify expected result based on ReduceOp
         for (size_t i = 0; i < count; ++i) {
             const T expected = ReduceExpected(static_cast<T>(i), n_ranks, op);
             T actual = output_host[i];
@@ -183,7 +185,8 @@ bool RunReduceKernel(
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
@@ -241,7 +244,7 @@ __global__ AICORE void TReduceEmptyKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteInput = CommRemotePtr(hcclCtx, input, i);
+        __gm__ T* remoteInput = domain::RemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -263,17 +266,19 @@ template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceEmptyKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int root, const HcclRootInfo* rootInfo)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
     if (n_ranks > 1) {
-        WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
     }
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, count * sizeof(T));
 
     T* input_host = nullptr;
     T* output_host = nullptr;
@@ -293,21 +298,21 @@ bool RunReduceEmptyKernel(
     }
 
     aclrtMemcpy(staging, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtFree(staging);
 
     if (rank_id == root) {
         aclrtMemcpy(output_device, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
     }
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TReduceEmptyKernelImpl<T, count, op>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
     if (rank_id == root) {
@@ -324,7 +329,8 @@ bool RunReduceEmptyKernel(
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
@@ -408,7 +414,7 @@ __global__ AICORE void TReduceLargeShapeKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteInput = CommRemotePtr(hcclCtx, input, i);
+        __gm__ T* remoteInput = domain::RemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -435,17 +441,19 @@ bool RunReduceLargeShapeKernel(
 {
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
     if (n_ranks > 1) {
-        WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
     }
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
 
     T* input_host = nullptr;
     T* output_host = nullptr;
@@ -465,19 +473,18 @@ bool RunReduceLargeShapeKernel(
     }
 
     aclrtMemcpy(staging, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtFree(staging);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TReduceLargeShapeKernelImpl<T, total_rows, cols, tile_rows, op>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
-    // Only root verifies result
     bool is_ok = true;
     if (rank_id == 0) {
         aclrtMemcpy(
@@ -517,7 +524,8 @@ bool RunReduceLargeShapeKernel(
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
@@ -592,7 +600,7 @@ __global__ AICORE void TReducePingPongKernelImpl(
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T* remoteInput = CommRemotePtr(hcclCtx, input, i);
+        __gm__ T* remoteInput = domain::RemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -621,17 +629,19 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 {
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
+    domain::CommContext commCtx{};
+    if (!BuildTestComm(commCtx, rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
+    auto* devCtx = domain::GetDeviceContext(commCtx, domain::AddrFamily::Window);
+    auto* symBase = domain::GetSymmetricBase(commCtx, domain::AddrFamily::Window);
+    int aclStatus = 0;
 
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
     if (n_ranks > 1) {
-        WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
+        WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, HCCL_WIN_SYNC_PREFIX);
     }
-    void* input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
+    void* input_ptr = WindowAlloc(reinterpret_cast<uint64_t>(symBase), winOffset, total_count * sizeof(T));
 
     T* input_host = nullptr;
     T* output_host = nullptr;
@@ -651,17 +661,17 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     aclrtMemcpy(staging, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
-    aclrtSynchronizeStream(ctx.stream);
+    WindowMemCopyIn<T><<<1, nullptr, commCtx.stream>>>((T*)input_ptr, staging, static_cast<int>(total_count));
+    aclrtSynchronizeStream(commCtx.stream);
     aclrtFree(staging);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     TReducePingPongKernelImpl<T, total_rows, cols, tile_rows, op>
-        <<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, ctx.deviceCtx);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        <<<1, nullptr, commCtx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, devCtx);
+    aclStatus = aclrtSynchronizeStream(commCtx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    domain::HostBarrier(commCtx);
 
     bool is_ok = true;
     if (rank_id == 0) {
@@ -702,7 +712,8 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
 
-    return ctx.Finalize() && is_ok;
+    domain::DestroyComm(commCtx);
+    return aclStatus == 0 && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
