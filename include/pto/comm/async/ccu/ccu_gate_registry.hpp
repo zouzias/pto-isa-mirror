@@ -16,16 +16,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #error "ccu_gate_registry.hpp is a host-only header and cannot be included in device code."
 #endif
 
-// Process-local descriptor registry for PTO gated CCU kernels.  Header-only.
-//
-// Producer (CCU kernel GeneArgs): calls Publish(rankId, dieId, ckeId, mask)
-// Consumer (host / ST main):     calls TryGet(rankId, &desc) to retrieve it
+// Process-local descriptor registry for PTO gated CCU kernels. Header-only.
+// Each rank holds one gate descriptor and a progress slot vector (e.g. ping-pong).
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "pto/comm/async/ccu/ccu_types.hpp"
 
@@ -35,47 +35,95 @@ namespace ccu {
 
 namespace detail {
 
-inline std::mutex& GateMapMutex()
+inline CcuGateDescriptor MakeDesc(uint32_t dieId, uint32_t ckeId, uint32_t mask)
 {
-    static std::mutex m;
-    return m;
+    return CcuGateDescriptor{dieId, ckeId, mask, 0};
 }
 
-inline std::unordered_map<uint32_t, CcuGateDescriptor>& GateMap()
-{
-    static std::unordered_map<uint32_t, CcuGateDescriptor> m;
-    return m;
-}
+struct RankEntry {
+    CcuGateDescriptor gate{};
+    bool hasGate{false};
+    std::vector<CcuGateDescriptor> progress;
+};
+
+struct Registry {
+    std::mutex mu;
+    std::unordered_map<uint32_t, RankEntry> ranks;
+
+    static Registry &Instance()
+    {
+        static Registry r;
+        return r;
+    }
+
+    template <typename Fn>
+    auto WithLock(Fn &&fn) -> decltype(fn(ranks))
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        return std::forward<Fn>(fn)(ranks);
+    }
+};
 
 } // namespace detail
 
 inline bool IsCcuGateEnabledFromEnv()
 {
-    const char* v = std::getenv(CCU_GATE_ENV);
+    const char *v = std::getenv(CCU_GATE_ENV);
     return v != nullptr && std::strcmp(v, "1") == 0;
 }
 
 inline void Publish(uint32_t rankId, uint32_t dieId, uint32_t ckeId, uint32_t mask)
 {
-    CcuGateDescriptor desc{};
-    desc.dieId = dieId;
-    desc.ckeId = ckeId;
-    desc.mask = mask;
-    desc.mmioAddr = 0;
-
-    std::lock_guard<std::mutex> lk(detail::GateMapMutex());
-    detail::GateMap()[rankId] = desc;
+    detail::Registry::Instance().WithLock([&](auto &ranks) {
+        auto &e = ranks[rankId];
+        e.gate = detail::MakeDesc(dieId, ckeId, mask);
+        e.hasGate = true;
+    });
 }
 
-inline bool TryGet(uint32_t rankId, CcuGateDescriptor& out)
+inline bool TryGet(uint32_t rankId, CcuGateDescriptor &out)
 {
-    std::lock_guard<std::mutex> lk(detail::GateMapMutex());
-    auto it = detail::GateMap().find(rankId);
-    if (it == detail::GateMap().end()) {
-        return false;
-    }
-    out = it->second;
-    return true;
+    return detail::Registry::Instance().WithLock([&](auto &ranks) {
+        auto it = ranks.find(rankId);
+        if (it == ranks.end() || !it->second.hasGate) {
+            return false;
+        }
+        out = it->second.gate;
+        return true;
+    });
+}
+
+inline void PublishProgress(uint32_t rankId, uint32_t slotIndex, uint32_t dieId, uint32_t ckeId, uint32_t mask)
+{
+    detail::Registry::Instance().WithLock([&](auto &ranks) {
+        auto &slots = ranks[rankId].progress;
+        if (slots.size() <= slotIndex) {
+            slots.resize(slotIndex + 1);
+        }
+        slots[slotIndex] = detail::MakeDesc(dieId, ckeId, mask);
+    });
+}
+
+inline bool TryGetProgress(uint32_t rankId, std::vector<CcuGateDescriptor> &out)
+{
+    return detail::Registry::Instance().WithLock([&](auto &ranks) {
+        auto it = ranks.find(rankId);
+        if (it == ranks.end() || it->second.progress.empty()) {
+            return false;
+        }
+        out = it->second.progress;
+        return true;
+    });
+}
+
+inline void ClearProgress(uint32_t rankId)
+{
+    detail::Registry::Instance().WithLock([&](auto &ranks) {
+        auto it = ranks.find(rankId);
+        if (it != ranks.end()) {
+            it->second.progress.clear();
+        }
+    });
 }
 
 } // namespace ccu
