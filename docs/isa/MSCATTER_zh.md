@@ -61,7 +61,7 @@ $$ \mathrm{table}[\cdot] \mathrel{\oplus}= \mathrm{src}_{\cdot},\quad \oplus \in
 enum class ScatterOOB : uint8_t {
     Undefined = 0,  // 不检查边界；调用者保证索引有效
     Skip      = 1,  // 丢弃写入（保留原始表值）
-    Clamp     = 2,  // 将索引钳制到 capacity - 1
+    Clamp     = 2,  // 将索引限制到 capacity - 1
     Wrap      = 3   // 索引模 capacity
 };
 ```
@@ -330,7 +330,7 @@ A5:
 
 ### Ascend 950PR/Ascend 950DT—SIMT启动与V↔S握手
 
-Ascend 950PR/Ascend 950DT实现将几乎整个pipe模型隐藏在 `cce::async_invoke` 之后。唯一显式的手握手在标量回退路径（`MScatterScalarImpl`，用于Elem `(1, 1)`）。
+Ascend 950PR/Ascend 950DT实现将几乎整个pipe模型隐藏在 `cce::async_invoke` 之后。唯一显式的握手在标量回退路径（`MScatterScalarImpl`，用于Elem `(1, 1)`）。
 
 ## UB内存预算
 
