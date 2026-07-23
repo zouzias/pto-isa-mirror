@@ -278,18 +278,58 @@ PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(
 #endif
 }
 
+// Non-cacheable scalar read of the shared counter (dcci-free poll path).
+PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
+{
+    return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
+}
+
+// Hardware scalar atomic-add of 1 to the shared counter; the dcci write-back is
+// the atomic publication point (same pattern as comm TNOTIFY AtomicAdd).
+PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
+{
+    set_st_atomic_cfg(ATOMIC_S32, ATOMIC_SUM);
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
+    st_atomic<int32_t>(1, counter);
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
+    dsb(DSB_DDR);
+}
+
+// AIV-only software SYNCALL barrier: single shared counter, atomic-add arrival +
+// O(1) ld_dev poll to epoch*totalBlocks. Counter is monotonic (never reset); the
+// epoch is derived from the pre-arrival value, so no per-core state is needed.
+// gmWorkspace must point at one zero-initialized cache line; ubWorkspace is unused.
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t* gmWorkspace, __ubuf__ int32_t* ubWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(
         CoreType == SyncCoreType::AIVOnly, "Software SYNCALL GM+UB overload only supports AIV-only kernels on A5.");
+    (void)ubWorkspace;
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)
     const int32_t totalBlks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
-    const int32_t blockIdx = static_cast<int32_t>(get_block_idx());
-    SYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlks, blockIdx);
+    dsb(DSB_DDR);
+    const int32_t before = SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace);
+    const int32_t target = (before / totalBlks + 1) * totalBlks;
+    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
+
+    int32_t pollCount = 0;
+    while (SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace) < target) {
+        ++pollCount;
+        if ((pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false, "SYNCALL soft atomic barrier timeout - possible deadlock");
+            break;
+        }
+    }
+    dsb(DSB_DDR);
+#else
+    (void)gmWorkspace;
+    (void)usedCores;
 #endif
     pipe_barrier(PIPE_ALL);
 #endif

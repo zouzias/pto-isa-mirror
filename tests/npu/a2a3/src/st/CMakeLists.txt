@@ -82,7 +82,8 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
-set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-enable")
+# cann-9.0.0 bisheng does not support --cce-pto-enable; manual PTO is the default.
+# set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-enable")
 
 if(DEBUG_MODE)
     message(STATUS "Debug Mode Enabled, Add Debug Options")
