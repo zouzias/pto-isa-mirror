@@ -491,3 +491,15 @@ using HalfUnion = FloatIntUnion<half>;
 using DistVST = ::pto::DistVST;
 #include <pto/npu/a5/TBinOp.hpp>
 #include <pto/npu/a5/TAdd.hpp>
+#include <pto/npu/a5/TAddS.hpp>
+#include <pto/npu/a5/TAnd.hpp>
+#include <pto/npu/a5/TDiv.hpp>
+#include <pto/npu/a5/TMax.hpp>
+#include <pto/npu/a5/TMin.hpp>
+#include <pto/npu/a5/TMins.hpp>
+#include <pto/npu/a5/TMul.hpp>
+#include <pto/npu/a5/TMulS.hpp>
+#include <pto/npu/a5/TShlS.hpp>
+#include <pto/npu/a5/TShrS.hpp>
+#include <pto/npu/a5/TSub.hpp>
+#include <pto/npu/a5/TSubS.hpp>

@@ -19,33 +19,21 @@ using namespace pto;
 namespace {
 
 template <typename T, int rows, int cols>
-void runTAdd()
+void runTShrS(T scalar)
 {
     using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
-    TileData src0Tile(rows, cols);
-    TileData src1Tile(rows, cols);
+    TileData srcTile(rows, cols);
     TileData dstTile(rows, cols);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x4000);
+    TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x8000);
 
     ::pto::mocker::ResetTrace();
-    TADD(dstTile, src0Tile, src1Tile);
+    TSHRS(dstTile, srcTile, scalar);
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
-    pto::test::a5::ExpectLastBinaryVecTileOp({"vlds", "vlds", "vadd", "vsts"}, repeat);
+    pto::test::a5::ExpectLastVecTileOp({"vlds", "vshrs", "vsts"}, repeat);
 }
 
 } // namespace
 
-TEST(TAdd, float_1x64) { runTAdd<float, 1, 64>(); }
-
-TEST(TAdd, float_1x512) { runTAdd<float, 1, 512>(); }
-
-TEST(TAdd, float_1x1024) { runTAdd<float, 1, 1024>(); }
-
-TEST(TAdd, float_1x2048) { runTAdd<float, 1, 2048>(); }
-
-TEST(TAdd, float_1x4096) { runTAdd<float, 1, 4096>(); }
-
-TEST(TAdd, float_1x6144) { runTAdd<float, 1, 6144>(); }
+TEST(TShrS, uint32_1x512) { runTShrS<uint32_t, 1, 512>(1U); }

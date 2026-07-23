@@ -38,11 +38,14 @@ endif()
 project(pto_test_costmodel_a5 CXX)
 message(STATUS "st_a5: LLVM ${PTO_A5_LLVM_VERSION}, CXX=${PTO_A5_CLANGXX}")
 
+find_package(GTest REQUIRED)
+find_package(Threads REQUIRED)
+
 # 注册 CTest:st_a5 是独立 CMake 工程(走 LLVM pass,不经 run_costmodel.py 的 gtest 流程),
 # 故在此 enable_testing 让 `ctest --test-dir <build>` 能发现用例(各 testcase 下 add_test)。
 enable_testing()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
