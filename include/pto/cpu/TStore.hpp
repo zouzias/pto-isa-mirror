@@ -257,7 +257,7 @@ template <
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     (void)Phase;
-    constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
+    constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
     constexpr bool useRelu = reluPreMode == ReluPreMode::NormalRelu;
 
     std::vector<uint64_t> scalars(fp.GetValidCol(), 0);
