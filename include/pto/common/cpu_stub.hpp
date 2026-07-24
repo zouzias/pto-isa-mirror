@@ -62,6 +62,18 @@ const pipe_t PIPE_ALL = 6;
 const pipe_t PIPE_FIX = 7;
 inline void pipe_barrier(pipe_t pipe) { (void)pipe; }
 
+// __CPU_SIM no-op stubs for the CANN dcci/dsb cache-barrier intrinsics
+// (AICore built-ins; the sim has no data cache).  Both dcci arities are
+// defined — the 2-arg (ptr, mode) form used by pto-isa and the 3-arg
+// (ptr, mode, prefetch) form emitted by the PTO codegen.
+typedef int mem_dsb_t;
+inline constexpr int SINGLE_CACHE_LINE = 0;
+inline constexpr int ENTIRE_DATA_CACHE = 0;
+inline constexpr int CACHELINE_OUT = 0;
+inline void dcci(const volatile void*, int) {}
+inline void dcci(const volatile void*, int, int) {}
+inline void dsb(mem_dsb_t) {}
+
 #define aclFloat16ToFloat(x) ((float)(x))
 
 enum {
