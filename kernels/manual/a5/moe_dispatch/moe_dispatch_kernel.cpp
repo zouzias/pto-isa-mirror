@@ -460,11 +460,6 @@ AICORE void MoeDispatchWithSync(
 
     int32_t paddedExpNum = ((EP * expertPerRank) + 7) & ~7;
 
-    constexpr int32_t SYNC_UB_ELEMS = 32;
-    using SyncUbTile = pto::Tile<pto::TileType::Vec, int32_t, 1, SYNC_UB_ELEMS, pto::BLayout::RowMajor, -1, -1>;
-    SyncUbTile syncUbTile(1, SYNC_UB_ELEMS);
-    TASSIGN(syncUbTile, 0);
-
     using SyncShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncGlobal = pto::GlobalTensor<int32_t, SyncShape, SyncStride, pto::Layout::ND>;
@@ -544,7 +539,7 @@ AICORE void MoeDispatchWithSync(
             pto::comm::TWAIT(signalG, 0, pto::comm::WaitCmp::NE);
         }
 
-        pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+        pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG);
 
         if (coreIdx == 0) {
             pipe_barrier(PIPE_ALL);
@@ -651,7 +646,7 @@ AICORE void MoeDispatchWithSync(
     // ========================================================================
     // Phase C: SYNCALL then dispatch using computed routing tables
     // ========================================================================
-    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG);
 
     MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
         gmA, gmPerTokenScale, wsCumsumMM + myRank * expertPerRank, wsTPE, wsPSBR, shmemBase, hcclCtx, EP, expertPerRank,

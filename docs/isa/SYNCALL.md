@@ -41,42 +41,22 @@ This semantic does **not** provide additional guarantees on GM or other buffer c
 
 ## C++ Built-in Interface
 
-Declared in `include/pto/common/pto_instr.hpp`. Software-mode interfaces use type-safe `GlobalTensor` and `Tile` parameters (constrained via SFINAE):
+Declared in `include/pto/common/pto_instr.hpp`. Software mode takes a type-safe `GlobalTensor` workspace only (`CoreType` selects AIV-only / AIC-only / MIX):
 
 ```cpp
 // Hardware mode (all CoreType variants)
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INST void SYNCALL();
 
-// Software mode — AIV-only (GlobalTensor + Vec Tile)
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly,
-          typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<TileData> && TileData::Loc == TileType::Vec, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0);
-
-// Software mode — AIC-only (GlobalTensor + Mat Tile)
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly,
-          typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<TileData> && TileData::Loc == TileType::Mat, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0);
-
-// Software mode — MIX (GlobalTensor + Vec Tile + Mat Tile)
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix,
-          typename GlobalData, typename UbTileData, typename L1TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
-                           is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace,
-                       int32_t usedCores = 0);
+// Software mode — GM shared-counter barrier (AIV-only / AIC-only / MIX via CoreType)
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, int32_t usedCores = 0);
 ```
 
 ## Parameters
 
-- `gmWorkspace`: `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>` (when `using namespace pto` coexists with Ascend C headers, qualify with `pto::` to avoid name collision with the compiler-intrinsic `Stride` enum). GM workspace for software mode; must be zero-initialized before the call. Each participating core occupies 8 `int32_t` values (cache-line-isolated sync counter).
-- `ubWorkspace`: `Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>` (template parameter is fixed at `SYNCALL_SOFT_SLOT_INT32 = 8`, one cache-line slot per core). UB scratch for AIV-only and MIX software mode; the runtime backing memory capacity must be at least `usedCores * 8 * sizeof(int32_t)` (the implementation accesses via raw pointer and does not validate the template capacity; examples declare it as compile-time max participant count × `SYNCALL_SOFT_SLOT_INT32` to guarantee sufficient backing memory).
-- `l1Workspace`: `Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`. L1 (cbuf) scratch for AIC-only and MIX software mode; used by `create_cbuf_matrix` to fill a sync value then DMA-transfer to GM.
+- `gmWorkspace`: `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>` (when `using namespace pto` coexists with Ascend C headers, qualify with `pto::` to avoid name collision with the compiler-intrinsic `Stride` enum). GM workspace for software mode; must be zero-initialized before the call. Soft mode uses a single shared atomic counter (one cache line is sufficient; allocating `usedCores * SYNCALL_SOFT_SLOT_INT32` remains compatible).
 - `usedCores`: Number of cores participating in the software barrier. When 0, automatically inferred — AIV-only / AIC-only use `get_block_num()`, MIX uses `SYNCALL_GET_MIX_PARTICIPANT_COUNT()` (i.e. `AIC blocks × (1 + AIV ratio)`).
 
 ## Kernel Meta Macros
