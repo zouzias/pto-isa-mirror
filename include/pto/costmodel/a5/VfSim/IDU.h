@@ -71,15 +71,12 @@ public:
   const std::vector<VloopTraceRecord> &vloopTrace() const noexcept { return vloopTrace_; }
 
 private:
-  struct LoopFrame {
-    int64_t beginIdx = 0;
-    int64_t endIdx = 0;
-    int64_t loopId = 0;
-    int64_t itersTotal = 0;
-    int64_t iterNow = 0;
-    bool isInnermost = false;
-    int64_t unroll = 1;
-    int64_t topBlockId = 0;
+  struct DispatchResources {
+    int64_t credits = 0;
+    int64_t shqQueueFree = 0;
+    int64_t lsqFree = 0;
+    int64_t shqFree = 0;
+    int64_t issueBudget = 0;
   };
 
   const ParamDB &db_;
@@ -115,6 +112,20 @@ private:
   void initVloopStarts();
   void setTopBlockVloop(int64_t topBlockId, int64_t startCycle);
   void initTopBlockNestedStarts(int64_t topBlockId, int64_t topVloopStart);
+  const std::vector<int64_t> &loopBoundsForTopBlock(int64_t topBlockId) const;
+  bool hasBlockEndLevel(const DynamicInst &inst, int64_t level) const;
+  void triggerNextTopBlock(const DynamicInst &inst, int64_t cycle);
+  int64_t lastDispatchOrCycle(const std::string &key, int64_t cycle) const;
+  void openLoopBody(const std::string &key, int64_t startCycle);
+  void triggerDepth2Vloops(const DynamicInst &inst,
+                           const std::vector<int64_t> &bounds,
+                           int64_t cycle);
+  void triggerDepth3InnerVloops(const DynamicInst &inst,
+                                const std::vector<int64_t> &bounds,
+                                int64_t cycle);
+  void triggerDepth3OuterVloops(const DynamicInst &inst,
+                                const std::vector<int64_t> &bounds,
+                                int64_t cycle);
 
   std::string makeKey(int64_t topBlockId, const std::string &loopId,
                       const std::vector<int64_t> &iters) const;
@@ -125,6 +136,19 @@ private:
 
   void updateLastDispatch(const DynamicInst &inst, int64_t cycle);
   void triggerNextVloops(const DynamicInst &inst, int64_t cycle);
+  DispatchResources makeDispatchResources(
+      const IDUDispatchBudget &budget) const;
+  bool hasInitialDispatchCredit(const DispatchResources &resources) const;
+  bool isVloopDispatchOpen(const DynamicInst &inst, int64_t cycle,
+                           const IDUDispatchBudget &budget);
+  bool hasQueueResource(const DynamicInst &inst, const std::string &form,
+                        const DispatchResources &resources) const;
+  int64_t countRegisterDst(const DynamicInst &inst) const;
+  void consumeDispatchResources(const DynamicInst &inst,
+                                const std::string &form, int64_t dstCount,
+                                DispatchResources &resources) const;
+  void recordDispatch(const DynamicInst &inst, int64_t cycle,
+                      const DispatchResources &resources);
   bool isLastInstOfTopBlock(const DynamicInst &inst) const;
 };
 

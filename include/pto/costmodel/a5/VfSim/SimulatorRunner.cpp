@@ -9,76 +9,22 @@
 #include "pto/costmodel/a5/VfSim/SimulatorRunner.h"
 
 #include "pto/costmodel/a5/VfSim/ISATraits.h"
+#include "pto/costmodel/a5/VfSim/JsonDumpUtils.h"
 #include "pto/costmodel/a5/VfSim/ProgramCanonicalization.h"
 #include "pto/costmodel/a5/VfSim/ProgramFlatten.h"
 #include "pto/costmodel/a5/VfSim/ProgramVregLiveRangeNormalization.h"
 #include "pto/costmodel/a5/VfSim/ValueStorage.h"
 
 #include <deque>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <cstdlib>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
 
 namespace vfsim {
 
 namespace {
-
-std::string jsonEscape(const std::string &text) {
-  std::string out;
-  out.reserve(text.size() + 8);
-  for (char c : text) {
-    switch (c) {
-    case '\\':
-      out += "\\\\";
-      break;
-    case '"':
-      out += "\\\"";
-      break;
-    case '\n':
-      out += "\\n";
-      break;
-    case '\r':
-      out += "\\r";
-      break;
-    case '\t':
-      out += "\\t";
-      break;
-    default:
-      out.push_back(c);
-      break;
-    }
-  }
-  return out;
-}
-
-template <typename T>
-std::string joinJsonArray(const std::vector<T> &values) {
-  std::ostringstream oss;
-  oss << "[";
-  for (size_t i = 0; i < values.size(); ++i) {
-    if (i)
-      oss << ", ";
-    oss << values[i];
-  }
-  oss << "]";
-  return oss.str();
-}
-
-template <>
-std::string joinJsonArray<std::string>(const std::vector<std::string> &values) {
-  std::ostringstream oss;
-  oss << "[";
-  for (size_t i = 0; i < values.size(); ++i) {
-    if (i)
-      oss << ", ";
-    oss << '"' << jsonEscape(values[i]) << '"';
-  }
-  oss << "]";
-  return oss.str();
-}
 
 template <typename T>
 void dumpJsonLines(const std::vector<T> &records, const std::string &path) {
@@ -94,6 +40,8 @@ struct Reservation {
   int64_t lsq = 0;
   int64_t shq = 0;
 };
+
+using IduToOooPipe = std::deque<std::pair<int64_t, DynamicInst>>;
 
 Reservation reservationForInst(const DynamicInst &inst, const ParamDB &db,
                                const std::string &defaultDtype,
@@ -111,6 +59,128 @@ Reservation reservationForInst(const DynamicInst &inst, const ParamDB &db,
   if (usesSharedShqCredit(db, inst.op, form))
     out.shq = 1;
   return out;
+}
+
+int64_t applyMaxCyclesEnv(int64_t maxCycles) {
+  const char *envMax = std::getenv("PTOAS_VFSIM_MAX_CYCLES");
+  if (envMax == nullptr)
+    return maxCycles;
+  try {
+    const int64_t parsed = std::stoll(envMax);
+    return parsed > 0 ? parsed : maxCycles;
+  } catch (...) {
+    return maxCycles;
+  }
+}
+
+void logCycleBegin(int64_t cycle, const IFU &ifu, const IDU &idu,
+                   const OoOCoreMainline &ooo) {
+  std::cerr << "[vfsim] cycle " << cycle << " begin"
+            << " ifu_done=" << (ifu.done() ? 1 : 0)
+            << " idu_empty=" << (idu.empty() ? 1 : 0)
+            << " rob=" << ooo.getRobSize()
+            << " lsq=" << ooo.getLsqSize()
+            << " shq=" << ooo.getShqSize() << "\n";
+}
+
+void updateExplicitIduCredits(OoOCoreMainline &ooo, int64_t cycle,
+                              bool enabled, int64_t &pregCredit,
+                              int64_t &shqCredit) {
+  auto visibleDelta = ooo.updateIduVisibility(cycle);
+  if (!enabled)
+    return;
+  pregCredit += visibleDelta["preg_free"];
+  shqCredit += visibleDelta["shq_release"];
+}
+
+void drainIduToOooPipe(IduToOooPipe &pipe, OoOCoreMainline &ooo,
+                       int64_t cycle, bool useExplicitIduCreditBank,
+                       const ValueStorageLookup &valueStorage,
+                       int64_t &iduPendingShqQueue) {
+  while (!pipe.empty() && pipe.front().first <= cycle) {
+    auto item = std::move(pipe.front());
+    pipe.pop_front();
+    if (useExplicitIduCreditBank) {
+      for (const auto &dst : item.second.dst) {
+        if (valueStorage.isRegister(dst))
+          --iduPendingShqQueue;
+      }
+    }
+    ooo.accept(item.second);
+  }
+}
+
+Reservation pendingPipeReservations(const IduToOooPipe &pipe, const IDU &idu,
+                                    const ValueStorageLookup &valueStorage) {
+  Reservation pending;
+  for (const auto &item : pipe) {
+    const auto r = reservationForInst(item.second, idu.db(), "fp32", valueStorage);
+    pending.preg += r.preg;
+    pending.shqQueue += r.shqQueue;
+    pending.lsq += r.lsq;
+    pending.shq += r.shq;
+  }
+  return pending;
+}
+
+void fillIdu(IFU &ifu, IDU &idu) {
+  while (idu.canAccept()) {
+    if (ifu.done())
+      break;
+    auto inst = ifu.nextInst();
+    if (!inst.has_value())
+      break;
+    idu.accept(*inst);
+  }
+}
+
+IDUDispatchBudget makeDispatchBudget(const OoOCoreMainline &ooo,
+                                     const Reservation &pending,
+                                     bool useExplicitIduCreditBank,
+                                     int64_t iduPregCredit,
+                                     int64_t iduShqCredit) {
+  IDUDispatchBudget budget;
+  budget.theoreticalLimitMode = false;
+  budget.theoreticalLimitVloopOnly = false;
+  budget.freePreg =
+      useExplicitIduCreditBank
+          ? iduPregCredit
+          : std::max<int64_t>(0, ooo.getFreePreg() - pending.preg);
+  budget.freeShqQueue =
+      std::max<int64_t>(0, ooo.getFreeShqQueue() - pending.shqQueue);
+  budget.freeLsq = std::max<int64_t>(0, ooo.getFreeLsq() - pending.lsq);
+  budget.freeShq =
+      useExplicitIduCreditBank
+          ? iduShqCredit
+          : std::max<int64_t>(0, ooo.getFreeShq() - pending.shq);
+  budget.issueBudget = 5;
+  return budget;
+}
+
+void logDispatchBegin(int64_t cycle, const IDUDispatchBudget &budget) {
+  std::cerr << "[vfsim] cycle " << cycle << " dispatch begin"
+            << " freePreg=" << budget.freePreg
+            << " freeShqQueue=" << budget.freeShqQueue
+            << " freeLsq=" << budget.freeLsq
+            << " freeShq=" << budget.freeShq << "\n";
+}
+
+void forwardDispatchedToOoo(const std::vector<DynamicInst> &dispatched,
+                            IduToOooPipe &pipe, OoOCoreMainline &ooo,
+                            int64_t cycle, int64_t iduToOooDelay) {
+  for (const auto &inst : dispatched) {
+    if (iduToOooDelay > 0)
+      pipe.emplace_back(cycle + iduToOooDelay, inst);
+    else
+      ooo.accept(inst);
+  }
+}
+
+bool isSimulationComplete(const IFU &ifu, const IDU &idu,
+                          const OoOCoreMainline &ooo,
+                          const IduToOooPipe &pipe) {
+  return ifu.done() && idu.empty() && ooo.getRobSize() == 0 &&
+         ooo.getLsqSize() == 0 && ooo.getShqSize() == 0 && pipe.empty();
 }
 
 void dumpDispatchLog(const IDU &idu, const std::string &path) {
@@ -139,6 +209,33 @@ void dumpVloopTrace(const IDU &idu, const std::string &path) {
        << ",\"start_cycle\":" << r.startCycle
        << "}\n";
   }
+}
+
+void dumpSimulationLogs(const std::string &resultsDir, const IDU &idu,
+                        const OoOCoreMainline &ooo) {
+  if (resultsDir.empty())
+    return;
+  std::filesystem::create_directories(resultsDir);
+  ooo.dumpHistory(resultsDir + "/sim_history.json");
+  ooo.dumpSimpleLogs(resultsDir + "/start_by_cycle.json",
+                     resultsDir + "/done_by_cycle.json");
+  dumpDispatchLog(idu, resultsDir + "/idu_to_ooo.json");
+  dumpVloopTrace(idu, resultsDir + "/vloop_trace.json");
+}
+
+std::string incompleteSimulationMessage(const IFU &ifu, const IDU &idu,
+                                        const OoOCoreMainline &ooo) {
+  return "Simulation did not complete before maxCycles"
+         " (ifu_done=" +
+         std::string(ifu.done() ? "true" : "false") +
+         ", idu_empty=" + std::string(idu.empty() ? "true" : "false") +
+         ", rob=" + std::to_string(ooo.getRobSize()) +
+         ", lsq=" + std::to_string(ooo.getLsqSize()) +
+         ", shq=" + std::to_string(ooo.getShqSize()) +
+         ", free_preg=" + std::to_string(ooo.getFreePreg()) +
+         ", free_shq=" + std::to_string(ooo.getFreeShq()) +
+         ", free_lsq=" + std::to_string(ooo.getFreeLsq()) +
+         ", free_shqq=" + std::to_string(ooo.getFreeShqQueue()) + ")";
 }
 
 } // namespace
@@ -175,18 +272,10 @@ SimulationResult runSimulation(IFU &ifu,
                                const std::string &resultsDir,
                                int64_t maxCycles,
                                const std::unordered_map<std::string, ValueInfo> &values) {
-  if (const char *envMax = std::getenv("PTOAS_VFSIM_MAX_CYCLES")) {
-    try {
-      const int64_t parsed = std::stoll(envMax);
-      if (parsed > 0)
-        maxCycles = parsed;
-    } catch (...) {
-      // Ignore malformed debug override.
-    }
-  }
+  maxCycles = applyMaxCyclesEnv(maxCycles);
   const bool debugCycles = std::getenv("PTOAS_VFSIM_DEBUG_CYCLES") != nullptr;
   const int64_t iduToOooDelay = uarch.iduToOooDelay;
-  std::deque<std::pair<int64_t, DynamicInst>> iduToOooPipe;
+  IduToOooPipe iduToOooPipe;
   const bool useExplicitIduCreditBank = uarch.useExplicitIduCreditBank;
   const ValueStorageLookup valueStorage(values);
 
@@ -201,83 +290,31 @@ SimulationResult runSimulation(IFU &ifu,
 
   while (cycle < maxCycles) {
     if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " begin"
-                << " ifu_done=" << (ifu.done() ? 1 : 0)
-                << " idu_empty=" << (idu.empty() ? 1 : 0)
-                << " rob=" << ooo.getRobSize()
-                << " lsq=" << ooo.getLsqSize()
-                << " shq=" << ooo.getShqSize() << "\n";
-    auto visibleDelta = ooo.updateIduVisibility(cycle);
-    if (useExplicitIduCreditBank) {
-      iduPregCredit += visibleDelta["preg_free"];
-      iduShqCredit += visibleDelta["shq_release"];
-    }
-
-    while (!iduToOooPipe.empty() && iduToOooPipe.front().first <= cycle) {
-      auto item = std::move(iduToOooPipe.front());
-      iduToOooPipe.pop_front();
-      if (useExplicitIduCreditBank) {
-        // conservative: rebuild reservations from inst metadata
-        for (const auto &s : item.second.dst) {
-          if (valueStorage.isRegister(s))
-            --iduPendingShqQueue;
-        }
-      }
-      ooo.accept(item.second);
-    }
+      logCycleBegin(cycle, ifu, idu, ooo);
+    updateExplicitIduCredits(ooo, cycle, useExplicitIduCreditBank,
+                             iduPregCredit, iduShqCredit);
+    drainIduToOooPipe(iduToOooPipe, ooo, cycle, useExplicitIduCreditBank,
+                      valueStorage, iduPendingShqQueue);
 
     if (debugCycles)
       std::cerr << "[vfsim] cycle " << cycle << " fill_idu begin\n";
-    int64_t pendingPreg = 0;
-    int64_t pendingShqQueue = 0;
-    int64_t pendingLsq = 0;
-    int64_t pendingShq = 0;
-    if (!useExplicitIduCreditBank) {
-      for (const auto &item : iduToOooPipe) {
-        const auto r = reservationForInst(item.second, idu.db(), dtype, valueStorage);
-        pendingPreg += r.preg;
-        pendingShqQueue += r.shqQueue;
-        pendingLsq += r.lsq;
-        pendingShq += r.shq;
-      }
-    }
-
-    while (idu.canAccept()) {
-      if (ifu.done())
-        break;
-      auto inst = ifu.nextInst();
-      if (!inst.has_value())
-        break;
-      idu.accept(*inst);
-    }
+    Reservation pending;
+    if (!useExplicitIduCreditBank)
+      pending = pendingPipeReservations(iduToOooPipe, idu, valueStorage);
+    fillIdu(ifu, idu);
     if (debugCycles)
       std::cerr << "[vfsim] cycle " << cycle << " fill_idu end\n";
 
-    IDUDispatchBudget budget;
-    budget.theoreticalLimitMode = false;
-    budget.theoreticalLimitVloopOnly = false;
-    budget.freePreg = useExplicitIduCreditBank ? iduPregCredit : std::max<int64_t>(0, ooo.getFreePreg() - pendingPreg);
-    budget.freeShqQueue = std::max<int64_t>(0, ooo.getFreeShqQueue() - pendingShqQueue);
-    budget.freeLsq = std::max<int64_t>(0, ooo.getFreeLsq() - pendingLsq);
-    budget.freeShq = useExplicitIduCreditBank ? iduShqCredit : std::max<int64_t>(0, ooo.getFreeShq() - pendingShq);
-    budget.issueBudget = 5;
+    const IDUDispatchBudget budget = makeDispatchBudget(
+        ooo, pending, useExplicitIduCreditBank, iduPregCredit, iduShqCredit);
 
     if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " dispatch begin"
-                << " freePreg=" << budget.freePreg
-                << " freeShqQueue=" << budget.freeShqQueue
-                << " freeLsq=" << budget.freeLsq
-                << " freeShq=" << budget.freeShq << "\n";
+      logDispatchBegin(cycle, budget);
     auto dispatched = idu.dispatch(cycle, budget);
     if (debugCycles)
       std::cerr << "[vfsim] cycle " << cycle << " dispatch end n=" << dispatched.size() << "\n";
-    for (const auto &inst : dispatched) {
-      if (iduToOooDelay > 0) {
-        iduToOooPipe.emplace_back(cycle + iduToOooDelay, inst);
-      } else {
-        ooo.accept(inst);
-      }
-    }
+    forwardDispatchedToOoo(dispatched, iduToOooPipe, ooo, cycle,
+                           iduToOooDelay);
 
     if (debugCycles)
       std::cerr << "[vfsim] cycle " << cycle << " ooo begin\n";
@@ -285,9 +322,7 @@ SimulationResult runSimulation(IFU &ifu,
     if (debugCycles)
       std::cerr << "[vfsim] cycle " << cycle << " ooo end\n";
 
-    if (ifu.done() && idu.empty() &&
-        ooo.getRobSize() == 0 && ooo.getLsqSize() == 0 && ooo.getShqSize() == 0 &&
-        iduToOooPipe.empty()) {
+    if (isSimulationComplete(ifu, idu, ooo, iduToOooPipe)) {
       completed = true;
       break;
     }
@@ -295,35 +330,12 @@ SimulationResult runSimulation(IFU &ifu,
     ++cycle;
   }
 
-  if (!completed)
-  {
-    if (!resultsDir.empty()) {
-      std::filesystem::create_directories(resultsDir);
-      ooo.dumpHistory(resultsDir + "/sim_history.json");
-      ooo.dumpSimpleLogs(resultsDir + "/start_by_cycle.json", resultsDir + "/done_by_cycle.json");
-      dumpDispatchLog(idu, resultsDir + "/idu_to_ooo.json");
-      dumpVloopTrace(idu, resultsDir + "/vloop_trace.json");
-    }
-    throw std::runtime_error(
-        "Simulation did not complete before maxCycles"
-        " (ifu_done=" + std::string(ifu.done() ? "true" : "false") +
-        ", idu_empty=" + std::string(idu.empty() ? "true" : "false") +
-        ", rob=" + std::to_string(ooo.getRobSize()) +
-        ", lsq=" + std::to_string(ooo.getLsqSize()) +
-        ", shq=" + std::to_string(ooo.getShqSize()) +
-        ", free_preg=" + std::to_string(ooo.getFreePreg()) +
-        ", free_shq=" + std::to_string(ooo.getFreeShq()) +
-        ", free_lsq=" + std::to_string(ooo.getFreeLsq()) +
-        ", free_shqq=" + std::to_string(ooo.getFreeShqQueue()) + ")");
+  if (!completed) {
+    dumpSimulationLogs(resultsDir, idu, ooo);
+    throw std::runtime_error(incompleteSimulationMessage(ifu, idu, ooo));
   }
 
-  if (!resultsDir.empty()) {
-    std::filesystem::create_directories(resultsDir);
-    ooo.dumpHistory(resultsDir + "/sim_history.json");
-    ooo.dumpSimpleLogs(resultsDir + "/start_by_cycle.json", resultsDir + "/done_by_cycle.json");
-    dumpDispatchLog(idu, resultsDir + "/idu_to_ooo.json");
-    dumpVloopTrace(idu, resultsDir + "/vloop_trace.json");
-  }
+  dumpSimulationLogs(resultsDir, idu, ooo);
   return SimulationResult{cycle, ooo.vfEndCycle(), resultsDir};
 }
 

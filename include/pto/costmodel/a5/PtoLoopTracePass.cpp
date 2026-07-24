@@ -95,6 +95,21 @@ struct LoopWork {
     std::vector<BasicBlock *> exitBlocks;  // dedicated exit blocks(exit hook 插这些块开头)
 };
 
+static bool isScopeCtorCall(const CallBase *call) {
+    const Function *callee = call->getCalledFunction();
+    return callee != nullptr && callee->getName().contains("ScopeSentinelC");
+}
+
+static std::vector<const Instruction *> collectScopeEnters(Function &F) {
+    std::vector<const Instruction *> scopeEnters;
+    for (BasicBlock &BB : F)
+        for (Instruction &I : BB)
+            if (const auto *call = dyn_cast<CallBase>(&I))
+                if (isScopeCtorCall(call))
+                    scopeEnters.push_back(&I);
+    return scopeEnters;
+}
+
 // 递归收集 loop 及内层,只收 inScope 为真者(在 __VEC_SCOPE__ 内,按 header 被 scope_enter 支配判定)。
 template <class InScopeFn>
 static void collectLoopInScope(Loop *L, Function &F, std::vector<LoopWork> &out,
@@ -134,7 +149,50 @@ static void collectLoopInScope(Loop *L, Function &F, std::vector<LoopWork> &out,
     SmallVector<BasicBlock *, 4> exitBlks;
     L->getUniqueExitBlocks(exitBlks);
     for (BasicBlock *eb : exitBlks) w.exitBlocks.push_back(eb);
-    out.push_back(std::move(w));
+	    out.push_back(std::move(w));
+	}
+
+template <class InScopeFn>
+static bool formDedicatedExitsForScopedLoops(LoopInfo &LI, DominatorTree &DT,
+                                             InScopeFn &&loopInScope) {
+    bool cfgChanged = false;
+    for (Loop *L : LI) {
+        SmallVector<Loop *, 8> nest;
+        nest.push_back(L);
+        for (size_t i = 0; i < nest.size(); ++i)
+            for (Loop *sub : nest[i]->getSubLoops()) nest.push_back(sub);
+        for (Loop *cur : nest)
+            if (loopInScope(cur))
+                cfgChanged |= formDedicatedExitBlocks(cur, &DT, &LI,
+                                                      /*MSSAU=*/nullptr,
+                                                      /*PreserveLCSSA=*/false);
+    }
+    return cfgChanged;
+}
+
+static void insertLoopEnterAndIter(LoopWork &w, LLVMContext &C,
+                                   FunctionCallee enterFn,
+                                   FunctionCallee iterFn) {
+    ConstantInt *loopIdC = ConstantInt::get(C, APInt(64, w.loopId));
+    IRBuilder<> enterBuilder(w.preheader->getTerminator());
+    Value *filePtr =
+        enterBuilder.CreateGlobalStringPtr(w.file.empty() ? StringRef("") : StringRef(w.file));
+    enterBuilder.CreateCall(
+        enterFn, {loopIdC, filePtr,
+                  ConstantInt::get(C, APInt(32, static_cast<uint64_t>(w.line))),
+                  ConstantInt::get(C, APInt(32, static_cast<uint64_t>(w.col)))});
+
+    IRBuilder<> iterBuilder(w.header, w.header->getFirstInsertionPt());
+    iterBuilder.CreateCall(iterFn, {loopIdC});
+}
+
+static void insertLoopExits(LoopWork &w, LLVMContext &C,
+                            FunctionCallee exitFn) {
+    ConstantInt *loopIdC = ConstantInt::get(C, APInt(64, w.loopId));
+    for (BasicBlock *eb : w.exitBlocks) {
+        IRBuilder<> b(eb, eb->getFirstInsertionPt());
+        b.CreateCall(exitFn, {loopIdC});
+    }
 }
 
 struct PtoLoopTracePass : PassInfoMixin<PtoLoopTracePass> {
@@ -145,21 +203,7 @@ struct PtoLoopTracePass : PassInfoMixin<PtoLoopTracePass> {
         LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
         DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
-        // 只抓 __VEC_SCOPE__ 内的 for。ScopeSentinel 构造函数调用 = scope-enter 地标:
-        // VF 驱动 always_inline 进调用者,其 loop 落调用者函数体;而 ScopeSentinel ctor -O0 不内联,
-        // __pto_vf_scope_enter 留在 ctor(另一函数)与 loop 不支配。但对 ctor 的 call 与 loop 同在
-        // 调用者函数体 → 以 ctor call 为地标支配成立。ctor mangled 名含 "ScopeSentinelC"。
-        auto isScopeCtorCall = [](const CallBase *call) -> bool {
-            const Function *callee = call->getCalledFunction();
-            if (!callee) return false;
-            return callee->getName().contains("ScopeSentinelC");
-        };
-        std::vector<const Instruction *> scopeEnters;
-        for (BasicBlock &BB : F)
-            for (Instruction &I : BB)
-                if (const auto *call = dyn_cast<CallBase>(&I))
-                    if (isScopeCtorCall(call))
-                        scopeEnters.push_back(&I);
+	        std::vector<const Instruction *> scopeEnters = collectScopeEnters(F);
 
         const bool isDemo = nameStartsWith(F.getName(), "__pto_demo_");
         if (scopeEnters.empty() && !isDemo) {
@@ -177,18 +221,8 @@ struct PtoLoopTracePass : PassInfoMixin<PtoLoopTracePass> {
 
         // VF 驱动内联进 if-init 块后,loop exit 常与哨兵析构/if-false 合流 → 非 dedicated。
         // 先对 in-scope loop 形成专用出口块(改 CFG,重算 DT),之后 getUniqueExitBlocks 才稳。
-        bool cfgChanged = false;
-        for (Loop *L : LI) {
-            SmallVector<Loop *, 8> nest;  // L 及全部内层
-            nest.push_back(L);
-            for (size_t i = 0; i < nest.size(); ++i)
-                for (Loop *sub : nest[i]->getSubLoops()) nest.push_back(sub);
-            for (Loop *cur : nest)
-                if (loopInScope(cur))
-                    cfgChanged |= formDedicatedExitBlocks(cur, &DT, &LI, /*MSSAU=*/nullptr,
-                                                          /*PreserveLCSSA=*/false);
-        }
-        if (cfgChanged) DT.recalculate(F);
+	        bool cfgChanged = formDedicatedExitsForScopedLoops(LI, DT, loopInScope);
+	        if (cfgChanged) DT.recalculate(F);
 
         std::vector<LoopWork> work;
         for (Loop *L : LI) collectLoopInScope(L, F, work, loopInScope);
@@ -199,35 +233,17 @@ struct PtoLoopTracePass : PassInfoMixin<PtoLoopTracePass> {
         FunctionCallee exitFn = getOrInsertLoopExit(M);
         LLVMContext &C = M.getContext();
 
-        bool changed = false;
-        for (LoopWork &w : work) {
-            ConstantInt *loopIdC = ConstantInt::get(C, APInt(64, w.loopId));
-
-            // enter:preheader terminator 前。
-            {
-                IRBuilder<> b(w.preheader->getTerminator());
-                Value *filePtr = b.CreateGlobalStringPtr(w.file.empty() ? StringRef("") : StringRef(w.file));
-                b.CreateCall(enterFn, {loopIdC, filePtr,
-                                       ConstantInt::get(C, APInt(32, static_cast<uint64_t>(w.line))),
-                                       ConstantInt::get(C, APInt(32, static_cast<uint64_t>(w.col)))});
-            }
-            // iter:header 首个插入点(PHI/debug 之后)前。
-            {
-                IRBuilder<> b(w.header, w.header->getFirstInsertionPt());
-                b.CreateCall(iterFn, {loopIdC});
-            }
-            changed = true;
-        }
+	        bool changed = false;
+	        for (LoopWork &w : work) {
+	            insertLoopEnterAndIter(w, C, enterFn, iterFn);
+	            changed = true;
+	        }
 
         // exit:每个 dedicated exit block 首插入点。dedicated ⇒ 块只由本 loop 进入 → 跳出必经一次。
         // 嵌套循环里内层 exit block 可能是外层 latch,exit hook 落外层 body → 正确反映"内层结束回外层"。
-        for (LoopWork &w : work) {
-            ConstantInt *loopIdC = ConstantInt::get(C, APInt(64, w.loopId));
-            for (BasicBlock *eb : w.exitBlocks) {
-                IRBuilder<> b(eb, eb->getFirstInsertionPt());
-                b.CreateCall(exitFn, {loopIdC});
-            }
-        }
+	        for (LoopWork &w : work) {
+	            insertLoopExits(w, C, exitFn);
+	        }
 
         return changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
     }

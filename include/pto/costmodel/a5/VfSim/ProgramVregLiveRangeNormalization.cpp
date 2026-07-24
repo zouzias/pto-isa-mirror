@@ -24,6 +24,18 @@ struct VregVersion {
   int64_t generation = 0;
 };
 
+struct FlatLoopVregState {
+  std::unordered_map<std::string, VregVersion> currentVersionByVreg;
+  std::unordered_map<std::string, int64_t> versionCounter;
+  std::vector<std::vector<std::optional<std::string>>> srcVersions;
+  std::vector<std::vector<std::optional<std::string>>> dstVersions;
+  std::unordered_map<std::string, int64_t> lastUse;
+  std::unordered_map<std::string, std::string> currentSlotByVreg;
+  std::unordered_map<std::string, std::string> slotOfVersion;
+  std::unordered_map<std::string, std::optional<std::string>> slotOccupant;
+  std::vector<std::string> slotPool;
+};
+
 std::string makeVersionKey(const VregVersion &version) {
   return version.name + "#" + std::to_string(version.generation);
 }
@@ -92,154 +104,190 @@ void ensureRegisterValue(
   values->emplace(slot, std::move(value));
 }
 
+void collectFlatLoopVersions(const std::vector<ProgramNode> &out,
+                             const ProgramAnalysis &analysis,
+                             FlatLoopVregState &state) {
+  state.srcVersions.assign(out.size(), {});
+  state.dstVersions.assign(out.size(), {});
+  for (size_t idx = 0; idx < out.size(); ++idx) {
+    const ProgramInstNode &inst = out[idx].inst;
+    state.srcVersions[idx].reserve(inst.src.size());
+    for (const std::string &src : inst.src) {
+      if (!analysis.isVregName(src)) {
+        state.srcVersions[idx].push_back(std::nullopt);
+        continue;
+      }
+      auto it = state.currentVersionByVreg.find(src);
+      if (it == state.currentVersionByVreg.end()) {
+        state.srcVersions[idx].push_back(std::nullopt);
+        continue;
+      }
+      std::string key = makeVersionKey(it->second);
+      state.srcVersions[idx].push_back(key);
+      state.lastUse[key] = static_cast<int64_t>(idx);
+    }
+
+    state.dstVersions[idx].reserve(inst.dst.size());
+    for (const std::string &dst : inst.dst) {
+      if (!analysis.isVregName(dst)) {
+        state.dstVersions[idx].push_back(std::nullopt);
+        continue;
+      }
+      int64_t &generation = state.versionCounter[dst];
+      ++generation;
+      VregVersion version{dst, generation};
+      state.currentVersionByVreg[dst] = version;
+      state.dstVersions[idx].push_back(makeVersionKey(version));
+    }
+  }
+}
+
+std::string versionBaseName(const std::optional<std::string> &version,
+                            const std::string &fallback) {
+  if (!version)
+    return fallback;
+  const size_t hash = version->find('#');
+  return hash == std::string::npos ? fallback : version->substr(0, hash);
+}
+
+std::string resolveSrcSlot(const std::string &src,
+                           const std::optional<std::string> &version,
+                           const FlatLoopVregState &state) {
+  if (version) {
+    auto slotIt = state.slotOfVersion.find(*version);
+    if (slotIt != state.slotOfVersion.end())
+      return slotIt->second;
+    const std::string versionName = versionBaseName(version, src);
+    auto curIt = state.currentSlotByVreg.find(versionName);
+    return curIt == state.currentSlotByVreg.end() ? versionName
+                                                  : curIt->second;
+  }
+  auto curIt = state.currentSlotByVreg.find(src);
+  return curIt == state.currentSlotByVreg.end() ? src : curIt->second;
+}
+
+std::vector<std::string> rewriteSrcs(const ProgramInstNode &inst, size_t idx,
+                                     const ProgramAnalysis &analysis,
+                                     const FlatLoopVregState &state) {
+  std::vector<std::string> newSrcs = inst.src;
+  for (size_t pos = 0; pos < inst.src.size(); ++pos) {
+    if (!analysis.isVregName(inst.src[pos]))
+      continue;
+    const std::optional<std::string> &version =
+        pos < state.srcVersions[idx].size() ? state.srcVersions[idx][pos]
+                                            : std::nullopt;
+    newSrcs[pos] = resolveSrcSlot(inst.src[pos], version, state);
+  }
+  return newSrcs;
+}
+
+std::vector<std::string> reusableSlots(const FlatLoopVregState &state,
+                                       size_t idx) {
+  std::vector<std::string> candidates;
+  for (const std::string &slot : state.slotPool) {
+    auto occIt = state.slotOccupant.find(slot);
+    bool reusable = occIt == state.slotOccupant.end() || !occIt->second;
+    if (!reusable) {
+      auto lastIt = state.lastUse.find(*occIt->second);
+      int64_t last = lastIt == state.lastUse.end() ? -1 : lastIt->second;
+      reusable = last < static_cast<int64_t>(idx);
+    }
+    if (reusable)
+      candidates.push_back(slot);
+  }
+  return candidates;
+}
+
+void addLastUseSrcSlots(std::vector<std::string> &candidates,
+                        const std::vector<std::string> &newSrcs,
+                        const FlatLoopVregState &state, size_t idx) {
+  for (size_t pos = 0; pos < state.srcVersions[idx].size(); ++pos) {
+    const std::optional<std::string> &version = state.srcVersions[idx][pos];
+    if (!version)
+      continue;
+    auto lastIt = state.lastUse.find(*version);
+    if (lastIt == state.lastUse.end() ||
+        lastIt->second != static_cast<int64_t>(idx))
+      continue;
+    if (pos < newSrcs.size() && !containsSlot(candidates, newSrcs[pos]))
+      candidates.push_back(newSrcs[pos]);
+  }
+}
+
+std::string chooseDstSlot(const std::vector<std::string> &newSrcs,
+                          std::vector<std::string> candidates,
+                          const std::string &dstName,
+                          const std::vector<std::string> &slotPool) {
+  if (newSrcs.size() == 1 && containsSlot(candidates, newSrcs[0]))
+    return newSrcs[0];
+  if (!candidates.empty()) {
+    std::sort(candidates.begin(), candidates.end(),
+              [](const std::string &lhs, const std::string &rhs) {
+      return vregSortKey(lhs) < vregSortKey(rhs);
+    });
+    return candidates.front();
+  }
+  if (!containsSlot(slotPool, dstName))
+    return dstName;
+  return nextFreshVreg(slotPool);
+}
+
+std::vector<std::string> rewriteDsts(
+    const ProgramInstNode &inst, const std::vector<std::string> &newSrcs,
+    size_t idx, const ProgramAnalysis &analysis, FlatLoopVregState &state,
+    std::unordered_map<std::string, ValueInfo> *values) {
+  std::vector<std::string> newDsts = inst.dst;
+  if (inst.dst.size() != 1 || !analysis.isVregName(inst.dst.front()))
+    return newDsts;
+  const std::optional<std::string> &dstVersion =
+      state.dstVersions[idx].empty() ? std::nullopt
+                                     : state.dstVersions[idx].front();
+  if (!dstVersion)
+    return newDsts;
+
+  const std::string &dstName = inst.dst.front();
+  std::vector<std::string> candidates = reusableSlots(state, idx);
+  addLastUseSrcSlots(candidates, newSrcs, state, idx);
+  const std::string chosenSlot =
+      chooseDstSlot(newSrcs, std::move(candidates), dstName, state.slotPool);
+  if (!containsSlot(state.slotPool, chosenSlot))
+    state.slotPool.push_back(chosenSlot);
+  ensureRegisterValue(values, chosenSlot, dstName);
+  state.slotOfVersion[*dstVersion] = chosenSlot;
+  state.currentSlotByVreg[dstName] = chosenSlot;
+  state.slotOccupant[chosenSlot] = *dstVersion;
+  newDsts[0] = chosenSlot;
+  return newDsts;
+}
+
+void rewriteFlatLoopInst(ProgramInstNode &inst, size_t idx,
+                         const ProgramAnalysis &analysis,
+                         FlatLoopVregState &state,
+                         ProgramVregLiveRangeNormalizationStats &stats,
+                         std::unordered_map<std::string, ValueInfo> *values) {
+  ProgramInstNode before = inst;
+  std::vector<std::string> newSrcs =
+      rewriteSrcs(inst, idx, analysis, state);
+  std::vector<std::string> newDsts =
+      rewriteDsts(inst, newSrcs, idx, analysis, state, values);
+  inst.src = std::move(newSrcs);
+  inst.dst = std::move(newDsts);
+  countFieldChanges(before, inst, stats);
+}
+
 std::vector<ProgramNode> normalizeFlatLoopVregs(
     const std::vector<ProgramNode> &body,
     const ProgramAnalysis &analysis,
     ProgramVregLiveRangeNormalizationStats &stats,
     std::unordered_map<std::string, ValueInfo> *values) {
   std::vector<ProgramNode> out = body;
-  std::unordered_map<std::string, VregVersion> currentVersionByVreg;
-  std::unordered_map<std::string, int64_t> versionCounter;
-  std::vector<std::vector<std::optional<std::string>>> srcVersions(out.size());
-  std::vector<std::vector<std::optional<std::string>>> dstVersions(out.size());
-  std::unordered_map<std::string, int64_t> lastUse;
-
+  FlatLoopVregState state;
+  collectFlatLoopVersions(out, analysis, state);
   for (size_t idx = 0; idx < out.size(); ++idx) {
-    ProgramInstNode &inst = out[idx].inst;
-    srcVersions[idx].reserve(inst.src.size());
-    for (const std::string &src : inst.src) {
-      if (!analysis.isVregName(src)) {
-        srcVersions[idx].push_back(std::nullopt);
-        continue;
-      }
-      auto it = currentVersionByVreg.find(src);
-      if (it == currentVersionByVreg.end()) {
-        srcVersions[idx].push_back(std::nullopt);
-        continue;
-      }
-      std::string key = makeVersionKey(it->second);
-      srcVersions[idx].push_back(key);
-      lastUse[key] = static_cast<int64_t>(idx);
+    if (out[idx].kind != ProgramNode::Kind::Inst)
+      continue;
+    rewriteFlatLoopInst(out[idx].inst, idx, analysis, state, stats, values);
     }
-
-    dstVersions[idx].reserve(inst.dst.size());
-    for (const std::string &dst : inst.dst) {
-      if (!analysis.isVregName(dst)) {
-        dstVersions[idx].push_back(std::nullopt);
-        continue;
-      }
-      int64_t &generation = versionCounter[dst];
-      ++generation;
-      VregVersion version{dst, generation};
-      currentVersionByVreg[dst] = version;
-      dstVersions[idx].push_back(makeVersionKey(version));
-    }
-  }
-
-  std::unordered_map<std::string, std::string> currentSlotByVreg;
-  std::unordered_map<std::string, std::string> slotOfVersion;
-  std::unordered_map<std::string, std::optional<std::string>> slotOccupant;
-  std::vector<std::string> slotPool;
-
-  for (size_t idx = 0; idx < out.size(); ++idx) {
-    ProgramInstNode before = out[idx].inst;
-    ProgramInstNode &inst = out[idx].inst;
-    std::vector<std::string> newSrcs = inst.src;
-
-    for (size_t pos = 0; pos < inst.src.size(); ++pos) {
-      const std::string &src = inst.src[pos];
-      if (!analysis.isVregName(src))
-        continue;
-
-      std::string slot = src;
-      const std::optional<std::string> &version =
-          pos < srcVersions[idx].size() ? srcVersions[idx][pos]
-                                        : std::nullopt;
-      if (version) {
-        auto slotIt = slotOfVersion.find(*version);
-        if (slotIt != slotOfVersion.end()) {
-          slot = slotIt->second;
-        } else {
-          size_t hash = version->find('#');
-          std::string versionName =
-              hash == std::string::npos ? src : version->substr(0, hash);
-          auto curIt = currentSlotByVreg.find(versionName);
-          slot = curIt == currentSlotByVreg.end() ? versionName
-                                                  : curIt->second;
-        }
-      } else {
-        auto curIt = currentSlotByVreg.find(src);
-        if (curIt != currentSlotByVreg.end())
-          slot = curIt->second;
-      }
-
-      newSrcs[pos] = slot;
-    }
-
-    std::vector<std::string> newDsts = inst.dst;
-    if (inst.dst.size() == 1 && analysis.isVregName(inst.dst.front())) {
-      const std::string &dstName = inst.dst.front();
-      const std::optional<std::string> &dstVersion =
-          dstVersions[idx].empty() ? std::nullopt : dstVersions[idx].front();
-      if (dstVersion) {
-        std::vector<std::string> candidateSlots;
-        for (const std::string &slot : slotPool) {
-          auto occIt = slotOccupant.find(slot);
-          bool reusable = occIt == slotOccupant.end() || !occIt->second;
-          if (!reusable) {
-            auto lastIt = lastUse.find(*occIt->second);
-            int64_t last = lastIt == lastUse.end() ? -1 : lastIt->second;
-            reusable = last < static_cast<int64_t>(idx);
-          }
-          if (reusable)
-            candidateSlots.push_back(slot);
-        }
-
-        for (size_t pos = 0; pos < srcVersions[idx].size(); ++pos) {
-          const std::optional<std::string> &version = srcVersions[idx][pos];
-          if (!version)
-            continue;
-          auto lastIt = lastUse.find(*version);
-          if (lastIt == lastUse.end() ||
-              lastIt->second != static_cast<int64_t>(idx))
-            continue;
-          if (pos < newSrcs.size() &&
-              !containsSlot(candidateSlots, newSrcs[pos]))
-            candidateSlots.push_back(newSrcs[pos]);
-        }
-
-        std::string chosenSlot;
-        if (newSrcs.size() == 1 && containsSlot(candidateSlots, newSrcs[0])) {
-          chosenSlot = newSrcs[0];
-        } else if (!candidateSlots.empty()) {
-          std::sort(candidateSlots.begin(), candidateSlots.end(),
-                    [](const std::string &lhs, const std::string &rhs) {
-            return vregSortKey(lhs) < vregSortKey(rhs);
-          });
-          chosenSlot = candidateSlots.front();
-        } else if (!containsSlot(slotPool, dstName)) {
-          chosenSlot = dstName;
-          slotPool.push_back(chosenSlot);
-        } else {
-          chosenSlot = nextFreshVreg(slotPool);
-          slotPool.push_back(chosenSlot);
-        }
-
-        if (!containsSlot(slotPool, chosenSlot))
-          slotPool.push_back(chosenSlot);
-        ensureRegisterValue(values, chosenSlot, dstName);
-        slotOfVersion[*dstVersion] = chosenSlot;
-        currentSlotByVreg[dstName] = chosenSlot;
-        slotOccupant[chosenSlot] = *dstVersion;
-        newDsts[0] = chosenSlot;
-      }
-    }
-
-    inst.src = std::move(newSrcs);
-    inst.dst = std::move(newDsts);
-    countFieldChanges(before, inst, stats);
-  }
-
   return out;
 }
 

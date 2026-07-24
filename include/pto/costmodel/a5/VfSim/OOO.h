@@ -244,6 +244,34 @@ private:
   std::vector<std::unordered_map<std::string, std::deque<Uop>>> exqWait_;
 
   void freeOldPregs(const Uop &u) override;
+  void completeRunningUops(int64_t cycle);
+  void retireDoneUops();
+  int64_t computeShqReadyCycle(const Uop &u) const;
+  void updateLsqReadiness(int64_t cycle);
+  void updateShqReadiness(int64_t cycle);
+  void mirrorStartedUopToRob(const Uop &u);
+  void markProducerReady(const Uop &u, const std::string &kind);
+  bool hasSameCycleSrcHazard(
+      const Uop &u, const std::unordered_set<std::string> &issuedSrcs) const;
+  void rememberIssuedSrcs(const Uop &u,
+                          std::unordered_set<std::string> &issuedSrcs) const;
+  void issueReadyLoads(int64_t cycle);
+  int chooseDirectIssuePort(const Uop &u,
+                            const std::vector<bool> &exuUsedThisCycle) const;
+  void recordComputeIssue(Uop &u, int64_t cycle, int port,
+                          const std::string &fuType);
+  void issueReadyComputeDirect(
+      int64_t cycle, std::vector<bool> &exuUsedThisCycle,
+      std::unordered_set<std::string> &issuedSrcsThisCycle);
+  void enqueueReadyComputeToExq(
+      int64_t cycle, std::unordered_set<std::string> &issuedSrcsThisCycle);
+  Uop *selectExqIssueCandidate(int port, int64_t cycle, std::string &fuType);
+  void issueExqWaitQueues(int64_t cycle,
+                          std::vector<bool> &exuUsedThisCycle);
+  void issueReadyComputeViaIsu(
+      int64_t cycle, std::vector<bool> &exuUsedThisCycle,
+      std::unordered_set<std::string> &issuedSrcsThisCycle);
+  void issueReadyStores(int64_t cycle);
 };
 
 } // namespace vfsim

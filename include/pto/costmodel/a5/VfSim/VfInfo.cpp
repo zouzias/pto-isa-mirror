@@ -11,6 +11,9 @@
 namespace vfsim {
 namespace {
 
+using ValueNameMap = std::unordered_map<std::string, std::string>;
+using ReservedValueMap = std::unordered_map<std::string, bool>;
+
 std::string lower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -37,6 +40,18 @@ conversionDtypes(const std::string &form) {
           normalize(form.substr(pos + 4))};
 }
 
+std::string compactDtype(const std::string &dtype) {
+  if (dtype == "fp32")
+    return "f32";
+  if (dtype == "fp16")
+    return "f16";
+  if (dtype == "int32")
+    return "s32";
+  if (dtype == "uint32")
+    return "u32";
+  return dtype;
+}
+
 void registerValue(VfInfo &vfInfo, const std::string &valueId) {
   if (vfInfo.values.find(valueId) != vfInfo.values.end())
     return;
@@ -44,6 +59,61 @@ void registerValue(VfInfo &vfInfo, const std::string &valueId) {
   value.valueId = valueId;
   value.storage = inferValueStorage(valueId);
   vfInfo.values.emplace(valueId, std::move(value));
+}
+
+void registerInstValues(VfInfo &vfInfo, const ProgramInstNode &inst) {
+  for (const std::string &valueId : inst.src)
+    registerValue(vfInfo, valueId);
+  for (const std::string &valueId : inst.dst)
+    registerValue(vfInfo, valueId);
+}
+
+void fillValueDtypes(VfInfo &vfInfo, const std::vector<std::string> &valueIds,
+                     const std::string &conversionDtype,
+                     const std::string &simpleForm) {
+  for (const std::string &valueId : valueIds) {
+    ValueInfo &value = vfInfo.values.at(valueId);
+    if (!value.dtype.empty())
+      continue;
+    if (!conversionDtype.empty())
+      value.dtype = conversionDtype;
+    else
+      value.dtype = !simpleForm.empty() ? simpleForm : vfInfo.defaultDtype;
+  }
+}
+
+void fillInstValueDtypes(VfInfo &vfInfo, const ProgramInstNode &inst) {
+  const auto [srcConversion, dstConversion] = conversionDtypes(inst.form);
+  const std::string simpleForm =
+      inst.form.find("_to_") == std::string::npos ? inst.form : "";
+  fillValueDtypes(vfInfo, inst.src, srcConversion, simpleForm);
+  fillValueDtypes(vfInfo, inst.dst, dstConversion, simpleForm);
+}
+
+std::string firstValueDtype(const VfInfo &vfInfo,
+                            const std::vector<std::string> &valueIds) {
+  if (valueIds.empty())
+    return "";
+  return vfInfo.values.at(valueIds.front()).dtype;
+}
+
+std::string inferInstForm(const VfInfo &vfInfo, const ProgramInstNode &inst) {
+  const std::string srcDtype = firstValueDtype(vfInfo, inst.src);
+  const std::string dstDtype = firstValueDtype(vfInfo, inst.dst);
+  if (!srcDtype.empty() && !dstDtype.empty() && srcDtype != dstDtype)
+    return compactDtype(srcDtype) + "_to_" + compactDtype(dstDtype);
+  if (!dstDtype.empty())
+    return dstDtype;
+  if (!srcDtype.empty())
+    return srcDtype;
+  return vfInfo.defaultDtype;
+}
+
+void canonicalizeInstNode(ProgramInstNode &inst, VfInfo &vfInfo) {
+  registerInstValues(vfInfo, inst);
+  fillInstValueDtypes(vfInfo, inst);
+  if (inst.form.empty())
+    inst.form = inferInstForm(vfInfo, inst);
 }
 
 void canonicalizeNodes(std::vector<ProgramNode> &nodes, VfInfo &vfInfo) {
@@ -54,62 +124,90 @@ void canonicalizeNodes(std::vector<ProgramNode> &nodes, VfInfo &vfInfo) {
       canonicalizeNodes(node.loop->body, vfInfo);
       continue;
     }
-
-    ProgramInstNode &inst = node.inst;
-    for (const std::string &valueId : inst.src)
-      registerValue(vfInfo, valueId);
-    for (const std::string &valueId : inst.dst)
-      registerValue(vfInfo, valueId);
-
-    const auto [srcConversion, dstConversion] = conversionDtypes(inst.form);
-    const std::string simpleForm =
-        inst.form.find("_to_") == std::string::npos ? inst.form : "";
-    for (const std::string &valueId : inst.src) {
-      ValueInfo &value = vfInfo.values.at(valueId);
-      if (value.dtype.empty())
-        value.dtype = !srcConversion.empty()
-                          ? srcConversion
-                          : (!simpleForm.empty() ? simpleForm
-                                                 : vfInfo.defaultDtype);
-    }
-    for (const std::string &valueId : inst.dst) {
-      ValueInfo &value = vfInfo.values.at(valueId);
-      if (value.dtype.empty())
-        value.dtype = !dstConversion.empty()
-                          ? dstConversion
-                          : (!simpleForm.empty() ? simpleForm
-                                                 : vfInfo.defaultDtype);
-    }
-
-    if (inst.form.empty()) {
-      std::string srcDtype;
-      std::string dstDtype;
-      if (!inst.src.empty())
-        srcDtype = vfInfo.values.at(inst.src.front()).dtype;
-      if (!inst.dst.empty())
-        dstDtype = vfInfo.values.at(inst.dst.front()).dtype;
-      if (!srcDtype.empty() && !dstDtype.empty() && srcDtype != dstDtype) {
-        auto compact = [](const std::string &dtype) {
-          if (dtype == "fp32")
-            return std::string("f32");
-          if (dtype == "fp16")
-            return std::string("f16");
-          if (dtype == "int32")
-            return std::string("s32");
-          if (dtype == "uint32")
-            return std::string("u32");
-          return dtype;
-        };
-        inst.form = compact(srcDtype) + "_to_" + compact(dstDtype);
-      } else if (!dstDtype.empty()) {
-        inst.form = dstDtype;
-      } else if (!srcDtype.empty()) {
-        inst.form = srcDtype;
-      } else {
-        inst.form = vfInfo.defaultDtype;
-      }
-    }
+    canonicalizeInstNode(node.inst, vfInfo);
   }
+}
+
+bool keepsStoragePrefix(const std::string &valueId, const ValueInfo &value) {
+  const std::string normalized = lower(valueId);
+  return (value.storage == ValueStorageKind::Register &&
+          normalized.rfind("v", 0) == 0) ||
+         (value.storage == ValueStorageKind::UB &&
+          normalized.rfind("mem", 0) == 0);
+}
+
+void reserveExistingLoweredNames(const VfInfo &vfInfo, ValueNameMap &names,
+                                 ReservedValueMap &reserved) {
+  for (const auto &[valueId, value] : vfInfo.values) {
+    if (!keepsStoragePrefix(valueId, value))
+      continue;
+    names[valueId] = valueId;
+    reserved[valueId] = true;
+  }
+}
+
+std::string nextLoweredName(const std::string &prefix, int64_t &next,
+                            ReservedValueMap &reserved) {
+  std::string candidate;
+  do {
+    candidate = prefix + std::to_string(next++);
+  } while (reserved.find(candidate) != reserved.end());
+  reserved[candidate] = true;
+  return candidate;
+}
+
+void assignLoweredName(const std::string &valueId, const ValueInfo &value,
+                       ValueNameMap &names, ReservedValueMap &reserved,
+                       int64_t &nextRegister, int64_t &nextUb) {
+  switch (value.storage) {
+  case ValueStorageKind::Register:
+    names[valueId] = nextLoweredName("V", nextRegister, reserved);
+    break;
+  case ValueStorageKind::UB:
+    names[valueId] = nextLoweredName("mem", nextUb, reserved);
+    break;
+  case ValueStorageKind::Scalar:
+    names[valueId] = valueId;
+    break;
+  }
+}
+
+ValueNameMap buildLoweredNames(const VfInfo &vfInfo) {
+  ValueNameMap names;
+  ReservedValueMap reserved;
+  int64_t nextRegister = 0;
+  int64_t nextUb = 0;
+  reserveExistingLoweredNames(vfInfo, names, reserved);
+  for (const auto &[valueId, value] : vfInfo.values) {
+    if (names.find(valueId) == names.end())
+      assignLoweredName(valueId, value, names, reserved, nextRegister, nextUb);
+  }
+  return names;
+}
+
+void rewriteNodeValueIds(std::vector<ProgramNode> &nodes,
+                         const ValueNameMap &names) {
+  for (ProgramNode &node : nodes) {
+    if (node.kind == ProgramNode::Kind::Loop) {
+      rewriteNodeValueIds(node.loop->body, names);
+      continue;
+    }
+    for (std::string &valueId : node.inst.src)
+      valueId = names.at(valueId);
+    for (std::string &valueId : node.inst.dst)
+      valueId = names.at(valueId);
+  }
+}
+
+std::unordered_map<std::string, ValueInfo>
+buildLoweredValues(std::unordered_map<std::string, ValueInfo> values,
+                   const ValueNameMap &names) {
+  std::unordered_map<std::string, ValueInfo> loweredValues;
+  for (auto &[valueId, value] : values) {
+    value.valueId = names.at(valueId);
+    loweredValues.emplace(value.valueId, std::move(value));
+  }
+  return loweredValues;
 }
 
 } // namespace
@@ -150,68 +248,9 @@ void canonicalizeVfInfo(VfInfo &vfInfo) {
 
 void lowerVfInfoValueIds(VfInfo &vfInfo) {
   canonicalizeVfInfo(vfInfo);
-  std::unordered_map<std::string, std::string> names;
-  std::unordered_map<std::string, bool> reserved;
-  int64_t nextRegister = 0;
-  int64_t nextUb = 0;
-  for (const auto &[valueId, value] : vfInfo.values) {
-    const std::string normalized = lower(valueId);
-    if ((value.storage == ValueStorageKind::Register &&
-         normalized.rfind("v", 0) == 0) ||
-        (value.storage == ValueStorageKind::UB &&
-         normalized.rfind("mem", 0) == 0)) {
-      names[valueId] = valueId;
-      reserved[valueId] = true;
-    }
-  }
-  for (const auto &[valueId, value] : vfInfo.values) {
-    if (names.find(valueId) != names.end())
-      continue;
-    switch (value.storage) {
-    case ValueStorageKind::Register: {
-      std::string candidate;
-      do {
-        candidate = "V" + std::to_string(nextRegister++);
-      } while (reserved.find(candidate) != reserved.end());
-      names[valueId] = candidate;
-      reserved[candidate] = true;
-      break;
-    }
-    case ValueStorageKind::UB: {
-      std::string candidate;
-      do {
-        candidate = "mem" + std::to_string(nextUb++);
-      } while (reserved.find(candidate) != reserved.end());
-      names[valueId] = candidate;
-      reserved[candidate] = true;
-      break;
-    }
-    case ValueStorageKind::Scalar:
-      names[valueId] = valueId;
-      break;
-    }
-  }
-
-  auto rewriteNodes = [&](auto &&self, std::vector<ProgramNode> &nodes) -> void {
-    for (ProgramNode &node : nodes) {
-      if (node.kind == ProgramNode::Kind::Loop) {
-        self(self, node.loop->body);
-        continue;
-      }
-      for (std::string &valueId : node.inst.src)
-        valueId = names.at(valueId);
-      for (std::string &valueId : node.inst.dst)
-        valueId = names.at(valueId);
-    }
-  };
-  rewriteNodes(rewriteNodes, vfInfo.body);
-
-  std::unordered_map<std::string, ValueInfo> loweredValues;
-  for (auto &[valueId, value] : vfInfo.values) {
-    value.valueId = names.at(valueId);
-    loweredValues.emplace(value.valueId, std::move(value));
-  }
-  vfInfo.values = std::move(loweredValues);
+  const ValueNameMap names = buildLoweredNames(vfInfo);
+  rewriteNodeValueIds(vfInfo.body, names);
+  vfInfo.values = buildLoweredValues(std::move(vfInfo.values), names);
 }
 
 } // namespace vfsim

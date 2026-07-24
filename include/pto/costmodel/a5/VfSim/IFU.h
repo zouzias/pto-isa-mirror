@@ -99,6 +99,12 @@ private:
   std::unordered_map<int, std::vector<int64_t>> topBlockLoopBounds_;
 
   void buildIndices();
+  std::vector<int64_t> collectLoopBegins();
+  void markInnermostLoops(const std::vector<int64_t> &begins);
+  void assignTopBlockIds(const std::vector<int64_t> &begins);
+  std::optional<int64_t> findLastInstIdx(int64_t begin, int64_t end) const;
+  void cacheLoopBodies(const std::vector<int64_t> &begins);
+  void cacheTopBlockLastInsts();
   static bool containsAnyLoop(const std::vector<LinearProgramNode> &nodes);
   static bool isInst(const LinearProgramNode &node);
   static bool isLoopBegin(const LinearProgramNode &node);
@@ -121,7 +127,23 @@ private:
   std::vector<int64_t> calcBlockEndLevelsNormal() const;
   bool isLastInTopBlockNormal() const;
   DynamicInst emitNormalInst(const LinearProgramNode &node);
+  DynamicInst emitUnrolledInst(const LinearProgramNode &node,
+                               const LoopFrame &frame,
+                               const std::vector<int64_t> &loopStack,
+                               const std::vector<int64_t> &iterStack,
+                               int64_t superIter, int64_t lane);
+  std::vector<int64_t> calcBlockEndLevelsUnrolled(
+      const std::vector<int64_t> &loopStack, const LoopFrame &frame,
+      bool isLastSuperIter) const;
+  bool isLastUnrolledTopBlock(const LoopFrame &frame) const;
+  void markLastPendingUnrolled(std::vector<DynamicInst> &pending,
+                               const std::vector<int64_t> &loopStack,
+                               const LoopFrame &frame,
+                               bool isLastSuperIter) const;
   void buildPendingUnrolled(LoopFrame &frame);
+  std::optional<DynamicInst> popPending();
+  void enterLoop(const LinearProgramNode &node);
+  std::optional<DynamicInst> handleLoopEnd();
 
   void updateLastDispatch(const DynamicInst &inst, int64_t cycle);
   void triggerNextVloops(const DynamicInst &inst, int64_t cycle);

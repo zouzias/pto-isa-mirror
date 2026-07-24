@@ -147,6 +147,102 @@ bool IDU::isLastInstOfTopBlock(const DynamicInst &inst) const {
   return inst.isLastInTopBlock;
 }
 
+const std::vector<int64_t> &IDU::loopBoundsForTopBlock(
+    int64_t topBlockId) const {
+  const auto it = topBlockLoopBounds_.find(static_cast<int>(topBlockId));
+  return it == topBlockLoopBounds_.end() ? loopBounds_ : it->second;
+}
+
+bool IDU::hasBlockEndLevel(const DynamicInst &inst, int64_t level) const {
+  return std::find(inst.blockEndLevels.begin(), inst.blockEndLevels.end(),
+                   level) != inst.blockEndLevels.end();
+}
+
+void IDU::triggerNextTopBlock(const DynamicInst &inst, int64_t cycle) {
+  if (!inst.isLastInTopBlock)
+    return;
+  const int64_t nextTop = inst.topBlockId + 1;
+  if (nextTop >= totalTopBlocks_ || topBlockVloopStart_.count(nextTop))
+    return;
+  setTopBlockVloop(nextTop, cycle);
+  initTopBlockNestedStarts(nextTop, cycle);
+}
+
+int64_t IDU::lastDispatchOrCycle(const std::string &key,
+                                 int64_t cycle) const {
+  const auto it = lastDispatchTime_.find(key);
+  return it == lastDispatchTime_.end() ? cycle : it->second;
+}
+
+void IDU::openLoopBody(const std::string &key, int64_t startCycle) {
+  vloopStart_[key] = startCycle;
+  bodyOpenTime_[key] = startCycle + vloopToDispatchDelay_;
+}
+
+void IDU::triggerDepth2Vloops(const DynamicInst &inst,
+                              const std::vector<int64_t> &bounds,
+                              int64_t cycle) {
+  if (!hasBlockEndLevel(inst, 1) || inst.iterStack.empty())
+    return;
+  const int64_t topBlockId = inst.topBlockId;
+  const int64_t i = inst.iterStack[0];
+  const std::string curKey = makeKey(topBlockId, "loop1", {i});
+  const int64_t endCy = lastDispatchOrCycle(curKey, cycle);
+  if (i + 1 >= bounds[0])
+    return;
+  const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
+  const int64_t nextStart =
+      std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
+  const std::string nextKey = makeKey(topBlockId, "loop1", {i + 1});
+  openLoopBody(nextKey, nextStart);
+  vloopTrace_.push_back(
+      VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextStart});
+}
+
+void IDU::triggerDepth3InnerVloops(const DynamicInst &inst,
+                                   const std::vector<int64_t> &bounds,
+                                   int64_t cycle) {
+  if (!hasBlockEndLevel(inst, 2) || inst.iterStack.size() < 2)
+    return;
+  const int64_t topBlockId = inst.topBlockId;
+  const int64_t i = inst.iterStack[0];
+  const int64_t j = inst.iterStack[1];
+  const std::string curKey = makeKey(topBlockId, "loop2", {i, j});
+  const int64_t endCy = lastDispatchOrCycle(curKey, cycle);
+  if (j + 1 >= bounds[1])
+    return;
+  const std::string nextKey = makeKey(topBlockId, "loop2", {i, j + 1});
+  openLoopBody(nextKey, endCy);
+  vloopTrace_.push_back(
+      VloopTraceRecord{topBlockId, "loop2", {i, j + 1}, endCy});
+}
+
+void IDU::triggerDepth3OuterVloops(const DynamicInst &inst,
+                                   const std::vector<int64_t> &bounds,
+                                   int64_t cycle) {
+  if (!hasBlockEndLevel(inst, 1) || inst.iterStack.empty())
+    return;
+  const int64_t topBlockId = inst.topBlockId;
+  const int64_t i = inst.iterStack[0];
+  const std::string curKey = makeKey(topBlockId, "loop1", {i});
+  const int64_t endCy = lastDispatchOrCycle(curKey, cycle);
+  if (i + 1 >= bounds[0])
+    return;
+
+  const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
+  const int64_t nextLoop1Start =
+      std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
+  openLoopBody(makeKey(topBlockId, "loop1", {i + 1}), nextLoop1Start);
+  vloopTrace_.push_back(
+      VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextLoop1Start});
+  if (bounds[1] <= 0)
+    return;
+  const int64_t childStart = nextLoop1Start + nestedVloopInitialStartGap_;
+  openLoopBody(makeKey(topBlockId, "loop2", {i + 1, 0}), childStart);
+  vloopTrace_.push_back(
+      VloopTraceRecord{topBlockId, "loop2", {i + 1, 0}, childStart});
+}
+
 void IDU::updateLastDispatch(const DynamicInst &inst, int64_t cycle) {
   const int64_t topBlockId = inst.topBlockId;
   const auto &bk = inst.blockKeyByLevel;
@@ -173,82 +269,121 @@ void IDU::updateLastDispatch(const DynamicInst &inst, int64_t cycle) {
 
 void IDU::triggerNextVloops(const DynamicInst &inst, int64_t cycle) {
   const int64_t topBlockId = inst.topBlockId;
-  const auto boundsIt = topBlockLoopBounds_.find(static_cast<int>(topBlockId));
-  const std::vector<int64_t> &bounds = boundsIt == topBlockLoopBounds_.end() ? loopBounds_ : boundsIt->second;
+  const std::vector<int64_t> &bounds = loopBoundsForTopBlock(topBlockId);
   const int64_t depth = static_cast<int64_t>(bounds.size());
 
-  if (inst.isLastInTopBlock) {
-    const int64_t nextTop = topBlockId + 1;
-    if (nextTop < totalTopBlocks_ && !topBlockVloopStart_.count(nextTop)) {
-      setTopBlockVloop(nextTop, cycle);
-      initTopBlockNestedStarts(nextTop, cycle);
-    }
-  }
+  triggerNextTopBlock(inst, cycle);
 
   if (depth <= 0 || inst.blockEndLevels.empty())
     return;
 
-  const auto &iterStack = inst.iterStack;
   if (depth == 1)
     return;
-
   if (depth == 2) {
-    if (std::find(inst.blockEndLevels.begin(), inst.blockEndLevels.end(), 1) != inst.blockEndLevels.end() &&
-        iterStack.size() >= 1) {
-      const int64_t i = iterStack[0];
-      const int64_t I = bounds[0];
-      const std::string curKey = makeKey(topBlockId, "loop1", {i});
-      const int64_t endCy = lastDispatchTime_.count(curKey) ? lastDispatchTime_[curKey] : cycle;
-      if (i + 1 < I) {
-        const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
-        const int64_t nextStart = std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
-        const std::string nextKey = makeKey(topBlockId, "loop1", {i + 1});
-        vloopStart_[nextKey] = nextStart;
-        bodyOpenTime_[nextKey] = nextStart + vloopToDispatchDelay_;
-        vloopTrace_.push_back(VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextStart});
-      }
-    }
+    triggerDepth2Vloops(inst, bounds, cycle);
     return;
   }
-
   if (depth == 3) {
-    if (std::find(inst.blockEndLevels.begin(), inst.blockEndLevels.end(), 2) != inst.blockEndLevels.end() &&
-        iterStack.size() >= 2) {
-      const int64_t i = iterStack[0];
-      const int64_t j = iterStack[1];
-      const int64_t M = bounds[1];
-      const std::string curKey = makeKey(topBlockId, "loop2", {i, j});
-      const int64_t endCy = lastDispatchTime_.count(curKey) ? lastDispatchTime_[curKey] : cycle;
-      if (j + 1 < M) {
-        const std::string nextKey = makeKey(topBlockId, "loop2", {i, j + 1});
-        vloopStart_[nextKey] = endCy;
-        bodyOpenTime_[nextKey] = endCy + vloopToDispatchDelay_;
-        vloopTrace_.push_back(VloopTraceRecord{topBlockId, "loop2", {i, j + 1}, endCy});
-      }
-    }
-
-    if (std::find(inst.blockEndLevels.begin(), inst.blockEndLevels.end(), 1) != inst.blockEndLevels.end() &&
-        iterStack.size() >= 1) {
-      const int64_t i = iterStack[0];
-      const int64_t K = bounds[0];
-      const int64_t M = bounds[1];
-      const std::string curKey = makeKey(topBlockId, "loop1", {i});
-      const int64_t endCy = lastDispatchTime_.count(curKey) ? lastDispatchTime_[curKey] : cycle;
-      if (i + 1 < K) {
-        const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
-        const int64_t nextLoop1Start = std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
-        vloopStart_[makeKey(topBlockId, "loop1", {i + 1})] = nextLoop1Start;
-        bodyOpenTime_[makeKey(topBlockId, "loop1", {i + 1})] = nextLoop1Start + vloopToDispatchDelay_;
-        vloopTrace_.push_back(VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextLoop1Start});
-        if (M > 0) {
-          const int64_t childStart = nextLoop1Start + nestedVloopInitialStartGap_;
-          vloopStart_[makeKey(topBlockId, "loop2", {i + 1, 0})] = childStart;
-          bodyOpenTime_[makeKey(topBlockId, "loop2", {i + 1, 0})] = childStart + vloopToDispatchDelay_;
-          vloopTrace_.push_back(VloopTraceRecord{topBlockId, "loop2", {i + 1, 0}, childStart});
-        }
-      }
-    }
+    triggerDepth3InnerVloops(inst, bounds, cycle);
+    triggerDepth3OuterVloops(inst, bounds, cycle);
   }
+}
+
+IDU::DispatchResources IDU::makeDispatchResources(
+    const IDUDispatchBudget &budget) const {
+  constexpr int64_t kUnlimited = 1LL << 60;
+  if (budget.theoreticalLimitMode) {
+    return DispatchResources{kUnlimited, kUnlimited, kUnlimited, kUnlimited,
+                             static_cast<int64_t>(window_.size())};
+  }
+  return DispatchResources{budget.freePreg, budget.freeShqQueue,
+                           budget.freeLsq, budget.freeShq,
+                           budget.issueBudget};
+}
+
+bool IDU::hasInitialDispatchCredit(
+    const DispatchResources &resources) const {
+  if (resources.shqQueueFree <= 0 && resources.lsqFree <= 0)
+    return false;
+  return !globalShqPregGate_ ||
+         (resources.credits > 0 && resources.shqFree > 0);
+}
+
+bool IDU::isVloopDispatchOpen(const DynamicInst &inst, int64_t cycle,
+                              const IDUDispatchBudget &budget) {
+  const auto topOpenIt = topBlockBodyOpenTime_.find(inst.topBlockId);
+  if (topOpenIt == topBlockBodyOpenTime_.end() || cycle < topOpenIt->second)
+    return false;
+
+  const auto innerKey = currentInnerBlockKey(inst);
+  if (!budget.theoreticalLimitVloopOnly && innerKey) {
+    const auto openIt = bodyOpenTime_.find(*innerKey);
+    if (openIt == bodyOpenTime_.end() || cycle < openIt->second)
+      return false;
+  }
+  if (budget.theoreticalLimitMode || budget.theoreticalLimitVloopOnly ||
+      !innerKey) {
+    return true;
+  }
+
+  const int64_t iterId = inst.iterStack.empty() ? 0 : inst.iterStack.back();
+  if (iterId == 0 && !blockBaseCycle_.count(*innerKey))
+    blockBaseCycle_[*innerKey] = cycle;
+  const auto baseIt = blockBaseCycle_.find(*innerKey);
+  if (baseIt == blockBaseCycle_.end())
+    return false;
+  return cycle >= baseIt->second + iterId * innermostIterDispatchStride_;
+}
+
+bool IDU::hasQueueResource(const DynamicInst &inst, const std::string &form,
+                           const DispatchResources &resources) const {
+  if (isLoadOp(db_, inst.op, form))
+    return resources.lsqFree > 0;
+  if (isStoreOp(db_, inst.op, form))
+    return resources.lsqFree > 0 && resources.shqFree > 0;
+  return resources.shqQueueFree > 0 && resources.shqFree > 0;
+}
+
+int64_t IDU::countRegisterDst(const DynamicInst &inst) const {
+  int64_t dstCount = 0;
+  for (const auto &dst : inst.dst) {
+    if (analysis_.isVregName(dst))
+      ++dstCount;
+  }
+  return dstCount;
+}
+
+void IDU::consumeDispatchResources(const DynamicInst &inst,
+                                   const std::string &form, int64_t dstCount,
+                                   DispatchResources &resources) const {
+  resources.credits -= dstCount;
+  if (usesLsq(db_, inst.op, form)) {
+    --resources.lsqFree;
+    if (usesSharedShqCredit(db_, inst.op, form))
+      --resources.shqFree;
+  } else if (usesShqQueue(db_, inst.op, form)) {
+    --resources.shqQueueFree;
+    --resources.shqFree;
+  }
+}
+
+void IDU::recordDispatch(const DynamicInst &inst, int64_t cycle,
+                         const DispatchResources &resources) {
+  window_.pop_front();
+  dispatchLog_.push_back(IDUDispatchRecord{
+      cycle,
+      inst.instId,
+      inst.op,
+      inst.dst,
+      inst.src,
+      inst.topBlockId,
+      resources.credits,
+      resources.shqQueueFree,
+      resources.lsqFree,
+      resources.shqFree,
+  });
+  updateLastDispatch(inst, cycle);
+  triggerNextVloops(inst, cycle);
 }
 
 std::vector<DynamicInst> IDU::dispatch(int64_t cycle, const IDUDispatchBudget &budget) {
@@ -259,103 +394,35 @@ std::vector<DynamicInst> IDU::dispatch(int64_t cycle, const IDUDispatchBudget &b
   if (cycle < dispatchStartGate)
     return {};
 
-  int64_t credits = budget.theoreticalLimitMode ? (1LL << 60) : budget.freePreg;
-  int64_t shqQueueFree = budget.theoreticalLimitMode ? (1LL << 60) : budget.freeShqQueue;
-  int64_t lsqFree = budget.theoreticalLimitMode ? (1LL << 60) : budget.freeLsq;
-  int64_t shqFree = budget.theoreticalLimitMode ? (1LL << 60) : budget.freeShq;
-  const int64_t issueBudget = budget.theoreticalLimitMode ? static_cast<int64_t>(window_.size())
-                                                          : budget.issueBudget;
+  DispatchResources resources = makeDispatchResources(budget);
 
   std::vector<DynamicInst> dispatched;
-  dispatched.reserve(static_cast<size_t>(std::max<int64_t>(0, issueBudget)));
+  dispatched.reserve(
+      static_cast<size_t>(std::max<int64_t>(0, resources.issueBudget)));
 
-  if (shqQueueFree <= 0 && lsqFree <= 0)
-    return {};
-  if (globalShqPregGate_ && (credits <= 0 || shqFree <= 0))
+  if (!hasInitialDispatchCredit(resources))
     return {};
 
   for (const auto &inst : window_) {
-    if (static_cast<int64_t>(dispatched.size()) >= issueBudget)
+    if (static_cast<int64_t>(dispatched.size()) >= resources.issueBudget)
       break;
 
-    const int64_t topBlockId = inst.topBlockId;
-    const auto topOpenIt = topBlockBodyOpenTime_.find(topBlockId);
-    if (topOpenIt == topBlockBodyOpenTime_.end() || cycle < topOpenIt->second)
+    if (!isVloopDispatchOpen(inst, cycle, budget))
       break;
-
-    if (!budget.theoreticalLimitVloopOnly) {
-      const auto innerKey = currentInnerBlockKey(inst);
-      if (innerKey) {
-        const auto openIt = bodyOpenTime_.find(*innerKey);
-        if (openIt == bodyOpenTime_.end() || cycle < openIt->second)
-          break;
-      }
-    }
-
-    const int64_t iterId = inst.iterStack.empty() ? 0 : inst.iterStack.back();
-    if (!budget.theoreticalLimitMode && !budget.theoreticalLimitVloopOnly) {
-      const auto innerKey = currentInnerBlockKey(inst);
-      if (innerKey) {
-        if (iterId == 0 && !blockBaseCycle_.count(*innerKey))
-          blockBaseCycle_[*innerKey] = cycle;
-        const auto baseIt = blockBaseCycle_.find(*innerKey);
-        if (baseIt == blockBaseCycle_.end())
-          break;
-        if (cycle < baseIt->second + iterId * innermostIterDispatchStride_)
-          break;
-      }
-    }
 
     const std::string &form = inst.form.empty() ? dtype_ : inst.form;
-    const bool isLoad = isLoadOp(db_, inst.op, form);
-    const bool isStore = isStoreOp(db_, inst.op, form);
-    if (isLoad) {
-      if (lsqFree <= 0)
-        break;
-    } else if (isStore) {
-      if (lsqFree <= 0 || shqFree <= 0)
-        break;
-    } else {
-      if (shqQueueFree <= 0 || shqFree <= 0)
-        break;
-    }
-
-    int64_t dstCount = 0;
-    for (const auto &d : inst.dst) {
-      if (analysis_.isVregName(d))
-        ++dstCount;
-    }
-    if (credits < dstCount)
+    if (!hasQueueResource(inst, form, resources))
       break;
 
+    const int64_t dstCount = countRegisterDst(inst);
+    if (resources.credits < dstCount)
+      break;
     dispatched.push_back(inst);
-    credits -= dstCount;
-    if (usesLsq(db_, inst.op, form)) {
-      --lsqFree;
-      if (usesSharedShqCredit(db_, inst.op, form))
-        --shqFree;
-    } else if (usesShqQueue(db_, inst.op, form)) {
-      --shqQueueFree;
-      --shqFree;
-    }
+    consumeDispatchResources(inst, form, dstCount, resources);
   }
 
   for (const auto &inst : dispatched) {
-    window_.pop_front();
-    dispatchLog_.push_back(IDUDispatchRecord{
-        cycle,
-        inst.instId,
-        inst.op,
-        inst.dst,
-        inst.src,
-        inst.topBlockId,
-        credits,
-        shqQueueFree,
-        lsqFree,
-        shqFree,
-    });
-    updateLastDispatch(inst, cycle);
-    triggerNextVloops(inst, cycle);
+    recordDispatch(inst, cycle, resources);
   }
 
   return dispatched;

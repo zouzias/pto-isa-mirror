@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
 #include <string_view>
 
 namespace pto::mocker::vf {
@@ -11,32 +12,33 @@ namespace pto::mocker::vf {
 inline constexpr uint64_t kMemBarPenaltyPlaceholder = 20;  // membar 固定惩罚(占位;3b 重新标定)
 inline constexpr uint64_t kUnknownInstructionFallbackCycles = 5;
 
+inline bool IsOneOf(std::string_view name, std::initializer_list<std::string_view> candidates)
+{
+    for (std::string_view candidate : candidates) {
+        if (name == candidate) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline uint64_t VecCycle(std::string_view name)
 {
-    // 谓词生成:plt_b*/pset_b*
-    if (name == "plt_b8" || name == "plt_b16" || name == "plt_b32" ||
-        name == "pset_b8" || name == "pset_b16" || name == "pset_b32") {
+    if (IsOneOf(name, {"plt_b8", "plt_b16", "plt_b32", "pset_b8", "pset_b16", "pset_b32"})) {
         return 2;
     }
-    // 搬运:vlds/vsts/vdup/vmov/vsel
-    if (name == "vlds" || name == "vsts" || name == "vdup" || name == "vmov" || name == "vsel") {
+    if (IsOneOf(name, {"vlds", "vsts", "vdup", "vmov", "vsel"})) {
         return 4;
     }
-    // 基础计算:vadd/vsub/vmul/vand/vor/vxor/vshl/vshr/vabs/vrelu/vnot/…
-    if (name == "vadd" || name == "vsub" || name == "vmul" || name == "vand" || name == "vor" ||
-        name == "vxor" || name == "vshl" || name == "vshr" || name == "vshls" || name == "vshrs" ||
-        name == "vabs" || name == "vrelu" || name == "vlrelu" || name == "vnot" || name == "vneg" ||
-        name == "vmin" || name == "vmax" || name == "vmins" || name == "vadds" || name == "pand" ||
-        name == "por" || name == "pnot") {
+    if (IsOneOf(name, {"vadd", "vsub", "vmul", "vand", "vor", "vxor", "vshl", "vshr", "vshls", "vshrs",
+                       "vabs", "vrelu", "vlrelu", "vnot", "vneg", "vmin", "vmax", "vmins", "vadds",
+                       "pand", "por", "pnot"})) {
         return 6;
     }
-    // 较重计算:vdiv/vexp/vsqrt/vln/vcvt/vmadd/vmuls/vmula/vcmp*/vtrc
-    if (name == "vdiv" || name == "vexp" || name == "vsqrt" || name == "vln" || name == "vcvt" ||
-        name == "vmadd" || name == "vmuls" || name == "vmula" || name == "vtrc" ||
+    if (IsOneOf(name, {"vdiv", "vexp", "vsqrt", "vln", "vcvt", "vmadd", "vmuls", "vmula", "vtrc"}) ||
         name.rfind("vcmp", 0) == 0) {
         return 10;
     }
-    // 同步屏障
     if (name == "pipe_barrier") {
         return kMemBarPenaltyPlaceholder;
     }
