@@ -31,8 +31,6 @@ function(_pto_a5_build_vfsim)
     endif()
     add_library(pto_a5_vfsim STATIC
         ${_vfsim_dir}/VfInfo.cpp
-        ${_vfsim_dir}/JsonVfInfoAdapter.cpp
-        ${_vfsim_dir}/Json.cpp
         ${_vfsim_dir}/ParamDB.cpp
         ${_vfsim_dir}/ISATraits.cpp
         ${_vfsim_dir}/ProgramAnalysis.cpp

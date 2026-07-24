@@ -11,6 +11,7 @@
 #include "pto/costmodel/a5/VfSim/VfSimParamsGenerated.h"
 
 #include <algorithm>
+#include <array>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -18,6 +19,66 @@
 
 namespace vfsim {
 namespace {
+
+struct IntUarchParam {
+  std::string_view key;
+  int64_t UarchConfig::*member;
+};
+
+struct BoolUarchParam {
+  std::string_view key;
+  bool UarchConfig::*member;
+};
+
+inline constexpr std::array<IntUarchParam, 27> kIntUarchParams = {{
+    {"issue_ports", &UarchConfig::issuePorts},
+    {"load_ports", &UarchConfig::loadPorts},
+    {"store_ports", &UarchConfig::storePorts},
+    {"IDU_window_width", &UarchConfig::iduWindowWidth},
+    {"IDU_issue_width", &UarchConfig::iduIssueWidth},
+    {"LDQ_width", &UarchConfig::ldqWidth},
+    {"vreg_num", &UarchConfig::vregNum},
+    {"shq_depth", &UarchConfig::shqDepth},
+    {"exq_depth", &UarchConfig::exqDepth},
+    {"shq_release_delay", &UarchConfig::shqReleaseDelay},
+    {"idu_visible_preg_delay", &UarchConfig::iduVisiblePregDelay},
+    {"idu_visible_shq_delay", &UarchConfig::iduVisibleShqDelay},
+    {"idu_to_ooo_delay", &UarchConfig::iduToOooDelay},
+    {"vloop_to_dispatch_delay", &UarchConfig::vloopToDispatchDelay},
+    {"idu_dispatch_start_advance", &UarchConfig::iduDispatchStartAdvance},
+    {"initial_top_block_vloop_start_cycle",
+     &UarchConfig::initialTopBlockVloopStartCycle},
+    {"nested_vloop_initial_start_gap",
+     &UarchConfig::nestedVloopInitialStartGap},
+    {"loop1_min_feedback_gap", &UarchConfig::loop1MinFeedbackGap},
+    {"innermost_iter_dispatch_stride",
+     &UarchConfig::innermostIterDispatchStride},
+    {"consumer_release_start_offset",
+     &UarchConfig::consumerReleaseStartOffset},
+    {"load_done_latency", &UarchConfig::loadDoneLatency},
+    {"ooo_to_shq_delay", &UarchConfig::oooToShqDelay},
+    {"ooo_to_lsq_delay", &UarchConfig::oooToLsqDelay},
+    {"exq_recv_delay", &UarchConfig::exqRecvDelay},
+    {"shq_to_exq_port_per_cycle", &UarchConfig::shqToExqPortPerCycle},
+    {"compute_inflight_cap", &UarchConfig::computeInflightCap},
+    {"exq_issue_inflight_cap_per_port",
+     &UarchConfig::exqIssueInflightCapPerPort},
+}};
+
+inline constexpr std::array<BoolUarchParam, 9> kBoolUarchParams = {{
+    {"enable_isu_queue_model", &UarchConfig::enableIsuQueueModel},
+    {"admit_blocked_to_exq", &UarchConfig::admitBlockedToExq},
+    {"enable_shq_credit_model", &UarchConfig::enableShqCreditModel},
+    {"enable_credit_visibility_delay",
+     &UarchConfig::enableCreditVisibilityDelay},
+    {"global_shq_preg_gate", &UarchConfig::globalShqPregGate},
+    {"use_explicit_idu_credit_bank", &UarchConfig::useExplicitIduCreditBank},
+    {"exq_capacity_counts_inflight",
+     &UarchConfig::exqCapacityCountsInflight},
+    {"enforce_same_cycle_src_hazard",
+     &UarchConfig::enforceSameCycleSrcHazard},
+    {"enable_cross_fu_ii", &UarchConfig::enableCrossFuIi},
+}};
 
 std::string toString(std::string_view value) {
   return std::string(value.data(), value.size());
@@ -45,48 +106,25 @@ std::string qualifyOp(const std::string &op, const std::string &form) {
 void applyUarchParam(UarchConfig &uarch, std::string_view key,
                      std::string_view type, std::string_view value) {
   (void)type;
-  const auto intValue = [&]() { return parseInt(value); };
-  const auto boolValue = [&]() { return parseBool(value); };
-  const auto stringValue = [&]() { return toString(value); };
   const std::string keyText = toString(key);
+  const auto intIt =
+      std::find_if(kIntUarchParams.begin(), kIntUarchParams.end(),
+                   [&](const auto &param) { return param.key == keyText; });
+  if (intIt != kIntUarchParams.end()) {
+    uarch.*(intIt->member) = parseInt(value);
+    return;
+  }
 
-  if (keyText == "issue_ports") uarch.issuePorts = intValue();
-  else if (keyText == "load_ports") uarch.loadPorts = intValue();
-  else if (keyText == "store_ports") uarch.storePorts = intValue();
-  else if (keyText == "IDU_window_width") uarch.iduWindowWidth = intValue();
-  else if (keyText == "IDU_issue_width") uarch.iduIssueWidth = intValue();
-  else if (keyText == "LDQ_width") uarch.ldqWidth = intValue();
-  else if (keyText == "vreg_num") uarch.vregNum = intValue();
-  else if (keyText == "enable_isu_queue_model") uarch.enableIsuQueueModel = boolValue();
-  else if (keyText == "shq_depth") uarch.shqDepth = intValue();
-  else if (keyText == "exq_depth") uarch.exqDepth = intValue();
-  else if (keyText == "admit_blocked_to_exq") uarch.admitBlockedToExq = boolValue();
-  else if (keyText == "enable_shq_credit_model") uarch.enableShqCreditModel = boolValue();
-  else if (keyText == "shq_release_delay") uarch.shqReleaseDelay = intValue();
-  else if (keyText == "enable_credit_visibility_delay") uarch.enableCreditVisibilityDelay = boolValue();
-  else if (keyText == "idu_visible_preg_delay") uarch.iduVisiblePregDelay = intValue();
-  else if (keyText == "idu_visible_shq_delay") uarch.iduVisibleShqDelay = intValue();
-  else if (keyText == "global_shq_preg_gate") uarch.globalShqPregGate = boolValue();
-  else if (keyText == "use_explicit_idu_credit_bank") uarch.useExplicitIduCreditBank = boolValue();
-  else if (keyText == "idu_to_ooo_delay") uarch.iduToOooDelay = intValue();
-  else if (keyText == "vloop_to_dispatch_delay") uarch.vloopToDispatchDelay = intValue();
-  else if (keyText == "idu_dispatch_start_advance") uarch.iduDispatchStartAdvance = intValue();
-  else if (keyText == "initial_top_block_vloop_start_cycle") uarch.initialTopBlockVloopStartCycle = intValue();
-  else if (keyText == "nested_vloop_initial_start_gap") uarch.nestedVloopInitialStartGap = intValue();
-  else if (keyText == "loop1_min_feedback_gap") uarch.loop1MinFeedbackGap = intValue();
-  else if (keyText == "innermost_iter_dispatch_stride") uarch.innermostIterDispatchStride = intValue();
-  else if (keyText == "consumer_release_start_offset") uarch.consumerReleaseStartOffset = intValue();
-  else if (keyText == "load_done_latency") uarch.loadDoneLatency = intValue();
-  else if (keyText == "ooo_to_shq_delay") uarch.oooToShqDelay = intValue();
-  else if (keyText == "ooo_to_lsq_delay") uarch.oooToLsqDelay = intValue();
-  else if (keyText == "exq_recv_delay") uarch.exqRecvDelay = intValue();
-  else if (keyText == "shq_to_exq_port_per_cycle") uarch.shqToExqPortPerCycle = intValue();
-  else if (keyText == "compute_inflight_cap") uarch.computeInflightCap = intValue();
-  else if (keyText == "exq_issue_inflight_cap_per_port") uarch.exqIssueInflightCapPerPort = intValue();
-  else if (keyText == "exq_capacity_counts_inflight") uarch.exqCapacityCountsInflight = boolValue();
-  else if (keyText == "mem_bar_mode") uarch.memBarMode = stringValue();
-  else if (keyText == "enforce_same_cycle_src_hazard") uarch.enforceSameCycleSrcHazard = boolValue();
-  else if (keyText == "enable_cross_fu_ii") uarch.enableCrossFuIi = boolValue();
+  const auto boolIt =
+      std::find_if(kBoolUarchParams.begin(), kBoolUarchParams.end(),
+                   [&](const auto &param) { return param.key == keyText; });
+  if (boolIt != kBoolUarchParams.end()) {
+    uarch.*(boolIt->member) = parseBool(value);
+    return;
+  }
+
+  if (keyText == "mem_bar_mode")
+    uarch.memBarMode = toString(value);
 }
 
 void addRelation(std::unordered_map<DTypeName, std::unordered_map<OpName, std::unordered_map<OpName, int64_t>>> &byDtype,

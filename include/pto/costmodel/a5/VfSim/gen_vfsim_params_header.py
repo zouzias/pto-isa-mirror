@@ -47,29 +47,37 @@ def _render_array(name: str, row_type: str, rows: list[str]) -> list[str]:
     ]
 
 
-def _render() -> str:
-    defaults = _read_csv("isa_defaults.csv", ["key", "value"])
-    isa = _read_csv(
-        "isa.csv",
-        [
-            "op",
-            "form",
-            "pipeline_startup_cost",
-            "latency",
-            "throughput",
-            "pipeline_drain_cost",
-            "data_load_cost",
-            "data_store_cost",
-            "EXU",
-            "dispatch_exu",
-            "op_class",
-        ],
-    )
-    uarch = _read_csv("uarch.csv", ["key", "type", "value"])
-    forwarding = _read_csv("forwarding.csv", ["producer", "consumer", "cycles"])
-    initiation_interval = _read_csv("initiation_interval.csv", ["previous", "current", "cycles"])
+def _load_params() -> dict[str, list[dict[str, str]]]:
+    return {
+        "defaults": _read_csv("isa_defaults.csv", ["key", "value"]),
+        "isa": _read_csv(
+            "isa.csv",
+            [
+                "op",
+                "form",
+                "pipeline_startup_cost",
+                "latency",
+                "throughput",
+                "pipeline_drain_cost",
+                "data_load_cost",
+                "data_store_cost",
+                "EXU",
+                "dispatch_exu",
+                "op_class",
+            ],
+        ),
+        "uarch": _read_csv("uarch.csv", ["key", "type", "value"]),
+        "forwarding": _read_csv(
+            "forwarding.csv", ["producer", "consumer", "cycles"]
+        ),
+        "initiation_interval": _read_csv(
+            "initiation_interval.csv", ["previous", "current", "cycles"]
+        ),
+    }
 
-    lines = [
+
+def _render_prelude() -> list[str]:
+    return [
         "// Copyright (c) 2026 Huawei Technologies Co., Ltd.",
         "// SPDX-License-Identifier: CANN-1.0",
         "",
@@ -119,66 +127,75 @@ def _render() -> str:
         "",
     ]
 
-    lines.extend(
-        _render_array(
-            "kIsaDefaultParams",
-            "IsaDefaultParam",
-            [f'  {{"{_escape(row["key"])}", {_int(row["value"])}}},' for row in defaults],
-        )
+
+def _render_defaults(rows: list[dict[str, str]]) -> list[str]:
+    return _render_array(
+        "kIsaDefaultParams",
+        "IsaDefaultParam",
+        [f'  {{"{_escape(row["key"])}", {_int(row["value"])}}},' for row in rows],
     )
-    lines.extend(
-        _render_array(
-            "kIsaInstParams",
-            "IsaInstParam",
-            [
-                (
-                    f'  {{"{_escape(row["op"])}", "{_escape(row["form"])}", '
-                    f'{_int(row["pipeline_startup_cost"])}, {_int(row["latency"])}, {_int(row["throughput"])}, '
-                    f'{_int(row["pipeline_drain_cost"])}, {_int(row["data_load_cost"])}, '
-                    f'{_int(row["data_store_cost"])}, "{_escape(row["EXU"])}", '
-                    f'"{_escape(row["dispatch_exu"])}", "{_escape(row["op_class"])}"}},'
-                )
-                for row in isa
-            ],
-        )
-    )
-    lines.extend(
-        _render_array(
-            "kUarchParams",
-            "UarchParam",
-            [
-                f'  {{"{_escape(row["key"])}", "{_escape(row["type"])}", "{_escape(row["value"])}"}},'
-                for row in uarch
-            ],
-        )
-    )
-    lines.extend(
-        _render_array(
-            "kForwardingParams",
-            "BinaryRelationParam",
-            [
-                f'  {{"{_escape(row["producer"])}", "{_escape(row["consumer"])}", {_int(row["cycles"])}}},'
-                for row in forwarding
-            ],
-        )
-    )
-    lines.extend(
-        _render_array(
-            "kInitiationIntervalParams",
-            "BinaryRelationParam",
-            [
-                f'  {{"{_escape(row["previous"])}", "{_escape(row["current"])}", {_int(row["cycles"])}}},'
-                for row in initiation_interval
-            ],
-        )
-    )
-    lines.extend(
+
+
+def _render_isa(rows: list[dict[str, str]]) -> list[str]:
+    return _render_array(
+        "kIsaInstParams",
+        "IsaInstParam",
         [
-            "} // namespace vfsim::generated",
-            "",
-            "#endif // VFSIM_NATIVE_PARAMS_GENERATED_H",
-            "",
-        ]
+            (
+                f'  {{"{_escape(row["op"])}", "{_escape(row["form"])}", '
+                f'{_int(row["pipeline_startup_cost"])}, {_int(row["latency"])}, {_int(row["throughput"])}, '
+                f'{_int(row["pipeline_drain_cost"])}, {_int(row["data_load_cost"])}, '
+                f'{_int(row["data_store_cost"])}, "{_escape(row["EXU"])}", '
+                f'"{_escape(row["dispatch_exu"])}", "{_escape(row["op_class"])}"}},'
+            )
+            for row in rows
+        ],
+    )
+
+
+def _render_uarch(rows: list[dict[str, str]]) -> list[str]:
+    return _render_array(
+        "kUarchParams",
+        "UarchParam",
+        [
+            f'  {{"{_escape(row["key"])}", "{_escape(row["type"])}", "{_escape(row["value"])}"}},'
+            for row in rows
+        ],
+    )
+
+
+def _render_forwarding(rows: list[dict[str, str]]) -> list[str]:
+    return _render_array(
+        "kForwardingParams",
+        "BinaryRelationParam",
+        [
+            f'  {{"{_escape(row["producer"])}", "{_escape(row["consumer"])}", {_int(row["cycles"])}}},'
+            for row in rows
+        ],
+    )
+
+
+def _render_initiation_interval(rows: list[dict[str, str]]) -> list[str]:
+    return _render_array(
+        "kInitiationIntervalParams",
+        "BinaryRelationParam",
+        [
+            f'  {{"{_escape(row["previous"])}", "{_escape(row["current"])}", {_int(row["cycles"])}}},'
+            for row in rows
+        ],
+    )
+
+
+def _render() -> str:
+    params = _load_params()
+    lines = _render_prelude()
+    lines.extend(_render_defaults(params["defaults"]))
+    lines.extend(_render_isa(params["isa"]))
+    lines.extend(_render_uarch(params["uarch"]))
+    lines.extend(_render_forwarding(params["forwarding"]))
+    lines.extend(_render_initiation_interval(params["initiation_interval"]))
+    lines.extend(
+        ["} // namespace vfsim::generated", "", "#endif // VFSIM_NATIVE_PARAMS_GENERATED_H", ""]
     )
     return "\n".join(lines)
 
