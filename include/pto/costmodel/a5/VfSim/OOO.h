@@ -240,10 +240,23 @@ public:
   void step() override;
 
 private:
+  struct ExqChoice {
+    int port = -1;
+    int64_t pred = 0;
+    int occ = 0;
+  };
+
   std::vector<int> exqInflightPerPort_;
   std::vector<std::unordered_map<std::string, std::deque<Uop>>> exqWait_;
 
   void freeOldPregs(const Uop &u) override;
+  Uop makeAcceptedUop(const DynamicInst &inst) const;
+  void capturePregSources(Uop &u) const;
+  void addPregConsumers(const Uop &u);
+  int allocatePregDsts(Uop &u);
+  void trackSharedShqCredit(Uop &u);
+  void enqueueAcceptedUop(Uop &u);
+  void releaseOldMappings(const Uop &u);
   void completeRunningUops(int64_t cycle);
   void retireDoneUops();
   int64_t computeShqReadyCycle(const Uop &u) const;
@@ -265,6 +278,11 @@ private:
       std::unordered_set<std::string> &issuedSrcsThisCycle);
   void enqueueReadyComputeToExq(
       int64_t cycle, std::unordered_set<std::string> &issuedSrcsThisCycle);
+  ExqChoice chooseExqEnqueuePort(const Uop &u, const std::string &fuType,
+                                 const std::vector<int> &shqToExqCnt,
+                                 int64_t cycle) const;
+  void moveUopToExqWait(Uop &u, int64_t cycle, const ExqChoice &choice,
+                        const std::string &fuType);
   Uop *selectExqIssueCandidate(int port, int64_t cycle, std::string &fuType);
   void issueExqWaitQueues(int64_t cycle,
                           std::vector<bool> &exuUsedThisCycle);

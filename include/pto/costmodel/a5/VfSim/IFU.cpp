@@ -237,20 +237,27 @@ std::vector<int64_t> IFU::calcBlockEndLevelsNormal() const {
 
   std::vector<int64_t> endLevels;
   for (int64_t lv = deepest; lv >= 0; --lv) {
-    bool allFinal = true;
-    for (int64_t kk = lv; kk <= deepest; ++kk) {
-      const auto &fr = frames_[static_cast<size_t>(kk)];
-      if (fr.iterNow != fr.itersTotal - 1) {
-        allFinal = false;
-        break;
-      }
-    }
-    if (allFinal)
+    if (areFinalLoopIterations(lv, deepest, nullptr, true))
       endLevels.push_back(lv);
     else
       break;
   }
   return endLevels;
+}
+
+bool IFU::areFinalLoopIterations(int64_t firstLevel, int64_t deepest,
+                                 const LoopFrame *unrolledFrame,
+                                 bool isLastSuperIter) const {
+  for (int64_t kk = firstLevel; kk <= deepest; ++kk) {
+    const auto &fr = frames_[static_cast<size_t>(kk)];
+    const bool finalNow =
+        unrolledFrame != nullptr && fr.beginIdx == unrolledFrame->beginIdx
+            ? isLastSuperIter
+            : fr.iterNow == fr.itersTotal - 1;
+    if (!finalNow)
+      return false;
+  }
+  return true;
 }
 
 bool IFU::isLastInTopBlockNormal() const {
@@ -333,18 +340,8 @@ std::vector<int64_t> IFU::calcBlockEndLevelsUnrolled(
 
   for (int64_t lv = static_cast<int64_t>(loopStack.size()) - 1; lv >= 0;
        --lv) {
-    bool allFinal = true;
-    for (int64_t kk = lv; kk < static_cast<int64_t>(frames_.size()); ++kk) {
-      const auto &fr = frames_[static_cast<size_t>(kk)];
-      const bool finalNow = (fr.beginIdx == frame.beginIdx)
-                                ? isLastSuperIter
-                                : (fr.iterNow == fr.itersTotal - 1);
-      if (!finalNow) {
-        allFinal = false;
-        break;
-      }
-    }
-    if (allFinal)
+    const int64_t deepest = static_cast<int64_t>(frames_.size()) - 1;
+    if (areFinalLoopIterations(lv, deepest, &frame, isLastSuperIter))
       endLevels.push_back(lv);
     else
       break;

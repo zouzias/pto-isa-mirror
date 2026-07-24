@@ -479,13 +479,35 @@ OoOCoreMainline::OoOCoreMainline(const UarchConfig &uarch, const ParamDB &db, st
 }
 
 void OoOCoreMainline::accept(const DynamicInst &inst) {
+  Uop u = makeAcceptedUop(inst);
+  capturePregSources(u);
+  addPregConsumers(u);
+  const int allocCount = allocatePregDsts(u);
+  if (enableCreditVisibilityDelay_ && allocCount > 0)
+    visiblePregFree_ = std::max(0, visiblePregFree_ - allocCount);
+  trackSharedShqCredit(u);
+  enqueueAcceptedUop(u);
+  rob_.push_back(u);
+  if (isStoreOp(db_, u.op, u.form))
+    blockOutstandingStores_[u.topBlockId] += 1;
+  releaseOldMappings(u);
+}
+
+Uop OoOCoreMainline::makeAcceptedUop(const DynamicInst &inst) const {
   Uop u;
   u.instId = inst.instId;
   u.op = inst.op;
   u.form = inst.form.empty() ? dtype_ : inst.form;
   u.src = inst.src;
   u.dst = inst.dst;
-  for (const auto &s : inst.src) {
+  u.topBlockId = inst.topBlockId;
+  u.iterStack = inst.iterStack;
+  u.isLastInTopBlock = inst.isLastInTopBlock;
+  return u;
+}
+
+void OoOCoreMainline::capturePregSources(Uop &u) const {
+  for (const auto &s : u.src) {
     if (!isRegisterValue(s)) {
       u.pregSrc.push_back(std::nullopt);
       u.pregSrcGen.push_back(std::nullopt);
@@ -503,17 +525,18 @@ void OoOCoreMainline::accept(const DynamicInst &inst) {
                                  : std::optional<int64_t>{genIt->second});
     }
   }
-  u.topBlockId = inst.topBlockId;
-  u.iterStack = inst.iterStack;
-  u.isLastInTopBlock = inst.isLastInTopBlock;
+}
 
+void OoOCoreMainline::addPregConsumers(const Uop &u) {
   for (const auto &preg : u.pregSrc) {
     if (preg) {
       pregConsumerCount_[*preg] += 1;
       pregReleaseEligibleCycle_.erase(*preg);
     }
   }
+}
 
+int OoOCoreMainline::allocatePregDsts(Uop &u) {
   int allocCount = 0;
   for (const auto &d : u.dst) {
     if (!isRegisterValue(d)) {
@@ -540,28 +563,29 @@ void OoOCoreMainline::accept(const DynamicInst &inst) {
     pregReleaseEligibleCycle_.erase(newPreg);
     ++allocCount;
   }
-  if (enableCreditVisibilityDelay_ && allocCount > 0)
-    visiblePregFree_ = std::max(0, visiblePregFree_ - allocCount);
+  return allocCount;
+}
 
+void OoOCoreMainline::trackSharedShqCredit(Uop &u) {
   if (enableShqCreditModel_ && usesSharedShqCredit(db_, u.op, u.form)) {
     ++shqUsed_;
     if (enableCreditVisibilityDelay_)
       ++visibleShqUsed_;
     u.isShqTracked = true;
   }
+}
 
+void OoOCoreMainline::enqueueAcceptedUop(Uop &u) {
   if (usesLsq(db_, u.op, u.form)) {
     u.lsqReadyCycle = static_cast<int64_t>(cycle_) + oooToLsqDelay_;
     lsq_.push_back(u);
-  } else {
-    u.shqReadyCycle = static_cast<int64_t>(cycle_) + oooToShqDelay_;
-    shq_.push_back(u);
+    return;
   }
-  rob_.push_back(u);
+  u.shqReadyCycle = static_cast<int64_t>(cycle_) + oooToShqDelay_;
+  shq_.push_back(u);
+}
 
-  if (isStoreOp(db_, u.op, u.form))
-    blockOutstandingStores_[u.topBlockId] += 1;
-
+void OoOCoreMainline::releaseOldMappings(const Uop &u) {
   for (const auto &oldPreg : u.pregOld) {
     if (oldPreg)
       (void)tryFreePreg(*oldPreg, cycle_);
@@ -824,62 +848,68 @@ void OoOCoreMainline::enqueueReadyComputeToExq(
       continue;
     }
     const std::string fuType = getFuType(u.op, u.form);
-    const auto legalPorts = eligibleExuPorts(u.op, u.form);
-    int chosenPort = -1;
-    int64_t chosenPred = 0;
-    int chosenOcc = 0;
-    for (int port : legalPorts) {
-      if (port < 0 || port >= issuePorts_)
-        continue;
-      if (shqToExqCnt[static_cast<size_t>(port)] >=
-          shqToExqPortPerCycle_)
-        continue;
-      const auto &q = exqWait_[static_cast<size_t>(port)];
-      int occ = static_cast<int>(q.at("ALU").size() + q.at("SFU").size());
-      if (exqCapacityCountsInflight_)
-        occ += exqInflight_[static_cast<size_t>(port)];
-      if (occ >= exqDepth_)
-        continue;
-      const int64_t recv = cycle + exqRecvDelay_;
-      int64_t pred = recv;
-      const auto &fq = q.at(fuType);
-      if (!fq.empty()) {
-        const Uop &prev = fq.back();
-        pred = std::max<int64_t>(
-            pred, prev.exqPredIssue + getIi(&prev.op, &prev.form, u.op,
-                                            u.form));
-      } else {
-        pred = std::max<int64_t>(
-            pred, predictExqIssueCycle(port, fuType, u.op, u.form, recv));
-      }
-      const auto key = std::make_tuple(pred, occ, port);
-      const auto best = std::make_tuple(chosenPred, chosenOcc, chosenPort);
-      if (chosenPort < 0 || key < best) {
-        chosenPort = port;
-        chosenPred = pred;
-        chosenOcc = occ;
-      }
-    }
-    if (chosenPort < 0) {
+    const ExqChoice choice =
+        chooseExqEnqueuePort(u, fuType, shqToExqCnt, cycle);
+    if (choice.port < 0) {
       ++it;
       continue;
     }
-    u.exuPort = chosenPort;
-    u.exqRecvCycle = cycle + exqRecvDelay_;
-    u.exqPredIssue = chosenPred;
-    u.state = "exq_wait";
-    if (usesSharedShqCredit(db_, u.op, u.form)) {
-      scheduleShqRelease(cycle, 1);
-      u.isShqTracked = false;
-      if (auto *robU = findRobUop(u.instId))
-        robU->isShqTracked = false;
-    }
-    exqWait_[static_cast<size_t>(chosenPort)][fuType].push_back(u);
-    shqToExqCnt[static_cast<size_t>(chosenPort)] += 1;
+    moveUopToExqWait(u, cycle, choice, fuType);
+    shqToExqCnt[static_cast<size_t>(choice.port)] += 1;
     ++exCount;
     rememberIssuedSrcs(u, issuedSrcsThisCycle);
     it = shq_.erase(it);
   }
+}
+
+OoOCoreMainline::ExqChoice OoOCoreMainline::chooseExqEnqueuePort(
+    const Uop &u, const std::string &fuType,
+    const std::vector<int> &shqToExqCnt, int64_t cycle) const {
+  ExqChoice choice;
+  for (int port : eligibleExuPorts(u.op, u.form)) {
+    if (port < 0 || port >= issuePorts_)
+      continue;
+    if (shqToExqCnt[static_cast<size_t>(port)] >= shqToExqPortPerCycle_)
+      continue;
+    const auto &q = exqWait_[static_cast<size_t>(port)];
+    int occ = static_cast<int>(q.at("ALU").size() + q.at("SFU").size());
+    if (exqCapacityCountsInflight_)
+      occ += exqInflight_[static_cast<size_t>(port)];
+    if (occ >= exqDepth_)
+      continue;
+    const int64_t recv = cycle + exqRecvDelay_;
+    int64_t pred = recv;
+    const auto &fq = q.at(fuType);
+    if (!fq.empty()) {
+      const Uop &prev = fq.back();
+      pred = std::max<int64_t>(
+          pred, prev.exqPredIssue + getIi(&prev.op, &prev.form, u.op, u.form));
+    } else {
+      pred = std::max<int64_t>(
+          pred, predictExqIssueCycle(port, fuType, u.op, u.form, recv));
+    }
+    const auto key = std::make_tuple(pred, occ, port);
+    const auto best = std::make_tuple(choice.pred, choice.occ, choice.port);
+    if (choice.port < 0 || key < best)
+      choice = ExqChoice{port, pred, occ};
+  }
+  return choice;
+}
+
+void OoOCoreMainline::moveUopToExqWait(Uop &u, int64_t cycle,
+                                       const ExqChoice &choice,
+                                       const std::string &fuType) {
+  u.exuPort = choice.port;
+  u.exqRecvCycle = cycle + exqRecvDelay_;
+  u.exqPredIssue = choice.pred;
+  u.state = "exq_wait";
+  if (usesSharedShqCredit(db_, u.op, u.form)) {
+    scheduleShqRelease(cycle, 1);
+    u.isShqTracked = false;
+    if (auto *robU = findRobUop(u.instId))
+      robU->isShqTracked = false;
+  }
+  exqWait_[static_cast<size_t>(choice.port)][fuType].push_back(u);
 }
 
 Uop *OoOCoreMainline::selectExqIssueCandidate(int port, int64_t cycle,

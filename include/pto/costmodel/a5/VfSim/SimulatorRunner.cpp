@@ -43,6 +43,15 @@ struct Reservation {
 
 using IduToOooPipe = std::deque<std::pair<int64_t, DynamicInst>>;
 
+struct SimulationState {
+  IduToOooPipe iduToOooPipe;
+  int64_t iduPregCredit = 0;
+  int64_t iduShqCredit = 0;
+  int64_t iduPendingShqQueue = 0;
+  int64_t cycle = 0;
+  bool completed = false;
+};
+
 Reservation reservationForInst(const DynamicInst &inst, const ParamDB &db,
                                const std::string &defaultDtype,
                                const ValueStorageLookup &valueStorage) {
@@ -223,6 +232,53 @@ void dumpSimulationLogs(const std::string &resultsDir, const IDU &idu,
   dumpVloopTrace(idu, resultsDir + "/vloop_trace.json");
 }
 
+bool runOneSimulationCycle(IFU &ifu, IDU &idu, OoOCoreMainline &ooo,
+                           SimulationState &state,
+                           bool useExplicitIduCreditBank,
+                           int64_t iduToOooDelay,
+                           const ValueStorageLookup &valueStorage,
+                           bool debugCycles) {
+  const int64_t cycle = state.cycle;
+  if (debugCycles)
+    logCycleBegin(cycle, ifu, idu, ooo);
+  updateExplicitIduCredits(ooo, cycle, useExplicitIduCreditBank,
+                           state.iduPregCredit, state.iduShqCredit);
+  drainIduToOooPipe(state.iduToOooPipe, ooo, cycle,
+                    useExplicitIduCreditBank, valueStorage,
+                    state.iduPendingShqQueue);
+
+  if (debugCycles)
+    std::cerr << "[vfsim] cycle " << cycle << " fill_idu begin\n";
+  Reservation pending;
+  if (!useExplicitIduCreditBank)
+    pending =
+        pendingPipeReservations(state.iduToOooPipe, idu, valueStorage);
+  fillIdu(ifu, idu);
+  if (debugCycles)
+    std::cerr << "[vfsim] cycle " << cycle << " fill_idu end\n";
+
+  const IDUDispatchBudget budget =
+      makeDispatchBudget(ooo, pending, useExplicitIduCreditBank,
+                         state.iduPregCredit, state.iduShqCredit);
+
+  if (debugCycles)
+    logDispatchBegin(cycle, budget);
+  auto dispatched = idu.dispatch(cycle, budget);
+  if (debugCycles)
+    std::cerr << "[vfsim] cycle " << cycle << " dispatch end n="
+              << dispatched.size() << "\n";
+  forwardDispatchedToOoo(dispatched, state.iduToOooPipe, ooo, cycle,
+                         iduToOooDelay);
+
+  if (debugCycles)
+    std::cerr << "[vfsim] cycle " << cycle << " ooo begin\n";
+  ooo.step();
+  if (debugCycles)
+    std::cerr << "[vfsim] cycle " << cycle << " ooo end\n";
+
+  return isSimulationComplete(ifu, idu, ooo, state.iduToOooPipe);
+}
+
 std::string incompleteSimulationMessage(const IFU &ifu, const IDU &idu,
                                         const OoOCoreMainline &ooo) {
   return "Simulation did not complete before maxCycles"
@@ -275,68 +331,30 @@ SimulationResult runSimulation(IFU &ifu,
   maxCycles = applyMaxCyclesEnv(maxCycles);
   const bool debugCycles = std::getenv("PTOAS_VFSIM_DEBUG_CYCLES") != nullptr;
   const int64_t iduToOooDelay = uarch.iduToOooDelay;
-  IduToOooPipe iduToOooPipe;
   const bool useExplicitIduCreditBank = uarch.useExplicitIduCreditBank;
   const ValueStorageLookup valueStorage(values);
-
-  int64_t iduPregCredit = ooo.getFreePreg();
-  int64_t iduShqCredit = ooo.getFreeShq();
-  int64_t iduPendingShqQueue = 0;
-  const std::string dtype = "fp32";
   (void)params;
 
-  int64_t cycle = 0;
-  bool completed = false;
+  SimulationState state;
+  state.iduPregCredit = ooo.getFreePreg();
+  state.iduShqCredit = ooo.getFreeShq();
 
-  while (cycle < maxCycles) {
-    if (debugCycles)
-      logCycleBegin(cycle, ifu, idu, ooo);
-    updateExplicitIduCredits(ooo, cycle, useExplicitIduCreditBank,
-                             iduPregCredit, iduShqCredit);
-    drainIduToOooPipe(iduToOooPipe, ooo, cycle, useExplicitIduCreditBank,
-                      valueStorage, iduPendingShqQueue);
-
-    if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " fill_idu begin\n";
-    Reservation pending;
-    if (!useExplicitIduCreditBank)
-      pending = pendingPipeReservations(iduToOooPipe, idu, valueStorage);
-    fillIdu(ifu, idu);
-    if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " fill_idu end\n";
-
-    const IDUDispatchBudget budget = makeDispatchBudget(
-        ooo, pending, useExplicitIduCreditBank, iduPregCredit, iduShqCredit);
-
-    if (debugCycles)
-      logDispatchBegin(cycle, budget);
-    auto dispatched = idu.dispatch(cycle, budget);
-    if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " dispatch end n=" << dispatched.size() << "\n";
-    forwardDispatchedToOoo(dispatched, iduToOooPipe, ooo, cycle,
-                           iduToOooDelay);
-
-    if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " ooo begin\n";
-    ooo.step();
-    if (debugCycles)
-      std::cerr << "[vfsim] cycle " << cycle << " ooo end\n";
-
-    if (isSimulationComplete(ifu, idu, ooo, iduToOooPipe)) {
-      completed = true;
+  while (state.cycle < maxCycles) {
+    if (runOneSimulationCycle(ifu, idu, ooo, state, useExplicitIduCreditBank,
+                              iduToOooDelay, valueStorage, debugCycles)) {
+      state.completed = true;
       break;
     }
-
-    ++cycle;
+    ++state.cycle;
   }
 
-  if (!completed) {
+  if (!state.completed) {
     dumpSimulationLogs(resultsDir, idu, ooo);
     throw std::runtime_error(incompleteSimulationMessage(ifu, idu, ooo));
   }
 
   dumpSimulationLogs(resultsDir, idu, ooo);
-  return SimulationResult{cycle, ooo.vfEndCycle(), resultsDir};
+  return SimulationResult{state.cycle, ooo.vfEndCycle(), resultsDir};
 }
 
 } // namespace vfsim

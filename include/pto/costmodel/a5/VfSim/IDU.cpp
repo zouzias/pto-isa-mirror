@@ -179,24 +179,34 @@ void IDU::openLoopBody(const std::string &key, int64_t startCycle) {
   bodyOpenTime_[key] = startCycle + vloopToDispatchDelay_;
 }
 
-void IDU::triggerDepth2Vloops(const DynamicInst &inst,
-                              const std::vector<int64_t> &bounds,
-                              int64_t cycle) {
+std::optional<int64_t> IDU::nextLoop1Start(
+    const DynamicInst &inst, const std::vector<int64_t> &bounds,
+    int64_t cycle) const {
   if (!hasBlockEndLevel(inst, 1) || inst.iterStack.empty())
-    return;
+    return std::nullopt;
   const int64_t topBlockId = inst.topBlockId;
   const int64_t i = inst.iterStack[0];
   const std::string curKey = makeKey(topBlockId, "loop1", {i});
   const int64_t endCy = lastDispatchOrCycle(curKey, cycle);
   if (i + 1 >= bounds[0])
+    return std::nullopt;
+  const auto startIt = vloopStart_.find(curKey);
+  const int64_t prevStart = startIt == vloopStart_.end() ? endCy : startIt->second;
+  return std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
+}
+
+void IDU::triggerDepth2Vloops(const DynamicInst &inst,
+                              const std::vector<int64_t> &bounds,
+                              int64_t cycle) {
+  const auto nextStart = nextLoop1Start(inst, bounds, cycle);
+  if (!nextStart.has_value())
     return;
-  const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
-  const int64_t nextStart =
-      std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
+  const int64_t topBlockId = inst.topBlockId;
+  const int64_t i = inst.iterStack[0];
   const std::string nextKey = makeKey(topBlockId, "loop1", {i + 1});
-  openLoopBody(nextKey, nextStart);
+  openLoopBody(nextKey, *nextStart);
   vloopTrace_.push_back(
-      VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextStart});
+      VloopTraceRecord{topBlockId, "loop1", {i + 1}, *nextStart});
 }
 
 void IDU::triggerDepth3InnerVloops(const DynamicInst &inst,
@@ -220,24 +230,17 @@ void IDU::triggerDepth3InnerVloops(const DynamicInst &inst,
 void IDU::triggerDepth3OuterVloops(const DynamicInst &inst,
                                    const std::vector<int64_t> &bounds,
                                    int64_t cycle) {
-  if (!hasBlockEndLevel(inst, 1) || inst.iterStack.empty())
+  const auto nextStart = nextLoop1Start(inst, bounds, cycle);
+  if (!nextStart.has_value())
     return;
   const int64_t topBlockId = inst.topBlockId;
   const int64_t i = inst.iterStack[0];
-  const std::string curKey = makeKey(topBlockId, "loop1", {i});
-  const int64_t endCy = lastDispatchOrCycle(curKey, cycle);
-  if (i + 1 >= bounds[0])
-    return;
-
-  const int64_t prevStart = vloopStart_.count(curKey) ? vloopStart_[curKey] : endCy;
-  const int64_t nextLoop1Start =
-      std::max<int64_t>(endCy, prevStart + loop1MinFeedbackGap_);
-  openLoopBody(makeKey(topBlockId, "loop1", {i + 1}), nextLoop1Start);
+  openLoopBody(makeKey(topBlockId, "loop1", {i + 1}), *nextStart);
   vloopTrace_.push_back(
-      VloopTraceRecord{topBlockId, "loop1", {i + 1}, nextLoop1Start});
+      VloopTraceRecord{topBlockId, "loop1", {i + 1}, *nextStart});
   if (bounds[1] <= 0)
     return;
-  const int64_t childStart = nextLoop1Start + nestedVloopInitialStartGap_;
+  const int64_t childStart = *nextStart + nestedVloopInitialStartGap_;
   openLoopBody(makeKey(topBlockId, "loop2", {i + 1, 0}), childStart);
   vloopTrace_.push_back(
       VloopTraceRecord{topBlockId, "loop2", {i + 1, 0}, childStart});

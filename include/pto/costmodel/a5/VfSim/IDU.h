@@ -117,6 +117,9 @@ private:
   void triggerNextTopBlock(const DynamicInst &inst, int64_t cycle);
   int64_t lastDispatchOrCycle(const std::string &key, int64_t cycle) const;
   void openLoopBody(const std::string &key, int64_t startCycle);
+  std::optional<int64_t> nextLoop1Start(const DynamicInst &inst,
+                                        const std::vector<int64_t> &bounds,
+                                        int64_t cycle) const;
   void triggerDepth2Vloops(const DynamicInst &inst,
                            const std::vector<int64_t> &bounds,
                            int64_t cycle);

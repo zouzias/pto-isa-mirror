@@ -125,6 +125,9 @@ private:
   buildBlockKeyByLevel(const std::vector<int64_t> &loopStack,
                        const std::vector<int64_t> &iterStack) const;
   std::vector<int64_t> calcBlockEndLevelsNormal() const;
+  bool areFinalLoopIterations(int64_t firstLevel, int64_t deepest,
+                              const LoopFrame *unrolledFrame,
+                              bool isLastSuperIter) const;
   bool isLastInTopBlockNormal() const;
   DynamicInst emitNormalInst(const LinearProgramNode &node);
   DynamicInst emitUnrolledInst(const LinearProgramNode &node,
