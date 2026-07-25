@@ -93,10 +93,46 @@ PTO_INTERNAL void SYNCALL_IMPL()
 #endif
 }
 
-// Non-cacheable scalar read of the shared counter (dcci-free poll path).
+// Non-cacheable scalar read of the shared counter (dcci-free poll path, AIV only).
 PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
 {
     return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
+}
+
+// AIC-safe read of the shared counter. A5 AIC (dav-c310 cube) cannot execute
+// ld_dev / st_atomic on GM, so it invalidates the cache line (dcci) and does a
+// plain scalar load instead of the ld_dev device read used by AIV.
+PTO_INTERNAL int32_t SYNCALL_SOFT_SCALAR_LOAD(__gm__ int32_t* counter)
+{
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
+    dsb(DSB_DDR);
+    return counter[0];
+}
+
+// Spin until the shared counter reaches target. AIV polls via ld_dev; AIC polls
+// via the cache path (if constexpr keeps ld_dev out of the cube binary).
+template <bool UseAtomicLoad>
+PTO_INTERNAL void SYNCALL_SOFT_POLL(__gm__ int32_t* counter, int32_t target)
+{
+    int32_t pollCount = 0;
+    for (;;) {
+        int32_t cur;
+        if constexpr (UseAtomicLoad) {
+            cur = SYNCALL_SOFT_ATOMIC_LOAD(counter);
+        } else {
+            cur = SYNCALL_SOFT_SCALAR_LOAD(counter);
+        }
+        if (cur >= target) {
+            break;
+        }
+        if ((++pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false, "SYNCALL soft barrier timeout - possible deadlock");
+            break;
+        }
+    }
 }
 
 // Hardware scalar atomic-add of 1 to the shared counter; the dcci write-back is
@@ -110,7 +146,7 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
     dsb(DSB_DDR);
 }
 
-// Shared atomic-counter barrier for AIV-only / MIX soft SYNCALL.
+// Shared atomic-counter barrier for AIV-only soft SYNCALL.
 // Counter is monotonic (never reset); epoch is derived from the pre-arrival value.
 PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32_t totalBlocks)
 {
@@ -118,36 +154,41 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32
     const int32_t before = SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace);
     const int32_t target = (before / totalBlocks + 1) * totalBlocks;
     SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
-
-    int32_t pollCount = 0;
-    while (SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace) < target) {
-        ++pollCount;
-        if ((pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
-            pipe_barrier(PIPE_ALL);
-        }
-        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
-            PTO_CPU_ASSERT(false, "SYNCALL soft atomic barrier timeout - possible deadlock");
-            break;
-        }
-    }
+    SYNCALL_SOFT_POLL<true>(gmWorkspace, target);
     dsb(DSB_DDR);
 }
 
 // MIX software SYNCALL: every AIC/AIV participant arrives on one shared counter.
+// A5 AIC cannot atomic-add or ld_dev on GM, so each AIC signals arrival to its
+// paired AIV subblock 0 (SYNC_AIC_AIV_FLAG), which does the atomic-add on the
+// AIC's behalf; AIC only polls the counter through the cache path. The counter
+// poll acts as back-pressure that keeps the per-barrier flag handshake 1:1.
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
-
-#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
+    dsb(DSB_DDR);
+
+#if defined(__DAV_VEC__)
+    const int32_t target = (SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace) / totalBlks + 1) * totalBlks;
+    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
+    if (get_subblockid() == 0) {
+        wait_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
+        SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
+    }
+    SYNCALL_SOFT_POLL<true>(gmWorkspace, target);
+#elif defined(__DAV_CUBE__)
+    const int32_t target = (SYNCALL_SOFT_SCALAR_LOAD(gmWorkspace) / totalBlks + 1) * totalBlks;
+    set_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
+    SYNCALL_SOFT_POLL<false>(gmWorkspace, target);
 #else
     (void)gmWorkspace;
-    (void)usedCores;
+    (void)totalBlks;
 #endif
+    dsb(DSB_DDR);
     pipe_barrier(PIPE_ALL);
 #endif
 }
