@@ -30,15 +30,16 @@ PTO_INTERNAL void AicScalarStore(__gm__ int32_t* dst, int32_t value)
     dsb(DSB_DDR);
 }
 
+// Read every peer flag with ld_dev (non-cacheable, straight from DDR). A batched
+// dcci + cached scalar load returns stale values on the A5 cube core; ld_dev is
+// the read idiom proven by the aic_probe ST and used by SYNCALL_SOFT_ATOMIC_LOAD.
 PTO_INTERNAL int32_t AicCheckFlags(__gm__ int32_t* flags, int32_t total, int32_t multiplier)
 {
-    for (int32_t i = 0; i < total; ++i) {
-        dcci(static_cast<__gm__ void*>(flags + i * kAicSoftCacheLine), SINGLE_CACHE_LINE);
-    }
-    dsb(DSB_DDR);
     int32_t allVisible = 1;
     for (int32_t i = 0; i < total; ++i) {
-        if ((flags + i * kAicSoftCacheLine)[0] != (i + 1) * multiplier) {
+        __gm__ int32_t* slot = flags + i * kAicSoftCacheLine;
+        const int32_t value = static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(slot), 0));
+        if (value != (i + 1) * multiplier) {
             allVisible = 0;
         }
     }
