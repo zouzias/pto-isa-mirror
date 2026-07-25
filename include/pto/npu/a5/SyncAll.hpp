@@ -219,13 +219,23 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
 #endif
 }
 
-template <bool AlwaysFalse = false>
+// AIC-only software SYNCALL: shared atomic counter over cube cores only. With no
+// AIV participating there is no concurrent cube+vector atomic on one address (the
+// case that faults 507015 in MIX), so the same atomic-counter barrier the AIV-only
+// path uses is safe here. A5 AIC scalar st_atomic/ld_dev is verified by the
+// aic_probe ST.
 PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+#if defined(__DAV_CUBE__)
+    const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
+#else
     (void)gmWorkspace;
     (void)usedCores;
-    PTO_STATIC_ASSERT(AlwaysFalse, "AIC-only software SYNCALL is not supported on A5.");
+#endif
+    pipe_barrier(PIPE_ALL);
 #endif
 }
 
