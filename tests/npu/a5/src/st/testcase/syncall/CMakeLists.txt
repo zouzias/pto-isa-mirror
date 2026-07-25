@@ -46,6 +46,11 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         -mllvm -cce-aicore-addr-transform
         -mllvm -cce-aicore-dcci-insert-for-scalar=false
     )
+    # Library headers the kernels compile against; listing them keeps the custom
+    # commands from reusing stale .o when only the pto headers change.
+    file(GLOB SYNCALL_PTO_HEADERS
+        ${PROJECT_SOURCE_DIR}/../../../../../include/pto/npu/a5/*.hpp
+        ${PROJECT_SOURCE_DIR}/../../../../../include/pto/common/*.hpp)
     add_custom_command(
         OUTPUT ${AIC_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir
@@ -62,6 +67,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -xcce -o ${AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
+                ${SYNCALL_PTO_HEADERS}
         VERBATIM
     )
     add_custom_command(
@@ -80,6 +86,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -xcce -o ${AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
+                ${SYNCALL_PTO_HEADERS}
         VERBATIM
     )
     add_custom_command(
@@ -113,6 +120,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
+                ${SYNCALL_PTO_HEADERS}
         VERBATIM
     )
     add_custom_target(${TARGET}_register_obj DEPENDS ${REGISTER_ELF})
