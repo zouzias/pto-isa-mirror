@@ -280,6 +280,15 @@ constexpr int32_t SYNCALL_SOFT_SLOT_INT32 = 8;
 constexpr int32_t SYNCALL_SOFT_BACKOFF_THRESHOLD = 16;
 constexpr int32_t SYNCALL_SOFT_MAX_POLL_ITERATIONS = 1000000;
 
+// A5 scalar per-core-slot MIX soft barrier: each participant core owns one
+// isolated slot spaced 2 cache lines (128 B) apart, so a scalar store + dcci on
+// one slot never invalidates a neighbor regardless of workspace base alignment.
+// A5 cannot run concurrent AIC(cube)+AIV(vector) atomic adds on a single shared
+// counter (faults with 507015), so MIX uses per-core slots instead of the shared
+// atomic counter that the AIV-only path uses. Callers of the soft MIX barrier
+// must size the GM workspace as usedCores * SYNCALL_SOFT_MIX_SLOT_INT32.
+constexpr int32_t SYNCALL_SOFT_MIX_SLOT_INT32 = 32;
+
 enum class AccToVecMode : uint8_t {
     SingleModeVec0 = 0,
     SingleModeVec1 = 1,

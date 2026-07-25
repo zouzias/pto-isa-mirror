@@ -182,6 +182,10 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
+    // Must match pto::SYNCALL_SOFT_MIX_SLOT_INT32: the soft MIX barrier uses one
+    // isolated per-core slot at this stride.
+    constexpr size_t mixSlotInt32 = 32;
+    constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
@@ -204,7 +208,7 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&markerHost), markerByteSize));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&flagsDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), syncWsBytes, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&markerDevice), markerByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     std::fill_n(outHost, elementCount, 0);
@@ -212,7 +216,7 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     std::fill_n(markerHost, blockCount * int32PerCacheLine, -1);
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
-    EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(aclrtMemset(syncWorkspaceDevice, syncWsBytes, 0, syncWsBytes));
     EXPECT_ACL_OK(aclrtMemcpy(markerDevice, markerByteSize, markerHost, markerByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
     LaunchSoftSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, markerDevice, stream);
@@ -266,6 +270,9 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
+    // Must match pto::SYNCALL_SOFT_MIX_SLOT_INT32 (per-core isolated slot stride).
+    constexpr size_t mixSlotInt32 = 32;
+    constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
@@ -282,13 +289,13 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&flagsHost), byteSize));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&flagsDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
-    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), syncWsBytes, ACL_MEM_MALLOC_HUGE_FIRST));
 
     std::fill_n(outHost, elementCount, 0);
     std::fill_n(flagsHost, elementCount, 0);
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
-    EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(aclrtMemset(syncWorkspaceDevice, syncWsBytes, 0, syncWsBytes));
 
     LaunchSoftSyncAllMix11(outDevice, flagsDevice, syncWorkspaceDevice, stream);
     EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
@@ -474,7 +481,8 @@ TEST_F(SYNCALLTest, case_mix_barrier_probe)
     constexpr int32_t markStride = 32;
     constexpr size_t markerElems = participants * markStride;
     constexpr size_t markerBytes = markerElems * sizeof(int32_t);
-    constexpr size_t wsBytes = participants * 8 * sizeof(int32_t);
+    // SYNCALL<Soft,Mix> now uses per-core slots at SYNCALL_SOFT_MIX_SLOT_INT32 (32) stride.
+    constexpr size_t wsBytes = participants * 32 * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
