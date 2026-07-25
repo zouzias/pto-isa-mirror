@@ -32,9 +32,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 constexpr uint64_t kMixProbeTilingKey = 1301;
 constexpr uint64_t kMixBarrierProbeTilingKey = 1302;
+constexpr uint64_t kMixSlotBarrierProbeTilingKey = 1303;
 constexpr int32_t kMixProbeAicBlocks = 18;
 constexpr int32_t kMixProbeParticipants = 54;
-constexpr int32_t kMarkStride = 32; // 128 bytes: no cache-line false sharing.
+constexpr int32_t kMarkStride = 32;      // 128 bytes: no cache-line false sharing.
+constexpr int32_t kSlotBarrierStride = 32; // per-core barrier slot, 128 bytes apart.
 
 PTO_INTERNAL void BigMark(__gm__ int32_t* marker, int32_t slotIdx, int32_t stage)
 {
@@ -49,6 +51,46 @@ PTO_INTERNAL void BigMark(__gm__ int32_t* marker, int32_t slotIdx, int32_t stage
     (void)marker;
     (void)slotIdx;
     (void)stage;
+#endif
+}
+
+// Candidate MIX barrier: per-core slot, scalar-only (no st_atomic / no ld_dev /
+// no shared counter). Each core publishes its own epoch into its own cache line
+// and spins until every core's slot has reached that epoch. Works on both AIC
+// and AIV (AIC scalar GM read/write verified by the probes).
+PTO_INTERNAL void SlotBarrierOnce(__gm__ int32_t* ws, int32_t idx, int32_t total)
+{
+#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+    __gm__ int32_t* mySlot = ws + idx * kSlotBarrierStride;
+    SoftDcci(static_cast<__gm__ void*>(mySlot));
+    dsb(DSB_DDR);
+    const int32_t epoch = mySlot[0] + 1;
+    mySlot[0] = epoch;
+    SoftDcci(static_cast<__gm__ void*>(mySlot));
+    dsb(DSB_DDR);
+
+    int32_t pollCount = 0;
+    while (true) {
+        int32_t ready = 0;
+        for (int32_t i = 0; i < total; ++i) {
+            __gm__ int32_t* s = ws + i * kSlotBarrierStride;
+            SoftDcci(static_cast<__gm__ void*>(s));
+            if (s[0] >= epoch) {
+                ++ready;
+            }
+        }
+        dsb(DSB_DDR);
+        if (ready >= total) {
+            break;
+        }
+        if (++pollCount >= 1000000) {
+            break;
+        }
+    }
+#else
+    (void)ws;
+    (void)idx;
+    (void)total;
 #endif
 }
 
@@ -78,6 +120,21 @@ extern "C" __global__ AICORE void RunMixBarrierProbe_1302_mix_aic(
     (void)marker;
 #endif
 }
+
+PTO_SYNCALL_MIX_AIC_KERNEL_META(RunMixSlotBarrierProbe_1303_mix_aic, 1, 2);
+extern "C" __global__ AICORE void RunMixSlotBarrierProbe_1303_mix_aic(
+    __gm__ int32_t __out__* syncWorkspace, __gm__ int32_t __out__* marker)
+{
+#if defined(__DAV_CUBE__)
+    const int32_t idx = GetMixLogicalIdx();
+    BigMark(marker, idx, 0);
+    SlotBarrierOnce(syncWorkspace, idx, kMixProbeParticipants);
+    BigMark(marker, idx, 1);
+#else
+    (void)syncWorkspace;
+    (void)marker;
+#endif
+}
 #endif
 
 #if defined(SYNCALL_MIX_BUILD_AIV)
@@ -100,6 +157,21 @@ extern "C" __global__ AICORE void RunMixBarrierProbe_1302_mix_aiv(
     BigMark(marker, idx, 0);
     GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
     SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, kMixProbeParticipants);
+    BigMark(marker, idx, 1);
+#else
+    (void)syncWorkspace;
+    (void)marker;
+#endif
+}
+
+PTO_SYNCALL_MIX_AIC_KERNEL_META(RunMixSlotBarrierProbe_1303_mix_aiv, 1, 2);
+extern "C" __global__ AICORE void RunMixSlotBarrierProbe_1303_mix_aiv(
+    __gm__ int32_t __out__* syncWorkspace, __gm__ int32_t __out__* marker)
+{
+#if defined(__DAV_VEC__)
+    const int32_t idx = GetMixLogicalIdx();
+    BigMark(marker, idx, 0);
+    SlotBarrierOnce(syncWorkspace, idx, kMixProbeParticipants);
     BigMark(marker, idx, 1);
 #else
     (void)syncWorkspace;
@@ -192,5 +264,12 @@ void LaunchMixBarrierProbe(int32_t* syncWorkspace, int32_t* marker, void* stream
     void* handle = RegisterMixProbe(reinterpret_cast<const void*>(&LaunchMixProbe));
     void* args[] = {syncWorkspace, marker};
     LaunchMixProbeHandle(handle, kMixBarrierProbeTilingKey, args, sizeof(args), stream);
+}
+
+void LaunchMixSlotBarrierProbe(int32_t* syncWorkspace, int32_t* marker, void* stream)
+{
+    void* handle = RegisterMixProbe(reinterpret_cast<const void*>(&LaunchMixProbe));
+    void* args[] = {syncWorkspace, marker};
+    LaunchMixProbeHandle(handle, kMixSlotBarrierProbeTilingKey, args, sizeof(args), stream);
 }
 #endif

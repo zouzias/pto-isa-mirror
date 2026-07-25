@@ -41,6 +41,7 @@ void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 void LaunchAicProbeStore(int32_t* out, void* stream);
 void LaunchMixProbe(int32_t* marker, void* stream);
 void LaunchMixBarrierProbe(int32_t* syncWorkspace, int32_t* marker, void* stream);
+void LaunchMixSlotBarrierProbe(int32_t* syncWorkspace, int32_t* marker, void* stream);
 void LaunchAicProbeStAtomic(int32_t* out, void* stream);
 void LaunchAicProbeLdDev(int32_t* out, void* stream);
 
@@ -506,6 +507,60 @@ TEST_F(SYNCALLTest, case_mix_barrier_probe)
         std::printf("\n");
     }
     EXPECT_EQ(syncRet, ACL_SUCCESS) << "bare MIX atomic barrier faulted";
+
+    (void)aclrtFree(markerDev);
+    (void)aclrtFree(wsDev);
+    (void)aclrtFreeHost(markerHost);
+    (void)aclrtDestroyStream(stream);
+    (void)aclrtResetDevice(0);
+    (void)aclFinalize();
+}
+
+// Candidate fix: bare MIX barrier using per-core scalar slots (no shared atomic
+// counter). Each core writes its own cache-line-aligned slot and polls all
+// slots. If this passes (all cores reach stage 1, ret=0), the shared-atomic
+// contention is confirmed as the 507015 root cause and this algorithm is the fix.
+TEST_F(SYNCALLTest, case_mix_slot_barrier_probe)
+{
+    constexpr int32_t participants = 54;
+    constexpr int32_t aicBlocks = 18;
+    constexpr int32_t markStride = 32;
+    constexpr int32_t slotStride = 32;
+    constexpr size_t markerElems = participants * markStride;
+    constexpr size_t markerBytes = markerElems * sizeof(int32_t);
+    constexpr size_t wsBytes = participants * slotStride * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream = nullptr;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t* markerHost = nullptr;
+    int32_t* markerDev = nullptr;
+    int32_t* wsDev = nullptr;
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&markerHost), markerBytes));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&markerDev), markerBytes, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&wsDev), wsBytes, ACL_MEM_MALLOC_HUGE_FIRST));
+    std::fill_n(markerHost, markerElems, -1);
+    EXPECT_ACL_OK(aclrtMemcpy(markerDev, markerBytes, markerHost, markerBytes, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(aclrtMemset(wsDev, wsBytes, 0, wsBytes));
+
+    LaunchMixSlotBarrierProbe(wsDev, markerDev, stream);
+    const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
+    std::printf("[mix_slot_barrier] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
+
+    if (aclrtMemcpy(markerHost, markerBytes, markerDev, markerBytes, ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) {
+        std::printf("[mix_slot_barrier] AIC stage (0=before barrier, 1=after barrier):");
+        for (int32_t i = 0; i < aicBlocks; ++i) {
+            std::printf(" %d", markerHost[i * markStride]);
+        }
+        std::printf("\n[mix_slot_barrier] AIV stage:");
+        for (int32_t i = aicBlocks; i < participants; ++i) {
+            std::printf(" %d", markerHost[i * markStride]);
+        }
+        std::printf("\n");
+    }
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << "per-core-slot MIX barrier faulted";
 
     (void)aclrtFree(markerDev);
     (void)aclrtFree(wsDev);
