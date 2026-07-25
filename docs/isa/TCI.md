@@ -58,7 +58,7 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &.
 
 - **Implementation checks (A2A3/A5)**:
     - `TileData::DType` must be exactly the same type as the scalar template parameter `T`.
-    - `dst/scalar` element types must be identical, and must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`.
+    - `dst/scalar` element types must be identical, and must be a 2- or 4-byte type (b16/b32): `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
     - `TileData::Rows == 1` (this is the condition enforced by the implementation; the sequence is generated along the column direction).
 - **Valid region**:
     - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.

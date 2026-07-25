@@ -59,7 +59,7 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &.
 
 - **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品/Ascend 950PR/Ascend 950DT)**:
     - `TileData::DType` 必须与标量模板参数 `T` 的类型完全相同。
-    - `dst`/`scalar` 元素类型必须相同，且必须是以下之一：`int32_t`、`uint32_t`、`int16_t`、`uint16_t`。
+    - `dst`/`scalar` 元素类型必须相同，且必须为 2 或 4 字节类型（b16/b32）：`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
     - `TileData::Rows == 1`（此为实现强制执行的条件，序列沿列方向生成）。
 - **有效区域**:
     - 实现使用 `dst.GetValidCol()` 作为序列长度，不参考 `dst.GetValidRow()`。
