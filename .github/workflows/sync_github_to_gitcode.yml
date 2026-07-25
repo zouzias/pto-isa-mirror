@@ -1,0 +1,244 @@
+name: Sync GitHub to GitCode
+
+# Mirrors the Crystal-wzy GitHub fork (main) into GitCode cann/pto-isa by opening
+# a sync Pull Request on GitCode — it does NOT force-push GitCode's base branch.
+#
+# Each run:
+#   1. checks out Crystal-wzy main (full history),
+#   2. force-pushes main to a sync branch on the GitCode target named by
+#      GITCODE_PUSH_URL (the cann repo itself, or a personal fork),
+#   3. opens a GitCode PR (sync branch -> master) — same-repo if GITCODE_PUSH_URL
+#      points at cann, or cross-repo (fork_owner:branch) if it points at a fork,
+#      or reuses the already-open one.
+#
+# GitCode API auth uses the `PRIVATE-TOKEN` header (GitLab-style), matching
+# scripts/github_pr_to_gitcode_pr.sh. Direction is GitHub -> GitCode, the REVERSE
+# of scripts/sync_cann_master_to_github_main.sh — disable that older sync if both
+# could run, or they will fight.
+#
+# Secrets (repo): GITCODE_PUSH_URL = full authenticated GitCode clone URL
+#                                    (https://oauth2:<token>@gitcode.com/<owner>/pto-isa.git)
+#                  GITCODE_TOKEN    = GitCode PAT (PRIVATE-TOKEN header + oauth2 git auth)
+
+on:
+  schedule:
+    # Weekly, Mondays ~03:17 UTC (off the :00/:30 marks to dodge the cron fleet).
+    # NOTE: GitHub Actions cron is UTC and scheduled workflows only run on the
+    # default branch. On a fork, GitHub disables scheduled workflows after 60
+    # days of repo inactivity — keep the fork active or re-enable when notified.
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "GitHub ref to mirror from (default refs/heads/main)"
+        required: false
+        default: "refs/heads/main"
+      target_branch:
+        description: "GitCode base branch to PR into (default master)"
+        required: false
+        default: "master"
+      sync_branch:
+        description: "GitCode feature branch that mirrors the GitHub source"
+        required: false
+        default: "sync/github-main"
+      dry_run:
+        description: "Plan only; do not push or open a PR. Use for the first test."
+        required: false
+        type: choice
+        default: "false"
+        options: ["true", "false"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-github-to-gitcode
+  cancel-in-progress: false
+
+env:
+  GITCODE_OWNER: cann
+  GITCODE_REPO: pto-isa
+  GITCODE_API: https://api.gitcode.com/api/v5
+
+jobs:
+  sync:
+    name: Open GitCode sync PR for Crystal-wzy/main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Resolve config
+        id: cfg
+        shell: bash
+        run: |
+          echo "source_ref=${{ github.event.inputs.source_ref || 'refs/heads/main' }}" >> "$GITHUB_OUTPUT"
+          echo "target_branch=${{ github.event.inputs.target_branch || 'master' }}" >> "$GITHUB_OUTPUT"
+          echo "sync_branch=${{ github.event.inputs.sync_branch || 'sync/github-main' }}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${{ github.event.inputs.dry_run || 'false' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out Crystal-wzy fork (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard GitCode secrets
+        env:
+          GITCODE_PUSH_URL: ${{ secrets.GITCODE_PUSH_URL }}
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+        run: |
+          if [ -z "${GITCODE_PUSH_URL}" ]; then
+            echo "::error::Missing GITCODE_PUSH_URL secret (full authenticated GitCode clone URL)." >&2
+            exit 1
+          fi
+          if [ -z "${GITCODE_TOKEN}" ]; then
+            echo "::error::Missing GITCODE_TOKEN secret (GitCode PAT for PRIVATE-TOKEN header)." >&2
+            exit 1
+          fi
+
+      - name: Configure committer identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve source, push owner, and decide whether to sync
+        id: decide
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          GITCODE_PUSH_URL: ${{ secrets.GITCODE_PUSH_URL }}
+        run: |
+          set -euo pipefail
+          git checkout --force "${{ steps.cfg.outputs.source_ref }}"
+          source_sha="$(git rev-parse HEAD)"
+
+          # Owner that GITCODE_PUSH_URL pushes to (cann itself, or a personal fork).
+          path="${GITCODE_PUSH_URL#*gitcode.com[:/]}"
+          push_owner="${path%%/*}"
+
+          # Fetch the canonical GitCode base branch directly (oauth2 token) so the
+          # "already in sync" compare is against cann's real master, not a fork's.
+          cann_url="https://oauth2:${GITCODE_TOKEN}@gitcode.com/${GITCODE_OWNER}/${GITCODE_REPO}.git"
+          target_sha=""
+          if git fetch --quiet --no-tags "${cann_url}" "${{ steps.cfg.outputs.target_branch }}" 2>/dev/null; then
+            target_sha="$(git rev-parse FETCH_HEAD)"
+          fi
+
+          echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
+          echo "target_sha=${target_sha}" >> "$GITHUB_OUTPUT"
+          echo "push_owner=${push_owner}" >> "$GITHUB_OUTPUT"
+          if [ -n "${target_sha}" ] && [ "${source_sha}" = "${target_sha}" ]; then
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show sync plan
+        run: |
+          echo "dry_run     : ${{ steps.cfg.outputs.dry_run }}"
+          echo "GitHub src  : ${{ steps.cfg.outputs.source_ref }} = ${{ steps.decide.outputs.source_sha }}"
+          echo "GitCode tgt : ${{ steps.cfg.outputs.target_branch }} = ${{ steps.decide.outputs.target_sha || '<absent>' }}"
+          echo "push target : ${{ steps.decide.outputs.push_owner }}/${{ env.GITCODE_REPO }}"
+          echo "sync branch : ${{ steps.cfg.outputs.sync_branch }}"
+          echo "needs_sync  : ${{ steps.decide.outputs.needs_sync }}"
+          if [ '${{ steps.decide.outputs.needs_sync }}' = 'false' ]; then
+            echo "Already in sync — nothing to do."
+          elif [ '${{ steps.cfg.outputs.dry_run }}' = 'true' ]; then
+            echo "DRY-RUN — would push sync branch and open/reuse a GitCode PR."
+          fi
+
+      - name: Push sync branch to GitCode
+        if: ${{ steps.decide.outputs.needs_sync == 'true' && steps.cfg.outputs.dry_run == 'false' }}
+        env:
+          GITCODE_PUSH_URL: ${{ secrets.GITCODE_PUSH_URL }}
+        run: |
+          set -euo pipefail
+          # Force-push OUR feature branch (never the base branch) to wherever
+          # GITCODE_PUSH_URL points (cann repo or a personal fork).
+          git push --force --quiet "${GITCODE_PUSH_URL}" "HEAD:refs/heads/${{ steps.cfg.outputs.sync_branch }}"
+          echo "Pushed ${{ steps.decide.outputs.source_sha }} -> ${{ steps.decide.outputs.push_owner }}:${{ steps.cfg.outputs.sync_branch }}"
+
+      - name: Open or locate GitCode sync PR
+        id: pr
+        if: ${{ steps.decide.outputs.needs_sync == 'true' && steps.cfg.outputs.dry_run == 'false' }}
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+        run: |
+          set -euo pipefail
+          HEAD_REF="${{ steps.cfg.outputs.sync_branch }}"
+          BASE_REF="${{ steps.cfg.outputs.target_branch }}"
+          SOURCE_SHA="${{ steps.decide.outputs.source_sha }}"
+          SHORT="${SOURCE_SHA:0:12}"
+          PUSH_OWNER="${{ steps.decide.outputs.push_owner }}"
+          API="${GITCODE_API}/repos/${GITCODE_OWNER}/${GITCODE_REPO}/pulls"
+
+          # head format: same-repo -> branch; cross-repo (fork) -> owner:branch
+          if [ "${PUSH_OWNER}" = "${GITCODE_OWNER}" ]; then
+            head_for_pr="${HEAD_REF}"
+          else
+            head_for_pr="${PUSH_OWNER}:${HEAD_REF}"
+          fi
+
+          # Look for an existing OPEN PR whose head branch and base match.
+          list_resp="$(mktemp)"
+          list_status="$(curl -sS --connect-timeout 30 --max-time 60 \
+            -o "${list_resp}" -w '%{http_code}' \
+            -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+            "${API}?state=open&per_page=100")"
+          if [ "${list_status}" != "200" ]; then
+            echo "::error::GitCode list-PRs returned HTTP ${list_status}" >&2
+            cat "${list_resp}" >&2; rm -f "${list_resp}"; exit 1
+          fi
+          existing="$(jq -r --arg h "${HEAD_REF}" --arg b "${BASE_REF}" '
+              [ .[] | select(
+                  ((.head | (if type=="object" then (.ref // .name // "") else . end)) == $h)
+                  and
+                  ((.base | (if type=="object" then (.ref // .name // "") else . end)) == $b)
+                ) ] as $m
+              | if ($m | length) > 0 then $m[0].number else "" end' "${list_resp}")"
+          rm -f "${list_resp}"
+
+          if [ -n "${existing}" ]; then
+            echo "pr_number=${existing}" >> "$GITHUB_OUTPUT"
+            echo "Open sync PR already exists: #${existing} — its diff refreshes automatically from the pushed branch."
+            exit 0
+          fi
+
+          # Build the POST body with jq so nothing needs shell quoting.
+          body="$(jq -n \
+            --arg t "sync: Crystal-wzy/main @ ${SHORT}" \
+            --arg h "${head_for_pr}" \
+            --arg b "${BASE_REF}" \
+            --arg sha "${SOURCE_SHA}" \
+            --arg src "${{ steps.cfg.outputs.source_ref }}" \
+            '{title:$t, head:$h, base:$b,
+              body:("Automated weekly mirror of **Crystal-wzy/pto-isa** `" + $src + "` into GitCode `" + $b + "`.\n\n"
+                    + "Source SHA: `" + $sha + "`\n\n"
+                    + "Generated by the *Sync GitHub to GitCode* GitHub Actions workflow.")}')"
+
+          create_resp="$(mktemp)"
+          create_status="$(curl -sS --connect-timeout 30 --max-time 180 \
+            -o "${create_resp}" -w '%{http_code}' \
+            -X POST "${API}" \
+            -H "Content-Type: application/json" \
+            -H "PRIVATE-TOKEN: ${GITCODE_TOKEN}" \
+            --data "${body}")"
+          number="$(jq -r '.number // .iid // .id // empty' "${create_resp}")"
+          case "${create_status}" in
+            200|201)
+              if [ -z "${number}" ]; then
+                echo "::error::PR created (HTTP ${create_status}) but no number in response:" >&2
+                cat "${create_resp}" >&2; rm -f "${create_resp}"; exit 1
+              fi
+              echo "pr_number=${number}" >> "$GITHUB_OUTPUT"
+              echo "Created GitCode PR #${number}: https://gitcode.com/${GITCODE_OWNER}/${GITCODE_REPO}/pulls/${number}"
+              ;;
+            422)
+              echo "GitCode returned 422 (likely no diff / nothing to merge); response:" >&2
+              cat "${create_resp}" >&2; rm -f "${create_resp}"
+              exit 0
+              ;;
+            *)
+              echo "::error::GitCode PR create returned HTTP ${create_status}:" >&2
+              cat "${create_resp}" >&2; rm -f "${create_resp}"
+              exit 1
+              ;;
+          esac
