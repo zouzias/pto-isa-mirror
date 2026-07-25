@@ -50,6 +50,11 @@ template <typename TileData, typename MaskTile, typename TmpTile, typename... Wa
 PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp, WaitEvents &... events);
 ```
 
+```cpp
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile, typename... WaitEvents>
+PTO_INST RecordEvent TSEL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp, WaitEvents &... events);
+```
+
 ## 约束
 
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
@@ -59,8 +64,8 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
-    - `TileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - `sizeof(DstTile::DType)` 必须是 `1`、`2` 或 `4` 字节。
+    - `DstTile::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
     - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
