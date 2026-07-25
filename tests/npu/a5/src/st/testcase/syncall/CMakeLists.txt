@@ -30,6 +30,39 @@ target_link_options(syncall_hard_kernel PRIVATE --cce-fatobj-link)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+# dav-c310 auto-split chevron kernel (single .so per source). arch35 bare dav-c310
+# compiles one source for both cube and vector and packs a MIX-launchable binary,
+# the same model dispatch_mega_combine uses. Only ratios that ccec can auto-split
+# (1:N with N>=1) may use this; true 1:1 still needs a separate path.
+function(pto_syncall_chevron_kernel TARGET SOURCE)
+    add_library(${TARGET} SHARED ${SOURCE})
+    target_compile_options(${TARGET} PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310
+                                             -DREGISTER_BASE -std=c++17)
+    target_include_directories(${TARGET} PRIVATE
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    target_link_options(${TARGET} PRIVATE --cce-fatobj-link)
+    target_link_libraries(syncall PRIVATE ${TARGET})
+endfunction()
+
+# Pure cube-only chevron kernel (single .so per source), dav-c310-cube. Used for
+# AIC-only kernels: one __global__ symbol launched with <<<blocks>>> on cube cores,
+# mirroring the AIV-only syncall_soft_kernel but on the cube arch.
+function(pto_syncall_cube_chevron_kernel TARGET SOURCE)
+    add_library(${TARGET} SHARED ${SOURCE})
+    target_compile_options(${TARGET} PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube
+                                             -DREGISTER_BASE -std=c++17)
+    target_include_directories(${TARGET} PRIVATE
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    target_link_options(${TARGET} PRIVATE --cce-fatobj-link)
+    target_link_libraries(syncall PRIVATE ${TARGET})
+endfunction()
+
 function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
     set(AIC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir/${SOURCE}.o)
     set(AIV_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir/${SOURCE}.o)
@@ -157,8 +190,8 @@ target_link_libraries(syncall PRIVATE
 )
 
 pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX_CORE_AIV_RATIO__=1)
-pto_syncall_mix_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)
-pto_syncall_mix_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
-pto_syncall_mix_kernel(syncall_aic_soft_kernel syncall_aic_soft_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
-pto_syncall_mix_kernel(syncall_aic_probe_kernel syncall_aic_probe_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
-pto_syncall_mix_kernel(syncall_mix_probe_kernel syncall_mix_probe_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)
+pto_syncall_chevron_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp)
+pto_syncall_cube_chevron_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp)
+pto_syncall_cube_chevron_kernel(syncall_aic_soft_kernel syncall_aic_soft_kernel.cpp)
+pto_syncall_cube_chevron_kernel(syncall_aic_probe_kernel syncall_aic_probe_kernel.cpp)
+pto_syncall_chevron_kernel(syncall_mix_probe_kernel syncall_mix_probe_kernel.cpp)
