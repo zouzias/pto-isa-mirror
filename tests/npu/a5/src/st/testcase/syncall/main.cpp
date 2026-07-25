@@ -38,6 +38,9 @@ void LaunchHardSyncAll(int32_t* out, int32_t* flags, int32_t totalBlocks, void* 
 void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
+void LaunchAicProbeStore(int32_t* out, void* stream);
+void LaunchAicProbeStAtomic(int32_t* out, void* stream);
+void LaunchAicProbeLdDev(int32_t* out, void* stream);
 
 #define EXPECT_ACL_OK(expr)                                             \
     do {                                                                \
@@ -324,4 +327,74 @@ TEST_F(SYNCALLTest, case_hard_aic_only_all_blocks)
     EXPECT_ACL_OK(aclrtDestroyStream(stream));
     EXPECT_ACL_OK(aclrtResetDevice(0));
     EXPECT_ACL_OK(aclFinalize());
+}
+
+// --------------------------------------------------------------------------
+// AIC intrinsic probes: isolate whether A5 AIC (cube) can run a plain GM scalar
+// store, st_atomic and ld_dev. Each probe MUST be run in its own process, e.g.
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_probe_store
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_probe_st_atomic
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_probe_ld_dev
+// A 507015 stream failure means the intrinsic faults on AIC; 0 + expected value
+// means it works. Cleanup always runs so a crash never leaves the device dirty.
+// --------------------------------------------------------------------------
+namespace {
+void RunAicProbe(
+    const char* label, void (*launch)(int32_t*, void*), int32_t preset0, int32_t preset8, int32_t expected)
+{
+    constexpr int32_t elementCount = 16;
+    constexpr size_t byteSize = elementCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream = nullptr;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t* hostBuf = nullptr;
+    int32_t* devBuf = nullptr;
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&hostBuf), byteSize));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&devBuf), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    std::fill_n(hostBuf, elementCount, 0);
+    hostBuf[0] = preset0;
+    hostBuf[8] = preset8;
+    EXPECT_ACL_OK(aclrtMemcpy(devBuf, byteSize, hostBuf, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    launch(devBuf, stream);
+    const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
+    std::printf("[aic_probe:%s] aclrtSynchronizeStream ret=%d (0=ok, 507015=AICORE exception)\n", label, syncRet);
+
+    if (syncRet == ACL_SUCCESS) {
+        const int32_t copyRet =
+            static_cast<int32_t>(aclrtMemcpy(hostBuf, byteSize, devBuf, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        if (copyRet == ACL_SUCCESS) {
+            std::printf("[aic_probe:%s] out[0]=%d (expected %d)\n", label, hostBuf[0], expected);
+            EXPECT_EQ(hostBuf[0], expected) << label << ": AIC intrinsic executed but produced wrong value";
+        } else {
+            std::printf("[aic_probe:%s] D2H copy failed ret=%d\n", label, copyRet);
+        }
+    }
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << label << ": AIC intrinsic faulted at runtime (likely unsupported on AIC)";
+
+    (void)aclrtFree(devBuf);
+    (void)aclrtFreeHost(hostBuf);
+    (void)aclrtDestroyStream(stream);
+    (void)aclrtResetDevice(0);
+    (void)aclFinalize();
+}
+} // namespace
+
+TEST_F(SYNCALLTest, case_aic_probe_store)
+{
+    RunAicProbe("store", LaunchAicProbeStore, /*preset0=*/0, /*preset8=*/0, /*expected=*/42);
+}
+
+TEST_F(SYNCALLTest, case_aic_probe_st_atomic)
+{
+    RunAicProbe("st_atomic", LaunchAicProbeStAtomic, /*preset0=*/10, /*preset8=*/0, /*expected=*/11);
+}
+
+TEST_F(SYNCALLTest, case_aic_probe_ld_dev)
+{
+    RunAicProbe("ld_dev", LaunchAicProbeLdDev, /*preset0=*/0, /*preset8=*/1234, /*expected=*/1234);
 }
