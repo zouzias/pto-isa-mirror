@@ -186,7 +186,7 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
 
     constexpr int32_t aicBlocks = 18;
-    const size_t markerByteSize = aicBlocks * int32PerCacheLine * sizeof(int32_t);
+    const size_t markerByteSize = blockCount * int32PerCacheLine * sizeof(int32_t);
 
     int32_t* outHost = nullptr;
     int32_t* flagsHost = nullptr;
@@ -206,7 +206,7 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 
     std::fill_n(outHost, elementCount, 0);
     std::fill_n(flagsHost, elementCount, 0);
-    std::fill_n(markerHost, aicBlocks * int32PerCacheLine, -1);
+    std::fill_n(markerHost, blockCount * int32PerCacheLine, -1);
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
@@ -218,9 +218,13 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 
     if (aclrtMemcpy(markerHost, markerByteSize, markerDevice, markerByteSize, ACL_MEMCPY_DEVICE_TO_HOST) ==
         ACL_SUCCESS) {
-        std::printf("[soft_mix_1_2] AIC stage markers (per AIC block, -1=never started, 8=completed):\n");
+        std::printf("[soft_mix_1_2] stage markers (-1=never started, 8=completed):\n AIC:");
         for (int32_t i = 0; i < aicBlocks; ++i) {
-            std::printf(" aic[%d]=%d", i, markerHost[i * int32PerCacheLine]);
+            std::printf(" %d", markerHost[i * int32PerCacheLine]);
+        }
+        std::printf("\n AIV:");
+        for (int32_t i = aicBlocks; i < blockCount; ++i) {
+            std::printf(" %d", markerHost[i * int32PerCacheLine]);
         }
         std::printf("\n[soft_mix_1_2] stages: 0=enter 1=proxyWr1 2=barrier1 3=check1 4=barrier2 5=proxyWr2 "
                     "6=barrier3 7=check2 8=outWr(done); crash is at the step AFTER the max marker\n");
