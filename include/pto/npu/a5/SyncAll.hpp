@@ -93,14 +93,15 @@ PTO_INTERNAL void SYNCALL_IMPL()
 #endif
 }
 
-// Non-cacheable scalar read of the shared counter (dcci-free poll path, AIV only).
+// Non-cacheable scalar read of the shared counter via ld_dev. Valid on both A5
+// AIC (cube) and AIV cores (verified by the aic_atomic_probe ST).
 PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
 {
     return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
 }
 
-// Spin until the shared counter reaches target. Only AIV reaches this path; A5
-// AIC never touches GM (see SYNCALL_SOFT_MIX_IMPL), so ld_dev is AIV-legal here.
+// Spin until the shared counter reaches target. Reached by every participant
+// core (AIC and AIV); ld_dev is legal on both on A5.
 PTO_INTERNAL void SYNCALL_SOFT_POLL(__gm__ int32_t* counter, int32_t target)
 {
     int32_t pollCount = 0;
@@ -117,6 +118,10 @@ PTO_INTERNAL void SYNCALL_SOFT_POLL(__gm__ int32_t* counter, int32_t target)
 
 // Hardware scalar atomic-add of 1 to the shared counter; the dcci write-back is
 // the atomic publication point (same pattern as comm TNOTIFY AtomicAdd).
+// set_st_atomic_cfg enables a STICKY DMA atomic-accumulate mode that also affects
+// subsequent non-atomic GM writes (copy_ubuf_to_gm, fixpipe/create_cbuf on AIC),
+// so it must be reset with set_atomic_none() once the atomic store has landed;
+// otherwise the next GM/Tile store corrupts data or faults (507015) on AIC.
 PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
 {
     set_st_atomic_cfg(ATOMIC_S32, ATOMIC_SUM);
@@ -124,6 +129,7 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
     st_atomic<int32_t>(1, counter);
     SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
     dsb(DSB_DDR);
+    set_atomic_none();
 }
 
 // Shared atomic-counter barrier for AIV-only soft SYNCALL.
@@ -138,12 +144,13 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32
     dsb(DSB_DDR);
 }
 
-// MIX software SYNCALL. A5 AIC (dav-c310 cube) cannot touch GM at all (no
-// st_atomic/ld_dev, no scalar GM poll), so it mirrors AscendC's MIX SyncAll:
-// AIC only rendezvouses with its paired AIV subblock 0 through intra_block flags.
-// AIV owns every GM access; the lead AIV (subblock 0) also arrives on the shared
-// counter for its paired AIC (keeping the participant count exact) and releases
-// the AIC once the whole barrier has completed.
+// MIX software SYNCALL. The A5 AIC (dav-c310 cube) core can execute scalar
+// st_atomic/ld_dev on GM (verified by the aic_atomic_probe ST), so every core --
+// each AIC block and each AIV subblock -- is a first-class participant that
+// arrives on and polls the shared atomic counter, exactly like the AIV-only
+// barrier. No AIC<->AIV0 intra_block proxy is needed for the barrier itself.
+// (Business GM Tile stores still proxy through AIV because A5 AIC lacks
+// copy_cbuf_to_gm; that DMA-path limitation is unrelated to scalar atomics.)
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
@@ -151,26 +158,8 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-
-#if defined(__DAV_VEC__)
-    const bool isLeadAiv = (get_subblockid() == 0);
-    dsb(DSB_DDR);
-    const int32_t target = (SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace) / totalBlks + 1) * totalBlks;
-    if (isLeadAiv) {
-        wait_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
-        SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
-    }
-    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
-    SYNCALL_SOFT_POLL(gmWorkspace, target);
-    dsb(DSB_DDR);
-    if (isLeadAiv) {
-        set_intra_block(PIPE_MTE3, SYNC_AIV_FLAG);
-    }
-#elif defined(__DAV_CUBE__)
-    (void)gmWorkspace;
-    (void)totalBlks;
-    set_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
-    wait_intra_block(PIPE_S, SYNC_AIV_FLAG);
+#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
 #else
     (void)gmWorkspace;
     (void)totalBlks;
