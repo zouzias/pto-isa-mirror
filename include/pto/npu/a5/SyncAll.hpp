@@ -99,32 +99,12 @@ PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
     return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
 }
 
-// AIC-safe read of the shared counter. A5 AIC (dav-c310 cube) cannot execute
-// ld_dev / st_atomic on GM, so it invalidates the cache line (dcci) and does a
-// plain scalar load instead of the ld_dev device read used by AIV.
-PTO_INTERNAL int32_t SYNCALL_SOFT_SCALAR_LOAD(__gm__ int32_t* counter)
-{
-    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
-    dsb(DSB_DDR);
-    return counter[0];
-}
-
-// Spin until the shared counter reaches target. AIV polls via ld_dev; AIC polls
-// via the cache path (if constexpr keeps ld_dev out of the cube binary).
-template <bool UseAtomicLoad>
+// Spin until the shared counter reaches target. Only AIV reaches this path; A5
+// AIC never touches GM (see SYNCALL_SOFT_MIX_IMPL), so ld_dev is AIV-legal here.
 PTO_INTERNAL void SYNCALL_SOFT_POLL(__gm__ int32_t* counter, int32_t target)
 {
     int32_t pollCount = 0;
-    for (;;) {
-        int32_t cur;
-        if constexpr (UseAtomicLoad) {
-            cur = SYNCALL_SOFT_ATOMIC_LOAD(counter);
-        } else {
-            cur = SYNCALL_SOFT_SCALAR_LOAD(counter);
-        }
-        if (cur >= target) {
-            break;
-        }
+    while (SYNCALL_SOFT_ATOMIC_LOAD(counter) < target) {
         if ((++pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
             pipe_barrier(PIPE_ALL);
         }
@@ -154,15 +134,16 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32
     const int32_t before = SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace);
     const int32_t target = (before / totalBlocks + 1) * totalBlocks;
     SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
-    SYNCALL_SOFT_POLL<true>(gmWorkspace, target);
+    SYNCALL_SOFT_POLL(gmWorkspace, target);
     dsb(DSB_DDR);
 }
 
-// MIX software SYNCALL: every AIC/AIV participant arrives on one shared counter.
-// A5 AIC cannot atomic-add or ld_dev on GM, so each AIC signals arrival to its
-// paired AIV subblock 0 (SYNC_AIC_AIV_FLAG), which does the atomic-add on the
-// AIC's behalf; AIC only polls the counter through the cache path. The counter
-// poll acts as back-pressure that keeps the per-barrier flag handshake 1:1.
+// MIX software SYNCALL. A5 AIC (dav-c310 cube) cannot touch GM at all (no
+// st_atomic/ld_dev, no scalar GM poll), so it mirrors AscendC's MIX SyncAll:
+// AIC only rendezvouses with its paired AIV subblock 0 through intra_block flags.
+// AIV owns every GM access; the lead AIV (subblock 0) also arrives on the shared
+// counter for its paired AIC (keeping the participant count exact) and releases
+// the AIC once the whole barrier has completed.
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
@@ -170,25 +151,30 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    dsb(DSB_DDR);
 
 #if defined(__DAV_VEC__)
+    const bool isLeadAiv = (get_subblockid() == 0);
+    dsb(DSB_DDR);
     const int32_t target = (SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace) / totalBlks + 1) * totalBlks;
-    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
-    if (get_subblockid() == 0) {
+    if (isLeadAiv) {
         wait_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
         SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
     }
-    SYNCALL_SOFT_POLL<true>(gmWorkspace, target);
+    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
+    SYNCALL_SOFT_POLL(gmWorkspace, target);
+    dsb(DSB_DDR);
+    if (isLeadAiv) {
+        set_intra_block(PIPE_MTE3, SYNC_AIV_FLAG);
+    }
 #elif defined(__DAV_CUBE__)
-    const int32_t target = (SYNCALL_SOFT_SCALAR_LOAD(gmWorkspace) / totalBlks + 1) * totalBlks;
+    (void)gmWorkspace;
+    (void)totalBlks;
     set_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
-    SYNCALL_SOFT_POLL<false>(gmWorkspace, target);
+    wait_intra_block(PIPE_S, SYNC_AIV_FLAG);
 #else
     (void)gmWorkspace;
     (void)totalBlks;
 #endif
-    dsb(DSB_DDR);
     pipe_barrier(PIPE_ALL);
 #endif
 }
