@@ -154,8 +154,28 @@ CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr,
 #endif
 }
 
+// Diagnostic: AIC publishes the last completed stage into a dedicated GM marker
+// slot via a plain scalar store (proven safe on A5 AIC by the aic_atomic_probe
+// ST). After a 507015 the host reads marker[aicIdx] to see where AIC faulted.
+PTO_INTERNAL void AicMark(__gm__ int32_t* marker, int32_t aicIdx, int32_t stage)
+{
+#if defined(__DAV_CUBE__)
+    if (marker != nullptr) {
+        __gm__ int32_t* slot = marker + aicIdx * kInt32PerCacheLine;
+        slot[0] = stage;
+        SoftDcci(static_cast<__gm__ void*>(slot));
+        dsb(DSB_DDR);
+    }
+#else
+    (void)marker;
+    (void)aicIdx;
+    (void)stage;
+#endif
+}
+
 template <int32_t TotalParticipants>
-PTO_INTERNAL void RunMixSyncAllBody(__gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace)
+PTO_INTERNAL void RunMixSyncAllBody(
+    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr)
 {
     const int32_t idx = GetMixLogicalIdx();
     const int32_t aicIdx = static_cast<int32_t>(get_block_idx());
@@ -163,22 +183,31 @@ PTO_INTERNAL void RunMixSyncAllBody(__gm__ int32_t* out, __gm__ int32_t* flags, 
     __gm__ int32_t* aicOutSlot = out + aicIdx * kInt32PerCacheLine;
     GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
 
+    AicMark(marker, aicIdx, 0);
     StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, idx + 1, aicFlagSlot, kMixFlagUbAddr);
+    AicMark(marker, aicIdx, 1);
 
     SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    AicMark(marker, aicIdx, 2);
 
     const int32_t allFirstVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 1);
+    AicMark(marker, aicIdx, 3);
 
     SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    AicMark(marker, aicIdx, 4);
 
     StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, aicFlagSlot, kMixFlagUbAddr);
+    AicMark(marker, aicIdx, 5);
 
     SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    AicMark(marker, aicIdx, 6);
 
     const int32_t allSecondVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 2);
+    AicMark(marker, aicIdx, 7);
 
     StoreMixParticipantLine(
         out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, aicOutSlot, kMixOutUbAddr);
+    AicMark(marker, aicIdx, 8);
 }
 
 #endif

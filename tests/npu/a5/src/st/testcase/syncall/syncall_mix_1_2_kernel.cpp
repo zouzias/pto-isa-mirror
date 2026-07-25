@@ -27,9 +27,10 @@ constexpr uint64_t kMix12SoftTilingKey = 1201;
 PTO_SYNCALL_MIX_AIC_KERNEL_META(RunSoftSyncAllMix12_1201_mix_aic, 1, 2);
 
 extern "C" __global__ AICORE void RunSoftSyncAllMix12_1201_mix_aic(
-    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace)
+    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace,
+    __gm__ int32_t __out__* marker)
 {
-    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace);
+    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace, marker);
 }
 #endif
 
@@ -37,9 +38,10 @@ extern "C" __global__ AICORE void RunSoftSyncAllMix12_1201_mix_aic(
 PTO_SYNCALL_MIX_AIC_KERNEL_META(RunSoftSyncAllMix12_1201_mix_aiv, 1, 2);
 
 extern "C" __global__ AICORE void RunSoftSyncAllMix12_1201_mix_aiv(
-    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace)
+    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace,
+    __gm__ int32_t __out__* marker)
 {
-    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace);
+    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace, marker);
 }
 #endif
 
@@ -84,7 +86,8 @@ std::vector<char> ReadCurrentSharedObject(const char* path)
 }
 
 void LaunchSoftMixKernel(
-    const void* anchor, uint64_t tilingKey, int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream)
+    const void* anchor, uint64_t tilingKey, int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker,
+    void* stream)
 {
     const char* path = GetCurrentSharedObjectPath(anchor);
     static const std::vector<char> kernelBinary = ReadCurrentSharedObject(path);
@@ -101,7 +104,7 @@ void LaunchSoftMixKernel(
         }
     }
 
-    void* args[] = {out, flags, syncWorkspace};
+    void* args[] = {out, flags, syncWorkspace, marker};
     rtArgsEx_t argsInfo{};
     argsInfo.args = args;
     argsInfo.argsSize = sizeof(args);
@@ -114,9 +117,10 @@ void LaunchSoftMixKernel(
 }
 } // namespace
 
-void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream)
+void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream)
 {
     LaunchSoftMixKernel(
-        reinterpret_cast<const void*>(&LaunchSoftSyncAllMix12), kMix12SoftTilingKey, out, flags, syncWorkspace, stream);
+        reinterpret_cast<const void*>(&LaunchSoftSyncAllMix12), kMix12SoftTilingKey, out, flags, syncWorkspace, marker,
+        stream);
 }
 #endif

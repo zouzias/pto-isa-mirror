@@ -36,7 +36,7 @@ std::string GetGoldenDir()
 void LaunchSoftSyncAll(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t totalBlocks, void* stream);
 void LaunchHardSyncAll(int32_t* out, int32_t* flags, int32_t totalBlocks, void* stream);
 void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
-void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
+void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 void LaunchAicProbeStore(int32_t* out, void* stream);
 void LaunchAicProbeStAtomic(int32_t* out, void* stream);
@@ -185,59 +185,72 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
 
+    constexpr int32_t aicBlocks = 18;
+    const size_t markerByteSize = aicBlocks * int32PerCacheLine * sizeof(int32_t);
+
     int32_t* outHost = nullptr;
     int32_t* flagsHost = nullptr;
+    int32_t* markerHost = nullptr;
     int32_t* outDevice = nullptr;
     int32_t* flagsDevice = nullptr;
     int32_t* syncWorkspaceDevice = nullptr;
+    int32_t* markerDevice = nullptr;
 
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&outHost), byteSize));
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&flagsHost), byteSize));
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&markerHost), markerByteSize));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&flagsDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&markerDevice), markerByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     std::fill_n(outHost, elementCount, 0);
     std::fill_n(flagsHost, elementCount, 0);
+    std::fill_n(markerHost, aicBlocks * int32PerCacheLine, -1);
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(syncWorkspaceDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+    EXPECT_ACL_OK(aclrtMemcpy(markerDevice, markerByteSize, markerHost, markerByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchSoftSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, stream);
-    EXPECT_ACL_OK(aclrtSynchronizeStream(stream));
-    EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
-    ASSERT_TRUE(WriteFile(GetGoldenDir() + "/output.bin", outHost, byteSize));
+    LaunchSoftSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, markerDevice, stream);
+    const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
+    std::printf("[soft_mix_1_2] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
 
-    std::vector<int32_t> golden(blockCount);
-    std::vector<int32_t> devFinal(blockCount);
-    for (size_t i = 0; i < blockCount; ++i) {
-        golden[i] = 1;
-        devFinal[i] = outHost[i * int32PerCacheLine];
+    if (aclrtMemcpy(markerHost, markerByteSize, markerDevice, markerByteSize, ACL_MEMCPY_DEVICE_TO_HOST) ==
+        ACL_SUCCESS) {
+        std::printf("[soft_mix_1_2] AIC stage markers (per AIC block, -1=never started, 8=completed):\n");
+        for (int32_t i = 0; i < aicBlocks; ++i) {
+            std::printf(" aic[%d]=%d", i, markerHost[i * int32PerCacheLine]);
+        }
+        std::printf("\n[soft_mix_1_2] stages: 0=enter 1=proxyWr1 2=barrier1 3=check1 4=barrier2 5=proxyWr2 "
+                    "6=barrier3 7=check2 8=outWr(done); crash is at the step AFTER the max marker\n");
+    }
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed";
+
+    if (syncRet == ACL_SUCCESS) {
+        EXPECT_ACL_OK(aclrtMemcpy(outHost, byteSize, outDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        EXPECT_ACL_OK(aclrtMemcpy(flagsHost, byteSize, flagsDevice, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        ASSERT_TRUE(WriteFile(GetGoldenDir() + "/output.bin", outHost, byteSize));
+
+        std::vector<int32_t> golden(blockCount);
+        std::vector<int32_t> devFinal(blockCount);
+        for (size_t i = 0; i < blockCount; ++i) {
+            golden[i] = 1;
+            devFinal[i] = outHost[i * int32PerCacheLine];
+        }
+        EXPECT_TRUE(ResultCmp<int32_t>(golden, devFinal, 0.0f));
     }
 
-    bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
-    if (!ret) {
-        std::printf("soft_mix_1_2 out[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", outHost[i * int32PerCacheLine]);
-        }
-        std::printf("\nsoft_mix_1_2 flags[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", flagsHost[i * int32PerCacheLine]);
-        }
-        std::printf("\n");
-    }
-    EXPECT_TRUE(ret);
-
-    EXPECT_ACL_OK(aclrtFree(outDevice));
-    EXPECT_ACL_OK(aclrtFree(flagsDevice));
-    EXPECT_ACL_OK(aclrtFree(syncWorkspaceDevice));
-    EXPECT_ACL_OK(aclrtFreeHost(outHost));
-    EXPECT_ACL_OK(aclrtFreeHost(flagsHost));
-    EXPECT_ACL_OK(aclrtDestroyStream(stream));
-    EXPECT_ACL_OK(aclrtResetDevice(0));
-    EXPECT_ACL_OK(aclFinalize());
+    (void)aclrtFree(outDevice);
+    (void)aclrtFree(flagsDevice);
+    (void)aclrtFree(syncWorkspaceDevice);
+    (void)aclrtFree(markerDevice);
+    (void)aclrtFreeHost(outHost);
+    (void)aclrtFreeHost(flagsHost);
+    (void)aclrtFreeHost(markerHost);
+    (void)aclrtDestroyStream(stream);
+    (void)aclrtResetDevice(0);
+    (void)aclFinalize();
 }
 
 TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
