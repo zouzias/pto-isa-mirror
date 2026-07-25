@@ -160,3 +160,4 @@ pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX
 pto_syncall_mix_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)
 pto_syncall_mix_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
 pto_syncall_mix_kernel(syncall_aic_probe_kernel syncall_aic_probe_kernel.cpp -D__MIX_CORE_AIV_RATIO__=0)
+pto_syncall_mix_kernel(syncall_mix_probe_kernel syncall_mix_probe_kernel.cpp -D__MIX_CORE_AIV_RATIO__=2)

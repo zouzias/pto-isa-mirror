@@ -39,6 +39,7 @@ void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace
 void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 void LaunchAicProbeStore(int32_t* out, void* stream);
+void LaunchMixProbe(int32_t* marker, void* stream);
 void LaunchAicProbeStAtomic(int32_t* out, void* stream);
 void LaunchAicProbeLdDev(int32_t* out, void* stream);
 
@@ -414,4 +415,49 @@ TEST_F(SYNCALLTest, case_aic_probe_st_atomic)
 TEST_F(SYNCALLTest, case_aic_probe_ld_dev)
 {
     RunAicProbe("ld_dev", LaunchAicProbeLdDev, /*preset0=*/0, /*preset8=*/1234, /*expected=*/1234);
+}
+
+// Decisive MIX-mode probe: can an A5 AIC (cube) core write GM at all while paired
+// with AIV in MIX mode? AIC writes 42 to its slot, AIV writes 100 to its slot.
+TEST_F(SYNCALLTest, case_mix_probe_aic_store)
+{
+    constexpr int32_t participants = 54;
+    constexpr int32_t aicBlocks = 18;
+    constexpr size_t elementCount = participants * 8;
+    constexpr size_t byteSize = elementCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream = nullptr;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t* hostBuf = nullptr;
+    int32_t* devBuf = nullptr;
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&hostBuf), byteSize));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&devBuf), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+    std::fill_n(hostBuf, elementCount, -1);
+    EXPECT_ACL_OK(aclrtMemcpy(devBuf, byteSize, hostBuf, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    LaunchMixProbe(devBuf, stream);
+    const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
+    std::printf("[mix_probe] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
+
+    if (aclrtMemcpy(hostBuf, byteSize, devBuf, byteSize, ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) {
+        std::printf("[mix_probe] AIC slots (expect 42 if AIC can write GM in MIX):");
+        for (int32_t i = 0; i < aicBlocks; ++i) {
+            std::printf(" %d", hostBuf[i * 8]);
+        }
+        std::printf("\n[mix_probe] AIV slots (control, expect 100):");
+        for (int32_t i = aicBlocks; i < participants; ++i) {
+            std::printf(" %d", hostBuf[i * 8]);
+        }
+        std::printf("\n");
+    }
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << "MIX probe: AIC scalar GM store faulted in MIX mode";
+
+    (void)aclrtFree(devBuf);
+    (void)aclrtFreeHost(hostBuf);
+    (void)aclrtDestroyStream(stream);
+    (void)aclrtResetDevice(0);
+    (void)aclFinalize();
 }
