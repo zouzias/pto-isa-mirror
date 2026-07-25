@@ -129,7 +129,9 @@ TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
 TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
 {
     constexpr int32_t blockCount = 18;
-    constexpr size_t int32PerCacheLine = 8;
+    // 16 int32 = one 64-byte A5 cache line per core slot; must match
+    // kAicSoftCacheLine in syncall_aic_soft_kernel.cpp (avoids cube dcci false sharing).
+    constexpr size_t int32PerCacheLine = 16;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
 
