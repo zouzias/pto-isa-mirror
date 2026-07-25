@@ -174,6 +174,10 @@ add_executable(syncall main.cpp)
 target_compile_options(syncall PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(syncall PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../common
+    ${ASCEND_HOME_PATH}/pkg_inc
+    ${ASCEND_HOME_PATH}/pkg_inc/profiling
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
 )
 
 target_link_directories(syncall PUBLIC
@@ -191,6 +195,7 @@ target_link_libraries(syncall PRIVATE
 
 pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX_CORE_AIV_RATIO__=1)
 pto_syncall_chevron_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp)
+pto_syncall_chevron_kernel(syncall_hard_mix_1_2_kernel syncall_hard_mix_1_2_kernel.cpp)
 pto_syncall_cube_chevron_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp)
 pto_syncall_cube_chevron_kernel(syncall_aic_soft_kernel syncall_aic_soft_kernel.cpp)
 pto_syncall_cube_chevron_kernel(syncall_aic_probe_kernel syncall_aic_probe_kernel.cpp)

@@ -175,33 +175,53 @@ PTO_INTERNAL void CoreMark(__gm__ int32_t* marker, int32_t slotIdx, int32_t stag
 #endif
 }
 
-template <int32_t TotalParticipants>
-PTO_INTERNAL void RunMixSyncAllBody(
-    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr)
+// One MIX barrier iteration, soft (per-core-slot GM) or hard (FFTS + intra_block).
+template <int32_t TotalParticipants, bool UseSoft>
+PTO_INTERNAL void MixBarrier(__gm__ int32_t* syncWorkspace)
 {
+    if constexpr (UseSoft) {
+        GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    } else {
+        (void)syncWorkspace;
+        SYNCALL<SyncCoreType::Mix>();
+    }
+}
+
+// Shared soft/hard MIX body. Soft callers keep the original argument list (ffts
+// defaulted, unused); hard callers pass UseSoft=false and a valid ffts base so
+// the FFTS cross-core sync inside SYNCALL<Mix>() has its control address.
+template <int32_t TotalParticipants, bool UseSoft = true>
+PTO_INTERNAL void RunMixSyncAllBody(
+    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr,
+    __gm__ uint64_t* fftsAddr = nullptr)
+{
+    if constexpr (!UseSoft) {
+        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
+    }
+
     const int32_t idx = GetMixLogicalIdx();
     const int32_t aicIdx = static_cast<int32_t>(get_block_idx());
     __gm__ int32_t* aicFlagSlot = flags + aicIdx * kInt32PerCacheLine;
     __gm__ int32_t* aicOutSlot = out + aicIdx * kInt32PerCacheLine;
-    GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
 
     CoreMark(marker, idx, 0);
     StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, idx + 1, aicFlagSlot, kMixFlagUbAddr);
     CoreMark(marker, idx, 1);
 
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
     CoreMark(marker, idx, 2);
 
     const int32_t allFirstVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 1);
     CoreMark(marker, idx, 3);
 
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
     CoreMark(marker, idx, 4);
 
     StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, aicFlagSlot, kMixFlagUbAddr);
     CoreMark(marker, idx, 5);
 
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
+    MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
     CoreMark(marker, idx, 6);
 
     const int32_t allSecondVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 2);
