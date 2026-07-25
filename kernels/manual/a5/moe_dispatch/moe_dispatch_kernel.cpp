@@ -550,8 +550,7 @@ AICORE void MoeDispatchWithSync(
             using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64, pto::BLayout::RowMajor, -1, -1>;
 
             TPETile tpeRowTile(1, paddedExpNum);
-            constexpr int32_t TPE_UB_OFFSET = SYNC_UB_ELEMS * static_cast<int32_t>(sizeof(int32_t));
-            TASSIGN(tpeRowTile, TPE_UB_OFFSET);
+            TASSIGN(tpeRowTile, 0);
             tpeRowTile.RowMaskInternal = 1;
             tpeRowTile.ColMaskInternal = paddedExpNum;
 

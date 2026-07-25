@@ -24,8 +24,6 @@ constexpr uint64_t kProxyUbAddr = 0x3000;
 constexpr uint64_t kProxyL1Addr = 0x0;
 constexpr uint16_t kProxyReqId = 7;
 constexpr uint16_t kProxyDoneId = 8;
-constexpr int32_t kSoftBackoffThreshold = 16;
-constexpr int32_t kSoftMaxPollIterations = 1000000;
 
 PTO_INTERNAL int32_t GetMixLogicalIdx()
 {
@@ -59,6 +57,7 @@ PTO_INTERNAL void SoftDcciRange(__gm__ int32_t* base, int32_t lines)
 }
 
 #if defined(__DAV_CUBE__)
+// A5 AIC lacks copy_cbuf_to_gm; stage value in L1/UB and ask AIV0 to write GM.
 PTO_INTERNAL void AicRequestProxyWrite(int32_t value)
 {
     __cbuf__ int32_t* l1 = reinterpret_cast<__cbuf__ int32_t*>(kProxyL1Addr);
@@ -98,6 +97,29 @@ PTO_INTERNAL void AivWriteGm(__gm__ int32_t* dst, int32_t value, uint64_t ubAddr
 }
 #endif
 
+// Write one participant's business GM line. Soft SYNCALL itself uses the library
+// atomic path; proxy remains only for AIC business GM stores (no copy_cbuf_to_gm).
+PTO_INTERNAL void StoreMixParticipantLine(
+    __gm__ int32_t* mySlot, int32_t value, __gm__ int32_t* aicSlot, uint64_t ubAddr)
+{
+#if defined(__DAV_CUBE__)
+    (void)mySlot;
+    (void)aicSlot;
+    (void)ubAddr;
+    AicRequestProxyWrite(value);
+#elif defined(__DAV_VEC__)
+    if (get_subblockid() == 0 && aicSlot != nullptr) {
+        AivServeProxyWrite(aicSlot);
+    }
+    AivWriteGm(mySlot, value, ubAddr);
+#else
+    (void)mySlot;
+    (void)value;
+    (void)aicSlot;
+    (void)ubAddr;
+#endif
+}
+
 PTO_INTERNAL int32_t
 CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr, int32_t multiplier)
 {
@@ -132,119 +154,31 @@ CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr,
 #endif
 }
 
-PTO_INTERNAL void SoftMixBarrierWrite(__gm__ int32_t* mySlot, int32_t curValue, __gm__ int32_t* aicSlot)
-{
-#if defined(__DAV_VEC__)
-    if (get_subblockid() == 0 && aicSlot != nullptr) {
-        AivServeProxyWrite(aicSlot);
-    }
-    AivWriteGm(mySlot, curValue, kMixReadUbAddr);
-#elif defined(__DAV_CUBE__)
-    (void)mySlot;
-    (void)aicSlot;
-    AicRequestProxyWrite(curValue);
-#endif
-}
-
-PTO_INTERNAL void SoftMixBarrierPoll(__gm__ int32_t* syncWorkspace, int32_t totalParticipants, int32_t curValue)
-{
-    int32_t pollCount = 0;
-    while (true) {
-        if (pollCount > kSoftBackoffThreshold) {
-            pipe_barrier(PIPE_ALL);
-        }
-        SoftDcciRange(syncWorkspace, totalParticipants);
-#if defined(__DAV_VEC__)
-        __ubuf__ int32_t* ub = reinterpret_cast<__ubuf__ int32_t*>(kMixReadUbAddr);
-        copy_gm_to_ubuf(
-            static_cast<__ubuf__ void*>(ub), static_cast<__gm__ void*>(syncWorkspace), 0, 1, totalParticipants, 0, 0);
-        set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-        int32_t readyCount = 0;
-        for (int32_t i = 0; i < totalParticipants; ++i) {
-            if (ub[i * kInt32PerCacheLine] >= curValue) {
-                ++readyCount;
-            }
-        }
-#elif defined(__DAV_CUBE__)
-        int32_t readyCount = 0;
-        for (int32_t i = 0; i < totalParticipants; ++i) {
-            if ((syncWorkspace + i * kInt32PerCacheLine)[0] >= curValue) {
-                ++readyCount;
-            }
-        }
-#else
-        int32_t readyCount = totalParticipants;
-#endif
-        pipe_barrier(PIPE_ALL);
-        if (readyCount >= totalParticipants) {
-            break;
-        }
-        ++pollCount;
-        if (pollCount >= kSoftMaxPollIterations) {
-            break;
-        }
-    }
-}
-
-PTO_INTERNAL void SoftMixBarrier(
-    __gm__ int32_t* syncWorkspace, int32_t totalParticipants, int32_t participantIdx, __gm__ int32_t* aicSlot)
-{
-    __gm__ int32_t* mySlot = syncWorkspace + participantIdx * kInt32PerCacheLine;
-    SoftDcci(static_cast<__gm__ void*>(mySlot));
-    dsb(DSB_DDR);
-    __asm__ __volatile__("" ::: "memory");
-    const int32_t curValue = mySlot[0] + 1;
-
-    SoftMixBarrierWrite(mySlot, curValue, aicSlot);
-    SoftMixBarrierPoll(syncWorkspace, totalParticipants, curValue);
-}
-
 template <int32_t TotalParticipants>
 PTO_INTERNAL void RunMixSyncAllBody(__gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace)
 {
     const int32_t idx = GetMixLogicalIdx();
     const int32_t aicIdx = static_cast<int32_t>(get_block_idx());
     __gm__ int32_t* aicFlagSlot = flags + aicIdx * kInt32PerCacheLine;
-    __gm__ int32_t* aicSyncSlot = syncWorkspace + aicIdx * kInt32PerCacheLine;
     __gm__ int32_t* aicOutSlot = out + aicIdx * kInt32PerCacheLine;
+    GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
 
-#if defined(__DAV_CUBE__)
-    AicRequestProxyWrite(idx + 1);
-#elif defined(__DAV_VEC__)
-    if (get_subblockid() == 0) {
-        AivServeProxyWrite(aicFlagSlot);
-    }
-    AivWriteGm(flags + idx * kInt32PerCacheLine, idx + 1, kMixFlagUbAddr);
-#endif
+    StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, idx + 1, aicFlagSlot, kMixFlagUbAddr);
 
-    SoftMixBarrier(syncWorkspace, TotalParticipants, idx, aicSyncSlot);
+    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
 
     const int32_t allFirstVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 1);
 
-    SoftMixBarrier(syncWorkspace, TotalParticipants, idx, aicSyncSlot);
+    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
 
-#if defined(__DAV_CUBE__)
-    AicRequestProxyWrite((idx + 1) * 2);
-#elif defined(__DAV_VEC__)
-    if (get_subblockid() == 0) {
-        AivServeProxyWrite(aicFlagSlot);
-    }
-    AivWriteGm(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, kMixFlagUbAddr);
-#endif
+    StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, aicFlagSlot, kMixFlagUbAddr);
 
-    SoftMixBarrier(syncWorkspace, TotalParticipants, idx, aicSyncSlot);
+    SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, TotalParticipants);
 
     const int32_t allSecondVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 2);
 
-#if defined(__DAV_CUBE__)
-    AicRequestProxyWrite(allFirstVisible & allSecondVisible);
-#elif defined(__DAV_VEC__)
-    if (get_subblockid() == 0) {
-        AivServeProxyWrite(aicOutSlot);
-    }
-    AivWriteGm(out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, kMixOutUbAddr);
-#endif
+    StoreMixParticipantLine(
+        out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, aicOutSlot, kMixOutUbAddr);
 }
 
 #endif

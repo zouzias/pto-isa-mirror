@@ -61,6 +61,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
                 -xcce -o ${AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
         VERBATIM
     )
     add_custom_command(
@@ -78,6 +79,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
                 -xcce -o ${AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
         VERBATIM
     )
     add_custom_command(
@@ -108,7 +110,9 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 -xcce -o ${REGISTER_AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
                 ${REGISTER_AIC_OBJ} ${REGISTER_AIV_OBJ} ${REGISTER_ELF}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
         VERBATIM
     )
     add_custom_target(${TARGET}_register_obj DEPENDS ${REGISTER_ELF})

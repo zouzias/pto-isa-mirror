@@ -13,9 +13,10 @@ flowchart TB
     H2 --> H3[wait_flag_dev etc.]
     H3 --> H4[Barrier complete]
   end
-  subgraph soft [Soft Mode / GM Polling]
-    S1[Write local GM slot counter] --> S2[Poll all slots reach current generation]
-    S2 --> S3[Barrier complete]
+  subgraph soft [Soft Mode / GM Atomic Counter]
+    S1[ld_dev shared counter] --> S2[st_atomic +1]
+    S2 --> S3[Poll until counter reaches epoch target]
+    S3 --> S4[Barrier complete]
   end
 ```
 
@@ -27,7 +28,7 @@ flowchart TB
 - **AIC-only**: `SYNCALL<SyncCoreType::AICOnly>()` synchronizes all AIC cores (A2/A3 supports both hardware and software modes; A5 supports hardware mode only).
 - **MIX (AIC+AIV)**: `SYNCALL<SyncCoreType::Mix>()` synchronizes mixed AIC and AIV cores.
 
-`SyncAllMode` (specified explicitly in workspace-bearing overloads) selects **hardware mode (FFTS)** or **software mode (GM polling)**. The workspace-free overload corresponds to the hardware path.
+`SyncAllMode` (specified explicitly in workspace-bearing overloads) selects **hardware mode (FFTS)** or **software mode (GM atomic counter)**. The workspace-free overload corresponds to the hardware path.
 
 ## Mathematical Semantics
 
@@ -35,7 +36,7 @@ Not applicable as an elementwise arithmetic operation. `SYNCALL` expresses a **b
 
 - At a given dynamic program point, every core in the participant set defined by the current `SyncCoreType` must execute past the `SYNCALL` call before any participant may proceed beyond that point.
 - Hardware mode: cross-core visibility is guaranteed by FFTS flags and device-side `wait_flag_dev` primitives.
-- Software mode: each participant owns a monotonically-increasing counter slot in GM; `dcci`/`dsb` coherency primitives and polling determine "all participants have reached the current generation."
+- Software mode: all participants share one monotonically-increasing GM atomic counter; each arrival does `st_atomic(+1)`, then polls with `ld_dev` until `counter >= epoch target` (derived from the pre-arrival value and participant count).
 
 This semantic does **not** provide additional guarantees on GM or other buffer contents after the barrier; cross-core data visibility must be maintained by the caller — see "Cross-Core GM Communication Notes".
 
@@ -179,14 +180,12 @@ Hard and soft kernels **must not share the same `.so`** in AIV-only / AIC-only c
 
 ## Constraints
 
-- Software-mode GM write paths per platform:
-  - A2/A3 (AIC-only and the AIC side of MIX): AIC writes GM slots via `copy_cbuf_to_gm` (L1→GM DMA); the AIV side of MIX writes via UB workspace.
-  - A5 MIX: A5 AIC (`dav-c310-cube`) lacks `copy_cbuf_to_gm`; instead it delegates UB→GM writes to AIV subblock 0 of the same block via `intra_block` signaling.
+- Software mode uses a **shared GM atomic counter** (`ld_dev` / `st_atomic`) for AIV-only, AIC-only (A2/A3), and MIX. No per-core slot Tile (UB/L1) is required on the Soft API.
 - A5 platform limitations (cf. "Mode Support Matrix"):
-  - AIC-only software unavailable: A5 AIC lacks an independent GM DMA write path (no `copy_cbuf_to_gm`), so GM-polling sync is infeasible.
+  - AIC-only software unavailable: A5 AIC-only Soft is not implemented (`static_assert` in `SYNCALL_SOFT_AIC_IMPL`).
   - Hardware MIX unavailable: `rtGetC2cCtrlAddr` returns `RT_ERROR_FEATURE_NOT_SUPPORT` (207000) on A5 (`CHIP_DAVID`), preventing FFTS base address retrieval.
   - AIC-only hardware: implemented via `ffts_cross_core_sync` + `wait_flag_dev`, without needing `set_ffts_base_addr`.
-- Software mode requires all participating cores to enter the same barrier group in the same order (based on monotonic generation counting; mismatched entry count/order causes misalignment or deadlock).
+- Software mode requires all participating cores to enter the same barrier group in the same order (based on monotonic epoch counting; mismatched entry count/order causes misalignment or deadlock).
 - `SYNCALL` does not participate in PTO's automatic Event dependency scheduling: it neither accepts `WaitEvents` nor returns a `RecordEvent` that later instructions can wait on. Consequently it does not automatically wait for preceding data instructions (e.g. `TSTORE`) to complete; the ordering and visibility between `SYNCALL` and surrounding data instructions must be ensured by the caller (see "Cross-Core GM Communication Notes").
 - In the auto build path (`__PTO_AUTO__`), `SYNCALL` is a no-op and emits no cross-core hardware synchronization (consistent with `TSYNC` etc.); actual synchronization happens only in manual kernels.
 
@@ -200,13 +199,13 @@ Hard and soft kernels **must not share the same `.so`** in AIV-only / AIC-only c
 - **Reader**: before reading, issue `dcci(addr, SINGLE_CACHE_LINE)` (invalidate) + `dsb` to ensure the latest DDR value is read instead of a stale local cache.
 - `set_flag` / `wait_flag` alone (intra-core pipeline sync) is **not** sufficient for cross-core visibility.
 - This is independent of the barrier mode: the **hardware FFTS barrier also does not flush cache**; it only guarantees the "all arrived" control-plane ordering.
-- `SYNCALL` internally applies full `dcci` + `dsb(DDR)` to its own sync slots, but does **not** flush the caller's business data.
+- Soft `SYNCALL` publishes its shared atomic counter via `st_atomic` + `dcci`/`dsb`, but does **not** flush the caller's business data.
 
 ### 2. Per-core slot must own a full cache line: avoid false-sharing lost writes
 
 - `dcci` / DMA operate at **32Byte cache-line** granularity; if adjacent cores' slots share one cache line, cross-core flushes overwrite / lose each other's writes.
-- Each core's slot should be 32Byte-aligned and **own one full cache line** (for `int32`, that means stride = 8, not 4).
-- `SYNCALL`'s own sync slots follow this design: `SYNCALL_SOFT_SLOT_INT32 = 8` (see `include/pto/common/type.hpp`); the caller's business workspace should follow the same isolation principle.
+- Each core's business slot should be 32Byte-aligned and **own one full cache line** (for `int32`, that means stride = 8, not 4).
+- Soft `SYNCALL` itself uses one shared counter (one cache line is enough); `SYNCALL_SOFT_SLOT_INT32 = 8` remains a useful stride constant for caller's per-core business workspaces.
 
 ## Examples
 
@@ -235,22 +234,23 @@ void example_hard_mix() {
 
 ### Manual — Software Mode
 
-Software mode requires a **zero-initialized** GM workspace and a correctly-sized UB/L1 Tile. `Mode` must be `SyncAllMode::Soft` (`Hard` ignores the workspace and behaves like the workspace-free `SYNCALL_IMPL`).
+Software mode requires a **zero-initialized** GM workspace (one cache line is enough for the shared atomic counter). `Mode` must be `SyncAllMode::Soft` (`Hard` ignores the workspace and behaves like the workspace-free `SYNCALL_IMPL`).
 
 ```cpp
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
 
-// The AIV software barrier reads all participating cores' slots into UB,
-// so UB capacity must be >= usedCores * SYNCALL_SOFT_SLOT_INT32 (each core owns one cache line);
-// here we declare it with kMaxAivCores (the target chip's max AIV core count) as a compile-time upper bound.
-constexpr int32_t kMaxAivCores = 48;  // e.g. 48 on 910B1
 void example_soft_aiv(__gm__ int32_t *gmPtr) {
   GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(gmPtr);
-  Tile<TileType::Vec, int32_t, 1, kMaxAivCores * SYNCALL_SOFT_SLOT_INT32> ub;
-  SYNCALL<SyncAllMode::Soft, SyncCoreType::AIVOnly>(gmWs, ub, 0);  // usedCores=0 -> get_block_num()
+  SYNCALL<SyncAllMode::Soft, SyncCoreType::AIVOnly>(gmWs, 0);  // usedCores=0 -> get_block_num()
+}
+
+// MIX: every AIC/AIV participant arrives on the same shared counter
+void example_soft_mix(__gm__ int32_t *gmPtr) {
+  GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(gmPtr);
+  SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, 0);  // usedCores=0 -> MIX participant count
 }
 ```
 
-MIX software mode requires both UB and L1 (Mat) Tiles; on A5 the AIC side delegates GM writes via a proxy path — see the "Constraints" section.
+A5 AIC-only Soft is unsupported; A5 Soft MIX uses the same atomic API (no UB/L1 Tile, no AIC→AIV proxy on the library path).
