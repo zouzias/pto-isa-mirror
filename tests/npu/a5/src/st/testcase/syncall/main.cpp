@@ -39,6 +39,9 @@ void LaunchHardSyncAll(int32_t* out, int32_t* flags, int32_t totalBlocks, void* 
 void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream);
 void LaunchHardSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
+void LaunchAicAtomicProbeAdd(int32_t* counter, void* stream);
+void LaunchAicAtomicProbeAddDcci(int32_t* counter, void* stream);
+void LaunchAicAtomicProbeBarrier(int32_t* counter, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 void LaunchAicProbeStore(int32_t* out, void* stream);
 void LaunchMixProbe(int32_t* marker, void* stream);
@@ -554,6 +557,74 @@ TEST_F(SYNCALLTest, case_aic_probe_st_atomic)
 TEST_F(SYNCALLTest, case_aic_probe_ld_dev)
 {
     RunAicProbe("ld_dev", LaunchAicProbeLdDev, /*preset0=*/0, /*preset8=*/1234, /*expected=*/1234);
+}
+
+// --------------------------------------------------------------------------
+// AIC-only concurrent-atomic probes: 18 cube blocks all increment ONE shared GM
+// counter, peeling SYNCALL_SOFT_ATOMIC_BARRIER apart to find which layer faults.
+// Run each alone:
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_atomic_probe_add
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_atomic_probe_add_dcci
+//   ./syncall --gtest_filter=SYNCALLTest.case_aic_atomic_probe_barrier
+// ret=507015 => that layer faults on cube; ret=0 but counter<18 => atomic updates
+// are lost (e.g. dcci clobber); ret=0 and counter==18 => that layer is fine.
+// --------------------------------------------------------------------------
+namespace {
+void RunAicAtomicProbe(const char* label, void (*launch)(int32_t*, void*), int32_t expectedCounter)
+{
+    constexpr int32_t elementCount = 16; // >= 1 cache line, counter lives at [0].
+    constexpr size_t byteSize = elementCount * sizeof(int32_t);
+
+    EXPECT_ACL_OK(aclInit(nullptr));
+    EXPECT_ACL_OK(aclrtSetDevice(0));
+    aclrtStream stream = nullptr;
+    EXPECT_ACL_OK(aclrtCreateStream(&stream));
+
+    int32_t* hostBuf = nullptr;
+    int32_t* devBuf = nullptr;
+    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&hostBuf), byteSize));
+    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&devBuf), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
+
+    std::fill_n(hostBuf, elementCount, 0);
+    EXPECT_ACL_OK(aclrtMemcpy(devBuf, byteSize, hostBuf, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
+
+    launch(devBuf, stream);
+    const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
+    std::printf("[aic_atomic:%s] aclrtSynchronizeStream ret=%d (0=ok, 507015=AICORE exception)\n", label, syncRet);
+
+    if (syncRet == ACL_SUCCESS) {
+        const int32_t copyRet =
+            static_cast<int32_t>(aclrtMemcpy(hostBuf, byteSize, devBuf, byteSize, ACL_MEMCPY_DEVICE_TO_HOST));
+        if (copyRet == ACL_SUCCESS) {
+            std::printf("[aic_atomic:%s] counter=%d (expected %d)\n", label, hostBuf[0], expectedCounter);
+            EXPECT_EQ(hostBuf[0], expectedCounter) << label << ": concurrent cube atomic lost updates";
+        } else {
+            std::printf("[aic_atomic:%s] D2H copy failed ret=%d\n", label, copyRet);
+        }
+    }
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << label << ": cube concurrent-atomic path faulted at runtime";
+
+    (void)aclrtFree(devBuf);
+    (void)aclrtFreeHost(hostBuf);
+    (void)aclrtDestroyStream(stream);
+    (void)aclrtResetDevice(0);
+    (void)aclFinalize();
+}
+} // namespace
+
+TEST_F(SYNCALLTest, case_aic_atomic_probe_add)
+{
+    RunAicAtomicProbe("add", LaunchAicAtomicProbeAdd, /*expectedCounter=*/18);
+}
+
+TEST_F(SYNCALLTest, case_aic_atomic_probe_add_dcci)
+{
+    RunAicAtomicProbe("add_dcci", LaunchAicAtomicProbeAddDcci, /*expectedCounter=*/18);
+}
+
+TEST_F(SYNCALLTest, case_aic_atomic_probe_barrier)
+{
+    RunAicAtomicProbe("barrier", LaunchAicAtomicProbeBarrier, /*expectedCounter=*/18);
 }
 
 // Decisive MIX-mode probe: can an A5 AIC (cube) core write GM at all while paired
