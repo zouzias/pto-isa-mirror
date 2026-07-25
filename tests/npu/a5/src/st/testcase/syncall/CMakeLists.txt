@@ -174,10 +174,6 @@ add_executable(syncall main.cpp)
 target_compile_options(syncall PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(syncall PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../common
-    ${ASCEND_HOME_PATH}/pkg_inc
-    ${ASCEND_HOME_PATH}/pkg_inc/profiling
-    ${ASCEND_HOME_PATH}/pkg_inc/runtime
-    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
 )
 
 target_link_directories(syncall PUBLIC

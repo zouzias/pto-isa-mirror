@@ -188,18 +188,13 @@ PTO_INTERNAL void MixBarrier(__gm__ int32_t* syncWorkspace)
     }
 }
 
-// Shared soft/hard MIX body. Soft callers keep the original argument list (ffts
-// defaulted, unused); hard callers pass UseSoft=false and a valid ffts base so
-// the FFTS cross-core sync inside SYNCALL<Mix>() has its control address.
+// Shared soft/hard MIX body. Hard callers pass UseSoft=false; the FFTS base for
+// SYNCALL<Mix>() is configured by the runtime for chevron-launched kernels, so no
+// set_ffts_base_addr here (mirrors the aiv-only hard SYNCALL path).
 template <int32_t TotalParticipants, bool UseSoft = true>
 PTO_INTERNAL void RunMixSyncAllBody(
-    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr,
-    __gm__ uint64_t* fftsAddr = nullptr)
+    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr)
 {
-    if constexpr (!UseSoft) {
-        set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
-    }
-
     const int32_t idx = GetMixLogicalIdx();
     const int32_t aicIdx = static_cast<int32_t>(get_block_idx());
     __gm__ int32_t* aicFlagSlot = flags + aicIdx * kInt32PerCacheLine;

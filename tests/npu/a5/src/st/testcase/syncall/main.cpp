@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include "acl/acl.h"
-#include "runtime/rt.h"
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdio>
@@ -39,7 +38,7 @@ void LaunchSoftSyncAllAIC(int32_t* out, int32_t* flags, int32_t* syncWorkspace, 
 void LaunchHardSyncAll(int32_t* out, int32_t* flags, int32_t totalBlocks, void* stream);
 void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream);
-void LaunchHardSyncAllMix12(uint8_t* ffts, int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
+void LaunchHardSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 void LaunchAicProbeStore(int32_t* out, void* stream);
 void LaunchMixProbe(int32_t* marker, void* stream);
@@ -420,13 +419,6 @@ TEST_F(SYNCALLTest, case_hard_mix_1_2_all_blocks)
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
 
-    // Hard MIX SYNCALL uses the FFTS cross-core sync, so the kernel needs the C2C
-    // control address as its ffts base.
-    uint64_t ffts = 0;
-    uint32_t fftsLen = 0;
-    ASSERT_EQ(rtGetC2cCtrlAddr(&ffts, &fftsLen), 0) << "rtGetC2cCtrlAddr failed";
-    ASSERT_NE(ffts, 0UL);
-
     int32_t* outHost = nullptr;
     int32_t* flagsHost = nullptr;
     int32_t* outDevice = nullptr;
@@ -444,7 +436,7 @@ TEST_F(SYNCALLTest, case_hard_mix_1_2_all_blocks)
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchHardSyncAllMix12(reinterpret_cast<uint8_t*>(ffts), outDevice, flagsDevice, syncWorkspaceDevice, stream);
+    LaunchHardSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, stream);
     const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
     std::printf("[hard_mix_1_2] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
     EXPECT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed";
