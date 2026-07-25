@@ -45,21 +45,21 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
-PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp, WaitEvents &... events);
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile, typename... WaitEvents>
+PTO_INST RecordEvent TSEL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-    - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - `sizeof(DstTile::DType)` must be `2` or `4` bytes.
+    - `DstTile::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-    - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - `sizeof(DstTile::DType)` must be `1`, `2`, or `4` bytes.
+    - `DstTile::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.

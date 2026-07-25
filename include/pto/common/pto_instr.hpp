@@ -1644,9 +1644,10 @@ PTO_INST RecordEvent TSELS(
     return {};
 }
 
-template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
+template <
+    typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile, typename... WaitEvents>
 PTO_INST RecordEvent
-TSEL(TileData& dst, MaskTile& selMask, TileData& src0, TileData& src1, TmpTile& tmp, WaitEvents&... events)
+TSEL(DstTile& dst, MaskTile& selMask, Src0Tile& src0, Src1Tile& src1, TmpTile& tmp, WaitEvents&... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TSEL, dst, selMask, src0, src1, tmp);
