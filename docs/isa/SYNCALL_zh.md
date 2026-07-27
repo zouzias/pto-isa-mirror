@@ -75,10 +75,10 @@ PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileDa
 
 ## 参数
 
-- `gmWorkspace`: `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>`（在Ascend C与 `using namespace pto` 并存时，建议写全 `pto::`，避免与编译器内置头中的 `Stride` 枚举同名冲突）。软件模式使用的GM workspace，调用前需要初始化为0。每个参与core占用8个 `int32_t`（按cache line隔离同步计数）。
-- `ubWorkspace`: `Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`（模板参数固定为 `SYNCALL_SOFT_SLOT_INT32 = 8`，即每核一个cache line槽位）。AIV-only和MIX软件模式使用的UB scratch，运行时后备内存容量须至少为 `usedCores * 8 * sizeof(int32_t)`（实现通过裸指针访问，不校验模板容量；示例中以编译期最大参与核数 × `SYNCALL_SOFT_SLOT_INT32` 声明以保证后备内存充足）。
-- `l1Workspace`: `Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`。AIC-only和MIX软件模式使用的L1（cbuf）scratch，用于 `create_cbuf_matrix` 填充同步值后经DMA搬移到GM。
-- `usedCores`: 参与软件barrier的core数。为0时自动推算——AIV-only / AIC-only使用 `get_block_num()`，MIX使用 `SYNCALL_GET_MIX_PARTICIPANT_COUNT()`（即 `AIC blocks × (1 + AIV ratio)`）。
+- `gmWorkspace`： `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>`（在Ascend C与 `using namespace pto` 并存时，建议写全 `pto::`，避免与编译器内置头中的 `Stride` 枚举同名冲突）。软件模式使用的GM workspace，调用前需要初始化为0。每个参与core占用8个 `int32_t`（按cache line隔离同步计数）。
+- `ubWorkspace`： `Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`（模板参数固定为 `SYNCALL_SOFT_SLOT_INT32 = 8`，即每核一个cache line槽位）。AIV-only和MIX软件模式使用的UB scratch，运行时后备内存容量须至少为 `usedCores * 8 * sizeof(int32_t)`（实现通过裸指针访问，不校验模板容量；示例中以编译期最大参与核数 × `SYNCALL_SOFT_SLOT_INT32` 声明以保证后备内存充足）。
+- `l1Workspace`： `Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`。AIC-only和MIX软件模式使用的L1（cbuf）scratch，用于 `create_cbuf_matrix` 填充同步值后经DMA搬移到GM。
+- `usedCores`： 参与软件barrier的core数。为0时自动推算——AIV-only / AIC-only使用 `get_block_num()`，MIX使用 `SYNCALL_GET_MIX_PARTICIPANT_COUNT()`（即 `AIC blocks × (1 + AIV ratio)`）。
 
 ## Kernel Meta宏
 
