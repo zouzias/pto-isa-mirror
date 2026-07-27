@@ -9,34 +9,31 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set +e
+set -e
 set -o pipefail
 
-echo "${ut_type:-}"
-echo "${TARGET_BRANCH:-}"
-echo "${obs_path:-}"
+echo "ut_type=${ut_type:-}"
+echo "TARGET_BRANCH=${TARGET_BRANCH:-}"
+echo "ge_st_rt2=${ge_st_rt2:-}"
+echo "task_name=${task_name:-}"
 
 grep -E "^VERSION_ID=" /etc/os-release | cut -d'"' -f2
+export PATH=/opt/buildtools/python-3.10.2/bin:$PATH
 sudo update-alternatives --set gcc /usr/bin/gcc-14
 gcc --version
-
-# Color definitions for log output
-Purple="\033[0;35m"
-BPurple="\033[1;35m"
-Color_Off="\033[0m"
 
 # Print and execute a command, capturing its exit code in the global variable ${ret}
 function LOG_DO() {
     local date_time
     date_time=$(date +%Y%m%d-%H%M%S)
-    echo -e "${BPurple}[Command]${Color_Off} ${date_time} ${Purple}$*${Color_Off}"
+    echo -e "[Command] ${date_time} $*"
     "$@" && ret=0 || ret=$?
     return "${ret}"
 }
 
 main() {
     cd "${WORKSPACE}" || exit
-
+    source /home/jenkins/Ascend/cann/bin/setenv.bash
     echo "Start run c++ testcase"
     echo "Y" | apt install libgtest-dev libgmock-dev
     gcc --version
@@ -52,10 +49,11 @@ main() {
         exit 0
     fi
 
-    if [[ "${task_name}" == "A3" ]]; then
+    if [[ "${ge_st_rt2}X" == "A3X" ]]; then
         LOG_DO python3 tests/script/build_st.py -a -r npu -v a3 -t all
-    elif [[ "${task_name}" == "A5" ]]; then
-        LOG_DO python3 tests/script/build_st.py -a -r npu -v a5 -t all
+    elif [[ "${ge_st_rt2}X" == "A5X" ]]; then
+
+        LOG_DO python3 tests/script/build_st.py -r npu -v a5 -t all
     else
         LOG_DO bash build.sh --cpu
     fi

@@ -27,7 +27,7 @@ echo "bash build.sh --run_simple"
 bash build.sh --run_simple --a3 2>&1 | tee -a ./run_test.log
 source /usr/local/Ascend/cann/set_env.sh
 echo "bash build.sh --comm --a3 --npu"
-# sleep 10000
+
 bash build.sh --comm --a3 --npu 2>&1 | tee -a ./run_test.log
 
 # Package slog
