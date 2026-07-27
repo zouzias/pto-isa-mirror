@@ -45,6 +45,8 @@ static DispatchMode g_dispatchMode = DispatchMode::Direct;
 #ifndef __gm__
 #define __gm__
 #endif
+// Skip SdmaWorkspaceManager pull-in from common.hpp (needs CCE attrs on host).
+#define PTO_COMM_ST_SKIP_SDMA_WORKSPACE_MANAGER
 #include "../../../../tests/npu/a2a3/comm/st/testcase/common.hpp"
 
 // ============================================================================
