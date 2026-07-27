@@ -30,6 +30,20 @@ function LOG_DO() {
     return "${ret}"
 }
 
+function DP_ASSERT_EQUAL() {
+    local actual_value=${1}
+    local expect_value=${2}
+    local assert_msg=${3}
+    echo "actual_value:${actual_value}"
+    echo "expect_value:${expect_value}"
+    if [ "${actual_value}" != "${expect_value}" ]; then
+        echo "${assert_msg} is failed."
+        exit 1
+    else
+        echo "${assert_msg} is success."
+    fi
+}
+
 main() {
     cd "${WORKSPACE}" || exit
     source /home/jenkins/Ascend/cann/bin/setenv.bash
