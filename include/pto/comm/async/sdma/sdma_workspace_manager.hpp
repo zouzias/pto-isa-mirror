@@ -348,13 +348,13 @@ private:
         }
     };
 
-    bool CreateAclTensor(const std::vector<uint64_t>& hostData, const std::vector<int64_t>& shape, TensorGuard& guard)
+    bool CalculateElementCount(const std::vector<int64_t>& shape, uint64_t& elemCount)
     {
         if (shape.empty()) {
             std::cerr << "[SDMA] CreateAclTensor empty shape" << std::endl;
             return false;
         }
-        uint64_t elemCount = 1;
+        elemCount = 1;
         for (int64_t dim : shape) {
             if (dim <= 0) {
                 std::cerr << "[SDMA] CreateAclTensor invalid dim: " << dim << std::endl;
@@ -367,7 +367,15 @@ private:
             }
             elemCount *= uDim;
         }
+        return true;
+    }
 
+    bool CreateAclTensor(const std::vector<uint64_t>& hostData, const std::vector<int64_t>& shape, TensorGuard& guard)
+    {
+        uint64_t elemCount = 0;
+        if (!CalculateElementCount(shape, elemCount)) {
+            return false;
+        }
         if (elemCount != hostData.size()) {
             std::cerr << "[SDMA] CreateAclTensor hostData size mismatch, elemCount=" << elemCount
                       << ", hostData.size=" << hostData.size() << std::endl;
