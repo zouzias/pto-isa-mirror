@@ -9,6 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+set -e
 set -o pipefail
 
 echo "ut_type=${ut_type:-}"
@@ -61,7 +62,7 @@ main() {
         echo "Skip UT test on non-master branch"
         exit 0
     fi
-
+    set +e
     if [[ "${ge_st_rt2}X" == "A3X" ]]; then
         LOG_DO python3 tests/script/build_st.py -a -r npu -v a3 -t all
         DP_ASSERT_EQUAL "$?" "0" "Run A3 UT TESTCASE"
@@ -72,7 +73,6 @@ main() {
         LOG_DO bash build.sh --cpu
         DP_ASSERT_EQUAL "$?" "0" "Run A5 UT TESTCASE"
     fi
-
     echo "Run UT TESTCASE success"
 }
 

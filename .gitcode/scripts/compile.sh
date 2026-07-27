@@ -9,6 +9,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+set -e
 set -o pipefail
 
 echo "package_name=${package_name:-}"
@@ -54,6 +55,7 @@ gcc --version
 rm -rf /opt/rh/devtoolset-7
 bisheng -v
 
+set +e
 if [[ "${ge_st_rt2}X" == "A5X" ]]; then
     LOG_DO bash build.sh --a5 --build
     DP_ASSERT_EQUAL "$?" "0" "Build  A5 ${REPOSITORY_NAME}"
@@ -64,4 +66,3 @@ fi
 
 # Locate the generated .run package
 echo "package_name=${package_name}" >> "${ATOMGIT_OUTPUT}"
-exit 0
