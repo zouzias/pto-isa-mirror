@@ -9,7 +9,6 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
-set -e
 set -o pipefail
 
 echo "ut_type=${ut_type:-}"
@@ -51,18 +50,16 @@ main() {
 
     if [[ "${ge_st_rt2}X" == "A3X" ]]; then
         LOG_DO python3 tests/script/build_st.py -a -r npu -v a3 -t all
+        DP_ASSERT_EQUAL "$?" "0" "Run A3 UT TESTCASE"
     elif [[ "${ge_st_rt2}X" == "A5X" ]]; then
-
         LOG_DO python3 tests/script/build_st.py -r npu -v a5 -t all
+        DP_ASSERT_EQUAL "$?" "0" "Run A5 UT TESTCASE"
     else
         LOG_DO bash build.sh --cpu
+        DP_ASSERT_EQUAL "$?" "0" "Run A5 UT TESTCASE"
     fi
 
-    if [[ ${ret} -ne 0 ]]; then
-        echo "ERROR: UT testcase build failed"
-        exit 1
-    fi
-    echo "Run UT TESTCASE"
+    echo "Run UT TESTCASE success"
 }
 
 main "$@"
