@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 #include <gtest/gtest.h>
 #include <algorithm>
-#include <cstdio>
 #include <filesystem>
 
 using namespace PtoTestCommon;
@@ -37,7 +36,7 @@ void LaunchSoftSyncAll(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int
 void LaunchSoftSyncAllAIC(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchHardSyncAll(int32_t* out, int32_t* flags, int32_t totalBlocks, void* stream);
 void LaunchSoftSyncAllMix11(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
-void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream);
+void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchHardSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream);
 void LaunchHardSyncAllAIC(int32_t* out, void* stream);
 
@@ -90,19 +89,7 @@ TEST_F(SYNCALLTest, case_soft_aiv_only_all_blocks)
         devFinal[i] = outHost[i * int32PerCacheLine];
     }
 
-    bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
-    if (!ret) {
-        std::printf("soft out[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", outHost[i * int32PerCacheLine]);
-        }
-        std::printf("\nsoft flags[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", flagsHost[i * int32PerCacheLine]);
-        }
-        std::printf("\n");
-    }
-    EXPECT_TRUE(ret);
+    EXPECT_TRUE(ResultCmp<int32_t>(golden, devFinal, 0.0f));
 
     EXPECT_ACL_OK(aclrtFree(outDevice));
     EXPECT_ACL_OK(aclrtFree(flagsDevice));
@@ -151,7 +138,6 @@ TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
 
     LaunchSoftSyncAllAIC(outDevice, flagsDevice, syncWorkspaceDevice, stream);
     const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
-    std::printf("[soft_aic_only] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
     EXPECT_EQ(syncRet, ACL_SUCCESS) << "AIC-only soft barrier faulted";
 
     if (syncRet == ACL_SUCCESS) {
@@ -165,15 +151,7 @@ TEST_F(SYNCALLTest, case_soft_aic_only_all_blocks)
             golden[i] = 1;
             devFinal[i] = outHost[i * int32PerCacheLine];
         }
-        bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
-        if (!ret) {
-            std::printf("soft_aic out[0..7]:");
-            for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-                std::printf(" %d", outHost[i * int32PerCacheLine]);
-            }
-            std::printf("\n");
-        }
-        EXPECT_TRUE(ret);
+        EXPECT_TRUE(ResultCmp<int32_t>(golden, devFinal, 0.0f));
     }
 
     (void)aclrtFree(outDevice);
@@ -225,15 +203,7 @@ TEST_F(SYNCALLTest, case_hard_aiv_only_all_blocks)
         devFinal[i] = outHost[i * int32PerCacheLine];
     }
 
-    bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
-    if (!ret) {
-        std::printf("hard out[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", outHost[i * int32PerCacheLine]);
-        }
-        std::printf("\n");
-    }
-    EXPECT_TRUE(ret);
+    EXPECT_TRUE(ResultCmp<int32_t>(golden, devFinal, 0.0f));
 
     EXPECT_ACL_OK(aclrtFree(outDevice));
     EXPECT_ACL_OK(aclrtFree(flagsDevice));
@@ -250,61 +220,34 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     constexpr size_t int32PerCacheLine = 16; // Must match kInt32PerCacheLine in syncall_mix_common.hpp.
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
-    // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
-    // per-core-slot barrier; the atomic-counter barrier only uses element 0.
-    constexpr size_t mixSlotInt32 = 32;
-    constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
+    // The soft barrier is a single shared atomic counter; give it its own cache line.
+    constexpr size_t syncWsBytes = int32PerCacheLine * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
     aclrtStream stream;
     EXPECT_ACL_OK(aclrtCreateStream(&stream));
 
-    constexpr int32_t aicBlocks = 18;
-    const size_t markerByteSize = blockCount * int32PerCacheLine * sizeof(int32_t);
-
     int32_t* outHost = nullptr;
     int32_t* flagsHost = nullptr;
-    int32_t* markerHost = nullptr;
     int32_t* outDevice = nullptr;
     int32_t* flagsDevice = nullptr;
     int32_t* syncWorkspaceDevice = nullptr;
-    int32_t* markerDevice = nullptr;
 
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&outHost), byteSize));
     EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&flagsHost), byteSize));
-    EXPECT_ACL_OK(aclrtMallocHost(reinterpret_cast<void**>(&markerHost), markerByteSize));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&outDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&flagsDevice), byteSize, ACL_MEM_MALLOC_HUGE_FIRST));
     EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&syncWorkspaceDevice), syncWsBytes, ACL_MEM_MALLOC_HUGE_FIRST));
-    EXPECT_ACL_OK(aclrtMalloc(reinterpret_cast<void**>(&markerDevice), markerByteSize, ACL_MEM_MALLOC_HUGE_FIRST));
 
     std::fill_n(outHost, elementCount, 0);
     std::fill_n(flagsHost, elementCount, 0);
-    std::fill_n(markerHost, blockCount * int32PerCacheLine, -1);
     EXPECT_ACL_OK(aclrtMemcpy(outDevice, byteSize, outHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemcpy(flagsDevice, byteSize, flagsHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE));
     EXPECT_ACL_OK(aclrtMemset(syncWorkspaceDevice, syncWsBytes, 0, syncWsBytes));
-    EXPECT_ACL_OK(aclrtMemcpy(markerDevice, markerByteSize, markerHost, markerByteSize, ACL_MEMCPY_HOST_TO_DEVICE));
 
-    LaunchSoftSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, markerDevice, stream);
+    LaunchSoftSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, stream);
     const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
-    std::printf("[soft_mix_1_2] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
-
-    if (aclrtMemcpy(markerHost, markerByteSize, markerDevice, markerByteSize, ACL_MEMCPY_DEVICE_TO_HOST) ==
-        ACL_SUCCESS) {
-        std::printf("[soft_mix_1_2] stage markers (-1=never started, 8=completed):\n AIC:");
-        for (int32_t i = 0; i < aicBlocks; ++i) {
-            std::printf(" %d", markerHost[i * int32PerCacheLine]);
-        }
-        std::printf("\n AIV:");
-        for (int32_t i = aicBlocks; i < blockCount; ++i) {
-            std::printf(" %d", markerHost[i * int32PerCacheLine]);
-        }
-        std::printf(
-            "\n[soft_mix_1_2] stages: 0=enter 1=proxyWr1 2=barrier1 3=check1 4=barrier2 5=proxyWr2 "
-            "6=barrier3 7=check2 8=outWr(done); crash is at the step AFTER the max marker\n");
-    }
     EXPECT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed";
 
     if (syncRet == ACL_SUCCESS) {
@@ -324,10 +267,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     (void)aclrtFree(outDevice);
     (void)aclrtFree(flagsDevice);
     (void)aclrtFree(syncWorkspaceDevice);
-    (void)aclrtFree(markerDevice);
     (void)aclrtFreeHost(outHost);
     (void)aclrtFreeHost(flagsHost);
-    (void)aclrtFreeHost(markerHost);
     (void)aclrtDestroyStream(stream);
     (void)aclrtResetDevice(0);
     (void)aclFinalize();
@@ -339,10 +280,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
     constexpr size_t int32PerCacheLine = 16; // Must match kInt32PerCacheLine in syncall_mix_common.hpp.
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
-    // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
-    // per-core-slot barrier; the atomic-counter barrier only uses element 0.
-    constexpr size_t mixSlotInt32 = 32;
-    constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
+    // The soft barrier is a single shared atomic counter; give it its own cache line.
+    constexpr size_t syncWsBytes = int32PerCacheLine * sizeof(int32_t);
 
     EXPECT_ACL_OK(aclInit(nullptr));
     EXPECT_ACL_OK(aclrtSetDevice(0));
@@ -380,19 +319,7 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
         devFinal[i] = outHost[i * int32PerCacheLine];
     }
 
-    bool ret = ResultCmp<int32_t>(golden, devFinal, 0.0f);
-    if (!ret) {
-        std::printf("soft_mix_1_1 out[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", outHost[i * int32PerCacheLine]);
-        }
-        std::printf("\nsoft_mix_1_1 flags[0..7]:");
-        for (size_t i = 0; i < std::min<size_t>(8, blockCount); ++i) {
-            std::printf(" %d", flagsHost[i * int32PerCacheLine]);
-        }
-        std::printf("\n");
-    }
-    EXPECT_TRUE(ret);
+    EXPECT_TRUE(ResultCmp<int32_t>(golden, devFinal, 0.0f));
 
     EXPECT_ACL_OK(aclrtFree(outDevice));
     EXPECT_ACL_OK(aclrtFree(flagsDevice));
@@ -435,7 +362,6 @@ TEST_F(SYNCALLTest, case_hard_mix_1_2_all_blocks)
 
     LaunchHardSyncAllMix12(outDevice, flagsDevice, syncWorkspaceDevice, stream);
     const int32_t syncRet = static_cast<int32_t>(aclrtSynchronizeStream(stream));
-    std::printf("[hard_mix_1_2] aclrtSynchronizeStream ret=%d (507015=AICORE exception)\n", syncRet);
     EXPECT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed";
 
     if (syncRet == ACL_SUCCESS) {

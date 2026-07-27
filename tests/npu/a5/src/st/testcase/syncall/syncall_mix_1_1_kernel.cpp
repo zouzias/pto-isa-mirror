@@ -8,15 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// A5 MIX 1:1 soft SYNCALL kernel, dual-arch dual-stream chevron.
-// dav-c310 auto-split is physically 1:2, and the register-ELF launch this case used
-// to take has no FFTS base on A5 (rtGetC2cCtrlAddr is unsupported), which is fatal
-// because the paired AIC->AIV proxy write relies on intra-block sync. Launching cube
-// and vector as two independent kernels removes both problems: a pure vector launch
-// reports subblockdim 1 so the AIV logical index lands in [18, 36) instead of running
-// off the end of the 36-slot buffers, and the cube core publishes its own flag with a
-// scalar GM store (Paired=false) instead of proxying. The soft GM barrier is what
-// synchronizes the two streams.
+// A5 MIX 1:1 soft SYNCALL kernel: cube and vector are built as two independent
+// chevron kernels and launched on separate streams. dav-c310 auto-split is
+// physically 1:2 so a 1:1 mix cannot come out of one launch, and a manually
+// registered ELF gets no FFTS base on A5 (rtGetC2cCtrlAddr is unsupported), which
+// rules out the intra-block AIC->AIV proxy write. Two pure launches avoid both: a
+// vector-only launch reports subblockdim 1, keeping AIV logical indices inside
+// [18, 36), and the cube core publishes its own flag with a scalar GM store
+// (Paired=false). The soft GM barrier is what synchronizes the two streams.
 
 #include "syncall_mix_common.hpp"
 

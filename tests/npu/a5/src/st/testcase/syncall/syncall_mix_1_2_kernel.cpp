@@ -19,13 +19,12 @@ constexpr int32_t kMix12SoftParticipants = 54;
 constexpr int32_t kMix12AicBlocks = 18;
 
 extern "C" __global__ AICORE void RunSoftSyncAllMix12(
-    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace,
-    __gm__ int32_t __out__* marker)
+    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace)
 {
-    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace, marker);
+    RunMixSyncAllBody<kMix12SoftParticipants>(out, flags, syncWorkspace);
 }
 
-void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t* marker, void* stream)
+void LaunchSoftSyncAllMix12(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream)
 {
-    RunSoftSyncAllMix12<<<kMix12AicBlocks, nullptr, stream>>>(out, flags, syncWorkspace, marker);
+    RunSoftSyncAllMix12<<<kMix12AicBlocks, nullptr, stream>>>(out, flags, syncWorkspace);
 }

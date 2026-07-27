@@ -21,11 +21,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 constexpr int32_t kAicSoftBlockCount = 18;
-// 64-byte (16 int32) per-core slot: A5 cache line is 64 B, and cube publishes via
-// scalar store + dcci (whole-cache-line write-back). At the old 32-byte stride two
-// cores shared one line, so one core's dcci clobbered the neighbor's flag (false
-// sharing) and the cross-core check failed. One full cache line per slot fixes it.
-// Must match int32PerCacheLine in case_soft_aic_only_all_blocks.
+// One full 64-byte A5 cache line per core slot: cube publishes via scalar store +
+// dcci, which writes back the whole line, so a narrower stride would let one core
+// clobber its neighbor's flag. Must match int32PerCacheLine in the host test.
 constexpr int32_t kAicSoftCacheLine = 16;
 
 PTO_INTERNAL void AicScalarStore(__gm__ int32_t* dst, int32_t value)
