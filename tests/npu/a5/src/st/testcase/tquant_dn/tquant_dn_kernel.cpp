@@ -21,7 +21,7 @@ namespace TQuantDNTest {
 
 // Reproduce the static tile and runtime validShape combinations emitted by
 // PyPTO for actual=[1472,1010], view=[1408,34], tile=[896,1212].
-template <typename T, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+template <typename T, MxQuantAlg Alg, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
 __global__ AICORE void runTQuantDNValidShape(
     __gm__ T __in__* src, __gm__ int8_t __out__* dst, __gm__ uint8_t __out__* exp)
 {
@@ -87,30 +87,46 @@ __global__ AICORE void runTQuantDNValidShape(
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TQUANT<0, MxQuantAlg::OcpMxFp8E4M3, true>(dstTile, srcTile, &expTile, &maxTile, &scalingTile);
+    TQUANT<0, Alg, true>(dstTile, srcTile, &expTile, &maxTile, &scalingTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
     TSTORE(expGlobal, expTile);
 }
 
-template <typename T, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+template <typename T, MxQuantAlg Alg, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
 void LaunchTQuantDNValidShape(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
 {
-    runTQuantDNValidShape<T, StaticRows, StaticCols, ValidRows, ValidCols>
+    runTQuantDNValidShape<T, Alg, StaticRows, StaticCols, ValidRows, ValidCols>
         <<<1, nullptr, stream>>>((T*)src, dst, exp);
 }
 
 template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
 void LaunchTQuantDNValidShapeFP16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
 {
-    LaunchTQuantDNValidShape<half, StaticRows, StaticCols, ValidRows, ValidCols>(src, dst, exp, stream);
+    LaunchTQuantDNValidShape<half, MxQuantAlg::OcpMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
 }
 
 template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
 void LaunchTQuantDNValidShapeBF16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
 {
-    LaunchTQuantDNValidShape<bfloat16_t, StaticRows, StaticCols, ValidRows, ValidCols>(src, dst, exp, stream);
+    LaunchTQuantDNValidShape<bfloat16_t, MxQuantAlg::OcpMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeNVFP16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<half, MxQuantAlg::NvMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeNVBF16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<bfloat16_t, MxQuantAlg::NvMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
 }
 
 // Full DN vector pipeline: TQUANT(DN) + TMOV(ND->NZ) + TMOV<0>(DN->ZZ).
@@ -321,11 +337,31 @@ void LaunchTQuantDN_nv_interleaved(
         <<<1, nullptr, stream>>>((bfloat16_t*)src, fp8_nd, e8_dn, fp8_nz, e8_zz, (bfloat16_t*)max_dn);
 }
 
+template <int M, int N, int N_pad>
+void LaunchTQuantDN_nv(
+    uint16_t* src, int8_t* fp8_nd, uint8_t* e8_dn, int8_t* fp8_nz, uint8_t* e8_zz, uint16_t* max_dn,
+    void* stream)
+{
+    runTQuantDN<bfloat16_t, M, N, N_pad, false, MxQuantAlg::NvMxFp8E4M3>
+        <<<1, nullptr, stream>>>((bfloat16_t*)src, fp8_nd, e8_dn, fp8_nz, e8_zz, (bfloat16_t*)max_dn);
+}
+
+template <int M, int N, int N_pad, bool InterleaveExp>
+void LaunchTQuantDN_fp32_nv(
+    uint32_t* src, int8_t* fp8_nd, uint8_t* e8_dn, int8_t* fp8_nz, uint8_t* e8_zz, uint32_t* max_dn,
+    void* stream)
+{
+    runTQuantDN<float, M, N, N_pad, InterleaveExp, MxQuantAlg::NvMxFp8E4M3>
+        <<<1, nullptr, stream>>>((float*)src, fp8_nd, e8_dn, fp8_nz, e8_zz, (float*)max_dn);
+}
+
 // MXFP4 (E2M1) DN kernel: quantizes src[M,N_pad] to packed FP4 plus per-group
 // e8m0/max tiles. TQUANT writes FP4 as a flat float4_e2m1x2_t tile; a uint8_t
 // TSTORE tile is assigned via TASSIGN to the same UB region so TSTORE reads it in-place
 // (no copy/intrinsics needed).
-template <typename T, int M, int N, int N_pad, bool InterleaveExp = false>
+template <
+    typename T, int M, int N, int N_pad, bool InterleaveExp = false,
+    MxQuantAlg Alg = MxQuantAlg::OcpMxFp4E2M1>
 __global__ AICORE void runTQuantDN_MXFP4(
     __gm__ T __in__* src_gm, __gm__ uint8_t __out__* fp4_nd_gm, __gm__ uint8_t __out__* e8_dn_gm,
     __gm__ uint8_t __out__* fp4_nz_gm, __gm__ T __out__* max_dn_gm)
@@ -425,9 +461,9 @@ __global__ AICORE void runTQuantDN_MXFP4(
     // Generic DN API: grp_axis=0, single MxQuantAlg tag. TQUANT writes the exponent
     // into e8Tile; the kernel TSTOREs e8Tile directly (shape already matches GM).
     if constexpr (InterleaveExp)
-        TQUANT<0, MxQuantAlg::OcpMxFp4E2M1, true>(fp4Tile, srcTile, &e8Tile, &maxTile, &scalingTile);
+        TQUANT<0, Alg, true>(fp4Tile, srcTile, &e8Tile, &maxTile, &scalingTile);
     else
-        TQUANT<0, MxQuantAlg::OcpMxFp4E2M1>(fp4Tile, srcTile, &e8Tile, &maxTile, &scalingTile);
+        TQUANT<0, Alg>(fp4Tile, srcTile, &e8Tile, &maxTile, &scalingTile);
 
     // Packed FP4 ND->NZ: source is RowMajor [M, packedCols] of float4_e2m1x2_t.
     TMOV(fp4NZTile, fp4Tile2D);
@@ -471,6 +507,30 @@ void LaunchTQuantDN_MXFP4_fp16_interleaved(
         <<<1, nullptr, stream>>>((half*)src, fp4_nd, e8_dn, fp4_nz, (half*)max_dn);
 }
 
+template <typename T, int M, int N, int N_pad, bool InterleaveExp>
+void LaunchTQuantDN_MXFP4_nv(
+    uint16_t* src, uint8_t* fp4_nd, uint8_t* e8_dn, uint8_t* fp4_nz, uint16_t* max_dn, void* stream)
+{
+    runTQuantDN_MXFP4<T, M, N, N_pad, InterleaveExp, MxQuantAlg::NvMxFp4E2M1>
+        <<<1, nullptr, stream>>>((T*)src, fp4_nd, e8_dn, fp4_nz, (T*)max_dn);
+}
+
+template <int M, int N, int N_pad, bool InterleaveExp>
+void LaunchTQuantDN_MXFP4_nv_bf16(
+    uint16_t* src, uint8_t* fp4_nd, uint8_t* e8_dn, uint8_t* fp4_nz, uint16_t* max_dn, void* stream)
+{
+    LaunchTQuantDN_MXFP4_nv<bfloat16_t, M, N, N_pad, InterleaveExp>(
+        src, fp4_nd, e8_dn, fp4_nz, max_dn, stream);
+}
+
+template <int M, int N, int N_pad, bool InterleaveExp>
+void LaunchTQuantDN_MXFP4_nv_fp16(
+    uint16_t* src, uint8_t* fp4_nd, uint8_t* e8_dn, uint8_t* fp4_nz, uint16_t* max_dn, void* stream)
+{
+    LaunchTQuantDN_MXFP4_nv<half, M, N, N_pad, InterleaveExp>(
+        src, fp4_nd, e8_dn, fp4_nz, max_dn, stream);
+}
+
 #define INSTANTIATE_TQUANT_DN(M, N, NP) \
     template void LaunchTQuantDN<M, N, NP>(uint16_t*, int8_t*, uint8_t*, int8_t*, uint8_t*, uint16_t*, void*)
 
@@ -488,6 +548,14 @@ void LaunchTQuantDN_MXFP4_fp16_interleaved(
 #define INSTANTIATE_TQUANT_DN_NV_INTERLEAVED(M, N, NP) \
     template void LaunchTQuantDN_nv_interleaved<M, N, NP>( \
         uint16_t*, int8_t*, uint8_t*, int8_t*, uint8_t*, uint16_t*, void*)
+
+#define INSTANTIATE_TQUANT_DN_NV(M, N, NP) \
+    template void LaunchTQuantDN_nv<M, N, NP>( \
+        uint16_t*, int8_t*, uint8_t*, int8_t*, uint8_t*, uint16_t*, void*)
+
+#define INSTANTIATE_TQUANT_DN_FP32_NV(M, N, NP, INTERLEAVE) \
+    template void LaunchTQuantDN_fp32_nv<M, N, NP, INTERLEAVE>( \
+        uint32_t*, int8_t*, uint8_t*, int8_t*, uint8_t*, uint32_t*, void*)
 
 INSTANTIATE_TQUANT_DN(128, 128, 128);
 INSTANTIATE_TQUANT_DN(64, 128, 128);
@@ -511,6 +579,11 @@ INSTANTIATE_TQUANT_DN_INTERLEAVED(128, 288, 288);
 INSTANTIATE_TQUANT_DN_INTERLEAVED(128, 352, 352);
 INSTANTIATE_TQUANT_DN_FP32_INTERLEAVED(128, 128, 128);
 INSTANTIATE_TQUANT_DN_NV_INTERLEAVED(128, 128, 128);
+INSTANTIATE_TQUANT_DN_NV_INTERLEAVED(128, 96, 96);
+INSTANTIATE_TQUANT_DN_NV(64, 128, 128);
+INSTANTIATE_TQUANT_DN_NV(128, 128, 128);
+INSTANTIATE_TQUANT_DN_FP32_NV(64, 128, 128, false);
+INSTANTIATE_TQUANT_DN_FP32_NV(128, 128, 128, true);
 
 #define INSTANTIATE_TQUANT_DN_VALID_SHAPE(DTYPE, SR, SC, VR, VC) \
     template void LaunchTQuantDNValidShape##DTYPE<SR, SC, VR, VC>(uint16_t*, int8_t*, uint8_t*, void*)
@@ -525,6 +598,16 @@ INSTANTIATE_TQUANT_DN_NV_INTERLEAVED(128, 128, 128);
 
 INSTANTIATE_TQUANT_DN_VALID_SHAPES(FP16);
 INSTANTIATE_TQUANT_DN_VALID_SHAPES(BF16);
+
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV(DTYPE, SR, SC, VR, VC) \
+    template void LaunchTQuantDNValidShapeNV##DTYPE<SR, SC, VR, VC>(uint16_t*, int8_t*, uint8_t*, void*)
+
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV(DTYPE) \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV(DTYPE, 896, 48, 896, 34); \
+    INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV(DTYPE, 512, 48, 64, 24)
+
+INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV(FP16);
+INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV(BF16);
 
 #define INSTANTIATE_TQUANT_DN_MXFP4_BF16(M, N, NP) \
     template void LaunchTQuantDN_MXFP4_bf16<M, N, NP>(uint16_t*, uint8_t*, uint8_t*, uint8_t*, uint16_t*, void*)
@@ -549,8 +632,19 @@ INSTANTIATE_TQUANT_DN_MXFP4_FP16(64, 256, 256);
 INSTANTIATE_TQUANT_DN_MXFP4_BF16_INTERLEAVED(128, 128, 128);
 INSTANTIATE_TQUANT_DN_MXFP4_FP16_INTERLEAVED(128, 128, 128);
 
+#define INSTANTIATE_TQUANT_DN_MXFP4_NV(DTYPE, M, N, NP, INTERLEAVE) \
+    template void LaunchTQuantDN_MXFP4_nv_##DTYPE<M, N, NP, INTERLEAVE>( \
+        uint16_t*, uint8_t*, uint8_t*, uint8_t*, uint16_t*, void*)
+
+INSTANTIATE_TQUANT_DN_MXFP4_NV(bf16, 64, 128, 128, false);
+INSTANTIATE_TQUANT_DN_MXFP4_NV(bf16, 128, 128, 128, true);
+INSTANTIATE_TQUANT_DN_MXFP4_NV(fp16, 64, 128, 128, false);
+INSTANTIATE_TQUANT_DN_MXFP4_NV(fp16, 128, 128, 128, true);
+
 #undef INSTANTIATE_TQUANT_DN
 #undef INSTANTIATE_TQUANT_DN_VALID_SHAPE
 #undef INSTANTIATE_TQUANT_DN_VALID_SHAPES
+#undef INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV
+#undef INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV
 
 } // namespace TQuantDNTest

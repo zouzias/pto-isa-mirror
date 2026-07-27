@@ -58,6 +58,20 @@ enum class MxQuantAlg {
 };
 ```
 
+For DN (`grp_axis=0`), all four values above support `fp16`, `bf16`, and `fp32`
+input. Both the ordinary E8M0 layout and the optional interleaved layout are
+supported:
+
+| Quantized format | Scale algorithm | Input types | `interleave` |
+|------------------|-----------------|-------------|--------------|
+| MXFP8 E4M3 | OCP | fp16 / bf16 / fp32 | `false` (default) / `true` |
+| MXFP8 E4M3 | NV | fp16 / bf16 / fp32 | `false` (default) / `true` |
+| MXFP4 E2M1 | OCP | fp16 / bf16 / fp32 | `false` (default) / `true` |
+| MXFP4 E2M1 | NV | fp16 / bf16 / fp32 | `false` (default) / `true` |
+
+Omitting the bool template argument is equivalent to `interleave=false`, so
+existing callers retain the original exponent layout.
+
 > **Backward compatibility:** the old `TQUANT<QuantType::MXFP8, ...>` interface is
 > retained unchanged. The `<grp_axis, mx_alg>` form is the preferred interface going
 > forward; nothing is removed.
