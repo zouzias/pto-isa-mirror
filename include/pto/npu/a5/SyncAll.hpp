@@ -44,12 +44,14 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIC_BLOCKS()
 #endif
 }
 
+// __MIX_CORE_AIV_RATIO__ wins when the build declares it: it states the ratio the
+// launch actually uses, which get_subblockdim() cannot report on the cube side.
 PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIV_RATIO()
 {
-#if defined(__DAV_VEC__)
-    return static_cast<int32_t>(get_subblockdim());
-#elif defined(__MIX_CORE_AIV_RATIO__)
+#if defined(__MIX_CORE_AIV_RATIO__)
     return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
+#elif defined(__DAV_VEC__)
+    return static_cast<int32_t>(get_subblockdim());
 #else
     return 1;
 #endif
@@ -129,10 +131,10 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
     st_atomic<int32_t>(1, counter);
     SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
     dsb(DSB_DDR);
-    set_atomic_none();
+    // set_atomic_none();
 }
 
-// Shared atomic-counter barrier for AIV-only soft SYNCALL.
+// Shared atomic-counter barrier for AIV-only / AIC-only / MIX soft SYNCALL.
 // Counter is monotonic (never reset); epoch is derived from the pre-arrival value.
 PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32_t totalBlocks)
 {
@@ -144,22 +146,22 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32
     dsb(DSB_DDR);
 }
 
-// MIX software SYNCALL: cube and vector cores share one atomic counter, the same
-// barrier the AIV-only and AIC-only paths use. Only the counter (element 0 of the
-// workspace) is touched here; business GM Tile stores still have to proxy through
-// AIV because A5 AIC lacks copy_cbuf_to_gm.
+// MIX software SYNCALL: every AIC/AIV participant arrives on one shared counter,
+// the same barrier the AIV-only and AIC-only paths use. Only element 0 of the
+// workspace is touched.
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
-    const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
+
 #if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
-    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
+    const int32_t totalBlocks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
 #else
     (void)gmWorkspace;
-    (void)totalBlks;
+    (void)usedCores;
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
@@ -192,8 +194,8 @@ PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCor
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)
-    const int32_t totalBlks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
-    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
+    const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
 #else
     (void)gmWorkspace;
     (void)usedCores;

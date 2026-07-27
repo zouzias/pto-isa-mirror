@@ -16,9 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-// One full 64-byte A5 cache line per participant slot. The non-paired MIX 1:1 path
-// publishes the cube flag with a scalar store + dcci, which writes back the whole
-// line, so slots packed at 32 bytes would let one cube core clobber its neighbor.
+// One full 64-byte A5 cache line per participant slot, for every MIX case. The
+// widest publisher decides the stride: the non-paired path has the cube core write
+// its flag with a scalar store + dcci, which writes back the whole line, so slots
+// packed at 32 bytes would let one cube core clobber its neighbor.
 constexpr int32_t kInt32PerCacheLine = 16;
 // copy_gm_to_ubuf counts 32-byte units; one slot spans this many of them.
 constexpr int32_t kBurstPerSlot = kInt32PerCacheLine * static_cast<int32_t>(sizeof(int32_t)) / 32;

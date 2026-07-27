@@ -464,7 +464,7 @@ AICORE void MoeDispatchWithSync(
     using SyncShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncGlobal = pto::GlobalTensor<int32_t, SyncShape, SyncStride, pto::Layout::ND>;
-    int32_t syncElems = coreNum * SYNCALL_SOFT_SLOT_INT32;
+    int32_t syncElems = SYNCALL_SOFT_WORKSPACE_INT32;
     SyncShape syncGmShape(1, 1, 1, 1, static_cast<size_t>(syncElems));
     SyncStride syncGmStride(syncElems, syncElems, syncElems, syncElems, 1);
     SyncGlobal syncGmG(syncGmWorkspace, syncGmShape, syncGmStride);

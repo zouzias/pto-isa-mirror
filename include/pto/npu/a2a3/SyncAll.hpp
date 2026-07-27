@@ -22,6 +22,8 @@ PTO_INTERNAL void SYNCALL_SOFT_DCCI(__gm__ void* ptr)
     __asm__ __volatile__("");
 }
 
+// __MIX_CORE_AIV_RATIO__ wins when the build declares it: it states the ratio the
+// launch actually uses, which get_subblockdim() cannot report on the cube side.
 PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIV_RATIO()
 {
 #if defined(__MIX_CORE_AIV_RATIO__)

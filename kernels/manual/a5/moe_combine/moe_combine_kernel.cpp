@@ -250,8 +250,7 @@ AICORE inline uint32_t TokenShardEnd(uint32_t totalTokens, uint32_t blockId, uin
 
 AICORE inline void SoftSyncAiv(__gm__ int32_t* gmWorkspace, uint32_t blockNum)
 {
-    GlobalNd<int32_t> syncGlobal =
-        MakeGlobal1D(gmWorkspace, static_cast<int32_t>(blockNum * pto::SYNCALL_SOFT_SLOT_INT32));
+    GlobalNd<int32_t> syncGlobal = MakeGlobal1D(gmWorkspace, pto::SYNCALL_SOFT_WORKSPACE_INT32);
     pto::SYNCALL<pto::SyncAllMode::Soft>(syncGlobal, static_cast<int32_t>(blockNum));
 }
 

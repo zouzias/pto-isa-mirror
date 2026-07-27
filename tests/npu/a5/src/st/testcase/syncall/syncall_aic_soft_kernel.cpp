@@ -25,6 +25,9 @@ constexpr int32_t kAicSoftBlockCount = 18;
 // dcci, which writes back the whole line, so a narrower stride would let one core
 // clobber its neighbor's flag. Must match int32PerCacheLine in the host test.
 constexpr int32_t kAicSoftCacheLine = 16;
+// Written by the launched-but-not-participating cores of the partial case, so the
+// host can tell "core ran and skipped the barrier" from "core never ran" (0).
+constexpr int32_t kIdleCoreMark = 2;
 
 PTO_INTERNAL void AicScalarStore(__gm__ int32_t* dst, int32_t value)
 {
@@ -33,9 +36,10 @@ PTO_INTERNAL void AicScalarStore(__gm__ int32_t* dst, int32_t value)
     dsb(DSB_DDR);
 }
 
-// Read every peer flag with ld_dev (non-cacheable, straight from DDR). A batched
-// dcci + cached scalar load returns stale values on the A5 cube core; ld_dev is
-// the read idiom used by SYNCALL_SOFT_ATOMIC_LOAD.
+// Read every peer flag with ld_dev (non-cacheable, straight from DDR). These flags
+// are published by cube scalar stores, and for those a batched dcci + cached scalar
+// load was observed to return stale values; ld_dev is the read idiom
+// SYNCALL_SOFT_ATOMIC_LOAD uses.
 PTO_INTERNAL int32_t AicCheckFlags(__gm__ int32_t* flags, int32_t total, int32_t multiplier)
 {
     int32_t allVisible = 1;
@@ -49,11 +53,11 @@ PTO_INTERNAL int32_t AicCheckFlags(__gm__ int32_t* flags, int32_t total, int32_t
     return allVisible;
 }
 
-extern "C" __global__ AICORE void RunSoftSyncAllAIC(
-    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace)
+// total is how many cube cores reach the barrier, which is also how many flag
+// slots each of them must observe.
+PTO_INTERNAL void SoftSyncAllAicBody(
+    __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, int32_t total)
 {
-#if defined(__DAV_CUBE__)
-    const int32_t total = static_cast<int32_t>(get_block_num());
     const int32_t idx = static_cast<int32_t>(get_block_idx());
     GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
 
@@ -67,6 +71,13 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(
 
     const int32_t allSecondVisible = AicCheckFlags(flags, total, 2);
     AicScalarStore(out + idx * kAicSoftCacheLine, allFirstVisible & allSecondVisible);
+}
+
+extern "C" __global__ AICORE void RunSoftSyncAllAIC(
+    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace)
+{
+#if defined(__DAV_CUBE__)
+    SoftSyncAllAicBody(out, flags, syncWorkspace, static_cast<int32_t>(get_block_num()));
 #else
     (void)out;
     (void)flags;
@@ -74,7 +85,33 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(
 #endif
 }
 
+// All launched cube cores run, only the first syncBlocks of them join the barrier.
+extern "C" __global__ AICORE void RunSoftSyncAllAICPartial(
+    __gm__ int32_t __out__* out, __gm__ int32_t __out__* flags, __gm__ int32_t __out__* syncWorkspace,
+    int32_t syncBlocks)
+{
+#if defined(__DAV_CUBE__)
+    const int32_t idx = static_cast<int32_t>(get_block_idx());
+    if (idx >= syncBlocks) {
+        AicScalarStore(out + idx * kAicSoftCacheLine, kIdleCoreMark);
+        return;
+    }
+    SoftSyncAllAicBody(out, flags, syncWorkspace, syncBlocks);
+#else
+    (void)out;
+    (void)flags;
+    (void)syncWorkspace;
+    (void)syncBlocks;
+#endif
+}
+
 void LaunchSoftSyncAllAIC(int32_t* out, int32_t* flags, int32_t* syncWorkspace, void* stream)
 {
     RunSoftSyncAllAIC<<<kAicSoftBlockCount, nullptr, stream>>>(out, flags, syncWorkspace);
+}
+
+void LaunchSoftSyncAllAICPartial(
+    int32_t* out, int32_t* flags, int32_t* syncWorkspace, int32_t launchBlocks, int32_t syncBlocks, void* stream)
+{
+    RunSoftSyncAllAICPartial<<<launchBlocks, nullptr, stream>>>(out, flags, syncWorkspace, syncBlocks);
 }
