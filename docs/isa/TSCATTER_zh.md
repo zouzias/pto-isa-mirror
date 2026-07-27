@@ -34,6 +34,7 @@ $$ \mathrm{dst}_{i, P \cdot j + \mathrm{pos}_P} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{i, P \cdot j + \mathrm{zeros}_P} = 0 $$
 
 其中：
+
 - `DstTileData::ValidCol` = `SrcTileData::ValidCol` × 扩展倍数
 - `DstTileData::ValidRow` = `SrcTileData::ValidRow`
 
@@ -46,6 +47,7 @@ $$ \mathrm{dst}_{P \cdot i + \mathrm{pos}_P, j} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{P \cdot i + \mathrm{zeros}_P, j} = 0 $$
 
 其中：
+
 - `DstTileData::ValidRow` = `SrcTileData::ValidRow` × 扩展倍数
 - `DstTileData::ValidCol` = `SrcTileData::ValidCol`
 
@@ -122,7 +124,7 @@ PTO_INST RecordEvent TSCATTER(DstTileData& dst, SrcTileData& src, WaitEvents&...
 
 ### 索引散播
 
-- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**:
+- **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - `TileDataD::Loc`、`TileDataS::Loc`、`TileDataI::Loc` 必须是 `TileType::Vec`。
     - `TileDataD::DType`、`TileDataS::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`half`、`float16_t`、`float32_t`、`uint32_t`、`uint16_t`、`uint8_t`、`bfloat16_t`。
     - `TileDataI::DType` 必须是以下之一：`int16_t`、`int32_t`、`uint16_t` 或 `uint32_t`。
@@ -145,7 +147,7 @@ PTO_INST RecordEvent TSCATTER(DstTileData& dst, SrcTileData& src, WaitEvents&...
 
 ### 掩码散播
 
-- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**:
+- **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - `DstTileData::Loc`、`SrcTileData::Loc` 必须是 `TileType::Vec`。
     - `DstTileData::DType`、`SrcTileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`half`、`float16_t`、`float32_t`、`uint32_t`、`uint16_t`、`uint8_t`、`bfloat16_t`。
     - `DstTileData::DType` 与 `SrcTileData::DType` 必须相同。
