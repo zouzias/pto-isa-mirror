@@ -158,7 +158,7 @@ CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr,
 // dedicated GM marker slot via a plain scalar store. GetMixLogicalIdx() is unique
 // across all cores (AIC 0..aicBlocks-1, AIV aicBlocks..total-1), so one buffer
 // serves both. After a 507015 the host reads marker[idx] to see where each core
-// faulted. Scalar GM store is proven safe on A5 AIC by the aic_atomic_probe ST.
+// faulted. Scalar GM store is safe on A5 AIC.
 PTO_INTERNAL void CoreMark(__gm__ int32_t* marker, int32_t slotIdx, int32_t stage)
 {
 #if defined(__DAV_CUBE__) || defined(__DAV_VEC__)

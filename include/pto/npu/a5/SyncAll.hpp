@@ -94,7 +94,7 @@ PTO_INTERNAL void SYNCALL_IMPL()
 }
 
 // Non-cacheable scalar read of the shared counter via ld_dev. Valid on both A5
-// AIC (cube) and AIV cores (verified by the aic_atomic_probe ST).
+// AIC (cube) and AIV cores.
 PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
 {
     return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
@@ -150,7 +150,8 @@ PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32
 PTO_INTERNAL int32_t SYNCALL_SOFT_MIX_LOGICAL_IDX()
 {
 #if defined(__DAV_VEC__)
-    return SYNCALL_GET_MIX_AIC_BLOCKS() + static_cast<int32_t>(get_block_idx()) * static_cast<int32_t>(get_subblockdim()) +
+    return SYNCALL_GET_MIX_AIC_BLOCKS() +
+           static_cast<int32_t>(get_block_idx()) * static_cast<int32_t>(get_subblockdim()) +
            static_cast<int32_t>(get_subblockid());
 #elif defined(__DAV_CUBE__)
     return static_cast<int32_t>(get_block_idx());
@@ -198,10 +199,10 @@ PTO_INTERNAL void SYNCALL_SOFT_SLOT_BARRIER(__gm__ int32_t* gmWorkspace, int32_t
 // MIX software SYNCALL. A5 cannot run concurrent AIC(cube)+AIV(vector) atomic
 // adds on one shared counter (faults 507015), so every core -- each AIC block
 // and each AIV subblock -- arrives on its own cache-line-isolated slot and polls
-// all slots (SYNCALL_SOFT_SLOT_BARRIER). AIC scalar GM store/load is valid on A5
-// (verified by the aic_probe / mix_probe STs). (Business GM Tile stores still
-// proxy through AIV because A5 AIC lacks copy_cbuf_to_gm; that DMA-path
-// limitation is unrelated to the scalar slot barrier.)
+// all slots (SYNCALL_SOFT_SLOT_BARRIER). AIC scalar GM store/load is valid on A5.
+// (Business GM Tile stores still proxy through AIV because A5 AIC lacks
+// copy_cbuf_to_gm; that DMA-path limitation is unrelated to the scalar slot
+// barrier.)
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
@@ -222,8 +223,7 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
 // AIC-only software SYNCALL: shared atomic counter over cube cores only. With no
 // AIV participating there is no concurrent cube+vector atomic on one address (the
 // case that faults 507015 in MIX), so the same atomic-counter barrier the AIV-only
-// path uses is safe here. A5 AIC scalar st_atomic/ld_dev is verified by the
-// aic_probe ST.
+// path uses is safe here. A5 AIC supports scalar st_atomic/ld_dev.
 PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__

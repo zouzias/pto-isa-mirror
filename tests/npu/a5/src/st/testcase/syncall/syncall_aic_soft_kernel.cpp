@@ -9,8 +9,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 // AIC-only software SYNCALL ST, dav-c310-cube single-chevron launch. Every cube
-// block publishes a flag to GM via a scalar store (AIC has no copy_ubuf_to_gm;
-// scalar GM store/ld_dev on A5 AIC is verified by the aic_probe ST), runs the
+// block publishes a flag to GM via a scalar store (AIC has no copy_ubuf_to_gm,
+// but A5 AIC does support scalar GM store/ld_dev), runs the
 // AIC-only soft barrier, then scalar-reads every flag to confirm all cube cores
 // synchronized. out[idx] == 1 iff this core saw all peers' round-1 and round-2
 // writes, proving the barrier ordered them.
@@ -37,7 +37,7 @@ PTO_INTERNAL void AicScalarStore(__gm__ int32_t* dst, int32_t value)
 
 // Read every peer flag with ld_dev (non-cacheable, straight from DDR). A batched
 // dcci + cached scalar load returns stale values on the A5 cube core; ld_dev is
-// the read idiom proven by the aic_probe ST and used by SYNCALL_SOFT_ATOMIC_LOAD.
+// the read idiom used by SYNCALL_SOFT_ATOMIC_LOAD.
 PTO_INTERNAL int32_t AicCheckFlags(__gm__ int32_t* flags, int32_t total, int32_t multiplier)
 {
     int32_t allVisible = 1;
