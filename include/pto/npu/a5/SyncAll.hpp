@@ -196,13 +196,14 @@ PTO_INTERNAL void SYNCALL_SOFT_SLOT_BARRIER(__gm__ int32_t* gmWorkspace, int32_t
     }
 }
 
-// MIX software SYNCALL. A5 cannot run concurrent AIC(cube)+AIV(vector) atomic
-// adds on one shared counter (faults 507015), so every core -- each AIC block
-// and each AIV subblock -- arrives on its own cache-line-isolated slot and polls
-// all slots (SYNCALL_SOFT_SLOT_BARRIER). AIC scalar GM store/load is valid on A5.
+// MIX software SYNCALL: shared atomic counter, the same barrier the AIV-only and
+// AIC-only paths use. Concurrent AIC(cube)+AIV(vector) atomic adds on one counter
+// faulted (507015) before the sticky-atomic reset in SYNCALL_SOFT_ATOMIC_ADD and
+// the single-chevron launch landed, so the atomic path is being re-evaluated;
+// SYNCALL_SOFT_SLOT_BARRIER stays available as the fallback (swap the two calls
+// below, and size the GM workspace as usedCores * SYNCALL_SOFT_MIX_SLOT_INT32).
 // (Business GM Tile stores still proxy through AIV because A5 AIC lacks
-// copy_cbuf_to_gm; that DMA-path limitation is unrelated to the scalar slot
-// barrier.)
+// copy_cbuf_to_gm; that DMA-path limitation is unrelated to the barrier choice.)
 template <SyncCoreType CoreType = SyncCoreType::Mix>
 PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
@@ -211,7 +212,8 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
     pipe_barrier(PIPE_ALL);
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
 #if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
-    SYNCALL_SOFT_SLOT_BARRIER(gmWorkspace, SYNCALL_SOFT_MIX_LOGICAL_IDX(), totalBlks);
+    // SYNCALL_SOFT_SLOT_BARRIER(gmWorkspace, SYNCALL_SOFT_MIX_LOGICAL_IDX(), totalBlks);
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
 #else
     (void)gmWorkspace;
     (void)totalBlks;

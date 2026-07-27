@@ -250,8 +250,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
-    // Must match pto::SYNCALL_SOFT_MIX_SLOT_INT32: the soft MIX barrier uses one
-    // isolated per-core slot at this stride.
+    // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
+    // per-core-slot barrier; the atomic-counter barrier only uses element 0.
     constexpr size_t mixSlotInt32 = 32;
     constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
 
@@ -339,7 +339,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
     constexpr size_t int32PerCacheLine = 8;
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
-    // Must match pto::SYNCALL_SOFT_MIX_SLOT_INT32 (per-core isolated slot stride).
+    // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
+    // per-core-slot barrier; the atomic-counter barrier only uses element 0.
     constexpr size_t mixSlotInt32 = 32;
     constexpr size_t syncWsBytes = blockCount * mixSlotInt32 * sizeof(int32_t);
 
