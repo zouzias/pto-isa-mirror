@@ -247,7 +247,7 @@ TEST_F(SYNCALLTest, case_hard_aiv_only_all_blocks)
 TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 {
     constexpr int32_t blockCount = 54;
-    constexpr size_t int32PerCacheLine = 8;
+    constexpr size_t int32PerCacheLine = 16; // Must match kInt32PerCacheLine in syncall_mix_common.hpp.
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
     // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
@@ -335,8 +335,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_2_all_blocks)
 
 TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
 {
-    constexpr int32_t blockCount = 36;
-    constexpr size_t int32PerCacheLine = 8;
+    constexpr int32_t blockCount = 36;       // 18 cube + 18 vector (1:1), dual-stream chevron.
+    constexpr size_t int32PerCacheLine = 16; // Must match kInt32PerCacheLine in syncall_mix_common.hpp.
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
     // Sized for pto::SYNCALL_SOFT_MIX_SLOT_INT32 so the workspace also covers the
@@ -406,8 +406,8 @@ TEST_F(SYNCALLTest, case_soft_mix_1_1_all_blocks)
 
 TEST_F(SYNCALLTest, case_hard_mix_1_2_all_blocks)
 {
-    constexpr int32_t blockCount = 54; // 18 cube + 36 vector (1:2), auto-split chevron.
-    constexpr size_t int32PerCacheLine = 8;
+    constexpr int32_t blockCount = 54;       // 18 cube + 36 vector (1:2), auto-split chevron.
+    constexpr size_t int32PerCacheLine = 16; // Must match kInt32PerCacheLine in syncall_mix_common.hpp.
     constexpr size_t elementCount = blockCount * int32PerCacheLine;
     constexpr size_t byteSize = elementCount * sizeof(int32_t);
 

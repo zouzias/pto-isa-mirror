@@ -16,7 +16,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr int32_t kInt32PerCacheLine = 8;
+// One full 64-byte A5 cache line per participant slot. The non-paired MIX 1:1 path
+// publishes the cube flag with a scalar store + dcci, which writes back the whole
+// line, so slots packed at 32 bytes would let one cube core clobber its neighbor.
+constexpr int32_t kInt32PerCacheLine = 16;
+// copy_gm_to_ubuf counts 32-byte units; one slot spans this many of them.
+constexpr int32_t kBurstPerSlot = kInt32PerCacheLine * static_cast<int32_t>(sizeof(int32_t)) / 32;
 constexpr uint64_t kMixFlagUbAddr = 0x0;
 constexpr uint64_t kMixReadUbAddr = 0x1000;
 constexpr uint64_t kMixOutUbAddr = 0x2000;
@@ -57,6 +62,15 @@ PTO_INTERNAL void SoftDcciRange(__gm__ int32_t* base, int32_t lines)
 }
 
 #if defined(__DAV_CUBE__)
+// Non-paired MIX (1:1 dual-stream): no AIV shares this block, so the cube core has
+// to publish its own flag. A5 AIC has no copy_cbuf_to_gm, but scalar GM store works.
+PTO_INTERNAL void AicScalarStoreGm(__gm__ int32_t* dst, int32_t value)
+{
+    dst[0] = value;
+    SoftDcci(static_cast<__gm__ void*>(dst));
+    dsb(DSB_DDR);
+}
+
 // A5 AIC lacks copy_cbuf_to_gm; stage value in L1/UB and ask AIV0 to write GM.
 PTO_INTERNAL void AicRequestProxyWrite(int32_t value)
 {
@@ -99,6 +113,10 @@ PTO_INTERNAL void AivWriteGm(__gm__ int32_t* dst, int32_t value, uint64_t ubAddr
 
 // Write one participant's business GM line. Soft SYNCALL itself uses the library
 // atomic path; proxy remains only for AIC business GM stores (no copy_cbuf_to_gm).
+// Paired=false is the 1:1 dual-stream launch, where cube and vector are separate
+// kernels: there is no AIV to proxy for the cube core and no intra-block channel
+// between them, so cube writes GM itself.
+template <bool Paired = true>
 PTO_INTERNAL void StoreMixParticipantLine(
     __gm__ int32_t* mySlot, int32_t value, __gm__ int32_t* aicSlot, uint64_t ubAddr)
 {
@@ -106,10 +124,18 @@ PTO_INTERNAL void StoreMixParticipantLine(
     (void)mySlot;
     (void)aicSlot;
     (void)ubAddr;
-    AicRequestProxyWrite(value);
+    if constexpr (Paired) {
+        AicRequestProxyWrite(value);
+    } else {
+        AicScalarStoreGm(mySlot, value);
+    }
 #elif defined(__DAV_VEC__)
-    if (get_subblockid() == 0 && aicSlot != nullptr) {
-        AivServeProxyWrite(aicSlot);
+    if constexpr (Paired) {
+        if (get_subblockid() == 0 && aicSlot != nullptr) {
+            AivServeProxyWrite(aicSlot);
+        }
+    } else {
+        (void)aicSlot;
     }
     AivWriteGm(mySlot, value, ubAddr);
 #else
@@ -127,7 +153,8 @@ CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr,
 #if defined(__DAV_VEC__)
     __ubuf__ int32_t* readUb = reinterpret_cast<__ubuf__ int32_t*>(ubAddr);
     copy_gm_to_ubuf(
-        static_cast<__ubuf__ void*>(readUb), static_cast<__gm__ void*>(flags), 0, 1, totalParticipants, 0, 0);
+        static_cast<__ubuf__ void*>(readUb), static_cast<__gm__ void*>(flags), 0, 1, totalParticipants * kBurstPerSlot,
+        0, 0);
     pipe_barrier(PIPE_ALL);
     int32_t allVisible = 1;
     for (int32_t i = 0; i < totalParticipants; ++i) {
@@ -191,7 +218,7 @@ PTO_INTERNAL void MixBarrier(__gm__ int32_t* syncWorkspace)
 // Shared soft/hard MIX body. Hard callers pass UseSoft=false; the FFTS base for
 // SYNCALL<Mix>() is configured by the runtime for chevron-launched kernels, so no
 // set_ffts_base_addr here (mirrors the aiv-only hard SYNCALL path).
-template <int32_t TotalParticipants, bool UseSoft = true>
+template <int32_t TotalParticipants, bool UseSoft = true, bool Paired = true>
 PTO_INTERNAL void RunMixSyncAllBody(
     __gm__ int32_t* out, __gm__ int32_t* flags, __gm__ int32_t* syncWorkspace, __gm__ int32_t* marker = nullptr)
 {
@@ -201,7 +228,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
     __gm__ int32_t* aicOutSlot = out + aicIdx * kInt32PerCacheLine;
 
     CoreMark(marker, idx, 0);
-    StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, idx + 1, aicFlagSlot, kMixFlagUbAddr);
+    StoreMixParticipantLine<Paired>(flags + idx * kInt32PerCacheLine, idx + 1, aicFlagSlot, kMixFlagUbAddr);
     CoreMark(marker, idx, 1);
 
     MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
@@ -213,7 +240,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
     MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
     CoreMark(marker, idx, 4);
 
-    StoreMixParticipantLine(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, aicFlagSlot, kMixFlagUbAddr);
+    StoreMixParticipantLine<Paired>(flags + idx * kInt32PerCacheLine, (idx + 1) * 2, aicFlagSlot, kMixFlagUbAddr);
     CoreMark(marker, idx, 5);
 
     MixBarrier<TotalParticipants, UseSoft>(syncWorkspace);
@@ -222,7 +249,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
     const int32_t allSecondVisible = CheckMixFlags(flags, TotalParticipants, kMixReadUbAddr, 2);
     CoreMark(marker, idx, 7);
 
-    StoreMixParticipantLine(
+    StoreMixParticipantLine<Paired>(
         out + idx * kInt32PerCacheLine, allFirstVisible & allSecondVisible, aicOutSlot, kMixOutUbAddr);
     CoreMark(marker, idx, 8);
 }

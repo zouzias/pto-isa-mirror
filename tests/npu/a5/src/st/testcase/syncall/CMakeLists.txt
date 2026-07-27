@@ -28,8 +28,6 @@ target_include_directories(syncall_hard_kernel PRIVATE
 )
 target_link_options(syncall_hard_kernel PRIVATE --cce-fatobj-link)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
 # dav-c310 auto-split chevron kernel (single .so per source). arch35 bare dav-c310
 # compiles one source for both cube and vector and packs a MIX-launchable binary,
 # the same model dispatch_mega_combine uses. Only ratios that ccec can auto-split
@@ -63,12 +61,14 @@ function(pto_syncall_cube_chevron_kernel TARGET SOURCE)
     target_link_libraries(syncall PRIVATE ${TARGET})
 endfunction()
 
-function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
+# True MIX 1:1 (dual-arch, dual-stream chevron). dav-c310 auto-split is physically
+# 1:2, and the register-ELF path cannot run on A5 because it needs an FFTS base that
+# rtGetC2cCtrlAddr does not provide here. So cube and vector are compiled as two
+# independent kernels into one .so and each gets its own chevron on its own stream;
+# the soft GM barrier is what synchronizes them.
+function(pto_syncall_mix11_soft_kernel TARGET SOURCE)
     set(AIC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir/${SOURCE}.o)
     set(AIV_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir/${SOURCE}.o)
-    set(REGISTER_AIC_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aic.dir/${SOURCE}.o)
-    set(REGISTER_AIV_OBJ ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aiv.dir/${SOURCE}.o)
-    set(REGISTER_ELF ${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_register.elf)
     set(SYNCALL_MIX_CCE_OPTIONS
         -xcce
         -fPIC
@@ -88,8 +88,8 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         OUTPUT ${AIC_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aic.dir
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c310-cube
-                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
-                -DSYNCALL_MIX_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
+                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 -D__MIX_CORE_AIV_RATIO__=1
+                -DSYNCALL_MIX_BUILD_AIC
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include
                 -I${ASCEND_DRIVER_PATH}/kernel/inc
@@ -107,8 +107,8 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
         OUTPUT ${AIV_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_aiv.dir
         COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c310-vec
-                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
-                -DSYNCALL_MIX_REGISTER_OBJECT_PATH=\"${REGISTER_ELF}\"
+                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 -D__MIX_CORE_AIV_RATIO__=1
+                -DSYNCALL_MIX_BUILD_AIV
                 -I${PROJECT_SOURCE_DIR}/../../../../../include
                 -I${ASCEND_HOME_PATH}/include
                 -I${ASCEND_DRIVER_PATH}/kernel/inc
@@ -122,43 +122,7 @@ function(pto_syncall_mix_kernel TARGET SOURCE RATIO_DEF)
                 ${SYNCALL_PTO_HEADERS}
         VERBATIM
     )
-    add_custom_command(
-        OUTPUT ${REGISTER_ELF}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aic.dir
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${TARGET}_register_aiv.dir
-        COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c310-cube
-                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIC
-                -DSYNCALL_MIX_REGISTER_BUILD
-                -I${PROJECT_SOURCE_DIR}/../../../../../include
-                -I${ASCEND_HOME_PATH}/include
-                -I${ASCEND_DRIVER_PATH}/kernel/inc
-                -I${ASCEND_HOME_PATH}/pkg_inc/
-                -I${ASCEND_HOME_PATH}/pkg_inc/profiling/
-                -I${ASCEND_HOME_PATH}/pkg_inc/runtime
-                -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
-                -xcce -o ${REGISTER_AIC_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
-        COMMAND ${CMAKE_CXX_COMPILER} ${SYNCALL_MIX_CCE_OPTIONS} --cce-aicore-arch=dav-c310-vec
-                -DREGISTER_BASE -std=c++17 -D__MIX_CORE_AIC_BLOCKS__=18 ${RATIO_DEF} -DSYNCALL_MIX_BUILD_AIV
-                -DSYNCALL_MIX_REGISTER_BUILD
-                -I${PROJECT_SOURCE_DIR}/../../../../../include
-                -I${ASCEND_HOME_PATH}/include
-                -I${ASCEND_DRIVER_PATH}/kernel/inc
-                -I${ASCEND_HOME_PATH}/pkg_inc/
-                -I${ASCEND_HOME_PATH}/pkg_inc/profiling/
-                -I${ASCEND_HOME_PATH}/pkg_inc/runtime
-                -I${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
-                -xcce -o ${REGISTER_AIV_OBJ} -c ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
-                ${REGISTER_AIC_OBJ} ${REGISTER_AIV_OBJ} ${REGISTER_ELF}
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/syncall_mix_common.hpp
-                ${CMAKE_CURRENT_SOURCE_DIR}/make_mix_register_elf.py
-                ${SYNCALL_PTO_HEADERS}
-        VERBATIM
-    )
-    add_custom_target(${TARGET}_register_obj DEPENDS ${REGISTER_ELF})
     add_library(${TARGET} SHARED ${AIC_OBJ} ${AIV_OBJ})
-    add_dependencies(${TARGET} ${TARGET}_register_obj)
     set_target_properties(${TARGET} PROPERTIES LINKER_LANGUAGE CXX)
     set_source_files_properties(${AIC_OBJ} ${AIV_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
     target_include_directories(${TARGET} PRIVATE
@@ -189,7 +153,7 @@ target_link_libraries(syncall PRIVATE
     stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
 )
 
-pto_syncall_mix_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp -D__MIX_CORE_AIV_RATIO__=1)
+pto_syncall_mix11_soft_kernel(syncall_mix_1_1_kernel syncall_mix_1_1_kernel.cpp)
 pto_syncall_chevron_kernel(syncall_mix_1_2_kernel syncall_mix_1_2_kernel.cpp)
 pto_syncall_chevron_kernel(syncall_hard_mix_1_2_kernel syncall_hard_mix_1_2_kernel.cpp)
 pto_syncall_cube_chevron_kernel(syncall_aic_hard_kernel syncall_aic_hard_kernel.cpp)
