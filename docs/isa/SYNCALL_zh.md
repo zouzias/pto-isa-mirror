@@ -13,9 +13,10 @@ flowchart TB
     H2 --> H3[wait_flag_dev 等]
     H3 --> H4[屏障完成]
   end
-  subgraph soft [软件模式 Soft / GM]
-    S1[写本地 GM slot 计数] --> S2[轮询全部 slot 达到当前代数]
-    S2 --> S3[屏障完成]
+  subgraph soft [软件模式 Soft / GM 原子计数器]
+    S1[ld_dev 读共享计数器] --> S2[st_atomic +1]
+    S2 --> S3[轮询直至 counter 达到本轮 epoch 目标]
+    S3 --> S4[屏障完成]
   end
 ```
 
@@ -27,7 +28,7 @@ flowchart TB
 - **AIC-only**：`SYNCALL<SyncCoreType::AICOnly>()` 同步所有AIC核（Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品支持硬件和软件模式；Ascend 950PR/Ascend 950DT仅支持硬件模式）。
 - **MIX（AIC+AIV）**：`SYNCALL<SyncCoreType::Mix>()` 同步AIC和AIV混合核。
 
-通过 `SyncAllMode`（在带workspace的重载中显式给出）选择 **硬件模式（FFTS）** 或 **软件模式（GM轮询）**。无workspace的重载对应硬件路径。
+通过 `SyncAllMode`（在带workspace的重载中显式给出）选择 **硬件模式（FFTS）** 或 **软件模式（GM 原子计数器）**。无workspace的重载对应硬件路径。
 
 ## 数学语义
 
@@ -35,13 +36,13 @@ flowchart TB
 
 - 在某一动态程序点上，凡属于当前 `SyncCoreType` 所划定参与者集合的core，均须执行到该 `SYNCALL` 调用之后，任一参与者方可越过该点继续执行后续代码。
 - 硬件模式：由FFTS旗标与设备侧 `wait_flag_dev` 等原语保证跨核可见顺序。
-- 软件模式：由GM中各参与者独占slot的单调计数与 `dcci`/`dsb` 等一致性原语，在轮询中判定「全员已到达当前代数」。
+- 软件模式：全体参与者共享一个单调递增的 GM 原子计数器；每次到达执行 `st_atomic(+1)`，再用 `ld_dev` 轮询直至 `counter >= epoch 目标`（由到达前的计数值与参与者数推导）。
 
 该语义**不**对barrier之后的GM或其它buffer内容作额外保证；跨核数据可见性需调用方自行维护，详见「跨核GM通信注意事项」。
 
 ## C++内建接口
 
-声明于 `include/pto/common/pto_instr.hpp`。软件模式接口使用类型安全的 `GlobalTensor` 和 `Tile` 参数（通过SFINAE约束）：
+声明于 `include/pto/common/pto_instr.hpp`。软件模式仅需类型安全的 `GlobalTensor` workspace（由 `CoreType` 选择 AIV-only / AIC-only / MIX）：
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
@@ -49,35 +50,15 @@ flowchart TB
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
 PTO_INST void SYNCALL();
 
-// 软件模式 — AIV-only（GlobalTensor + Vec Tile）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly,
-          typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<TileData> && TileData::Loc == TileType::Vec, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &ubWorkspace, int32_t usedCores = 0);
-
-// 软件模式 — AIC-only（GlobalTensor + Mat Tile）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly,
-          typename GlobalData, typename TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<TileData> && TileData::Loc == TileType::Mat, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, TileData &l1Workspace, int32_t usedCores = 0);
-
-// 软件模式 — MIX（GlobalTensor + Vec Tile + Mat Tile）
-template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix,
-          typename GlobalData, typename UbTileData, typename L1TileData,
-          std::enable_if_t<is_global_data_v<GlobalData> &&
-                           is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
-                           is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat, int> = 0>
-PTO_INST void SYNCALL(GlobalData &gmWorkspace, UbTileData &ubWorkspace, L1TileData &l1Workspace,
-                       int32_t usedCores = 0);
+// 软件模式 — GM 共享计数器 barrier（通过 CoreType 选择 AIV-only / AIC-only / MIX）
+template <SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
+          std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INST void SYNCALL(GlobalData &gmWorkspace, int32_t usedCores = 0);
 ```
 
 ## 参数
 
-- `gmWorkspace`: `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>`（在Ascend C与 `using namespace pto` 并存时，建议写全 `pto::`，避免与编译器内置头中的 `Stride` 枚举同名冲突）。软件模式使用的GM workspace，调用前需要初始化为0。每个参与core占用8个 `int32_t`（按cache line隔离同步计数）。
-- `ubWorkspace`: `Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`（模板参数固定为 `SYNCALL_SOFT_SLOT_INT32 = 8`，即每核一个cache line槽位）。AIV-only和MIX软件模式使用的UB scratch，运行时后备内存容量须至少为 `usedCores * 8 * sizeof(int32_t)`（实现通过裸指针访问，不校验模板容量；示例中以编译期最大参与核数 × `SYNCALL_SOFT_SLOT_INT32` 声明以保证后备内存充足）。
-- `l1Workspace`: `Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32>`。AIC-only和MIX软件模式使用的L1（cbuf）scratch，用于 `create_cbuf_matrix` 填充同步值后经DMA搬移到GM。
+- `gmWorkspace`: `GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>>`（在Ascend C与 `using namespace pto` 并存时，建议写全 `pto::`，避免与编译器内置头中的 `Stride` 枚举同名冲突）。软件模式使用的GM workspace，调用前需要初始化为0。Soft 使用单个共享原子计数器（一个 cache line 即可；仍可按 `usedCores * SYNCALL_SOFT_SLOT_INT32` 分配以兼容旧布局）。
 - `usedCores`: 参与软件barrier的core数。为0时自动推算——AIV-only / AIC-only使用 `get_block_num()`，MIX使用 `SYNCALL_GET_MIX_PARTICIPANT_COUNT()`（即 `AIC blocks × (1 + AIV ratio)`）。
 
 ## Kernel Meta宏
@@ -200,14 +181,12 @@ Hard与Soft kernel **不可共用同一 `.so`**（AIV-only / AIC-only等场景�
 
 ## 约束
 
-- 软件模式各平台GM写入路径：
-  - Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品（AIC-only与MIX的AIC侧）：AIC通过 `copy_cbuf_to_gm`（L1→GM DMA）写GM slot；MIX的AIV侧通过UB workspace写入。
-  - Ascend 950PR/Ascend 950DT MIX：Ascend 950PR/Ascend 950DT AIC（`dav-c310-cube`）不支持 `copy_cbuf_to_gm`，改为通过 `intra_block` 信号委托同block的AIV subblock 0代写UB→GM。
+- 软件模式对 AIV-only、AIC-only（A2/A3）与 MIX 统一使用 **GM 共享原子计数器**（`ld_dev` / `st_atomic`）。Soft API 不再需要每核 slot 的 UB/L1 Tile。
 - Ascend 950PR/Ascend 950DT平台限制原因（对应「模式支持矩阵」）：
-  - AIC-only软件不可用：Ascend 950PR/Ascend 950DT AIC缺少 `copy_cbuf_to_gm` 等独立写GM的DMA路径，无法实现GM轮询。
+  - AIC-only软件不可用：Ascend 950PR/Ascend 950DT 的 AIC-only Soft 未实现（`SYNCALL_SOFT_AIC_IMPL` 中 `static_assert`）。
   - 硬件MIX不可用：`rtGetC2cCtrlAddr` 在Ascend 950PR/Ascend 950DT（`CHIP_DAVID`）返回 `RT_ERROR_FEATURE_NOT_SUPPORT`（207000），取不到FFTS基地址。
   - AIC-only硬件：通过 `ffts_cross_core_sync` + `wait_flag_dev` 实现，不需要 `set_ffts_base_addr`。
-- 软件模式要求所有参与core以相同顺序进入同一组barrier（基于单调代数计数，进入次数/顺序不一致会导致错配或死锁）。
+- 软件模式要求所有参与core以相同顺序进入同一组barrier（基于单调 epoch 计数，进入次数/顺序不一致会导致错配或死锁）。
 - `SYNCALL` 不参与PTO的Event自动依赖编排：既不接受 `WaitEvents`，也不返回可被后续指令等待的 `RecordEvent`。因此它不会自动等待前序数据指令（如 `TSTORE`）完成，`SYNCALL` 前后与数据指令之间的顺序与可见性需调用方自行保证（见「跨核GM通信注意事项」）。
 - 在auto构建路径（`__PTO_AUTO__`）下，`SYNCALL` 为no-op，不发射跨核硬件同步（与 `TSYNC` 等一致）；真实同步只在manual kernel中发生。
 
@@ -221,13 +200,13 @@ Hard与Soft kernel **不可共用同一 `.so`**（AIV-only / AIC-only等场景�
 - **读方**：读前 `dcci(addr, SINGLE_CACHE_LINE)`（invalidate）+ `dsb`，确保读到DDR最新值而非本核旧cache。
 - 仅有 `set_flag` / `wait_flag`（核内流水同步）**不足以**保证跨核可见性。
 - 该要求与barrier模式无关：**硬件FFTS barrier同样不刷cache**，只保证「全员到达」的控制面顺序。
-- `SYNCALL` 内部对自己的同步槽位已做完整 `dcci` + `dsb(DDR)` 处理，但**不会**替调用方刷业务数据。
+- Soft `SYNCALL` 通过 `st_atomic` + `dcci`/`dsb` 发布共享原子计数器，但**不会**替调用方刷业务数据。
 
 ### 2. 每核slot按cache line独占：避免false sharing丢写
 
 - `dcci` / DMA以 **32Byte cache line** 为粒度操作；若相邻核slot共享同一条cache line，跨核刷新会互相覆盖 / 丢写。
-- 每核slot应按32Byte对齐并**独占一条cache line**（`int32` 场景即stride = 8，而非4）。
-- `SYNCALL` 自身的同步槽位即按此设计：`SYNCALL_SOFT_SLOT_INT32 = 8`（见 `include/pto/common/type.hpp`），调用方的业务workspace也应遵循同样的隔离原则。
+- 调用方业务 slot 应按32Byte对齐并**独占一条 cache line**（`int32` 场景即 stride = 8，而非4）。
+- Soft `SYNCALL` 自身只用一个共享计数器（一个 cache line 即可）；`SYNCALL_SOFT_SLOT_INT32 = 8` 仍可作为调用方每核业务 workspace 的 stride 常量。
 
 ## 示例
 
@@ -256,22 +235,23 @@ void example_hard_mix() {
 
 ### 手动（Manual）—软件模式
 
-软件模式需传入 **已清零** 的GM workspace与合法容量的UB/L1 Tile。`Mode` 须为 `SyncAllMode::Soft`（`Hard` 时忽略workspace，行为同无参 `SYNCALL_IMPL`）。
+软件模式需传入 **已清零** 的GM workspace（共享原子计数器占一个 cache line 即可）。`Mode` 须为 `SyncAllMode::Soft`（`Hard` 时忽略workspace，行为同无参 `SYNCALL_IMPL`）。
 
 ```cpp
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
 
-// AIV 软件 barrier 需把全部参与核的 slot 读入 UB，
-// UB 容量须 >= usedCores * SYNCALL_SOFT_SLOT_INT32（每核独占一条 cache line）；
-// 这里以目标芯片最大 AIV 核数 kMaxAivCores 作为编译期上界声明。
-constexpr int32_t kMaxAivCores = 48;  // 例：910B1 为 48
 void example_soft_aiv(__gm__ int32_t *gmPtr) {
   GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(gmPtr);
-  Tile<TileType::Vec, int32_t, 1, kMaxAivCores * SYNCALL_SOFT_SLOT_INT32> ub;
-  SYNCALL<SyncAllMode::Soft, SyncCoreType::AIVOnly>(gmWs, ub, 0);  // usedCores=0 自动取 get_block_num()
+  SYNCALL<SyncAllMode::Soft, SyncCoreType::AIVOnly>(gmWs, 0);  // usedCores=0 自动取 get_block_num()
+}
+
+// MIX：每个 AIC/AIV 参与者到达同一共享计数器
+void example_soft_mix(__gm__ int32_t *gmPtr) {
+  GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(gmPtr);
+  SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, 0);  // usedCores=0 自动取 MIX 参与者数
 }
 ```
 
-MIX软件模式需同时提供UB与L1（Mat）Tile；Ascend 950PR/Ascend 950DT AIC侧通过代理路径写GM，详见「约束」一节。
+Ascend 950PR/Ascend 950DT 的 AIC-only Soft 不支持；该平台 Soft MIX 走同一套原子 API（库路径无需 UB/L1 Tile，也无需 AIC→AIV 代理写）。

@@ -18,7 +18,6 @@ PTO_SYNCALL_AIC_KERNEL_META(RunSoftSyncAllAIC);
 constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kFlagL1Addr = 0x0;
 constexpr uint64_t kOutL1Addr = 0x1000;
-constexpr uint64_t kSoftSyncL1Addr = 0x2000;
 
 PTO_INTERNAL void StoreInt32LineL1(__gm__ int32_t* dst, int32_t value, uint64_t l1Addr)
 {
@@ -50,11 +49,7 @@ extern "C" __global__ AICORE void RunSoftSyncAllAIC(
     StoreInt32LineL1(flags + idx * kInt32PerCacheLine, idx + 1, kFlagL1Addr);
 
     GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
-    Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
-#ifndef __PTO_AUTO__
-    syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t*>(kSoftSyncL1Addr);
-#endif
-    SYNCALL<SyncAllMode::Soft, SyncCoreType::AICOnly>(gmWs, syncL1Tile, totalBlocks);
+    SYNCALL<SyncAllMode::Soft, SyncCoreType::AICOnly>(gmWs, totalBlocks);
 
     InvalidateGmLines(flags, totalBlocks);
     int32_t allVisible = 1;

@@ -461,12 +461,6 @@ AICORE void MoeDispatchWithSync(
 
     int32_t paddedExpNum = ((EP * expertPerRank) + 7) & ~7;
 
-    // UB workspace for software SYNCALL (needs coreNum * 32 bytes)
-    constexpr int32_t SYNC_UB_ELEMS = 32;
-    using SyncUbTile = pto::Tile<pto::TileType::Vec, int32_t, 1, SYNC_UB_ELEMS, pto::BLayout::RowMajor, -1, -1>;
-    SyncUbTile syncUbTile(1, SYNC_UB_ELEMS);
-    TASSIGN(syncUbTile, 0);
-
     using SyncShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using SyncGlobal = pto::GlobalTensor<int32_t, SyncShape, SyncStride, pto::Layout::ND>;
@@ -554,7 +548,7 @@ AICORE void MoeDispatchWithSync(
 
         // All data arrived. Now restore values and compute routing tables.
         // Only core 0 computes cumsumMM and preSumBeforeRank (small data, sequential).
-        pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+        pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG);
 
         if (coreIdx == 0) {
             // Phase B.1: Read all TPE rows from shmem, restore (subtract flag),
@@ -567,8 +561,7 @@ AICORE void MoeDispatchWithSync(
             using TPETile = pto::Tile<pto::TileType::Vec, int32_t, 1, 64, pto::BLayout::RowMajor, -1, -1>;
 
             TPETile tpeRowTile(1, paddedExpNum);
-            constexpr int32_t TPE_UB_OFFSET = SYNC_UB_ELEMS * static_cast<int32_t>(sizeof(int32_t));
-            TASSIGN(tpeRowTile, TPE_UB_OFFSET);
+            TASSIGN(tpeRowTile, 0);
             tpeRowTile.RowMaskInternal = 1;
             tpeRowTile.ColMaskInternal = paddedExpNum;
 
@@ -669,7 +662,7 @@ AICORE void MoeDispatchWithSync(
     // ========================================================================
     // Phase C: SYNCALL then dispatch using computed routing tables
     // ========================================================================
-    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG, syncUbTile);
+    pto::SYNCALL<pto::SyncAllMode::Soft>(syncGmG);
 
     MoeDispatchDirect<HIDDEN_SIZE, TILE_COLS, MOVE_NUM>(
         gmA, gmPerTokenScale, wsCumsumMM + myRank * expertPerRank, wsTPE, wsPSBR, shmemBase, hcclCtx, EP, expertPerRank,

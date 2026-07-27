@@ -35,14 +35,6 @@ PTO_INTERNAL void SYNCALL_SOFT_DCCI(__gm__ void* ptr)
     __asm__ __volatile__("");
 }
 
-PTO_INTERNAL void SYNCALL_SOFT_DCCI_RANGE(__gm__ int32_t* ptr, int32_t cachelines)
-{
-    for (int32_t i = 0; i < cachelines; ++i) {
-        SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(ptr + i * SYNCALL_SOFT_SLOT_INT32));
-    }
-    dsb(DSB_DDR);
-}
-
 PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIC_BLOCKS()
 {
 #if defined(__MIX_CORE_AIC_BLOCKS__)
@@ -60,18 +52,6 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIV_RATIO()
     return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
 #else
     return 1;
-#endif
-}
-
-PTO_INTERNAL int32_t SYNCALL_GET_MIX_PARTICIPANT_IDX(int32_t totalParticipants = 0)
-{
-#if defined(__DAV_VEC__)
-    const int32_t ratio = SYNCALL_GET_MIX_AIV_RATIO();
-    const int32_t aicCnt = (totalParticipants > 0) ? (totalParticipants / (1 + ratio)) : SYNCALL_GET_MIX_AIC_BLOCKS();
-    return static_cast<int32_t>(aicCnt + get_block_idx() * get_subblockdim() + get_subblockid());
-#else
-    (void)totalParticipants;
-    return static_cast<int32_t>(get_block_idx());
 #endif
 }
 
@@ -113,183 +93,167 @@ PTO_INTERNAL void SYNCALL_IMPL()
 #endif
 }
 
-PTO_INTERNAL int32_t SYNCALL_SOFT_GM_LOAD(__gm__ int32_t* src)
+// Non-cacheable scalar read of the shared counter via ld_dev. Valid on both A5
+// AIC (cube) and AIV cores (verified by the aic_atomic_probe ST).
+PTO_INTERNAL int32_t SYNCALL_SOFT_ATOMIC_LOAD(__gm__ int32_t* counter)
 {
-    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(src));
-    dsb(DSB_DDR);
-    return src[0];
+    return static_cast<int32_t>(ld_dev(reinterpret_cast<__gm__ uint32_t*>(counter), 0));
 }
 
-constexpr uint16_t SYNC_PROXY_WRITE_REQ = 7;
-constexpr uint16_t SYNC_PROXY_WRITE_DONE = 8;
-
-#if defined(__DAV_CUBE__)
-PTO_INTERNAL void SYNCALL_SOFT_AIC_STORE_SLOT(
-    __gm__ int32_t* dst, __cbuf__ int32_t* l1Workspace, __ubuf__ int32_t* ubWorkspace, int32_t value)
+// Spin until the shared counter reaches target. Reached by every participant
+// core (AIC and AIV); ld_dev is legal on both on A5.
+PTO_INTERNAL void SYNCALL_SOFT_POLL(__gm__ int32_t* counter, int32_t target)
 {
-    (void)dst;
-    constexpr int64_t repeatConfig = (static_cast<int64_t>(1) << 16) | 1;
-    create_cbuf_matrix(l1Workspace, repeatConfig, static_cast<uint32_t>(value));
-    pipe_barrier(PIPE_ALL);
-    copy_cbuf_to_ubuf(
-        static_cast<__ubuf__ void*>(ubWorkspace), static_cast<__cbuf__ void*>(l1Workspace), 0, 1, 1, 0, 0);
-    pipe_barrier(PIPE_ALL);
-    set_intra_block(PIPE_S, SYNC_PROXY_WRITE_REQ);
-    wait_intra_block(PIPE_S, SYNC_PROXY_WRITE_DONE);
-}
-#endif
-
-#if defined(__DAV_VEC__)
-PTO_INTERNAL void SYNCALL_SOFT_AIV_PROXY_WRITE(__gm__ int32_t* dst, __ubuf__ int32_t* ubWorkspace)
-{
-    wait_intra_block(PIPE_S, SYNC_PROXY_WRITE_REQ);
-    pipe_barrier(PIPE_ALL);
-    pto_copy_ubuf_to_gm_align_v2(
-        static_cast<__gm__ void*>(dst), static_cast<__ubuf__ void*>(ubWorkspace), 0, 1, 1, 0, 0, 0);
-    pipe_barrier(PIPE_ALL);
-    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(dst));
-    dsb(DSB_DDR);
-    set_intra_block(PIPE_MTE3, SYNC_PROXY_WRITE_DONE);
-}
-#endif
-
-#if defined(__DAV_VEC__)
-PTO_INTERNAL int32_t SYNCALL_SOFT_AIV_WRITE_SLOT(__gm__ int32_t* localSyncGM, __ubuf__ int32_t* ubWorkspace)
-{
-    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(localSyncGM));
-    dsb(DSB_DDR);
-    copy_gm_to_ubuf(static_cast<__ubuf__ void*>(ubWorkspace), static_cast<__gm__ void*>(localSyncGM), 0, 1, 1, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-
-    const int32_t curVal = ubWorkspace[0] + 1;
-    ubWorkspace[0] = curVal;
-
-    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
-    pto_copy_ubuf_to_gm_align_v2(
-        static_cast<__gm__ void*>(localSyncGM), static_cast<__ubuf__ void*>(ubWorkspace), 0, 1, 1, 0, 0, 0);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(localSyncGM));
-    dsb(DSB_DDR);
-    return curVal;
-}
-
-PTO_INTERNAL void SYNCALL_SOFT_AIV_BARRIER(
-    __gm__ int32_t* gmWorkspace, __ubuf__ int32_t* ubWorkspace, int32_t totalBlks, int32_t blockIdx)
-{
-    __gm__ int32_t* localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
-    const int32_t curVal = SYNCALL_SOFT_AIV_WRITE_SLOT(localSyncGM, ubWorkspace);
-
-    int32_t pollCnt = 0;
-    while (true) {
-        if (pollCnt > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
+    int32_t pollCount = 0;
+    while (SYNCALL_SOFT_ATOMIC_LOAD(counter) < target) {
+        if ((++pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
             pipe_barrier(PIPE_ALL);
         }
-        SYNCALL_SOFT_DCCI_RANGE(gmWorkspace, totalBlks);
-        copy_gm_to_ubuf(
-            static_cast<__ubuf__ void*>(ubWorkspace), static_cast<__gm__ void*>(gmWorkspace), 0, 1, totalBlks, 0, 0);
-        set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-
-        int32_t readyCnt = 0;
-        for (int32_t i = 0; i < totalBlks; ++i) {
-            if (ubWorkspace[i * SYNCALL_SOFT_SLOT_INT32] >= curVal) {
-                ++readyCnt;
-            }
-        }
-        pipe_barrier(PIPE_ALL);
-        if (readyCnt >= totalBlks) {
-            break;
-        }
-        ++pollCnt;
-        if (pollCnt >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
             PTO_CPU_ASSERT(false, "SYNCALL soft barrier timeout - possible deadlock");
             break;
         }
     }
 }
-#endif
 
+// Hardware scalar atomic-add of 1 to the shared counter; the dcci write-back is
+// the atomic publication point (same pattern as comm TNOTIFY AtomicAdd).
+// set_st_atomic_cfg enables a STICKY DMA atomic-accumulate mode that also affects
+// subsequent non-atomic GM writes (copy_ubuf_to_gm, fixpipe/create_cbuf on AIC),
+// so it must be reset with set_atomic_none() once the atomic store has landed;
+// otherwise the next GM/Tile store corrupts data or faults (507015) on AIC.
+PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_ADD(__gm__ int32_t* counter)
+{
+    set_st_atomic_cfg(ATOMIC_S32, ATOMIC_SUM);
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
+    st_atomic<int32_t>(1, counter);
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(counter));
+    dsb(DSB_DDR);
+    set_atomic_none();
+}
+
+// Shared atomic-counter barrier for AIV-only soft SYNCALL.
+// Counter is monotonic (never reset); epoch is derived from the pre-arrival value.
+PTO_INTERNAL void SYNCALL_SOFT_ATOMIC_BARRIER(__gm__ int32_t* gmWorkspace, int32_t totalBlocks)
+{
+    dsb(DSB_DDR);
+    const int32_t before = SYNCALL_SOFT_ATOMIC_LOAD(gmWorkspace);
+    const int32_t target = (before / totalBlocks + 1) * totalBlocks;
+    SYNCALL_SOFT_ATOMIC_ADD(gmWorkspace);
+    SYNCALL_SOFT_POLL(gmWorkspace, target);
+    dsb(DSB_DDR);
+}
+
+// Unique per-core index [0, participants) across a MIX launch: each AIC block
+// takes idx get_block_idx(); each AIV subblock takes aicBlocks + block*ratio +
+// subblock, matching the launch's (1 + aivRatio) cores per AIC block.
+PTO_INTERNAL int32_t SYNCALL_SOFT_MIX_LOGICAL_IDX()
+{
+#if defined(__DAV_VEC__)
+    return SYNCALL_GET_MIX_AIC_BLOCKS() + static_cast<int32_t>(get_block_idx()) * static_cast<int32_t>(get_subblockdim()) +
+           static_cast<int32_t>(get_subblockid());
+#elif defined(__DAV_CUBE__)
+    return static_cast<int32_t>(get_block_idx());
+#else
+    return 0;
+#endif
+}
+
+// Per-core-slot barrier: every core publishes a monotonic epoch into its own
+// cache-line-isolated slot (scalar store + dcci) and spins until every other
+// slot has reached that epoch. Unlike the shared atomic counter, this never
+// makes AIC and AIV atomically update one address, so it is safe on A5 MIX.
+PTO_INTERNAL void SYNCALL_SOFT_SLOT_BARRIER(__gm__ int32_t* gmWorkspace, int32_t idx, int32_t totalBlocks)
+{
+    __gm__ int32_t* mySlot = gmWorkspace + idx * SYNCALL_SOFT_MIX_SLOT_INT32;
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(mySlot));
+    dsb(DSB_DDR);
+    const int32_t epoch = mySlot[0] + 1;
+    mySlot[0] = epoch;
+    SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(mySlot));
+    dsb(DSB_DDR);
+
+    int32_t pollCount = 0;
+    while (true) {
+        int32_t ready = 0;
+        for (int32_t i = 0; i < totalBlocks; ++i) {
+            __gm__ int32_t* slot = gmWorkspace + i * SYNCALL_SOFT_MIX_SLOT_INT32;
+            SYNCALL_SOFT_DCCI(static_cast<__gm__ void*>(slot));
+            ready += static_cast<int32_t>(slot[0] >= epoch);
+        }
+        dsb(DSB_DDR);
+        if (ready >= totalBlocks) {
+            break;
+        }
+        if ((++pollCount % SYNCALL_SOFT_BACKOFF_THRESHOLD) == 0) {
+            pipe_barrier(PIPE_ALL);
+        }
+        if (pollCount >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
+            PTO_CPU_ASSERT(false, "SYNCALL soft mix barrier timeout - possible deadlock");
+            break;
+        }
+    }
+}
+
+// MIX software SYNCALL. A5 cannot run concurrent AIC(cube)+AIV(vector) atomic
+// adds on one shared counter (faults 507015), so every core -- each AIC block
+// and each AIV subblock -- arrives on its own cache-line-isolated slot and polls
+// all slots (SYNCALL_SOFT_SLOT_BARRIER). AIC scalar GM store/load is valid on A5
+// (verified by the aic_probe / mix_probe STs). (Business GM Tile stores still
+// proxy through AIV because A5 AIC lacks copy_cbuf_to_gm; that DMA-path
+// limitation is unrelated to the scalar slot barrier.)
 template <SyncCoreType CoreType = SyncCoreType::Mix>
-PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(
-    __gm__ int32_t* gmWorkspace, __ubuf__ int32_t* ubWorkspace, __cbuf__ int32_t* l1Workspace, int32_t usedCores = 0)
+PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
-
-#if defined(__DAV_CUBE__)
     const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX(totalBlks);
-    __gm__ int32_t* localSyncGM = gmWorkspace + blockIdx * SYNCALL_SOFT_SLOT_INT32;
-
-    const int32_t curValue = SYNCALL_SOFT_GM_LOAD(localSyncGM) + 1;
-    SYNCALL_SOFT_AIC_STORE_SLOT(localSyncGM, l1Workspace, ubWorkspace, curValue);
-
-    int32_t pollCnt = 0;
-    while (true) {
-        if (pollCnt > SYNCALL_SOFT_BACKOFF_THRESHOLD) {
-            pipe_barrier(PIPE_ALL);
-        }
-        int32_t readyCount = 0;
-        for (int32_t i = 0; i < totalBlks; ++i) {
-            __gm__ int32_t* syncGM = gmWorkspace + i * SYNCALL_SOFT_SLOT_INT32;
-            if (SYNCALL_SOFT_GM_LOAD(syncGM) >= curValue) {
-                ++readyCount;
-            }
-        }
-        pipe_barrier(PIPE_ALL);
-        if (readyCount >= totalBlks) {
-            break;
-        }
-        ++pollCnt;
-        if (pollCnt >= SYNCALL_SOFT_MAX_POLL_ITERATIONS) {
-            PTO_CPU_ASSERT(false, "SYNCALL soft MIX AIC barrier timeout - possible deadlock");
-            break;
-        }
-    }
-#elif defined(__DAV_VEC__)
-    (void)l1Workspace;
-    const int32_t totalBlks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
-    const int32_t blockIdx = SYNCALL_GET_MIX_PARTICIPANT_IDX(totalBlks);
-    const int32_t aicBlockIdx = static_cast<int32_t>(get_block_idx());
-
-    if (get_subblockid() == 0) {
-        __gm__ int32_t* aicSyncGM = gmWorkspace + aicBlockIdx * SYNCALL_SOFT_SLOT_INT32;
-        SYNCALL_SOFT_AIV_PROXY_WRITE(aicSyncGM, ubWorkspace);
-    }
-    SYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlks, blockIdx);
+#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+    SYNCALL_SOFT_SLOT_BARRIER(gmWorkspace, SYNCALL_SOFT_MIX_LOGICAL_IDX(), totalBlks);
+#else
+    (void)gmWorkspace;
+    (void)totalBlks;
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
 }
 
-template <bool AlwaysFalse = false>
-PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(
-    __gm__ int32_t* gmWorkspace, __cbuf__ int32_t* l1Workspace, int32_t usedCores = 0)
+// AIC-only software SYNCALL: shared atomic counter over cube cores only. With no
+// AIV participating there is no concurrent cube+vector atomic on one address (the
+// case that faults 507015 in MIX), so the same atomic-counter barrier the AIV-only
+// path uses is safe here. A5 AIC scalar st_atomic/ld_dev is verified by the
+// aic_probe ST.
+PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_ALL);
+#if defined(__DAV_CUBE__)
+    const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
+#else
     (void)gmWorkspace;
-    (void)l1Workspace;
     (void)usedCores;
-    PTO_STATIC_ASSERT(AlwaysFalse, "AIC-only software SYNCALL is not supported on A5.");
+#endif
+    pipe_barrier(PIPE_ALL);
 #endif
 }
 
+// AIV-only software SYNCALL: atomic shared counter.
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t* gmWorkspace, __ubuf__ int32_t* ubWorkspace, int32_t usedCores = 0)
+PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCores = 0)
 {
 #ifndef __PTO_AUTO__
     PTO_STATIC_ASSERT(
-        CoreType == SyncCoreType::AIVOnly, "Software SYNCALL GM+UB overload only supports AIV-only kernels on A5.");
+        CoreType == SyncCoreType::AIVOnly, "Software SYNCALL soft GM overload only supports AIV-only kernels on A5.");
     pipe_barrier(PIPE_ALL);
 
 #if defined(__DAV_VEC__)
     const int32_t totalBlks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
-    const int32_t blockIdx = static_cast<int32_t>(get_block_idx());
-    SYNCALL_SOFT_AIV_BARRIER(gmWorkspace, ubWorkspace, totalBlks, blockIdx);
+    SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlks);
+#else
+    (void)gmWorkspace;
+    (void)usedCores;
 #endif
     pipe_barrier(PIPE_ALL);
 #endif
