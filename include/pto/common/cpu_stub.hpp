@@ -61,39 +61,18 @@ static inline int aclrtMallocHost(void** p, size_t sz)
     return 0;
 }
 
-#define aclrtMalloc(a, b, c) aclrtMallocHost(a, b)
-
-#define aclrtMemcpy(dst, sz_dst, src, sz_src, type)                            \
-    {                                                                          \
-        for (size_t i = 0; i < sz_src && i < sz_dst; i++)                      \
-            reinterpret_cast<char*>(dst)[i] = reinterpret_cast<char*>(src)[i]; \
-    }
-
-#if defined(__CPU_SIM)
-inline int aclrtMemset(void* dst, size_t dstSize, int value, size_t count)
-{
-    constexpr int ACL_SUCCESS = 0;
-    constexpr int ACL_ERROR_GE_PARAM_INVALID = 145000;
-
-    if (count == 0) {
-        return ACL_SUCCESS;
-    }
-    if (dst == nullptr || count > dstSize) {
-        return ACL_ERROR_GE_PARAM_INVALID;
-    }
-    std::fill_n(reinterpret_cast<uint8_t*>(dst), count, static_cast<uint8_t>(value));
-    return ACL_SUCCESS;
-}
-#endif
-
-#define aclrtSynchronizeStream(x) (0)
-#define aclrtFree(x) free(x)
-#define aclrtFreeHost(x) free(x)
-#define aclrtDestroyStream(x)
-#define aclrtResetDevice(x)
-#define aclFinalize(x)
-#define set_flag(a, b, c)
-#define wait_flag(a, b, c)
+inline void set_flag(pipe_t, pipe_t, int) {}
+inline void wait_flag(pipe_t, pipe_t, int) {}
+using mem_dsb_t = int;
+inline constexpr int SINGLE_CACHE_LINE = 0;
+inline constexpr int ENTIRE_DATA_CACHE = 0;
+inline constexpr int CACHELINE_OUT = 0;
+inline constexpr mem_dsb_t DSB_DDR = 0;
+inline constexpr mem_dsb_t DSB_ALL = 0;
+inline constexpr mem_dsb_t DSB_UB = 0;
+inline void dcci(const volatile void*, int) {}
+inline void dcci(const volatile void*, int, int) {}
+inline void dsb(mem_dsb_t) {}
 #define __cce_get_tile_ptr(x) x
 #define set_mask_norm(...)
 #define set_vector_mask(...)
@@ -126,6 +105,10 @@ struct CommDeviceContext {
 #define EVENT_ID1 1
 #define EVENT_ID2 2
 #define EVENT_ID3 3
+#define EVENT_ID4 4
+#define EVENT_ID5 5
+#define EVENT_ID6 6
+#define EVENT_ID7 7
 
 #define F16_MAX 65504.0f
 
