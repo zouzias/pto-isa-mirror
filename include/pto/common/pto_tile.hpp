@@ -15,6 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
 #include "pto/common/debug.h"
+#if defined(__CPU_SIM)
+#include <pto/cpu/atomic.hpp>
+#include <pto/cpu/memory.hpp>
+#endif
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
 #include <vector>
@@ -600,6 +604,7 @@ struct GlobalTensor {
         const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
                             i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
                             i4 * GetStride(GlobalTensorDim::DIM_4);
+        std::lock_guard<std::mutex> lock(cpu::AtomicAddMutex());
         if constexpr (IsTwinType<DType>()) {
             const auto val = GetProperDataPart(data(), offset);
             SetProperDataPart(data(), offset, val + summand);
@@ -1669,6 +1674,7 @@ public:
     void AddToElement(int64_t r, int64_t c, const DType& summand)
     {
         const auto offset = GetTileElementOffset<std::remove_reference_t<decltype(*this)>>(r, c);
+        std::lock_guard<std::mutex> lock(cpu::AtomicAddMutex());
         if constexpr (IsTwinType<DType>()) {
             const auto val = GetProperDataPart(data(), offset);
             SetProperDataPart(data(), offset, val + summand);

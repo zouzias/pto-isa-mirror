@@ -67,9 +67,17 @@ __tf__ PTO_INLINE void LoadPlainGT(TileData& dst, GlobalData& src)
                         src.GetShape(GlobalTensorDim::DIM_4),
                     [&](std::size_t r) {
                         const auto cols = src.GetShape(GlobalTensorDim::DIM_4);
+                        const auto srcOffset = i * src.GetStride(GlobalTensorDim::DIM_0) +
+                                               j * src.GetStride(GlobalTensorDim::DIM_1) +
+                                               k * src.GetStride(GlobalTensorDim::DIM_2) +
+                                               static_cast<int64_t>(r) * src.GetStride(GlobalTensorDim::DIM_3);
+                        const auto* rowStart = src.data() + srcOffset;
+                        const auto* rowEnd = rowStart + (cols - 1) * src.GetStride(GlobalTensorDim::DIM_4);
+                        const bool rowMapped = cpu::IsMappedAddress(rowStart) && cpu::IsMappedAddress(rowEnd);
                         PTO_CPU_VECTORIZE_LOOP
                         for (int64_t c = 0; c < cols; c++) {
-                            const auto val = src.GetElement(i, j, k, r, c);
+                            const auto val =
+                                rowMapped ? src.GetElement(i, j, k, r, c) : getPadValue<TileData>();
                             if constexpr (TileData::BFractal == BLayout::RowMajor) {
                                 dst.SetElement(tileHighRankOffset2 + r, c, val);
                             } else {
@@ -93,8 +101,19 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
             GlobalData::layout == pto::Layout::NZ,
         "Only ND, DN and NZ GLobal Tensors are currently supported");
 
-    // Filling padding
-    std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), getPadValue<TileData>());
+    // Filling padding.  A partial tile can be a view into a larger simulated
+    // on-chip tile; clearing the whole static storage would overwrite sibling
+    // rows/columns in that parent tile.
+    const auto pad = getPadValue<TileData>();
+    if (dst.GetValidRow() == TileData::Rows && dst.GetValidCol() == TileData::Cols) {
+        std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), pad);
+    } else {
+        for (int64_t r = 0; r < dst.GetValidRow(); ++r) {
+            for (int64_t c = 0; c < dst.GetValidCol(); ++c) {
+                dst.SetElement(r, c, pad);
+            }
+        }
+    }
 
     // Filling data
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
