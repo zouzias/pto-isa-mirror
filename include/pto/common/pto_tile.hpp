@@ -587,6 +587,61 @@ struct GlobalTensor {
         return GetProperDataPart(data_, offset);
     }
 
+    int64_t GetGlobalElementOffset(size_t r, size_t c)
+    {
+        const size_t shape0 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_0));
+        const size_t shape1 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_1));
+        const size_t shape2 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_2));
+        const size_t shape3 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_3));
+        const size_t shape4 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_4));
+
+        int64_t i0, i1, i2, i3, i4;
+        if constexpr (layout == pto::Layout::ND) {
+            i4 = c;
+            i3 = r % shape3;
+            i2 = (r / shape3) % shape2;
+            i1 = (r / (shape3 * shape2)) % shape1;
+            i0 = r / (shape1 * shape2 * shape3);
+        } else if constexpr (layout == pto::Layout::DN) {
+            i3 = r;
+            i4 = c % shape4;
+            i2 = (c / shape4) % shape2;
+            i1 = (c / (shape4 * shape2)) % shape1;
+            i0 = c / (shape1 * shape2 * shape4);
+        } else if constexpr (layout == pto::Layout::NZ) {
+            const size_t outerCol = c / shape4;
+            i0 = outerCol / shape1;
+            i1 = outerCol % shape1;
+            i2 = r / shape3;
+            i3 = r % shape3;
+            i4 = c % shape4;
+        } else if constexpr (layout == pto::Layout::NC1HWC0) {
+            i3 = r % shape3;
+            i2 = (r / shape3) % shape2;
+            i0 = r / (shape2 * shape3);
+            i4 = c % shape4;
+            i1 = c / shape4;
+        } else if (layout == pto::Layout::NDC1HWC0) {
+            constexpr size_t C0 = C0_SIZE_BYTE / sizeof(DType);
+            i4 = r % shape4;
+            i3 = (r / shape4) % shape3;
+            i0 = r / (shape3 * shape4);
+            i2 = (c / C0) % shape2;
+            i1 = c / (shape2 * C0);
+        }
+
+        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
+                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
+                            i4 * GetStride(GlobalTensorDim::DIM_4);
+        return offset;
+    }
+
+    void SetElement(size_t r, size_t c, const DType& val)
+    {
+        const auto offset = GetGlobalElementOffset(r, c);
+        SetProperDataPart(data(), offset, val);
+    }
+
     void SetElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& val)
     {
         const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +

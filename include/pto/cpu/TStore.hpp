@@ -20,6 +20,49 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename TileData, typename GlobalData>
+PTO_INLINE void CheckStoreTiles(GlobalData& dst, TileData& src)
+{
+    if constexpr (GlobalData::layout == pto::Layout::NZ) {
+        assert(
+            src.GetValidRow() == dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) &&
+            src.GetValidCol() == dst.GetShape(GlobalTensorDim::DIM_0) * dst.GetShape(GlobalTensorDim::DIM_1) *
+                                     dst.GetShape(GlobalTensorDim::DIM_4));
+
+    } else {
+        assert(
+            dst.GetShape(GlobalTensorDim::DIM_0) * dst.GetShape(GlobalTensorDim::DIM_1) *
+                dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) *
+                dst.GetShape(GlobalTensorDim::DIM_4) >=
+            src.GetValidRow() * src.GetValidCol());
+    }
+}
+
+template <typename GlobalData, typename TileData, QuantMode_t quantMode, bool applyRelu>
+__tf__ PTO_INLINE void TStore(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars)
+{
+    using DT = typename GlobalData::DType;
+    using ST = typename TileData::DType;
+
+    CheckStoreTiles(dst, src);
+
+    const size_t validRow = src.GetValidRow();
+    const size_t validCol = src.GetValidCol();
+
+    uint64_t scalar = 0;
+    for (size_t row = 0; row < validRow; ++row) {
+        for (size_t col = 0; col < validCol; ++col) {
+            ST val;
+            if constexpr (quantMode != QuantMode_t::NoQuant) {
+                scalar = scalars[TileData::isRowMajor ? col : row];
+            }
+            val = src.GetElement(row, col);
+            DT dstVal = ConvertStoreValue<DT, ST, quantMode, applyRelu>(val, scalar);
+            dst.SetElement(row, col, dstVal);
+        }
+    }
+}
+
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TStoreInstrL12Gm(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, uint16_t nBurst, uint16_t lenBurst,
     uint16_t gmGap, uint16_t l1Gap)
@@ -74,130 +117,6 @@ PTO_INTERNAL void TStore6HD(
             TStore5HD<TileData, GlobalData>(
                 dst + offsetDst, src + offsetSrc, srcC1, srcH, srcW, gStrideC1, gStrideH, gStrideW, srcC1, srcH, srcW);
         }
-    }
-}
-
-template <typename GlobalData, typename TileData, QuantMode_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void TStoreAcc(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars)
-{
-    const size_t validRow = src.GetValidRow();
-    const size_t validCol = src.GetValidCol();
-
-    const size_t shape_0 = dst.GetShape(GlobalTensorDim::DIM_0);
-    const size_t shape_1 = dst.GetShape(GlobalTensorDim::DIM_1);
-    const size_t shape_2 = dst.GetShape(GlobalTensorDim::DIM_2);
-    const size_t shape_3 = dst.GetShape(GlobalTensorDim::DIM_3);
-    const size_t shape_4 = dst.GetShape(GlobalTensorDim::DIM_4);
-
-    const size_t stride_0 = dst.GetStride(GlobalTensorDim::DIM_0);
-    const size_t stride_1 = dst.GetStride(GlobalTensorDim::DIM_1);
-    const size_t stride_2 = dst.GetStride(GlobalTensorDim::DIM_2);
-    const size_t stride_3 = dst.GetStride(GlobalTensorDim::DIM_3);
-    const size_t stride_4 = dst.GetStride(GlobalTensorDim::DIM_4);
-
-    uint64_t scalar = 0;
-    for (int s0 = 0; s0 < shape_0; ++s0) {
-        for (int s2 = 0; s2 < shape_2; ++s2) {
-            for (int s3 = 0; s3 < shape_3; ++s3) {
-                size_t row = s0 * shape_2 * shape_3 + s2 * shape_3 + s3;
-                for (int s1 = 0; s1 < shape_1; ++s1) {
-                    for (int s4 = 0; s4 < shape_4; ++s4) {
-                        typename TileData::DType val = 0;
-                        size_t col = s1 * shape_4 + s4;
-                        if (row < validRow && col < validCol) {
-                            if constexpr (quantMode != QuantMode_t::NoQuant) {
-                                scalar = scalars[TileData::isRowMajor ? col : row];
-                            }
-                            val = src.GetElement(row, col);
-                        }
-                        dst.SetElement(
-                            s0, s1, s2, s3, s4,
-                            ConvertStoreValue<
-                                typename GlobalData::DType, typename TileData::DType, quantMode, applyRelu>(
-                                val, scalar));
-                    }
-                }
-            }
-        }
-    }
-}
-
-template <typename GlobalData, typename TileData, QuantMode_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void StorePlainGT(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars)
-{
-    uint64_t scalar = 0;
-    for (int64_t i = 0; i < dst.GetShape(GlobalTensorDim::DIM_0); i++) {
-        const int64_t tileHighRankOffset0 = i * dst.GetShape(GlobalTensorDim::DIM_1);
-        for (int64_t j = 0; j < dst.GetShape(GlobalTensorDim::DIM_1); j++) {
-            const int64_t tileHighRankOffset1 = (tileHighRankOffset0 + j) * dst.GetShape(GlobalTensorDim::DIM_2);
-            for (int64_t k = 0; k < dst.GetShape(GlobalTensorDim::DIM_2); k++) {
-                const int64_t tileHighRankOffset2 =
-                    (tileHighRankOffset1 + k) *
-                    dst.GetShape(
-                        TileData::BFractal == BLayout::RowMajor ? GlobalTensorDim::DIM_3 : GlobalTensorDim::DIM_4);
-                cpu::parallel_for_1d(
-                    0, dst.GetShape(GlobalTensorDim::DIM_3),
-                    static_cast<std::size_t>(dst.GetShape(GlobalTensorDim::DIM_3)) *
-                        dst.GetShape(GlobalTensorDim::DIM_4),
-                    [&](std::size_t r) {
-                        const auto cols = dst.GetShape(GlobalTensorDim::DIM_4);
-                        PTO_CPU_VECTORIZE_LOOP
-                        for (int64_t c = 0; c < cols; c++) {
-                            typename TileData::DType val;
-                            if constexpr (TileData::BFractal == BLayout::RowMajor) {
-                                val = src.GetElement(tileHighRankOffset2 + r, c);
-                            } else {
-                                val = src.GetElement(r, tileHighRankOffset2 + c);
-                            }
-
-                            if constexpr (quantMode != QuantMode_t::NoQuant) {
-                                scalar = scalars[TileData::isRowMajor ? c : r];
-                            }
-
-                            dst.SetElement(
-                                i, j, k, r, c,
-                                ConvertStoreValue<
-                                    typename GlobalData::DType, typename TileData::DType, quantMode, applyRelu>(
-                                    val, scalar));
-                        }
-                    });
-            }
-        }
-    }
-}
-
-template <typename GlobalData, typename TileData, QuantMode_t quantMode, bool applyRelu>
-__tf__ PTO_INLINE void TStore(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars)
-{
-    if constexpr (GlobalData::layout == pto::Layout::NZ) {
-        assert(
-            src.GetValidRow() == dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) &&
-            src.GetValidCol() == dst.GetShape(GlobalTensorDim::DIM_0) * dst.GetShape(GlobalTensorDim::DIM_1) *
-                                     dst.GetShape(GlobalTensorDim::DIM_4));
-
-    } else {
-        assert(
-            dst.GetShape(GlobalTensorDim::DIM_0) * dst.GetShape(GlobalTensorDim::DIM_1) *
-                dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) *
-                dst.GetShape(GlobalTensorDim::DIM_4) >=
-            src.GetValidRow() * src.GetValidCol());
-    }
-    if constexpr (GlobalData::layout == pto::Layout::NZ) {
-        using D = typename GlobalData::DType;
-        using S = typename TileData::DType;
-        ForEachNZElement<TileData>(
-            src.GetValidRow(), src.GetValidCol(), dst.GetShape(GlobalTensorDim::DIM_1),
-            dst.GetShape(GlobalTensorDim::DIM_3), dst.GetShape(GlobalTensorDim::DIM_4),
-            dst.GetStride(GlobalTensorDim::DIM_0), dst.GetStride(GlobalTensorDim::DIM_1),
-            dst.GetStride(GlobalTensorDim::DIM_2), dst.GetStride(GlobalTensorDim::DIM_3),
-            dst.GetStride(GlobalTensorDim::DIM_4), [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-                StoreElement<D, S, TileData, quantMode, applyRelu>(
-                    dst.data(), gd_idx, src.data()[tile_idx], r, c, scalars);
-            });
-    } else if (TileData::Loc == TileType::Acc) {
-        TStoreAcc<GlobalData, TileData, quantMode, applyRelu>(dst, src, scalars);
-    } else {
-        StorePlainGT<GlobalData, TileData, quantMode, applyRelu>(dst, src, scalars);
     }
 }
 
