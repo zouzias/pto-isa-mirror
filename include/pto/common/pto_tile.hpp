@@ -578,8 +578,7 @@ struct GlobalTensor {
 
     AICORE DType* data() { return data_; }
 
-#if defined(__CPU_SIM)
-
+#ifdef __CPU_SIM
     void SetElement(const size_t offset, const DType& val) { SetProperDataPart(data(), offset, val); }
 #endif
 
