@@ -587,81 +587,7 @@ struct GlobalTensor {
         return GetProperDataPart(data_, offset);
     }
 
-    int64_t GetGlobalElementOffset(size_t r, size_t c)
-    {
-        const size_t shape0 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_0));
-        const size_t shape1 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_1));
-        const size_t shape2 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_2));
-        const size_t shape3 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_3));
-        const size_t shape4 = static_cast<size_t>(GetShape(GlobalTensorDim::DIM_4));
-
-        int64_t i0, i1, i2, i3, i4;
-        if constexpr (layout == pto::Layout::ND) {
-            i4 = c;
-            i3 = r % shape3;
-            i2 = (r / shape3) % shape2;
-            i1 = (r / (shape3 * shape2)) % shape1;
-            i0 = r / (shape1 * shape2 * shape3);
-        } else if constexpr (layout == pto::Layout::DN) {
-            i3 = r;
-            i4 = c % shape4;
-            i2 = (c / shape4) % shape2;
-            i1 = (c / (shape4 * shape2)) % shape1;
-            i0 = c / (shape1 * shape2 * shape4);
-        } else if constexpr (layout == pto::Layout::NZ) {
-            const size_t outerCol = c / shape4;
-            i0 = outerCol / shape1;
-            i1 = outerCol % shape1;
-            i2 = r / shape3;
-            i3 = r % shape3;
-            i4 = c % shape4;
-        } else if constexpr (layout == pto::Layout::NC1HWC0) {
-            i3 = r % shape3;
-            i2 = (r / shape3) % shape2;
-            i0 = r / (shape2 * shape3);
-            i4 = c % shape4;
-            i1 = c / shape4;
-        } else if (layout == pto::Layout::NDC1HWC0) {
-            constexpr size_t C0 = C0_SIZE_BYTE / sizeof(DType);
-            i4 = r % shape4;
-            i3 = (r / shape4) % shape3;
-            i0 = r / (shape3 * shape4);
-            i2 = (c / C0) % shape2;
-            i1 = c / (shape2 * C0);
-        }
-
-        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
-                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
-                            i4 * GetStride(GlobalTensorDim::DIM_4);
-        return offset;
-    }
-
-    void SetElement(size_t r, size_t c, const DType& val)
-    {
-        const auto offset = GetGlobalElementOffset(r, c);
-        SetProperDataPart(data(), offset, val);
-    }
-
-    void SetElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& val)
-    {
-        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
-                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
-                            i4 * GetStride(GlobalTensorDim::DIM_4);
-        SetProperDataPart(data(), offset, val);
-    }
-
-    void AddToElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& summand)
-    {
-        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
-                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
-                            i4 * GetStride(GlobalTensorDim::DIM_4);
-        if constexpr (IsTwinType<DType>()) {
-            const auto val = GetProperDataPart(data(), offset);
-            SetProperDataPart(data(), offset, val + summand);
-        } else {
-            data()[offset] += summand;
-        }
-    }
+    void SetElement(const size_t offset, const DType& val) { SetProperDataPart(data(), offset, val); }
 #endif
 
 private:
@@ -1402,6 +1328,30 @@ public:
     PTO_INTERNAL void SetDstMposition(uint16_t dstMposition) { dstMposition_ = dstMposition; }
     PTO_INTERNAL uint16_t GetDstMposition() const { return dstMposition_; }
 #endif
+
+#ifdef __CPU_SIM
+    PTO_INTERNAL int64_t GetProperValidRow()
+    {
+        if constexpr (layout == pto::Layout::NC1HWC0) {
+            return GetShape(0) * GetShape(2) * GetShape(3);
+        } else if constexpr (layout == pto::Layout::NDC1HWC0) {
+            return GetShape(0) * GetShape(3) * GetShape(4);
+        }
+        return 0;
+    }
+
+    PTO_INTERNAL int64_t GetProperValidCol()
+    {
+        constexpr size_t C0 = C0_SIZE_BYTE / sizeof(DType);
+        if constexpr (layout == pto::Layout::NC1HWC0) {
+            return GetShape(1) * GetShape(4);
+        } else if constexpr (layout == pto::Layout::NDC1HWC0) {
+            return GetShape(1) * GetShape(2) * C0;
+        }
+        return 0;
+    }
+#endif
+
 private:
     AICORE void assignData(TileDType data) { data_ = data; }
     TileDType data_;
@@ -1861,38 +1811,6 @@ constexpr bool is_tile_data_v = is_tile<T>::value;
 
 template <typename T>
 constexpr bool is_boxed_data_v = is_boxed_tile<T>;
-
-// Get the memory offset of a tile element from logical coordinates
-template <typename TileT>
-PTO_INTERNAL size_t GetTileOffset(int row, int col)
-{
-    static_assert(is_tile_data_v<TileT>, "tile_offset only accepts Tile types.");
-    if constexpr (!TileT::isBoxedLayout) {
-        return row * TileT::RowStride + col * TileT::ColStride;
-    } else {
-        // Compute block coordinates
-        int BlockRow = row / TileT::InnerRows;
-        int BlockCol = col / TileT::InnerCols;
-        // Compute intra-block offset
-        int InnerRow = row % TileT::InnerRows;
-        int InnerCol = col % TileT::InnerCols;
-        // Compute block numbers
-        static constexpr int BlockNumRow = TileT::Rows / TileT::InnerRows;
-        static constexpr int BlockNumCol = TileT::Cols / TileT::InnerCols;
-        if constexpr (is_Nz_layout<TileT>::value) {
-            return (BlockNumRow * BlockCol + BlockRow) * TileT::InnerNumel + InnerRow * TileT::InnerCols + InnerCol;
-        } else if constexpr (is_Zn_layout<TileT>::value) {
-            return (BlockNumCol * BlockRow + BlockCol) * TileT::InnerNumel + InnerCol * TileT::InnerRows + InnerRow;
-        } else if constexpr (is_Zz_layout<TileT>::value) {
-            return (BlockNumCol * BlockRow + BlockCol) * TileT::InnerNumel + InnerRow * TileT::InnerCols + InnerCol;
-        } else {
-            // This branch should not be instantiated.
-            static_assert(
-                sizeof(TileT) == 0, "Unsupported layout in Tile, fractal tiles should be "
-                                    "Nz or Zn layout.");
-        }
-    }
-}
 
 } // namespace pto
 
