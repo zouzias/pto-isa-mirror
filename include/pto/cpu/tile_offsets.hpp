@@ -116,7 +116,7 @@ size_t inline GetGlobalElementOffsetPlain(GlobalData& gdata, size_t r, size_t c)
 
 template <typename GlobalData>
 size_t inline MapTileIndicesToGlobalOffset(
-    size_t r, size_t c, const std::vector<int64_t>& shapes, const std::vector<int64_t>& strides)
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
 {
     const size_t shape0 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_0]);
     const size_t shape1 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_1]);
