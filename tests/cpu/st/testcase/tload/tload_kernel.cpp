@@ -63,10 +63,12 @@ AICORE __inline__ auto getGlobalTensor(__gm__ T* addr, int gShape0, int gShape1,
         int stride1 = gShape2 * shape3 * shape4;
         int stride2 = shape3 * shape4;
 
+        constexpr auto layout = major == BLayout::RowMajor ? pto::Layout::ND : pto::Layout::DN;
+
         using DynStrideDim5 = pto::Stride<-1, -1, -1, -1, -1>;
         auto dynShape =
             getOptDynShape<shape0, shape1, shape2, shape3, shape4>(gShape0, gShape1, gShape2, gShape3, gShape4);
-        using GlobalData = GlobalTensor<T, decltype(dynShape), DynStrideDim5>;
+        using GlobalData = GlobalTensor<T, decltype(dynShape), DynStrideDim5, layout>;
 
         if constexpr (major == BLayout::RowMajor) {
             GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, shape4, 1));

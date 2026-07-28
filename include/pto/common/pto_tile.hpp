@@ -579,13 +579,6 @@ struct GlobalTensor {
     AICORE DType* data() { return data_; }
 
 #if defined(__CPU_SIM)
-    DType GetElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4)
-    {
-        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
-                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
-                            i4 * GetStride(GlobalTensorDim::DIM_4);
-        return GetProperDataPart(data_, offset);
-    }
 
     void SetElement(const size_t offset, const DType& val) { SetProperDataPart(data(), offset, val); }
 #endif

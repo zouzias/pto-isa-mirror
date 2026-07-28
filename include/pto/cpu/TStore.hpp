@@ -19,8 +19,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename TileData, typename GlobalData>
-PTO_INLINE void CheckStoreTiles(GlobalData& dst, TileData& src)
+template <typename GlobalData, typename TileData>
+PTO_INLINE void CheckTileDataStore(GlobalData& dst, TileData& src)
 {
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         assert(
@@ -37,13 +37,34 @@ PTO_INLINE void CheckStoreTiles(GlobalData& dst, TileData& src)
     }
 }
 
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void CheckConvTileData()
+{
+    static_assert(
+        std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
+            std::is_same_v<typename TileData::DType, int16_t> || std::is_same_v<typename TileData::DType, uint16_t> ||
+            std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
+            std::is_same_v<typename TileData::DType, half> || std::is_same_v<typename TileData::DType, bfloat16_t> ||
+            std::is_same_v<typename TileData::DType, float>,
+        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+    static_assert(TileData::Loc == pto::TileType::Mat, "Fix: Dst TileType must be Mat!");
+    static_assert(
+        sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
+        "Fix: Source dtype must be same with dst dtype!");
+
+    constexpr bool isSameLayout =
+        (GlobalData::layout == pto::Layout::NC1HWC0 && TileData::layout == pto::Layout::NC1HWC0) ||
+        (GlobalData::layout == pto::Layout::NDC1HWC0 && TileData::layout == pto::Layout::NDC1HWC0);
+    static_assert(isSameLayout == true, "Fix: Src and Dst layout must be the same in case of NC1HWC0 or NDC1HWC0!");
+}
+
 template <typename GlobalData, typename TileData, QuantMode_t quantMode, bool applyRelu>
 __tf__ PTO_INLINE void TStore(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars)
 {
     using DT = typename GlobalData::DType;
     using ST = typename TileData::DType;
 
-    CheckStoreTiles(dst, src);
+    CheckTileDataStore(dst, src);
 
     const size_t validRow = src.GetValidRow();
     const size_t validCol = src.GetValidCol();
@@ -75,6 +96,7 @@ template <typename GlobalData, typename ConTile>
 __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
 {
     using T = typename ConTile::DType;
+    CheckConvTileData<GlobalData, ConTile>();
 
     const size_t validRow = src.GetProperValidRow();
     const size_t validCol = src.GetProperValidCol();

@@ -49,41 +49,8 @@ AICORE constexpr typename TileData::DType getPadValue()
     }
 }
 
-template <typename GlobalData, typename TileData>
-__tf__ PTO_INLINE void LoadPlainGT(TileData& dst, GlobalData& src)
-{
-    for (int64_t i = 0; i < src.GetShape(GlobalTensorDim::DIM_0); i++) {
-        const int64_t tileHighRankOffset0 = i * src.GetShape(GlobalTensorDim::DIM_1);
-        for (int64_t j = 0; j < src.GetShape(GlobalTensorDim::DIM_1); j++) {
-            const int64_t tileHighRankOffset1 = (tileHighRankOffset0 + j) * src.GetShape(GlobalTensorDim::DIM_2);
-            for (int64_t k = 0; k < src.GetShape(GlobalTensorDim::DIM_2); k++) {
-                const int64_t tileHighRankOffset2 =
-                    (tileHighRankOffset1 + k) *
-                    src.GetShape(
-                        TileData::BFractal == BLayout::RowMajor ? GlobalTensorDim::DIM_3 : GlobalTensorDim::DIM_4);
-                cpu::parallel_for_1d(
-                    0, src.GetShape(GlobalTensorDim::DIM_3),
-                    static_cast<std::size_t>(src.GetShape(GlobalTensorDim::DIM_3)) *
-                        src.GetShape(GlobalTensorDim::DIM_4),
-                    [&](std::size_t r) {
-                        const auto cols = src.GetShape(GlobalTensorDim::DIM_4);
-                        PTO_CPU_VECTORIZE_LOOP
-                        for (int64_t c = 0; c < cols; c++) {
-                            const auto val = src.GetElement(i, j, k, r, c);
-                            if constexpr (TileData::BFractal == BLayout::RowMajor) {
-                                dst.SetElement(tileHighRankOffset2 + r, c, val);
-                            } else {
-                                dst.SetElement(r, tileHighRankOffset2 + c, val);
-                            }
-                        }
-                    });
-            }
-        }
-    }
-}
-
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
+PTO_INLINE void CheckTileData(TileData& dst, GlobalData& src)
 {
     static_assert(
         sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
@@ -93,23 +60,11 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
             GlobalData::layout == pto::Layout::NZ,
         "Only ND, DN and NZ GLobal Tensors are currently supported");
 
-    // Filling padding
-    std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), getPadValue<TileData>());
-
-    // Filling data
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         assert(
             dst.GetValidRow() == src.GetShape(GlobalTensorDim::DIM_2) * src.GetShape(GlobalTensorDim::DIM_3) &&
             dst.GetValidCol() == src.GetShape(GlobalTensorDim::DIM_0) * src.GetShape(GlobalTensorDim::DIM_1) *
                                      src.GetShape(GlobalTensorDim::DIM_4));
-        ForEachNZElement<TileData>(
-            dst.GetValidRow(), dst.GetValidCol(), src.GetShape(GlobalTensorDim::DIM_1),
-            src.GetShape(GlobalTensorDim::DIM_3), src.GetShape(GlobalTensorDim::DIM_4),
-            src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(1), src.GetStride(GlobalTensorDim::DIM_2),
-            src.GetStride(GlobalTensorDim::DIM_3), src.GetStride(GlobalTensorDim::DIM_4),
-            [&](size_t r, size_t c, size_t tile_idx, size_t gd_idx) {
-                SetProperDataPart(dst.data(), tile_idx, GetProperDataPart(src.data(), gd_idx));
-            });
     } else {
         assert(
             (src.GetShape(GlobalTensorDim::DIM_0) * src.GetShape(GlobalTensorDim::DIM_1) *
@@ -120,8 +75,34 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
                      src.GetShape(GlobalTensorDim::DIM_2) * src.GetShape(GlobalTensorDim::DIM_4) ==
                  dst.GetValidCol() &&
              src.GetShape(GlobalTensorDim::DIM_3) == dst.GetValidRow() && !TileData::isRowMajor));
+    }
+}
 
-        LoadPlainGT(dst, src);
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
+{
+    CheckTileData<TileData, GlobalData>(dst, src);
+
+    const size_t validRow = dst.GetValidRow();
+    const size_t validCol = dst.GetValidCol();
+
+        // Filling padding
+    std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), getPadValue<TileData>());
+
+    const std::vector<int64_t> shapes = {
+        src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
+        src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
+        src.GetShape(GlobalTensorDim::DIM_4)};
+    const std::vector<int64_t> strides = {
+        src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(GlobalTensorDim::DIM_1),
+        src.GetStride(GlobalTensorDim::DIM_2), src.GetStride(GlobalTensorDim::DIM_3),
+        src.GetStride(GlobalTensorDim::DIM_4)};
+
+    for (size_t row = 0; row < validRow; ++row) {
+        for (size_t col = 0; col < validCol; ++col) {
+            const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
+            dst.SetElement(row, col, GetProperDataPart(src.data(), dstOffset));
+        }
     }
 }
 
