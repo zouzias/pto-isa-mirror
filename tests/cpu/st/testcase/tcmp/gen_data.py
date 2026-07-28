@@ -26,33 +26,42 @@ def gen_golden_data_tcmp(case_name, param):
     input1 = NumExt.astype(np.random.randint(1, 10, size=[row, col]), dtype)
     input2 = NumExt.astype(np.random.randint(1, 10, size=[row, col]), dtype)
 
-    golden = NumExt.zeros([row, col], dtype)
+    # Element-wise comparison, result is 0 or 1 per element
     if param.cmp_mode == "EQ":
-        golden = NumExt.astype(np.equal(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.equal(input1, input2), np.uint8)
     elif param.cmp_mode == "NE":
-        golden = NumExt.astype(np.not_equal(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.not_equal(input1, input2), np.uint8)
     elif param.cmp_mode == "GT":
-        golden = NumExt.astype(np.greater(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.greater(input1, input2), np.uint8)
     elif param.cmp_mode == "LT":
-        golden = NumExt.astype(np.less(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.less(input1, input2), np.uint8)
     elif param.cmp_mode == "GE":
-        golden = NumExt.astype(np.greater_equal(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.greater_equal(input1, input2), np.uint8)
     elif param.cmp_mode == "LE":
-        golden = NumExt.astype(np.less_equal(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.less_equal(input1, input2), np.uint8)
     else: # default EQ
-        golden = NumExt.astype(np.equal(input1, input2), dtype)
+        golden_elem = NumExt.astype(np.equal(input1, input2), np.uint8)
 
-    # Apply valid region constraints
-    output = NumExt.zeros([row, col], dtype)
+    # Zero out invalid region
     for h in range(row):
         for w in range(col):
             if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
+                golden_elem[h][w] = 0
+
+    # Pack bits into uint8_t (8 bits per byte, little-endian bit order)
+    packed_cols = (col + 7) // 8
+    golden = np.zeros([row, col], dtype=np.uint8)
+    for h in range(row):
+        for w in range(col):
+            byte_idx = w // 8
+            bit_idx = w % 8
+            if golden_elem[h][w] != 0:
+                golden[h][byte_idx] |= (1 << bit_idx)
 
     # Save the input and golden data to binary files
     NumExt.write_array("input1.bin", input1, dtype)
     NumExt.write_array("input2.bin", input2, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+    NumExt.write_array("golden.bin", golden, np.uint8)
 
     return input1, input2, golden
 
