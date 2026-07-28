@@ -30,6 +30,10 @@ AICORE void runHashFind(
     using TileI32 = Tile<TileType::Vec, int32_t, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;
     using TileU32 = Tile<TileType::Vec, uint32_t, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;
 
+    constexpr int kPackedCols = (kTileCols + 7) / 8;
+    constexpr int kMaskTileCols = ((kPackedCols + 31) / 32) * 32; // align to 32 bytes per row
+    using TileMask = Tile<TileType::Vec, uint8_t, kTileRows, kMaskTileCols, BLayout::RowMajor, -1, -1>;
+
     using TableShape = Shape<1, 1, 1, 1, kCap>;
     using TableStride = Stride<1, 1, 1, kCap, 1>;
     using TableGT = GlobalTensor<int32_t, TableShape, TableStride>;
@@ -46,7 +50,6 @@ AICORE void runHashFind(
     TileI32 qTile(kTileRows, kTileCols);
     TileU32 qU32Tile(kTileRows, kTileCols);
     TileI32 outTile(kTileRows, kTileCols);
-    TileI32 doneTile(kTileRows, kTileCols);
     TileU32 hTile(kTileRows, kTileCols);
     TileU32 idxTile(kTileRows, kTileCols);
     TileI32 keyTile(kTileRows, kTileCols);
@@ -57,14 +60,17 @@ AICORE void runHashFind(
     TileU32 shift15(kTileRows, kTileCols);
     TileU32 tmpU32(kTileRows, kTileCols);
     TileU32 xorTmp(kTileRows, kTileCols);
-    TileI32 matchTile(kTileRows, kTileCols);
-    TileI32 emptyTile(kTileRows, kTileCols);
-    TileI32 pendingTile(kTileRows, kTileCols);
     TileI32 emptyKeyTile(kTileRows, kTileCols);
-    TileI32 zeroTile(kTileRows, kTileCols);
-    TileI32 shouldWrite(kTileRows, kTileCols);
-    TileI32 delta(kTileRows, kTileCols);
-    TileI32 update(kTileRows, kTileCols);
+    TileI32 tmpI32(kTileRows, kTileCols);
+
+    // Bit-packed mask tiles: each uint8 element stores 8 comparison results (one per column).
+    TileMask matchTile(kTileRows, kPackedCols);
+    TileMask emptyTile(kTileRows, kPackedCols);
+    TileMask pendingTile(kTileRows, kPackedCols);
+    TileMask doneTile(kTileRows, kPackedCols);
+    TileMask shouldWrite(kTileRows, kPackedCols);
+    TileMask onesTile(kTileRows, kPackedCols);
+    TileMask maskTmp(kTileRows, kPackedCols);
 
     // No direct Tile memory assignment is made (via TASSIGN)
     // So, __PTO_AUTO__ macro should be enabled in compiler definitions for auto memory assignment
@@ -72,11 +78,11 @@ AICORE void runHashFind(
     TLOAD(qTile, queryGlobal);
     TCVT(qU32Tile, qTile, RoundMode::CAST_NONE);
 
-    // Initialize output and per-element done flags.
+    // Initialize output, done flags and the all-ones mask used to compute pending = ~done.
     TEXPANDS(outTile, kNotFound);
-    TEXPANDS(doneTile, static_cast<int32_t>(0));
+    TEXPANDS(doneTile, static_cast<uint8_t>(0));
     TEXPANDS(emptyKeyTile, kEmptyKey);
-    TEXPANDS(zeroTile, static_cast<int32_t>(0));
+    TEXPANDS(onesTile, static_cast<uint8_t>(0xFF));
 
     constexpr uint32_t mask = static_cast<uint32_t>(kCap - 1);
 
@@ -111,27 +117,28 @@ AICORE void runHashFind(
         TCMP(matchTile, keyTile, qTile, CmpMode::EQ);
         TCMP(emptyTile, keyTile, emptyKeyTile, CmpMode::EQ);
 
-        // pending = (done == 0)
-        TCMP(pendingTile, doneTile, zeroTile, CmpMode::EQ);
+        // pending = (done == 0)  <=>  bitwise NOT of the packed done mask
+        TXOR(pendingTile, doneTile, onesTile, maskTmp);
 
         // shouldWrite = match & pending
         TAND(shouldWrite, matchTile, pendingTile);
 
-        // out = out + shouldWrite * (val - out)
-        TSUB(delta, valTile, outTile);
-        TMUL(update, delta, shouldWrite);
-        TADD(outTile, outTile, update);
+        // out = shouldWrite ? val : out
+        TSEL(outTile, shouldWrite, valTile, outTile, tmpI32);
 
         // done |= (match | empty)
         TOR(shouldWrite, matchTile, emptyTile);
         TOR(doneTile, doneTile, shouldWrite);
 
-        // Early-exit: if all lanes are done, stop probing.
+        // Early-exit: all lanes are done once every packed mask byte has all bits set.
+        // Requires kTileCols to be a multiple of 8 so no padding bits remain in the last byte.
         bool any_pending = false;
-        for (int lane = 0; lane < kTileRows * kTileCols; ++lane) {
-            if (doneTile.data()[lane] == 0) {
-                any_pending = true;
-                break;
+        for (int r = 0; r < kTileRows && !any_pending; ++r) {
+            for (int c = 0; c < kPackedCols; ++c) {
+                if (doneTile.data()[r * kMaskTileCols + c] != 0xFF) {
+                    any_pending = true;
+                    break;
+                }
             }
         }
         if (!any_pending) {
