@@ -358,6 +358,11 @@ MXFP4_INTERLEAVED_CASE_PARAMS = [
     ("fp16", "TQUANTDNTest.case_nv_mxfp4_fp16_128x128_interleaved", 128, 128, True),
 ]
 
+MXFP4_VALID_SHAPE_FP16_CASE_PARAMS = [
+    ("TQUANTDNTest.case_mxfp4_fp16_case286_s128x480_v128x478", 128, 478),
+    ("TQUANTDNTest.case_mxfp4_fp16_case286_s64x480_v64x478", 64, 478),
+]
+
 VALID_SHAPE_CASE_PARAMS = [
     ("fp16", 896, 896, 34),
     ("fp16", 512, 512, 34),
@@ -378,6 +383,17 @@ NV_VALID_SHAPE_CASE_PARAMS = [
     ("fp16", 512, 64, 24),
     ("bf16", 896, 896, 34),
     ("bf16", 512, 64, 24),
+]
+
+FP32_VALID_SHAPE_CASE_PARAMS = [
+    (64, 48, 64, 41),
+    (64, 48, 64, 45),
+]
+
+NV_FP32_VALID_SHAPE_CASE_PARAMS = [
+    (64, 88, 64, 83),
+    (128, 224, 128, 219),
+    (64, 48, 64, 44),
 ]
 
 GOLDEN_DIR = os.environ.get("PTO_GOLDEN_DIR", ".")
@@ -563,11 +579,29 @@ def gen_golden_data_mxfp4_fp16(case_name, m, n, nv=False):
     _write_golden_mxfp4(out_dir, golden)
 
 
-def gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols, nv=False):
+def gen_golden_data_mxfp4_valid_shape_fp16(case_name, valid_rows, valid_cols):
+    src = _gen_src_fp16_safe(valid_rows, valid_cols).astype(np.float16)
+    fp4_nd, e8_dn, _ = quant_fp16_to_mxfp4_dn(src, valid_rows, valid_cols)
+    e8_interleaved = interleave_e8m0_dn(e8_dn, valid_rows // 32, valid_cols)
+    out_dir = os.path.join(GOLDEN_DIR, case_name)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "input.bin"), "wb") as f:
+        f.write(src.view(np.uint16).reshape(-1).tobytes())
+    with open(os.path.join(out_dir, "golden_fp4_nd.bin"), "wb") as f:
+        f.write(fp4_nd.tobytes())
+    with open(os.path.join(out_dir, "golden_e8_dn_interleaved.bin"), "wb") as f:
+        f.write(e8_interleaved.tobytes())
+
+
+def gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols, nv=False, static_cols=48):
     prefix = "case_nv_validshape" if nv else "case_validshape"
-    case_name = f"TQUANTDNTest.{prefix}_{dtype}_s{static_rows}x48_v{valid_rows}x{valid_cols}"
+    case_name = f"TQUANTDNTest.{prefix}_{dtype}_s{static_rows}x{static_cols}_v{valid_rows}x{valid_cols}"
     src = np.random.uniform(-1.0, 1.0, size=(valid_rows, valid_cols)).astype(np.float32)
-    if dtype == "fp16":
+    if dtype == "fp32":
+        input_bytes = src.reshape(-1).tobytes()
+        src_numeric = src
+        max_input = src
+    elif dtype == "fp16":
         src_fp16 = src.astype(np.float16)
         input_bytes = src_fp16.view(np.uint16).reshape(-1).tobytes()
         src_numeric = src_fp16.astype(np.float32)
@@ -625,10 +659,19 @@ if __name__ == "__main__":
             gen_golden_data_mxfp4_fp16(case_name, m, n, nv=nv)
         else:
             gen_golden_data_mxfp4_bf16(case_name, m, n, nv=nv)
+    for case_name, valid_rows, valid_cols in MXFP4_VALID_SHAPE_FP16_CASE_PARAMS:
+        print(f"Generating {case_name}...")
+        gen_golden_data_mxfp4_valid_shape_fp16(case_name, valid_rows, valid_cols)
     for dtype, static_rows, valid_rows, valid_cols in VALID_SHAPE_CASE_PARAMS:
         print(f"Generating {dtype} validShape static=[{static_rows},48] valid=[{valid_rows},{valid_cols}]...")
         gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols)
     for dtype, static_rows, valid_rows, valid_cols in NV_VALID_SHAPE_CASE_PARAMS:
         print(f"Generating NV {dtype} validShape static=[{static_rows},48] valid=[{valid_rows},{valid_cols}]...")
         gen_golden_data_valid_shape(dtype, static_rows, valid_rows, valid_cols, nv=True)
+    for static_rows, static_cols, valid_rows, valid_cols in FP32_VALID_SHAPE_CASE_PARAMS:
+        print(f"Generating fp32 validShape static=[{static_rows},{static_cols}] valid=[{valid_rows},{valid_cols}]...")
+        gen_golden_data_valid_shape("fp32", static_rows, valid_rows, valid_cols, static_cols=static_cols)
+    for static_rows, static_cols, valid_rows, valid_cols in NV_FP32_VALID_SHAPE_CASE_PARAMS:
+        print(f"Generating NV fp32 validShape static=[{static_rows},{static_cols}] valid=[{valid_rows},{valid_cols}]...")
+        gen_golden_data_valid_shape("fp32", static_rows, valid_rows, valid_cols, nv=True, static_cols=static_cols)
     print("Done.")

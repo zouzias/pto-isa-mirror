@@ -31,7 +31,7 @@ __global__ AICORE void runTQuantDNValidShape(
 
     constexpr int fp8StaticCols = PTO_CEIL(StaticCols, 32);
     constexpr int expStaticRows = StaticRows / 64;
-    constexpr int expStaticCols = StaticCols * 2;
+    constexpr int expStaticCols = PTO_CEIL(StaticCols * 2, 32);
     constexpr int maxStaticRows = StaticRows / 32;
     constexpr int expValidRows = ValidRows / 64;
     constexpr int expValidCols = ValidCols * 2;
@@ -94,8 +94,8 @@ __global__ AICORE void runTQuantDNValidShape(
     TSTORE(expGlobal, expTile);
 }
 
-template <typename T, MxQuantAlg Alg, int StaticRows, int StaticCols, int ValidRows, int ValidCols>
-void LaunchTQuantDNValidShape(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream)
+template <typename T, MxQuantAlg Alg, int StaticRows, int StaticCols, int ValidRows, int ValidCols, typename SrcT>
+void LaunchTQuantDNValidShape(SrcT* src, int8_t* dst, uint8_t* exp, void* stream)
 {
     runTQuantDNValidShape<T, Alg, StaticRows, StaticCols, ValidRows, ValidCols>
         <<<1, nullptr, stream>>>((T*)src, dst, exp);
@@ -127,6 +127,131 @@ void LaunchTQuantDNValidShapeNVBF16(uint16_t* src, int8_t* dst, uint8_t* exp, vo
 {
     LaunchTQuantDNValidShape<bfloat16_t, MxQuantAlg::NvMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
         src, dst, exp, stream);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeFP32(uint32_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<float, MxQuantAlg::OcpMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
+}
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeNVFP32(uint32_t* src, int8_t* dst, uint8_t* exp, void* stream)
+{
+    LaunchTQuantDNValidShape<float, MxQuantAlg::NvMxFp8E4M3, StaticRows, StaticCols, ValidRows, ValidCols>(
+        src, dst, exp, stream);
+}
+
+// Reproduce QuantMX case 286 exactly after PyPTO clamps the configured tile
+// [128, 560] to view [448, 478]: static cols are padded to 480 while the
+// runtime valid cols remain 478. FP4 and exponent use the same logical shapes
+// as the generated CCE; the byte tile is only an alias used to store packed FP4.
+template <int StaticRows, int ValidRows>
+__global__ AICORE void runTQuantDNMXFP4ValidShapeFP16(
+    __gm__ half __in__* src, __gm__ uint8_t __out__* dst, __gm__ uint8_t __out__* exp)
+{
+    constexpr int StaticCols = 480;
+    constexpr int ValidCols = 478;
+    constexpr int PackedStaticCols = StaticCols / 2;
+    constexpr int PackedValidCols = ValidCols / 2;
+    constexpr int ExpStaticRows = StaticRows / 64;
+    constexpr int ExpStaticCols = StaticCols * 2;
+    constexpr int ExpValidRows = ValidRows / 64;
+    constexpr int ExpValidCols = ValidCols * 2;
+    constexpr int MaxStaticRows = StaticRows / 32;
+    constexpr int MaxValidRows = ValidRows / 32;
+
+    using SrcTile = Tile<
+        TileType::Vec, half, StaticRows, StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using DstTile = Tile<
+        TileType::Vec, float4_e2m1x2_t, StaticRows, StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using DstBytesTile = Tile<
+        TileType::Vec, uint8_t, 1, StaticRows * PackedStaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using ExpTile = Tile<
+        TileType::Vec, uint8_t, ExpStaticRows, ExpStaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using MaxTile = Tile<
+        TileType::Vec, half, MaxStaticRows, StaticCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using ScalingTile = MaxTile;
+
+    using SrcGlobal =
+        GlobalTensor<half, Shape<1, 1, 1, ValidRows, ValidCols>, pto::Stride<1, 1, 1, ValidCols, 1>>;
+    using DstGlobal = GlobalTensor<
+        uint8_t, Shape<1, 1, 1, 1, StaticRows * PackedStaticCols>,
+        pto::Stride<1, 1, 1, StaticRows * PackedStaticCols, 1>>;
+    using ExpGlobal = GlobalTensor<
+        uint8_t, Shape<1, 1, 1, ExpValidRows, ExpValidCols>, pto::Stride<1, 1, 1, ExpValidCols, 1>>;
+
+    constexpr uint32_t srcAddr = 0;
+    constexpr uint32_t srcBytes = StaticRows * StaticCols * sizeof(half);
+    constexpr uint32_t dstAddr = PTO_CEIL(srcAddr + srcBytes, 32);
+    constexpr uint32_t dstBytes = StaticRows * StaticCols;
+    constexpr uint32_t expAddr = PTO_CEIL(dstAddr + dstBytes, 32);
+    constexpr uint32_t expBytes = ExpStaticRows * ExpStaticCols;
+    constexpr uint32_t maxAddr = PTO_CEIL(expAddr + expBytes, 32);
+    constexpr uint32_t maxBytes = MaxStaticRows * StaticCols * sizeof(half);
+    constexpr uint32_t scalingAddr = PTO_CEIL(maxAddr + maxBytes, 32);
+    constexpr uint32_t scalingBytes = maxBytes;
+    static_assert(scalingAddr + scalingBytes <= 0x40000, "case 286 UB layout exceeds 256 KB.");
+
+    SrcTile srcTile(ValidRows, ValidCols);
+    DstTile dstTile(ValidRows, ValidCols);
+    DstBytesTile dstBytesTile(1, StaticRows * PackedStaticCols);
+    ExpTile expTile(ExpValidRows, ExpValidCols);
+    MaxTile maxTile(MaxValidRows, ValidCols);
+    ScalingTile scalingTile(MaxValidRows, ValidCols);
+    SrcGlobal srcGlobal(src);
+    DstGlobal dstGlobal(dst);
+    ExpGlobal expGlobal(exp);
+
+    TASSIGN(srcTile, srcAddr);
+    TASSIGN(dstTile, dstAddr);
+    TASSIGN(dstBytesTile, dstAddr);
+    TASSIGN(expTile, expAddr);
+    TASSIGN(maxTile, maxAddr);
+    TASSIGN(scalingTile, scalingAddr);
+    TLOAD(srcTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TQUANT<0, MxQuantAlg::OcpMxFp4E2M1, true>(dstTile, srcTile, &expTile, &maxTile, &scalingTile);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dstGlobal, dstBytesTile);
+    TSTORE(expGlobal, expTile);
+}
+
+template <int StaticRows, int ValidRows>
+void LaunchTQuantDNMXFP4ValidShapeFP16(uint16_t* src, uint8_t* dst, uint8_t* exp, void* stream)
+{
+    runTQuantDNMXFP4ValidShapeFP16<StaticRows, ValidRows>
+        <<<1, nullptr, stream>>>((half*)src, dst, exp);
+}
+
+// Match the native FP4 TStore emitted for QuantMX case 286. The logical tile
+// is [128, 480] with valid shape [128, 478], while the destination keeps the
+// actual tensor row stride of 1506 FP4 elements (753 packed bytes).
+__global__ AICORE void runTStoreMXFP4Case286(__gm__ uint8_t __out__* dst)
+{
+    using DstTile = Tile<
+        TileType::Vec, float4_e2m1x2_t, 128, 480, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512,
+        PadValue::Zero>;
+    using DstGlobal = GlobalTensor<
+        float4_e2m1x2_t, Shape<1, 1, 1, 128, 478>, pto::Stride<3084288, 3084288, 3084288, 1506, 1>>;
+
+    DstTile dstTile(128, 478);
+    DstGlobal dstGlobal(reinterpret_cast<__gm__ float4_e2m1x2_t*>(dst));
+    TASSIGN(dstTile, 0);
+    TSTORE(dstGlobal, dstTile);
+}
+
+void LaunchTStoreMXFP4Case286(uint8_t* dst, void* stream)
+{
+    runTStoreMXFP4Case286<<<1, nullptr, stream>>>(dst);
 }
 
 // Full DN vector pipeline: TQUANT(DN) + TMOV(ND->NZ) + TMOV<0>(DN->ZZ).
@@ -599,6 +724,12 @@ INSTANTIATE_TQUANT_DN_FP32_NV(128, 128, 128, true);
 INSTANTIATE_TQUANT_DN_VALID_SHAPES(FP16);
 INSTANTIATE_TQUANT_DN_VALID_SHAPES(BF16);
 
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPE_FP32(SR, SC, VR, VC) \
+    template void LaunchTQuantDNValidShapeFP32<SR, SC, VR, VC>(uint32_t*, int8_t*, uint8_t*, void*)
+
+INSTANTIATE_TQUANT_DN_VALID_SHAPE_FP32(64, 48, 64, 41);
+INSTANTIATE_TQUANT_DN_VALID_SHAPE_FP32(64, 48, 64, 45);
+
 #define INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV(DTYPE, SR, SC, VR, VC) \
     template void LaunchTQuantDNValidShapeNV##DTYPE<SR, SC, VR, VC>(uint16_t*, int8_t*, uint8_t*, void*)
 
@@ -608,6 +739,16 @@ INSTANTIATE_TQUANT_DN_VALID_SHAPES(BF16);
 
 INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV(FP16);
 INSTANTIATE_TQUANT_DN_VALID_SHAPES_NV(BF16);
+
+#define INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV_FP32(SR, SC, VR, VC) \
+    template void LaunchTQuantDNValidShapeNVFP32<SR, SC, VR, VC>(uint32_t*, int8_t*, uint8_t*, void*)
+
+INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV_FP32(64, 88, 64, 83);
+INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV_FP32(128, 224, 128, 219);
+INSTANTIATE_TQUANT_DN_VALID_SHAPE_NV_FP32(64, 48, 64, 44);
+
+template void LaunchTQuantDNMXFP4ValidShapeFP16<128, 128>(uint16_t*, uint8_t*, uint8_t*, void*);
+template void LaunchTQuantDNMXFP4ValidShapeFP16<64, 64>(uint16_t*, uint8_t*, uint8_t*, void*);
 
 #define INSTANTIATE_TQUANT_DN_MXFP4_BF16(M, N, NP) \
     template void LaunchTQuantDN_MXFP4_bf16<M, N, NP>(uint16_t*, uint8_t*, uint8_t*, uint8_t*, uint16_t*, void*)

@@ -86,6 +86,17 @@ void LaunchTQuantDNValidShapeNVFP16(uint16_t* src, int8_t* dst, uint8_t* exp, vo
 template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
 void LaunchTQuantDNValidShapeNVBF16(uint16_t* src, int8_t* dst, uint8_t* exp, void* stream);
 
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeFP32(uint32_t* src, int8_t* dst, uint8_t* exp, void* stream);
+
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols>
+void LaunchTQuantDNValidShapeNVFP32(uint32_t* src, int8_t* dst, uint8_t* exp, void* stream);
+
+template <int StaticRows, int ValidRows>
+void LaunchTQuantDNMXFP4ValidShapeFP16(uint16_t* src, uint8_t* dst, uint8_t* exp, void* stream);
+
+void LaunchTStoreMXFP4Case286(uint8_t* dst, void* stream);
+
 } // namespace TQuantDNTest
 
 class TQUANTDNTest : public testing::Test {
@@ -111,18 +122,18 @@ void ExpectGoldenMatch(
     EXPECT_TRUE(ResultCmp<T>(golden, output, 0.0f)) << stageName << ": " << tensorName << " mismatch vs golden";
 }
 
-template <int StaticRows, int StaticCols, int ValidRows, int ValidCols, bool IsFP16, bool IsNv = false>
+template <int StaticRows, int StaticCols, int ValidRows, int ValidCols, typename SrcT, bool IsFP16, bool IsNv = false>
 void test_tquant_dn_valid_shape()
 {
     constexpr size_t srcElements = ValidRows * ValidCols;
     constexpr size_t dstElements = srcElements;
     constexpr size_t expElements = (ValidRows / 64) * ValidCols * 2;
-    size_t srcFileSize = srcElements * sizeof(uint16_t);
+    size_t srcFileSize = srcElements * sizeof(SrcT);
     size_t dstFileSize = dstElements;
     size_t expFileSize = expElements;
     const std::string goldenDir = GetGoldenDir();
 
-    std::vector<uint16_t> srcHost(srcElements);
+    std::vector<SrcT> srcHost(srcElements);
     std::vector<int8_t> dstHost(dstElements);
     std::vector<uint8_t> expHost(expElements);
     std::vector<int8_t> goldenDst(dstElements);
@@ -135,17 +146,23 @@ void test_tquant_dn_valid_shape()
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    uint16_t* srcDevice;
+    SrcT* srcDevice;
     int8_t* dstDevice;
     uint8_t* expDevice;
-    aclrtMalloc((void**)&srcDevice, srcElements * sizeof(uint16_t), ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcElements * sizeof(SrcT), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&dstDevice, dstElements, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&expDevice, expElements, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(
-        srcDevice, srcElements * sizeof(uint16_t), srcHost.data(), srcElements * sizeof(uint16_t),
+        srcDevice, srcElements * sizeof(SrcT), srcHost.data(), srcElements * sizeof(SrcT),
         ACL_MEMCPY_HOST_TO_DEVICE);
 
-    if constexpr (IsNv && IsFP16) {
+    if constexpr (IsNv && std::is_same<SrcT, uint32_t>::value) {
+        TQuantDNTest::LaunchTQuantDNValidShapeNVFP32<StaticRows, StaticCols, ValidRows, ValidCols>(
+            srcDevice, dstDevice, expDevice, stream);
+    } else if constexpr (std::is_same<SrcT, uint32_t>::value) {
+        TQuantDNTest::LaunchTQuantDNValidShapeFP32<StaticRows, StaticCols, ValidRows, ValidCols>(
+            srcDevice, dstDevice, expDevice, stream);
+    } else if constexpr (IsNv && IsFP16) {
         TQuantDNTest::LaunchTQuantDNValidShapeNVFP16<StaticRows, StaticCols, ValidRows, ValidCols>(
             srcDevice, dstDevice, expDevice, stream);
     } else if constexpr (IsNv) {
@@ -178,7 +195,7 @@ void test_tquant_dn_valid_shape()
 #define TQUANT_DN_VALID_SHAPE_CASE(DTYPE, IS_FP16, SR, VR, VC) \
     TEST_F(TQUANTDNTest, case_validshape_##DTYPE##_s##SR##x48_v##VR##x##VC) \
     { \
-        test_tquant_dn_valid_shape<SR, 48, VR, VC, IS_FP16>(); \
+        test_tquant_dn_valid_shape<SR, 48, VR, VC, uint16_t, IS_FP16>(); \
     }
 
 TQUANT_DN_VALID_SHAPE_CASE(fp16, true, 896, 896, 34)
@@ -199,7 +216,7 @@ TQUANT_DN_VALID_SHAPE_CASE(bf16, false, 512, 64, 24)
 #define TQUANT_DN_VALID_SHAPE_NV_CASE(DTYPE, IS_FP16, SR, VR, VC) \
     TEST_F(TQUANTDNTest, case_nv_validshape_##DTYPE##_s##SR##x48_v##VR##x##VC) \
     { \
-        test_tquant_dn_valid_shape<SR, 48, VR, VC, IS_FP16, true>(); \
+        test_tquant_dn_valid_shape<SR, 48, VR, VC, uint16_t, IS_FP16, true>(); \
     }
 
 TQUANT_DN_VALID_SHAPE_NV_CASE(fp16, true, 896, 896, 34)
@@ -208,6 +225,111 @@ TQUANT_DN_VALID_SHAPE_NV_CASE(bf16, false, 896, 896, 34)
 TQUANT_DN_VALID_SHAPE_NV_CASE(bf16, false, 512, 64, 24)
 
 #undef TQUANT_DN_VALID_SHAPE_NV_CASE
+
+#define TQUANT_DN_VALID_SHAPE_FP32_CASE(PREFIX, IS_NV, SR, SC, VR, VC) \
+    TEST_F(TQUANTDNTest, PREFIX##_validshape_fp32_s##SR##x##SC##_v##VR##x##VC) \
+    { \
+        test_tquant_dn_valid_shape<SR, SC, VR, VC, uint32_t, false, IS_NV>(); \
+    }
+
+TQUANT_DN_VALID_SHAPE_FP32_CASE(case, false, 64, 48, 64, 41)
+TQUANT_DN_VALID_SHAPE_FP32_CASE(case, false, 64, 48, 64, 45)
+TQUANT_DN_VALID_SHAPE_FP32_CASE(case_nv, true, 64, 88, 64, 83)
+TQUANT_DN_VALID_SHAPE_FP32_CASE(case_nv, true, 128, 224, 128, 219)
+TQUANT_DN_VALID_SHAPE_FP32_CASE(case_nv, true, 64, 48, 64, 44)
+
+#undef TQUANT_DN_VALID_SHAPE_FP32_CASE
+
+template <int StaticRows, int ValidRows>
+void test_tquant_dn_mxfp4_valid_shape_fp16()
+{
+    constexpr size_t validCols = 478;
+    constexpr size_t srcBytes = ValidRows * validCols * sizeof(uint16_t);
+    constexpr size_t packedValidCols = validCols / 2;
+    constexpr size_t packedStaticCols = 480 / 2;
+    constexpr size_t dstBytes = ValidRows * packedValidCols;
+    constexpr size_t dstRawBytes = StaticRows * packedStaticCols;
+    constexpr size_t expBytes = (ValidRows / 64) * validCols * 2;
+    const std::string goldenDir = GetGoldenDir();
+    size_t srcFileSize = srcBytes;
+    size_t dstFileSize = dstBytes;
+    size_t expFileSize = expBytes;
+
+    std::vector<uint16_t> srcHost(srcBytes / sizeof(uint16_t));
+    std::vector<uint8_t> dstRawHost(dstRawBytes);
+    std::vector<uint8_t> dstHost(dstBytes);
+    std::vector<uint8_t> expHost(expBytes);
+    std::vector<uint8_t> goldenDst(dstBytes);
+    std::vector<uint8_t> goldenExp(expBytes);
+    ReadFile(goldenDir + "/input.bin", srcFileSize, srcHost.data(), srcBytes);
+    ReadFile(goldenDir + "/golden_fp4_nd.bin", dstFileSize, goldenDst.data(), dstBytes);
+    ReadFile(goldenDir + "/golden_e8_dn_interleaved.bin", expFileSize, goldenExp.data(), expBytes);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    uint16_t* srcDevice;
+    uint8_t* dstDevice;
+    uint8_t* expDevice;
+    aclrtMalloc((void**)&srcDevice, srcBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, dstRawBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&expDevice, expBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemcpy(srcDevice, srcBytes, srcHost.data(), srcBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    TQuantDNTest::LaunchTQuantDNMXFP4ValidShapeFP16<StaticRows, ValidRows>(
+        srcDevice, dstDevice, expDevice, stream);
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "case 286 MXFP4 validShape sync failed: " << aclGetRecentErrMsg();
+    aclrtMemcpy(dstRawHost.data(), dstRawBytes, dstDevice, dstRawBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(expHost.data(), expBytes, expDevice, expBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+    for (size_t row = 0; row < ValidRows; ++row) {
+        std::copy_n(
+            dstRawHost.data() + row * packedStaticCols, packedValidCols,
+            dstHost.data() + row * packedValidCols);
+    }
+    ExpectGoldenMatch("case286", "fp4_nd", goldenDst, dstHost);
+    ExpectGoldenMatch("case286", "e8_dn_interleaved", goldenExp, expHost);
+
+    aclrtFree(srcDevice);
+    aclrtFree(dstDevice);
+    aclrtFree(expDevice);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+}
+
+TEST_F(TQUANTDNTest, case_mxfp4_fp16_case286_s128x480_v128x478)
+{
+    test_tquant_dn_mxfp4_valid_shape_fp16<128, 128>();
+}
+
+TEST_F(TQUANTDNTest, case_mxfp4_fp16_case286_s64x480_v64x478)
+{
+    test_tquant_dn_mxfp4_valid_shape_fp16<64, 64>();
+}
+
+TEST_F(TQUANTDNTest, case_mxfp4_case286_native_tstore_s128x480_v128x478_stride1506)
+{
+    constexpr size_t outputBytes = 2048 * ((1506 + 1) / 2);
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    uint8_t* dstDevice = nullptr;
+    aclrtMalloc((void**)&dstDevice, outputBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, outputBytes, 0, outputBytes);
+
+    TQuantDNTest::LaunchTStoreMXFP4Case286(dstDevice, stream);
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    EXPECT_EQ(syncRet, ACL_SUCCESS) << "case 286 native FP4 TStore sync failed: " << aclGetRecentErrMsg();
+
+    aclrtFree(dstDevice);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+}
 
 template <int M, int N, int N_pad, bool InterleaveExp = false, bool IsNv = false>
 void test_tquant_dn_bf16()
