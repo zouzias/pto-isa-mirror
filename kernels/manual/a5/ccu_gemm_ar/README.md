@@ -71,12 +71,13 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 - **Dual-stream overlap**: Compute Stream runs AIC GEMM; AIV Stream runs progress/gate; CCU Stream runs fused RS+AG. After each tile/group becomes ready, a CKE fires CCU work that overlaps with later compute.
 - **Logical RS + AG, fused execution**: one CCU mission per owner group — Pull Reduce to the owner, then Push Broadcast; volume about `2*(P-1)/P * D`.
 - **Owner-scoped packed layout**: `owner = tile % nranks`, packed owner-contiguously so CCU can issue fixed-length group WQEs; residual groups pad each owner shard to a multiple of `comm-group-tiles`.
-- **Progress sync**: AIC `AtomicAdd`s into local-window `groupDone[flat]`; peer AIV polls then `TNOTIFY(owner groupReady)`; owner waits `>= P-1` then `TriggerProgressCke` (**depth-1** to avoid lost edges).
+- **Progress sync**: AIC `AtomicAdd`s into local-window `groupDone[flat]`; peer AIV polls then `TNOTIFY(owner groupReady)`; owner waits `>= P-1` then `TriggerProgressCke`. In-flight depth is set by `CCU_PIPE_DEPTH`; each in-flight group owns its own progress CKE slot so no edge is lost.
 - **CKE lifetime**: seq one-shot and pipelined register in **one** `RegisterStart/End` batch; after Translate they Publish to `seqGate` / `gate` (+ progress) so physical CKEs are not reused across paths.
 - **AG stagger**: CCU Broadcast peer write order rotates by `(rankId + group) % (P-1)`.
 - **Block Swizzle + L1/L0 double buffering**: same compute-side pattern as `gemm_ar` (zigzag tiles, `stepK=4`, L0 ping/pong).
 - **Per-tile store fence**: after `TSTORE`, `pipe_barrier(PIPE_FIX) + dsb`, then signal `groupDone`.
-- **Stable constraint**: `CCU_MISSION_PARALLEL=1`; each rank has a distinct pipelined `gate` and Sequential `seqGate`.
+- **Stable constraint**: `CCU_MISSION_PARALLEL=1`, `CCU_PIPE_DEPTH=1`; each rank has a distinct pipelined `gate` and Sequential `seqGate`.
+- **Cross-group pipelining (experimental, off by default)**: at `CCU_PIPE_DEPTH=2` the CCU defers the Broadcast completion wait of group `g` until after the Reduce of group `g+1`, overlapping the two. Reduce owns the on-chip MS slices while Broadcast streams local HBM to remote HBM without MS, so they do not contend. **Not yet verified on hardware.**
 
 ## Tiling Parameters
 
@@ -97,6 +98,7 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 | `COMPUTE_BLOCK_NUM` | 24 (override with `--compute-blocks`) |
 | `COMM_BLOCK_NUM` | 24 |
 | `CCU_MISSION_PARALLEL` | 1 |
+| `CCU_PIPE_DEPTH` | 1 (`2` is experimental) |
 
 ## Overall Architecture
 
@@ -130,7 +132,7 @@ Each AIC owns a subset of tiles assigned by `block_idx`. For each tile:
 ### AIV Progress
 
 1. Each rank's AIV polls local `groupDone[flat]`; when it reaches `CcuOwnerGroupTilesInGroup`, it `TNOTIFY(+1)` the **owner** `groupReady[flat]`.
-2. Owner AIV, per flat group: after `TTEST(groupReady >= P-1)`, and when depth-1 backpressure allows, `st_dev` `TriggerProgressCke` (single progress CKE).
+2. Owner AIV, per flat group: after `TTEST(groupReady >= P-1)`, and when depth-`CCU_PIPE_DEPTH` backpressure allows, `st_dev` `TriggerProgressCke`, round-robining slots by `issued % CCU_PROGRESS_SLOTS`.
 3. Host `PrepareCcu`: Launch persistent CCU → **single** `st_dev` gate poke (same as `treduce_ccu`, no Host poll); after `WaitEvent(gate)` CCU consumes groups on progress CKEs.
 
 ### CCU fused RS + AG
@@ -236,6 +238,7 @@ CCU GEMM AllReduce demo completed successfully.
 | `HCCL_CCU_CUSTOM_OP_MODE` | custom CCU kernel mode | set to `1` by `run.sh` |
 | `FIRST_DEVICE` | first NPU device id | `0` |
 | `CCU_MISSION_PARALLEL` | CCU mission parallelism | must be `1` |
+| `CCU_PIPE_DEPTH` | AIV->CCU progress handshake in-flight depth | `1` (default) or `2` (experimental, unverified on hardware) |
 | `HCOMM_PKG_INC` | optional internal hcomm pkg_inc | auto-probed by cmake |
 | `PTO_CCU_GEMM_AR_VERBOSE` | log seq/pipe gate VAs | off |
 | `PTO_CCU_GEMM_AR_COMM_DIAG` | log seq/pipe `aiv_wall`/`ccu_wall` | off |
@@ -254,6 +257,7 @@ Constraints:
 - `M` / `N` are padded to `baseM` / `baseN`
 - `CONFIG_COMM_SUB_M == G_BASE_M`
 - `CCU_MISSION_PARALLEL=1`
+- `CCU_PIPE_DEPTH=1` (default; `2` is an unverified experimental path)
 
 ## Build System
 

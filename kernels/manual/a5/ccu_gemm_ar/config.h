@@ -199,5 +199,25 @@ static constexpr uint32_t CCU_MISSION_PARALLEL = CONFIG_CCU_MISSION_PARALLEL;
 // WaitEvent(gate). Re-enable K>1 only after per-mission gate descriptors exist.
 static_assert(CCU_MISSION_PARALLEL == 1, "ccu_gemm_ar stable path requires CONFIG_CCU_MISSION_PARALLEL=1");
 
+// In-flight depth of the AIV -> CCU progress handshake, i.e. how many groups the
+// AIV may have poked but the CCU not yet retired.
+//   1 = stable path. Per group the CCU does Reduce -> Broadcast -> wait, so the
+//       Broadcast of group g never overlaps the Reduce of group g+1.
+//   2 = cross-group software pipelining. The CCU defers the Broadcast wait of
+//       group g until after the Reduce of group g+1, so the two overlap. This is
+//       correct only with >= 2 progress CKE slots, because one CKE mask bit
+//       saturates: a second poke before the CCU consumes the first is absorbed.
+// Depth 2 is UNVERIFIED ON HARDWARE. See docs/ccu/ccu_gemm_ar_optimization_analysis.md
+// section 4.3.2 for the protocol trace and what must be measured before trusting it.
+#ifndef CONFIG_CCU_PIPE_DEPTH
+#define CONFIG_CCU_PIPE_DEPTH 1
+#endif
+static constexpr uint32_t CCU_PIPE_DEPTH = CONFIG_CCU_PIPE_DEPTH;
+static_assert(CCU_PIPE_DEPTH == 1 || CCU_PIPE_DEPTH == 2, "ccu_gemm_ar supports CONFIG_CCU_PIPE_DEPTH of 1 or 2 only");
+
+// One progress CKE slot per in-flight group, so consecutive pokes never collide.
+static constexpr uint32_t CCU_PROGRESS_SLOTS = CCU_PIPE_DEPTH;
+static constexpr uint32_t CCU_MAX_PROGRESS_SLOTS = 2;
+
 static constexpr int WARMUP_ITERS = 5;
 static constexpr int COMPUTE_ONLY_ITERS = 5;

@@ -271,6 +271,9 @@ struct CcuState {
     CcuFusedReduceBroadcastKernelArg rsArgs[kMaxCcuMissions]{};
     CcuFusedReduceBroadcastKernelArg seqArg{};
 
+    // Indexed by progress CKE slot (CCU_PROGRESS_SLOTS), not by mission: mission
+    // parallelism is fixed at 1, see CCU_MISSION_PARALLEL in config.h.
+    static_assert(kMaxCcuMissions >= CCU_MAX_PROGRESS_SLOTS, "progress slot array too small");
     uint64_t rsProgressVA[kMaxCcuMissions]{};
     uint32_t rsProgressMask[kMaxCcuMissions]{};
     uint64_t rsGateVA[kMaxCcuMissions]{};
@@ -1052,9 +1055,9 @@ inline bool EnsureSeqGateDistinctFromPipelined(int rankId, const CcuState& ccu)
     return true;
 }
 
-// Fused progress CKE: single registry slot.
+// Fused progress CKE: one registry slot per in-flight group (CCU_PROGRESS_SLOTS).
 inline constexpr uint32_t kProgressCkeSlot = 0;
-inline constexpr uint32_t kProgressCkeSlotCount = 1;
+inline constexpr uint32_t kProgressCkeSlotCount = CCU_PROGRESS_SLOTS;
 
 inline bool ResolveCcuProgress(int rankId, CcuState& ccu)
 {
@@ -1070,14 +1073,17 @@ inline bool ResolveCcuProgress(int rankId, CcuState& ccu)
         return false;
     }
 
-    const auto& desc = progDescs[kProgressCkeSlot];
-    uint64_t progAddr = ResolveOneCkeVA(desc.dieId, desc.ckeId);
-    if (progAddr == 0) {
-        std::cerr << "[CCU-AR] rank=" << rankId << ": fused progress VA resolution failed" << std::endl;
-        return false;
+    for (uint32_t slot = 0; slot < kProgressCkeSlotCount; ++slot) {
+        const auto& desc = progDescs[kProgressCkeSlot + slot];
+        uint64_t progAddr = ResolveOneCkeVA(desc.dieId, desc.ckeId);
+        if (progAddr == 0) {
+            std::cerr << "[CCU-AR] rank=" << rankId << ": fused progress VA resolution failed (slot=" << slot << ")"
+                      << std::endl;
+            return false;
+        }
+        ccu.rsProgressVA[slot] = progAddr;
+        ccu.rsProgressMask[slot] = desc.mask;
     }
-    ccu.rsProgressVA[0] = progAddr;
-    ccu.rsProgressMask[0] = desc.mask;
     ccu.ckeResolved = true;
     return true;
 }

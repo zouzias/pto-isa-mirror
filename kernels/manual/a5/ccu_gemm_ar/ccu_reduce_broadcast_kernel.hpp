@@ -37,6 +37,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/async/ccu/ccu_loopgroup_utils.hpp"
 #include "pto/comm/async/ccu/ccu_types.hpp"
 
+#include "config.h"
+
 namespace hcomm {
 
 // Minimal link-time surface against libhcomm (not in public cann-9.2 headers).
@@ -159,7 +161,7 @@ struct FusedCkePublishPending {
     uint32_t gateMask{0};
     uint32_t progressMask{0};
     hcomm::CcuRep::CompletedEvent gateEv{};
-    hcomm::CcuRep::CompletedEvent progressEv{};
+    hcomm::CcuRep::CompletedEvent progressEv[CCU_MAX_PROGRESS_SLOTS]{};
 };
 
 inline std::vector<FusedCkePublishPending>& FusedCkePublishTlsList()
@@ -384,7 +386,9 @@ private:
         }
         pending.hasProgress = true;
         pending.progressMask = progressMask_;
-        pending.progressEv = progressEvent_;
+        for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
+            pending.progressEv[slot] = progressEvent_[slot];
+        }
         FusedCkePublishTlsList().push_back(pending);
     }
 
@@ -432,8 +436,20 @@ private:
         doneEvent_ = ker->CreateCompletedEvent();
         doneEvent_.mask = doneMask_;
         if (!oneShotBaselineOnly_) {
-            progressEvent_ = ker->CreateCompletedEvent();
-            progressEvent_.mask = progressMask_;
+            // One CompletedEvent per in-flight group. Distinct events may reuse the
+            // same mask value (gate and done already both use bit 0).
+            for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
+                progressEvent_[slot] = ker->CreateCompletedEvent();
+                progressEvent_[slot].mask = progressMask_;
+            }
+        }
+
+        // Constant across groups; WaitBroadcast() may be emitted before the first
+        // IssueBroadcast() when CCU_PIPE_DEPTH == 2, so derive it here.
+        bcastPeerCount_ = 0;
+        for (uint32_t r = 0; r < rankSize_ && bcastPeerCount_ < kMaxFusedRanks; ++r) {
+            if (r != rootId_)
+                ++bcastPeerCount_;
         }
 
         const uint32_t totalBufs = goConfig_.loopCount * goConfig_.msInterleave;
@@ -507,7 +523,8 @@ private:
         }
     }
 
-    inline void DoBroadcast(accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutput, uint32_t startIdx)
+    // Issue the group's peer writes without waiting. Pairs with WaitBroadcast().
+    inline void IssueBroadcast(accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutput, uint32_t startIdx)
     {
         agSrcAddr_.addr = rsOutput_[rankId_];
         agSrcAddr_.addr += groupOffset;
@@ -534,7 +551,19 @@ private:
                 ownChannels_[idx], agDstAddr_[idx], agSrcAddr_, rsLengthVar_, agOpEvent_,
                 static_cast<uint16_t>(1u << idx));
         }
-        (void)accu::EventWait(agOpEvent_, static_cast<uint16_t>((1u << nPeers) - 1));
+    }
+
+    inline void WaitBroadcast()
+    {
+        if (bcastPeerCount_ == 0)
+            return;
+        (void)accu::EventWait(agOpEvent_, static_cast<uint16_t>((1u << bcastPeerCount_) - 1));
+    }
+
+    inline void DoBroadcast(accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutput, uint32_t startIdx)
+    {
+        IssueBroadcast(groupOffset, baseOutput, startIdx);
+        WaitBroadcast();
     }
 
     // Bind peer/self RS source addresses and owner reduce destination for one group.
@@ -592,23 +621,51 @@ private:
         baseOutput = rsOutput_[rankId_];
     }
 
-    inline void WaitNextProgressCke(hcomm::CcuKernel* ker) { (void)ker->WaitEvent(progressEvent_, progressMask_); }
+    inline void WaitNextProgressCke(hcomm::CcuKernel* ker) { (void)ker->WaitEvent(progressEvent_[0], progressMask_); }
+
+    // Depth 2 consumes progress slots round-robin, matching the AIV poke order.
+    // CCU general registers support only assignment and addition -- there is no bit
+    // operation, so `counter & 1` is unavailable and parity must be carried explicitly.
+    inline void WaitNextProgressCkeAlternating(
+        hcomm::CcuKernel* ker, accu::Variable& parity, accu::Variable& zero, accu::Variable& one)
+    {
+        CCU_IF(parity != 0)
+        {
+            (void)ker->WaitEvent(progressEvent_[1], progressMask_);
+            parity = zero;
+        }
+        CCU_ELSE
+        {
+            (void)ker->WaitEvent(progressEvent_[0], progressMask_);
+            parity = one;
+        }
+    }
 
     // Per-group peer-order rotation needs CCU_IF specialization. For 2-rank
     // (nPeers==1) start is always 0 — emit a single Write path.
+    // `groupSelector` picks the per-group peer rotation and must therefore track the
+    // group being issued, not the group being retired (they differ at depth 2).
+    // waitInline=false leaves the completion wait to the caller.
     inline void BroadcastPipelinedGroup(
-        accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutputAll, accu::Variable& itemsDoneCounter)
+        accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutputAll, accu::Variable& groupSelector,
+        bool waitInline)
     {
         const uint32_t nPeers = (rankSize_ > 1) ? (rankSize_ - 1) : 1;
         if (nPeers <= 1) {
-            DoBroadcast(groupOffset, baseOutputAll, 0);
+            IssueBroadcast(groupOffset, baseOutputAll, 0);
+            if (waitInline) {
+                WaitBroadcast();
+            }
             return;
         }
         for (uint32_t gi = 0; gi < missionWorkItems_; ++gi) {
-            CCU_IF(itemsDoneCounter == static_cast<uint64_t>(gi))
+            CCU_IF(groupSelector == static_cast<uint64_t>(gi))
             {
                 const uint32_t start = (rankId_ + gi) % nPeers;
-                DoBroadcast(groupOffset, baseOutputAll, start);
+                IssueBroadcast(groupOffset, baseOutputAll, start);
+                if (waitInline) {
+                    WaitBroadcast();
+                }
             }
         }
     }
@@ -623,7 +680,6 @@ private:
 
         accu::Variable groupOffset = MakeImmediate(baseOffsetBytes_);
         accu::Variable groupBytes = MakeImmediate(payloadBytes_);
-        accu::Variable itemsDoneCounter = MakeImmediate(0);
         accu::Variable one = MakeImmediate(1);
 
         hcomm::CcuKernel* ker = CurrentCcuKernel();
@@ -632,15 +688,51 @@ private:
             return;
         }
 
-        CCU_WHILE(itemsDoneCounter != static_cast<uint64_t>(missionWorkItems_))
-        {
-            WaitNextProgressCke(ker);
-            BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
-            DoReduce();
-            BroadcastPipelinedGroup(groupOffset, baseOutputAll, itemsDoneCounter);
-            groupOffset += groupBytes;
-            itemsDoneCounter += one;
-            (void)accu::Store(itemsDoneAddr_, itemsDoneCounter);
+        if constexpr (CCU_PIPE_DEPTH >= 2) {
+            // Cross-group pipelining: the Broadcast of group g is retired only after
+            // the Reduce of group g+1, so the two overlap. Reduce owns the on-chip MS
+            // slices while Broadcast streams HBM to remote HBM, so they do not contend
+            // for the same CCU resource. `issuedCounter` drives the loop and the peer
+            // rotation; `doneCounter` reports retired groups to the AIV and therefore
+            // lags by one -- which is exactly why CCU_PIPE_DEPTH must be >= 2 on the
+            // AIV side too, or the backpressure would deadlock against this lag.
+            accu::Variable issuedCounter = MakeImmediate(0);
+            accu::Variable doneCounter = MakeImmediate(0);
+            accu::Variable parity = MakeImmediate(0);
+            accu::Variable zero = MakeImmediate(0);
+
+            CCU_WHILE(issuedCounter != static_cast<uint64_t>(missionWorkItems_))
+            {
+                WaitNextProgressCkeAlternating(ker, parity, zero, one);
+                BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
+                DoReduce();
+                CCU_IF(issuedCounter != 0)
+                {
+                    WaitBroadcast();
+                    doneCounter += one;
+                    (void)accu::Store(itemsDoneAddr_, doneCounter);
+                }
+                BroadcastPipelinedGroup(groupOffset, baseOutputAll, issuedCounter, /*waitInline=*/false);
+                groupOffset += groupBytes;
+                issuedCounter += one;
+            }
+
+            WaitBroadcast();
+            doneCounter += one;
+            (void)accu::Store(itemsDoneAddr_, doneCounter);
+        } else {
+            accu::Variable itemsDoneCounter = MakeImmediate(0);
+
+            CCU_WHILE(itemsDoneCounter != static_cast<uint64_t>(missionWorkItems_))
+            {
+                WaitNextProgressCke(ker);
+                BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
+                DoReduce();
+                BroadcastPipelinedGroup(groupOffset, baseOutputAll, itemsDoneCounter, /*waitInline=*/true);
+                groupOffset += groupBytes;
+                itemsDoneCounter += one;
+                (void)accu::Store(itemsDoneAddr_, itemsDoneCounter);
+            }
         }
 
         FusedTrace("algo", rankId_, "DoPipelinedDataPath done (fused)");
@@ -660,6 +752,7 @@ private:
     HcclReduceOp reduceOp_{HcclReduceOp::HCCL_REDUCE_SUM};
 
     uint32_t progressMask_{1u << 1};
+    uint32_t progressWaitSlot_{0}; // host-side cursor while emitting microcode
     uint32_t missionWorkItems_{0};
     uint64_t itemsDoneAddr_{0};
     uint64_t kernelReadyAddr_{0};
@@ -683,11 +776,15 @@ private:
     accu::LocalAddr agSrcAddr_;
     std::vector<accu::RemoteAddr> agDstAddr_;
     accu::Event agOpEvent_;
+    // Number of peers every Broadcast writes to; constant across groups. Only one
+    // Broadcast is ever in flight, so a single event/address set suffices even at
+    // CCU_PIPE_DEPTH == 2: the wait for group g happens before group g+1 is issued.
+    uint32_t bcastPeerCount_{0};
 
     // Gate/progress/done: old CKE-poke protocol via CompletedEvent (not AscendC Event).
     hcomm::CcuRep::CompletedEvent gateEvent_;
     hcomm::CcuRep::CompletedEvent doneEvent_;
-    hcomm::CcuRep::CompletedEvent progressEvent_;
+    hcomm::CcuRep::CompletedEvent progressEvent_[CCU_MAX_PROGRESS_SLOTS];
 
     std::unique_ptr<accu::Array<accu::CcuBuffer>> loopBufs_;
     std::unique_ptr<accu::Array<accu::Event>> loopEvents_;
@@ -738,8 +835,11 @@ inline CcuResult PublishStashedCkeAfterRegisterEnd()
             continue;
         detail::PublishOneCke(pending.gateEv, pending.rankId, /*slot=*/0, pending.gateMask, true, pending.isSeqOneShot);
         if (pending.hasProgress) {
-            detail::PublishOneCke(
-                pending.progressEv, pending.rankId, detail::kProgressCkeSlot, pending.progressMask, false);
+            for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
+                detail::PublishOneCke(
+                    pending.progressEv[slot], pending.rankId, detail::kProgressCkeSlot + slot, pending.progressMask,
+                    false);
+            }
         }
     }
     ClearFusedCkePublishTls();
