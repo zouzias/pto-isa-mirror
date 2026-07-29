@@ -2435,7 +2435,20 @@ PTO_INST RecordEvent TQUANT(
     WaitEvents&... events)
 {
     TSYNC(events...);
-    TQUANT_IMPL<grp_axis, mx_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+    TQUANT_IMPL<grp_axis, mx_alg, false, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+        dst, src, exp, max, scaling);
+    return {};
+}
+
+template <
+    int grp_axis, auto mx_alg, bool interleave, typename TileDataOut = void, typename TileDataSrc = void,
+    typename TileDataExp = void, typename TileDataMax = void, typename TileDataScaling = void, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling,
+    WaitEvents&... events)
+{
+    TSYNC(events...);
+    TQUANT_IMPL<grp_axis, mx_alg, interleave, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
         dst, src, exp, max, scaling);
     return {};
 }
