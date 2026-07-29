@@ -93,7 +93,7 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 | `baseN` | 256 |
 | `stepKa` / `stepKb` | 4 |
 | `commSubM` | 128 (`== baseM`; current path requires subtile=1) |
-| `commGroupTiles` | default 16 (prefer 8 on 4 ranks) |
+| `commGroupTiles` | default 16 (prefer 13 on 4 ranks, see optimization analysis §4.5) |
 | Number of tiles | 258 (`43 x 6`) |
 | `COMPUTE_BLOCK_NUM` | 24 (override with `--compute-blocks`) |
 | `COMM_BLOCK_NUM` | 24 |
@@ -213,12 +213,18 @@ cd ${git_clone_path}/kernels/manual/a5/ccu_gemm_ar
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
 ```
 
-4. 4 ranks (prefer `comm-group-tiles=8`):
+4. 4 ranks (prefer `comm-group-tiles=13`):
 
 ```bash
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 4 -d 4 \
-  --compute-blocks 32 --comm-group-tiles 8
+  --compute-blocks 32 --comm-group-tiles 13
 ```
+
+On 4 ranks the owner shards are 65/65/64/64. `13` divides 65, so the critical
+owner needs no zero padding; the default `16` pads 65 up to 80 (18.8% of the
+transferred bytes are zeros), and the `8` suggested in earlier docs does not
+divide 65 either (pads to 72). Both are model results — 4 ranks has not been
+measured. See `docs/ccu/ccu_gemm_ar_optimization_analysis.md` section 4.5.
 
 On success:
 

@@ -341,6 +341,23 @@ private:
         return v;
     }
 
+    // Snapshot working RS addresses into a per-bank copy that the Loop body will
+    // bind. Required because the n+p remnant path emits `addr += residual` AFTER
+    // binding loop0 but BEFORE LoopGroup runs: if both loops closed over the same
+    // Variables, loop0 would start one memSlice too late (see DoReduce).
+    inline void SnapshotReduceBank(uint32_t bank)
+    {
+        const uint32_t channelSize = static_cast<uint32_t>(ownChannels_.size());
+        for (uint32_t i = 0; i < channelSize && i < kMaxFusedRanks; ++i) {
+            rsLoopSrc_[bank][i].addr = rsSrcAddr_[i].addr;
+            rsLoopSrc_[bank][i].token = rsSrcAddr_[i].token;
+        }
+        rsLoopSelf_[bank].addr = rsSelfLocalAddr_.addr;
+        rsLoopSelf_[bank].token = rsSelfLocalAddr_.token;
+        rsLoopDst_[bank].addr = rsDstAddr_.addr;
+        rsLoopDst_[bank].token = rsDstAddr_.token;
+    }
+
     inline accu::Func MakeReduceLoopBody(uint32_t bankIndex, accu::Variable& lenVar)
     {
         return accu::Func([this, bankIndex, &lenVar]() {
@@ -352,11 +369,11 @@ private:
 
             for (uint32_t i = 0; i < channelSize; ++i) {
                 (void)accu::Read(
-                    ownChannels_[i], (*loopBufs_)[base + i], rsSrcAddr_[i], lenVar, event,
+                    ownChannels_[i], (*loopBufs_)[base + i], rsLoopSrc_[bankIndex][i], lenVar, event,
                     static_cast<uint16_t>(1u << i));
             }
             (void)accu::LocalCopy(
-                (*loopBufs_)[base + size - 1], rsSelfLocalAddr_, lenVar, event,
+                (*loopBufs_)[base + size - 1], rsLoopSelf_[bankIndex], lenVar, event,
                 static_cast<uint16_t>(1u << channelSize));
 
             (void)accu::EventWait(event, allMask);
@@ -367,7 +384,7 @@ private:
                 (void)accu::EventWait(event, 1u);
             }
 
-            (void)accu::LocalCopy(rsDstAddr_, (*loopBufs_)[base], lenVar, event, 1u);
+            (void)accu::LocalCopy(rsLoopDst_[bankIndex], (*loopBufs_)[base], lenVar, event, 1u);
             (void)accu::EventWait(event, 1u);
         });
     }
@@ -421,6 +438,12 @@ private:
         rsSrcAddr_.reserve(rankSize_);
         for (uint32_t i = 0; i < rankSize_; ++i)
             rsSrcAddr_.emplace_back();
+        for (uint32_t bank = 0; bank < 2; ++bank) {
+            rsLoopSelf_[bank] = accu::LocalAddr{};
+            rsLoopDst_[bank] = accu::LocalAddr{};
+            for (uint32_t i = 0; i < kMaxFusedRanks; ++i)
+                rsLoopSrc_[bank][i] = accu::RemoteAddr{};
+        }
 
         agSrcAddr_ = accu::LocalAddr{};
         for (uint32_t i = 0; i + 1 < rankSize_; ++i)
@@ -490,6 +513,9 @@ private:
             loopParam = EncodeLoopParam(0, goConfig_.memSlice * goConfig_.loopCount, 0);
             loopParam += rsGoSizeLoopIter_;
 
+            // Snapshot before LoopGroup so the m-part does not share Variables with
+            // the remnant path (which mutates rsSrcAddr_/rsDstAddr_ below).
+            SnapshotReduceBank(0);
             accu::Variable sliceSize = MakeImmediate(goConfig_.memSlice);
             accu::Func body = MakeReduceLoopBody(0, sliceSize);
             accu::Loop loop(loopParam, body);
@@ -500,6 +526,12 @@ private:
             accu::LoopGroup group(paraCfg, offsetCfg, /*maxLoopNum=*/1u, {loop});
         }
 
+        // Remnant n+p path mirrors hcomm ReduceLoopGroup: bind loop0 at
+        // base+offset (length=residual), THEN advance by residual and bind loop1.
+        // The two loops MUST close over distinct address Variables — a shared
+        // rsSrcAddr_ would see both += ops before LoopGroup runs, so loop0 would
+        // start one memSlice (4 KiB) too late. For GT=26 that skips the first 8
+        // rows of every group's remnant (global tile 48, 100, ...).
         CCU_IF(rsGoSizeParallel_ != 0)
         {
             const uint32_t channelSize = static_cast<uint32_t>(ownChannels_.size());
@@ -508,6 +540,7 @@ private:
             rsSelfLocalAddr_.addr += rsGoSizeOffset_;
             rsDstAddr_.addr += rsGoSizeOffset_;
 
+            SnapshotReduceBank(0);
             accu::Variable loopCfg0 = MakeImmediate(EncodeLoopParam(0, 0, 1));
             accu::Func body0 = MakeReduceLoopBody(0, rsGoSizeResidual_);
             accu::Loop loop0(loopCfg0, body0);
@@ -517,6 +550,7 @@ private:
             rsSelfLocalAddr_.addr += rsGoSizeResidual_;
             rsDstAddr_.addr += rsGoSizeResidual_;
 
+            SnapshotReduceBank(1);
             accu::Variable loopCfg1 = MakeImmediate(EncodeLoopParam(0, 0, 1));
             accu::Variable sliceSize = MakeImmediate(goConfig_.memSlice);
             accu::Func body1 = MakeReduceLoopBody(1, sliceSize);
@@ -776,6 +810,10 @@ private:
     accu::LocalAddr rsDstAddr_;
     accu::LocalAddr rsSelfLocalAddr_;
     std::vector<accu::RemoteAddr> rsSrcAddr_;
+    // Per-bank address snapshots for MakeReduceLoopBody (see SnapshotReduceBank).
+    accu::RemoteAddr rsLoopSrc_[2][kMaxFusedRanks];
+    accu::LocalAddr rsLoopSelf_[2];
+    accu::LocalAddr rsLoopDst_[2];
 
     accu::LocalAddr agSrcAddr_;
     std::vector<accu::RemoteAddr> agDstAddr_;

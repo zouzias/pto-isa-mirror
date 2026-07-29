@@ -93,7 +93,7 @@ $$
 | `baseN` | 256 |
 | `stepKa` / `stepKb` | 4 |
 | `commSubM` | 128（`== baseM`，当前路径要求 subtile=1） |
-| `commGroupTiles` | 默认 16（4 卡建议 8） |
+| `commGroupTiles` | 默认 16（4 卡建议 13，见优化分析 §4.5） |
 | `tile 数` | 258（43×6） |
 | `COMPUTE_BLOCK_NUM` | 24（可用 `--compute-blocks` 覆盖） |
 | `COMM_BLOCK_NUM` | 24 |
@@ -213,12 +213,17 @@ cd ${git_clone_path}/kernels/manual/a5/ccu_gemm_ar
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
 ```
 
-4. 4 卡（推荐 `comm-group-tiles=8`）：
+4. 4 卡（建议 `comm-group-tiles=13`）：
 
 ```bash
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 4 -d 4 \
-  --compute-blocks 32 --comm-group-tiles 8
+  --compute-blocks 32 --comm-group-tiles 13
 ```
+
+4 卡的 owner 分片是 65/65/64/64，`13` 能整除 65，使关键 owner 零补零；默认的 `16`
+会把 65 补到 80（18.8% 传输字节为零），早期文档里的 `8` 也不整除 65（补到 72）。
+两者均为模型结论，4 卡尚未实测，详见
+`docs/ccu/ccu_gemm_ar_optimization_analysis.md` §4.5。
 
 成功时输出：
 

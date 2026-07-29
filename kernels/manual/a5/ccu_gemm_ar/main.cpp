@@ -173,13 +173,14 @@ static float halfToFloat(uint16_t h)
 
 static bool VerifyOutput(const uint16_t* output_fp16, const float* golden, int nRanks)
 {
+    // Per-element FP16 tolerance. Final verdict requires EVERY valid element to pass —
+    // do not allow a fraction of the matrix to be wrong (previous err_threshold =
+    // valid_elements * rtol silently accepted whole missing tiles).
     const float atol = 1.0f;
     const float rtol = 0.01f;
-    const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
     float max_diff = 0.0f;
     float max_diff_ratio = 0.0f;
     size_t err_count = 0;
-    const size_t err_threshold = static_cast<size_t>(valid_elements * rtol);
     constexpr size_t MAX_ERR_PRINT = 4;
 
     for (size_t row = 0; row < G_ORIG_M; ++row) {
@@ -209,10 +210,10 @@ static bool VerifyOutput(const uint16_t* output_fp16, const float* golden, int n
         }
     }
 
-    bool ok = (err_count <= err_threshold);
+    bool ok = (err_count == 0);
     std::cout << "[VERIFY] valid_region=" << G_ORIG_M << "x" << G_ORIG_N << " max_diff=" << max_diff
-              << " max_ratio=" << max_diff_ratio << " err=" << err_count << "/" << err_threshold << " -> "
-              << (ok ? "PASS" : "FAIL") << std::endl;
+              << " max_ratio=" << max_diff_ratio << " err=" << err_count << " (atol=" << atol << ", rtol=" << rtol
+              << ") -> " << (ok ? "PASS" : "FAIL") << std::endl;
     return ok;
 }
 
