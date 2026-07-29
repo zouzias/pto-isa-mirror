@@ -50,6 +50,11 @@ template <typename TileData, typename MaskTile, typename TmpTile, typename... Wa
 PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp, WaitEvents &... events);
 ```
 
+```cpp
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile, typename... WaitEvents>
+PTO_INST RecordEvent TSEL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp, WaitEvents &... events);
+```
+
 ## 约束
 
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
