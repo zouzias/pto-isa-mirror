@@ -354,24 +354,26 @@ private:
             const uint32_t size = channelSize + 1;
             const uint16_t allMask = static_cast<uint16_t>((1u << size) - 1);
 
+            // Base event for this Loop body. LoopGroup parallel expansion strides
+            // CKE id by offsetCfg.ckeOffset (=1), so lane k uses loopEvents_[k].
+            accu::Event& event = (*loopEvents_)[0];
             for (uint32_t i = 0; i < channelSize; ++i) {
                 (void)accu::Read(
-                    ownChannels_[i], (*loopBufs_)[i], rsSrcAddr_[i], lenVar, loopEvent_,
-                    static_cast<uint16_t>(1u << i));
+                    ownChannels_[i], (*loopBufs_)[i], rsSrcAddr_[i], lenVar, event, static_cast<uint16_t>(1u << i));
             }
             (void)accu::LocalCopy(
-                (*loopBufs_)[size - 1], rsSelfLocalAddr_, lenVar, loopEvent_, static_cast<uint16_t>(1u << channelSize));
+                (*loopBufs_)[size - 1], rsSelfLocalAddr_, lenVar, event, static_cast<uint16_t>(1u << channelSize));
 
-            (void)accu::EventWait(loopEvent_, allMask);
+            (void)accu::EventWait(event, allMask);
 
             if (size > 1) {
                 (void)accu::LocalReduce(
-                    loopBufs_->data(), size, dataType_, outputDataType_, reduceOp_, lenVar, loopEvent_, 1u);
-                (void)accu::EventWait(loopEvent_, 1u);
+                    loopBufs_->data(), size, dataType_, outputDataType_, reduceOp_, lenVar, event, 1u);
+                (void)accu::EventWait(event, 1u);
             }
 
-            (void)accu::LocalCopy(rsDstAddr_, (*loopBufs_)[0], lenVar, loopEvent_, 1u);
-            (void)accu::EventWait(loopEvent_, 1u);
+            (void)accu::LocalCopy(rsDstAddr_, (*loopBufs_)[0], lenVar, event, 1u);
+            (void)accu::EventWait(event, 1u);
         });
     }
 
@@ -459,9 +461,13 @@ private:
                 ++bcastPeerCount_;
         }
 
+        // MS and Event resources for LoopGroup parallel expand (see microcode:
+        // each expanded lane offsets MSId by msInterleave and CKEId by ckeOffset).
+        // Must be a contiguous BlockAlloc of size loopCount — same as hcomm
+        // AllocGoResource — not a single Event() / Array(1).
         const uint32_t totalBufs = goConfig_.loopCount * goConfig_.msInterleave;
         loopBufs_ = std::make_unique<accu::Array<accu::CcuBuffer>>(totalBufs);
-        loopEvent_ = accu::Event{};
+        loopEvents_ = std::make_unique<accu::Array<accu::Event>>(goConfig_.loopCount);
 
         FusedTrace(
             "init", rankId_,
@@ -787,7 +793,7 @@ private:
     hcomm::CcuRep::CompletedEvent progressEvent_[CCU_MAX_PROGRESS_SLOTS];
 
     std::unique_ptr<accu::Array<accu::CcuBuffer>> loopBufs_;
-    accu::Event loopEvent_;
+    std::unique_ptr<accu::Array<accu::Event>> loopEvents_;
 };
 
 inline CcuFusedReduceBroadcastKernelArg& FusedRegisterTlsArg()
