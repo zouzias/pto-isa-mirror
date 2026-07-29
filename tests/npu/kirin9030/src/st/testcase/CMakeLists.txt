@@ -196,7 +196,7 @@ set(ALL_TESTCASES
     tlrelu
     tdiv
     tcmps
-    # tmov_acc2vec
+    tmov_acc2vec
     tsel
     tsels
     trsqrt
@@ -260,7 +260,7 @@ set(ALL_TESTCASES
     textract_vec
     # tmov_zz
     tmov_nd2nz
-    # textract_acc2vec
+    textract_acc2vec
     texpands_mat
     tload_mix
 )
