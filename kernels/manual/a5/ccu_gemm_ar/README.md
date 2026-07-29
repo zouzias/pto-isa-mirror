@@ -92,9 +92,9 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 | `baseN` | 256 |
 | `stepKa` / `stepKb` | 4 |
 | `commSubM` | 128 (`== baseM`; current path requires subtile=1) |
-| `commGroupTiles` | default 16 (prefer 13 on 4 ranks, see optimization analysis §4.5) |
+| `commGroupTiles` | default 16; measured prefer 2-rank `26`, 4-rank `13` |
 | Number of tiles | 258 (`43 x 6`) |
-| `COMPUTE_BLOCK_NUM` | 24 (override with `--compute-blocks`) |
+| `COMPUTE_BLOCK_NUM` | default 24 (use `--compute-blocks 32` for reported numbers) |
 | `COMM_BLOCK_NUM` | 24 |
 | `CCU_MISSION_PARALLEL` | 1 |
 
@@ -168,26 +168,45 @@ CCU payloads (`gemm_output` / `reduced_output`) and final `row_output` live in a
 
 ## Measured Performance (reference)
 
-Measured on 2-rank Ascend950PR with `M=5416, K=6144, N=1408` (padded `5504x1536`), `258 tiles (43x6)`, `compute_blocks=32`, `ccu_group_tiles=16`. Each rank computes full GEMM `C_i = A_i x B`; AllReduce sums the two `C_i`. `comm_data=0.016 GB/rank`.
+Same shape: `M=5416, K=6144, N=1408` (padded `5504x1536`), `258 tiles (43x6)`, `compute_blocks=32`.  
+Format: **avg** `[med=, std=]`. Headline metric is **Pipelined**.
+
+### 2 ranks (`--comm-group-tiles 26`)
+
+`comm_data=0.016 GB/rank`. VERIFY `err=0` PASS.
 
 | Metric | Value |
 | --- | --- |
-| Compute-only | `313.2 us` (`299162 GFLOPS`) |
-| Sequential | `735.6 us` (compute `314.7 us` + one-shot fused RS→AG `420.9 us @ 37.4 GB/s`) |
-| Pipelined | **`574.6 us`** (compute done `302.8 us`, comm done `574.1 us @ 27.4 GB/s`) |
-| Speedup | `1.280x` |
-| Time saved | `161.0 us` (`21.9%`) |
-| Overlap eff | `52.7%` |
-| Throughput | `326138 GFLOPS` (total) |
+| Compute-only | `300.4 us` (`311919 GFLOPS`) `[med=300.4, std=1.0]` |
+| Sequential | `756.6 us` `[med=756.7, std=5.9]` (compute `299.8 us` + one-shot comm `456.8 us @ 34.5 GB/s`) |
+| Pipelined | **`480.3 us`** `[med=476.7, std=15.8]` (compute done `293.4 us`, comm done `479.9 us @ 32.8 GB/s`) |
+| Speedup | `1.575x` |
+| Time saved | `276.4 us` (`36.5%`) |
+| Overlap eff | `93.3%` |
+| Throughput | `390231 GFLOPS` (total) |
+
+### 4 ranks (`--comm-group-tiles 13`)
+
+`comm_data=0.024 GB/rank`. VERIFY `err=0` PASS.  
+This Sequential run had a large `std`; prefer **med** when comparing Sequential / Speedup across configs.
+
+| Metric | Value |
+| --- | --- |
+| Compute-only | `300.4 us` (`311984 GFLOPS`) `[med=300.2, std=2.9]` |
+| Sequential | `683.4 us` `[med=614.2, std=271.4]` (compute `300.9 us` + one-shot comm `382.4 us @ 61.9 GB/s`, med comm `312.9`) |
+| Pipelined | **`389.0 us`** `[med=384.5, std=18.6]` (compute done `292.5 us`, comm done `388.6 us @ 60.9 GB/s`) |
+| Speedup | `1.757x` (vs Sequential avg; ~`1.58x` if using med seq≈614) |
+| Time saved | `294.4 us` (`43.1%`) |
+| Overlap eff | `76.2%` |
+| Throughput | `963556 GFLOPS` (total, ×ranks) |
 
 ### What these numbers mean
 
-- **Compute-only**: pure GEMM with no communication. Here `313.2 us` → `299162 GFLOPS`.
-- **Sequential**: full GEMM, then peer-sync + one-shot CCU, no compute/comm overlap. Launch is outside the timer; `seq` is continuous wall-clock. Here `735.6 us` with compute `314.7 us` and comm `420.9 us`.
-- **Pipelined**: `PrepareCcu` outside the timer; AIC / AIV / CCU overlapped end-to-end. Here `574.6 us`, `1.280x` vs Sequential; `compute done = 302.8 us`.
-- **Speedup**: Sequential / Pipelined.
-- **Time saved**: wall time saved vs the serial path. Here `161.0 us` (~`21.9%`).
-- **Overlap eff**: time saved by overlap as a percentage of the shorter serial phase. Pipelined `comm done` is wall-to-CCU-finish (includes overlap), so it is not pure CCU latency.
+- **Compute-only**: pure GEMM with no communication.
+- **Sequential**: full GEMM, then peer-sync + one-shot CCU, no compute/comm overlap; Launch outside the timer.
+- **Pipelined**: `PrepareCcu` outside the timer; AIC / AIV / CCU overlapped end-to-end (primary cross-config metric).
+- **Speedup**: Sequential / Pipelined (treat carefully when Sequential variance is high).
+- **Overlap eff**: time saved by overlap as a percentage of the shorter serial phase.
 
 ## Build and Run
 
@@ -198,31 +217,28 @@ export ASCEND_CANN_PATH=/usr/local/Ascend/cann-<version>/set_env.sh
 source "${ASCEND_CANN_PATH}"
 ```
 
-2. Run the 2-rank example:
+2. Run the 2-rank example (use `--comm-group-tiles 26` to match the numbers above):
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a5/ccu_gemm_ar
-./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
+./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32 --comm-group-tiles 26
 ```
 
 3. Choose the first device id:
 
 ```bash
-FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
+FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 \
+  --compute-blocks 32 --comm-group-tiles 26
 ```
 
-4. 4 ranks (prefer `comm-group-tiles=13`):
+4. 4 ranks (matches the numbers above with `--comm-group-tiles 13`):
 
 ```bash
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 4 -d 4 \
   --compute-blocks 32 --comm-group-tiles 13
 ```
 
-On 4 ranks the owner shards are 65/65/64/64. `13` divides 65, so the critical
-owner needs no zero padding; the default `16` pads 65 up to 80 (18.8% of the
-transferred bytes are zeros), and the `8` suggested in earlier docs does not
-divide 65 either (pads to 72). Both are model results — 4 ranks has not been
-measured. See `docs/ccu/ccu_gemm_ar_optimization_analysis.md` section 4.5.
+On 4 ranks owner shards are 65/65/64/64; `13` divides 65 (less pad on the critical owner). Default `16` pads 65 to 80.
 
 On success:
 

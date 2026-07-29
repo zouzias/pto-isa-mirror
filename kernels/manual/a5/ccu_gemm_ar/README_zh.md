@@ -92,9 +92,9 @@ $$
 | `baseN` | 256 |
 | `stepKa` / `stepKb` | 4 |
 | `commSubM` | 128（`== baseM`，当前路径要求 subtile=1） |
-| `commGroupTiles` | 默认 16（4 卡建议 13，见优化分析 §4.5） |
+| `commGroupTiles` | 默认 16；实测推荐 2 卡 `26`、4 卡 `13` |
 | `tile 数` | 258（43×6） |
-| `COMPUTE_BLOCK_NUM` | 24（可用 `--compute-blocks` 覆盖） |
+| `COMPUTE_BLOCK_NUM` | 默认 24（跑分请 `--compute-blocks 32`） |
 | `COMM_BLOCK_NUM` | 24 |
 | `CCU_MISSION_PARALLEL` | 1 |
 
@@ -168,26 +168,45 @@ CCU payload（`gemm_output` / `reduced_output`）与最终 `row_output` 在高�
 
 ## 实测性能（参考）
 
-以下数据在 2 卡 Ascend950PR 上测得，参数 `M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=32`，`ccu_group_tiles=16`。每 rank 计算完整 GEMM `C_i = A_i × B`，AllReduce 对 2 个 `C_i` 求和；`comm_data=0.016 GB/rank`。
+同 shape：`M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=32`。  
+格式：**avg** `[med=, std=]`。headline 主看 **Pipelined**。
+
+### 2 卡（`--comm-group-tiles 26`）
+
+`comm_data=0.016 GB/rank`。VERIFY `err=0` PASS。
 
 | 指标 | 值 |
 | --- | --- |
-| Compute-only | `313.2 us`（`299162 GFLOPS`） |
-| Sequential | `735.6 us`（compute `314.7 us` + one-shot fused RS→AG `420.9 us @ 37.4 GB/s`） |
-| Pipelined | **`574.6 us`**（compute done `302.8 us`，comm done `574.1 us @ 27.4 GB/s`） |
-| Speedup | `1.280x` |
-| Time saved | `161.0 us`（`21.9%`） |
-| Overlap eff | `52.7%` |
-| Throughput | `326138 GFLOPS`（total） |
+| Compute-only | `300.4 us`（`311919 GFLOPS`）`[med=300.4, std=1.0]` |
+| Sequential | `756.6 us` `[med=756.7, std=5.9]`（compute `299.8 us` + one-shot comm `456.8 us @ 34.5 GB/s`） |
+| Pipelined | **`480.3 us`** `[med=476.7, std=15.8]`（compute done `293.4 us`，comm done `479.9 us @ 32.8 GB/s`） |
+| Speedup | `1.575x` |
+| Time saved | `276.4 us`（`36.5%`） |
+| Overlap eff | `93.3%` |
+| Throughput | `390231 GFLOPS`（total） |
+
+### 4 卡（`--comm-group-tiles 13`）
+
+`comm_data=0.024 GB/rank`。VERIFY `err=0` PASS。  
+Sequential 本跑 `std` 偏大，跨配置对比 Sequential / Speedup 时优先看 **med**。
+
+| 指标 | 值 |
+| --- | --- |
+| Compute-only | `300.4 us`（`311984 GFLOPS`）`[med=300.2, std=2.9]` |
+| Sequential | `683.4 us` `[med=614.2, std=271.4]`（compute `300.9 us` + one-shot comm `382.4 us @ 61.9 GB/s`，med comm `312.9`） |
+| Pipelined | **`389.0 us`** `[med=384.5, std=18.6]`（compute done `292.5 us`，comm done `388.6 us @ 60.9 GB/s`） |
+| Speedup | `1.757x`（分母为本跑 Sequential avg；若用 med seq≈614 则约 `1.58x`） |
+| Time saved | `294.4 us`（`43.1%`） |
+| Overlap eff | `76.2%` |
+| Throughput | `963556 GFLOPS`（total，×ranks） |
 
 ### 这些数字意味着什么
 
-- **Compute-only**：纯 GEMM 时间（无通信）。当前 `313.2 us`，对应 `299162 GFLOPS`。
-- **Sequential**：整段 GEMM 后再 peer-sync + one-shot CCU，无算通重叠。Launch 在计时外；`seq` 为连续墙钟。当前 `735.6 us`，其中 compute `314.7 us`、comm `420.9 us`。
-- **Pipelined**：`PrepareCcu` 在计时外；AIC / AIV / CCU 重叠端到端。当前 `574.6 us`，相对 Sequential 加速 `1.280x`；`compute done = 302.8 us`。
-- **Speedup**：Sequential / Pipelined。
-- **Time saved**：相对串行路径节省的总时长。当前节省 `161.0 us`，约占 `21.9%`。
-- **Overlap eff**：重叠带来的时间节省占较短阶段时间的百分比。
+- **Compute-only**：纯 GEMM（无通信）。
+- **Sequential**：整段 GEMM 后再 peer-sync + one-shot CCU，无算通重叠；Launch 在计时外。
+- **Pipelined**：`PrepareCcu` 在计时外；AIC / AIV / CCU 重叠端到端（跨配置主指标）。
+- **Speedup**：Sequential / Pipelined（Sequential 方差大时慎读）。
+- **Overlap eff**：重叠节省占较短阶段时间的百分比。
 
 ## 构建与运行
 
@@ -198,30 +217,28 @@ export ASCEND_CANN_PATH=/usr/local/Ascend/cann-<version>/set_env.sh
 source "${ASCEND_CANN_PATH}"
 ```
 
-2. 运行示例（2 卡）：
+2. 运行示例（2 卡，与上文实测一致可用 `--comm-group-tiles 26`）：
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a5/ccu_gemm_ar
-./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
+./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32 --comm-group-tiles 26
 ```
 
 3. 指定起始设备编号：
 
 ```bash
-FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 --compute-blocks 32
+FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2 \
+  --compute-blocks 32 --comm-group-tiles 26
 ```
 
-4. 4 卡（建议 `comm-group-tiles=13`）：
+4. 4 卡（与上文实测一致，`--comm-group-tiles 13`）：
 
 ```bash
 FIRST_DEVICE=0 ./run.sh -r npu -v Ascend950PR_958b -n 4 -d 4 \
   --compute-blocks 32 --comm-group-tiles 13
 ```
 
-4 卡的 owner 分片是 65/65/64/64，`13` 能整除 65，使关键 owner 零补零；默认的 `16`
-会把 65 补到 80（18.8% 传输字节为零），早期文档里的 `8` 也不整除 65（补到 72）。
-两者均为模型结论，4 卡尚未实测，详见
-`docs/ccu/ccu_gemm_ar_optimization_analysis.md` §4.5。
+4 卡 owner 分片为 65/65/64/64，`13` 能整除 65（关键 owner 少补零）。默认 `16` 会把 65 pad 到 80。
 
 成功时输出：
 
