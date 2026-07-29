@@ -86,8 +86,16 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
+    cmpmode_str = {
+        "CmpMode::EQ": 'eq',
+        "CmpMode::NE": 'ne',
+        "CmpMode::LT": 'lt',
+        "CmpMode::GT": 'gt',
+        "CmpMode::GE": 'ge',
+        "CmpMode::LE": 'le'
+    }[param.mode]
     nan_suffix = "_nan" if getattr(param, "is_nan", False) else ""
-    return f"TCMPSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"\
+    return f"TCMPSTest.case_{cmpmode_str}_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"\
         f"{param.valid_row}x{param.valid_col}{nan_suffix}"
 
 if __name__ == "__main__":
