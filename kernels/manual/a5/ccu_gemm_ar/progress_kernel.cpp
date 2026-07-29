@@ -34,12 +34,8 @@ AICORE inline __gm__ T* CommRemotePtr(__gm__ CommDeviceContext* ctx, __gm__ T* l
 
 static constexpr uint64_t kCkeValidBit = 1ULL << 63;
 static constexpr uint32_t kPollFenceInterval = 64;
-// One in-flight group per progress CKE slot. A CKE mask bit is edge-triggered and
-// saturates, so a slot must not be re-poked before the CCU consumes it; alternating
-// over CCU_PROGRESS_SLOTS slots is what makes depth > 1 safe.
-static constexpr uint32_t kSchedMaxInflight = CCU_PIPE_DEPTH;
-static constexpr uint32_t kProgressSlots = CCU_PROGRESS_SLOTS;
-static_assert(kSchedMaxInflight <= kProgressSlots, "each in-flight group needs its own progress CKE slot");
+// Strict one-at-a-time: AIV must not re-poke the progress CKE until CCU retires the group.
+static constexpr uint32_t kSchedMaxInflight = 1;
 
 // ProgressCtx and ProgressCkeCtx are defined in kernel_launchers.h.
 
@@ -94,11 +90,9 @@ AICORE inline uint64_t SchedRowMajorOffsetHalves(uint32_t tile, uint32_t sub)
     return tileBase + static_cast<uint64_t>(sub) * G_COMM_SUB_M * G_N;
 }
 
-// Round-robin the progress slot so two in-flight groups never share a CKE mask bit.
-AICORE inline void TriggerProgressCke(ProgressCkeCtx* cke, uint64_t issued)
+AICORE inline void TriggerProgressCke(ProgressCkeCtx* cke, uint64_t /*issued*/)
 {
-    const uint32_t slot = static_cast<uint32_t>(issued % kProgressSlots);
-    TriggerOneCke(cke->ckeSlotVA[slot], cke->ckeMask[slot]);
+    TriggerOneCke(cke->ckeSlotVA[0], cke->ckeMask[0]);
 }
 
 AICORE inline void WaitItemsDoneGE(volatile __gm__ uint64_t* itemsDonePtr, uint64_t target)
@@ -229,15 +223,13 @@ AICORE inline void WaitPeerReady(
     }
 }
 
-// Owner (Pipelined): peer ready + depth-D itemsDone (+ ring).
-// Group `issued` may enter flight once all but the last (D - 1) issued groups have
-// retired. At D = 1 this is `done >= issued`, i.e. strict one-at-a-time.
+// Owner (Pipelined): peer ready + previous group retired (done >= issued).
 AICORE inline void WaitPeerReadyAndBackpressure(
     __gm__ int32_t* signalBase, uint32_t flatReadyIdx, int32_t peerTarget, volatile __gm__ uint64_t* itemsDonePtr,
     uint64_t issued, volatile __gm__ ProgressCtx::Timing* timing, bool timingOn)
 {
     const bool needBp = (issued >= kSchedMaxInflight);
-    const uint64_t bpTarget = needBp ? (issued - kSchedMaxInflight + 1) : 0;
+    const uint64_t bpTarget = needBp ? issued : 0;
     uint32_t spin = 0;
 
     while (true) {

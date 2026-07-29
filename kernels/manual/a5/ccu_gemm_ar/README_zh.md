@@ -71,13 +71,12 @@ $$
 - **双流重叠**：Compute Stream 跑 AIC GEMM；AIV Stream 跑 progress/gate；CCU Stream 跑 fused RS+AG。tile/group 就绪后经 CKE 触发 CCU，与后续计算重叠。
 - **逻辑 RS + AG，执行上 fused**：每个 owner group 一次 CCU mission——先 Pull Reduce 到 owner，再 Push Broadcast；通信量约 `2*(P-1)/P * D`。
 - **owner 作用域 packed 布局**：`owner = tile % nranks`，packed 按 owner 连续，便于 CCU 按 group 发固定长度 WQE；残余 group 对 owner shard 按 `comm-group-tiles` 对齐补零。
-- **Progress 同步**：AIC 对本地 window `groupDone[flat]` 做 `AtomicAdd`；peer AIV poll 齐后 `TNOTIFY(owner groupReady)`；owner 等 `>= P-1` 再 `TriggerProgressCke`。在途深度由 `CCU_PIPE_DEPTH` 决定：每个在途 group 独占一个 progress CKE 槽位，避免丢边沿。
+- **Progress 同步**：AIC 对本地 window `groupDone[flat]` 做 `AtomicAdd`；peer AIV poll 齐后 `TNOTIFY(owner groupReady)`；owner 等 `>= P-1` 且上一 group 已退休再 `TriggerProgressCke`（单 progress CKE，严格一拍一发）。
 - **CKE 生命周期**：seq one-shot 与 pipelined 在**同一次** `RegisterStart/End` 中注册，Translate 后分别 Publish 到 `seqGate` / `gate`（+ progress），保证物理 CKE 不复用。
 - **AG 错峰**：CCU Broadcast 的 peer 写序按 `(rankId + group) % (P-1)` 轮转。
 - **Block Swizzle + L1/L0 双缓冲**：计算侧与 `gemm_ar` 同类（zigzag tile、`stepK=4`、L0 ping/pong）。
 - **每 tile store fence**：`TSTORE` 后 `pipe_barrier(PIPE_FIX) + dsb`，再发 `groupDone`。
-- **Stable 约束**：`CCU_MISSION_PARALLEL=1`、`CCU_PIPE_DEPTH=1`；每 rank 有独立的 pipelined `gate` 与 Sequential `seqGate`。
-- **跨组流水（实验，默认关闭）**：`CCU_PIPE_DEPTH=2` 时 CCU 把 group `g` 的 Broadcast 完成等待推迟到 group `g+1` 的 Reduce 之后，两者重叠。Reduce 独占片上 MS，Broadcast 走本地 HBM → 远端 HBM 不占 MS，因此不争用同一资源。**尚未在硬件上验证。**
+- **Stable 约束**：`CCU_MISSION_PARALLEL=1`；每 rank 有独立的 pipelined `gate` 与 Sequential `seqGate`。CCU 每 group 串行 Reduce→Broadcast（同 channel）。
 
 ## Tiling 参数
 
@@ -98,7 +97,6 @@ $$
 | `COMPUTE_BLOCK_NUM` | 24（可用 `--compute-blocks` 覆盖） |
 | `COMM_BLOCK_NUM` | 24 |
 | `CCU_MISSION_PARALLEL` | 1 |
-| `CCU_PIPE_DEPTH` | 1（`2` 为实验值） |
 
 ## 整体架构
 
@@ -132,7 +130,7 @@ $$
 ### AIV Progress
 
 1. 各 rank AIV 轮询本地 `groupDone[flat]`，达到 `CcuOwnerGroupTilesInGroup` 后，对 **owner** 的 `groupReady[flat]` 做 `TNOTIFY(+1)`。
-2. Owner AIV 对每个 flat group：`TTEST(groupReady >= P-1)` 通过后，在 depth-`CCU_PIPE_DEPTH` 背压允许时用 `st_dev` `TriggerProgressCke`，槽位按 `issued % CCU_PROGRESS_SLOTS` 轮转。
+2. Owner AIV 对每个 flat group：`TTEST(groupReady >= P-1)` 且上一 group 已退休后，用 `st_dev` `TriggerProgressCke`（单槽）。
 3. Host 侧 `PrepareCcu`：Launch persistent CCU → **单次** `st_dev` poke gate（与 `treduce_ccu` 相同，无 Host 轮询）；CCU `WaitEvent(gate)` 放行后按 progress CKE 消费 group。
 
 ### CCU fused RS + AG
@@ -243,7 +241,6 @@ CCU GEMM AllReduce demo completed successfully.
 | `HCCL_CCU_CUSTOM_OP_MODE` | 自定义 CCU kernel | `run.sh` 置为 `1` |
 | `FIRST_DEVICE` | 起始 NPU 编号 | 默认 `0` |
 | `CCU_MISSION_PARALLEL` | CCU mission 并行度 | 必须为 `1` |
-| `CCU_PIPE_DEPTH` | AIV→CCU 进度握手在途深度 | `1`（默认）或 `2`（实验，未经硬件验证）|
 | `HCOMM_PKG_INC` | 内部 hcomm pkg_inc（可选） | cmake 自动探测 |
 | `PTO_CCU_GEMM_AR_VERBOSE` | 打印 seq/pipe gate VA 等 | 默认关闭 |
 | `PTO_CCU_GEMM_AR_COMM_DIAG` | 打印 seq/pipe `aiv_wall`/`ccu_wall` | 默认关闭 |
@@ -262,7 +259,6 @@ G_M=8192 G_K=8192 G_N=2048 ./run.sh -r npu -v Ascend950PR_958b -n 2 -d 2
 - `M`/`N` 自动 pad 到 `baseM`/`baseN`
 - `CONFIG_COMM_SUB_M == G_BASE_M`
 - `CCU_MISSION_PARALLEL=1`
-- `CCU_PIPE_DEPTH=1`（默认；`2` 为未验证的实验路径）
 
 
 ## 构建系统

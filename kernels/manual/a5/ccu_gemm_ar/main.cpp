@@ -993,10 +993,8 @@ static void LaunchCompute(const DeviceBuffers& buf, int rank_id, int n_ranks, ac
 static void LaunchCcuProgress(CcuState& ccu, const DeviceBuffers& buf, int rankId, int nRanks)
 {
     ProgressCkeCtx rsCke{};
-    for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
-        rsCke.ckeSlotVA[slot] = ccu.rsProgressVA[slot];
-        rsCke.ckeMask[slot] = ccu.rsProgressMask[slot];
-    }
+    rsCke.ckeSlotVA[0] = ccu.rsProgressVA;
+    rsCke.ckeMask[0] = ccu.rsProgressMask;
     rsCke.itemsDoneAddr = MissionRsItemsDoneAddr(buf.progressCtx_dev, 0);
     rsCke.kernelReadyAddr = MissionRsKernelReadyAddr(buf.progressCtx_dev, 0);
 

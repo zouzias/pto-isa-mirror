@@ -20,8 +20,7 @@ static constexpr uint32_t kMaxCcuMissions = 16;
 
 // Progress CKE context passed by value to AIV kernels.
 // GM addresses are uint64_t for host portability; device casts to __gm__.
-// CCU_PROGRESS_SLOTS entries are live; the AIV pokes slot (issued % slots) so that
-// two in-flight groups never share a CKE mask bit. Poke via st_dev.
+// Single progress CKE; poke via st_dev only after the previous group has retired.
 struct ProgressCkeCtx {
     uint64_t ckeSlotVA[CCU_MAX_PROGRESS_SLOTS];
     uint32_t ckeMask[CCU_MAX_PROGRESS_SLOTS];

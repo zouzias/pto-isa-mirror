@@ -80,11 +80,6 @@ if(DEFINED CONFIG_CCU_MISSION_PARALLEL)
     add_compile_definitions(CONFIG_CCU_MISSION_PARALLEL=${CONFIG_CCU_MISSION_PARALLEL})
 endif()
 
-# AIV->CCU progress handshake depth (1 = stable, 2 = cross-group pipelining)
-if(DEFINED CONFIG_CCU_PIPE_DEPTH)
-    add_compile_definitions(CONFIG_CCU_PIPE_DEPTH=${CONFIG_CCU_PIPE_DEPTH})
-endif()
-
 add_link_options(-s -Wl,-z,relro -Wl,-z,now)
 
 set(CMAKE_CCE_COMPILE_OPTIONS

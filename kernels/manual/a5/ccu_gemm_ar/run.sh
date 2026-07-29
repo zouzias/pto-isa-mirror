@@ -36,7 +36,7 @@ for d in ${MPI_SEARCH_DIRS}; do
 done
 
 SHORT=r:,v:,n:,d:
-LONG=run-mode:,soc-version:,nranks:,ndevices:,compute-blocks:,comm-blocks:,comm-group-tiles:,ccu-pipe-depth:,mission:,
+LONG=run-mode:,soc-version:,nranks:,ndevices:,compute-blocks:,comm-blocks:,comm-group-tiles:,mission:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -63,9 +63,6 @@ do
         (--comm-group-tiles )
             COMM_GROUP_TILES="$2"
             shift 2;;
-        (--ccu-pipe-depth )
-            CCU_PIPE_DEPTH="$2"
-            shift 2;;
         (--)
             shift;
             break;;
@@ -82,16 +79,6 @@ done
 if [ "${CCU_MISSION_PARALLEL}" != "1" ]; then
     echo "[ERROR] CCU_MISSION_PARALLEL=${CCU_MISSION_PARALLEL} unsupported; stable path requires 1."
     exit 1
-fi
-# AIV->CCU progress handshake depth. 1 = stable path. 2 = cross-group pipelining
-# (Broadcast of group g overlaps Reduce of group g+1); UNVERIFIED ON HARDWARE.
-: "${CCU_PIPE_DEPTH:=1}"
-if [ "${CCU_PIPE_DEPTH}" != "1" ] && [ "${CCU_PIPE_DEPTH}" != "2" ]; then
-    echo "[ERROR] CCU_PIPE_DEPTH=${CCU_PIPE_DEPTH} unsupported; use 1 or 2."
-    exit 1
-fi
-if [ "${CCU_PIPE_DEPTH}" = "2" ]; then
-    echo "[WARN] CCU_PIPE_DEPTH=2 is experimental and unverified on hardware."
 fi
 # COMM_GROUP_TILES: unset → config.h default (16). Residual last groups OK (owner shard padded).
 
@@ -184,7 +171,6 @@ echo "  HCCL_BUFFSIZE: ${HCCL_BUFFSIZE:-200} MB"
 echo "  COMPUTE_BLOCKS: ${COMPUTE_BLOCKS:-default}  COMM_BLOCKS: ${COMM_BLOCKS:-default}  (per-tile CCU_WHILE progress CKE)"
 echo "  COMM_GROUP_TILES: ${COMM_GROUP_TILES:-default}"
 echo "  CCU_MISSION_PARALLEL (K): ${CCU_MISSION_PARALLEL}"
-echo "  CCU_PIPE_DEPTH: ${CCU_PIPE_DEPTH}  (1=stable, 2=cross-group pipelining, experimental)"
 echo "  HCOMM_PKG_INC: ${HCOMM_PKG_INC:-auto}"
 echo "==========================="
 
@@ -217,7 +203,6 @@ TILE_OPTS=""
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
       -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N} \
       -DCONFIG_CCU_MISSION_PARALLEL=${CCU_MISSION_PARALLEL} \
-      -DCONFIG_CCU_PIPE_DEPTH=${CCU_PIPE_DEPTH} \
       ${HCOMM_OPTS} ${BLOCK_OPTS} ${TILE_OPTS} ..
 make -j16
 

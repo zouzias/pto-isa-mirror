@@ -249,10 +249,8 @@ inline uint32_t MissionWorkItemCount(int nRanks, int rankId)
 
 struct CcuState {
     ThreadHandle threadHandle{0};
-    // Reduce (Read) channels: one per peer, peer order matching SetupCcuChannels.
+    // One CCU channel per peer (Reduce Read + Broadcast Write share it).
     std::vector<ChannelHandle> channels;
-    // Broadcast (Write) channels: same peer order. Empty ⇒ reuse channels (depth=1).
-    std::vector<ChannelHandle> bcastChannels;
     aclrtStream ccuStream{nullptr};
     aclrtStream aivStream{nullptr};
 
@@ -274,11 +272,9 @@ struct CcuState {
     CcuFusedReduceBroadcastKernelArg rsArgs[kMaxCcuMissions]{};
     CcuFusedReduceBroadcastKernelArg seqArg{};
 
-    // Indexed by progress CKE slot (CCU_PROGRESS_SLOTS), not by mission: mission
-    // parallelism is fixed at 1, see CCU_MISSION_PARALLEL in config.h.
-    static_assert(kMaxCcuMissions >= CCU_MAX_PROGRESS_SLOTS, "progress slot array too small");
-    uint64_t rsProgressVA[kMaxCcuMissions]{};
-    uint32_t rsProgressMask[kMaxCcuMissions]{};
+    // Mission parallelism is fixed at 1 (see CCU_MISSION_PARALLEL); one progress CKE.
+    uint64_t rsProgressVA{0};
+    uint32_t rsProgressMask{0};
     uint64_t rsGateVA[kMaxCcuMissions]{};
     uint32_t rsGateMask[kMaxCcuMissions]{};
     uint32_t rsGateDieId{0};
@@ -784,16 +780,9 @@ inline bool SyncCcuStreams(const CcuState& ccu, int rankId, const char* phase)
     return true;
 }
 
-// Same pattern as performance_test UrmaWorkspaceManager::AppendPeerChannelDescs:
-// pick ONE UBC_CTP link, then push the same desc `want` times. HCCL assigns
-// reuseIdx 0..want-1 for 1:1 jetty pairing. Do NOT mix distinct links across
-// netLayers for multi-channel — peers would handshake mismatched endpoints (TIMEOUT).
-inline bool TryAppendUbcCtpChannels(
-    HcclComm comm, int rankId, int peer, uint32_t want, std::vector<HcclChannelDesc>& requests)
+// Pick the first UBC_CTP link to peer (any netLayer) and append one channel desc.
+inline bool TryAppendUbcCtpChannel(HcclComm comm, int rankId, int peer, std::vector<HcclChannelDesc>& requests)
 {
-    if (want == 0) {
-        return true;
-    }
     for (uint32_t netLayer = 0; netLayer < 3; ++netLayer) {
         uint32_t linkNum = 0;
         CommLink* linkList = nullptr;
@@ -815,32 +804,24 @@ inline bool TryAppendUbcCtpChannels(
             if (proto != COMM_PROTOCOL_UBC_CTP) {
                 continue;
             }
-            // Same peer × want: identical endpoints; HCCL reuseIdx separates channels.
-            for (uint32_t qp = 0; qp < want; ++qp) {
-                HcclChannelDesc desc;
-                HcclChannelDescInit(&desc, 1);
-                desc.remoteRank = static_cast<uint32_t>(peer);
-                desc.notifyNum = 4;
-                desc.channelProtocol = linkList[i].linkAttr.linkProtocol;
-                desc.localEndpoint = linkList[i].srcEndpointDesc;
-                desc.remoteEndpoint = linkList[i].dstEndpointDesc;
-                requests.push_back(desc);
-            }
+            HcclChannelDesc desc;
+            HcclChannelDescInit(&desc, 1);
+            desc.remoteRank = static_cast<uint32_t>(peer);
+            desc.notifyNum = 4;
+            desc.channelProtocol = linkList[i].linkAttr.linkProtocol;
+            desc.localEndpoint = linkList[i].srcEndpointDesc;
+            desc.remoteEndpoint = linkList[i].dstEndpointDesc;
+            requests.push_back(desc);
             if (VerboseLog()) {
                 std::cerr << "[CCU-AR] rank=" << rankId << ": selected UBC_CTP link to peer=" << peer
-                          << " at layer=" << netLayer << " locProto=" << static_cast<int>(linkList[i].srcEndpointDesc.protocol)
-                          << " rmtProto=" << static_cast<int>(linkList[i].dstEndpointDesc.protocol) << " x" << want
-                          << " (reuseIdx 0.." << (want - 1) << ")" << std::endl;
+                          << " at layer=" << netLayer
+                          << " locProto=" << static_cast<int>(linkList[i].srcEndpointDesc.protocol)
+                          << " rmtProto=" << static_cast<int>(linkList[i].dstEndpointDesc.protocol) << std::endl;
             }
             return true;
         }
     }
     return false;
-}
-
-inline bool TryAppendUbcCtpChannel(HcclComm comm, int rankId, int peer, std::vector<HcclChannelDesc>& requests)
-{
-    return TryAppendUbcCtpChannels(comm, rankId, peer, 1, requests);
 }
 
 inline bool AcquireRequestedCcuChannels(
@@ -855,7 +836,6 @@ inline bool AcquireRequestedCcuChannels(
         HcclResult rc = HcclChannelAcquire(
             comm, COMM_ENGINE_CCU, requests.data(), static_cast<uint32_t>(requests.size()), channels.data());
         if (rc != HCCL_SUCCESS) {
-            // 9 == HCCL_E_TIMEOUT (often mismatched multi-channel handshake / reuseIdx).
             std::cerr << "[CCU-AR] rank=" << rankId << ": HcclChannelAcquire failed: " << static_cast<int>(rc)
                       << " channels=" << requests.size() << (rc == HCCL_E_TIMEOUT ? " (TIMEOUT)" : "") << std::endl;
             return false;
@@ -867,15 +847,10 @@ inline bool AcquireRequestedCcuChannels(
     return true;
 }
 
-// Per peer: 1 channel (depth=1) or 2 (depth>=2: Reduce Read + Broadcast Write).
-// Flat acquire order is [peer0_rs, peer0_ag?, peer1_rs, peer1_ag?, ...]; then split.
-inline bool SetupCcuChannels(
-    HcclComm comm, int rankId, int nRanks, std::vector<ChannelHandle>& channels,
-    std::vector<ChannelHandle>& bcastChannels)
+// One CCU channel per peer (shared by Reduce and Broadcast).
+inline bool SetupCcuChannels(HcclComm comm, int rankId, int nRanks, std::vector<ChannelHandle>& channels)
 {
     channels.clear();
-    bcastChannels.clear();
-    constexpr uint32_t kChannelsPerPeer = (CCU_PIPE_DEPTH >= 2) ? 2u : 1u;
 
     std::vector<HcclChannelDesc> requests;
     uint32_t peerCount = 0;
@@ -883,7 +858,7 @@ inline bool SetupCcuChannels(
         if (peer == rankId) {
             continue;
         }
-        if (!TryAppendUbcCtpChannels(comm, rankId, peer, kChannelsPerPeer, requests)) {
+        if (!TryAppendUbcCtpChannel(comm, rankId, peer, requests)) {
             std::cerr << "[CCU-AR] rank=" << rankId << ": no UBC_CTP link to peer=" << peer << " at any netLayer"
                       << std::endl;
             return false;
@@ -891,30 +866,16 @@ inline bool SetupCcuChannels(
         ++peerCount;
     }
 
-    std::vector<ChannelHandle> acquired;
-    if (!AcquireRequestedCcuChannels(comm, rankId, requests, acquired)) {
+    if (!AcquireRequestedCcuChannels(comm, rankId, requests, channels)) {
         return false;
     }
-    if (acquired.size() != static_cast<size_t>(peerCount) * kChannelsPerPeer) {
-        std::cerr << "[CCU-AR] rank=" << rankId << ": channel count mismatch got=" << acquired.size()
-                  << " want=" << (peerCount * kChannelsPerPeer) << std::endl;
+    if (channels.size() != peerCount) {
+        std::cerr << "[CCU-AR] rank=" << rankId << ": channel count mismatch got=" << channels.size()
+                  << " want=" << peerCount << std::endl;
         return false;
-    }
-
-    channels.reserve(peerCount);
-    if (kChannelsPerPeer >= 2) {
-        bcastChannels.reserve(peerCount);
-    }
-    for (uint32_t p = 0; p < peerCount; ++p) {
-        const size_t base = static_cast<size_t>(p) * kChannelsPerPeer;
-        channels.push_back(acquired[base]);
-        if (kChannelsPerPeer >= 2) {
-            bcastChannels.push_back(acquired[base + 1]);
-        }
     }
     if (VerboseLog()) {
-        std::cerr << "[CCU-AR] rank=" << rankId << ": rsChannels=" << channels.size()
-                  << " bcastChannels=" << bcastChannels.size() << " (pipeDepth=" << CCU_PIPE_DEPTH << ")" << std::endl;
+        std::cerr << "[CCU-AR] rank=" << rankId << ": channels=" << channels.size() << std::endl;
     }
     return true;
 }
@@ -1110,35 +1071,26 @@ inline bool EnsureSeqGateDistinctFromPipelined(int rankId, const CcuState& ccu)
     return true;
 }
 
-// Fused progress CKE: one registry slot per in-flight group (CCU_PROGRESS_SLOTS).
-inline constexpr uint32_t kProgressCkeSlot = 0;
-inline constexpr uint32_t kProgressCkeSlotCount = CCU_PROGRESS_SLOTS;
-
 inline bool ResolveCcuProgress(int rankId, CcuState& ccu)
 {
-    if (ccu.ckeResolved && ccu.rsProgressVA[0] != 0)
+    if (ccu.ckeResolved && ccu.rsProgressVA != 0)
         return true;
 
     std::vector<pto::comm::ccu::CcuGateDescriptor> progDescs;
-    const std::string progressWhat = "progress TryGet (need " + std::to_string(kProgressCkeSlotCount) + " descriptors)";
-    if (!TryCcuDescriptorWithRetry(rankId, progressWhat.c_str(), [&]() {
-            return pto::comm::ccu::TryGetProgress(static_cast<uint32_t>(rankId), progDescs) &&
-                   progDescs.size() >= kProgressCkeSlotCount;
+    if (!TryCcuDescriptorWithRetry(rankId, "progress TryGet (need 1 descriptor)", [&]() {
+            return pto::comm::ccu::TryGetProgress(static_cast<uint32_t>(rankId), progDescs) && !progDescs.empty();
         })) {
         return false;
     }
 
-    for (uint32_t slot = 0; slot < kProgressCkeSlotCount; ++slot) {
-        const auto& desc = progDescs[kProgressCkeSlot + slot];
-        uint64_t progAddr = ResolveOneCkeVA(desc.dieId, desc.ckeId);
-        if (progAddr == 0) {
-            std::cerr << "[CCU-AR] rank=" << rankId << ": fused progress VA resolution failed (slot=" << slot << ")"
-                      << std::endl;
-            return false;
-        }
-        ccu.rsProgressVA[slot] = progAddr;
-        ccu.rsProgressMask[slot] = desc.mask;
+    const auto& desc = progDescs[0];
+    uint64_t progAddr = ResolveOneCkeVA(desc.dieId, desc.ckeId);
+    if (progAddr == 0) {
+        std::cerr << "[CCU-AR] rank=" << rankId << ": fused progress VA resolution failed" << std::endl;
+        return false;
     }
+    ccu.rsProgressVA = progAddr;
+    ccu.rsProgressMask = desc.mask;
     ccu.ckeResolved = true;
     return true;
 }
@@ -1177,8 +1129,6 @@ inline void FillFusedKernelArg(
     kernelArg.gateMask = pto::comm::ccu::CCU_GATE_MASK;
     kernelArg.doneMask = pto::comm::ccu::CCU_DONE_MASK;
     kernelArg.channels = ccu.channels;
-    // One-shot is strictly serial RS→AG; reuse Reduce channels for Broadcast.
-    kernelArg.bcastChannels = forceOneShot ? std::vector<ChannelHandle>{} : ccu.bcastChannels;
     kernelArg.oneShotBaselineOnly = forceOneShot ? 1 : 0;
 
     // v3-style sequential group offsets: owner shard starts at packed prefix.
@@ -1431,7 +1381,7 @@ inline bool InitCcuThreadAndChannels(HcclComm hcclComm, int rankId, int nRanks, 
                   << std::endl;
         return false;
     }
-    if (!SetupCcuChannels(hcclComm, rankId, nRanks, ccu.channels, ccu.bcastChannels)) {
+    if (!SetupCcuChannels(hcclComm, rankId, nRanks, ccu.channels)) {
         std::cerr << "[ERROR] Rank " << rankId << ": CCU channel setup failed!\n";
         return false;
     }

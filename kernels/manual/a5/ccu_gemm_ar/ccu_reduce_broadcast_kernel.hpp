@@ -107,10 +107,8 @@ struct CcuFusedReduceBroadcastKernelArg {
 
     uint8_t oneShotBaselineOnly{0};
 
-    // Reduce (Read) channels, one per peer.
+    // One CCU channel per peer; used for both Reduce (Read) and Broadcast (Write).
     std::vector<ChannelHandle> channels;
-    // Broadcast (Write) channels, same peer order. Empty ⇒ reuse channels.
-    std::vector<ChannelHandle> bcastChannels;
 };
 
 static constexpr uint32_t kMaxFusedRanks = 16;
@@ -244,16 +242,15 @@ public:
         baseOffsetBytes_ = kernelArg.baseOffsetBytes;
         oneShotBaselineOnly_ = kernelArg.oneShotBaselineOnly != 0;
         ownChannels_ = kernelArg.channels;
-        bcastChannels_ = kernelArg.bcastChannels.empty() ? kernelArg.channels : kernelArg.bcastChannels;
 
         if (FusedTraceEnabled()) {
             std::fprintf(
                 stderr,
                 "[CCU_FUSED/ctor] rank=%u rankSize=%u payloadBytes=%llu loopCount=%u "
-                "missionWorkItems=%u baseOff=%llu oneShot=%u rsCh=%zu bcastCh=%zu\n",
+                "missionWorkItems=%u baseOff=%llu oneShot=%u channels=%zu\n",
                 rankId_, rankSize_, static_cast<unsigned long long>(payloadBytes_), goConfig_.loopCount,
                 missionWorkItems_, static_cast<unsigned long long>(baseOffsetBytes_), oneShotBaselineOnly_ ? 1u : 0u,
-                ownChannels_.size(), bcastChannels_.size());
+                ownChannels_.size());
         }
     }
 
@@ -399,9 +396,7 @@ private:
         }
         pending.hasProgress = true;
         pending.progressMask = progressMask_;
-        for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
-            pending.progressEv[slot] = progressEvent_[slot];
-        }
+        pending.progressEv[0] = progressEvent_;
         FusedCkePublishTlsList().push_back(pending);
     }
 
@@ -449,15 +444,11 @@ private:
         doneEvent_ = ker->CreateCompletedEvent();
         doneEvent_.mask = doneMask_;
         if (!oneShotBaselineOnly_) {
-            // One CompletedEvent per in-flight group. Distinct events may reuse the
-            // same mask value (gate and done already both use bit 0).
-            for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
-                progressEvent_[slot] = ker->CreateCompletedEvent();
-                progressEvent_[slot].mask = progressMask_;
-            }
+            progressEvent_ = ker->CreateCompletedEvent();
+            progressEvent_.mask = progressMask_;
         }
 
-        // Constant across groups; needed before any BroadcastPipelinedGroup emit.
+        // Constant across groups; needed before any Broadcast emit.
         bcastPeerCount_ = 0;
         for (uint32_t r = 0; r < rankSize_ && bcastPeerCount_ < kMaxFusedRanks; ++r) {
             if (r != rootId_)
@@ -548,8 +539,8 @@ private:
         }
         if (nPeers == 0)
             return;
-        if (bcastChannels_.size() < nPeers) {
-            FusedTrace("bcast", rankId_, "bcastChannels_ smaller than peer count");
+        if (ownChannels_.size() < nPeers) {
+            FusedTrace("bcast", rankId_, "ownChannels_ smaller than peer count");
             return;
         }
 
@@ -561,7 +552,7 @@ private:
             agDstAddr_[idx].addr += groupOffset;
             agDstAddr_[idx].token = rsToken_[r];
             (void)accu::Write(
-                bcastChannels_[idx], agDstAddr_[idx], agSrcAddr_, rsLengthVar_, agOpEvent_,
+                ownChannels_[idx], agDstAddr_[idx], agSrcAddr_, rsLengthVar_, agOpEvent_,
                 static_cast<uint16_t>(1u << idx));
         }
     }
@@ -634,58 +625,29 @@ private:
         baseOutput = rsOutput_[rankId_];
     }
 
-    inline void WaitNextProgressCke(hcomm::CcuKernel* ker) { (void)ker->WaitEvent(progressEvent_[0], progressMask_); }
-
-    // Depth 2 consumes progress slots round-robin, matching the AIV poke order.
-    // CCU general registers support only assignment and addition -- there is no bit
-    // operation, so `counter & 1` is unavailable and parity must be carried explicitly.
-    inline void WaitNextProgressCkeAlternating(
-        hcomm::CcuKernel* ker, accu::Variable& parity, accu::Variable& zero, accu::Variable& one)
-    {
-        CCU_IF(parity != 0)
-        {
-            (void)ker->WaitEvent(progressEvent_[1], progressMask_);
-            parity = zero;
-        }
-        CCU_ELSE
-        {
-            (void)ker->WaitEvent(progressEvent_[0], progressMask_);
-            parity = one;
-        }
-    }
+    inline void WaitNextProgressCke(hcomm::CcuKernel* ker) { (void)ker->WaitEvent(progressEvent_, progressMask_); }
 
     // Per-group peer-order rotation needs CCU_IF specialization. For 2-rank
     // (nPeers==1) start is always 0 — emit a single Write path.
-    // `groupSelector` picks the per-group peer rotation and must therefore track the
-    // group being issued, not the group being retired (they differ at depth 2).
-    // waitInline=false leaves the completion wait to the caller.
-    inline void BroadcastPipelinedGroup(
-        accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutputAll, accu::Variable& groupSelector,
-        bool waitInline)
+    inline void BroadcastGroup(
+        accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutputAll, accu::Variable& groupSelector)
     {
         const uint32_t nPeers = (rankSize_ > 1) ? (rankSize_ - 1) : 1;
         if (nPeers <= 1) {
-            IssueBroadcast(groupOffset, baseOutputAll, 0);
-            if (waitInline) {
-                WaitBroadcast();
-            }
+            DoBroadcast(groupOffset, baseOutputAll, 0);
             return;
         }
         for (uint32_t gi = 0; gi < missionWorkItems_; ++gi) {
             CCU_IF(groupSelector == static_cast<uint64_t>(gi))
             {
                 const uint32_t start = (rankId_ + gi) % nPeers;
-                IssueBroadcast(groupOffset, baseOutputAll, start);
-                if (waitInline) {
-                    WaitBroadcast();
-                }
+                DoBroadcast(groupOffset, baseOutputAll, start);
             }
         }
     }
 
     inline void DoPipelinedDataPath()
     {
-        const uint32_t channelSize = static_cast<uint32_t>(ownChannels_.size());
         std::vector<accu::Variable> baseInput;
         accu::Variable baseOutput;
         std::vector<accu::Variable> baseOutputAll;
@@ -694,6 +656,7 @@ private:
         accu::Variable groupOffset = MakeImmediate(baseOffsetBytes_);
         accu::Variable groupBytes = MakeImmediate(payloadBytes_);
         accu::Variable one = MakeImmediate(1);
+        accu::Variable itemsDoneCounter = MakeImmediate(0);
 
         hcomm::CcuKernel* ker = CurrentCcuKernel();
         if (ker == nullptr) {
@@ -701,52 +664,18 @@ private:
             return;
         }
 
-        if constexpr (CCU_PIPE_DEPTH >= 2) {
-            // Cross-group overlap: Reduce(g) || Broadcast(g-1). Safe only when
-            // Broadcast uses a distinct channel set (bcastChannels_) from Reduce
-            // Reads (ownChannels_). Dual progress CKE + doneCounter lag keep AIV
-            // one poke ahead without deadlock.
-            accu::Variable issuedCounter = MakeImmediate(0);
-            accu::Variable doneCounter = MakeImmediate(0);
-            accu::Variable parity = MakeImmediate(0);
-            accu::Variable zero = MakeImmediate(0);
-
-            CCU_WHILE(issuedCounter != static_cast<uint64_t>(missionWorkItems_))
-            {
-                WaitNextProgressCkeAlternating(ker, parity, zero, one);
-                BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
-                DoReduce();
-                CCU_IF(issuedCounter != 0)
-                {
-                    WaitBroadcast();
-                    doneCounter += one;
-                    (void)accu::Store(itemsDoneAddr_, doneCounter);
-                }
-                BroadcastPipelinedGroup(groupOffset, baseOutputAll, issuedCounter, /*waitInline=*/false);
-                groupOffset += groupBytes;
-                issuedCounter += one;
-            }
-
-            WaitBroadcast();
-            doneCounter += one;
-            (void)accu::Store(itemsDoneAddr_, doneCounter);
-        } else {
-            accu::Variable itemsDoneCounter = MakeImmediate(0);
-
-            CCU_WHILE(itemsDoneCounter != static_cast<uint64_t>(missionWorkItems_))
-            {
-                WaitNextProgressCke(ker);
-                BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
-                DoReduce();
-                BroadcastPipelinedGroup(groupOffset, baseOutputAll, itemsDoneCounter, /*waitInline=*/true);
-                groupOffset += groupBytes;
-                itemsDoneCounter += one;
-                (void)accu::Store(itemsDoneAddr_, itemsDoneCounter);
-            }
+        CCU_WHILE(itemsDoneCounter != static_cast<uint64_t>(missionWorkItems_))
+        {
+            WaitNextProgressCke(ker);
+            BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
+            DoReduce();
+            BroadcastGroup(groupOffset, baseOutputAll, itemsDoneCounter);
+            groupOffset += groupBytes;
+            itemsDoneCounter += one;
+            (void)accu::Store(itemsDoneAddr_, itemsDoneCounter);
         }
 
         FusedTrace("algo", rankId_, "DoPipelinedDataPath done (fused)");
-        (void)channelSize;
     }
 
     uint32_t rankId_{0};
@@ -757,13 +686,11 @@ private:
     uint64_t payloadBytes_{0};
     bool gateOnly_{false};
     std::vector<ChannelHandle> ownChannels_;
-    std::vector<ChannelHandle> bcastChannels_;
     HcclDataType dataType_{HcclDataType::HCCL_DATA_TYPE_FP32};
     HcclDataType outputDataType_{HcclDataType::HCCL_DATA_TYPE_FP32};
     HcclReduceOp reduceOp_{HcclReduceOp::HCCL_REDUCE_SUM};
 
     uint32_t progressMask_{1u << 1};
-    uint32_t progressWaitSlot_{0}; // host-side cursor while emitting microcode
     uint32_t missionWorkItems_{0};
     uint64_t itemsDoneAddr_{0};
     uint64_t kernelReadyAddr_{0};
@@ -788,13 +715,12 @@ private:
     std::vector<accu::RemoteAddr> agDstAddr_;
     accu::Event agOpEvent_;
     // Number of peers every Broadcast writes to; constant across groups.
-    // Depth-2 keeps one Broadcast in flight while the next Reduce runs on rs channels.
     uint32_t bcastPeerCount_{0};
 
     // Gate/progress/done: old CKE-poke protocol via CompletedEvent (not AscendC Event).
     hcomm::CcuRep::CompletedEvent gateEvent_;
     hcomm::CcuRep::CompletedEvent doneEvent_;
-    hcomm::CcuRep::CompletedEvent progressEvent_[CCU_MAX_PROGRESS_SLOTS];
+    hcomm::CcuRep::CompletedEvent progressEvent_;
 
     std::unique_ptr<accu::Array<accu::CcuBuffer>> loopBufs_;
     std::unique_ptr<accu::Array<accu::Event>> loopEvents_;
@@ -845,11 +771,8 @@ inline CcuResult PublishStashedCkeAfterRegisterEnd()
             continue;
         detail::PublishOneCke(pending.gateEv, pending.rankId, /*slot=*/0, pending.gateMask, true, pending.isSeqOneShot);
         if (pending.hasProgress) {
-            for (uint32_t slot = 0; slot < CCU_PROGRESS_SLOTS; ++slot) {
-                detail::PublishOneCke(
-                    pending.progressEv[slot], pending.rankId, detail::kProgressCkeSlot + slot, pending.progressMask,
-                    false);
-            }
+            detail::PublishOneCke(
+                pending.progressEv[0], pending.rankId, detail::kProgressCkeSlot, pending.progressMask, false);
         }
     }
     ClearFusedCkePublishTls();
