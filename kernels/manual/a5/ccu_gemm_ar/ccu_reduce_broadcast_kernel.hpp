@@ -160,9 +160,12 @@ struct FusedCkePublishPending {
     uint32_t rankId{0};
     uint32_t gateMask{0};
     uint32_t progressMask{0};
-    hcomm::CcuRep::CompletedEvent gateEv{};
-    // No {}: CompletedEvent's ctor is explicit; array {} is copy-init and fails.
+    hcomm::CcuRep::CompletedEvent gateEv;
     hcomm::CcuRep::CompletedEvent progressEv[CCU_MAX_PROGRESS_SLOTS];
+
+    // CompletedEvent's ctor is explicit: aggregate/array {} is copy-initialization and
+    // fails. A user ctor default-inits omitted members (direct ctor call), which is OK.
+    FusedCkePublishPending() : gateEv() {}
 };
 
 inline std::vector<FusedCkePublishPending>& FusedCkePublishTlsList()
@@ -373,7 +376,7 @@ private:
     // Pushes one entry per registered kernel (seq + pipelined share one RegisterEnd).
     inline void StashCkeForPublish()
     {
-        FusedCkePublishPending pending{};
+        FusedCkePublishPending pending;
         pending.valid = true;
         pending.isSeqOneShot = oneShotBaselineOnly_;
         pending.rankId = rankId_;
