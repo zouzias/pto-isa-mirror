@@ -1328,6 +1328,12 @@ public:
             return GetShape(0) * GetShape(2) * GetShape(3);
         } else if constexpr (layout == pto::Layout::NDC1HWC0) {
             return GetShape(0) * GetShape(3) * GetShape(4);
+        } else if constexpr (layout == pto::Layout::FRACTAL_Z) {
+            if constexpr (totalDimCount == 4) {
+                return GetShape(0) * GetShape(3);
+            } else {
+                return GetShape(0) * GetShape(1) * GetShape(2) * GetShape(4);
+            }
         }
         return 0;
     }
@@ -1336,9 +1342,15 @@ public:
     {
         constexpr size_t C0 = C0_SIZE_BYTE / sizeof(DType);
         if constexpr (layout == pto::Layout::NC1HWC0) {
-            return GetShape(1) * GetShape(4);
+            return GetShape(1) * C0;
         } else if constexpr (layout == pto::Layout::NDC1HWC0) {
             return GetShape(1) * GetShape(2) * C0;
+        } else if constexpr (layout == pto::Layout::FRACTAL_Z) {
+            if constexpr (totalDimCount == 4) {
+                return GetShape(1) * GetShape(2);
+            } else {
+                return GetShape(3);
+            }
         }
         return 0;
     }
