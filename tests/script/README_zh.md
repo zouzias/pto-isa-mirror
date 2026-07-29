@@ -22,6 +22,23 @@ python3 tests/script/run_st.py -r npu -v a3 -t tmatmul -g TMATMULTest.case1
 python3 tests/script/run_st.py -r sim -v a5 -t tmatmul -g TMATMULTest.case1
 ```
 
+### A5 TQUANT DN 并行 simulator
+
+`run_tquant_dn_parallel.py` 会构建一次、生成一次 golden，然后通过 GoogleTest shard
+并行运行全部 `TQUANTDNTest.*`。每个 shard 使用独立的 simulator 日志目录。
+
+```bash
+# 默认 5 路并发，运行全部 DN 用例
+python3 tests/script/run_tquant_dn_parallel.py
+
+# 8 路并发，或只运行 valid-shape 用例
+python3 tests/script/run_tquant_dn_parallel.py -j 8
+python3 tests/script/run_tquant_dn_parallel.py -j 5 -g 'TQUANTDNTest.case_validshape_*'
+
+# 复用已有 A5 sim build
+python3 tests/script/run_tquant_dn_parallel.py -j 5 -w
+```
+
 ## CPU ST
 
 - 批量构建 + 运行：`tests/script/all_cpu_tests.py`
