@@ -201,14 +201,9 @@ static_assert(CCU_MISSION_PARALLEL == 1, "ccu_gemm_ar stable path requires CONFI
 
 // In-flight depth of the AIV -> CCU progress handshake, i.e. how many groups the
 // AIV may have poked but the CCU not yet retired.
-//   1 = stable path. Per group the CCU does Reduce -> Broadcast -> wait, so the
-//       Broadcast of group g never overlaps the Reduce of group g+1.
-//   2 = cross-group software pipelining. The CCU defers the Broadcast wait of
-//       group g until after the Reduce of group g+1, so the two overlap. This is
-//       correct only with >= 2 progress CKE slots, because one CKE mask bit
-//       saturates: a second poke before the CCU consumes the first is absorbed.
-// Depth 2 is UNVERIFIED ON HARDWARE. See docs/ccu/ccu_gemm_ar_optimization_analysis.md
-// section 4.3.2 for the protocol trace and what must be measured before trusting it.
+//   1 = stable path. One channel/peer; Reduce then Broadcast+wait (serial).
+//   2 = dual progress CKE + Reduce(g)||Broadcast(g-1). Requires a second CCU
+//       channel per peer (bcastChannels) so Read and Write do not share one SQ.
 #ifndef CONFIG_CCU_PIPE_DEPTH
 #define CONFIG_CCU_PIPE_DEPTH 1
 #endif

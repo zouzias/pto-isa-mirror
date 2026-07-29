@@ -107,7 +107,10 @@ struct CcuFusedReduceBroadcastKernelArg {
 
     uint8_t oneShotBaselineOnly{0};
 
+    // Reduce (Read) channels, one per peer.
     std::vector<ChannelHandle> channels;
+    // Broadcast (Write) channels, same peer order. Empty ⇒ reuse channels.
+    std::vector<ChannelHandle> bcastChannels;
 };
 
 static constexpr uint32_t kMaxFusedRanks = 16;
@@ -241,15 +244,16 @@ public:
         baseOffsetBytes_ = kernelArg.baseOffsetBytes;
         oneShotBaselineOnly_ = kernelArg.oneShotBaselineOnly != 0;
         ownChannels_ = kernelArg.channels;
+        bcastChannels_ = kernelArg.bcastChannels.empty() ? kernelArg.channels : kernelArg.bcastChannels;
 
         if (FusedTraceEnabled()) {
             std::fprintf(
                 stderr,
                 "[CCU_FUSED/ctor] rank=%u rankSize=%u payloadBytes=%llu loopCount=%u "
-                "missionWorkItems=%u baseOff=%llu oneShot=%u channels=%zu\n",
+                "missionWorkItems=%u baseOff=%llu oneShot=%u rsCh=%zu bcastCh=%zu\n",
                 rankId_, rankSize_, static_cast<unsigned long long>(payloadBytes_), goConfig_.loopCount,
                 missionWorkItems_, static_cast<unsigned long long>(baseOffsetBytes_), oneShotBaselineOnly_ ? 1u : 0u,
-                ownChannels_.size());
+                ownChannels_.size(), bcastChannels_.size());
         }
     }
 
@@ -453,8 +457,7 @@ private:
             }
         }
 
-        // Constant across groups; WaitBroadcast() may be emitted before the first
-        // IssueBroadcast() when CCU_PIPE_DEPTH == 2, so derive it here.
+        // Constant across groups; needed before any BroadcastPipelinedGroup emit.
         bcastPeerCount_ = 0;
         for (uint32_t r = 0; r < rankSize_ && bcastPeerCount_ < kMaxFusedRanks; ++r) {
             if (r != rootId_)
@@ -545,6 +548,10 @@ private:
         }
         if (nPeers == 0)
             return;
+        if (bcastChannels_.size() < nPeers) {
+            FusedTrace("bcast", rankId_, "bcastChannels_ smaller than peer count");
+            return;
+        }
 
         const uint32_t start = startIdx % nPeers;
         for (uint32_t k = 0; k < nPeers; ++k) {
@@ -554,7 +561,7 @@ private:
             agDstAddr_[idx].addr += groupOffset;
             agDstAddr_[idx].token = rsToken_[r];
             (void)accu::Write(
-                ownChannels_[idx], agDstAddr_[idx], agSrcAddr_, rsLengthVar_, agOpEvent_,
+                bcastChannels_[idx], agDstAddr_[idx], agSrcAddr_, rsLengthVar_, agOpEvent_,
                 static_cast<uint16_t>(1u << idx));
         }
     }
@@ -695,13 +702,10 @@ private:
         }
 
         if constexpr (CCU_PIPE_DEPTH >= 2) {
-            // Cross-group pipelining: the Broadcast of group g is retired only after
-            // the Reduce of group g+1, so the two overlap. Reduce owns the on-chip MS
-            // slices while Broadcast streams HBM to remote HBM, so they do not contend
-            // for the same CCU resource. `issuedCounter` drives the loop and the peer
-            // rotation; `doneCounter` reports retired groups to the AIV and therefore
-            // lags by one -- which is exactly why CCU_PIPE_DEPTH must be >= 2 on the
-            // AIV side too, or the backpressure would deadlock against this lag.
+            // Cross-group overlap: Reduce(g) || Broadcast(g-1). Safe only when
+            // Broadcast uses a distinct channel set (bcastChannels_) from Reduce
+            // Reads (ownChannels_). Dual progress CKE + doneCounter lag keep AIV
+            // one poke ahead without deadlock.
             accu::Variable issuedCounter = MakeImmediate(0);
             accu::Variable doneCounter = MakeImmediate(0);
             accu::Variable parity = MakeImmediate(0);
@@ -753,6 +757,7 @@ private:
     uint64_t payloadBytes_{0};
     bool gateOnly_{false};
     std::vector<ChannelHandle> ownChannels_;
+    std::vector<ChannelHandle> bcastChannels_;
     HcclDataType dataType_{HcclDataType::HCCL_DATA_TYPE_FP32};
     HcclDataType outputDataType_{HcclDataType::HCCL_DATA_TYPE_FP32};
     HcclReduceOp reduceOp_{HcclReduceOp::HCCL_REDUCE_SUM};
@@ -782,9 +787,8 @@ private:
     accu::LocalAddr agSrcAddr_;
     std::vector<accu::RemoteAddr> agDstAddr_;
     accu::Event agOpEvent_;
-    // Number of peers every Broadcast writes to; constant across groups. Only one
-    // Broadcast is ever in flight, so a single event/address set suffices even at
-    // CCU_PIPE_DEPTH == 2: the wait for group g happens before group g+1 is issued.
+    // Number of peers every Broadcast writes to; constant across groups.
+    // Depth-2 keeps one Broadcast in flight while the next Reduce runs on rs channels.
     uint32_t bcastPeerCount_{0};
 
     // Gate/progress/done: old CKE-poke protocol via CompletedEvent (not AscendC Event).
