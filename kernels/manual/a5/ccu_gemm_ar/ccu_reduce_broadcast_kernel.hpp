@@ -161,7 +161,8 @@ struct FusedCkePublishPending {
     uint32_t gateMask{0};
     uint32_t progressMask{0};
     hcomm::CcuRep::CompletedEvent gateEv{};
-    hcomm::CcuRep::CompletedEvent progressEv[CCU_MAX_PROGRESS_SLOTS]{};
+    // No {}: CompletedEvent's ctor is explicit; array {} is copy-init and fails.
+    hcomm::CcuRep::CompletedEvent progressEv[CCU_MAX_PROGRESS_SLOTS];
 };
 
 inline std::vector<FusedCkePublishPending>& FusedCkePublishTlsList()
