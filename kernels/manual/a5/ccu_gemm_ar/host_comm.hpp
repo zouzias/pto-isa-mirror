@@ -784,18 +784,17 @@ inline bool SyncCcuStreams(const CcuState& ccu, int rankId, const char* phase)
     return true;
 }
 
-// Probe netLayers for one peer and append the first UBC_CTP link descriptor.
-// Append `want` UBC_CTP channel requests to `peer`. Prefers distinct links; if fewer
-// links exist, replicates the first usable link (same endpoints, separate channel handles).
+// Same pattern as performance_test UrmaWorkspaceManager::AppendPeerChannelDescs:
+// pick ONE UBC_CTP link, then push the same desc `want` times. HCCL assigns
+// reuseIdx 0..want-1 for 1:1 jetty pairing. Do NOT mix distinct links across
+// netLayers for multi-channel — peers would handshake mismatched endpoints (TIMEOUT).
 inline bool TryAppendUbcCtpChannels(
     HcclComm comm, int rankId, int peer, uint32_t want, std::vector<HcclChannelDesc>& requests)
 {
     if (want == 0) {
         return true;
     }
-    std::vector<HcclChannelDesc> found;
-    found.reserve(want);
-    for (uint32_t netLayer = 0; netLayer < 3 && found.size() < want; ++netLayer) {
+    for (uint32_t netLayer = 0; netLayer < 3; ++netLayer) {
         uint32_t linkNum = 0;
         CommLink* linkList = nullptr;
         HcclResult rc = HcclRankGraphGetLinks(
@@ -807,7 +806,7 @@ inline bool TryAppendUbcCtpChannels(
             }
             continue;
         }
-        for (uint32_t i = 0; i < linkNum && found.size() < want; ++i) {
+        for (uint32_t i = 0; i < linkNum; ++i) {
             auto proto = linkList[i].linkAttr.linkProtocol;
             if (VerboseLog()) {
                 std::cerr << "[CCU-AR] rank=" << rankId << ": layer=" << netLayer << " peer=" << peer << " link[" << i
@@ -816,30 +815,27 @@ inline bool TryAppendUbcCtpChannels(
             if (proto != COMM_PROTOCOL_UBC_CTP) {
                 continue;
             }
-            HcclChannelDesc desc;
-            HcclChannelDescInit(&desc, 1);
-            desc.remoteRank = static_cast<uint32_t>(peer);
-            desc.notifyNum = 4;
-            desc.channelProtocol = linkList[i].linkAttr.linkProtocol;
-            desc.localEndpoint = linkList[i].srcEndpointDesc;
-            desc.remoteEndpoint = linkList[i].dstEndpointDesc;
+            // Same peer × want: identical endpoints; HCCL reuseIdx separates channels.
+            for (uint32_t qp = 0; qp < want; ++qp) {
+                HcclChannelDesc desc;
+                HcclChannelDescInit(&desc, 1);
+                desc.remoteRank = static_cast<uint32_t>(peer);
+                desc.notifyNum = 4;
+                desc.channelProtocol = linkList[i].linkAttr.linkProtocol;
+                desc.localEndpoint = linkList[i].srcEndpointDesc;
+                desc.remoteEndpoint = linkList[i].dstEndpointDesc;
+                requests.push_back(desc);
+            }
             if (VerboseLog()) {
                 std::cerr << "[CCU-AR] rank=" << rankId << ": selected UBC_CTP link to peer=" << peer
-                          << " at layer=" << netLayer << " locProto=" << static_cast<int>(desc.localEndpoint.protocol)
-                          << " rmtProto=" << static_cast<int>(desc.remoteEndpoint.protocol)
-                          << " (channel " << (found.size() + 1) << "/" << want << ")" << std::endl;
+                          << " at layer=" << netLayer << " locProto=" << static_cast<int>(linkList[i].srcEndpointDesc.protocol)
+                          << " rmtProto=" << static_cast<int>(linkList[i].dstEndpointDesc.protocol) << " x" << want
+                          << " (reuseIdx 0.." << (want - 1) << ")" << std::endl;
             }
-            found.push_back(desc);
+            return true;
         }
     }
-    if (found.empty()) {
-        return false;
-    }
-    while (found.size() < want) {
-        found.push_back(found.front());
-    }
-    requests.insert(requests.end(), found.begin(), found.end());
-    return true;
+    return false;
 }
 
 inline bool TryAppendUbcCtpChannel(HcclComm comm, int rankId, int peer, std::vector<HcclChannelDesc>& requests)
@@ -859,8 +855,9 @@ inline bool AcquireRequestedCcuChannels(
         HcclResult rc = HcclChannelAcquire(
             comm, COMM_ENGINE_CCU, requests.data(), static_cast<uint32_t>(requests.size()), channels.data());
         if (rc != HCCL_SUCCESS) {
+            // 9 == HCCL_E_TIMEOUT (often mismatched multi-channel handshake / reuseIdx).
             std::cerr << "[CCU-AR] rank=" << rankId << ": HcclChannelAcquire failed: " << static_cast<int>(rc)
-                      << std::endl;
+                      << " channels=" << requests.size() << (rc == HCCL_E_TIMEOUT ? " (TIMEOUT)" : "") << std::endl;
             return false;
         }
     }
