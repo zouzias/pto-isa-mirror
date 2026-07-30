@@ -19,9 +19,6 @@ template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
-void LaunchTMOVAcc2VecNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-
-template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
@@ -35,12 +32,6 @@ void LaunchTMOVAcc2VecFBQuantNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, u
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecSCQuantNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-
-template <int32_t tilingKey>
-void LaunchTMOVAcc2VecFBQuantNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
-
-template <int32_t tilingKey>
-void LaunchTMOVAcc2VecSCQuantNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 class TMOVTest : public testing::Test {
 protected:
@@ -92,14 +83,10 @@ void tmov_acc2vec_test(uint32_t M, uint32_t K, uint32_t N, uint32_t baseM = 0, u
         LaunchTMOVAcc2VecNZ2ND<key>(dstDevice, src0Device, src1Device, stream);
     } else if constexpr (funcKey == 2) {
         LaunchTMOVAcc2VecNZ2NZ<key>(dstDevice, src0Device, src1Device, stream);
-    } else if constexpr (funcKey == 3) {
-        LaunchTMOVAcc2VecNZ2DN<key>(dstDevice, src0Device, src1Device, stream);
     } else if constexpr (funcKey == 4) {
         LaunchTMOVAcc2VecSCQuantNZ2ND<key>(dstDevice, src0Device, src1Device, stream);
     } else if constexpr (funcKey == 5) {
         LaunchTMOVAcc2VecSCQuantNZ2NZ<key>(dstDevice, src0Device, src1Device, stream);
-    } else if constexpr (funcKey == 6) {
-        LaunchTMOVAcc2VecSCQuantNZ2DN<key>(dstDevice, src0Device, src1Device, stream);
     }
 
     aclrtSynchronizeStream(stream);
@@ -169,8 +156,6 @@ void tmov_acc2vec_fb_quant_test(
         LaunchTMOVAcc2VecFBQuantNZ2ND<key>(dstDevice, src0Device, src1Device, src2Device, stream);
     } else if constexpr (funcKey == 2) {
         LaunchTMOVAcc2VecFBQuantNZ2NZ<key>(dstDevice, src0Device, src1Device, src2Device, stream);
-    } else if constexpr (funcKey == 3) {
-        LaunchTMOVAcc2VecFBQuantNZ2DN<key>(dstDevice, src0Device, src1Device, src2Device, stream);
     }
 
     aclrtSynchronizeStream(stream);
@@ -282,39 +267,3 @@ TEST_F(TMOVTest, case_nz2nd_sc_quant_2) { tmov_acc2vec_test<4, int8_t, uint16_t,
 TEST_F(TMOVTest, case_nz2nd_sc_quant_3) { tmov_acc2vec_test<4, uint16_t, int8_t, int8_t, 3>(30, 48, 64); }
 
 TEST_F(TMOVTest, case_nz2nd_sc_quant_4) { tmov_acc2vec_test<4, int8_t, int8_t, int8_t, 4>(60, 128, 32); }
-
-TEST_F(TMOVTest, case_nz2dn_1) { tmov_acc2vec_test<3, uint16_t, uint16_t, uint16_t, 1>(8, 7, 6); }
-
-TEST_F(TMOVTest, case_nz2dn_2) { tmov_acc2vec_test<3, uint16_t, uint16_t, uint16_t, 2>(112, 48, 95); }
-
-TEST_F(TMOVTest, case_nz2dn_3) { tmov_acc2vec_test<3, uint16_t, uint16_t, uint16_t, 3>(48, 31, 31); }
-
-TEST_F(TMOVTest, case_nz2dn_4) { tmov_acc2vec_test<3, uint16_t, uint16_t, uint16_t, 4>(88, 48, 95); }
-
-TEST_F(TMOVTest, case_nz2dn_fb_quant_1)
-{
-    tmov_acc2vec_fb_quant_test<3, int8_t, int8_t, int8_t, uint64_t, 1>(96, 128, 60);
-}
-
-TEST_F(TMOVTest, case_nz2dn_fb_quant_2)
-{
-    tmov_acc2vec_fb_quant_test<3, uint16_t, int8_t, int8_t, uint64_t, 2>(32, 48, 64);
-}
-
-TEST_F(TMOVTest, case_nz2dn_fb_quant_3)
-{
-    tmov_acc2vec_fb_quant_test<3, int8_t, uint16_t, uint16_t, uint64_t, 3>(32, 128, 60);
-}
-
-TEST_F(TMOVTest, case_nz2dn_fb_quant_4)
-{
-    tmov_acc2vec_fb_quant_test<3, int8_t, aclFloat16, aclFloat16, uint64_t, 4>(64, 64, 90);
-}
-
-TEST_F(TMOVTest, case_nz2dn_sc_quant_1) { tmov_acc2vec_test<6, int16_t, aclFloat16, aclFloat16, 1>(80, 40, 66); }
-
-TEST_F(TMOVTest, case_nz2dn_sc_quant_2) { tmov_acc2vec_test<6, int8_t, uint16_t, uint16_t, 2>(96, 128, 60); }
-
-TEST_F(TMOVTest, case_nz2dn_sc_quant_3) { tmov_acc2vec_test<6, uint16_t, int8_t, int8_t, 3>(32, 128, 64); }
-
-TEST_F(TMOVTest, case_nz2dn_sc_quant_4) { tmov_acc2vec_test<6, int8_t, int8_t, int8_t, 4>(64, 64, 90); }

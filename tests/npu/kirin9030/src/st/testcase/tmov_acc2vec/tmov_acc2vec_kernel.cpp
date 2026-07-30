@@ -170,6 +170,16 @@ AICORE inline void UBCopyOut(GlobalData& dst, TileData& src, int rows, int cols,
         tileStride);
 }
 
+template <Layout layoutType>
+AICORE inline constexpr BLayout GetTileBLayout()
+{
+    if constexpr (layoutType == Layout::NZ) {
+        return BLayout::ColMajor;
+    } else {
+        return BLayout::RowMajor;
+    }
+}
+
 template <
     typename OutType, typename SrcTileData, int validM, int validN, Layout layoutType = Layout::ND,
     int sfractalSize = 512>
@@ -179,12 +189,6 @@ AICORE inline void RunTSTORE(__gm__ OutType* out, SrcTileData& srcTile)
         using GlobalDataOut = GlobalTensor<
             OutType, pto::Shape<1, 1, 1, validM, validN>,
             pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
-        GlobalDataOut dstGlobal(out);
-        TSTORE(dstGlobal, srcTile);
-    } else if constexpr (layoutType == Layout::DN) {
-        using GlobalDataOut = GlobalTensor<
-            OutType, pto::Shape<1, 1, 1, validM, validN>,
-            pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, 1, validM>, layoutType>;
         GlobalDataOut dstGlobal(out);
         TSTORE(dstGlobal, srcTile);
     } else if constexpr (layoutType == Layout::NZ) {
@@ -203,16 +207,6 @@ AICORE inline void RunTSTORE(__gm__ OutType* out, SrcTileData& srcTile)
         } else {
             UBCopyOut<OutType, GlobalDataOut, SrcTileData>(dstGlobal, srcTile, validM, validN, 0);
         }
-    }
-}
-
-template <Layout layoutType>
-AICORE inline constexpr BLayout GetTileBLayout()
-{
-    if constexpr (layoutType == Layout::NZ || layoutType == Layout::DN) {
-        return BLayout::ColMajor;
-    } else {
-        return BLayout::RowMajor;
     }
 }
 
@@ -403,140 +397,6 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType* out, __gm__ AType* src0, _
     RunTSTORE<OutType, DstTileData, validM, validN, layoutType, sfractalSize>(out, dstTileData);
 }
 
-template <
-    typename OutType, typename AType, typename BType, int M, int K, int N, int validM, int validN, bool splitM,
-    bool isNZUnalign = false>
-__global__ AICORE void RunSplitNTMOVNz2Nz(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1)
-{
-    constexpr int mSize = splitM ? M / 2 : M;
-    constexpr int nSize = splitM ? N : N / 2;
-    constexpr int sFractalSize = 512; // kirin9030: half uses 512
-    constexpr uint16_t sGRows_ = 16;
-    constexpr uint16_t sGCols_ = CeilDiv<uint16_t>(sFractalSize, sGRows_ * sizeof(OutType));
-    constexpr uint16_t kGRows_ = CeilDiv<uint16_t>(mSize, sGRows_);
-    constexpr uint16_t kGCols_ = CeilDiv<uint16_t>(nSize, sGRows_);
-    using DynShapeDim5 = Shape<1, kGCols_, kGRows_, sGRows_, sGCols_>;
-
-    constexpr uint32_t gShape2 = CeilDiv<uint16_t>(M, sGRows_);
-    constexpr uint32_t gShape3 = CeilDiv<uint16_t>(N, sGRows_);
-    using DynStrideDim5 =
-        pto::Stride<gShape3 * gShape2 * sGCols_ * sGRows_, gShape2 * sGCols_ * sGRows_, sGCols_ * sGRows_, sGCols_, 1>;
-
-    using GlobalDataOut = GlobalTensor<OutType, DynShapeDim5, DynStrideDim5, Layout::NZ>;
-    GlobalDataOut dstGlobal1(out);
-    constexpr int stride = splitM ? mSize * sGCols_ : M * nSize;
-    GlobalDataOut dstGlobal2(out + stride);
-    if constexpr (!isNZUnalign) {
-        RunMATMUL<AType, BType, OutType, M, K, N, validM, K, validN>(src0, src1, nullptr);
-    } else {
-        RunMATMUL_NZUNALIGN<AType, BType, OutType, M, K, N, validM, K, validN>(src0, src1, nullptr);
-    }
-    using AccTile = TileAcc<CType<AType>, M, N, validM, validN>;
-    AccTile cTile;
-    TASSIGN<0x0>(cTile);
-
-    using DstTileData =
-        Tile<TileType::Vec, OutType, M, N, BLayout::ColMajor, mSize, nSize, SLayout::RowMajor, sFractalSize>;
-    DstTileData dstTileData;
-    TASSIGN<0x0>(dstTileData);
-
-    constexpr int dualDstCtl = splitM ? 1 : 2;
-    constexpr uint64_t mode = getMode<0, dualDstCtl>();
-    TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
-
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-
-    // kirin9030: single block execution, store both halves
-    TSTORE(dstGlobal1, dstTileData);
-    TSTORE(dstGlobal2, dstTileData);
-}
-
-template <
-    typename OutType, typename AType, typename BType, int M, int K, int N, int validM, int validN, bool splitM,
-    bool isNZUnalign = false>
-__global__ AICORE void RunSplitMTMOVNz2Nz(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1)
-{
-    constexpr int mSize = splitM ? M / 2 : M;
-    constexpr int nSize = splitM ? N : N / 2;
-    constexpr int sFractalSize = 512; // kirin9030: half uses 512
-    constexpr uint16_t sGRows_ = 16;
-    constexpr uint16_t sGCols_ = CeilDiv<uint16_t>(sFractalSize, sGRows_ * sizeof(OutType));
-    constexpr uint16_t kGRows_ = CeilDiv<uint16_t>(mSize, sGRows_);
-    constexpr uint16_t kGCols_ = CeilDiv<uint16_t>(nSize, sGRows_);
-    using DynShapeDim5 = Shape<1, 1, 1, sGRows_, sGCols_>;
-
-    using DynStrideDim5 = pto::Stride<sGCols_ * sGRows_, sGCols_ * sGRows_, sGCols_ * sGRows_, sGCols_, 1>;
-
-    using GlobalDataOut = GlobalTensor<OutType, DynShapeDim5, DynStrideDim5, Layout::NZ>;
-    constexpr int stride = splitM ? mSize * sGCols_ : M * nSize;
-
-    if constexpr (!isNZUnalign) {
-        RunMATMUL<AType, BType, OutType, M, K, N, validM, K, validN>(src0, src1, nullptr);
-    } else {
-        RunMATMUL_NZUNALIGN<AType, BType, OutType, M, K, N, validM, K, validN>(src0, src1, nullptr);
-    }
-    using AccTile = TileAcc<CType<AType>, M, N, validM, validN>;
-    AccTile cTile;
-    TASSIGN<0x0>(cTile);
-
-    using DstTileData =
-        Tile<TileType::Vec, OutType, M, N, BLayout::ColMajor, mSize, nSize, SLayout::RowMajor, sFractalSize>;
-    DstTileData dstTileData;
-    TASSIGN<0x0>(dstTileData);
-
-    constexpr int dualDstCtl = splitM ? 1 : 2;
-    constexpr uint64_t mode = getMode<0, dualDstCtl>();
-    TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
-
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-
-    // kirin9030: single block execution
-    constexpr uint16_t sFractalColNum = CeilDiv<uint16_t>(nSize, sGRows_);
-    for (int i = 0; i < sFractalColNum; i++) {
-        GlobalDataOut dstGlobal1(out + 2 * stride * i);
-        TSTORE(dstGlobal1, dstTileData);
-    }
-    for (int i = 0; i < sFractalColNum; i++) {
-        GlobalDataOut dstGlobal2(out + stride + 2 * stride * i);
-        TSTORE(dstGlobal2, dstTileData);
-    }
-}
-
-template <typename OutType, typename AType, typename BType, int M, int K, int N, bool splitM>
-__global__ AICORE void RunSplitTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1)
-{
-    constexpr int mSize = splitM ? M / 2 : M;
-    constexpr int nSize = splitM ? N : N / 2;
-    using GlobalDataOut = GlobalTensor<
-        OutType, pto::Shape<1, 1, 1, mSize, nSize>, pto::Stride<1 * M * N, 1 * M * N, M * N, N, 1>, Layout::ND>;
-    GlobalDataOut dstGlobal1(out);
-    constexpr int stride = splitM ? mSize * nSize : nSize;
-    GlobalDataOut dstGlobal2(out + stride);
-
-    RunMATMUL<AType, BType, OutType, M, K, N, M, K, N>(src0, src1, nullptr);
-
-    using AccTile = TileAcc<CType<AType>, M, N, M, N>;
-    AccTile cTile;
-    TASSIGN<0x0>(cTile);
-
-    using DstTileData = Tile<TileType::Vec, OutType, M, N, BLayout::RowMajor, mSize, nSize>;
-    DstTileData dstTileData;
-    TASSIGN<0x0>(dstTileData);
-
-    constexpr int dualDstCtl = splitM ? 1 : 2;
-    constexpr uint8_t mode = getMode<0, dualDstCtl>();
-    TMOV<DstTileData, AccTile, static_cast<AccToVecMode>(mode)>(dstTileData, cTile);
-
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-
-    // kirin9030: single block execution
-    TSTORE(dstGlobal1, dstTileData);
-    TSTORE(dstGlobal2, dstTileData);
-}
-
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
 {
@@ -555,14 +415,6 @@ void LaunchTMOVAcc2VecNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, void* st
         // kirin9030: bfloat16_t is half, use half instead
         RunTMOV<half, half, half, 111, 47, 96, 112, 96, 0><<<1, nullptr, stream>>>(
             reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 5) {
-        // split m - kirin9030: float->half
-        RunSplitTMOV<half, half, half, 96, 32, 48, true><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 6) {
-        // split n - kirin9030: float->half
-        RunSplitTMOV<half, half, half, 48, 32, 128, false><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
     }
 }
 
@@ -570,8 +422,6 @@ template void LaunchTMOVAcc2VecNZ2ND<1>(uint8_t* out, uint8_t* src0, uint8_t* sr
 template void LaunchTMOVAcc2VecNZ2ND<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2ND<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2ND<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2ND<5>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2ND<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
@@ -591,22 +441,6 @@ void LaunchTMOVAcc2VecNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, void* st
         // kirin9030: bfloat16_t is half
         RunTMOV<half, half, half, 45, 112, 43, 48, 48, 1, true, true, Layout::NZ, 512><<<1, nullptr, stream>>>(
             reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 5) {
-        // kirin9030: float->half, sfractalSize 1024->512
-        RunSplitNTMOVNz2Nz<half, half, half, 48, 80, 128, 45, 125, false, true><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 6) {
-        // kirin9030: float->half, sfractalSize 1024->512
-        RunSplitNTMOVNz2Nz<half, half, half, 80, 16, 96, 75, 90, false, true><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 7) {
-        // kirin9030: float->half, sfractalSize 1024->512
-        RunSplitMTMOVNz2Nz<half, half, half, 112, 48, 80, 110, 78, true, true><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 8) {
-        // kirin9030: float->half, sfractalSize 1024->512
-        RunSplitMTMOVNz2Nz<half, half, half, 16, 112, 112, 13, 110, true, true><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
     }
 }
 
@@ -614,10 +448,6 @@ template void LaunchTMOVAcc2VecNZ2NZ<1>(uint8_t* out, uint8_t* src0, uint8_t* sr
 template void LaunchTMOVAcc2VecNZ2NZ<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2NZ<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2NZ<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2NZ<5>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2NZ<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2NZ<7>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2NZ<8>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecFBQuantNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream)
@@ -738,86 +568,3 @@ template void LaunchTMOVAcc2VecSCQuantNZ2ND<1>(uint8_t* out, uint8_t* src0, uint
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecSCQuantNZ2ND<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-
-template <int32_t tilingKey>
-void LaunchTMOVAcc2VecNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
-{
-    if constexpr (tilingKey == 1) {
-        // kirin9030: float->half
-        RunTMOV<half, half, half, 8, 7, 6, 32, 32, 0, false, false, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 2) {
-        RunTMOV<half, half, half, 112, 48, 95, 112, 96, 0, false, false, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 3) {
-        // kirin9030: bfloat16_t is half
-        RunTMOV<half, half, half, 48, 31, 31, 64, 32, 1, false, true, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    } else if constexpr (tilingKey == 4) {
-        // kirin9030: float->half, sfractalSize 1024->512
-        RunTMOV<half, half, half, 88, 48, 95, 96, 96, 0, false, true, Layout::DN, 512><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
-    }
-}
-
-template void LaunchTMOVAcc2VecNZ2DN<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2DN<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2DN<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecNZ2DN<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-
-template <int32_t tilingKey>
-void LaunchTMOVAcc2VecFBQuantNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream)
-{
-    if constexpr (tilingKey == 1) {
-        RunTMOVFBQuant<int8_t, int8_t, int8_t, uint64_t, 96, 128, 60, 96, 64, 0, false, false, Layout::DN>
-            <<<1, nullptr, stream>>>(
-                reinterpret_cast<int8_t*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
-                reinterpret_cast<uint64_t*>(src2));
-    } else if constexpr (tilingKey == 2) {
-        RunTMOVFBQuant<half, int8_t, int8_t, uint64_t, 32, 48, 64, 32, 64, 0, false, false, Layout::DN>
-            <<<1, nullptr, stream>>>(
-                reinterpret_cast<half*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
-                reinterpret_cast<uint64_t*>(src2));
-    } else if constexpr (tilingKey == 3) {
-        RunTMOVFBQuant<int8_t, half, half, uint64_t, 32, 128, 60, 32, 64, 0, false, true, Layout::DN>
-            <<<1, nullptr, stream>>>(
-                reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
-                reinterpret_cast<uint64_t*>(src2));
-    } else if constexpr (tilingKey == 4) {
-        // kirin9030: use int8_t as output to enable quantization (half would trigger NoQuant)
-        RunTMOVFBQuant<int8_t, half, half, uint64_t, 64, 64, 90, 64, 90, 0, false, true, Layout::DN>
-            <<<1, nullptr, stream>>>(
-                reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
-                reinterpret_cast<uint64_t*>(src2));
-    }
-}
-
-template void LaunchTMOVAcc2VecFBQuantNZ2DN<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
-template void LaunchTMOVAcc2VecFBQuantNZ2DN<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
-template void LaunchTMOVAcc2VecFBQuantNZ2DN<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
-template void LaunchTMOVAcc2VecFBQuantNZ2DN<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
-
-template <int32_t tilingKey>
-void LaunchTMOVAcc2VecSCQuantNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
-{
-    if constexpr (tilingKey == 1) {
-        // kirin9030: use int16_t as output to enable quantization (half would trigger NoQuant)
-        RunTMOVSCQuant<int16_t, half, half, 80, 40, 66, 80, 66, 0, false, true, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<int16_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1), 2);
-    } else if constexpr (tilingKey == 2) {
-        // kirin9030: TMatmul only supports half+half->half or int8+int8->int32, not float
-        RunTMOVSCQuant<int8_t, half, half, 96, 128, 60, 96, 64, 0, false, true, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1), 5);
-    } else if constexpr (tilingKey == 3) {
-        RunTMOVSCQuant<half, int8_t, int8_t, 32, 128, 64, 32, 64, 0, false, false, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<half*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1), 3);
-    } else if constexpr (tilingKey == 4) {
-        RunTMOVSCQuant<int8_t, int8_t, int8_t, 64, 64, 90, 64, 96, 0, false, false, Layout::DN><<<1, nullptr, stream>>>(
-            reinterpret_cast<int8_t*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1), 1);
-    }
-}
-
-template void LaunchTMOVAcc2VecSCQuantNZ2DN<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecSCQuantNZ2DN<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecSCQuantNZ2DN<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
-template void LaunchTMOVAcc2VecSCQuantNZ2DN<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);

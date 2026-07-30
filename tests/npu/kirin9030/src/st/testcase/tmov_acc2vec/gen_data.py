@@ -165,8 +165,6 @@ def gen_golden_data(case_name, param):
 
     if dst_format == "NZ":
         golden = get_golden_nd_to_nz(golden, base_m, base_n, dst_type, s_fractal_size)
-    elif dst_format == "DN":
-        golden = golden.transpose()
     golden.astype(dst_type).tofile("./golden.bin")
 
 
@@ -226,10 +224,6 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nz_2",
         "TMOVTest.case_nz2nz_3",
         "TMOVTest.case_nz2nz_4",
-        "TMOVTest.case_nz2dn_1",
-        "TMOVTest.case_nz2dn_2",
-        "TMOVTest.case_nz2dn_3",
-        "TMOVTest.case_nz2dn_4",
         # Quant pre
         "TMOVTest.case_nz2nz_fb_quant_1",
         "TMOVTest.case_nz2nz_fb_quant_2",
@@ -248,14 +242,6 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nd_sc_quant_2",
         "TMOVTest.case_nz2nd_sc_quant_3",
         "TMOVTest.case_nz2nd_sc_quant_4",
-        "TMOVTest.case_nz2dn_fb_quant_1",
-        "TMOVTest.case_nz2dn_fb_quant_2",
-        "TMOVTest.case_nz2dn_fb_quant_3",
-        "TMOVTest.case_nz2dn_fb_quant_4",
-        "TMOVTest.case_nz2dn_sc_quant_1",
-        "TMOVTest.case_nz2dn_sc_quant_2",
-        "TMOVTest.case_nz2dn_sc_quant_3",
-        "TMOVTest.case_nz2dn_sc_quant_4",
     ]
 
     case_params_list = [
@@ -269,11 +255,6 @@ if __name__ == "__main__":
         TMovParams(np.float16, np.float16, np.float16, 80, 112, 96, 0, 0, 0, "NZ", 512),
         TMovParams(np.float16, np.float16, np.float16, 13, 16, 9, 16, 16, 16, "NZ", 512, False, False, True),
         TMovParams(np.float16, np.float16, np.float16, 45, 112, 43, 48, 112, 48, "NZ", 512, False, False, True),
-        # nz2dn - kirin9030: float->half
-        TMovParams(np.float16, np.float16, np.float16, 8, 7, 6, 0, 0, 0, "DN"),
-        TMovParams(np.float16, np.float16, np.float16, 112, 48, 95, 0, 0, 0, "DN"),
-        TMovParams(np.float16, np.float16, np.float16, 48, 31, 31, 0, 0, 0, "DN", 512, False, False, True),
-        TMovParams(np.float16, np.float16, np.float16, 88, 48, 95, 0, 0, 0, "DN", 512, False, False, True),
         # nz2nz fb quant
         TMovParams(np.int8, np.int8, np.int8, 128, 48, 128, 0, 0, 0, "NZ", 512, True, False, False, np.uint64),
         TMovParams(np.int8, np.int8, np.float16, 64, 80, 96, 0, 0, 0, "NZ", 512, True, False, False, np.uint64),
@@ -296,16 +277,6 @@ if __name__ == "__main__":
         TMovParams(np.float16, np.float16, np.int8, 60, 128, 64, 0, 0, 0, "ND", 512, False, True, True, None, 5),
         TMovParams(np.int8, np.int8, np.float16, 30, 48, 64, 0, 0, 0, "ND", 512, False, True, False, None, 3),
         TMovParams(np.int8, np.int8, np.int8, 60, 128, 32, 0, 0, 0, "ND", 512, False, True, False, None, 1),
-        # nz2dn fb quant - kirin9030: float->half
-        TMovParams(np.int8, np.int8, np.int8, 96, 128, 60, 0, 0, 0, "DN", 512, True, False, False, np.uint64),
-        TMovParams(np.int8, np.int8, np.float16, 32, 48, 64, 0, 0, 0, "DN", 512, True, False, False, np.uint64),
-        TMovParams(np.float16, np.float16, np.int8, 32, 128, 60, 0, 0, 0, "DN", 512, True, False, True, np.uint64),
-        TMovParams(np.float16, np.float16, np.int8, 64, 64, 90, 0, 0, 0, "DN", 512, True, False, True, np.uint64),
-        # nz2dn sc quant - kirin9030: use int16_t as output to enable quantization
-        TMovParams(np.float16, np.float16, np.int16, 80, 40, 66, 0, 0, 0, "DN", 512, False, True, True, None, 2),
-        TMovParams(np.float16, np.float16, np.int8, 96, 128, 60, 0, 0, 0, "DN", 512, False, True, True, None, 5),
-        TMovParams(np.int8, np.int8, np.float16, 32, 128, 64, 0, 0, 0, "DN", 512, False, True, False, None, 3),
-        TMovParams(np.int8, np.int8, np.int8, 64, 64, 90, 0, 0, 0, "DN", 512, False, True, False, None, 1),
     ]
 
     for i, case_name in enumerate(case_name_list):

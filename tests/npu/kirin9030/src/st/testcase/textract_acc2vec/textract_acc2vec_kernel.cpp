@@ -198,22 +198,22 @@ AICORE inline void RunTSTORE(__gm__ OutType* out, SrcTileData& srcTile)
 }
 
 template <Layout layoutType>
-AICORE inline constexpr BLayout GetTileBLayout()
-{
-    if constexpr (layoutType == Layout::NZ || layoutType == Layout::DN) {
-        return BLayout::ColMajor;
-    } else {
-        return BLayout::RowMajor;
-    }
-}
-
-template <Layout layoutType>
 AICORE inline constexpr SLayout GetTileSLayout()
 {
     if constexpr (layoutType == Layout::NZ) {
         return SLayout::RowMajor;
     } else {
         return SLayout::NoneBox;
+    }
+}
+
+template <Layout layoutType>
+AICORE inline constexpr BLayout GetTileBLayout()
+{
+    if constexpr (layoutType == Layout::NZ || layoutType == Layout::DN) {
+        return BLayout::ColMajor;
+    } else {
+        return BLayout::RowMajor;
     }
 }
 
