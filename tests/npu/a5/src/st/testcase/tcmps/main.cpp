@@ -89,13 +89,14 @@ void test_tcmps()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<uint8_t> golden(Row * ((Col + 7) / 8));
-    std::vector<uint8_t> devFinal(Row * ((Col + 7) / 8));
+    std::vector<uint8_t> golden(static_cast<size_t>(Row) * static_cast<size_t>((Col + 7) / 8));
+    std::vector<uint8_t> devFinal(static_cast<size_t>(Row) * static_cast<size_t>((Col + 7) / 8));
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    bool ret = ResultCmp<uint8_t>(golden, devFinal, 0.001f);
-
+    auto validGolden = ExtractValidMaskLittleEndian(golden, Row, Col, ValidRow, ValidCol);
+    auto validActual = ExtractValidMaskLittleEndian(devFinal, Row, Col, ValidRow, ValidCol);
+    bool ret = ResultCmp<uint8_t>(validGolden, validActual, 0.001f);
     EXPECT_TRUE(ret);
 }
 
