@@ -196,3 +196,11 @@ TEST_F(TSELSTest, case_float_uint8_1x8192_1x4096_1x8192_1x8192)
 {
     this->Launch<float, uint8_t, 1, 8192, 1, 4096, 1, 8192, 1, 8192>();
 }
+TEST_F(TSELSTest, case_int64_uint8_4x16_4x32_4x16_4x16)
+{
+    this->Launch<int64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_4x16_4x32_4x16_4x16)
+{
+    this->Launch<uint64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>();
+}

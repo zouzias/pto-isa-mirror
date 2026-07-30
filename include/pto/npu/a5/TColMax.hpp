@@ -32,7 +32,12 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLMAX) OP_TYPE(reduce) void TColMax(
     __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
     __ubuf__ T* src = (__ubuf__ T*)__cce_get_tile_ptr(srcData);
 
-    TColReduceInstr<TColMaxOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64ColReduceSoftware<Int64BinaryOp::Max, T, TileDataOut::Cols, TileDataIn::Cols>(
+            dst, src, validRow, validCol);
+    } else {
+        TColReduceInstr<TColMaxOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
+    }
 }
 
 template <typename TileDataOut, typename TileDataIn>

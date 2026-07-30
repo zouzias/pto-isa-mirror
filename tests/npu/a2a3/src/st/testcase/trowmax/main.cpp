@@ -262,3 +262,11 @@ TEST_F(TROWMAXTest, case28)
     bool ret = TRowMaxTestFramework<28, int16_t, 8, 8, 448, 448, 1>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TROWMAXTest, case_int64_4x16)
+{
+    EXPECT_TRUE((TRowMaxTestFramework<29, int64_t, 4, 4, 16, 16, 1>()));
+}
+TEST_F(TROWMAXTest, case_uint64_4x16)
+{
+    EXPECT_TRUE((TRowMaxTestFramework<30, uint64_t, 4, 4, 16, 16, 1>()));
+}

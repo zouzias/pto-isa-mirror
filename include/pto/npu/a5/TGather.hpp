@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include "common.hpp"
+#include "Int64Software.hpp"
 
 namespace pto {
 template <typename DstTileData, typename Src0TileData, typename Src1TileData>
@@ -20,8 +21,8 @@ PTO_INTERNAL void CheckValid()
 {
     static_assert(
         (sizeof(typename DstTileData::DType) == 1) || (sizeof(typename DstTileData::DType) == 2) ||
-            (sizeof(typename DstTileData::DType) == 4),
-        "Fix: TGATHER expect b8/b16/b32");
+            (sizeof(typename DstTileData::DType) == 4) || (sizeof(typename DstTileData::DType) == 8),
+        "Fix: TGATHER expect b8/b16/b32/b64");
     static_assert(
         (sizeof(typename Src1TileData::DType) == 2) || (sizeof(typename Src1TileData::DType) == 4),
         "Fix: TGATHER expect b16/b32");
@@ -146,7 +147,12 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD& dst, TileDataS0& src0, TileDataS1& src
     unsigned kValidCols = dst.GetValidCol();
     unsigned kValidRows = dst.GetValidRow();
 
-    if constexpr (sizeof(typename TileDataS0::DType) == 4) {
+    if constexpr (sizeof(typename TileDataS0::DType) == 8) {
+        using T = typename TileDataS0::DType;
+        using I = typename TileDataS1::DType;
+        Int64GatherSoftware<T, I, TileDataD::Cols, TileDataS1::Cols>(
+            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src0.data(), (__ubuf__ I*)src1.data(), kValidRows, kValidCols);
+    } else if constexpr (sizeof(typename TileDataS0::DType) == 4) {
         TGather_b32<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
     } else if constexpr (sizeof(typename TileDataS0::DType) == 2 && sizeof(typename TileDataS1::DType) == 2) {
         TGather_b16<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
@@ -272,14 +278,16 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData& dst, SrcTileData& src)
     using T = typename SrcTileData::DType;
     using U = typename DstTileData::DType;
     static_assert(
-        std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
+        std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, int8_t> ||
+            std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
             std::is_same_v<T, uint16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
             std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float> ||
             std::is_same_v<T, float8_e4m3_t> || std::is_same_v<T, float8_e5m2_t> || std::is_same_v<T, hifloat8_t>,
         "Fix: TGATHER Src data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
         "half/bfloat16_t/float/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
     static_assert(
-        std::is_same_v<U, int8_t> || std::is_same_v<U, uint8_t> || std::is_same_v<U, int16_t> ||
+        std::is_same_v<U, int64_t> || std::is_same_v<U, uint64_t> || std::is_same_v<U, int8_t> ||
+            std::is_same_v<U, uint8_t> || std::is_same_v<U, int16_t> ||
             std::is_same_v<U, uint16_t> || std::is_same_v<U, int32_t> || std::is_same_v<U, uint32_t> ||
             std::is_same_v<U, half> || std::is_same_v<U, bfloat16_t> || std::is_same_v<U, float> ||
             std::is_same_v<U, float8_e4m3_t> || std::is_same_v<U, float8_e5m2_t> || std::is_same_v<U, hifloat8_t>,
@@ -291,7 +299,12 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData& dst, SrcTileData& src)
     static_assert((DstTileData::isRowMajor && SrcTileData::isRowMajor), "Fix: TGATHER expect row major");
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
-    TGather<DstTileData, SrcTileData, maskPattern, gatherType>(dst.data(), src.data(), rows, cols);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64GatherPatternSoftware<maskPattern, gatherType, T, DstTileData::Cols, SrcTileData::Cols>(
+            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), rows, cols);
+    } else {
+        TGather<DstTileData, SrcTileData, maskPattern, gatherType>(dst.data(), src.data(), rows, cols);
+    }
 }
 
 template <typename TileDataD, typename TileDataS, typename TileDataS1, typename TileDataC, CmpMode cmpMode>

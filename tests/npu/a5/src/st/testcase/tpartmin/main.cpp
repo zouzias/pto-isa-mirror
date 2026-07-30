@@ -138,4 +138,6 @@ TEST_F(TPARTMINTest, case_fp32_8x8_8x0_8x8) { test_tpartmin<float, 8, 8, 8, 0, 8
 TEST_F(TPARTMINTest, case_fp32_8x8_0x8_8x8) { test_tpartmin<float, 8, 8, 0, 8, 8, 8, 8, 8, 1, 8, 8, 8>(); }
 TEST_F(TPARTMINTest, case_fp32_8x8_8x8_8x0) { test_tpartmin<float, 8, 8, 8, 8, 8, 0, 8, 8, 8, 8, 1, 8>(); }
 TEST_F(TPARTMINTest, case_fp32_8x8_8x8_0x8) { test_tpartmin<float, 8, 8, 8, 8, 0, 8, 8, 8, 8, 8, 1, 8>(); }
+TEST_F(TPARTMINTest, case_s64_4x16_2x16_4x16) { test_tpartmin<int64_t, 4, 16, 2, 16, 4, 16>(); }
+TEST_F(TPARTMINTest, case_u64_4x16_2x16_4x16) { test_tpartmin<uint64_t, 4, 16, 2, 16, 4, 16>(); }
 } // namespace TPartMinTest
