@@ -67,7 +67,6 @@ struct RemOp {
     PTO_INTERNAL static void RemInt32Instr(
         __ubuf__ int32_t* dst, __ubuf__ int32_t* src0, __ubuf__ int32_t* src1, __ubuf__ int32_t* tmp)
     {
-        __ubuf__ float* dst_f = reinterpret_cast<__ubuf__ float*>(dst);
         __ubuf__ float* src0_f = reinterpret_cast<__ubuf__ float*>(src0);
         __ubuf__ float* src1_f = reinterpret_cast<__ubuf__ float*>(src1);
         __ubuf__ float* tmp_f = reinterpret_cast<__ubuf__ float*>(tmp);
@@ -76,11 +75,21 @@ struct RemOp {
         vconv_s322f32(src1_f, src1, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
 
-        RemF32Instr(dst_f, src0_f, src1_f, tmp_f);
+        vdiv(tmp_f, src0_f, src1_f, 1, 1, 1, 1, 8, 8, 8);
+        pipe_barrier(PIPE_V);
 
-        vconv_f322s32r(dst, dst_f, 1, 1, 1, 8, 8);
+        vconv_f322f32f(tmp_f, tmp_f, 1, 1, 1, 8, 8);
+        pipe_barrier(PIPE_V);
+        vconv_f322s32z(tmp, tmp_f, 1, 1, 1, 8, 8);
+        pipe_barrier(PIPE_V);
+
         vconv_f322s32r(src0, src0_f, 1, 1, 1, 8, 8);
         vconv_f322s32r(src1, src1_f, 1, 1, 1, 8, 8);
+        pipe_barrier(PIPE_V);
+        vmul(dst, tmp, src1, 1, 1, 1, 1, 8, 8, 8);
+        pipe_barrier(PIPE_V);
+
+        vsub(dst, src0, dst, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
     }
 
