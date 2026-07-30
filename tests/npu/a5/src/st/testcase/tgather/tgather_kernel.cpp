@@ -110,6 +110,10 @@ template void launchTGATHER_demo<int8_t, uint16_t, int8_t, 16, 128, 16, 64>(
     int8_t* src0, uint16_t* src1, int8_t* out, void* stream);
 template void launchTGATHER_demo<uint8_t, uint16_t, uint8_t, 16, 128, 16, 64>(
     uint8_t* src0, uint16_t* src1, uint8_t* out, void* stream);
+template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 16, 4, 16>(
+    int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
+template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>(
+    uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
 __global__ AICORE void runTGATHER(__gm__ dstT __out__* out, __gm__ srcT __in__* src)

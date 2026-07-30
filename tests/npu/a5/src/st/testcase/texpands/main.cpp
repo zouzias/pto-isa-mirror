@@ -76,8 +76,8 @@ void test_texpands()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(kGRows_ * kGCols_);
+    std::vector<T> devFinal(kGRows_ * kGCols_);
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
@@ -130,4 +130,12 @@ TEST_F(TEXPANDSTest, case_int16_16x200_20x512_16x200_PAD_VALUE_MAX)
 TEST_F(TEXPANDSTest, case_int16_1x200_1x512_1x200_PAD_VALUE_MAX)
 {
     test_texpands<int16_t, 1, 200, 1, 512, 1, 200, PAD_VALUE_MAX>();
+}
+TEST_F(TEXPANDSTest, case_int64_5x16_5x16_5x16_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_5x16_5x16_5x16_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL>();
 }

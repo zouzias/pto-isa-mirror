@@ -259,3 +259,11 @@ TEST_F(TROWMINTest, case28)
     bool ret = TRowMinTestFramework<28, int16_t, 8, 8, 448, 448, 1>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TROWMINTest, case_int64_4x16)
+{
+    EXPECT_TRUE((TRowMinTestFramework<29, int64_t, 4, 4, 16, 16, 1>()));
+}
+TEST_F(TROWMINTest, case_uint64_4x16)
+{
+    EXPECT_TRUE((TRowMinTestFramework<30, uint64_t, 4, 4, 16, 16, 1>()));
+}
