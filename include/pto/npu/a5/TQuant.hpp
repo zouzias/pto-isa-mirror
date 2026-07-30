@@ -566,29 +566,30 @@ struct B16OcpQuantCtx {
     static constexpr int expShift = 7;
 };
 
-template <typename OcpFormatSpec>
+template <typename OcpFormatSpec, bool NeedScaling = true>
 PTO_INTERNAL void InitB16OcpQuantCtx(B16OcpQuantCtx<OcpFormatSpec>& ctx)
 {
     vbr(ctx.vu16_max_exp_value, ctx.kMaxExp);
-    vbr(ctx.vu16_scale_bias, ctx.kExpBias);
     vbr(ctx.vu16_exp_nan, ctx.kExpNan);
-    vbr(ctx.vu16_nan, ctx.kB16Nan);
     vbr(ctx.vu16_exp_mask, ctx.kExpMask);
     vbr(ctx.vu16_mantissa_mask, ctx.kMantissaMask);
+    if constexpr (NeedScaling) {
+        vbr(ctx.vu16_scale_bias, ctx.kExpBias);
+        vbr(ctx.vu16_nan, ctx.kB16Nan);
+    }
 }
 
 // Compute exponent and scaling from one VL of b16 max data, using a pre-initialised ctx.
 // Outputs: shared_exp written to expPtr (PK_B16), scaling written to scalingPtr (NORM_B16).
-template <typename OcpFormatSpec, typename T>
-PTO_INTERNAL void ComputeB16OcpExpAndScaling(
-    B16OcpQuantCtx<OcpFormatSpec>& ctx, __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr,
-    uint32_t off, uint32_t rem)
+template <typename OcpFormatSpec, typename T, bool NeedScaling = true>
+PTO_INTERNAL void ComputeB16OcpExpAndScalingRegs(
+    B16OcpQuantCtx<OcpFormatSpec>& ctx, __ubuf__ T* maxPtr, uint32_t off, uint32_t rem,
+    RegTensor<uint16_t>& vu16_shared_exp, RegTensor<uint16_t>& vu16_recip_scale, vector_bool& preg_b16)
 {
     __ubuf__ uint16_t* maxPtr_u16 = (__ubuf__ uint16_t*)maxPtr;
-    __ubuf__ uint16_t* scalingPtr_u16 = (__ubuf__ uint16_t*)scalingPtr;
     RegTensor<uint16_t> vu16_max_abs, vu16_max_exp, vu16_mantissa;
-    RegTensor<uint16_t> vu16_shared_exp, vu16_scale_value, vu16_recip_scale;
-    vector_bool preg_b16 = CreatePredicate<T>(rem);
+    RegTensor<uint16_t> vu16_scale_value;
+    preg_b16 = CreatePredicate<T>(rem);
     vlds(vu16_max_abs, maxPtr_u16, off, NORM);
     vand(vu16_max_exp, vu16_max_abs, ctx.vu16_exp_mask, preg_b16, MODE_ZEROING);
     vand(vu16_mantissa, vu16_max_abs, ctx.vu16_mantissa_mask, preg_b16, MODE_ZEROING);
@@ -599,9 +600,24 @@ PTO_INTERNAL void ComputeB16OcpExpAndScaling(
     vsub(vu16_shared_exp, vu16_max_exp, ctx.vu16_max_exp_value, preg_b16, MODE_ZEROING);
     vshrs(vu16_scale_value, vu16_shared_exp, ctx.expShift, preg_b16, MODE_ZEROING);
     vsel(vu16_scale_value, ctx.vu16_exp_nan, vu16_scale_value, ctx.preg_nan);
-    vsts(vu16_scale_value, (__ubuf__ uint16_t*)expPtr, off / sizeof(T), PK_B16, preg_b16);
-    vsub(vu16_recip_scale, ctx.vu16_scale_bias, vu16_shared_exp, preg_b16, MODE_ZEROING);
-    vsel(vu16_recip_scale, ctx.vu16_nan, vu16_recip_scale, ctx.preg_nan);
+    if constexpr (NeedScaling) {
+        vsub(vu16_recip_scale, ctx.vu16_scale_bias, vu16_shared_exp, preg_b16, MODE_ZEROING);
+        vsel(vu16_recip_scale, ctx.vu16_nan, vu16_recip_scale, ctx.preg_nan);
+    }
+    vu16_shared_exp = vu16_scale_value;
+}
+
+template <typename OcpFormatSpec, typename T>
+PTO_INTERNAL void ComputeB16OcpExpAndScaling(
+    B16OcpQuantCtx<OcpFormatSpec>& ctx, __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr,
+    uint32_t off, uint32_t rem)
+{
+    __ubuf__ uint16_t* scalingPtr_u16 = (__ubuf__ uint16_t*)scalingPtr;
+    RegTensor<uint16_t> vu16_shared_exp, vu16_recip_scale;
+    vector_bool preg_b16;
+    ComputeB16OcpExpAndScalingRegs<OcpFormatSpec, T>(
+        ctx, maxPtr, off, rem, vu16_shared_exp, vu16_recip_scale, preg_b16);
+    vsts(vu16_shared_exp, (__ubuf__ uint16_t*)expPtr, off / sizeof(T), PK_B16, preg_b16);
     vsts(vu16_recip_scale, scalingPtr_u16, off, NORM_B16, preg_b16);
 }
 
@@ -716,6 +732,25 @@ PTO_INTERNAL void InitF32NvQuantCtx(F32NvQuantCtx<NvFormatSpec>& ctx)
     vbr(ctx.vb32_min_rcp, 0x00400000);
 }
 
+template <typename NvQuantCtx>
+PTO_INTERNAL void RoundUpNvSharedExponent(
+    NvQuantCtx& ctx, vector_s32& sharedExp, vector_s32& exponent, vector_s32& mantissa, MaskReg& preg)
+{
+    vector_s32 incrementedExp;
+    sharedExp = exponent;
+    vadds(incrementedExp, sharedExp, 1, preg, MODE_ZEROING);
+    vcmps_ne(ctx.preg_mant_gt_zero, mantissa, 0, preg);
+    vcmps_gt(ctx.preg_exp_gt_zero, exponent, 0, preg);
+    vcmps_lt(ctx.preg_exp_lt_max, exponent, 0xFE, preg);
+    vcmps_eq(ctx.preg_exp_eq_zero, exponent, 0, preg);
+    pand(ctx.preg_round_normal, ctx.preg_mant_gt_zero, ctx.preg_exp_gt_zero, preg);
+    pand(ctx.preg_round_normal, ctx.preg_round_normal, ctx.preg_exp_lt_max, preg);
+    vcmps_gt(ctx.preg_mant_gt_half_subnormal, mantissa, 0x00400000, preg);
+    pand(ctx.preg_round_subnormal, ctx.preg_mant_gt_half_subnormal, ctx.preg_exp_eq_zero, preg);
+    por(ctx.preg_round_up, ctx.preg_round_normal, ctx.preg_round_subnormal, preg);
+    vsel(sharedExp, incrementedExp, sharedExp, ctx.preg_round_up);
+}
+
 // Compute NV exponent and scaling from one VL of max data, using a pre-initialised ctx.
 // Outputs: vb32_shared_exp and vb32_scaling in f32 registers (caller handles store).
 template <typename NvFormatSpec>
@@ -723,24 +758,13 @@ PTO_INTERNAL void ComputeF32NvExpAndScaling(
     F32NvQuantCtx<NvFormatSpec>& ctx, vector_s32& vb32_shared_exp, vector_s32& vb32_scaling, vector_f32& vb32_max,
     MaskReg& preg_b32, __ubuf__ int32_t* maxPtrRaw, uint32_t loadOff)
 {
-    vector_s32 vb32_exponent, vb32_mantissa, vb32_shared_exp_inc;
+    vector_s32 vb32_exponent, vb32_mantissa;
     vlds((vector_s32&)vb32_max, maxPtrRaw, loadOff, NORM);
     vmuls(vb32_max, vb32_max, ctx.descaleMultiplier, preg_b32, MODE_ZEROING);
     vand(vb32_exponent, (vector_s32&)vb32_max, ctx.vb32_exp_mask, preg_b32, MODE_ZEROING);
     vand(vb32_mantissa, (vector_s32&)vb32_max, ctx.vb32_mantissa_mask, preg_b32, MODE_ZEROING);
     vshrs(vb32_exponent, vb32_exponent, ctx.shr, preg_b32, MODE_ZEROING);
-    vb32_shared_exp = vb32_exponent;
-    vadds(vb32_shared_exp_inc, vb32_shared_exp, 1, preg_b32, MODE_ZEROING);
-    vcmps_ne(ctx.preg_mant_gt_zero, vb32_mantissa, 0, preg_b32);
-    vcmps_gt(ctx.preg_exp_gt_zero, vb32_exponent, 0, preg_b32);
-    vcmps_lt(ctx.preg_exp_lt_max, vb32_exponent, 0xFE, preg_b32);
-    vcmps_eq(ctx.preg_exp_eq_zero, vb32_exponent, 0, preg_b32);
-    pand(ctx.preg_round_normal, ctx.preg_mant_gt_zero, ctx.preg_exp_gt_zero, preg_b32);
-    pand(ctx.preg_round_normal, ctx.preg_round_normal, ctx.preg_exp_lt_max, preg_b32);
-    vcmps_gt(ctx.preg_mant_gt_half_subnormal, vb32_mantissa, 0x00400000, preg_b32);
-    pand(ctx.preg_round_subnormal, ctx.preg_mant_gt_half_subnormal, ctx.preg_exp_eq_zero, preg_b32);
-    por(ctx.preg_round_up, ctx.preg_round_normal, ctx.preg_round_subnormal, preg_b32);
-    vsel(vb32_shared_exp, vb32_shared_exp_inc, vb32_shared_exp, ctx.preg_round_up);
+    RoundUpNvSharedExponent(ctx, vb32_shared_exp, vb32_exponent, vb32_mantissa, preg_b32);
     vsub(vb32_scaling, ctx.vb32_exp_max, vb32_shared_exp, preg_b32);
     vshls((vector_u32&)vb32_scaling, (vector_u32&)vb32_scaling, ctx.shr, preg_b32, MODE_ZEROING);
     vcmps_eq(ctx.preg_exp_ff, vb32_exponent, 0xFF, preg_b32);
@@ -868,11 +892,7 @@ PTO_INTERNAL void ExtractB8ExponentAndScalingVL(
             ExtractB16NvExponentAndScalingCore<NvMxFp8E4M3Spec, T>(maxPtr, expPtr, scalingPtr, off, rem);
         }
     } else if constexpr (std::is_same<Alg, NvF4E2M1Alg>::value) {
-        if constexpr (std::is_same<T, float>::value) {
-            ExtractF32NvExponentAndScalingCore<NvMxFp4E2M1Spec>(maxPtr, expPtr, scalingPtr, off, rem);
-        } else {
-            ExtractB16NvExponentAndScalingCore<NvMxFp4E2M1Spec, T>(maxPtr, expPtr, scalingPtr, off, rem);
-        }
+        ExtractB16NvExponentAndScalingCore<NvMxFp4E2M1Spec, T>(maxPtr, expPtr, scalingPtr, off, rem);
     }
 }
 
@@ -902,61 +922,68 @@ struct B16NvQuantCtx {
     static constexpr int b16ExpShift = 7;
 };
 
-template <typename NvFormatSpec>
+template <typename NvFormatSpec, bool NeedScaling = true>
 PTO_INTERNAL void InitB16NvQuantCtx(B16NvQuantCtx<NvFormatSpec>& ctx)
 {
     vbr(ctx.vb32_exp_mask, 0x7F800000);
     vbr(ctx.vb32_mantissa_mask, 0x007FFFFF);
     vbr(ctx.vb32_exp_nan, 0xFF);
     vbr(ctx.vb32_exp_max, 0xFE);
-    vbr(ctx.vb32_special_scale, NvFormatSpec::b16SpecialScaleBits);
-    vbr(ctx.vb32_min_rcp, 0x0040);
+    if constexpr (NeedScaling) {
+        vbr(ctx.vb32_special_scale, NvFormatSpec::b16SpecialScaleBits);
+        vbr(ctx.vb32_min_rcp, 0x0040);
+    }
 }
 
 // Compute NV exponent and scaling from one VL of b16 max data, using a pre-initialised ctx.
 // Loads b16 (UNPK_B16), upcasts to f32, applies descale, computes shared_exp with
 // ceiling rounding, then stores exp (PK4_B32) and scaling (PK_B32, lower 16 bits).
-template <typename NvFormatSpec, typename T>
-PTO_INTERNAL void ComputeB16NvExpAndScaling(
-    B16NvQuantCtx<NvFormatSpec>& ctx, __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr,
-    uint32_t off, uint32_t rem)
+template <typename NvFormatSpec, typename T, bool NeedScaling = true>
+PTO_INTERNAL void ComputeB16NvExpAndScalingRegs(
+    B16NvQuantCtx<NvFormatSpec>& ctx, __ubuf__ T* maxPtr, uint32_t off, uint32_t rem, vector_s32& vb32_shared_exp,
+    vector_s32& vb32_bf16_scale_bits, MaskReg& preg_b32)
 {
     uint32_t chunkCountB16 = rem * 2;
     uint32_t chunkCountB32 = rem;
     MaskReg preg_b16 = CreatePredicate<T>(chunkCountB16);
-    MaskReg preg_b32 = CreatePredicate<float>(chunkCountB32);
+    preg_b32 = CreatePredicate<float>(chunkCountB32);
     RegTensor<T> vb16_max;
     vector_f32 vb32_max;
-    vector_s32 vb32_exponent, vb32_mantissa, vb32_shared_exp, vb32_shared_exp_inc, vb32_bf16_scale_bits;
+    vector_s32 vb32_exponent, vb32_mantissa;
     vlds(vb16_max, maxPtr, off, UNPK_B16);
     vcvt(vb32_max, vb16_max, preg_b16, PART_EVEN);
     vmuls(vb32_max, vb32_max, ctx.descaleMultiplier, preg_b32, MODE_ZEROING);
     vand(vb32_exponent, (vector_s32&)vb32_max, ctx.vb32_exp_mask, preg_b32, MODE_ZEROING);
     vand(vb32_mantissa, (vector_s32&)vb32_max, ctx.vb32_mantissa_mask, preg_b32, MODE_ZEROING);
     vshrs(vb32_exponent, vb32_exponent, ctx.f32ExpShift, preg_b32, MODE_ZEROING);
-    vb32_shared_exp = vb32_exponent;
-    vadds(vb32_shared_exp_inc, vb32_shared_exp, 1, preg_b32, MODE_ZEROING);
-    vcmps_ne(ctx.preg_mant_gt_zero, vb32_mantissa, 0, preg_b32);
-    vcmps_gt(ctx.preg_exp_gt_zero, vb32_exponent, 0, preg_b32);
-    vcmps_lt(ctx.preg_exp_lt_max, vb32_exponent, 0xFE, preg_b32);
-    vcmps_eq(ctx.preg_exp_eq_zero, vb32_exponent, 0, preg_b32);
-    pand(ctx.preg_round_normal, ctx.preg_mant_gt_zero, ctx.preg_exp_gt_zero, preg_b32);
-    pand(ctx.preg_round_normal, ctx.preg_round_normal, ctx.preg_exp_lt_max, preg_b32);
-    vcmps_gt(ctx.preg_mant_gt_half_subnormal, vb32_mantissa, 0x00400000, preg_b32);
-    pand(ctx.preg_round_subnormal, ctx.preg_mant_gt_half_subnormal, ctx.preg_exp_eq_zero, preg_b32);
-    por(ctx.preg_round_up, ctx.preg_round_normal, ctx.preg_round_subnormal, preg_b32);
-    vsel(vb32_shared_exp, vb32_shared_exp_inc, vb32_shared_exp, ctx.preg_round_up);
-    vsub(vb32_bf16_scale_bits, ctx.vb32_exp_max, vb32_shared_exp, preg_b32);
-    vshls(
-        (vector_u32&)vb32_bf16_scale_bits, (vector_u32&)vb32_bf16_scale_bits, ctx.b16ExpShift, preg_b32, MODE_ZEROING);
+    RoundUpNvSharedExponent(ctx, vb32_shared_exp, vb32_exponent, vb32_mantissa, preg_b32);
+    if constexpr (NeedScaling) {
+        vsub(vb32_bf16_scale_bits, ctx.vb32_exp_max, vb32_shared_exp, preg_b32);
+        vshls(
+            (vector_u32&)vb32_bf16_scale_bits, (vector_u32&)vb32_bf16_scale_bits, ctx.b16ExpShift, preg_b32,
+            MODE_ZEROING);
+    }
     vcmps_eq(ctx.preg_exp_ff, vb32_exponent, 0xFF, preg_b32);
     pnot(ctx.preg_mant_eq_zero, ctx.preg_mant_gt_zero, preg_b32);
     pand(ctx.preg_inf, ctx.preg_exp_ff, ctx.preg_mant_eq_zero, preg_b32);
     pand(ctx.preg_nan, ctx.preg_exp_ff, ctx.preg_mant_gt_zero, preg_b32);
-    vsel(vb32_bf16_scale_bits, ctx.vb32_min_rcp, vb32_bf16_scale_bits, ctx.preg_inf);
+    if constexpr (NeedScaling)
+        vsel(vb32_bf16_scale_bits, ctx.vb32_min_rcp, vb32_bf16_scale_bits, ctx.preg_inf);
     vsel(vb32_shared_exp, ctx.vb32_exp_max, vb32_shared_exp, ctx.preg_inf);
-    vsel(vb32_bf16_scale_bits, ctx.vb32_special_scale, vb32_bf16_scale_bits, ctx.preg_nan);
+    if constexpr (NeedScaling)
+        vsel(vb32_bf16_scale_bits, ctx.vb32_special_scale, vb32_bf16_scale_bits, ctx.preg_nan);
     vsel(vb32_shared_exp, ctx.vb32_exp_nan, vb32_shared_exp, ctx.preg_nan);
+}
+
+template <typename NvFormatSpec, typename T>
+PTO_INTERNAL void ComputeB16NvExpAndScaling(
+    B16NvQuantCtx<NvFormatSpec>& ctx, __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr,
+    uint32_t off, uint32_t rem)
+{
+    vector_s32 vb32_shared_exp, vb32_bf16_scale_bits;
+    MaskReg preg_b32;
+    ComputeB16NvExpAndScalingRegs<NvFormatSpec, T>(
+        ctx, maxPtr, off, rem, vb32_shared_exp, vb32_bf16_scale_bits, preg_b32);
     vsts(vb32_shared_exp, ((__ubuf__ int32_t*)expPtr), off / 4, PK4_B32, preg_b32);
     vsts((vector_u16&)vb32_bf16_scale_bits, (__ubuf__ uint16_t*)scalingPtr, off, PK_B32, preg_b32);
 }
@@ -2576,7 +2603,250 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(
 // get the correctness first then use loop peeling
 // Assumptions:
 // 1) validRows is divisible by 32 (grpSize)
-template <typename T, uint32_t StaticCols>
+PTO_INTERNAL void StoreDnInterleavedExponentB16(
+    __ubuf__ uint8_t* expPtr, RegTensor<uint16_t>& exp0, RegTensor<uint16_t>& exp1, uint32_t dstByteOffset,
+    uint32_t elemCount)
+{
+    MaskReg preg = CreatePredicate<uint16_t>(elemCount);
+    vshls(exp1, exp1, 8, preg, MODE_ZEROING);
+    vor(exp0, exp0, exp1, preg, MODE_ZEROING);
+    vsts(exp0, (__ubuf__ uint16_t*)expPtr, dstByteOffset / sizeof(uint16_t), NORM_B16, preg);
+}
+
+PTO_INTERNAL void StoreDnInterleavedExponentB32(
+    __ubuf__ uint8_t* expPtr, vector_s32& exp0, vector_s32& exp1, uint32_t dstByteOffset, uint32_t elemCount)
+{
+    MaskReg preg = CreatePredicate<uint32_t>(elemCount);
+    vshls((vector_u32&)exp1, (vector_u32&)exp1, 8, preg, MODE_ZEROING);
+    vor((vector_u32&)exp0, (vector_u32&)exp0, (vector_u32&)exp1, preg, MODE_ZEROING);
+    vsts((vector_u16&)exp0, (__ubuf__ uint16_t*)expPtr, dstByteOffset / sizeof(uint16_t), PK_B32, preg);
+}
+
+template <typename Alg>
+PTO_INTERNAL void ExtractDnF32ScalingVL(__ubuf__ float* maxPtr, __ubuf__ float* scalingPtr, uint32_t off, uint32_t rem)
+{
+    vector_f32 maxData;
+    vector_s32 sharedExp, scaling;
+    MaskReg preg = CreatePredicate<float>(rem);
+    if constexpr (std::is_same<Alg, OcpF8E4M3Alg>::value) {
+        F32OcpQuantCtx ctx;
+        InitF32OcpQuantCtx(ctx);
+        ComputeF32OcpExpAndScaling(ctx, sharedExp, scaling, maxData, preg, (__ubuf__ int32_t*)maxPtr, off);
+    } else {
+        F32NvQuantCtx<NvMxFp8E4M3Spec> ctx;
+        InitF32NvQuantCtx(ctx);
+        ComputeF32NvExpAndScaling<NvMxFp8E4M3Spec>(
+            ctx, sharedExp, scaling, maxData, preg, (__ubuf__ int32_t*)maxPtr, off);
+    }
+    vsts(scaling, (__ubuf__ int32_t*)scalingPtr, off, NORM_B32, preg);
+}
+
+// f32 needs a sequential scratch path because retaining two complete extraction
+// contexts exceeds the safe VF register budget. This is intentionally kept
+// separate from the b16 pair fast path below.
+template <typename Alg, uint32_t StaticCols, uint32_t ExpStaticCols>
+PTO_INTERNAL void WriteDnInterleavedExponentF32(
+    __ubuf__ float* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ float* scalingPtr, unsigned validRows,
+    unsigned validCols)
+{
+    constexpr uint32_t grpSize = 32;
+    constexpr uint32_t elementsPerVL = CCE_VL / sizeof(float);
+    constexpr uint32_t bytesPerInputVL = CCE_VL / 2;
+    constexpr uint32_t scratchRowStride = ((StaticCols + 31) / 32) * 32;
+    uint32_t pairCount = validRows / (2 * grpSize);
+    __ubuf__ uint8_t* expScratch = (__ubuf__ uint8_t*)scalingPtr;
+    __ubuf__ float* scalingSink = (__ubuf__ float*)(expScratch + 2 * scratchRowStride);
+    for (uint32_t pair = 0; pair < pairCount; ++pair) {
+        __ubuf__ float* maxRow0 = maxPtr + pair * 2 * StaticCols;
+        __ubuf__ float* maxRow1 = maxRow0 + StaticCols;
+        for (uint32_t off = 0; off < validCols; off += elementsPerVL) {
+            uint32_t rem = validCols - off;
+            if (rem > elementsPerVL)
+                rem = elementsPerVL;
+            ExtractB8ExponentAndScalingVL<Alg, float>(maxRow0, expScratch, scalingSink, off, rem);
+            ExtractB8ExponentAndScalingVL<Alg, float>(maxRow1, expScratch + scratchRowStride, scalingSink, off, rem);
+        }
+        mem_bar(VST_VLD);
+        for (uint32_t off = 0; off < validCols; off += bytesPerInputVL) {
+            uint32_t rem = validCols - off;
+            if (rem > bytesPerInputVL)
+                rem = bytesPerInputVL;
+            vector_u8 exp0, exp1;
+            vlds(exp0, expScratch, off, UNPK_B8);
+            vlds(exp1, expScratch + scratchRowStride, off, UNPK_B8);
+            MaskReg preg = CreatePredicate<uint16_t>(rem);
+            vshls((vector_u16&)exp1, (vector_u16&)exp1, 8, preg, MODE_ZEROING);
+            vor((vector_u16&)exp0, (vector_u16&)exp0, (vector_u16&)exp1, preg, MODE_ZEROING);
+            uint32_t dstByteOffset = pair * ExpStaticCols + 2 * off;
+            vsts((vector_u16&)exp0, (__ubuf__ uint16_t*)expPtr, dstByteOffset / sizeof(uint16_t), NORM_B16, preg);
+        }
+        mem_bar(VLD_VST);
+    }
+}
+
+// Process two adjacent DN row groups as independent register streams. Besides
+// hiding part of the exponent/scaling dependency chain, this writes the final
+// interleaved E8M0 bytes during stage 2 and avoids a second pass over max.
+template <typename Alg, typename T>
+PTO_INTERNAL void ExtractDnInterleavedPairVL(
+    __ubuf__ T* maxRow0, __ubuf__ T* maxRow1, __ubuf__ T* scalingRow0, __ubuf__ T* scalingRow1,
+    __ubuf__ uint8_t* expPtr, uint32_t off, uint32_t dstByteOffset, uint32_t rem)
+{
+    constexpr bool isOcp = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, OcpF4E2M1Alg>::value;
+    constexpr bool isFp8 = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, NvF8E4M3Alg>::value;
+    if constexpr (isOcp) {
+        using OcpSpec = std::conditional_t<isFp8, OcpMxFp8E4M3Spec, OcpMxFp4E2M1Spec>;
+        B16OcpQuantCtx<OcpSpec> ctx;
+        InitB16OcpQuantCtx(ctx);
+        RegTensor<uint16_t> exp0, exp1, scaling0, scaling1;
+        vector_bool preg0, preg1;
+        ComputeB16OcpExpAndScalingRegs<OcpSpec, T>(ctx, maxRow0, off, rem, exp0, scaling0, preg0);
+        ComputeB16OcpExpAndScalingRegs<OcpSpec, T>(ctx, maxRow1, off, rem, exp1, scaling1, preg1);
+        vsts(scaling0, (__ubuf__ uint16_t*)scalingRow0, off, NORM_B16, preg0);
+        vsts(scaling1, (__ubuf__ uint16_t*)scalingRow1, off, NORM_B16, preg1);
+        StoreDnInterleavedExponentB16(expPtr, exp0, exp1, dstByteOffset, rem);
+    } else {
+        using NvSpec = std::conditional_t<isFp8, NvMxFp8E4M3Spec, NvMxFp4E2M1Spec>;
+        B16NvQuantCtx<NvSpec> ctx;
+        InitB16NvQuantCtx(ctx);
+        vector_s32 exp0, exp1, scaling0, scaling1;
+        MaskReg preg0, preg1;
+        ComputeB16NvExpAndScalingRegs<NvSpec, T>(ctx, maxRow0, off, rem, exp0, scaling0, preg0);
+        ComputeB16NvExpAndScalingRegs<NvSpec, T>(ctx, maxRow1, off, rem, exp1, scaling1, preg1);
+        vsts((vector_u16&)scaling0, (__ubuf__ uint16_t*)scalingRow0, off, PK_B32, preg0);
+        vsts((vector_u16&)scaling1, (__ubuf__ uint16_t*)scalingRow1, off, PK_B32, preg1);
+        StoreDnInterleavedExponentB32(expPtr, exp0, exp1, dstByteOffset, rem);
+    }
+}
+
+template <typename Alg, typename T>
+PTO_INTERNAL void ExtractDnB16ScalingVL(__ubuf__ T* maxPtr, __ubuf__ T* scalingPtr, uint32_t off, uint32_t rem)
+{
+    constexpr bool isOcp = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, OcpF4E2M1Alg>::value;
+    constexpr bool isFp8 = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, NvF8E4M3Alg>::value;
+    if constexpr (isOcp) {
+        using OcpSpec = std::conditional_t<isFp8, OcpMxFp8E4M3Spec, OcpMxFp4E2M1Spec>;
+        B16OcpQuantCtx<OcpSpec> ctx;
+        InitB16OcpQuantCtx(ctx);
+        RegTensor<uint16_t> exp, scaling;
+        vector_bool preg;
+        ComputeB16OcpExpAndScalingRegs<OcpSpec, T>(ctx, maxPtr, off, rem, exp, scaling, preg);
+        vsts(scaling, (__ubuf__ uint16_t*)scalingPtr, off, NORM_B16, preg);
+    } else {
+        using NvSpec = std::conditional_t<isFp8, NvMxFp8E4M3Spec, NvMxFp4E2M1Spec>;
+        B16NvQuantCtx<NvSpec> ctx;
+        InitB16NvQuantCtx(ctx);
+        vector_s32 exp, scaling;
+        MaskReg preg;
+        ComputeB16NvExpAndScalingRegs<NvSpec, T>(ctx, maxPtr, off, rem, exp, scaling, preg);
+        vsts((vector_u16&)scaling, (__ubuf__ uint16_t*)scalingPtr, off, PK_B32, preg);
+    }
+}
+
+template <typename Alg, typename T, uint32_t StaticCols, uint32_t ExpStaticCols>
+PTO_INTERNAL void WriteDnInterleavedExponentB16(
+    __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* /*scalingPtr*/, unsigned validRows, unsigned validCols)
+{
+    constexpr uint32_t grpSize = 32;
+    constexpr bool isOcp = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, OcpF4E2M1Alg>::value;
+    constexpr bool isFp8 = std::is_same<Alg, OcpF8E4M3Alg>::value || std::is_same<Alg, NvF8E4M3Alg>::value;
+    constexpr uint32_t elementsPerVL = isOcp ? CCE_VL / sizeof(T) : CCE_VL / sizeof(float);
+    uint32_t pairCount = validRows / (2 * grpSize);
+    uint32_t vlCount = CeilDivision(validCols, elementsPerVL);
+    for (uint32_t pair = 0; pair < pairCount; ++pair) {
+        __ubuf__ T* maxRow0 = maxPtr + pair * 2 * StaticCols;
+        __ubuf__ T* maxRow1 = maxRow0 + StaticCols;
+        for (uint32_t i = 0; i < vlCount; ++i) {
+            uint32_t off = i * elementsPerVL;
+            uint32_t rem = validCols - off;
+            if (rem > elementsPerVL)
+                rem = elementsPerVL;
+            uint32_t dstByteOffset = pair * ExpStaticCols + 2 * off;
+            if constexpr (isOcp) {
+                using OcpSpec = std::conditional_t<isFp8, OcpMxFp8E4M3Spec, OcpMxFp4E2M1Spec>;
+                B16OcpQuantCtx<OcpSpec> ctx;
+                InitB16OcpQuantCtx<OcpSpec, false>(ctx);
+                RegTensor<uint16_t> exp0, exp1, scaling0, scaling1;
+                vector_bool preg0, preg1;
+                ComputeB16OcpExpAndScalingRegs<OcpSpec, T, false>(ctx, maxRow0, off, rem, exp0, scaling0, preg0);
+                ComputeB16OcpExpAndScalingRegs<OcpSpec, T, false>(ctx, maxRow1, off, rem, exp1, scaling1, preg1);
+                StoreDnInterleavedExponentB16(expPtr, exp0, exp1, dstByteOffset, rem);
+            } else {
+                using NvSpec = std::conditional_t<isFp8, NvMxFp8E4M3Spec, NvMxFp4E2M1Spec>;
+                B16NvQuantCtx<NvSpec> ctx;
+                InitB16NvQuantCtx<NvSpec, false>(ctx);
+                vector_s32 exp0, exp1, scaling0, scaling1;
+                MaskReg preg0, preg1;
+                ComputeB16NvExpAndScalingRegs<NvSpec, T, false>(ctx, maxRow0, off, rem, exp0, scaling0, preg0);
+                ComputeB16NvExpAndScalingRegs<NvSpec, T, false>(ctx, maxRow1, off, rem, exp1, scaling1, preg1);
+                StoreDnInterleavedExponentB32(expPtr, exp0, exp1, dstByteOffset, rem);
+            }
+        }
+    }
+}
+
+template <QuantScaleAlg scale_alg, typename T, typename ReduceVecType>
+PTO_INTERNAL void UpdateDnAbsMax4(
+    RegTensor<T>& value0, RegTensor<T>& value1, RegTensor<T>& value2, RegTensor<T>& value3, ReduceVecType& max0,
+    ReduceVecType& max1, ReduceVecType& max2, ReduceVecType& max3, RegTensor<uint16_t>& absMask, MaskReg& preg)
+{
+    constexpr bool convertFp16ToBf16 = scale_alg == QuantScaleAlg::OCP && std::is_same<T, half>::value;
+    if constexpr (convertFp16ToBf16) {
+        vector_bf16 bf16Value0, bf16Value1, bf16Value2, bf16Value3;
+        RegTensor<uint16_t> abs0, abs1, abs2, abs3;
+        Fp16ToBf16PreserveSpecial(value0, value1, bf16Value0, bf16Value1, preg, preg);
+        Fp16ToBf16PreserveSpecial(value2, value3, bf16Value2, bf16Value3, preg, preg);
+        vand(abs0, (vector_u16&)bf16Value0, absMask, preg, MODE_ZEROING);
+        vand(abs1, (vector_u16&)bf16Value1, absMask, preg, MODE_ZEROING);
+        vand(abs2, (vector_u16&)bf16Value2, absMask, preg, MODE_ZEROING);
+        vand(abs3, (vector_u16&)bf16Value3, absMask, preg, MODE_ZEROING);
+        vmax((vector_u16&)max0, abs0, (vector_u16&)max0, preg, MODE_ZEROING);
+        vmax((vector_u16&)max1, abs1, (vector_u16&)max1, preg, MODE_ZEROING);
+        vmax((vector_u16&)max2, abs2, (vector_u16&)max2, preg, MODE_ZEROING);
+        vmax((vector_u16&)max3, abs3, (vector_u16&)max3, preg, MODE_ZEROING);
+    } else if constexpr (std::is_same<T, float>::value) {
+        vabs((vector_f32&)value0, (vector_f32&)value0, preg);
+        vabs((vector_f32&)value1, (vector_f32&)value1, preg);
+        vabs((vector_f32&)value2, (vector_f32&)value2, preg);
+        vabs((vector_f32&)value3, (vector_f32&)value3, preg);
+        vmax(max0, value0, max0, preg, MODE_ZEROING);
+        vmax(max1, value1, max1, preg, MODE_ZEROING);
+        vmax(max2, value2, max2, preg, MODE_ZEROING);
+        vmax(max3, value3, max3, preg, MODE_ZEROING);
+    } else {
+        RegTensor<uint16_t> abs0, abs1, abs2, abs3;
+        vand(abs0, (vector_u16&)value0, absMask, preg, MODE_ZEROING);
+        vand(abs1, (vector_u16&)value1, absMask, preg, MODE_ZEROING);
+        vand(abs2, (vector_u16&)value2, absMask, preg, MODE_ZEROING);
+        vand(abs3, (vector_u16&)value3, absMask, preg, MODE_ZEROING);
+        vmax((vector_u16&)max0, abs0, (vector_u16&)max0, preg, MODE_ZEROING);
+        vmax((vector_u16&)max1, abs1, (vector_u16&)max1, preg, MODE_ZEROING);
+        vmax((vector_u16&)max2, abs2, (vector_u16&)max2, preg, MODE_ZEROING);
+        vmax((vector_u16&)max3, abs3, (vector_u16&)max3, preg, MODE_ZEROING);
+    }
+}
+
+template <typename T, typename ReduceVecType>
+PTO_INTERNAL void MergeAndStoreDnAbsMax(
+    ReduceVecType& result, ReduceVecType& max0, ReduceVecType& max1, ReduceVecType& max2, ReduceVecType& max3,
+    __ubuf__ T* maxPtr, uint32_t offset, MaskReg& preg)
+{
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    if constexpr (std::is_same<T, float>::value) {
+        vmax(max0, max0, max1, preg, MODE_ZEROING);
+        vmax(max2, max2, max3, preg, MODE_ZEROING);
+        vmax(result, max0, max2, preg, MODE_ZEROING);
+        vsts(result, maxPtr, offset, distValue, preg);
+    } else {
+        vmax((vector_u16&)max0, (vector_u16&)max0, (vector_u16&)max1, preg, MODE_ZEROING);
+        vmax((vector_u16&)max2, (vector_u16&)max2, (vector_u16&)max3, preg, MODE_ZEROING);
+        vmax((vector_u16&)result, (vector_u16&)max0, (vector_u16&)max2, preg, MODE_ZEROING);
+        vsts((vector_u16&)result, (__ubuf__ uint16_t*)maxPtr, offset, NORM_B16, preg);
+    }
+}
+
+template <QuantScaleAlg scale_alg, typename T, uint32_t StaticCols>
 PTO_INTERNAL void AbsReduceMax_DN(__ubuf__ T* srcPtr, __ubuf__ T* maxPtr, unsigned validRows, unsigned validCols)
 {
     constexpr uint32_t grpSize = 32;
@@ -2585,14 +2855,16 @@ PTO_INTERNAL void AbsReduceMax_DN(__ubuf__ T* srcPtr, __ubuf__ T* maxPtr, unsign
     uint32_t num_grps_per_col = CeilDivision(validRows, grpSize);
     constexpr uint32_t num_vls_inner_loop = 4;
     uint32_t inner_loop_iters = CeilDivision(grpSize, num_vls_inner_loop);
-    static constexpr auto distValue =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-    // vabs expects a floating-point vector type. bf16
-    // registers are represented as vector_f16 on this
-    // hardware, so cast accordingly; fp32 uses vector_f32.
-    using AbsVecType = std::conditional_t<std::is_same<T, float>::value, vector_f32, vector_f16>;
+    // OCP FP16 follows the tail-axis path: convert to BF16 before reducing
+    // group maxima, because stage 2 interprets max/scaling storage as BF16 bits.
+    constexpr bool convertFp16ToBf16 = scale_alg == QuantScaleAlg::OCP && std::is_same<T, half>::value;
+    using ReduceVecType = std::conditional_t<convertFp16ToBf16, vector_bf16, RegTensor<T>>;
     RegTensor<T> vreg_0, vreg_1, vreg_2, vreg_3;
-    RegTensor<T> vreg_max, vreg_max_0, vreg_max_1, vreg_max_2, vreg_max_3;
+    ReduceVecType vreg_max, vreg_max_0, vreg_max_1, vreg_max_2, vreg_max_3;
+    RegTensor<uint16_t> vu16_abs_mask;
+    // Match ND: clear the sign bit and compare raw B16 bits so floating vmax cannot consume NaN/Inf.
+    if constexpr (!std::is_same<T, float>::value)
+        vbr(vu16_abs_mask, (uint16_t)0x7FFF);
     uint32_t preg_cols = validCols;
     for (uint32_t i = 0; i < num_vls_per_row; ++i) {
         uint32_t vl_start = i * elementsPerVL;
@@ -2610,25 +2882,19 @@ PTO_INTERNAL void AbsReduceMax_DN(__ubuf__ T* srcPtr, __ubuf__ T* maxPtr, unsign
                 vlds(vreg_1, srcPtr + offset, 1 * StaticCols, NORM);
                 vlds(vreg_2, srcPtr + offset, 2 * StaticCols, NORM);
                 vlds(vreg_3, srcPtr + offset, 3 * StaticCols, NORM);
-                vabs((AbsVecType&)vreg_0, (AbsVecType&)vreg_0, preg);
-                vabs((AbsVecType&)vreg_1, (AbsVecType&)vreg_1, preg);
-                vabs((AbsVecType&)vreg_2, (AbsVecType&)vreg_2, preg);
-                vabs((AbsVecType&)vreg_3, (AbsVecType&)vreg_3, preg);
-                vmax(vreg_max_0, vreg_0, vreg_max_0, preg, MODE_ZEROING);
-                vmax(vreg_max_1, vreg_1, vreg_max_1, preg, MODE_ZEROING);
-                vmax(vreg_max_2, vreg_2, vreg_max_2, preg, MODE_ZEROING);
-                vmax(vreg_max_3, vreg_3, vreg_max_3, preg, MODE_ZEROING);
+                UpdateDnAbsMax4<scale_alg, T>(
+                    vreg_0, vreg_1, vreg_2, vreg_3, vreg_max_0, vreg_max_1, vreg_max_2, vreg_max_3, vu16_abs_mask,
+                    preg);
             }
-            vmax(vreg_max_0, vreg_max_0, vreg_max_1, preg, MODE_ZEROING);
-            vmax(vreg_max_2, vreg_max_2, vreg_max_3, preg, MODE_ZEROING);
-            vmax(vreg_max, vreg_max_0, vreg_max_2, preg, MODE_ZEROING);
-            vsts(vreg_max, maxPtr, j * StaticCols + i * elementsPerVL, distValue, preg);
+            MergeAndStoreDnAbsMax<T>(
+                vreg_max, vreg_max_0, vreg_max_1, vreg_max_2, vreg_max_3, maxPtr, j * StaticCols + i * elementsPerVL,
+                preg);
         }
     }
 }
 
 // fp16 & bf16
-template <typename T, uint32_t StaticCols>
+template <typename T, uint32_t SrcStaticCols, uint32_t DstStaticCols>
 PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(
     __ubuf__ T* srcPtr, __ubuf__ T* scalingPtr, __ubuf__ uint8_t* dstPtr, unsigned validRows, unsigned validCols)
 {
@@ -2636,7 +2902,8 @@ PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(
     constexpr uint32_t b16ElementsPerVL = CCE_VL / sizeof(T); // B16 elements per VL
     uint32_t num_vls_per_row = CeilDivision((uint32_t)validCols, b16ElementsPerVL);
     uint32_t num_grps_per_col = CeilDivision((uint32_t)validRows, grpSize);
-    RegTensor<T> vb16_scaling, vb16_input;
+    vector_bf16 vb16_scaling;
+    RegTensor<T> vb16_input;
     vector_f32 vb32_scaling_even, vb32_scaling_odd;
     vector_f32 vb32_input_even, vb32_input_odd;
     vector_f8e4m3 vb8_p0, vb8_p1, vb8_out;
@@ -2650,12 +2917,14 @@ PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(
         MaskReg preg_b32 = CreatePredicate<float>(preg_cols_b32);
         for (uint32_t j = 0; j < num_grps_per_col; ++j) {
             uint32_t row_base = j * grpSize;
-            vlds(vb16_scaling, scalingPtr, vl_start + j * StaticCols, NORM);
+            // Stage 2 stores reciprocal scaling as BF16 bits even when T is half.
+            // Load through u16 so vcvt uses BF16-to-FP32 conversion semantics.
+            vlds((vector_u16&)vb16_scaling, (__ubuf__ uint16_t*)scalingPtr, vl_start + j * SrcStaticCols, NORM);
             vcvt(vb32_scaling_even, vb16_scaling, preg_b16, PART_EVEN);
             vcvt(vb32_scaling_odd, vb16_scaling, preg_b16, PART_ODD);
             for (uint32_t k = 0; k < grpSize; ++k) {
                 uint32_t r = row_base + k;
-                vlds(vb16_input, srcPtr, r * StaticCols + vl_start, NORM);
+                vlds(vb16_input, srcPtr, r * SrcStaticCols + vl_start, NORM);
                 vcvt(vb32_input_even, vb16_input, preg_b16, PART_EVEN);
                 vcvt(vb32_input_odd, vb16_input, preg_b16, PART_ODD);
                 vmul(vb32_input_even, vb32_input_even, vb32_scaling_even, preg_b32, MODE_ZEROING);
@@ -2663,7 +2932,7 @@ PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(
                 vcvt(vb8_p0, vb32_input_even, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
                 vcvt(vb8_p1, vb32_input_odd, preg_b32, ROUND_R, RS_ENABLE, PART_P1);
                 vor(vb8_out, vb8_p0, vb8_p1, preg_b8);
-                uint32_t dst_byte_offset = r * StaticCols + vl_start;
+                uint32_t dst_byte_offset = r * DstStaticCols + vl_start;
                 vsts((vector_u32&)vb8_out, (__ubuf__ uint32_t*)dstPtr, dst_byte_offset / 4, PK_B32, preg_b8);
             }
         }
@@ -2671,7 +2940,7 @@ PTO_INTERNAL void calcQuantizedFP8Values_DN_B16(
 }
 
 // fp32
-template <uint32_t StaticCols>
+template <uint32_t SrcStaticCols, uint32_t DstStaticCols>
 PTO_INTERNAL void calcQuantizedFP8Values_DN_float(
     __ubuf__ float* srcPtr, __ubuf__ float* scalingPtr, __ubuf__ uint8_t* dstPtr, unsigned validRows,
     unsigned validCols)
@@ -2684,19 +2953,21 @@ PTO_INTERNAL void calcQuantizedFP8Values_DN_float(
     vector_f8e4m3 vb8_out;
     for (uint32_t i = 0; i < num_vls_per_row; ++i) {
         uint32_t vl_start = i * b32ElementsPerVL;
-        uint32_t preg_cols_b32 = validCols;
-        uint32_t preg_cols_b8 = validCols * 4;
+        uint32_t preg_cols_b32 = validCols - vl_start;
+        if (preg_cols_b32 > b32ElementsPerVL)
+            preg_cols_b32 = b32ElementsPerVL;
+        uint32_t preg_cols_b8 = preg_cols_b32 * 4;
         MaskReg preg_b32 = CreatePredicate<float>(preg_cols_b32);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_cols_b8);
         for (uint32_t j = 0; j < num_grps_per_col; ++j) {
             uint32_t row_base = j * grpSize;
-            vlds(vf32_scaling, scalingPtr, vl_start + j * StaticCols, NORM);
+            vlds(vf32_scaling, scalingPtr, vl_start + j * SrcStaticCols, NORM);
             for (uint32_t k = 0; k < grpSize; ++k) {
                 uint32_t r = row_base + k;
-                vlds(vf32_input, srcPtr, r * StaticCols + vl_start, NORM);
+                vlds(vf32_input, srcPtr, r * SrcStaticCols + vl_start, NORM);
                 vmul(vf32_input, vf32_input, vf32_scaling, preg_b32, MODE_ZEROING);
                 vcvt(vb8_out, vf32_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-                vsts((vector_u8&)vb8_out, dstPtr, r * StaticCols + vl_start, PK4_B32, preg_b8);
+                vsts((vector_u8&)vb8_out, dstPtr, r * DstStaticCols + vl_start, PK4_B32, preg_b8);
             }
         }
     }
@@ -2739,41 +3010,52 @@ PTO_INTERNAL void calcQuantizedFP4E2M1Values_DN_Bf16(
     }
 }
 
-// Per-row FP16->MXFP4 E2M1 DN quantization. The fp16 input is widened to fp32,
-// multiplied by the pre-widened EVEN/ODD fp32 scaling, rounded back to bf16,
-// NaN-saturated, and packed to FP4.
-template <uint32_t StaticCols>
+// Per-row FP16->MXFP4 E2M1 DN quantization. Keep the scaled values in FP32 and
+// use the same E2M1 magic-rounding path as the tail-axis implementation. An
+// intermediate FP32->BF16 conversion changes E2M1 tie decisions.
+template <uint32_t DstStaticRows, uint32_t StaticCols>
 PTO_INTERNAL void calcQuantizedFP4E2M1Values_DN_Fp16_Row(
     __ubuf__ half* srcPtr, __ubuf__ uint8_t* dstPtr, vector_f32& vf32_scaling_even, vector_f32& vf32_scaling_odd,
-    uint32_t r, uint32_t vl_start, MaskReg& preg_b16, MaskReg& preg_b32)
+    vector_u8& packIndex, uint32_t r, uint32_t vl_start, uint32_t packedBytes, MaskReg& preg_b16, MaskReg& preg_b32)
 {
     RegTensor<half> vf16_input;
-    vector_bf16 vb16_even, vb16_odd, vb16_merged;
     vector_f32 vf32_even, vf32_odd;
-    vector_f4e2m1x2 vfp4;
+    vector_s32 vs32_even_code, vs32_odd_code;
+    vector_u8 vu8_packed;
 
     vlds(vf16_input, srcPtr, r * StaticCols + vl_start, NORM);
     vcvt(vf32_even, (vector_f16&)vf16_input, preg_b16, PART_EVEN);
     vcvt(vf32_odd, (vector_f16&)vf16_input, preg_b16, PART_ODD);
     vmul(vf32_even, vf32_even, vf32_scaling_even, preg_b32, MODE_ZEROING);
     vmul(vf32_odd, vf32_odd, vf32_scaling_odd, preg_b32, MODE_ZEROING);
-    vcvt(vb16_even, vf32_even, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
-    vcvt(vb16_odd, vf32_odd, preg_b32, ROUND_R, RS_ENABLE, PART_ODD);
-    vor(vb16_merged, vb16_even, vb16_odd, preg_b16, MODE_ZEROING);
-    SaturateBf16NaNToPosInf((vector_u16&)vb16_merged, preg_b16);
-    vcvt(vfp4, vb16_merged, preg_b16, ROUND_R, PART_P0);
+    CalcE2M1SignedCodeI32(vs32_even_code, vf32_even, preg_b32);
+    CalcE2M1SignedCodeI32(vs32_odd_code, vf32_odd, preg_b32);
+    PackE2M1SignedCodeBytes(vu8_packed, vs32_even_code, vs32_odd_code, packIndex, preg_b32);
     uint32_t dst_byte_offset = r * StaticCols + vl_start;
-    vsts((RegTensor<uint8_t>&)vfp4, dstPtr, dst_byte_offset / 2, PK4_B32, preg_b16);
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(packedBytes);
+    if constexpr ((StaticCols / 2) % 32 == 0) {
+        vsts(vu8_packed, dstPtr, dst_byte_offset / 2, NORM_B8, preg_b8);
+    } else {
+        // The packed row stride can be 16-byte aligned but not 32-byte aligned
+        // (case 286: 480 FP16 values -> 240 FP4 bytes). RV_VSTS rejects those
+        // odd-row addresses. First pack to the unused aligned half of the FP4
+        // tile, then copy the packed bytes with the unaligned-store stream.
+        __ubuf__ uint8_t* scratchPtr = dstPtr + DstStaticRows * StaticCols / 2;
+        vsts(vu8_packed, scratchPtr, 0, NORM_B8, preg_b8);
+        mem_bar(VST_VLD);
+        RegTensor<uint8_t> packed;
+        vlds(packed, scratchPtr, 0, NORM);
+        UnalignReg ureg;
+        __ubuf__ uint8_t* writePtr = dstPtr + dst_byte_offset / 2;
+        vstus(ureg, packedBytes, packed, writePtr, POST_UPDATE);
+        vstas(ureg, writePtr, 0, POST_UPDATE);
+    }
 }
 
-// MXFP4 E2M1 DN stage 3 for FP16. fp16 must be scaled in
-// fp32 to keep mantissa precision (user requirement), and
-// there is no fp32->fp4 vcvt, so the path is fp16->fp32
-// (EVEN/ODD) -> fp32*scaling_fp32 -> fp32->bf16 (ROUND_R)
-// via vintlv merge -> NaN->+Inf -> vcvt bf16->fp4 (PART_P0)
-// -> PK4_B32. Scaling is stored as bf16; it is widened to
-// fp32 once per group (hoisted).
-template <uint32_t StaticCols>
+// MXFP4 E2M1 DN stage 3 for FP16. Scaling is stored as BF16 and widened
+// to FP32 once per group; the FP32 product goes directly through E2M1 magic
+// rounding and software nibble packing.
+template <uint32_t DstStaticRows, uint32_t StaticCols>
 PTO_INTERNAL void calcQuantizedFP4E2M1Values_DN_Fp16(
     __ubuf__ half* srcPtr, __ubuf__ half* scalingPtr, __ubuf__ uint8_t* dstPtr, unsigned validRows, unsigned validCols)
 {
@@ -2783,10 +3065,18 @@ PTO_INTERNAL void calcQuantizedFP4E2M1Values_DN_Fp16(
     uint32_t num_grps_per_col = CeilDivision((uint32_t)validRows, grpSize);
     vector_bf16 vb16_scaling;
     vector_f32 vf32_scaling_even, vf32_scaling_odd;
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+    vector_u8 packIndex;
+    vci((RegTensor<int8_t>&)packIndex, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t>&)packIndex, (RegTensor<int16_t>&)packIndex, (int16_t)4, preg_idx);
     uint32_t preg_cols_b16 = validCols;
     uint32_t preg_cols_b32 = validCols;
     for (uint32_t i = 0; i < num_vls_per_row; ++i) {
         uint32_t vl_start = i * b16ElementsPerVL;
+        uint32_t remaining = validCols > vl_start ? validCols - vl_start : 0;
+        if (remaining > b16ElementsPerVL)
+            remaining = b16ElementsPerVL;
+        uint32_t packedBytes = CeilDivision(remaining, 2U);
         MaskReg preg_b16 = CreatePredicate<half>(preg_cols_b16);
         MaskReg preg_b32 = CreatePredicate<float>(preg_cols_b32);
         for (uint32_t j = 0; j < num_grps_per_col; ++j) {
@@ -2798,50 +3088,130 @@ PTO_INTERNAL void calcQuantizedFP4E2M1Values_DN_Fp16(
             vcvt(vf32_scaling_odd, vb16_scaling, preg_b16, PART_ODD);
             for (uint32_t k = 0; k < grpSize; ++k) {
                 uint32_t r = row_base + k;
-                calcQuantizedFP4E2M1Values_DN_Fp16_Row<StaticCols>(
-                    srcPtr, dstPtr, vf32_scaling_even, vf32_scaling_odd, r, vl_start, preg_b16, preg_b32);
+                calcQuantizedFP4E2M1Values_DN_Fp16_Row<DstStaticRows, StaticCols>(
+                    srcPtr, dstPtr, vf32_scaling_even, vf32_scaling_odd, packIndex, r, vl_start, packedBytes, preg_b16,
+                    preg_b32);
             }
         }
     }
 }
 
-template <QuantScaleAlg scale_alg, typename T, unsigned StaticCols>
+PTO_INTERNAL uint32_t GetDnRemainingCols(uint32_t validCols, uint32_t off, uint32_t elementsPerVL)
+{
+    uint32_t remaining = validCols - off;
+    return remaining > elementsPerVL ? elementsPerVL : remaining;
+}
+
+template <typename Alg, typename T>
+PTO_INTERNAL void ExtractDnScalingVL(__ubuf__ T* maxPtr, __ubuf__ T* scalingPtr, uint32_t off, uint32_t remaining)
+{
+    if constexpr (std::is_same<T, float>::value)
+        ExtractDnF32ScalingVL<Alg>(maxPtr, scalingPtr, off, remaining);
+    else
+        ExtractDnB16ScalingVL<Alg, T>(maxPtr, scalingPtr, off, remaining);
+}
+
+template <typename Alg, typename T, uint32_t StaticCols>
+PTO_INTERNAL void ExtractDnLinearExponentAndScaling(
+    __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr, uint32_t validRows, uint32_t validCols,
+    uint32_t elementsPerVL)
+{
+    constexpr uint32_t grpSize = 32;
+    uint32_t vlCount = CeilDivision(validCols, elementsPerVL);
+    uint32_t groupCount = CeilDivision(validRows, grpSize);
+    for (uint32_t group = 0; group < groupCount; ++group) {
+        __ubuf__ T* maxRow = maxPtr + group * StaticCols;
+        __ubuf__ uint8_t* expRow = expPtr + group * StaticCols;
+        __ubuf__ T* scalingRow = scalingPtr + group * StaticCols;
+        for (uint32_t vl = 0; vl < vlCount; ++vl) {
+            uint32_t off = vl * elementsPerVL;
+            uint32_t remaining = GetDnRemainingCols(validCols, off, elementsPerVL);
+            ExtractB8ExponentAndScalingVL<Alg, T>(maxRow, expRow, scalingRow, off, remaining);
+        }
+    }
+}
+
+template <typename Alg, typename T, uint32_t StaticCols, uint32_t ExpStaticCols>
+PTO_INTERNAL void ExtractDnInterleavedExponentAndScaling(
+    __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr, uint32_t validRows, uint32_t validCols,
+    uint32_t elementsPerVL)
+{
+    constexpr uint32_t grpSize = 32;
+    uint32_t vlCount = CeilDivision(validCols, elementsPerVL);
+    uint32_t groupCount = CeilDivision(validRows, grpSize);
+    if constexpr (std::is_same<T, float>::value || std::is_same<T, half>::value) {
+        for (uint32_t group = 0; group < groupCount; ++group) {
+            __ubuf__ T* maxRow = maxPtr + group * StaticCols;
+            __ubuf__ T* scalingRow = scalingPtr + group * StaticCols;
+            for (uint32_t vl = 0; vl < vlCount; ++vl) {
+                uint32_t off = vl * elementsPerVL;
+                uint32_t remaining = GetDnRemainingCols(validCols, off, elementsPerVL);
+                ExtractDnScalingVL<Alg, T>(maxRow, scalingRow, off, remaining);
+            }
+        }
+    } else {
+        uint32_t pairCount = groupCount / 2;
+        for (uint32_t pair = 0; pair < pairCount; ++pair) {
+            __ubuf__ T* maxRow0 = maxPtr + pair * 2 * StaticCols;
+            __ubuf__ T* maxRow1 = maxRow0 + StaticCols;
+            __ubuf__ T* scalingRow0 = scalingPtr + pair * 2 * StaticCols;
+            __ubuf__ T* scalingRow1 = scalingRow0 + StaticCols;
+            for (uint32_t vl = 0; vl < vlCount; ++vl) {
+                uint32_t off = vl * elementsPerVL;
+                uint32_t remaining = GetDnRemainingCols(validCols, off, elementsPerVL);
+                ExtractDnInterleavedPairVL<Alg, T>(
+                    maxRow0, maxRow1, scalingRow0, scalingRow1, expPtr, off, pair * ExpStaticCols + 2 * off, remaining);
+            }
+        }
+    }
+}
+
+template <typename Alg, bool Interleave, typename T, uint32_t StaticCols, uint32_t ExpStaticCols>
+PTO_INTERNAL void ExtractDnExponentAndScaling(
+    __ubuf__ T* maxPtr, __ubuf__ uint8_t* expPtr, __ubuf__ T* scalingPtr, uint32_t validRows, uint32_t validCols,
+    uint32_t elementsPerVL)
+{
+    if constexpr (Interleave)
+        ExtractDnInterleavedExponentAndScaling<Alg, T, StaticCols, ExpStaticCols>(
+            maxPtr, expPtr, scalingPtr, validRows, validCols, elementsPerVL);
+    else
+        ExtractDnLinearExponentAndScaling<Alg, T, StaticCols>(
+            maxPtr, expPtr, scalingPtr, validRows, validCols, elementsPerVL);
+}
+
+template <
+    QuantScaleAlg scale_alg, bool interleave, typename T, unsigned SrcStaticCols, unsigned DstStaticCols,
+    unsigned ExpStaticCols>
 PTO_INTERNAL void TQuant_MXFP8_DN(
     __ubuf__ T* srcPtr, __ubuf__ uint8_t* expPtr, __ubuf__ uint8_t* dstPtr, __ubuf__ T* maxPtr, __ubuf__ T* scalingPtr,
     unsigned validRows, unsigned validCols)
 {
-    constexpr uint32_t grpSize = 32;
-    constexpr uint32_t elementsPerVL = CCE_VL / sizeof(T);
-    AbsReduceMax_DN<T, StaticCols>(srcPtr, maxPtr, validRows, validCols);
+    using Alg = std::conditional_t<scale_alg == QuantScaleAlg::NV, NvF8E4M3Alg, OcpF8E4M3Alg>;
+    constexpr uint32_t elementsPerVL =
+        (scale_alg == QuantScaleAlg::NV && sizeof(T) == sizeof(uint16_t)) ? CCE_VL / sizeof(float) : CCE_VL / sizeof(T);
+    AbsReduceMax_DN<scale_alg, T, SrcStaticCols>(srcPtr, maxPtr, validRows, validCols);
     mem_bar(VST_VLD);
-    // DN-aware 2D extraction: each row-group j owns one row
-    // of width StaticCols in the max/scaling/exp tiles.
-    // Process each row as a 1D VL sequence so all offsets
-    // stay aligned while preserving the 2D tile shape.
-    uint32_t num_grps_per_col = CeilDivision((uint32_t)validRows, grpSize);
-    uint32_t num_vls_per_row = CeilDivision((uint32_t)validCols, elementsPerVL);
-    for (uint32_t j = 0; j < num_grps_per_col; ++j) {
-        __ubuf__ T* maxRowPtr = maxPtr + j * StaticCols;
-        __ubuf__ uint8_t* expRowPtr = expPtr + j * StaticCols;
-        __ubuf__ T* scalingRowPtr = scalingPtr + j * StaticCols;
-        for (uint32_t i = 0; i < num_vls_per_row; ++i) {
-            uint32_t off = i * elementsPerVL;
-            uint32_t rem = (validCols > off) ? (validCols - off) : 0;
-            if (rem > elementsPerVL)
-                rem = elementsPerVL;
-            ExtractB8ExponentAndScalingVL<OcpF8E4M3Alg, T>(maxRowPtr, expRowPtr, scalingRowPtr, off, rem);
-        }
-    }
+    ExtractDnExponentAndScaling<Alg, interleave, T, SrcStaticCols, ExpStaticCols>(
+        maxPtr, expPtr, scalingPtr, validRows, validCols, elementsPerVL);
     mem_bar(VST_VLD);
     if constexpr (std::is_same<T, float>::value)
-        calcQuantizedFP8Values_DN_float<StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+        calcQuantizedFP8Values_DN_float<SrcStaticCols, DstStaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
     else
-        calcQuantizedFP8Values_DN_B16<T, StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+        calcQuantizedFP8Values_DN_B16<T, SrcStaticCols, DstStaticCols>(
+            srcPtr, scalingPtr, dstPtr, validRows, validCols);
+    if constexpr (interleave && std::is_same<T, float>::value) {
+        mem_bar(VST_VLD);
+        WriteDnInterleavedExponentF32<Alg, SrcStaticCols, ExpStaticCols>(
+            maxPtr, expPtr, scalingPtr, validRows, validCols);
+    } else if constexpr (interleave && std::is_same<T, half>::value) {
+        WriteDnInterleavedExponentB16<Alg, T, SrcStaticCols, ExpStaticCols>(
+            maxPtr, expPtr, scalingPtr, validRows, validCols);
+    }
 }
 
 template <
-    QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-    typename TileDataScaling>
+    QuantScaleAlg scale_alg, bool interleave, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
 __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl_DN(
     typename TileDataOut::TileDType __out__ dst, typename TileDataExp::TileDType __out__ exp,
     typename TileDataMax::TileDType __out__ max, typename TileDataScaling::TileDType __out__ scaling,
@@ -2863,47 +3233,42 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl_DN(
     {
         ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
         mem_bar(VST_VLD);
-        TQuant_MXFP8_DN<scale_alg, T, TileDataSrc::Cols>(
+        TQuant_MXFP8_DN<scale_alg, interleave, T, TileDataSrc::Cols, TileDataOut::Cols, TileDataExp::Cols>(
             srcPtr, (__ubuf__ uint8_t*)expPtr, (__ubuf__ uint8_t*)dstPtr, maxPtr, scalingPtr, validRows, validCols);
     }
 }
 
-// MXFP4 E2M1 DN: same 3-stage shape as MXFP8 DN but OCP E2M1
+// MXFP4 E2M1 DN: same 3-stage shape as MXFP8 DN with OCP or NV scaling.
 // exponent extraction (OcpF4E2M1Alg -> maxExp 0x0100) and
 // FP4 stage-3 quantize. scaling is bf16.
-template <QuantScaleAlg scale_alg, typename T, unsigned StaticCols>
+template <
+    QuantScaleAlg scale_alg, bool interleave, typename T, unsigned DstStaticRows, unsigned StaticCols,
+    unsigned ExpStaticCols>
 PTO_INTERNAL void TQuant_MXFP4_E2M1_DN(
     __ubuf__ T* srcPtr, __ubuf__ uint8_t* expPtr, __ubuf__ uint8_t* dstPtr, __ubuf__ T* maxPtr, __ubuf__ T* scalingPtr,
     unsigned validRows, unsigned validCols)
 {
-    constexpr uint32_t grpSize = 32;
-    constexpr uint32_t elementsPerVL = CCE_VL / sizeof(T);
-    AbsReduceMax_DN<T, StaticCols>(srcPtr, maxPtr, validRows, validCols);
+    using Alg = std::conditional_t<scale_alg == QuantScaleAlg::NV, NvF4E2M1Alg, OcpF4E2M1Alg>;
+    constexpr uint32_t elementsPerVL =
+        (scale_alg == QuantScaleAlg::NV && sizeof(T) == sizeof(uint16_t)) ? CCE_VL / sizeof(float) : CCE_VL / sizeof(T);
+    AbsReduceMax_DN<scale_alg, T, StaticCols>(srcPtr, maxPtr, validRows, validCols);
     mem_bar(VST_VLD);
-    uint32_t num_grps_per_col = CeilDivision((uint32_t)validRows, grpSize);
-    uint32_t num_vls_per_row = CeilDivision((uint32_t)validCols, elementsPerVL);
-    for (uint32_t j = 0; j < num_grps_per_col; ++j) {
-        __ubuf__ T* maxRowPtr = maxPtr + j * StaticCols;
-        __ubuf__ uint8_t* expRowPtr = expPtr + j * StaticCols;
-        __ubuf__ T* scalingRowPtr = scalingPtr + j * StaticCols;
-        for (uint32_t i = 0; i < num_vls_per_row; ++i) {
-            uint32_t off = i * elementsPerVL;
-            uint32_t rem = (validCols > off) ? (validCols - off) : 0;
-            if (rem > elementsPerVL)
-                rem = elementsPerVL;
-            ExtractB8ExponentAndScalingVL<OcpF4E2M1Alg, T>(maxRowPtr, expRowPtr, scalingRowPtr, off, rem);
-        }
-    }
+    ExtractDnExponentAndScaling<Alg, interleave, T, StaticCols, ExpStaticCols>(
+        maxPtr, expPtr, scalingPtr, validRows, validCols, elementsPerVL);
     mem_bar(VST_VLD);
     if constexpr (std::is_same<T, bfloat16_t>::value)
         calcQuantizedFP4E2M1Values_DN_Bf16<StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
     else
-        calcQuantizedFP4E2M1Values_DN_Fp16<StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+        calcQuantizedFP4E2M1Values_DN_Fp16<DstStaticRows, StaticCols>(srcPtr, scalingPtr, dstPtr, validRows, validCols);
+    if constexpr (interleave && std::is_same<T, half>::value) {
+        WriteDnInterleavedExponentB16<Alg, T, StaticCols, ExpStaticCols>(
+            maxPtr, expPtr, scalingPtr, validRows, validCols);
+    }
 }
 
 template <
-    QuantScaleAlg scale_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-    typename TileDataScaling>
+    QuantScaleAlg scale_alg, bool interleave, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
 __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl_DN(
     typename TileDataOut::TileDType __out__ dst, typename TileDataExp::TileDType __out__ exp,
     typename TileDataMax::TileDType __out__ max, typename TileDataScaling::TileDType __out__ scaling,
@@ -2926,7 +3291,7 @@ __tf__ PTO_INTERNAL void TQuant_MXFP4_E2M1_Impl_DN(
     {
         ZeroPadSourceTile<T, TileDataSrc::Cols>(srcPtr, validRows, validCols);
         mem_bar(VST_VLD);
-        TQuant_MXFP4_E2M1_DN<scale_alg, T, TileDataSrc::Cols>(
+        TQuant_MXFP4_E2M1_DN<scale_alg, interleave, T, TileDataOut::Rows, TileDataSrc::Cols, TileDataExp::Cols>(
             srcPtr, (__ubuf__ uint8_t*)expPtr, (__ubuf__ uint8_t*)dstPtr, maxPtr, scalingPtr, validRows, validCols);
     }
 }
@@ -3067,14 +3432,15 @@ PTO_INTERNAL void TQUANT_IMPL(
 
 // Generic grp_axis + mx_alg dispatch (5-tile). grp_axis=0
 // (DN) calls the *_Impl_DN pipeline, grp_axis=1 (ND) calls
-// the scale-alg ND pipeline. The DN caller reshapes the
-// exponent via TMOV(e8DnTile, exp) after TQUANT. All
+// the scale-alg ND pipeline. For DN, interleave=true writes
+// E8M0 directly as [groupPair, col, groupInPair], matching
+// aclnnDynamicMxQuant's non-tail-axis output. All
 // validation lives here (impl layer), not in the
 // pto_instr.hpp wrapper. The single MxQuantAlg tag is
 // decoded inline (no helper functions) to a (QuantType,
 // QuantScaleAlg) pair.
 template <
-    int grp_axis, MxQuantAlg mx_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    int grp_axis, MxQuantAlg mx_alg, bool interleave, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
     typename TileDataMax, typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
     TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
@@ -3087,20 +3453,46 @@ PTO_INTERNAL void TQUANT_IMPL(
     constexpr QuantScaleAlg scale_alg = isNv ? QuantScaleAlg::NV : QuantScaleAlg::OCP;
     CheckTQuantMxTypes<quant_type, T, OutT>();
     if constexpr (grp_axis == 0) {
+        if constexpr (interleave) {
+            constexpr uint32_t interleavedExpRows = (TileDataSrc::Rows + 63) / 64;
+            constexpr uint32_t interleavedExpCols = ((TileDataSrc::Cols * 2 + 31) / 32) * 32;
+            PTO_STATIC_ASSERT(TileDataSrc::Rows % 64 == 0, "Fix: DN interleave requires 64-aligned tile rows.");
+            PTO_STATIC_ASSERT(
+                TileDataExp::Rows == interleavedExpRows && TileDataExp::Cols == interleavedExpCols,
+                "Fix: DN interleaved exponent tile shape must be [ceil(M/64), align32(2*N)].");
+            PTO_ASSERT(src.GetValidRow() % 64 == 0, "Fix: DN interleave requires 64-aligned valid rows.");
+            PTO_ASSERT(
+                exp->GetValidRow() == CeilDivision(src.GetValidRow(), 64U) &&
+                    exp->GetValidCol() == src.GetValidCol() * 2,
+                "Fix: DN interleaved exponent valid shape must be [ceil(validM/64), 2*validN].");
+        }
         if constexpr (quant_type == QuantType::MXFP8) {
-            TQuant_MXFP8_Impl_DN<scale_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+            TQuant_MXFP8_Impl_DN<
+                scale_alg, interleave, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
                 dst.data(), exp->data(), max->data(), scaling->data(), src.data(), src.GetValidRow(),
                 src.GetValidCol());
         } else {
-            TQuant_MXFP4_E2M1_Impl_DN<scale_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+            TQuant_MXFP4_E2M1_Impl_DN<
+                scale_alg, interleave, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
                 dst.data(), exp->data(), max->data(), scaling->data(), src.data(), src.GetValidRow(),
                 src.GetValidCol());
         }
     } else {
         static_assert(grp_axis == 1, "Fix: grp_axis must be 0 (DN) or 1 (ND).");
+        static_assert(!interleave, "Fix: exponent interleave is only supported for DN (grp_axis=0).");
         TQUANT_IMPL<quant_type, scale_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
             dst, src, exp, max, scaling);
     }
+}
+
+template <
+    int grp_axis, MxQuantAlg mx_alg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
+{
+    TQUANT_IMPL<grp_axis, mx_alg, false, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+        dst, src, exp, max, scaling);
 }
 } // namespace pto
 #endif // TQUANT_HPP
