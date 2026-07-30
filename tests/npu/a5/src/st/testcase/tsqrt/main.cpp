@@ -75,8 +75,8 @@ void test_tsqrt()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(dstFileSize);
-    std::vector<T> devFinal(dstFileSize);
+    std::vector<T> golden(static_cast<size_t>(dstRow) * static_cast<size_t>(dstCol));
+    std::vector<T> devFinal(static_cast<size_t>(dstRow) * static_cast<size_t>(dstCol));
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
@@ -85,7 +85,9 @@ void test_tsqrt()
         eps = 0.00005f;
     }
     eps = highPrecision ? 0.0000001f : eps;
-    bool ret = ResultCmp(golden, devFinal, eps);
+    auto validGolden = ExtractValid2D(golden, validRow, validCol, dstCol);
+    auto validActual = ExtractValid2D(devFinal, validRow, validCol, dstCol);
+    bool ret = ResultCmp(validGolden, validActual, eps);
 
     EXPECT_TRUE(ret);
 }
