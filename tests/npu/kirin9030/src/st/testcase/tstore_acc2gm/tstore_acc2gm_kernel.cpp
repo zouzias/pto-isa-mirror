@@ -85,7 +85,7 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType* out, __gm__ srcData
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 #endif
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
     } else if constexpr (reluMode == 1) {
@@ -169,7 +169,7 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType* out, __gm__ srcData
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 #endif
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
     } else if constexpr (reluMode == 1) {
@@ -258,7 +258,7 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
         preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
     }
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
 
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar);
@@ -349,7 +349,7 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
         preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
     }
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar);
     } else if constexpr (reluMode == 1) {
@@ -447,7 +447,7 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 #endif
     TMOV(scalingTile, scalingMatTile);
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
     } else if constexpr (reluMode == 1) {
@@ -546,7 +546,7 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 #endif
     TMOV(scalingTile, scalingMatTile);
-    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
     } else if constexpr (reluMode == 1) {
