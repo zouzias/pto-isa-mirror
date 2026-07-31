@@ -102,8 +102,8 @@ void test_gather_index()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<float> golden(dstFileSize);
-    std::vector<float> devFinal(dstFileSize);
+    std::vector<dstT> golden(DSTROW * DSTCOL);
+    std::vector<dstT> devFinal(DSTROW * DSTCOL);
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
@@ -133,6 +133,16 @@ TEST_F(TGATHERTest, case6_f8e5m2_i16_16x128_16x64)
 TEST_F(TGATHERTest, case7_i8_u16_16x128_16x64) { test_gather_index<int8_t, uint16_t, int8_t, 16, 128, 16, 64>(); }
 
 TEST_F(TGATHERTest, case8_u8_u16_16x128_16x64) { test_gather_index<uint8_t, uint16_t, uint8_t, 16, 128, 16, 64>(); }
+
+TEST_F(TGATHERTest, case9_int64_u32_4x16_4x16)
+{
+    test_gather_index<int64_t, uint32_t, int64_t, 4, 16, 4, 16>();
+}
+
+TEST_F(TGATHERTest, case10_uint64_u32_4x16_4x16)
+{
+    test_gather_index<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>();
+}
 
 template <typename T, pto::MaskPattern PATTERN, uint32_t ROW, uint32_t COL, typename dstT = T>
 void test_gather()

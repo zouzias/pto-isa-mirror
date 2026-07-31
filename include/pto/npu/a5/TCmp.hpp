@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "Int64Software.hpp"
 
 namespace pto {
 
@@ -135,7 +136,8 @@ PTO_INTERNAL void TcmpCheck()
 {
     using T = typename SrcTile0::DType;
     static_assert(
-        std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, float> ||
+        std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, int32_t> ||
+            std::is_same_v<T, uint32_t> || std::is_same_v<T, float> ||
             std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, half> ||
             std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, bfloat16_t>,
         "TCMP: Invalid data type.");
@@ -162,7 +164,12 @@ PTO_INTERNAL void TCMP_IMPL(DstTile& dst, SrcTile0& src0, SrcTile1& src1, CmpMod
     using T = typename SrcTile0::DType;
     unsigned validRow = src0.GetValidRow();
     unsigned validCol = src0.GetValidCol();
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 8) {
+        constexpr unsigned dstRowBytes = DstTile::RowStride * sizeof(typename DstTile::DType);
+        Int64CompareSoftware<T, dstRowBytes, SrcTile0::Cols, SrcTile1::Cols>(
+            (__ubuf__ uint8_t*)dst.data(), (__ubuf__ T*)src0.data(), (__ubuf__ T*)src1.data(), cmpMode, validRow,
+            validCol);
+    } else if constexpr (sizeof(T) == 4) {
         TCmp_32B<DstTile, SrcTile0, SrcTile1>(dst.data(), src0.data(), src1.data(), cmpMode, validRow, validCol);
     } else if constexpr ((sizeof(T) == 2) || (sizeof(T) == 1)) {
         TCmp_8B_16B<DstTile, SrcTile0, SrcTile1>(dst.data(), src0.data(), src1.data(), cmpMode, validRow, validCol);
