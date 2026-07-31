@@ -6,7 +6,7 @@
 
 ## Unreleased
 
-- 暂无
+- 将 `cmake/fetch_cann_cmake.cmake` 中的 CANN 工程公共 cmake 仓 tag（`CANN_CMAKE_TAG`）从 `master-042` 升级到 `master-046`。
 
 ### Added
 
@@ -14,7 +14,7 @@
 
 ### Changed
 
-- 暂无
+- 将 `cmake/fetch_cann_cmake.cmake` 中的 `CANN_CMAKE_TAG` 从 `master-042` 升级到 `master-046`，跟随 CANN 工程公共 cmake 仓。上游 `master-046` 将 nlohmann/json 升级到 v3.12.0；本仓自有的 `cmake/third_party/json.cmake` 已固定为 json v3.12.0，无需额外改动。
 
 ### Fixed
 

@@ -6,7 +6,7 @@ The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated 
 
 ## Unreleased
 
-- N/A
+- Bump the shared CANN engineering cmake repo tag (`CANN_CMAKE_TAG`) in `cmake/fetch_cann_cmake.cmake` from `master-042` to `master-046`.
 
 ### Added
 
@@ -14,7 +14,7 @@ The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated 
 
 ### Changed
 
-- N/A
+- Bump `CANN_CMAKE_TAG` in `cmake/fetch_cann_cmake.cmake` from `master-042` to `master-046` to track the shared CANN engineering cmake repo. The upstream `master-046` release upgrades nlohmann/json to v3.12.0; note that this repo's own `cmake/third_party/json.cmake` already pins json v3.12.0, so no further change is required.
 
 ### Fixed
 
