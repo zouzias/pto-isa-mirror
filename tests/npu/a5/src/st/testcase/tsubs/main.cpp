@@ -82,8 +82,8 @@ bool TSubSTestFramework()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(static_cast<size_t>(dstTileRow) * static_cast<size_t>(dstTileCol));
-    std::vector<T> devFinal(static_cast<size_t>(dstTileRow) * static_cast<size_t>(dstTileCol));
+    std::vector<T> golden(dstByteSize);
+    std::vector<T> devFinal(dstByteSize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 

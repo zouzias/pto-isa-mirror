@@ -108,8 +108,8 @@ void test_tpartargmin()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden_val(dstTR * dstTC);
-    std::vector<T> devFinal_val(dstTR * dstTC);
+    std::vector<T> golden_val(dstValFileSize);
+    std::vector<T> devFinal_val(dstValFileSize);
     std::vector<U> golden_idx(dstTR * dstTC);
     std::vector<U> devFinal_idx(dstTR * dstTC);
     ReadFile(GetGoldenDir() + "/golden_val.bin", dstValFileSize, golden_val.data(), dstValFileSize);

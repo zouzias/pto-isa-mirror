@@ -75,8 +75,8 @@ void test_tsqrt()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(static_cast<size_t>(dstRow) * static_cast<size_t>(dstCol));
-    std::vector<T> devFinal(static_cast<size_t>(dstRow) * static_cast<size_t>(dstCol));
+    std::vector<T> golden(dstFileSize);
+    std::vector<T> devFinal(dstFileSize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
