@@ -210,6 +210,8 @@ if __name__ == "__main__":
         TGatherParamsNorm("TGATHERTest.case6_f8e5m2_i16_16x128_16x64", np.int8, np.int16, 16, 128, 16, 64),
         TGatherParamsNorm("TGATHERTest.case7_i8_u16_16x128_16x64", np.int8, np.uint16, 16, 128, 16, 64),
         TGatherParamsNorm("TGATHERTest.case8_u8_u16_16x128_16x64", np.uint8, np.uint16, 16, 128, 16, 64),
+        TGatherParamsNorm("TGATHERTest.case9_int64_u32_4x16_4x16", np.int64, np.uint32, 4, 16, 4, 16),
+        TGatherParamsNorm("TGATHERTest.case10_uint64_u32_4x16_4x16", np.uint64, np.uint32, 4, 16, 4, 16),
         ParamMasked("TGATHERTest.case1_float_P0101", np.float32, np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_float_P1010", np.float32, np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_float_P0001", np.float32, np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001),

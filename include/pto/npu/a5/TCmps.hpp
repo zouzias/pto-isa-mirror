@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 #include "TCmp.hpp"
+#include "Int64Software.hpp"
 
 namespace pto {
 constexpr const uint16_t RESULT_NUM_PER_INT32 = 32;
@@ -122,7 +123,11 @@ __tf__ PTO_INTERNAL OP_NAME(TCMPS) OP_TYPE(element_wise) void TCmps_Scalar(
     constexpr uint32_t srcStride = TileDataSrc::RowStride;
     constexpr uint32_t dstStride = TileDataDst::RowStride * sizeof(typename TileDataDst::DType) / sizeof(uint32_t);
 
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 8) {
+        constexpr unsigned dstRowBytes = TileDataDst::RowStride * sizeof(typename TileDataDst::DType);
+        Int64CompareScalarSoftware<T, dstRowBytes, TileDataSrc::Cols>(
+            (__ubuf__ uint8_t*)dst, src0, src1, mode, validRow, validCol);
+    } else if constexpr (sizeof(T) == 4) {
         TCmps_32B<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
     } else {
         TCmps_8B_16B<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
@@ -209,7 +214,11 @@ __tf__ PTO_INTERNAL OP_NAME(TCMPS) OP_TYPE(element_wise) void TCmps_Tile(
     constexpr uint32_t srcStride = TileDataSrc0::RowStride;
     constexpr uint32_t dstStride = TileDataDst::RowStride * sizeof(typename TileDataDst::DType) / sizeof(uint32_t);
 
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 8) {
+        constexpr unsigned dstRowBytes = TileDataDst::RowStride * sizeof(typename TileDataDst::DType);
+        Int64CompareSoftware<T, dstRowBytes, TileDataSrc0::Cols, TileDataSrc1::Cols>(
+            (__ubuf__ uint8_t*)dst, src0, src1, mode, validRow, validCol);
+    } else if constexpr (sizeof(T) == 4) {
         TCmpsTileB32<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
     } else {
         TCmpsTileB8B16<T, srcStride, dstStride>(dst, src0, src1, mode, validRow, validCol);
@@ -221,9 +230,10 @@ PTO_INTERNAL void TcmpsCheck()
 {
     using T = typename TileDataSrc::DType;
     static_assert(
-        std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, float> ||
-            std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, half> ||
-            std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, bfloat16_t>,
+        std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, int32_t> ||
+            std::is_same_v<T, uint32_t> || std::is_same_v<T, float> || std::is_same_v<T, int16_t> ||
+            std::is_same_v<T, uint16_t> || std::is_same_v<T, half> || std::is_same_v<T, uint8_t> ||
+            std::is_same_v<T, int8_t> || std::is_same_v<T, bfloat16_t>,
         "TCMPS: Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "TCMPS: not supported Layout type");
     static_assert(TileDataDst::Loc == TileType::Vec, "TileType of dst tile must be TileType::Vec.");

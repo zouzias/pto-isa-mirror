@@ -117,3 +117,5 @@ TEST_F(TREMSTest, case6) { TRemSTestFramework<float, 256, 32, 256, 32, 256, 31>(
 TEST_F(TREMSTest, caseHP1) { TRemSTestFramework<float, 64, 64, 64, 64, 64, 64, false, true>(); }
 
 TEST_F(TREMSTest, caseHP2) { TRemSTestFramework<float, 64, 64, 64, 64, 64, 61, false, true>(); }
+TEST_F(TREMSTest, case_int64_4x16) { TRemSTestFramework<int64_t, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TREMSTest, case_uint64_4x16) { TRemSTestFramework<uint64_t, 4, 16, 4, 16, 4, 16>(); }
