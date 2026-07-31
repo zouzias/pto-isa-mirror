@@ -110,16 +110,21 @@ void test_tpartargmax()
 
     std::vector<T> golden_val(dstValFileSize);
     std::vector<T> devFinal_val(dstValFileSize);
-    std::vector<U> golden_idx(dstIdxFileSize);
-    std::vector<U> devFinal_idx(dstIdxFileSize);
+    std::vector<U> golden_idx(dstTR * dstTC);
+    std::vector<U> devFinal_idx(dstTR * dstTC);
     ReadFile(GetGoldenDir() + "/golden_val.bin", dstValFileSize, golden_val.data(), dstValFileSize);
     ReadFile(GetGoldenDir() + "/output_val.bin", dstValFileSize, devFinal_val.data(), dstValFileSize);
     ReadFile(GetGoldenDir() + "/golden_idx.bin", dstIdxFileSize, golden_idx.data(), dstIdxFileSize);
     ReadFile(GetGoldenDir() + "/output_idx.bin", dstIdxFileSize, devFinal_idx.data(), dstIdxFileSize);
 
-    bool ret = ResultCmp<T>(golden_val, devFinal_val, 0.001f);
+    auto validGoldenVal = ExtractValid2D(golden_val, dstVR, dstVC, dstTC);
+    auto validActualVal = ExtractValid2D(devFinal_val, dstVR, dstVC, dstTC);
+    auto validGoldenIdx = ExtractValid2D(golden_idx, dstVR, dstVC, dstTC);
+    auto validActualIdx = ExtractValid2D(devFinal_idx, dstVR, dstVC, dstTC);
+
+    bool ret = ResultCmp<T>(validGoldenVal, validActualVal, 0.001f);
     EXPECT_TRUE(ret);
-    ret = ResultCmp<U>(golden_idx, devFinal_idx, 0.001f);
+    ret = ResultCmp<U>(validGoldenIdx, validActualIdx, 0.001f);
     EXPECT_TRUE(ret);
 }
 

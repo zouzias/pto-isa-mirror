@@ -85,7 +85,9 @@ void test_tsqrt()
         eps = 0.00005f;
     }
     eps = highPrecision ? 0.0000001f : eps;
-    bool ret = ResultCmp(golden, devFinal, eps);
+    auto validGolden = ExtractValid2D(golden, validRow, validCol, dstCol);
+    auto validActual = ExtractValid2D(devFinal, validRow, validCol, dstCol);
+    bool ret = ResultCmp(validGolden, validActual, eps);
 
     EXPECT_TRUE(ret);
 }

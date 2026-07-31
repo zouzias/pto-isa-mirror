@@ -81,7 +81,9 @@ void test_texp()
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
     constexpr float eps = highPrecision ? 0.0000001f : std::is_same_v<T, float> ? 0.00005f : 0.0005f;
-    bool ret = ResultCmp(golden, devFinal, eps);
+    auto validGolden = ExtractValid2D(golden, validRow, validCol, dstCol);
+    auto validActual = ExtractValid2D(devFinal, validRow, validCol, dstCol);
+    bool ret = ResultCmp(validGolden, validActual, eps);
 
     EXPECT_TRUE(ret);
 }

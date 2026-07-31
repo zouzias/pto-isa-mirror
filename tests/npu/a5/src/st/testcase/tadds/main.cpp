@@ -87,7 +87,11 @@ bool TAddSTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
-    return ResultCmp<T>(golden, devFinal, 0.001f);
+    // Kernel valid shape is DynDim2Shape(validRow, validCol); host srcValidCol maps to validCol.
+    // Golden currently fills row×col, and all existing cases keep row==validRow, col==srcValidCol.
+    auto validGolden = ExtractValid2D(golden, validRow, srcValidCol, dstTileCol);
+    auto validActual = ExtractValid2D(devFinal, validRow, srcValidCol, dstTileCol);
+    return ResultCmp<T>(validGolden, validActual, 0.001f);
 }
 
 TEST_F(TADDSTest, case1)

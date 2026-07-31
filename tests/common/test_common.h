@@ -303,6 +303,59 @@ bool ResultCmp(
         outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
 }
 
+// Extract a valid row-major rectangle from a physical row-major tile.
+// physical is indexed as physical[r * tileCols + c]. Only r in [0, validRows),
+// c in [0, validCols) are read. Caller must ensure physical.size() >=
+// validRows * tileCols (and tileCols >= validCols, validRows/Cols >= 0).
+template <typename T>
+std::vector<T> ExtractValid2D(
+    const std::vector<T>& physical, int validRows, int validCols, int tileCols)
+{
+    assert(validRows >= 0 && validCols >= 0 && tileCols >= 0);
+    assert(validCols <= tileCols);
+    assert(static_cast<size_t>(validRows) * static_cast<size_t>(tileCols) <= physical.size());
+    std::vector<T> out;
+    out.reserve(static_cast<size_t>(validRows) * static_cast<size_t>(validCols));
+    for (int r = 0; r < validRows; ++r) {
+        for (int c = 0; c < validCols; ++c) {
+            out.push_back(physical[static_cast<size_t>(r) * static_cast<size_t>(tileCols) + static_cast<size_t>(c)]);
+        }
+    }
+    return out;
+}
+
+// Extract defined mask bits for tcmp/tcmps-style layouts.
+// Physical layout: row-major, rowStrideBytes = ceil(col / 8.0), length row * rowStrideBytes.
+// Packing matches numpy packbits(..., bitorder='little'): bit i of byte b is column b*8+i (LSB-first).
+// When validCol % 8 != 0, the last partial byte is masked so padding bits are forced to 0 on
+// BOTH sides of a later ResultCmp (caller should extract golden and actual the same way).
+// Only rows [0, validRow) are emitted. Output length = validRow * ceil(validCol / 8.0).
+inline std::vector<uint8_t> ExtractValidMaskLittleEndian(
+    const std::vector<uint8_t>& physical, int row, int col, int validRow, int validCol)
+{
+    assert(row >= 0 && col >= 0 && validRow >= 0 && validCol >= 0);
+    assert(validRow <= row && validCol <= col);
+    const int rowStrideBytes = (col + 7) / 8;
+    const int outStrideBytes = (validCol + 7) / 8;
+    assert(static_cast<size_t>(row) * static_cast<size_t>(rowStrideBytes) <= physical.size());
+    std::vector<uint8_t> out(static_cast<size_t>(validRow) * static_cast<size_t>(outStrideBytes), 0);
+    const int fullBytes = validCol / 8;
+    const int remBits = validCol % 8;
+    const uint8_t lastMask = remBits == 0 ? static_cast<uint8_t>(0) : static_cast<uint8_t>((1u << remBits) - 1u);
+    for (int r = 0; r < validRow; ++r) {
+        const size_t srcRow = static_cast<size_t>(r) * static_cast<size_t>(rowStrideBytes);
+        const size_t dstRow = static_cast<size_t>(r) * static_cast<size_t>(outStrideBytes);
+        for (int b = 0; b < fullBytes; ++b) {
+            out[dstRow + static_cast<size_t>(b)] = physical[srcRow + static_cast<size_t>(b)];
+        }
+        if (remBits != 0) {
+            out[dstRow + static_cast<size_t>(fullBytes)] =
+                static_cast<uint8_t>(physical[srcRow + static_cast<size_t>(fullBytes)] & lastMask);
+        }
+    }
+    return out;
+}
+
 #if (defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)) && defined(PTO_RUN_MODE_NPU)
 ACL_FUNC_VISIBILITY aclError aclrtMemset(void* devPtr, size_t maxCount, int32_t value, size_t count) { return; }
 #endif

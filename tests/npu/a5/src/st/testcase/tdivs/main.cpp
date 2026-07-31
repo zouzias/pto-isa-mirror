@@ -98,8 +98,10 @@ void TDivSTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
+    auto validGolden = ExtractValid2D(golden, validRow, validCol, dstTileCol);
+    auto validActual = ExtractValid2D(devFinal, validRow, validCol, dstTileCol);
     constexpr auto resPrecision = highPrecision ? 0.0000001f : 0.001f;
-    bool ret = ResultCmp<T>(golden, devFinal, resPrecision);
+    bool ret = ResultCmp<T>(validGolden, validActual, resPrecision);
     EXPECT_TRUE(ret);
 }
 
