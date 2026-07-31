@@ -13,6 +13,8 @@
 import os
 
 import numpy as np
+from en_dtypes import hifloat8
+
 np.random.seed(19)
 
 
@@ -33,13 +35,16 @@ class TTransParams:
         self.m = m
         self.n = n
 
+
 if __name__ == "__main__":
     case_name_list = [
         "TTRANSTest.case1",
+        "TTRANSTest.case2",
     ]
 
     case_params_list = [
-        TTransParams(np.float32, 128 , 128),
+        TTransParams(np.float32, 128, 128),
+        TTransParams(hifloat8, 128, 128),
     ]
 
     for i, case_name in enumerate(case_name_list):
@@ -51,5 +56,3 @@ if __name__ == "__main__":
         gen_golden(case_name, case_params_list[i])
 
         os.chdir(original_dir)
-
-
