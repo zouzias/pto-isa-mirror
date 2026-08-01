@@ -105,3 +105,4 @@ TEST_F(TTRANSTest, case16_float_2_16_2_16) { test_ttrans<float, 2, 16, 2, 16>();
 TEST_F(TTRANSTest, case17_int8_32_32_32_32) { test_ttrans<uint8_t, 32, 32, 32, 32>(); }
 TEST_F(TTRANSTest, case18_int8_64_64_22_63) { test_ttrans<uint8_t, 64, 64, 22, 63>(); }
 TEST_F(TTRANSTest, case19_float_8_8_8_8) { test_ttrans<float, 8, 8, 8, 8>(); }
+TEST_F(TTRANSTest, case20_half_128_128_64_64) { test_ttrans<aclFloat16, 128, 128, 64, 64>(); }
