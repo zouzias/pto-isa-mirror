@@ -26,6 +26,7 @@ env:
   SOURCE_BRANCH: ${{atomgit.head_ref}}
   obs_path: "${{ vars.OBS_PATH }}/${{ env.MERGE_ID }}"
   obs_smoke_path: "${{ env.obs_path }}/presmoke/2"
+  online: ${{ vars.APPLY_LABEL }}
 
 stages:
   stage1:
