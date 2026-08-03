@@ -40,6 +40,7 @@ jobs:
           workspace: ${{ steps.process_checkout.outputs.path }}
       -
         name: upload
+        if: ${{ always() }}
         uses: obs-upload
         with:
           endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
@@ -54,8 +55,6 @@ jobs:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.precommit_image_version }}
   Check_pr:
     name: CodeCheck_check-pr
-    select: selected_by_default
-    needs: []
     steps:
       -
         name: Checkout
@@ -86,8 +85,6 @@ jobs:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   SCA:
     name: SCA
-    select: selected_by_default
-    needs: []
     steps:
       -
         name: Checkout
@@ -116,8 +113,6 @@ jobs:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   Antiposion:
     name: Antiposion
-    select: selected_by_default
-    needs: []
     steps:
       -
         name: Checkout
@@ -146,8 +141,6 @@ jobs:
       image: swr.cn-north-4.myhuaweicloud.com/ci_cann/${{ inputs.codecheck_image_version }}
   CodeCheck:
     name: CodeCheck
-    select: selected_by_default
-    needs: []
     steps:
       -
         name: Checkout
