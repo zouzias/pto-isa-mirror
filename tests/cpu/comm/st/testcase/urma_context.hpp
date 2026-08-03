@@ -30,6 +30,7 @@ struct UrmaTestContext {
     int deviceId{-1};
     void* devBuf{nullptr};
     UrmaWorkspaceManager urmaMgr;
+    void* stream{nullptr}; // Dummy placeholder for compatibility
 
     bool AllocHugePageBuffer(size_t commBytesNeeded) { return true; }
 
