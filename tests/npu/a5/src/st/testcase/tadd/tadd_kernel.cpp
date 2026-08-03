@@ -56,6 +56,61 @@ void LaunchTAdd(T* out, T* src0, T* src1, void* stream)
         <<<1, nullptr, stream>>>(out, src0, src1);
 }
 
+inline AICORE uint64_t GetPerfCycle()
+{
+    uint64_t cycle;
+    asm volatile("MOV %0, SYS_CNT\n" : "+l"(cycle));
+    return cycle;
+}
+
+template <typename T, int repeatTimes>
+__global__ AICORE void runTAddPerf(
+    __gm__ T __out__* out, __gm__ T __in__* src0, __gm__ T __in__* src1, __gm__ uint64_t __out__* cycles)
+{
+    constexpr int tileRows = 4;
+    constexpr int tileCols = 16;
+    constexpr int validRows = 4;
+    constexpr int validCols = 15;
+    using DynShape = pto::Shape<-1, -1, -1, -1, -1>;
+    using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShape, DynStride>;
+    GlobalData dstGlobal(
+        out, pto::Shape(1, 1, 1, validRows, validCols),
+        pto::Stride(tileRows * tileCols, tileRows * tileCols, tileRows * tileCols, tileCols, 1));
+    GlobalData src0Global(
+        src0, pto::Shape(1, 1, 1, validRows, validCols),
+        pto::Stride(tileRows * tileCols, tileRows * tileCols, tileRows * tileCols, tileCols, 1));
+    GlobalData src1Global(
+        src1, pto::Shape(1, 1, 1, validRows, validCols),
+        pto::Stride(tileRows * tileCols, tileRows * tileCols, tileRows * tileCols, tileCols, 1));
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    TileData dstTile(validRows, validCols);
+    TileData src0Tile(validRows, validCols);
+    TileData src1Tile(validRows, validCols);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+
+    Event<Op::TLOAD, Op::TADD> evt0 = TLOAD(src0Tile, src0Global);
+    Event<Op::TLOAD, Op::TADD> evt1 = TLOAD(src1Tile, src1Global);
+    TADD(dstTile, src0Tile, src1Tile, evt0, evt1);
+    pipe_barrier(PIPE_ALL);
+    uint64_t before = GetPerfCycle();
+    for (int i = 0; i < repeatTimes; ++i) {
+        TADD(dstTile, src0Tile, src1Tile);
+    }
+    pipe_barrier(PIPE_ALL);
+    uint64_t after = GetPerfCycle();
+    TSTORE(dstGlobal, dstTile);
+    cycles[0] = after - before;
+}
+
+template <typename T, int repeatTimes>
+void LaunchTAddPerf(T* out, T* src0, T* src1, uint64_t* cycles, void* stream)
+{
+    runTAddPerf<T, repeatTimes><<<1, nullptr, stream>>>(out, src0, src1, cycles);
+}
+
 template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
 void LaunchTAddHalf(aclFloat16* out, aclFloat16* src0, aclFloat16* src1, void* stream)
 {
@@ -67,6 +122,10 @@ template void LaunchTAdd<float, 64, 64, 64, 64, 64, 64, 64, 64>(float* out, floa
 template void LaunchTAdd<float, 64, 128, 64, 128, 64, 128, 64, 128>(float* out, float* src0, float* src1, void* stream);
 template void LaunchTAdd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(
     int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAdd<int64_t, 4, 16, 4, 16, 4, 16, 4, 15>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTAdd<uint64_t, 4, 16, 4, 16, 4, 16, 4, 15>(
+    uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTAddPerf<int64_t, 1000>(int64_t* out, int64_t* src0, int64_t* src1, uint64_t* cycles, void* stream);
 template void LaunchTAdd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(
     int16_t* out, int16_t* src0, int16_t* src1, void* stream);
 template void LaunchTAddHalf<16, 256, 16, 256, 16, 256, 16, 256>(

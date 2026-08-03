@@ -172,3 +172,11 @@ TEST_F(TCOLSUMTest, case31)
     bool ret = TCOLSUMTestFramework<31, float, 1, 1, 1, 512, 511>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TCOLSUMTest, case_int64_4x16)
+{
+    EXPECT_TRUE((TCOLSUMTestFramework<41, int64_t, 4, 4, 1, 16, 16>()));
+}
+TEST_F(TCOLSUMTest, case_uint64_4x16)
+{
+    EXPECT_TRUE((TCOLSUMTestFramework<42, uint64_t, 4, 4, 1, 16, 16>()));
+}

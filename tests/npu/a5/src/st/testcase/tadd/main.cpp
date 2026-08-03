@@ -35,6 +35,9 @@ template <
     int vCols>
 void LaunchTAdd(T* out, T* src0, T* src1, void* stream);
 
+template <typename T, int repeatTimes>
+void LaunchTAddPerf(T* out, T* src0, T* src1, uint64_t* cycles, void* stream);
+
 template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
 void LaunchTAddHalf(aclFloat16* out, aclFloat16* src0, aclFloat16* src1, void* stream);
 
@@ -95,8 +98,8 @@ void test_tadd()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSizeDst);
-    std::vector<T> devFinal(fileSizeDst);
+    std::vector<T> golden(fileSizeDst / sizeof(T));
+    std::vector<T> devFinal(fileSizeDst / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
     ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
 
@@ -108,6 +111,48 @@ void test_tadd()
 TEST_F(TADDTest, case_float_64x64_64x64_64x64_64x64) { test_tadd<float, 64, 64, 64, 64, 64, 64, 64, 64>(); }
 TEST_F(TADDTest, case_float_64x128_64x128_64x128_64x128) { test_tadd<float, 64, 128, 64, 128, 64, 128, 64, 128>(); }
 TEST_F(TADDTest, case_int32_64x64_64x64_64x64_64x64) { test_tadd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
+TEST_F(TADDTest, case_int64_4x16_4x16_4x16_4x15) { test_tadd<int64_t, 4, 16, 4, 16, 4, 16, 4, 15>(); }
+TEST_F(TADDTest, case_uint64_4x16_4x16_4x16_4x15) { test_tadd<uint64_t, 4, 16, 4, 16, 4, 16, 4, 15>(); }
+TEST_F(TADDTest, perf_int64_4x16_4x16_4x16_4x15)
+{
+    constexpr size_t elements = 4 * 16;
+    constexpr size_t bytes = elements * sizeof(int64_t);
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    int64_t *src0, *src1, *dst;
+    uint64_t* cycles;
+    aclrtMalloc((void**)&src0, bytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1, bytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dst, bytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&cycles, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
+    std::vector<int64_t> input0(elements), input1(elements), output(elements);
+    for (size_t i = 0; i < elements; ++i) {
+        input0[i] = static_cast<int64_t>(i * 17 - 300);
+        input1[i] = static_cast<int64_t>(i * 11 + 7);
+    }
+    aclrtMemcpy(src0, bytes, input0.data(), bytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1, bytes, input1.data(), bytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTAddPerf<int64_t, 1000>(dst, src0, src1, cycles, stream);
+    aclrtSynchronizeStream(stream);
+    uint64_t hostCycles = 0;
+    aclrtMemcpy(&hostCycles, sizeof(hostCycles), cycles, sizeof(hostCycles), ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(output.data(), bytes, dst, bytes, ACL_MEMCPY_DEVICE_TO_HOST);
+    for (size_t row = 0; row < 4; ++row) {
+        for (size_t col = 0; col < 15; ++col) {
+            EXPECT_EQ(output[row * 16 + col], input0[row * 16 + col] + input1[row * 16 + col]);
+        }
+    }
+    std::printf("PTO int64 TADD 4x16 valid 4x15, 1000 repeats: %lu cycles\n", hostCycles);
+    aclrtFree(cycles);
+    aclrtFree(dst);
+    aclrtFree(src1);
+    aclrtFree(src0);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+}
 TEST_F(TADDTest, case_int16_64x64_64x64_64x64_64x64) { test_tadd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
 TEST_F(TADDTest, case_half_16x256_16x256_16x256_16x256)
 {

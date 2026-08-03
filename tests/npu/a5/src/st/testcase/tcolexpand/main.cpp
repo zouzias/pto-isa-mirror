@@ -75,8 +75,8 @@ void test_tcolexpand()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(outputFileSize);
-    std::vector<T> devFinal(outputFileSize);
+    std::vector<T> golden(outputFileSize / sizeof(T));
+    std::vector<T> devFinal(outputFileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
     bool ret = ResultCmp(golden, devFinal, 0.001f);
@@ -90,4 +90,6 @@ TEST_F(TCOLEXPANDTest, case_float_1_8_128_63) { test_tcolexpand<float, 1, 8, 128
 TEST_F(TCOLEXPANDTest, case_half_1_33_512_512) { test_tcolexpand<aclFloat16, 1, 33, 512, 512>(); }
 TEST_F(TCOLEXPANDTest, case_int8_2_17_256_44) { test_tcolexpand<int8_t, 2, 17, 256, 44>(); }
 TEST_F(TCOLEXPANDTest, case_float_1_54_64_63) { test_tcolexpand<float, 1, 54, 64, 63>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_16_16) { test_tcolexpand<int64_t, 1, 4, 16, 16>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_16_16) { test_tcolexpand<uint64_t, 1, 4, 16, 16>(); }
 } // namespace TColExpandTest

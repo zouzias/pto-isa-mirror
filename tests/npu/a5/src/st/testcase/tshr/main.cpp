@@ -79,8 +79,8 @@ void test_tshr()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(fileSize / sizeof(T));
+    std::vector<T> devFinal(fileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
@@ -106,3 +106,5 @@ TEST_F(TSHRTest, case7) { test_tshr<int8_t, 32, 32, 32, 32>(); }
 TEST_F(TSHRTest, case8) { test_tshr<int16_t, 16, 16, 16, 16>(); }
 
 TEST_F(TSHRTest, case9) { test_tshr<int32_t, 8, 8, 8, 8>(); }
+TEST_F(TSHRTest, case_int64_4x16) { test_tshr<int64_t, 4, 16, 4, 16>(); }
+TEST_F(TSHRTest, case_uint64_4x16) { test_tshr<uint64_t, 4, 16, 4, 16>(); }
