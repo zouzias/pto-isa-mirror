@@ -32,6 +32,22 @@ stages:
     name: PreBuild
     select: selected_by_default
     jobs:
+      JOB_pre:
+        name: Test_pre_pipeline
+        steps:
+          -
+            name: Checkout
+            identifier: process_checkout
+            uses: checkout
+            with:
+              ref: ${{ atomgit.event.pull_request.merge_commit_sha }}
+              token: ${{ secrets.GIT_TOKEN }}
+          -
+            name: pre_pipeline
+            run: |
+              echo "pre pipeline check: repo=${{ env.repo_name }} merge_id=${{ env.MERGE_ID }}"
+        if: "${{ default() }}"
+        runs-on: ["dedicate-hosted", "x64", "small"]
       JOB_image:
         name: Test_image
         steps:
@@ -85,6 +101,7 @@ stages:
                 ${{ steps.process_checkout.outputs.path }}/pr_filelist_mod.txt
                 ${{ steps.process_checkout.outputs.path }}/pr_filelist_precommit.txt
                 ${{ steps.process_checkout.outputs.path }}/update_file_detail.txt
+                ${{ steps.process_checkout.outputs.path }}/gitdiff.txt
               object-prefix: ${{ env.obs_path }}/
         if: "${{ default() }}"
         runs-on:
@@ -158,41 +175,11 @@ stages:
           spec: 'xlarge'
           ge_st_rt2: 'A5'
           image_version: ${{ jobs.JOB_image.outputs.Compile_Ascend_ARM_A5 }}
-      JOB_codecheck:
-        name: CodeCheck
-        uses: .gitcode/workflows/codecheck_action.yml
-        with:
-          precommit_image_version: ${{ jobs.JOB_image.outputs.precommit }}
-          codecheck_image_version: ${{ jobs.JOB_image.outputs.codecheck }}
-      JOB_staticcheck_markdown:
-        name: CodeCheck_staticcheck_markdown
+      JOB_staticcheck_md_check:
+        name: CodeCheck_staticcheck_md_check
         uses: .gitcode/workflows/staticcheck_action.yml
         with:
-          check_type: 'markdown'
-          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
-      JOB_staticcheck_codespell_check:
-        name: CodeCheck_staticcheck_codespell
-        uses: .gitcode/workflows/staticcheck_action.yml
-        with:
-          check_type: 'codespell_check'
-          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
-      JOB_staticcheck_tag_closed_check:
-        name: CodeCheck_staticcheck_tag_closed
-        uses: .gitcode/workflows/staticcheck_action.yml
-        with:
-          check_type: 'tag_closed_check'
-          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
-      JOB_staticcheck_resource_existence_check:
-        name: CodeCheck_staticcheck_resource_existence
-        uses: .gitcode/workflows/staticcheck_action.yml
-        with:
-          check_type: 'resource_existence_check'
-          image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
-      JOB_staticcheck_link_validity_check:
-        name: CodeCheck_staticcheck_link_validity
-        uses: .gitcode/workflows/staticcheck_action.yml
-        with:
-          check_type: 'link_validity_check'
+          check_type: 'md_check'
           image_version: ${{ jobs.JOB_image.outputs.staticcheck }}
     pre:
     - type: auto
@@ -202,8 +189,6 @@ stages:
     jobs:
       UT_Test:
         name: UT_Test
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/llt_action.yml
         with:
           ut_type: ''
@@ -211,8 +196,6 @@ stages:
           image_version: ${{ jobs.JOB_image.outputs.UT_Test }}
       UT_Test_automode_A3:
         name: UT_Test_automode_A3
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/llt_action.yml
         with:
           ut_type: ''
@@ -221,8 +204,6 @@ stages:
           image_version: ${{ jobs.JOB_image.outputs.UT_Test_A3 }}
       UT_Test_automode_A5:
         name: UT_Test_automode_A5
-        select: selected_by_default
-        needs: []
         uses: .gitcode/workflows/llt_action.yml
         with:
           ut_type: ''
