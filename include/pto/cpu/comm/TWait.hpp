@@ -65,13 +65,12 @@ inline uint32_t ReadTwaitMaxSpin()
     return static_cast<uint32_t>(parsed);
 }
 
-inline bool IsProgressAwareCallerAddress(void* address)
+inline bool IsDecodeLayerCallerAddress(void* address)
 {
 #if defined(__linux__)
     Dl_info info{};
     if (address != nullptr && dladdr(address, &info) != 0 && info.dli_fname != nullptr) {
-        return std::strstr(info.dli_fname, "_jit_l3_decode_layer_") != nullptr ||
-               std::strstr(info.dli_fname, "_jit_l3_mtp_decode_layer_") != nullptr;
+        return std::strstr(info.dli_fname, "_jit_l3_decode_layer_") != nullptr;
     }
 #else
     (void)address;
@@ -85,7 +84,7 @@ inline bool UseProgressAwareTwait()
     void* callStack[8] = {};
     const int frameCount = backtrace(callStack, static_cast<int>(sizeof(callStack) / sizeof(callStack[0])));
     for (int i = 0; i < frameCount; ++i) {
-        if (IsProgressAwareCallerAddress(callStack[i])) {
+        if (IsDecodeLayerCallerAddress(callStack[i])) {
             return true;
         }
     }

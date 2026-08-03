@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/cpu/NPUMemoryModel.hpp>
 #include "test_common.h"
 #include <gtest/gtest.h>
+#include <filesystem>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -88,6 +89,7 @@ void tload_test()
     aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
 #endif
 
+    std::filesystem::create_directories(GetGoldenDir());
     std::ofstream inFile(GetGoldenDir() + "/input.bin", std::ios::binary | std::ios::out);
     std::ofstream outFile(GetGoldenDir() + "/output.bin", std::ios::binary | std::ios::out);
     std::ofstream goldFile(GetGoldenDir() + "/golden.bin", std::ios::binary | std::ios::out);
