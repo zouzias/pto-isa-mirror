@@ -58,6 +58,9 @@ protected:
         float eps = sizeof(T) == 4 ? 0.00005f : 0.0005f;
         ReadFile(GetGoldenDir() + "/golden.bin", byteSize, golden.data(), byteSize);
         ReadFile(GetGoldenDir() + "/output.bin", byteSize, result.data(), byteSize);
+        if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+            return ResultCmpExact(golden, result.data());
+        }
         if (printAllEn) {
             return ResultCmp<T>(golden, result, eps, 0, 1000, true);
         }
@@ -258,4 +261,14 @@ TEST_F(TROWMINTest, case28)
 {
     bool ret = TRowMinTestFramework<28, int16_t, 8, 8, 448, 448, 1>();
     EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case_int64_4x16)
+{
+    EXPECT_TRUE((TRowMinTestFramework<29, int64_t, 4, 4, 16, 15, 1>()));
+}
+
+TEST_F(TROWMINTest, case_uint64_4x16)
+{
+    EXPECT_TRUE((TRowMinTestFramework<30, uint64_t, 4, 4, 16, 15, 1>()));
 }

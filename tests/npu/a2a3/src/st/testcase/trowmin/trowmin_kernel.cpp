@@ -204,6 +204,14 @@ extern "C" __global__ AICORE void launchTROWMINCase28(__gm__ int16_t* out, __gm_
 {
     runTRowMin<int16_t, 8, 8, 448, 448, 1>(out, src);
 }
+extern "C" __global__ AICORE void launchTROWMINCase29(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowMin<int64_t, 4, 4, 16, 15, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWMINCase30(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTRowMin<uint64_t, 4, 4, 16, 15, 1>(out, src);
+}
 
 template <uint32_t caseId>
 void launchTROWMINTestCase(void* out, void* src, aclrtStream stream)
@@ -321,6 +329,14 @@ void launchTROWMINTestCase(void* out, void* src, aclrtStream stream)
             launchTROWMINCase28<<<1, nullptr, stream>>>((int16_t*)out, (int16_t*)src);
             break;
         }
+        case 29: {
+            launchTROWMINCase29<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 30: {
+            launchTROWMINCase30<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -354,3 +370,5 @@ template void launchTROWMINTestCase<25>(void* out, void* src, aclrtStream stream
 template void launchTROWMINTestCase<26>(void* out, void* src, aclrtStream stream);
 template void launchTROWMINTestCase<27>(void* out, void* src, aclrtStream stream);
 template void launchTROWMINTestCase<28>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<29>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<30>(void* out, void* src, aclrtStream stream);

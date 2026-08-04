@@ -26,7 +26,11 @@ def gen_golden_data(param):
     # Use appropriate value range based on data type
     if np.issubdtype(data_type, np.integer):
         # For integer types, use a reasonable range
-        if data_type == np.int32:
+        if data_type == np.uint64:
+            input_arr = np.random.randint(low=0, high=1000, size=(row, col)).astype(data_type)
+        elif data_type == np.int64:
+            input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
+        elif data_type == np.int32:
             input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
         elif data_type == np.int16:
             input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
@@ -88,6 +92,8 @@ if __name__ == "__main__":
         TRowMinParams("TROWMINTest.case26", np.int16, 32, 32, 128, 128),
         TRowMinParams("TROWMINTest.case27", np.int16, 16, 16, 192, 192),
         TRowMinParams("TROWMINTest.case28", np.int16, 8, 8, 448, 448),
+        TRowMinParams("TROWMINTest.case_int64_4x16", np.int64, 4, 4, 16, 15),
+        TRowMinParams("TROWMINTest.case_uint64_4x16", np.uint64, 4, 4, 16, 15),
     ]
 
     for _, case in enumerate(case_params_list):

@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 namespace TColExpandTest {
 
-template <typename T, uint32_t srcRows, uint32_t dstRows, uint32_t cols, uint32_t validCols>
+ template <typename T, uint32_t srcRows, uint32_t dstRows, uint32_t cols, uint32_t validCols>
 __global__ AICORE void runCOLEXPAND(__gm__ T __out__* out, __gm__ T __in__* src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, srcRows, validCols>;
@@ -72,4 +72,6 @@ template void launchTCOLEXPAND<float, 1, 8, 128, 63>(float* out, float* src, voi
 template void launchTCOLEXPAND<aclFloat16, 1, 33, 512, 512>(aclFloat16* out, aclFloat16* src, void* stream);
 template void launchTCOLEXPAND<int8_t, 2, 17, 256, 44>(int8_t* out, int8_t* src, void* stream);
 template void launchTCOLEXPAND<float, 1, 54, 64, 63>(float* out, float* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 16, 16>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 16, 16>(uint64_t* out, uint64_t* src, void* stream);
 } // namespace TColExpandTest

@@ -95,12 +95,17 @@ void test_tadd()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSizeDst);
-    std::vector<T> devFinal(fileSizeDst);
+    std::vector<T> golden(fileSizeDst / sizeof(T));
+    std::vector<T> devFinal(fileSizeDst / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
     ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    }
 
     EXPECT_TRUE(ret);
 }
@@ -108,6 +113,8 @@ void test_tadd()
 TEST_F(TADDTest, case_float_64x64_64x64_64x64_64x64) { test_tadd<float, 64, 64, 64, 64, 64, 64, 64, 64>(); }
 TEST_F(TADDTest, case_float_64x128_64x128_64x128_64x128) { test_tadd<float, 64, 128, 64, 128, 64, 128, 64, 128>(); }
 TEST_F(TADDTest, case_int32_64x64_64x64_64x64_64x64) { test_tadd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
+TEST_F(TADDTest, case_int64_4x16_4x16_4x16_4x15) { test_tadd<int64_t, 4, 16, 4, 16, 4, 16, 4, 15>(); }
+TEST_F(TADDTest, case_uint64_4x16_4x16_4x16_4x15) { test_tadd<uint64_t, 4, 16, 4, 16, 4, 16, 4, 15>(); }
 TEST_F(TADDTest, case_int16_64x64_64x64_64x64_64x64) { test_tadd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
 TEST_F(TADDTest, case_half_16x256_16x256_16x256_16x256)
 {
