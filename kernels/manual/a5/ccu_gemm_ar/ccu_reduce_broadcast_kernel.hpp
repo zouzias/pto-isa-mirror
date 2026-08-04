@@ -107,6 +107,10 @@ struct CcuFusedReduceBroadcastKernelArg {
 
     uint8_t oneShotBaselineOnly{0};
 
+    // Fused Reduce+Broadcast: after each MS slice is reduced, immediately
+    // Write from MS to all peers (skip HBM roundtrip). Default 0 = off (legacy path).
+    uint8_t fusedReduceBroadcast{0};
+
     // One CCU channel per peer; used for both Reduce (Read) and Broadcast (Write).
     std::vector<ChannelHandle> channels;
 };
@@ -241,6 +245,7 @@ public:
         kernelReadyAddr_ = kernelArg.kernelReadyAddr;
         baseOffsetBytes_ = kernelArg.baseOffsetBytes;
         oneShotBaselineOnly_ = kernelArg.oneShotBaselineOnly != 0;
+        fusedReduceBroadcast_ = kernelArg.fusedReduceBroadcast != 0;
         ownChannels_ = kernelArg.channels;
 
         if (FusedTraceEnabled()) {
@@ -375,6 +380,51 @@ private:
 
             (void)accu::LocalCopy(rsDstAddr_, (*loopBufs_)[0], lenVar, event, 1u);
             (void)accu::EventWait(event, 1u);
+        });
+    }
+
+    // Fused Reduce+Broadcast: after LocalReduce, write from MS to local HBM AND
+    // all peers simultaneously, eliminating the HBM roundtrip for Broadcast.
+    inline accu::Func MakeReduceBroadcastLoopBody(accu::Variable& lenVar)
+    {
+        return accu::Func([this, &lenVar]() {
+            const uint32_t channelSize = static_cast<uint32_t>(ownChannels_.size());
+            const uint32_t size = channelSize + 1;
+            const uint16_t readMask = static_cast<uint16_t>((1u << size) - 1);
+
+            accu::Event& event = (*loopEvents_)[0];
+
+            // Phase 1: Read all peers + self into MS buffers
+            for (uint32_t i = 0; i < channelSize; ++i) {
+                (void)accu::Read(
+                    ownChannels_[i], (*loopBufs_)[i], rsSrcAddr_[i], lenVar, event, static_cast<uint16_t>(1u << i));
+            }
+            (void)accu::LocalCopy(
+                (*loopBufs_)[size - 1], rsSelfLocalAddr_, lenVar, event, static_cast<uint16_t>(1u << channelSize));
+            (void)accu::EventWait(event, readMask);
+
+            // Phase 2: LocalReduce → result in loopBufs_[0]
+            if (size > 1) {
+                (void)accu::LocalReduce(
+                    loopBufs_->data(), size, dataType_, outputDataType_, reduceOp_, lenVar, event, 1u);
+                (void)accu::EventWait(event, 1u);
+            }
+
+            // Phase 3: Fused output — from MS directly
+            //   bit 0: LocalCopy to owner's local HBM (rsDstAddr_)
+            //   bits 1..nPeers: Write(CcuBuffer→RemoteAddr) to each peer
+            const uint32_t nPeers = bcastPeerCount_;
+            const uint16_t localBit = 1u;
+            (void)accu::LocalCopy(rsDstAddr_, (*loopBufs_)[0], lenVar, event, localBit);
+
+            for (uint32_t i = 0; i < nPeers; ++i) {
+                const uint16_t peerBit = static_cast<uint16_t>(1u << (i + 1));
+                (void)accu::Write(
+                    ownChannels_[i], agDstAddr_[i], (*loopBufs_)[0], lenVar, event, peerBit);
+            }
+
+            const uint16_t outputMask = static_cast<uint16_t>((1u << (nPeers + 1)) - 1);
+            (void)accu::EventWait(event, outputMask);
         });
     }
 
@@ -523,6 +573,62 @@ private:
         }
     }
 
+    // Fused Reduce+Broadcast in one LoopGroup pass: after reduce each MS slice,
+    // immediately Write from MS to all peers + LocalCopy to local HBM.
+    // Eliminates the HBM roundtrip between DoReduce and BroadcastGroup.
+    // Precondition: agDstAddr_ must be bound to peer output addresses before calling.
+    inline void DoReduceBroadcast()
+    {
+        CCU_IF(rsGoSizeLoopIter_ != 0)
+        {
+            accu::Variable loopParam = MakeImmediate(0);
+            loopParam = EncodeLoopParam(0, goConfig_.memSlice * goConfig_.loopCount, 0);
+            loopParam += rsGoSizeLoopIter_;
+
+            accu::Variable sliceSize = MakeImmediate(goConfig_.memSlice);
+            accu::Func body = MakeReduceBroadcastLoopBody(sliceSize);
+            accu::Loop loop(loopParam, body);
+
+            accu::Variable paraCfg = MakeImmediate(EncodeParallelParam(goConfig_.loopCount - 1, 0, 1));
+            accu::Variable offsetCfg = MakeImmediate(EncodeOffsetParam(goConfig_.memSlice, goConfig_.msInterleave, 1));
+            accu::LoopGroup group(paraCfg, offsetCfg, /*maxLoopNum=*/1u, {loop});
+        }
+
+        CCU_IF(rsGoSizeParallel_ != 0)
+        {
+            const uint32_t channelSize = static_cast<uint32_t>(ownChannels_.size());
+            for (uint32_t i = 0; i < channelSize; ++i)
+                rsSrcAddr_[i].addr += rsGoSizeOffset_;
+            rsSelfLocalAddr_.addr += rsGoSizeOffset_;
+            rsDstAddr_.addr += rsGoSizeOffset_;
+            for (uint32_t i = 0; i < bcastPeerCount_; ++i)
+                agDstAddr_[i].addr += rsGoSizeOffset_;
+
+            accu::Variable loopCfg = MakeImmediate(EncodeLoopParam(0, 0, 1));
+            accu::Func body = MakeReduceBroadcastLoopBody(rsGoSizeResidual_);
+            accu::Loop loop(loopCfg, body);
+
+            accu::Variable offsetCfg = MakeImmediate(EncodeOffsetParam(goConfig_.memSlice, goConfig_.msInterleave, 1));
+            accu::LoopGroup group(rsGoSizeParallel_, offsetCfg, /*maxLoopNum=*/1u, {loop});
+        }
+    }
+
+    // Bind broadcast destination addresses for the fused path.
+    // Must be called before DoReduceBroadcast so agDstAddr_ participates in LoopGroup offset.
+    inline void BindBroadcastAddrsForGroup(
+        const accu::Variable& groupOffset, const std::vector<accu::Variable>& baseOutputAll)
+    {
+        uint32_t idx = 0;
+        for (uint32_t r = 0; r < rankSize_ && idx < bcastPeerCount_; ++r) {
+            if (r == rootId_)
+                continue;
+            agDstAddr_[idx].addr = baseOutputAll[r];
+            agDstAddr_[idx].addr += groupOffset;
+            agDstAddr_[idx].token = rsToken_[r];
+            ++idx;
+        }
+    }
+
     // Issue the group's peer writes without waiting. Pairs with WaitBroadcast().
     inline void IssueBroadcast(accu::Variable& groupOffset, std::vector<accu::Variable>& baseOutput, uint32_t startIdx)
     {
@@ -668,8 +774,18 @@ private:
         {
             WaitNextProgressCke(ker);
             BindRsAddrsForGroup(baseInput, baseOutput, groupOffset);
-            DoReduce();
-            BroadcastGroup(groupOffset, baseOutputAll, itemsDoneCounter);
+
+            if (fusedReduceBroadcast_) {
+                // Fused path: Reduce each MS slice and immediately Write from MS
+                // to all peers, eliminating the HBM write-read roundtrip.
+                BindBroadcastAddrsForGroup(groupOffset, baseOutputAll);
+                DoReduceBroadcast();
+            } else {
+                // Legacy path: Reduce to local HBM, then Broadcast from HBM.
+                DoReduce();
+                BroadcastGroup(groupOffset, baseOutputAll, itemsDoneCounter);
+            }
+
             groupOffset += groupBytes;
             itemsDoneCounter += one;
             (void)accu::Store(itemsDoneAddr_, itemsDoneCounter);
@@ -696,6 +812,7 @@ private:
     uint64_t kernelReadyAddr_{0};
     uint64_t baseOffsetBytes_{0};
     bool oneShotBaselineOnly_{false};
+    bool fusedReduceBroadcast_{false};
 
     GoConfig goConfig_;
 

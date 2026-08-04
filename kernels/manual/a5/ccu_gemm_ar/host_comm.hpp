@@ -1154,6 +1154,11 @@ inline void FillFusedKernelArg(
         kernelArg.itemsDoneAddr = MissionRsItemsDoneAddr(buf.progressCtx_dev, mission);
         kernelArg.kernelReadyAddr = MissionRsKernelReadyAddr(buf.progressCtx_dev, mission);
     }
+
+    // Fused Reduce+Broadcast: env CCU_FUSED_RB=1 enables MS-direct broadcast.
+    if (const char* env = std::getenv("CCU_FUSED_RB"); env != nullptr && env[0] == '1') {
+        kernelArg.fusedReduceBroadcast = 1;
+    }
 }
 
 // Match mesh/ST: pin CCU IO die (env HCCL_PTO_GATE_DIE_ID, default 1 on A5).
