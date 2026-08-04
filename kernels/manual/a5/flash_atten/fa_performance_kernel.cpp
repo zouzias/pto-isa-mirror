@@ -643,7 +643,7 @@ AICORE inline void compute_p(
         }
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-        qkPipe.cons.setFreeStatus((row_slice == static_cast<int>(kTileFactor) - 1));
+        qkPipe.cons.setFreeStatus((row_slice == static_cast<int>(kTileFactor) - 1) && should_notify_qk_consume);
         TFREE(qkPipe);
 
         if (row_slice == static_cast<int>(kTileFactor) - 1) {
@@ -1146,6 +1146,15 @@ __global__ AICORE void runTFA(
             qkPipe.prod.allocate();
         for (int i = 0; i < pending_update_consumed; ++i)
             pvPipe.prod.allocate();
+#if USE_L0C_TO_DUAL_UB_PATH_QK
+        // ubBufSync.free() fires every tile while allocate() only starts at
+        // tile_id >= srcVecTNBuffers, leaving min(num_tiles, srcVecTNBuffers)
+        // unmatched free credits (Cube IDs flag+1 / flag+1+16). Drain them here.
+        const int pending_ub_buf_freed =
+            (num_tiles_s1 < static_cast<int>(srcVecTNBuffers)) ? num_tiles_s1 : static_cast<int>(srcVecTNBuffers);
+        for (int i = 0; i < pending_ub_buf_freed; ++i)
+            ubBufSync.allocate();
+#endif
     }
 
     if constexpr (DAV_VEC) {
@@ -1237,25 +1246,25 @@ void LaunchTFA(
     template void LaunchTFA<                                                                                       \
         S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK,                    \
         kFaCvFifoConsSyncPeriod>(                                                                                  \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float* p_out_fp32,    \
+        uint16_t* ffts, aclFloat16* q, aclFloat16* k, aclFloat16* v, aclFloat16* p_out, float* p_out_fp32,         \
         float* global_sum_out, float* exp_max_out, float* o_out, float* o_parts_out, float* qk_out, float* pv_out, \
         uint8_t* profile_data, aclrtStream stream, uint8_t* cv_comm_buf);                                          \
     template void LaunchTFA<                                                                                       \
         S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK,                    \
         kFaCvFifoConsSyncPeriod>(                                                                                  \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float* p_out_fp32,    \
+        uint16_t* ffts, aclFloat16* q, aclFloat16* k, aclFloat16* v, aclFloat16* p_out, float* p_out_fp32,         \
         float* global_sum_out, float* exp_max_out, float* o_out, float* o_parts_out, float* qk_out, float* pv_out, \
         aclrtStream stream, uint8_t* cv_comm_buf);                                                                 \
     template void LaunchTFA<                                                                                       \
         S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,                     \
         kFaCvFifoConsSyncPeriod>(                                                                                  \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float* p_out_fp32,    \
+        uint16_t* ffts, aclFloat16* q, aclFloat16* k, aclFloat16* v, aclFloat16* p_out, float* p_out_fp32,         \
         float* global_sum_out, float* exp_max_out, float* o_out, float* o_parts_out, float* qk_out, float* pv_out, \
         uint8_t* profile_data, aclrtStream stream, uint8_t* cv_comm_buf);                                          \
     template void LaunchTFA<                                                                                       \
         S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,                     \
         kFaCvFifoConsSyncPeriod>(                                                                                  \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float* p_out_fp32,    \
+        uint16_t* ffts, aclFloat16* q, aclFloat16* k, aclFloat16* v, aclFloat16* p_out, float* p_out_fp32,         \
         float* global_sum_out, float* exp_max_out, float* o_out, float* o_parts_out, float* qk_out, float* pv_out, \
         aclrtStream stream, uint8_t* cv_comm_buf);
 
