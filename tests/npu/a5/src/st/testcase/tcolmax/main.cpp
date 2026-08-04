@@ -213,3 +213,11 @@ TEST_F(TCOLMAXTest, case73)
     bool ret = TCOLMAXTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TCOLMAXTest, case_int64_4x16)
+{
+    EXPECT_TRUE((TCOLMAXTestFramework<81, int64_t, 4, 4, 1, 16, 16>()));
+}
+TEST_F(TCOLMAXTest, case_uint64_4x16)
+{
+    EXPECT_TRUE((TCOLMAXTestFramework<82, uint64_t, 4, 4, 1, 16, 16>()));
+}

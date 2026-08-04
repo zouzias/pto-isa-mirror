@@ -204,6 +204,14 @@ extern "C" __global__ AICORE void launchTROWMAXCase28(__gm__ int16_t* out, __gm_
 {
     runTRowMax<int16_t, 8, 8, 448, 448, 1>(out, src);
 }
+extern "C" __global__ AICORE void launchTROWMAXCase29(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowMax<int64_t, 4, 4, 16, 16, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWMAXCase30(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTRowMax<uint64_t, 4, 4, 16, 16, 1>(out, src);
+}
 
 template <uint32_t caseId>
 void launchTROWMAXTestCase(void* out, void* src, aclrtStream stream)
@@ -321,6 +329,14 @@ void launchTROWMAXTestCase(void* out, void* src, aclrtStream stream)
             launchTROWMAXCase28<<<1, nullptr, stream>>>((int16_t*)out, (int16_t*)src);
             break;
         }
+        case 29: {
+            launchTROWMAXCase29<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 30: {
+            launchTROWMAXCase30<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -354,3 +370,5 @@ template void launchTROWMAXTestCase<25>(void* out, void* src, aclrtStream stream
 template void launchTROWMAXTestCase<26>(void* out, void* src, aclrtStream stream);
 template void launchTROWMAXTestCase<27>(void* out, void* src, aclrtStream stream);
 template void launchTROWMAXTestCase<28>(void* out, void* src, aclrtStream stream);
+template void launchTROWMAXTestCase<29>(void* out, void* src, aclrtStream stream);
+template void launchTROWMAXTestCase<30>(void* out, void* src, aclrtStream stream);
