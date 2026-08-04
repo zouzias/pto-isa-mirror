@@ -17,7 +17,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #if defined(__CPU_SIM)
 #include <pto/cpu/atomic.hpp>
-#include <pto/cpu/memory.hpp>
 #endif
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
@@ -1352,26 +1351,9 @@ public:
     PTO_INTERNAL void SetDstMposition(uint16_t dstMposition) { dstMposition_ = dstMposition; }
     PTO_INTERNAL uint16_t GetDstMposition() const { return dstMposition_; }
 #endif
-#ifdef __CPU_SIM
-    PTO_INTERNAL std::uintptr_t GetAssignedAddress() const { return assignedAddress_; }
-    PTO_INTERNAL bool HasAssignedAddress() const { return hasAssignedAddress_; }
-#endif
 private:
-#ifdef __CPU_SIM
-    AICORE void assignData(TileDType data, std::uintptr_t assignedAddress = 0)
-    {
-        data_ = data;
-        assignedAddress_ = assignedAddress;
-        hasAssignedAddress_ = true;
-    }
-#else
     AICORE void assignData(TileDType data) { data_ = data; }
-#endif
     TileDType data_;
-#ifdef __CPU_SIM
-    std::uintptr_t assignedAddress_ = 0;
-    bool hasAssignedAddress_ = false;
-#endif
     uint8_t padList_[4] = {0};
     uint16_t fmapH_ = 0;
     uint16_t fmapW_ = 0;
@@ -1699,21 +1681,9 @@ public:
             data()[offset] += summand;
         }
     }
-
-    PTO_INTERNAL std::uintptr_t GetAssignedAddress() const { return assignedAddress_; }
-    PTO_INTERNAL bool HasAssignedAddress() const { return hasAssignedAddress_; }
 #endif
 private:
-#ifdef __CPU_SIM
-    AICORE void assignData(TileDType data, std::uintptr_t assignedAddress = 0)
-    {
-        data_ = data;
-        assignedAddress_ = assignedAddress;
-        hasAssignedAddress_ = true;
-    }
-#else
     AICORE void assignData(TileDType data) { data_ = data; }
-#endif
     bool isKAligned_; // K alignment flag for A3.
 
 #if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
@@ -1721,10 +1691,6 @@ private:
     TileDType data_ = nullptr;
 #else
     TileDType data_;
-#endif
-#ifdef __CPU_SIM
-    std::uintptr_t assignedAddress_ = 0;
-    bool hasAssignedAddress_ = false;
 #endif
 };
 
