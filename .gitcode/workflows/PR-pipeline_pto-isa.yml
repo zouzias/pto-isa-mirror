@@ -36,19 +36,20 @@ stages:
       JOB_pre:
         name: Test_pre_pipeline
         steps:
-          -
-            name: Checkout
-            identifier: process_checkout
-            uses: checkout
+          - name: pre_pipeline
+            uses: cann/.gitcode/actions/pre-pipeline@master
             with:
-              ref: ${{ atomgit.event.pull_request.merge_commit_sha }}
+              owner: ${{ env.org_name }}
+              repo: ${{ env.repo_name }}
+              pr_number: ${{ atomgit.event.pull_request.number }}
               token: ${{ secrets.GIT_TOKEN }}
-          -
-            name: pre_pipeline
-            run: |
-              echo "pre pipeline check: repo=${{ env.repo_name }} merge_id=${{ env.MERGE_ID }}"
-        if: "${{ default() }}"
-        runs-on: ["dedicate-hosted", "x64", "small"]
+              apply_label: ${{ vars.APPLY_LABEL }}
+          - name: associate-pr-comment
+            uses: associate-pr-comment
+            if: env.online == 'true'
+        runs-on: [dedicate-hosted, x64, small]
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/ci_cann/ubuntu20.04.05_x86:k8s_v1.1006
       JOB_image:
         name: Test_image
         steps:
