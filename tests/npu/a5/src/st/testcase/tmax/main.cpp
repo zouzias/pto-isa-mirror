@@ -95,8 +95,8 @@ void test_tmax()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSizeDst);
-    std::vector<T> devFinal(fileSizeDst);
+    std::vector<T> golden(fileSizeDst / sizeof(T));
+    std::vector<T> devFinal(fileSizeDst / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
     ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
 
@@ -126,3 +126,5 @@ TEST_F(TMAXTest, case_half_16x64_16x128_16x128_16x63)
 TEST_F(TMAXTest, case_float_16x32_16x64_16x32_16x31) { test_tmax<float, 16, 32, 16, 64, 16, 32, 16, 31>(); }
 TEST_F(TMAXTest, case_int16_32x128_32x128_32x256_32x127) { test_tmax<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>(); }
 TEST_F(TMAXTest, case_int32_16x32_16x64_16x32_16x31) { test_tmax<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(); }
+TEST_F(TMAXTest, case_int64_4x16_4x16_4x16_4x16) { test_tmax<int64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TMAXTest, case_uint64_4x16_4x16_4x16_4x16) { test_tmax<uint64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
