@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-#define PAD_VALUE_NULL (-100)
+ #define PAD_VALUE_NULL (-100)
 #define PAD_VALUE_MAX (1)
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
@@ -81,4 +81,8 @@ template void LaunchTExpandS<uint16_t, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX,
 template void LaunchTExpandS<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX, false>(
     void* out, void* scalar, void* stream);
 template void LaunchTExpandS<int16_t, 1, 200, 1, 512, 1, 200, PAD_VALUE_MAX, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<int64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<uint64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL, false>(
     void* out, void* scalar, void* stream);
