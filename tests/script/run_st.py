@@ -128,14 +128,16 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
 
 def run_gen_data(golden_path):
     original_dir = os.getcwd()
+    gen_data_name = f"gen_data_{os.getpid()}.py"
+    gen_data_path = os.path.join("build", gen_data_name)
     try:
-        cmd = ["cp", golden_path, "build/gen_data.py"]
+        cmd = ["cp", golden_path, gen_data_path]
         run_command(cmd)
 
         build_dir = "build/"
         os.chdir(build_dir)
 
-        gloden_gen_cmd = [sys.executable, "gen_data.py"]
+        gloden_gen_cmd = [sys.executable, gen_data_name]
         output = run_command(gloden_gen_cmd)
         print(output)
     except Exception as e:
@@ -143,6 +145,8 @@ def run_gen_data(golden_path):
         raise
     finally:
         os.chdir(original_dir)
+        if os.path.exists(gen_data_path):
+            os.remove(gen_data_path)
 
 
 def needs_test_isolation(testcase):
