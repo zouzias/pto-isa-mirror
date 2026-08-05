@@ -167,10 +167,11 @@ AICORE inline void ComputeAndStoreTile(
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     TSTORE(dstGlobal, cTile);
 
-    // Fence Cube TSTORE (PIPE_FIX) before signaling AIV.
-    // MTE1/MTE2/M are already drained by the wait_flags above; PIPE_ALL
-    // would stall the whole core unnecessarily on every tile.
-    pipe_barrier(PIPE_FIX);
+    // The counter below is a scalar store; pipe_barrier(PIPE_FIX) does not order
+    // the scalar pipe against PIPE_FIX. Without PIPE_ALL the scalar unit can
+    // publish groupDone while TSTORE is still draining, so the CCU may read a
+    // half-written tile. There is no set_flag(PIPE_FIX→S), so PIPE_ALL is required.
+    pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
 
     // AtomicAdd into owner-scoped group counter.

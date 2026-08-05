@@ -75,7 +75,8 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 - **CKE lifetime**: seq one-shot and pipelined register in **one** `RegisterStart/End` batch; after Translate they Publish to `seqGate` / `gate` (+ progress) so physical CKEs are not reused across paths.
 - **AG stagger**: CCU Broadcast peer write order rotates by `(rankId + group) % (P-1)`.
 - **Block Swizzle + L1/L0 double buffering**: same compute-side pattern as `gemm_ar` (zigzag tiles, `stepK=4`, L0 ping/pong).
-- **Per-tile store fence**: after `TSTORE`, `pipe_barrier(PIPE_FIX) + dsb`, then signal `groupDone`.
+- **Per-tile store fence**: after `TSTORE`, `pipe_barrier(PIPE_ALL) + dsb`, then signal `groupDone`. `PIPE_FIX` only drains FixPipe and does **not** order the following scalar `st_atomic(groupDone)`; without `PIPE_ALL` the CCU can read a half-written tile (more visible with small groups / short payloads).
+- **Optional Broadcast source**: Pipelined defaults to Reduce→HBM then whole-group Broadcast; `CCU_FUSED_RB=1` Writes from MS after each 4KB Reduce (saves the HBM round-trip, but small-message count scales with peer count). Sequential one-shot **always** Broadcasts from HBM.
 - **Stable constraint**: `CCU_MISSION_PARALLEL=1`; each rank has a distinct pipelined `gate` and Sequential `seqGate`. Per group the CCU runs Reduce→Broadcast serially on one channel.
 
 ## Tiling Parameters
@@ -108,7 +109,7 @@ This example uses Ascend950PR as the validation platform. Cube (AIC) and Vector 
 │  ┌────────────────────┐   ┌─────────────────────────┐  ┌──────────────────┐  │
 │  │ for each tile:     │   │ poll groupDone          │  │ WaitEvent(gate)  │  │
 │  │   K-loop → TSTORE  │──►│ TNOTIFY owner groupReady│  │ per group:       │  │
-│  │   PIPE_FIX + dsb   │   │ owner: wait >= P-1      │──►│   Pull Reduce    │  │
+│  │   PIPE_ALL + dsb   │   │ owner: wait >= P-1      │──►│   Pull Reduce    │  │
 │  │   AtomicAdd        │   │ TriggerProgressCke      │  │   Push Broadcast │  │
 │  │     groupDone[flat]│   │ (depth-1 backpressure)  │  │ itemsDone++      │  │
 │  └────────────────────┘   └─────────────────────────┘  └──────────────────┘  │
@@ -122,7 +123,7 @@ Each AIC owns a subset of tiles assigned by `block_idx`. For each tile:
 1. **Block Swizzle**: zigzag traversal (odd rows reversed) to improve L1 reuse of `B`.
 2. **K-loop**: batched `TLOAD` into L1 with `stepKa=4`, `TEXTRACT` into L0, then `TMATMUL` / `TMATMUL_ACC`.
 3. **TSTORE**: L0C FP32 is cast to FP16 by FixPipe and written to **owner-packed** `gemm_output`.
-4. **`pipe_barrier(PIPE_FIX) + dsb(DSB_DDR)`**: ensure the store is visible before signaling.
+4. **`pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)`**: drain FixPipe across pipes before signaling (there is no `set_flag(PIPE_FIX→S)` for the scalar `groupDone` path).
 5. **Progress signal**: `AtomicAdd(+1)` into this rank's window `groupDone[flat(owner,g)]`.
 
 ## Communication Path Details
@@ -137,8 +138,10 @@ Each AIC owns a subset of tiles assigned by `block_idx`. For each tile:
 
 For each ready group (owner-contiguous tiles):
 
-1. **Pull Reduce**: `Read` peer packed `gemm_output` into MS, `LocalReduce`, write owner `reduced_output` shard.
-2. **Push Broadcast**: staggered peer-order `Write` to each rank's `reduced_output` at the same offset.
+1. **Pull Reduce**: `Read` peer packed `gemm_output` into MS (4KB slices), `LocalReduce`.
+2. **Push Broadcast** (Pipelined only; two options):
+   - **Default (HBM)**: `LocalCopy` the reduce result into owner `reduced_output`, then one whole-group `Write` per peer.
+   - **`CCU_FUSED_RB=1` (MS)**: after each 4KB Reduce, `Write` from MS to every peer (and still LocalCopy to local HBM). Each Write stays 4KB, so cost scales with peer count.
 3. Increment `itemsDone` for AIV backpressure on the next group.
 
 ### Sequential baseline
@@ -169,36 +172,46 @@ CCU payloads (`gemm_output` / `reduced_output`) and final `row_output` live in a
 ## Measured Performance (reference)
 
 Same shape: `M=5416, K=6144, N=1408` (padded `5504x1536`), `258 tiles (43x6)`, `compute_blocks=32`.  
-Format: **avg** `[med=, std=]`. Headline metric is **Pipelined**.
+Date: **2026-08-05** (`FIRST_DEVICE=2`, devices 2–5; includes the `PIPE_ALL` store fence).  
+Format: **avg** `[med=, std=]`. Headline metric is **Pipelined**.  
+Default Broadcast = HBM (`CCU_FUSED_RB` unset or `0`).
 
-### 2 ranks (`--comm-group-tiles 26`)
+### 2 ranks (`--comm-group-tiles 26`, HBM Broadcast)
 
 `comm_data=0.016 GB/rank`. VERIFY `err=0` PASS.
 
 | Metric | Value |
 | --- | --- |
-| Compute-only | `300.4 us` (`311919 GFLOPS`) `[med=300.4, std=1.0]` |
-| Sequential | `756.6 us` `[med=756.7, std=5.9]` (compute `299.8 us` + one-shot comm `456.8 us @ 34.5 GB/s`) |
-| Pipelined | **`480.3 us`** `[med=476.7, std=15.8]` (compute done `293.4 us`, comm done `479.9 us @ 32.8 GB/s`) |
-| Speedup | `1.575x` |
-| Time saved | `276.4 us` (`36.5%`) |
-| Overlap eff | `93.3%` |
-| Throughput | `390231 GFLOPS` (total) |
+| Compute-only | `308.0 us` (`304261 GFLOPS`) `[med=308.1, std=0.3]` |
+| Sequential | `777.0 us` `[med=773.1, std=11.2]` (compute `308.4 us` + one-shot comm `468.6 us @ 33.6 GB/s`) |
+| Pipelined | **`488.1 us`** `[med=484.5, std=18.8]` (compute done `299.1 us`, comm done `487.7 us @ 32.3 GB/s`) |
+| Speedup | `1.592x` |
+| Overlap eff | `94.1%` |
+| Throughput | `383993 GFLOPS` (total) |
 
-### 4 ranks (`--comm-group-tiles 13`)
+### 4 ranks (`--comm-group-tiles 13`, HBM Broadcast)
 
-`comm_data=0.024 GB/rank`. VERIFY `err=0` PASS.  
-This Sequential run had a large `std`; prefer **med** when comparing Sequential / Speedup across configs.
+`comm_data=0.024 GB/rank`. VERIFY `err=0` PASS.
 
 | Metric | Value |
 | --- | --- |
-| Compute-only | `300.4 us` (`311984 GFLOPS`) `[med=300.2, std=2.9]` |
-| Sequential | `683.4 us` `[med=614.2, std=271.4]` (compute `300.9 us` + one-shot comm `382.4 us @ 61.9 GB/s`, med comm `312.9`) |
-| Pipelined | **`389.0 us`** `[med=384.5, std=18.6]` (compute done `292.5 us`, comm done `388.6 us @ 60.9 GB/s`) |
-| Speedup | `1.757x` (vs Sequential avg; ~`1.58x` if using med seq≈614) |
-| Time saved | `294.4 us` (`43.1%`) |
-| Overlap eff | `76.2%` |
-| Throughput | `963556 GFLOPS` (total, ×ranks) |
+| Compute-only | `306.5 us` (`305748 GFLOPS`) `[med=306.8, std=0.7]` |
+| Sequential | `641.2 us` `[med=636.8, std=19.6]` (compute `308.0 us` + one-shot comm `333.2 us @ 71.1 GB/s`) |
+| Pipelined | **`388.1 us`** `[med=380.7, std=23.2]` (compute done `299.9 us`, comm done `387.7 us @ 61.1 GB/s`) |
+| Speedup | `1.652x` |
+| Overlap eff | `83.1%` |
+| Throughput | `965752 GFLOPS` (total, ×ranks) |
+
+### HBM vs MS Broadcast (same-day, `CCU_FUSED_RB`)
+
+| Config | Broadcast | Pipelined | Sequential | Speedup |
+| --- | --- | --- | --- | --- |
+| 2-rank g=26 | HBM (`0`) | 488.1 `[med=484.5]` | 777.0 | 1.592x |
+| 2-rank g=26 | **MS (`1`)** | **465.0** `[med=462.1]` | 796.8 | **1.714x** |
+| 4-rank g=13 | HBM (`0`) | 388.1 `[med=380.7]` | 641.2 | 1.652x |
+| 4-rank g=13 | MS (`1`) | 383.0 `[med=378.7]` | 615.8 | 1.608x |
+
+Takeaway: on 2 ranks MS is ~**23 µs** faster (HBM round-trip savings beat single-peer 4KB tax); on 4 ranks the two are tied (~5 µs, noise) because peer=3 roughly triples per-group small Writes. Sequential ignores `CCU_FUSED_RB` (always HBM one-shot); Sequential deltas above are run-to-run noise.
 
 ### What these numbers mean
 
@@ -255,7 +268,8 @@ CCU GEMM AllReduce demo completed successfully.
 | `MPI_SEARCH_DIRS` | MPI `bin/` search paths | common mpich locations |
 | `MPI_LIB_PATH` | `libmpi.so` | set by `run.sh` |
 | `HCCL_BUFFSIZE` | HCCL window size (MB) | auto-raised by `run.sh` from M/N |
-| `HCCL_CCU_CUSTOM_OP_MODE` | custom CCU kernel mode | set to `1` by `run.sh` |
+| `HCCL_CCU_CUSTOM_OP_MODE` | custom CCU kernel mode (required for `HcommCcuKernelRegister`) | set to `1` by `run.sh` |
+| `CCU_FUSED_RB` | Pipelined: `1` = MS-direct Broadcast, else HBM Broadcast | HBM by default |
 | `FIRST_DEVICE` | first NPU device id | `0` |
 | `CCU_MISSION_PARALLEL` | CCU mission parallelism | must be `1` |
 | `HCOMM_PKG_INC` | optional internal hcomm pkg_inc | auto-probed by cmake |

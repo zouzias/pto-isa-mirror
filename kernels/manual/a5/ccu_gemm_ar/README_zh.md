@@ -75,7 +75,8 @@ $$
 - **CKE 生命周期**：seq one-shot 与 pipelined 在**同一次** `RegisterStart/End` 中注册，Translate 后分别 Publish 到 `seqGate` / `gate`（+ progress），保证物理 CKE 不复用。
 - **AG 错峰**：CCU Broadcast 的 peer 写序按 `(rankId + group) % (P-1)` 轮转。
 - **Block Swizzle + L1/L0 双缓冲**：计算侧与 `gemm_ar` 同类（zigzag tile、`stepK=4`、L0 ping/pong）。
-- **每 tile store fence**：`TSTORE` 后 `pipe_barrier(PIPE_FIX) + dsb`，再发 `groupDone`。
+- **每 tile store fence**：`TSTORE` 后 `pipe_barrier(PIPE_ALL) + dsb`，再发 `groupDone`。`PIPE_FIX` 只排空 FixPipe，**不能**与随后的标量 `st_atomic(groupDone)` 定序；否则 CCU 可能读到半写完的 tile（小 group / 短 payload 上更容易暴露）。
+- **Broadcast 源可选**：Pipelined 默认 Reduce 写 HBM 后再整段 Broadcast；`CCU_FUSED_RB=1` 时每个 4KB MS Reduce 完立刻从 MS Write（省 HBM 往返，但小包次数随 peer 线性涨）。Sequential one-shot **始终**走 HBM Broadcast。
 - **Stable 约束**：`CCU_MISSION_PARALLEL=1`；每 rank 有独立的 pipelined `gate` 与 Sequential `seqGate`。CCU 每 group 串行 Reduce→Broadcast（同 channel）。
 
 ## Tiling 参数
@@ -108,7 +109,7 @@ $$
 │  ┌────────────────────┐   ┌─────────────────────────┐  ┌──────────────────┐  │
 │  │ for each tile:     │   │ poll groupDone          │  │ WaitEvent(gate)  │  │
 │  │   K-loop → TSTORE  │──►│ TNOTIFY owner groupReady│  │ per group:       │  │
-│  │   PIPE_FIX + dsb   │   │ owner: wait >= P-1      │──►│   Pull Reduce    │  │
+│  │   PIPE_ALL + dsb   │   │ owner: wait >= P-1      │──►│   Pull Reduce    │  │
 │  │   AtomicAdd        │   │ TriggerProgressCke      │  │   Push Broadcast │  │
 │  │     groupDone[flat]│   │ (depth-1 backpressure)  │  │ itemsDone++      │  │
 │  └────────────────────┘   └─────────────────────────┘  └──────────────────┘  │
@@ -122,7 +123,7 @@ $$
 1. **Block Swizzle**：zigzag 遍历，奇数行反向，提升 B 的 L1 复用。
 2. **K-loop**：`stepKa=4` 批量 TLOAD 到 L1，TEXTRACT 到 L0，TMATMUL / TMATMUL_ACC。
 3. **TSTORE**：L0C FP32 经 FixPipe cast 为 FP16，写入 **owner-packed** `gemm_output`。
-4. **`pipe_barrier(PIPE_FIX) + dsb(DSB_DDR)`**：保证 store 可见后发信号。
+4. **`pipe_barrier(PIPE_ALL) + dsb(DSB_DDR)`**：跨流水线排空 FixPipe 后再发信号（标量 `groupDone` 与 `TSTORE` 之间无 `set_flag(PIPE_FIX→S)` 通道）。
 5. **Progress 信号**：`AtomicAdd(+1)` 到本 rank window 的 `groupDone[flat(owner,g)]`。
 
 ## 通信路径详解
@@ -137,8 +138,10 @@ $$
 
 对每个就绪 group（owner 作用域连续 tile）：
 
-1. **Pull Reduce**：从各 peer 的 packed `gemm_output` `Read` 到 MS，`LocalReduce`，结果落在 owner `reduced_output` 对应 shard。
-2. **Push Broadcast**：按错峰 peer 序 `Write` 到各 rank 的 `reduced_output` 同偏移。
+1. **Pull Reduce**：从各 peer 的 packed `gemm_output` `Read` 到 MS（每片 4KB），`LocalReduce`。
+2. **Push Broadcast**（二选一，仅 Pipelined）：
+   - **默认（HBM）**：Reduce 结果先 `LocalCopy` 到 owner `reduced_output`，再对该 group **整段** `Write` 给各 peer。
+   - **`CCU_FUSED_RB=1`（MS）**：每个 4KB slice Reduce 完立刻从 MS `Write` 给各 peer（同时仍 LocalCopy 到本地 HBM）；单笔仍是 4KB，peer 多时小包开销线性放大。
 3. `itemsDone` 递增，供 AIV 背压判断下一 group 是否可开火。
 
 ### Sequential baseline
@@ -169,36 +172,46 @@ CCU payload（`gemm_output` / `reduced_output`）与最终 `row_output` 在高�
 ## 实测性能（参考）
 
 同 shape：`M=5416, K=6144, N=1408`（padded `5504×1536`），`258 tiles (43×6)`，`compute_blocks=32`。  
-格式：**avg** `[med=, std=]`。headline 主看 **Pipelined**。
+日期：**2026-08-05**（`FIRST_DEVICE=2`，卡 2–5；含 `PIPE_ALL` store fence）。  
+格式：**avg** `[med=, std=]`。headline 主看 **Pipelined**。  
+默认 Broadcast = HBM（`CCU_FUSED_RB` 未设或 `0`）。
 
-### 2 卡（`--comm-group-tiles 26`）
+### 2 卡（`--comm-group-tiles 26`，HBM Broadcast）
 
 `comm_data=0.016 GB/rank`。VERIFY `err=0` PASS。
 
 | 指标 | 值 |
 | --- | --- |
-| Compute-only | `300.4 us`（`311919 GFLOPS`）`[med=300.4, std=1.0]` |
-| Sequential | `756.6 us` `[med=756.7, std=5.9]`（compute `299.8 us` + one-shot comm `456.8 us @ 34.5 GB/s`） |
-| Pipelined | **`480.3 us`** `[med=476.7, std=15.8]`（compute done `293.4 us`，comm done `479.9 us @ 32.8 GB/s`） |
-| Speedup | `1.575x` |
-| Time saved | `276.4 us`（`36.5%`） |
-| Overlap eff | `93.3%` |
-| Throughput | `390231 GFLOPS`（total） |
+| Compute-only | `308.0 us`（`304261 GFLOPS`）`[med=308.1, std=0.3]` |
+| Sequential | `777.0 us` `[med=773.1, std=11.2]`（compute `308.4 us` + one-shot comm `468.6 us @ 33.6 GB/s`） |
+| Pipelined | **`488.1 us`** `[med=484.5, std=18.8]`（compute done `299.1 us`，comm done `487.7 us @ 32.3 GB/s`） |
+| Speedup | `1.592x` |
+| Overlap eff | `94.1%` |
+| Throughput | `383993 GFLOPS`（total） |
 
-### 4 卡（`--comm-group-tiles 13`）
+### 4 卡（`--comm-group-tiles 13`，HBM Broadcast）
 
-`comm_data=0.024 GB/rank`。VERIFY `err=0` PASS。  
-Sequential 本跑 `std` 偏大，跨配置对比 Sequential / Speedup 时优先看 **med**。
+`comm_data=0.024 GB/rank`。VERIFY `err=0` PASS。
 
 | 指标 | 值 |
 | --- | --- |
-| Compute-only | `300.4 us`（`311984 GFLOPS`）`[med=300.2, std=2.9]` |
-| Sequential | `683.4 us` `[med=614.2, std=271.4]`（compute `300.9 us` + one-shot comm `382.4 us @ 61.9 GB/s`，med comm `312.9`） |
-| Pipelined | **`389.0 us`** `[med=384.5, std=18.6]`（compute done `292.5 us`，comm done `388.6 us @ 60.9 GB/s`） |
-| Speedup | `1.757x`（分母为本跑 Sequential avg；若用 med seq≈614 则约 `1.58x`） |
-| Time saved | `294.4 us`（`43.1%`） |
-| Overlap eff | `76.2%` |
-| Throughput | `963556 GFLOPS`（total，×ranks） |
+| Compute-only | `306.5 us`（`305748 GFLOPS`）`[med=306.8, std=0.7]` |
+| Sequential | `641.2 us` `[med=636.8, std=19.6]`（compute `308.0 us` + one-shot comm `333.2 us @ 71.1 GB/s`） |
+| Pipelined | **`388.1 us`** `[med=380.7, std=23.2]`（compute done `299.9 us`，comm done `387.7 us @ 61.1 GB/s`） |
+| Speedup | `1.652x` |
+| Overlap eff | `83.1%` |
+| Throughput | `965752 GFLOPS`（total，×ranks） |
+
+### HBM vs MS Broadcast（同日对照，`CCU_FUSED_RB`）
+
+| 配置 | Broadcast | Pipelined | Sequential | Speedup |
+| --- | --- | --- | --- | --- |
+| 2 卡 g=26 | HBM（`0`） | 488.1 `[med=484.5]` | 777.0 | 1.592x |
+| 2 卡 g=26 | **MS（`1`）** | **465.0** `[med=462.1]` | 796.8 | **1.714x** |
+| 4 卡 g=13 | HBM（`0`） | 388.1 `[med=380.7]` | 641.2 | 1.652x |
+| 4 卡 g=13 | MS（`1`） | 383.0 `[med=378.7]` | 615.8 | 1.608x |
+
+解读：2 卡 MS 约快 **23 µs**（省 HBM 往返 > 单 peer 的 4KB 小包税）；4 卡两者打平（约 5 µs，噪声级）——peer=3 时每 group 小包次数约 ×3，抵消了往返收益。Sequential 不受 `CCU_FUSED_RB` 影响（始终 HBM one-shot），表中 Sequential 差值为跑间波动。
 
 ### 这些数字意味着什么
 
@@ -255,7 +268,8 @@ CCU GEMM AllReduce demo completed successfully.
 | `MPI_SEARCH_DIRS` | MPI `bin/` 搜索路径 | 常见 mpich 路径 |
 | `MPI_LIB_PATH` | `libmpi.so` | `run.sh` 自动设置 |
 | `HCCL_BUFFSIZE` | HCCL 窗口（MB） | `run.sh` 按 M/N 自动抬高 |
-| `HCCL_CCU_CUSTOM_OP_MODE` | 自定义 CCU kernel | `run.sh` 置为 `1` |
+| `HCCL_CCU_CUSTOM_OP_MODE` | 自定义 CCU kernel（`HcommCcuKernelRegister` 必需） | `run.sh` 置为 `1` |
+| `CCU_FUSED_RB` | Pipelined：`1`=MS 直发 Broadcast，其它/未设=HBM Broadcast | 默认 HBM |
 | `FIRST_DEVICE` | 起始 NPU 编号 | 默认 `0` |
 | `CCU_MISSION_PARALLEL` | CCU mission 并行度 | 必须为 `1` |
 | `HCOMM_PKG_INC` | 内部 hcomm pkg_inc（可选） | cmake 自动探测 |
