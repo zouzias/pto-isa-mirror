@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 namespace TRowExpandTest {
 
-template <typename T, uint32_t rows, uint32_t srcCols, uint32_t dstValidCols, uint32_t dstCols>
+ template <typename T, uint32_t rows, uint32_t srcCols, uint32_t dstValidCols, uint32_t dstCols>
 __global__ AICORE void runROWEXPAND(__gm__ T __out__* out, __gm__ T __in__* src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, rows, srcCols>;
@@ -72,4 +72,6 @@ template void launchTROWEXPAND<float, 16, 8, 128, 128>(float* out, float* src, v
 template void launchTROWEXPAND<aclFloat16, 16, 16, 511, 512>(aclFloat16* out, aclFloat16* src, void* stream);
 template void launchTROWEXPAND<int8_t, 16, 32, 255, 256>(int8_t* out, int8_t* src, void* stream);
 template void launchTROWEXPAND<float, 16, 8, 127, 128>(float* out, float* src, void* stream);
+template void launchTROWEXPAND<int64_t, 4, 16, 16, 16>(int64_t* out, int64_t* src, void* stream);
+template void launchTROWEXPAND<uint64_t, 4, 16, 16, 16>(uint64_t* out, uint64_t* src, void* stream);
 } // namespace TRowExpandTest
