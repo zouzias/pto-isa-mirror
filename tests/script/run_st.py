@@ -16,6 +16,13 @@ import shutil
 import argparse
 import fnmatch
 import re
+import time
+
+
+def log_time(name, start_time, detail=""):
+    elapsed = time.monotonic() - start_time
+    suffix = f" {detail}" if detail else ""
+    print(f"[TIME] {name}{suffix} {elapsed:.3f}s")
 
 
 def run_command(command, cwd=None, check=True):
@@ -83,6 +90,7 @@ def get_simulator_info(ascend_home, soc_version):
 
 
 def build_project(run_mode, soc_version, testcase="all", debug_enable=False, auto_enable=False):
+    start_time = time.monotonic()
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
@@ -124,10 +132,20 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
         raise
     finally:
         os.chdir(original_dir)
+        log_time("build", start_time, testcase)
 
 
 def run_gen_data(golden_path):
+    start_time = time.monotonic()
     original_dir = os.getcwd()
+    marker_dir = os.path.join("build", ".gen_data_done")
+    marker_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", golden_path)
+    marker_path = os.path.join(marker_dir, marker_name)
+    if os.path.exists(marker_path):
+        print(f"[SKIP] gen_data cached: {golden_path}")
+        log_time("gen_data_cached", start_time, golden_path)
+        return
+
     try:
         cmd = ["cp", golden_path, "build/gen_data.py"]
         run_command(cmd)
@@ -138,11 +156,15 @@ def run_gen_data(golden_path):
         gloden_gen_cmd = [sys.executable, "gen_data.py"]
         output = run_command(gloden_gen_cmd)
         print(output)
+        os.makedirs(os.path.join(original_dir, marker_dir), exist_ok=True)
+        with open(os.path.join(original_dir, marker_path), "w") as marker:
+            marker.write("ok\n")
     except Exception as e:
         print(f"gen golden failed: {e}")
         raise
     finally:
         os.chdir(original_dir)
+        log_time("gen_data", start_time, golden_path)
 
 
 def needs_test_isolation(testcase):
@@ -221,6 +243,7 @@ def find_mpirun():
 
 
 def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
+    start_time = time.monotonic()
     original_dir = os.getcwd()
     try:
         build_dir = "build/bin/"
@@ -265,9 +288,11 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
         raise
     finally:
         os.chdir(original_dir)
+        log_time("run_binary", start_time, testcase)
 
 
 def main():
+    start_time = time.monotonic()
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
@@ -400,6 +425,7 @@ def main():
         print(f"run failed: {str(e)}", file=sys.stderr)
         sys.exit(1)
     os.chdir(original_dir)
+    log_time("run_st_total", start_time, args.testcase)
 
 
 if __name__ == "__main__":
