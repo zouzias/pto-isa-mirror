@@ -56,7 +56,7 @@ void LaunchTAdd(T* out, T* src0, T* src1, void* stream)
         <<<1, nullptr, stream>>>(out, src0, src1);
 }
 
-template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
+ template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
 void LaunchTAddHalf(aclFloat16* out, aclFloat16* src0, aclFloat16* src1, void* stream)
 {
     runTAdd<half, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>
@@ -67,6 +67,9 @@ template void LaunchTAdd<float, 64, 64, 64, 64, 64, 64, 64, 64>(float* out, floa
 template void LaunchTAdd<float, 64, 128, 64, 128, 64, 128, 64, 128>(float* out, float* src0, float* src1, void* stream);
 template void LaunchTAdd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(
     int32_t* out, int32_t* src0, int32_t* src1, void* stream);
+template void LaunchTAdd<int64_t, 4, 16, 4, 16, 4, 16, 4, 15>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTAdd<uint64_t, 4, 16, 4, 16, 4, 16, 4, 15>(
+    uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
 template void LaunchTAdd<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(
     int16_t* out, int16_t* src0, int16_t* src1, void* stream);
 template void LaunchTAddHalf<16, 256, 16, 256, 16, 256, 16, 256>(

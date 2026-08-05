@@ -16,7 +16,7 @@ using namespace pto;
 
 #define PTO_DIV_ROUNDUP(x, y) (((x) + (y) - 1) / (y))
 
-template <typename T, int validRows, int validCols, int upperOrLower>
+ template <typename T, int validRows, int validCols, int upperOrLower>
 __global__ AICORE void runTTri(__gm__ T __out__* out, int diagonal)
 {
     constexpr uint16_t alignedCol = PTO_DIV_ROUNDUP(validCols, BLOCK_BYTE_SIZE) * BLOCK_BYTE_SIZE;
@@ -56,6 +56,8 @@ template void LaunchTTri<float, 32, 91, 1>(float* out, int diagonal, void* strea
 template void LaunchTTri<float, 128, 128, 1>(float* out, int diagonal, void* stream);
 template void LaunchTTri<float, 763, 32, 0>(float* out, int diagonal, void* stream);
 template void LaunchTTri<float, 763, 32, 1>(float* out, int diagonal, void* stream);
+template void LaunchTTri<int64_t, 4, 15, 1>(int64_t* out, int diagonal, void* stream);
+template void LaunchTTri<uint64_t, 4, 15, 0>(uint64_t* out, int diagonal, void* stream);
 
 // --- Dynamic (static != valid) variants ---
 
