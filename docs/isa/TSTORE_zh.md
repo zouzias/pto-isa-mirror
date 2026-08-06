@@ -89,8 +89,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
         - 布局必须匹配ND/DN/NZ（或特殊情况：`TileData::Rows == 1` 或 `TileData::Cols == 1`）。
         - 强制执行额外的对齐约束（例如，对于ND，行主序宽度（以字节为单位）必须是32的倍数；对于DN，列主序高度（以字节为单位）必须是32的倍数，但有特殊情况例外）。
     - 对于源tile位置为`TileType::Acc`（包括带量化参数的调用形式和原子写入变体）：
-        - 支持的布局转换：NZ2ND、NZ2NZ、NZ2NHWC、NZ2NCHW、NZ2NCDHW。不支持NZ2DN。
-        - 目标布局必须是ND、NZ、NHWC、NCHW或NCDHW；源数据类型必须是 `int32_t` 或 `float`。
+        - 支持的布局转换：NZ2ND、NZ2DN、NZ2NZ、NZ2NHWC、NZ2NCHW、NZ2NCDHW。
+        - 目标布局必须是ND、DN、NZ、NHWC、NCHW或NCDHW；源数据类型必须是 `int32_t` 或 `float`。
         - 不使用量化时，目标数据类型必须是 `int32_t/float/half/bfloat16_t`。
         - ACC到GM的数据类型支持取决于调用形式：
 
@@ -103,7 +103,7 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 
           其它未列出的跨类型组合不属于支持范围。
 
-        - 静态形状约束与Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品对于行/列的约束相同；`AtomicAdd` 额外限制目标数据类型为支持的原子类型。
+        - 静态形状约束：`1 <= TileData::Cols <= 4095`；如果是ND则 `1 <= TileData::Rows <= 8192`；如果是DN、NZ、NHWC、NCHW或NCDHW则 `1 <= TileData::Rows <= 65535` 且 `TileData::Cols % 16 == 0`。对于DN，`TileData::Rows * sizeof(DstType)` 必须是32的倍数。`AtomicAdd` 额外限制目标数据类型为支持的原子类型。
 - **有效区域**:
     - 实现使用 `src.GetValidRow()` / `src.GetValidCol()` 作为传输大小。
 
