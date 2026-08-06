@@ -87,8 +87,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
     - Layouts must match ND/DN/NZ (or a special case where `TileData::Rows == 1` or `TileData::Cols == 1`).
     - Additional alignment constraints are enforced (e.g., for ND the row-major width in bytes must be a multiple of 32; for DN the column-major height in bytes must be a multiple of 32, with special-case exceptions).
     - For `TileType::Acc` / ACC source tiles:
-      - Supported layout conversions: NZ2ND, NZ2NZ, NZ2NHWC, NZ2NCHW, NZ2NCDHW. NZ2DN is **not** supported.
-      - Destination layout must be ND, NZ, NHWC, NCHW, or NCDHW; source dtype must be `int32_t` or `float`.
+      - Supported layout conversions: NZ2ND, NZ2DN, NZ2NZ, NZ2NHWC, NZ2NCHW, NZ2NCDHW.
+      - Destination layout must be ND, DN, NZ, NHWC, NCHW, or NCDHW; source dtype must be `int32_t` or `float`.
     - When not using quantization, destination dtype must be `int32_t/float/half/bfloat16_t`.
     - ACC-to-GM dtype support:
 
@@ -100,7 +100,7 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
       | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half`, `bfloat16_t` |
 
       Other cross-type combinations are not supported.
-    - Static shape constraints match A2A3 for rows/cols; `AtomicAdd` additionally restricts destination dtype to supported atomic types.
+    - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND then `1 <= TileData::Rows <= 8192`; if DN, NZ, NHWC, NCHW, or NCDHW then `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`. For DN, `TileData::Rows * sizeof(DstType)` must be a multiple of 32. `AtomicAdd` additionally restricts destination dtype to supported atomic types.
 - **Valid region**:
     - The implementation uses `src.GetValidRow()` / `src.GetValidCol()` as the transfer size.
 
