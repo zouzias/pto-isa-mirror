@@ -18,7 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min };
+enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min, And, Or, Xor, Not, Abs };
 
 template <MaskPattern Pattern>
 PTO_INTERNAL constexpr unsigned Int64MaskPatternOffset()
@@ -447,6 +447,15 @@ PTO_INTERNAL void Int64BinaryCalcRegs(
         vmula(dstHigh, src0High, src1Low, mask, MODE_ZEROING);
     } else if constexpr (Op == Int64Op::Shl || Op == Int64Op::Shr) {
         Int64ShiftRegs<Op == Int64Op::Shr, T>(dstLow, dstHigh, src0Low, src0High, src1Low, mask);
+    } else if constexpr (Op == Int64Op::And) {
+        vand((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vand((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Or) {
+        vor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Xor) {
+        vxor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vxor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
     } else {
         Int64MinMax<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
     }
@@ -456,14 +465,18 @@ template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned 
 PTO_INTERNAL void Int64BinaryRepeat(
     __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint32_t colOffset, MaskReg& mask)
 {
-    vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High;
+    vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High, half0, half1;
+    MaskReg lowMask, highMask;
     uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
     uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
     vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
     vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
     Int64BinaryCalcRegs<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
-    vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(half0, half1, dstLow, dstHigh);
+    vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+    vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
 }
 
 template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
