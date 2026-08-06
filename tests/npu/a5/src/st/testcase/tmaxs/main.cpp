@@ -56,9 +56,10 @@ void test_tmaxs()
     aclrtMalloc((void**)&src0Device, srcfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, scalarFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input1.bin", srcfileSize, src0Host, srcfileSize);
-    ReadFile(GetGoldenDir() + "/input_scalar.bin", scalarFileSize, src1Host, scalarFileSize);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input1.bin", srcfileSize, src0Host, srcfileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input_scalar.bin", scalarFileSize, src1Host, scalarFileSize));
 
+    aclrtMemset(dstDevice, dstfileSize, 0, dstfileSize);
     aclrtMemcpy(src0Device, srcfileSize, src0Host, srcfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, scalarFileSize, src1Host, scalarFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTMaxs<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, kPadValue_>(
@@ -82,8 +83,8 @@ void test_tmaxs()
 
     std::vector<T> golden(dstfileSize / sizeof(T));
     std::vector<T> devFinal(dstfileSize / sizeof(T));
-    ReadFile(GetGoldenDir() + "/golden.bin", dstfileSize, golden.data(), dstfileSize);
-    ReadFile(GetGoldenDir() + "/output.bin", dstfileSize, devFinal.data(), dstfileSize);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", dstfileSize, golden.data(), dstfileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", dstfileSize, devFinal.data(), dstfileSize));
 
     bool ret;
     if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
