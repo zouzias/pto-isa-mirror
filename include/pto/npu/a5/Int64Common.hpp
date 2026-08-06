@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min };
+enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min, And, Or, Xor, Not, Abs };
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 PTO_INTERNAL void Int64AddRegs(
