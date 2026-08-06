@@ -30,7 +30,7 @@ def saturation(value, min_val, max_val, target_type):
     """
     Saturate the input floating-point number and convert it to the target type.
     """
-    x_clamped = np.clip(value, min_val, max_val) # Saturation Processing
+    x_clamped = np.clip(value, min_val, max_val)  # Saturation Processing
     return np.round(x_clamped).astype(target_type).astype(target_type)
 
 
@@ -81,10 +81,10 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
     temp_quant_tensor = np.random.randint(1, 5, n).astype(np.float32)
     temp_quant_tensor_api = copy.deepcopy(temp_quant_tensor).astype(np.uint64)
     for i, _ in enumerate(temp_quant_tensor_api):
-        temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor[i]))[0]
+        temp_quant_tensor_api[i] = struct.unpack("!I", struct.pack("!f", temp_quant_tensor[i]))[0]
         if dst_data_type == np.int8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
-    
+
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
     quant_tensor = quant_tensor.astype(quant_type)
     quant_tensor.tofile("./quant_vector_gm.bin")
@@ -101,7 +101,7 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
                 quant_golden[i, j] = golden[i, j] * quant_tensor[j]
     return quant_golden
 
-   
+
 def gen_x1_x2_golden(g_info):
     src_data_type = g_info.src_data_type
     dst_data_type = g_info.dst_data_type
@@ -162,27 +162,32 @@ def gen_golden_data(case_name, g_info):
     elif dst_format == 3:
         c0_size = 8
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
-    elif dst_format == 4: 
+    elif dst_format == 4:
         # NHWC
         shape = g_info.shape
         golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).astype(dst_data_type)
-    elif dst_format == 5: 
+    elif dst_format == 5:
         # NCHW
         shape = g_info.shape
         golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).transpose(0, 3, 1, 2).astype(dst_data_type)
-    elif dst_format == 6: 
+    elif dst_format == 6:
         # NCDHW:
         shape_ncdhw = g_info.ncdhw_shape
         golden_ncdhw = np.zeros(shape_ncdhw, dtype=dst_data_type)
         shape_orig = g_info.shape
-        golden_nchw = golden.reshape(
-            shape_orig[0], shape_orig[1], shape_orig[2], shape_orig[3]
-        ).transpose(0, 3, 1, 2).astype(dst_data_type)
+        golden_nchw = (
+            golden.reshape(shape_orig[0], shape_orig[1], shape_orig[2], shape_orig[3])
+            .transpose(0, 3, 1, 2)
+            .astype(dst_data_type)
+        )
         golden_ncdhw[:, :, 0, :, :] = golden_nchw
         golden = golden_ncdhw
+    elif dst_format == 7:
+        # DN (column-major): golden has shape (M, N); write as (N, M) = column-major view
+        golden = golden.T.astype(dst_data_type)
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
-    
+
     golden = golden.astype(dst_data_type)
 
     x1_gm.tofile("./x1_gm.bin")
@@ -191,8 +196,20 @@ def gen_golden_data(case_name, g_info):
 
 
 class TStoreAcc2gmParams:
-    def __init__(self, dst_data_type, src_data_type, dst_format, m, n, k, quant_mode=0, scalar=1, relu_mode=0,
-        shape=(0, 0, 0, 0), ncdhw_shape=(0, 0, 0, 0, 0)):
+    def __init__(
+        self,
+        dst_data_type,
+        src_data_type,
+        dst_format,
+        m,
+        n,
+        k,
+        quant_mode=0,
+        scalar=1,
+        relu_mode=0,
+        shape=(0, 0, 0, 0),
+        ncdhw_shape=(0, 0, 0, 0, 0),
+    ):
         self.src_data_type = src_data_type
         self.dst_data_type = dst_data_type
         self.dst_format = dst_format
@@ -204,6 +221,7 @@ class TStoreAcc2gmParams:
         self.relu_mode = relu_mode
         self.shape = shape
         self.ncdhw_shape = ncdhw_shape
+
 
 if __name__ == "__main__":
     case_name_list = [
@@ -224,6 +242,9 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case27",
         "TStoreAcc2gmTest.case_relu_1",
         "TStoreAcc2gmTest.case_relu_21",
+        "TStoreAcc2gmTest.case_dn_1",
+        "TStoreAcc2gmTest.case_dn_2",
+        "TStoreAcc2gmTest.case_dn_3",
     ]
 
     case_params_list = [
@@ -244,9 +265,12 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(bfloat16, np.float16, 1, 160, 79, 51, 1, 3),
         TStoreAcc2gmParams(np.float32, np.float32, 1, 117, 97, 71, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 77, 34, 81, quant_mode=1, scalar=2, relu_mode=1),
+        TStoreAcc2gmParams(np.float32, np.float32, 7, 32, 16, 16),
+        TStoreAcc2gmParams(np.int32, np.int8, 7, 96, 64, 32),
+        TStoreAcc2gmParams(np.float16, np.float16, 7, 112, 128, 80),
     ]
 
-    for i, case_name  in enumerate(case_name_list):
+    for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()
