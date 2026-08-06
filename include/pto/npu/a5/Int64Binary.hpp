@@ -236,7 +236,8 @@ PTO_INTERNAL void Int64Binary(
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High;
+        vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High, half0, half1;
+        MaskReg lowMask, highMask;
         uint16_t rowCount = validRows;
         for (uint16_t row = 0; row < rowCount; ++row) {
             uint32_t remainingCols = validCols;
@@ -264,10 +265,22 @@ PTO_INTERNAL void Int64Binary(
                     vmula(dstHigh, src0High, src1Low, mask, MODE_ZEROING);
                 } else if constexpr (Op == Int64Op::Shl || Op == Int64Op::Shr) {
                     Int64ShiftRegs<Op == Int64Op::Shr, T>(dstLow, dstHigh, src0Low, src0High, src1Low, mask);
+                } else if constexpr (Op == Int64Op::And) {
+                    vand((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+                    vand((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Or) {
+                    vor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+                    vor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Xor) {
+                    vxor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+                    vxor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
                 } else {
                     Int64MinMax<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
                 }
-                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, dstLow, dstHigh);
+                vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+                vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
@@ -277,41 +290,63 @@ PTO_INTERNAL void Int64Binary(
 template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
 {
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh;
+        vector_s32 dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, half0, half1;
+        MaskReg lowMask, highMask;
         uint64_t scalarBits = static_cast<uint64_t>(scalar);
         int32_t low = static_cast<int32_t>(scalarBits);
         int32_t high = static_cast<int32_t>(scalarBits >> 32);
         vbr(scalarLow, low);
         vbr(scalarHigh, high);
-        uint32_t maskCount = validCols;
-        MaskReg mask = plt_b32(maskCount, POST_UPDATE);
         uint16_t rowCount = validRows;
         for (uint16_t row = 0; row < rowCount; ++row) {
-            vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src + row * SrcCols * 2, 0, DINTLV_B32);
-            MaskReg carry;
-            MaskReg carryOut;
-            if constexpr (Op == Int64Op::Add) {
-                vaddc(carry, dstLow, srcLow, scalarLow, mask);
-                vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
-            } else if constexpr (Op == Int64Op::Sub) {
-                vsubc(carry, dstLow, srcLow, scalarLow, mask);
-                vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
-            } else if constexpr (Op == Int64Op::Mul) {
-                vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
-                vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
-                vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
-            } else if constexpr (Op == Int64Op::Shl) {
-                vbr(scalarLow, static_cast<int32_t>(scalarBits));
-                Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
-            } else if constexpr (Op == Int64Op::Shr) {
-                vbr(scalarLow, static_cast<int32_t>(scalarBits));
-                Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
-            } else {
-                Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+            uint32_t remainingCols = validCols;
+            for (uint16_t colRepeat = 0; colRepeat < repeatTimes; ++colRepeat) {
+                uint32_t cols = remainingCols > elementsPerRepeat ? elementsPerRepeat : remainingCols;
+                MaskReg mask = plt_b32(cols, POST_UPDATE);
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
+                uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+                vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+                MaskReg carry;
+                MaskReg carryOut;
+                if constexpr (Op == Int64Op::Add) {
+                    vaddc(carry, dstLow, srcLow, scalarLow, mask);
+                    vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Sub) {
+                    vsubc(carry, dstLow, srcLow, scalarLow, mask);
+                    vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Mul) {
+                    vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
+                    vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
+                    vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Shl) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else if constexpr (Op == Int64Op::Shr) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else if constexpr (Op == Int64Op::And) {
+                    vand((vector_u32&)dstLow, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask, MODE_ZEROING);
+                    vand((vector_u32&)dstHigh, (vector_u32&)srcHigh, (vector_u32&)scalarHigh, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Or) {
+                    vor((vector_u32&)dstLow, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask, MODE_ZEROING);
+                    vor((vector_u32&)dstHigh, (vector_u32&)srcHigh, (vector_u32&)scalarHigh, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Xor) {
+                    vxor((vector_u32&)dstLow, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask, MODE_ZEROING);
+                    vxor((vector_u32&)dstHigh, (vector_u32&)srcHigh, (vector_u32&)scalarHigh, mask, MODE_ZEROING);
+                } else {
+                    Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+                }
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, dstLow, dstHigh);
+                vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+                vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
+                remainingCols -= cols;
             }
-            vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, mask);
         }
     }
 }
