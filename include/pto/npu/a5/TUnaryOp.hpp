@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "custom/TExp_Custom.hpp"
 #include "custom/TLog_Custom.hpp"
 #include "custom/TSqrtHp.hpp"
+#include "Int64Binary.hpp"
 
 namespace pto {
 template <typename Op, typename T, unsigned nRepeatElem>
@@ -203,14 +204,19 @@ __tf__ PTO_INTERNAL OP_NAME(TNOT) OP_TYPE(element_wise) void TNot(
     using T = typename DstTile::DType;
     __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
     __ubuf__ T* src = (__ubuf__ T*)__cce_get_tile_ptr(srcData);
-    TUnaryOp<DstTile, SrcTile, NotOp<T>>(dst, src, validRow, validCol, version);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64Unary<Int64Op::Not, T, DstTile::Cols, SrcTile::Cols>(dst, src, validRow, validCol);
+    } else {
+        TUnaryOp<DstTile, SrcTile, NotOp<T>>(dst, src, validRow, validCol, version);
+    }
 }
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TNOT_IMPL(DstTile& dst, SrcTile& src)
 {
     TUnaryCheck<DstTile, SrcTile, false>();
     static_assert(
-        std::is_same_v<typename DstTile::DType, uint32_t> || std::is_same_v<typename DstTile::DType, int32_t> ||
+        std::is_same_v<typename DstTile::DType, uint64_t> || std::is_same_v<typename DstTile::DType, int64_t> ||
+            std::is_same_v<typename DstTile::DType, uint32_t> || std::is_same_v<typename DstTile::DType, int32_t> ||
             std::is_same_v<typename DstTile::DType, uint16_t> || std::is_same_v<typename DstTile::DType, int16_t> ||
             std::is_same_v<typename DstTile::DType, uint8_t> || std::is_same_v<typename DstTile::DType, int8_t>,
         "TNOT: Invalid data type.");
@@ -307,14 +313,19 @@ __tf__ PTO_INTERNAL OP_NAME(TABS) OP_TYPE(element_wise) void TAbs(
     using T = typename DstTile::DType;
     __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
     __ubuf__ T* src = (__ubuf__ T*)__cce_get_tile_ptr(srcData);
-    TUnaryOp<DstTile, SrcTile, AbsOp<T>>(dst, src, validRow, validCol, version);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64Unary<Int64Op::Abs, T, DstTile::Cols, SrcTile::Cols>(dst, src, validRow, validCol);
+    } else {
+        TUnaryOp<DstTile, SrcTile, AbsOp<T>>(dst, src, validRow, validCol, version);
+    }
 }
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TABS_IMPL(DstTile& dst, SrcTile& src)
 {
     TUnaryCheck<DstTile, SrcTile, false>();
     static_assert(
-        std::is_same_v<typename DstTile::DType, float32_t> || std::is_same_v<typename DstTile::DType, float> ||
+        std::is_same_v<typename DstTile::DType, int64_t> || std::is_same_v<typename DstTile::DType, uint64_t> ||
+            std::is_same_v<typename DstTile::DType, float32_t> || std::is_same_v<typename DstTile::DType, float> ||
             std::is_same_v<typename DstTile::DType, float16_t> || std::is_same_v<typename DstTile::DType, half> ||
             std::is_same_v<typename DstTile::DType, int8_t> || std::is_same_v<typename DstTile::DType, int16_t> ||
             std::is_same_v<typename DstTile::DType, int32_t>,
