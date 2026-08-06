@@ -120,19 +120,23 @@ PTO_INTERNAL void CheckStaticAcc()
         caps::IsSInt32<typename TileData::DType>() || caps::IsFP32<typename TileData::DType>(),
         "The input data type must be restricted to int32_t/float!");
     static_assert(
-        (GlobalData::layout == pto::Layout::ND) || (GlobalData::layout == pto::Layout::NZ) ||
-            (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW) ||
-            (GlobalData::layout == pto::Layout::NCDHW),
-        "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW / NZ2NCDHW.");
+        (GlobalData::layout == pto::Layout::ND) || (GlobalData::layout == pto::Layout::DN) ||
+            (GlobalData::layout == pto::Layout::NZ) || (GlobalData::layout == pto::Layout::NHWC) ||
+            (GlobalData::layout == pto::Layout::NCHW) || (GlobalData::layout == pto::Layout::NCDHW),
+        "TSTORE(Acc2GM) only support NZ2ND / NZ2DN / NZ2NZ / NZ2NHWC / NZ2NCHW / NZ2NCDHW.");
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert(
         (GlobalData::layout == pto::Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
-            ((GlobalData::layout == pto::Layout::NZ || (GlobalData::layout == pto::Layout::NHWC) ||
-              (GlobalData::layout == pto::Layout::NCHW) || (GlobalData::layout == pto::Layout::NCDHW)) &&
+            ((GlobalData::layout == pto::Layout::DN || GlobalData::layout == pto::Layout::NZ ||
+              (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW) ||
+              (GlobalData::layout == pto::Layout::NCDHW)) &&
              TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
         "When GlobalData is ND format, the range of Rows is [1, 8192]."
-        "When GlobalData is NZ/NHWC/NCHW/NCDHW format, the range of Rows is [1, 65535] and Cols"
+        "When GlobalData is DN/NZ/NHWC/NCHW/NCDHW format, the range of Rows is [1, 65535] and Cols"
         "must be an integer multiple of 16.");
+    static_assert(
+        GlobalData::layout != pto::Layout::DN || (TileData::Rows * sizeof(typename GlobalData::RawDType) % 32 == 0),
+        "When GlobalData is DN format, TileData::Rows * sizeof(DstType) must be a multiple of 32.");
     if constexpr (!isQuant) {
         static_assert(
             caps::IsSInt32<typename GlobalData::RawDType>() || caps::IsFP32<typename GlobalData::RawDType>() ||
