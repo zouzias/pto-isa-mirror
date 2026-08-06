@@ -22,6 +22,12 @@ template <int tilingKey>
 void LaunchTStoreAcc2gmNz2nz(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int tilingKey>
+void LaunchTStoreAcc2gmNz2dn(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+
+template <int tilingKey>
+void LaunchTStoreAcc2gmVectorNz2dn(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
+
+template <int tilingKey>
 void LaunchTStoreAcc2gmScalarNz2nd(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream, float scalarQuant);
 
 template <int tilingKey>
@@ -78,6 +84,63 @@ void test_tstore_acc2gm_nz2nd()
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStoreAcc2gmNz2nd<tilingKey>(dstDevice, src0Device, src1Device, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, cFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dstDataType> golden(cFileSize);
+    std::vector<dstDataType> devFinal(cFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+
+    bool ret = ResultCmp<dstDataType>(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+template <int tilingKey, typename dstDataType, typename srcDataType, int validM, int validN, int validK>
+void test_tstore_acc2gm_nz2dn()
+{
+    size_t aFileSize = validM * validK * sizeof(srcDataType);
+    size_t bFileSize = validK * validN * sizeof(srcDataType);
+    size_t cFileSize = validM * validN * sizeof(dstDataType);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstHost, *src0Host, *src1Host;
+    uint8_t *dstDevice, *src0Device, *src1Device;
+
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
+
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
+    ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+
+    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTStoreAcc2gmNz2dn<tilingKey>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -345,6 +408,77 @@ void test_tstore_acc2gm_vector_nz2nd()
 }
 
 template <int tilingKey, typename dstDataType, typename srcDataType, int validM, int validN, int validK>
+void test_tstore_acc2gm_vector_nz2dn()
+{
+    using ScalingT = uint64_t;
+    constexpr int alignFbN = (validN * sizeof(ScalingT) + 127) / 128 * 128 / sizeof(ScalingT);
+    size_t aFileSize = validM * validK * sizeof(srcDataType);
+    size_t bFileSize = validK * validN * sizeof(srcDataType);
+    size_t cFileSize = validM * validN * sizeof(dstDataType);
+    size_t fbFileSize = alignFbN * sizeof(ScalingT);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t* dstHost;
+    uint8_t* src0Host;
+    uint8_t* src1Host;
+    uint8_t* quantTensorHost;
+    uint8_t* dstDevice;
+    uint8_t* src0Device;
+    uint8_t* src1Device;
+    uint8_t* quantTensorDevice;
+
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
+    aclrtMallocHost((void**)(&quantTensorHost), fbFileSize);
+
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&quantTensorDevice, fbFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
+    ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    ReadFile(GetGoldenDir() + "/quant_vector_gm.bin", fbFileSize, quantTensorHost, fbFileSize);
+
+    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(quantTensorDevice, fbFileSize, quantTensorHost, fbFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTStoreAcc2gmVectorNz2dn<tilingKey>(dstDevice, src0Device, src1Device, quantTensorDevice, stream);
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, cFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
+    aclrtFree(quantTensorDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
+    aclrtFreeHost(quantTensorHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dstDataType> golden(cFileSize);
+    std::vector<dstDataType> devFinal(cFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+
+    bool ret = ResultCmp<dstDataType>(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+template <int tilingKey, typename dstDataType, typename srcDataType, int validM, int validN, int validK>
 void test_tstore_acc2gm_vector_nz2nz()
 {
     using ScalingT = uint64_t;
@@ -567,3 +701,15 @@ TEST_F(TStoreAcc2gmTest, case_ncdhw_5) { test_tstore_acc2gm_scalar_nz2nd<51, uin
 TEST_F(TStoreAcc2gmTest, case_ncdhw_6) { test_tstore_acc2gm_vector_nz2nd<51, uint16_t, uint8_t, 1056, 64, 32>(); }
 
 TEST_F(TStoreAcc2gmTest, case_ncdhw_7) { test_tstore_acc2gm_vector_nz2nd<52, float, uint16_t, 1024, 128, 32>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_1) { test_tstore_acc2gm_nz2dn<1, float, float, 32, 32, 16>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_2) { test_tstore_acc2gm_nz2dn<2, int32_t, int8_t, 32, 32, 32>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_3) { test_tstore_acc2gm_nz2dn<3, uint16_t, uint16_t, 32, 32, 16>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_4) { test_tstore_acc2gm_vector_nz2dn<1, uint16_t, uint16_t, 32, 32, 16>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_5) { test_tstore_acc2gm_vector_nz2dn<2, uint8_t, uint8_t, 32, 32, 32>(); }
+
+TEST_F(TStoreAcc2gmTest, case_dn_6) { test_tstore_acc2gm_vector_nz2dn<3, float, float, 64, 32, 16>(); }
