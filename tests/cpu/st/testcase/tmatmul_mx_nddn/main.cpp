@@ -22,7 +22,7 @@ template <int32_t tilingKey>
 void LaunchTMATMUL_MX_BIAS(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
 
-class TMATMULMXTest : public testing::Test {
+class TMATMULMX_NDDN_Test : public testing::Test {
 protected:
     void SetUp() override {}
     void TearDown() override {}
@@ -147,7 +147,7 @@ void TmatmulMXTest(uint32_t M, uint32_t K, uint32_t N, uint32_t validM, uint32_t
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TMATMULMXTest, case1)
+TEST_F(TMATMULMX_NDDN_Test, case1)
 {
     uint32_t M = 128;
     uint32_t K = 64;
@@ -156,7 +156,7 @@ TEST_F(TMATMULMXTest, case1)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 1>(M, K, N, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case2)
+TEST_F(TMATMULMX_NDDN_Test, case2)
 {
     uint32_t M = 127;
     uint32_t K = 72;
@@ -165,7 +165,7 @@ TEST_F(TMATMULMXTest, case2)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 2>(128, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case3)
+TEST_F(TMATMULMX_NDDN_Test, case3)
 {
     uint32_t M = 128;
     uint32_t K = 110;
@@ -174,7 +174,7 @@ TEST_F(TMATMULMXTest, case3)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 3>(128, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case4)
+TEST_F(TMATMULMX_NDDN_Test, case4)
 {
     uint32_t M = 128;
     uint32_t K = 64;
@@ -183,7 +183,7 @@ TEST_F(TMATMULMXTest, case4)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 4>(128, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case5)
+TEST_F(TMATMULMX_NDDN_Test, case5)
 {
     uint32_t M = 117;
     uint32_t K = 64;
@@ -192,7 +192,7 @@ TEST_F(TMATMULMXTest, case5)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 5>(128, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case6)
+TEST_F(TMATMULMX_NDDN_Test, case6)
 {
     uint32_t M = 128;
     uint32_t K = 118;
@@ -201,7 +201,7 @@ TEST_F(TMATMULMXTest, case6)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 6>(128, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case7)
+TEST_F(TMATMULMX_NDDN_Test, case7)
 {
     uint32_t M = 115;
     uint32_t K = 64;
@@ -210,7 +210,7 @@ TEST_F(TMATMULMXTest, case7)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 7>(128, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case8)
+TEST_F(TMATMULMX_NDDN_Test, case8)
 {
     uint32_t M = 16;
     uint32_t K = 32;
@@ -219,7 +219,7 @@ TEST_F(TMATMULMXTest, case8)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 8>(16, 64, 32, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case9)
+TEST_F(TMATMULMX_NDDN_Test, case9)
 {
     uint32_t M = 10;
     uint32_t K = 50;
@@ -228,7 +228,7 @@ TEST_F(TMATMULMXTest, case9)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 9>(16, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case10)
+TEST_F(TMATMULMX_NDDN_Test, case10)
 {
     uint32_t M = 4;
     uint32_t K = 30;
@@ -237,7 +237,7 @@ TEST_F(TMATMULMXTest, case10)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 10>(16, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case11)
+TEST_F(TMATMULMX_NDDN_Test, case11)
 {
     uint32_t M = 1;
     uint32_t K = 128;
@@ -246,7 +246,7 @@ TEST_F(TMATMULMXTest, case11)
     TmatmulMXTest<float, uint8_t, uint8_t, false, true, 11>(16, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case12)
+TEST_F(TMATMULMX_NDDN_Test, case12)
 {
     uint32_t M = 1;
     uint32_t K = 256;
@@ -255,7 +255,7 @@ TEST_F(TMATMULMXTest, case12)
     TmatmulMXTest<float, uint8_t, uint8_t, false, false, 12>(16, 256, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case13)
+TEST_F(TMATMULMX_NDDN_Test, case13)
 {
     uint32_t M = 115;
     uint32_t K = 64;
@@ -264,7 +264,7 @@ TEST_F(TMATMULMXTest, case13)
     TmatmulMXTest<float, uint8_t, uint8_t, true, false, 1>(128, 64, 32, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case14)
+TEST_F(TMATMULMX_NDDN_Test, case14)
 {
     uint32_t M = 200;
     uint32_t K = 192;
@@ -273,7 +273,7 @@ TEST_F(TMATMULMXTest, case14)
     TmatmulMXTest<float, uint8_t, uint8_t, true, false, 2>(208, 192, 128, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case15)
+TEST_F(TMATMULMX_NDDN_Test, case15)
 {
     uint32_t M = 35;
     uint32_t K = 128;
@@ -282,7 +282,7 @@ TEST_F(TMATMULMXTest, case15)
     TmatmulMXTest<float, uint8_t, uint8_t, true, true, 3>(48, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case16)
+TEST_F(TMATMULMX_NDDN_Test, case16)
 {
     uint32_t M = 47;
     uint32_t K = 128;
@@ -291,7 +291,7 @@ TEST_F(TMATMULMXTest, case16)
     TmatmulMXTest<float, uint8_t, uint8_t, true, true, 4>(48, 128, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case17)
+TEST_F(TMATMULMX_NDDN_Test, case17)
 {
     uint32_t M = 64;
     uint32_t K = 192;
@@ -300,7 +300,7 @@ TEST_F(TMATMULMXTest, case17)
     TmatmulMXTest<float, uint8_t, uint8_t, true, false, 5>(64, 192, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case18)
+TEST_F(TMATMULMX_NDDN_Test, case18)
 {
     uint32_t M = 1;
     uint32_t K = 64;
@@ -309,7 +309,7 @@ TEST_F(TMATMULMXTest, case18)
     TmatmulMXTest<float, uint8_t, uint8_t, true, true, 6>(16, 64, 64, M, K, N);
 }
 
-TEST_F(TMATMULMXTest, case19)
+TEST_F(TMATMULMX_NDDN_Test, case19)
 {
     uint32_t M = 1;
     uint32_t K = 2048;
