@@ -226,6 +226,7 @@ tpushpop_vc
 tpushpop_cv_nosplit
 tpushpop_vc_nosplit
 tpushpop_dir_both
+tpushpop_dir_both_concurrent
 tpushpop_subtile
 tfusedmuladd
 tmuladddst
@@ -254,6 +255,7 @@ if (AUTO_MODE)
     tpushpop_cv_nosplit
     tpushpop_vc_nosplit
     tpushpop_dir_both
+    tpushpop_dir_both_concurrent
     tpushpop_subtile
   # the following case wait to be fix 
     mgather
