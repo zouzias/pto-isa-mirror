@@ -322,6 +322,8 @@ class ParallelSchedulingTest(unittest.TestCase):
         self.root = Path(self._tmp.name)
 
     def tearDown(self):
+        with rsp._ACTIVE_PROCS_LOCK:
+            rsp._ACTIVE_PROCS.clear()
         self._tmp.cleanup()
 
     def test_two_workers_get_distinct_roots_and_devices(self):
@@ -662,6 +664,95 @@ class BuildShParsingTest(unittest.TestCase):
         proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
+
+
+class MainFlowRegressionTest(unittest.TestCase):
+    """P1: main() orchestration regression tests (mocked devices/runner)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.st_root = self.root / "st"
+        self.st_root.mkdir()
+        self.base_build = self.root / "base"
+        self.base_build.mkdir()
+        self.run_st_script = self.root / "run_st.py"
+        self.manifest = self.root / "tasks.tsv"
+        self.manifest.write_text("t1\tF.case1\t0\nt2\tF.case2\t0\n")
+
+    def tearDown(self):
+        with rsp._ACTIVE_PROCS_LOCK:
+            rsp._ACTIVE_PROCS.clear()
+        self._tmp.cleanup()
+
+    def _base_argv(self):
+        return [
+            "run_st_parallel.py",
+            "--manifest", str(self.manifest),
+            "--workers", "2",
+            "--st-root", str(self.st_root),
+            "--base-build-dir", str(self.base_build),
+            "--run-st-script", str(self.run_st_script),
+            "--run-mode", "npu",
+            "--soc-version", "a3",
+        ]
+
+    def test_no_device_best_effort_enters_serial_fallback(self):
+        """main() with no devices and best-effort must run all tasks serially."""
+        fake = self.run_st_script
+        fake.write_text(
+            "import sys, os\n"
+            "rec=os.environ['RECORD']\n"
+            "with open(rec,'a') as f: f.write('x\\n')\n"
+            "sys.exit(0)\n"
+        )
+        record = self.root / "rec.txt"
+        argv = self._base_argv() + ["--best-effort"]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(rsp, "select_devices", return_value=([], None)), \
+             mock.patch.object(rsp, "query_npu_smi",
+                               side_effect=rsp.DeviceDiscoveryError("no smi")), \
+             mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            rc = rsp.main()
+        self.assertEqual(rc, 0)
+        # Serial fallback executed both tasks.
+        self.assertEqual(record.read_text().count("x"), 2)
+
+    def test_build_prep_exception_releases_locks_and_preserves_dir(self):
+        """If worker build prep raises, locks release and run dir is preserved."""
+        argv = self._base_argv()
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(rsp, "select_devices", return_value=([0, 3], "npu-smi")), \
+             mock.patch.object(rsp, "query_npu_smi", return_value=[
+                 rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False),
+             ]), \
+             mock.patch.object(rsp, "lock_candidate") as lk, \
+             mock.patch.object(rsp, "release_lock") as rl:
+            lk.side_effect = [
+                rsp.DeviceLock(0, fd=None, path=str(self.root / "l0")),
+                rsp.DeviceLock(3, fd=None, path=str(self.root / "l3")),
+            ]
+            with self.assertRaises(OSError):
+                with mock.patch.object(rsp, "prepare_worker_build",
+                                       side_effect=OSError("boom")):
+                    rsp.main()
+            # Both locks must be released during cleanup.
+            self.assertEqual(rl.call_count, 2)
+            # The run dir is preserved on failure (not removed).
+            run_dir = self.st_root / ".smoke-parallel" / str(os.getpid())
+            self.assertTrue(run_dir.exists())
+
+
+class NpuSmiNoProcessTableTest(unittest.TestCase):
+    """P1: npu-smi with healthy rows but no process table must fail, not guess."""
+
+    def test_healthy_row_without_process_table_raises(self):
+        out = (
+            "| NPU   Name                | Health |\n"
+            "| 0     910B4               | OK     |\n"
+        )
+        with self.assertRaises(rsp.DeviceDiscoveryError):
+            rsp.parse_npu_smi(out)
 
 
 if __name__ == "__main__":

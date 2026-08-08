@@ -210,6 +210,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       mkdir -p "$A3_PARALLEL_ROOT"
       A3_TASK_MANIFEST="${A3_PARALLEL_ROOT}/tasks.tsv"
       : > "$A3_TASK_MANIFEST"
+      # Clean up the per-run manifest directory on exit, including on failure.
+      # The orchestrator also removes its own PID dir; this trap covers the
+      # shell-side manifest dir and any early-exit path.
+      trap 'rm -rf "$A3_PARALLEL_ROOT"' EXIT
     fi
     if [ -z "${PTO_ST_DUMP_TASKS:-}" ]; then
       python3 tests/script/build_st.py $ARGS -v a3 -t all

@@ -214,14 +214,12 @@ def parse_npu_smi(stdout, stderr=""):
     busy_ids = set()
     idle_confirmed = set()
     proc_section = False
-    saw_process_table = False
     for line in (stdout or "").splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         if "Process id" in stripped:
             proc_section = True
-            saw_process_table = True
             continue
         # Device block header => end of process section once process section starts.
         m = re.match(r"^\|\s*(\d+)\s+(\S+)\s*\|\s*(OK|[A-Za-z]+)\s*\|", stripped)
@@ -246,15 +244,17 @@ def parse_npu_smi(stdout, stderr=""):
                 idle_confirmed.discard(int(pm.group(1)))
     if not device_rows:
         raise DeviceDiscoveryError("npu-smi output could not be parsed confidently")
-    # Every device must have a confirmed process status: either a busy row or
-    # an explicit "No running processes found in NPU N" marker. If the process
-    # table was present but a device got neither, we cannot assume it is idle.
-    if saw_process_table:
-        for dev_id in device_rows:
-            if dev_id not in busy_ids and dev_id not in idle_confirmed:
-                raise DeviceDiscoveryError(
-                    f"npu-smi process status for device {dev_id} could not be determined"
-                )
+    # Every healthy device must have a confirmed process status: either a busy
+    # row or an explicit "No running processes found in NPU N" marker. If the
+    # process table is absent or a healthy device got neither, we cannot assume
+    # it is idle and must report a probe failure rather than guess.
+    for dev_id in device_rows:
+        if not device_rows[dev_id]:
+            continue  # unhealthy devices are excluded from selection anyway
+        if dev_id not in busy_ids and dev_id not in idle_confirmed:
+            raise DeviceDiscoveryError(
+                f"npu-smi process status for device {dev_id} could not be determined"
+            )
     for dev_id in sorted(device_rows):
         statuses.append(NpuStatus(
             device_id=dev_id,
@@ -292,11 +292,14 @@ def select_devices(requested, explicit=None, inherited=None, smi_statuses=None,
         ids = list(dict.fromkeys(inherited))
         if len(ids) >= requested:
             return ids, "ASCEND_RT_VISIBLE_DEVICES"
-        if not best_effort:
-            raise DeviceDiscoveryError(
-                f"ASCEND_RT_VISIBLE_DEVICES has {len(ids)} ids, need {requested}"
-            )
-
+        # The scheduler assigned a device list but it is insufficient. Do not
+        # fall through to npu-smi /dev: that would cross the scheduler's device
+        # boundary. Return serial fallback (best-effort) or error.
+        if best_effort:
+            return [], "ASCEND_RT_VISIBLE_DEVICES"
+        raise DeviceDiscoveryError(
+            f"ASCEND_RT_VISIBLE_DEVICES has {len(ids)} ids, need {requested}"
+        )
     # 3. npu-smi healthy + idle.
     if smi_statuses is not None:
         candidates = [s.device_id for s in smi_statuses if s.healthy and not s.busy]
@@ -604,17 +607,8 @@ def main():
     workers = []
     threads = []
 
-    def cleanup():
-        for lk in locks:
-            release_lock(lk)
-        if parallel_root is not None and parallel_root.exists():
-            try:
-                remove_parallel_root(parallel_root)
-            except SmokeError as e:
-                print(f"[PARALLEL][WARN] {e}")
-
-    def handle_signal(signum, frame):
-        print(f"[PARALLEL] received signal {signum}; terminating workers")
+    def cleanup(success):
+        # Terminate and wait for any still-live child processes.
         with _ACTIVE_PROCS_LOCK:
             procs = list(_ACTIVE_PROCS)
         for p in procs:
@@ -622,7 +616,40 @@ def main():
                 p.terminate()
             except Exception:
                 pass
-        cleanup()
+        for p in procs:
+            try:
+                p.wait(timeout=10)
+            except Exception:
+                pass
+        # Join any still-live worker threads.
+        for thr in threads:
+            try:
+                thr.join(timeout=5)
+            except Exception:
+                pass
+        # Release device locks.
+        for lk in locks:
+            release_lock(lk)
+        # Handle the run directory: remove on success, preserve on failure.
+        if parallel_root is not None and parallel_root.exists():
+            if success:
+                try:
+                    remove_parallel_root(parallel_root)
+                except SmokeError as e:
+                    print(f"[PARALLEL][WARN] {e}")
+            else:
+                print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+
+    def handle_signal(signum, frame):
+        print(f"[PARALLEL] received signal {signum}; terminating workers")
+        cleanup(success=False)
+        with _ACTIVE_PROCS_LOCK:
+            procs = list(_ACTIVE_PROCS)
+        for p in procs:
+            try:
+                p.wait(timeout=5)
+            except Exception:
+                pass
         sys.exit(128 + signum)
 
     signal.signal(signal.SIGINT, handle_signal)
@@ -675,6 +702,7 @@ def main():
     print("[PARALLEL] requested_workers=%d locked_devices=%s"
           % (args.workers, ",".join(str(d) for d in locked_devices)))
 
+    success = False
     try:
         # --- private worker build roots ---
         parallel_root = Path(args.st_root) / ".smoke-parallel" / str(os.getpid())
@@ -721,17 +749,12 @@ def main():
                 print(f"[PARALLEL][RESULT] task={r.task.index} testcase={r.task.testcase} "
                       f"worker={r.worker_index} exit={r.returncode} elapsed_ms={r.elapsed_ms} {status}")
 
-        # --- cleanup ---
-        if not failed:
-            cleanup()
-        else:
-            print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
-            for lk in locks:
-                release_lock(lk)
-
+        success = not failed
         return 1 if failed else 0
     finally:
-        threads.clear()
+        # Always release locks, terminate/wait child processes, join threads.
+        # Remove the run dir only on success; preserve it on failure/exception.
+        cleanup(success)
 
 
 if __name__ == "__main__":
