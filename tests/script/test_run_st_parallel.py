@@ -6,7 +6,11 @@
 
 import os
 import sys
+import json
+import queue
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -253,6 +257,145 @@ class ManifestTest(unittest.TestCase):
                 rsp.parse_task_manifest(path)
         finally:
             os.unlink(path)
+
+
+class WorkerIsolationTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.base = self.root / "base-build"
+        self.base_bin = self.base / "bin"
+        self.base_bin.mkdir(parents=True)
+        (self.base_bin / "fake_test").write_text("fake binary")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_worker_builds_are_distinct_real_dirs(self):
+        w1 = self.root / "worker-0" / "build"
+        w2 = self.root / "worker-1" / "build"
+        b1 = rsp.prepare_worker_build(self.base, w1)
+        b2 = rsp.prepare_worker_build(self.base, w2)
+        self.assertNotEqual(str(b1.resolve()), str(b2.resolve()))
+        self.assertTrue(b1.is_dir())
+        self.assertTrue(b2.is_dir())
+        # Real directories, not symlinks to the shared bin.
+        self.assertFalse(b1.is_symlink())
+        self.assertFalse(b2.is_symlink())
+        self.assertTrue((b1 / "fake_test").exists())
+        self.assertTrue((b2 / "fake_test").exists())
+
+    def test_remove_parallel_root_refuses_outside_marker(self):
+        outside = self.root / "build"  # not under .smoke-parallel
+        outside.mkdir(exist_ok=True)
+        with self.assertRaises(rsp.SmokeError):
+            rsp.remove_parallel_root(outside)
+
+    def test_remove_parallel_root_removes_run_root(self):
+        marker = self.root / ".smoke-parallel" / "12345"
+        marker.mkdir(parents=True)
+        rsp.remove_parallel_root(marker)
+        self.assertFalse(marker.exists())
+
+
+class ParallelSchedulingTest(unittest.TestCase):
+    def _fake_script(self, record_path):
+        """A fake run_st.py that records build-dir + device and 'runs' a task.
+
+        Simulates variable duration so early-finishing workers pick up more tasks.
+        """
+        script = self.root / "fake_run_st.py"
+        script.write_text(
+            "import sys, os, time, json\n"
+            "out = os.environ.get('RECORD', '')\n"
+            "with open(out, 'a') as f:\n"
+            "    f.write(json.dumps({'build_dir': sys.argv[sys.argv.index('--build-dir')+1],\n"
+            "        'dev': os.environ.get('ASCEND_RT_VISIBLE_DEVICES')}) + '\\n')\n"
+            f"time.sleep(0.05)\n"
+            "sys.exit(0)\n"
+        )
+        return str(script)
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_two_workers_get_distinct_roots_and_devices(self):
+        record = self.root / "record.jsonl"
+        script = self.root / "fake_run_st.py"
+        script.write_text(
+            "import sys, os, json\n"
+            "out = os.environ.get('RECORD','')\n"
+            "with open(out,'a') as f:\n"
+            "    f.write(json.dumps({'build_dir': sys.argv[sys.argv.index('--build-dir')+1],\n"
+            "        'dev': os.environ.get('ASCEND_RT_VISIBLE_DEVICES')}) + '\\n')\n"
+            "sys.exit(0)\n"
+        )
+        manifest = self.root / "tasks.tsv"
+        manifest.write_text("t1\tF1.case1\t0\nt2\tF2.case1\t0\n")
+
+        base = self.root / "base"
+        base_bin = base / "bin"
+        base_bin.mkdir(parents=True)
+        (base_bin / "fake_test").write_text("x")
+
+        st_root = self.root / "st"
+        st_root.mkdir()
+
+        tasks = rsp.parse_task_manifest(str(manifest))
+        w1_build = self.root / "w1" / "build"
+        w2_build = self.root / "w2" / "build"
+        rsp.prepare_worker_build(base, w1_build)
+        rsp.prepare_worker_build(base, w2_build)
+        w1 = rsp.WorkerConfig(0, 3, w1_build, self.root / "w1.log")
+        w2 = rsp.WorkerConfig(1, 5, w2_build, self.root / "w2.log")
+
+        q = queue.Queue()
+        for t in tasks:
+            q.put(t)
+        q.put(None)
+        q.put(None)
+        print_lock = threading.Lock()
+        results = []
+        env_patch = {**os.environ, "RECORD": str(record)}
+        with unittest.mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            th1 = threading.Thread(target=rsp.worker_loop, args=(w1, q, str(script), False, print_lock, results, time.perf_counter))
+            th2 = threading.Thread(target=rsp.worker_loop, args=(w2, q, str(script), False, print_lock, results, time.perf_counter))
+            th1.start(); th2.start(); th1.join(); th2.join()
+
+        rows = [json.loads(l) for l in record.read_text().splitlines()]
+        build_dirs = {r["build_dir"] for r in rows}
+        devices = {r["dev"] for r in rows}
+        self.assertEqual(len(build_dirs), 2)
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices, {"3", "5"})
+
+    def test_failed_task_causes_nonzero_and_others_still_run(self):
+        script = self.root / "fake_run_st.py"
+        script.write_text(
+            "import sys\n"
+            "tc = sys.argv[sys.argv.index('-t')+1]\n"
+            "sys.exit(1 if tc=='tbad' else 0)\n"
+        )
+        manifest = self.root / "tasks.tsv"
+        manifest.write_text("tbad\tF.case1\t0\ntok\tF.case2\t0\n")
+        tasks = rsp.parse_task_manifest(str(manifest))
+        base = self.root / "base"; (base / "bin").mkdir(parents=True)
+        (base / "bin" / "fake_test").write_text("x")
+        wb = self.root / "w" / "build"
+        rsp.prepare_worker_build(base, wb)
+        w = rsp.WorkerConfig(0, 0, wb, self.root / "w.log")
+        q = queue.Queue()
+        for t in tasks: q.put(t)
+        q.put(None)
+        results = []
+        rsp.worker_loop(w, q, str(script), False, threading.Lock(), results, time.perf_counter)
+        self.assertEqual(len(results), 2)  # both tasks drained
+        self.assertEqual(results[0].returncode, 1)
+        self.assertEqual(results[1].returncode, 0)
 
 
 if __name__ == "__main__":
