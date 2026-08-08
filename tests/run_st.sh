@@ -255,7 +255,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tquant -g TQUANTTEST.case_int8_sym_fp32_128x128_nd:TQUANTTEST.case_int8_asym_fp32_128x128_nd
       python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat -g TEXPANDSTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 \
-        -g MGATHERGM2L1Test.case_row_float_16x16_64rows:MGATHERGM2L1Test.case_row_int32_16x8_32rows:MGATHERGM2L1Test.case_row_float_16x16_64rows:MGATHERGM2L1Test.case_row_uint16_16x32_48rows:MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size
+        -g MGATHERGM2L1Test.case_row_float_16x16_64rows:MGATHERGM2L1Test.case_row_int32_16x8_32rows:MGATHERGM2L1Test.case_row_uint16_16x32_48rows:MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size
     fi
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
