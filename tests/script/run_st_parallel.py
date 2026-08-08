@@ -31,6 +31,69 @@ _ACTIVE_PROCS = []
 _ACTIVE_PROCS_LOCK = threading.Lock()
 
 
+def _pgid(pid):
+    """Return the process group id for pid, or None if unavailable."""
+    try:
+        return os.getpgid(pid)
+    except (OSError, ProcessLookupError):
+        return None
+
+
+def terminate_process_group(pid, sig, ignore_errors=False):
+    """Send a signal to the whole process group of `pid` (if it is a leader)."""
+    if pid is None or os.name == "nt":
+        return False
+    pgid = _pgid(pid)
+    if pgid is None:
+        return False
+    try:
+        os.killpg(pgid, sig)
+        return True
+    except (OSError, ProcessLookupError):
+        if not ignore_errors:
+            pass
+        return False
+
+
+def terminate_proc_gracefully(proc, timeout=10):
+    """TERM the process group, wait up to timeout, then SIGKILL on timeout.
+
+    Returns True if the process group exited, False otherwise.
+    """
+    if proc is None:
+        return True
+    pid = proc.pid
+    # Prefer terminating the whole group so run_st.py AND its gtest/NPU
+    # children all receive the signal.
+    if terminate_process_group(pid, signal.SIGTERM):
+        try:
+            proc.wait(timeout=timeout)
+            return True
+        except subprocess.TimeoutExpired:
+            pass
+    else:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=timeout)
+            return True
+        except subprocess.TimeoutExpired:
+            pass
+    # Escalate to SIGKILL on the whole group.
+    terminate_process_group(pid, signal.SIGKILL)
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+        return True
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
@@ -461,6 +524,7 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        start_new_session=True,
     )
     with _ACTIVE_PROCS_LOCK:
         _ACTIVE_PROCS.append(proc)
@@ -555,12 +619,20 @@ def run_serial_fallback(tasks, args, print_lock, now):
         if args.auto_mode:
             cmd.append("-a")
         # Serial fallback runs from the ST root with the shared build dir and
-        # leaves device visibility untouched (inherited environment).
+        # leaves device visibility untouched (inherited environment). It uses a
+        # tracked Popen in its own process group so signal cleanup can terminate
+        # the whole tree (run_st.py + gtest/NPU children).
         start = now()
         with print_lock:
             print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
+        proc = None
         try:
-            proc = subprocess.run(cmd, cwd=str(args.st_root))
+            proc = subprocess.Popen(
+                cmd, cwd=str(args.st_root), start_new_session=True,
+            )
+            with _ACTIVE_PROCS_LOCK:
+                _ACTIVE_PROCS.append(proc)
+            proc.wait()
         except Exception as e:
             with print_lock:
                 print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
@@ -568,6 +640,11 @@ def run_serial_fallback(tasks, args, print_lock, now):
             failed = True
             executed += 1
             continue
+        finally:
+            if proc is not None:
+                with _ACTIVE_PROCS_LOCK:
+                    if proc in _ACTIVE_PROCS:
+                        _ACTIVE_PROCS.remove(proc)
         elapsed_ms = int((now() - start) * 1000)
         executed += 1
         ok = proc.returncode == 0
@@ -607,49 +684,43 @@ def main():
     workers = []
     threads = []
 
+    _cleanup_state = {"done": False}
+
     def cleanup(success):
-        # Terminate and wait for any still-live child processes.
-        with _ACTIVE_PROCS_LOCK:
-            procs = list(_ACTIVE_PROCS)
-        for p in procs:
-            try:
-                p.terminate()
-            except Exception:
-                pass
-        for p in procs:
-            try:
-                p.wait(timeout=10)
-            except Exception:
-                pass
-        # Join any still-live worker threads.
-        for thr in threads:
-            try:
-                thr.join(timeout=5)
-            except Exception:
-                pass
-        # Release device locks.
-        for lk in locks:
-            release_lock(lk)
-        # Handle the run directory: remove on success, preserve on failure.
-        if parallel_root is not None and parallel_root.exists():
-            if success:
+        if _cleanup_state["done"]:
+            return
+        try:
+            # 1. Terminate the whole process group of every tracked child,
+            #    escalating TERM -> wait -> KILL. This ensures run_st.py AND
+            #    the gtest/NPU binaries it spawned are gone before we proceed.
+            with _ACTIVE_PROCS_LOCK:
+                procs = list(_ACTIVE_PROCS)
+            for p in procs:
+                terminate_proc_gracefully(p, timeout=10)
+            # 2. Join worker threads (bounded wait).
+            for thr in threads:
                 try:
-                    remove_parallel_root(parallel_root)
-                except SmokeError as e:
-                    print(f"[PARALLEL][WARN] {e}")
-            else:
-                print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+                    thr.join(timeout=5)
+                except Exception:
+                    pass
+            # 3. Only after processes and threads have exited, release locks.
+            for lk in locks:
+                release_lock(lk)
+            # 4. Handle the run directory: remove on success, preserve on failure.
+            if parallel_root is not None and parallel_root.exists():
+                if success:
+                    try:
+                        remove_parallel_root(parallel_root)
+                    except SmokeError as e:
+                        print(f"[PARALLEL][WARN] {e}")
+                else:
+                    print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+        finally:
+            _cleanup_state["done"] = True
 
     def handle_signal(signum, frame):
         print(f"[PARALLEL] received signal {signum}; terminating workers")
         cleanup(success=False)
-        with _ACTIVE_PROCS_LOCK:
-            procs = list(_ACTIVE_PROCS)
-        for p in procs:
-            try:
-                p.wait(timeout=5)
-            except Exception:
-                pass
         sys.exit(128 + signum)
 
     signal.signal(signal.SIGINT, handle_signal)
