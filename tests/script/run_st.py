@@ -16,6 +16,7 @@ import shutil
 import argparse
 import fnmatch
 import re
+import time
 
 
 def run_command(command, cwd=None, check=True):
@@ -342,7 +343,20 @@ def main():
 
         # 生成标杆
         golden_path = "testcase/" + testcase + "/gen_data.py"
-        run_gen_data(golden_path)
+        gen_data_start_ns = time.perf_counter_ns()
+        try:
+            run_gen_data(golden_path)
+        finally:
+            gen_data_elapsed_ms = (time.perf_counter_ns() - gen_data_start_ns) / 1e6
+            print(f"[TIMING] gen_data {testcase}: {gen_data_elapsed_ms:.0f} ms")
+
+        def run_binary_with_timing(*run_args, **run_kwargs):
+            run_binary_start_ns = time.perf_counter_ns()
+            try:
+                return run_binary(*run_args, **run_kwargs)
+            finally:
+                run_binary_elapsed_ms = (time.perf_counter_ns() - run_binary_start_ns) / 1e6
+                print(f"[TIMING] run_binary {testcase}: {run_binary_elapsed_ms:.0f} ms")
 
         # 执行二进制文件
         if is_comm and default_cases == "all":
@@ -371,7 +385,7 @@ def main():
                         print("============================================================")
                         total_runs += 1
                         try:
-                            run_binary(testcase, args.run_mode, case, is_comm=True, nranks=nranks)
+                            run_binary_with_timing(testcase, args.run_mode, case, is_comm=True, nranks=nranks)
                         except Exception:
                             print(f"[ERROR] Testcase failed: {testcase}/{case} (nranks={nranks})")
                             fail_count += 1
@@ -382,7 +396,7 @@ def main():
                     os.environ["GTEST_FILTER"] = gtest_filter
                     total_runs += 1
                     try:
-                        run_binary(testcase, args.run_mode, default_cases, is_comm=True, nranks=nranks)
+                        run_binary_with_timing(testcase, args.run_mode, default_cases, is_comm=True, nranks=nranks)
                     except Exception:
                         print(f"[ERROR] Testcase failed: {testcase} (nranks={nranks})")
                         fail_count += 1
@@ -394,7 +408,7 @@ def main():
                 print(f"[ERROR] {fail_count}/{total_runs} run(s) failed.")
                 sys.exit(1)
         else:
-            run_binary(testcase, args.run_mode, default_cases, is_comm=is_comm, nranks=args.nranks)
+            run_binary_with_timing(testcase, args.run_mode, default_cases, is_comm=is_comm, nranks=args.nranks)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)
