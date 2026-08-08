@@ -25,6 +25,11 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX fallback
     fcntl = None
 
+# Module-level tracking of live child processes so signal handlers can
+# terminate them. Guarded by threads calling Popen; reads iterate defensively.
+_ACTIVE_PROCS = []
+_ACTIVE_PROCS_LOCK = threading.Lock()
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -207,13 +212,16 @@ def parse_npu_smi(stdout, stderr=""):
     statuses = []
     device_rows = {}
     busy_ids = set()
+    idle_confirmed = set()
     proc_section = False
+    saw_process_table = False
     for line in (stdout or "").splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         if "Process id" in stripped:
             proc_section = True
+            saw_process_table = True
             continue
         # Device block header => end of process section once process section starts.
         m = re.match(r"^\|\s*(\d+)\s+(\S+)\s*\|\s*(OK|[A-Za-z]+)\s*\|", stripped)
@@ -228,14 +236,25 @@ def parse_npu_smi(stdout, stderr=""):
             if nm:
                 # Explicitly idle; remove any prior busy marking.
                 busy_ids.discard(int(nm.group(1)))
+                idle_confirmed.add(int(nm.group(1)))
             continue
         if proc_section:
             # Process row: | <npu_id> | <pid> | <name> | ...
             pm = re.match(r"^\|\s*(\d+)\s*\|\s*(\d+)\s*\|", stripped)
             if pm:
                 busy_ids.add(int(pm.group(1)))
+                idle_confirmed.discard(int(pm.group(1)))
     if not device_rows:
         raise DeviceDiscoveryError("npu-smi output could not be parsed confidently")
+    # Every device must have a confirmed process status: either a busy row or
+    # an explicit "No running processes found in NPU N" marker. If the process
+    # table was present but a device got neither, we cannot assume it is idle.
+    if saw_process_table:
+        for dev_id in device_rows:
+            if dev_id not in busy_ids and dev_id not in idle_confirmed:
+                raise DeviceDiscoveryError(
+                    f"npu-smi process status for device {dev_id} could not be determined"
+                )
     for dev_id in sorted(device_rows):
         statuses.append(NpuStatus(
             device_id=dev_id,
@@ -266,13 +285,13 @@ def select_devices(requested, explicit=None, inherited=None, smi_statuses=None,
             raise DeviceDiscoveryError(
                 f"PTO_ST_PARALLEL_DEVICES has {len(ids)} ids, need {requested}"
             )
-        return ids[:requested], "PTO_ST_PARALLEL_DEVICES"
+        return ids, "PTO_ST_PARALLEL_DEVICES"
 
     # 2. Inherited visible list.
     if inherited:
         ids = list(dict.fromkeys(inherited))
         if len(ids) >= requested:
-            return ids[:requested], "ASCEND_RT_VISIBLE_DEVICES"
+            return ids, "ASCEND_RT_VISIBLE_DEVICES"
         if not best_effort:
             raise DeviceDiscoveryError(
                 f"ASCEND_RT_VISIBLE_DEVICES has {len(ids)} ids, need {requested}"
@@ -282,13 +301,13 @@ def select_devices(requested, explicit=None, inherited=None, smi_statuses=None,
     if smi_statuses is not None:
         candidates = [s.device_id for s in smi_statuses if s.healthy and not s.busy]
         if len(candidates) >= requested:
-            return candidates[:requested], "npu-smi"
+            return candidates, "npu-smi"
 
     # 4. /dev enumeration only with explicit opt-in.
     if assume_available:
         dev_ids = list_dev_davinci_ids()
         if len(dev_ids) >= requested:
-            return dev_ids[:requested], "/dev"
+            return dev_ids, "/dev"
 
     # 5. Best-effort serial fallback.
     if best_effort:
@@ -440,6 +459,8 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         text=True,
         bufsize=1,
     )
+    with _ACTIVE_PROCS_LOCK:
+        _ACTIVE_PROCS.append(proc)
     log_handle = open(str(worker.log_path), "a", encoding="utf-8")
     try:
         try:
@@ -459,6 +480,9 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         log_handle.close()
         proc.stdout.close()
         proc.wait()
+        with _ACTIVE_PROCS_LOCK:
+            if proc in _ACTIVE_PROCS:
+                _ACTIVE_PROCS.remove(proc)
     elapsed_ms = int((now() - start) * 1000)
     with print_lock:
         print(f"[PARALLEL] task={task.index} testcase={task.testcase} "
@@ -501,6 +525,60 @@ def worker_loop(worker, task_queue, run_st_script, auto_mode, print_lock, result
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def run_serial_fallback(tasks, args, print_lock, now):
+    """Best-effort serial fallback: run every manifest task in order.
+
+    Uses the base build dir, does not remap device visibility, and returns
+    nonzero if any task fails. Returns (exit_code, executed_count).
+    """
+    print("[PARALLEL][FALLBACK] requested=%d; executing %d tasks serially"
+          % (args.workers, len(tasks)))
+    executed = 0
+    failed = False
+    for task in tasks:
+        cmd = [
+            sys.executable,
+            str(args.run_st_script),
+            "-r", "npu",
+            "-w",
+            "-v", "a3",
+            "-t", task.testcase,
+            "--build-dir", str(args.base_build_dir),
+        ]
+        if task.gtest_filter:
+            cmd.extend(["-g", task.gtest_filter])
+        if task.debug_enable:
+            cmd.append("-d")
+        if args.auto_mode:
+            cmd.append("-a")
+        # Serial fallback runs from the ST root with the shared build dir and
+        # leaves device visibility untouched (inherited environment).
+        start = now()
+        with print_lock:
+            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
+        try:
+            proc = subprocess.run(cmd, cwd=str(args.st_root))
+        except Exception as e:
+            with print_lock:
+                print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                      f"error: {e}")
+            failed = True
+            executed += 1
+            continue
+        elapsed_ms = int((now() - start) * 1000)
+        executed += 1
+        ok = proc.returncode == 0
+        with print_lock:
+            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                  f"exit={proc.returncode} elapsed_ms={elapsed_ms} "
+                  f"({'ok' if ok else 'FAIL'})")
+        if not ok:
+            failed = True
+    print(f"[PARALLEL][SERIAL] done: executed={executed}/{len(tasks)} "
+          f"failed={1 if failed else 0}")
+    return (1 if failed else 0), executed
+
+
 def main():
     parser = argparse.ArgumentParser(description="A3 parallel smoke orchestrator")
     parser.add_argument("--manifest", required=True)
@@ -520,6 +598,35 @@ def main():
 
     tasks = parse_task_manifest(args.manifest)
     now = time.perf_counter
+    print_lock = threading.Lock()
+    locks = []
+    parallel_root = None
+    workers = []
+    threads = []
+
+    def cleanup():
+        for lk in locks:
+            release_lock(lk)
+        if parallel_root is not None and parallel_root.exists():
+            try:
+                remove_parallel_root(parallel_root)
+            except SmokeError as e:
+                print(f"[PARALLEL][WARN] {e}")
+
+    def handle_signal(signum, frame):
+        print(f"[PARALLEL] received signal {signum}; terminating workers")
+        with _ACTIVE_PROCS_LOCK:
+            procs = list(_ACTIVE_PROCS)
+        for p in procs:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        cleanup()
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
 
     # --- device selection ---
     explicit = os.environ.get("PTO_ST_PARALLEL_DEVICES")
@@ -540,94 +647,91 @@ def main():
         best_effort=args.best_effort,
     )
     if not devices:
-        # best-effort serial fallback requested by caller via env marker
-        print("[PARALLEL][FALLBACK] requested=%d selected=0 reason=%r; using serial execution"
-              % (args.workers, "npu-smi unavailable and no assigned device list"))
-        return 0
-    print("[PARALLEL] requested_workers=%d source=%s selected_devices=%s"
-          % (args.workers, source, ",".join(str(d) for d in devices)))
+        if args.best_effort:
+            return run_serial_fallback(tasks, args, print_lock, now)[0]
+        raise SmokeError(
+            "cannot determine NPU allocation safely; set PTO_ST_PARALLEL_DEVICES, "
+            "provide ASCEND_RT_VISIBLE_DEVICES, or explicitly use --parallel-assume-available"
+        )
+    print("[PARALLEL] candidate_pool=%s source=%s"
+          % (",".join(str(d) for d in devices), source))
 
-    # --- cooperative locking ---
-    locks = []
+    # --- cooperative locking: iterate the full candidate pool until N locks ---
     for dev in devices:
+        if len(locks) >= args.workers:
+            break
         lock = lock_candidate(dev)
-        if lock is None:
-            # try next candidate from same source
-            continue
-        locks.append(lock)
+        if lock is not None:
+            locks.append(lock)
     if len(locks) < args.workers:
         for lk in locks:
             release_lock(lk)
         if args.best_effort:
-            print("[PARALLEL][FALLBACK] requested=%d selected=%d reason=%r; using serial execution"
-                  % (args.workers, len(locks), "insufficient lockable devices"))
-            return 0
+            return run_serial_fallback(tasks, args, print_lock, now)[0]
         raise SmokeError(
             f"could not lock {args.workers} devices (locked {len(locks)})"
         )
+    locked_devices = [lk.device_id for lk in locks]
+    print("[PARALLEL] requested_workers=%d locked_devices=%s"
+          % (args.workers, ",".join(str(d) for d in locked_devices)))
 
-    # --- private worker build roots ---
-    parallel_root = Path(args.st_root) / ".smoke-parallel" / str(os.getpid())
-    parallel_root.mkdir(parents=True, exist_ok=True)
-    workers = []
-    for i, dev in enumerate(devices):
-        worker_build = parallel_root / f"worker-{i}" / "build"
-        prepare_worker_build(args.base_build_dir, worker_build)
-        log_path = parallel_root / f"worker-{i}" / "worker.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        workers.append(WorkerConfig(
-            index=i,
-            physical_device=dev,
-            build_dir=worker_build,
-            log_path=log_path,
-        ))
-        print("[PARALLEL] worker=%d device=%d build_dir=%s"
-              % (i, dev, worker_build))
+    try:
+        # --- private worker build roots ---
+        parallel_root = Path(args.st_root) / ".smoke-parallel" / str(os.getpid())
+        parallel_root.mkdir(parents=True, exist_ok=True)
+        for i, dev in enumerate(locked_devices):
+            worker_build = parallel_root / f"worker-{i}" / "build"
+            prepare_worker_build(args.base_build_dir, worker_build)
+            log_path = parallel_root / f"worker-{i}" / "worker.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            workers.append(WorkerConfig(
+                index=i,
+                physical_device=dev,
+                build_dir=worker_build,
+                log_path=log_path,
+            ))
+            print("[PARALLEL] worker=%d device=%d build_dir=%s"
+                  % (i, dev, worker_build))
 
-    # --- dynamic scheduling ---
-    task_queue = queue.Queue()
-    for t in tasks:
-        task_queue.put(t)
-    for w in workers:
-        task_queue.put(None)  # sentinel per worker
+        # --- dynamic scheduling ---
+        task_queue = queue.Queue()
+        for t in tasks:
+            task_queue.put(t)
+        for w in workers:
+            task_queue.put(None)  # sentinel per worker
 
-    print_lock = threading.Lock()
-    results = []
-    threads = []
-    for w in workers:
-        thr = threading.Thread(
-            target=worker_loop,
-            args=(w, task_queue, args.run_st_script, args.auto_mode,
-                  print_lock, results, now),
-        )
-        thr.start()
-        threads.append(thr)
-    for thr in threads:
-        thr.join()
+        results = []
+        for w in workers:
+            thr = threading.Thread(
+                target=worker_loop,
+                args=(w, task_queue, args.run_st_script, args.auto_mode,
+                      print_lock, results, now),
+            )
+            thr.start()
+            threads.append(thr)
+        for thr in threads:
+            thr.join()
 
-    # --- summary (deterministic task-index order) ---
-    results.sort(key=lambda r: r.task.index)
-    failed = False
-    with print_lock:
-        for r in results:
-            status = "ok" if r.returncode == 0 else "FAIL"
-            print(f"[PARALLEL][RESULT] task={r.task.index} testcase={r.task.testcase} "
-                  f"worker={r.worker_index} exit={r.returncode} elapsed_ms={r.elapsed_ms} {status}")
-            if r.returncode != 0:
-                failed = True
+        # --- summary (deterministic task-index order) ---
+        results.sort(key=lambda r: r.task.index)
+        failed = any(r.returncode != 0 for r in results)
+        with print_lock:
+            for r in results:
+                status = "ok" if r.returncode == 0 else "FAIL"
+                print(f"[PARALLEL][RESULT] task={r.task.index} testcase={r.task.testcase} "
+                      f"worker={r.worker_index} exit={r.returncode} elapsed_ms={r.elapsed_ms} {status}")
 
-    # --- cleanup ---
-    for lk in locks:
-        release_lock(lk)
-    if not failed:
-        try:
-            remove_parallel_root(parallel_root)
-        except SmokeError as e:
-            print(f"[PARALLEL][WARN] {e}")
-    else:
-        print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+        # --- cleanup ---
+        if not failed:
+            cleanup()
+        else:
+            print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+            for lk in locks:
+                release_lock(lk)
 
-    return 1 if failed else 0
+        return 1 if failed else 0
+    finally:
+        threads.clear()
 
 
 if __name__ == "__main__":

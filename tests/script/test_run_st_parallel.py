@@ -517,5 +517,152 @@ class ParallelOptionValidationTest(unittest.TestCase):
         self.assertEqual(rc, 0)
 
 
+class BestEffortFallbackTest(unittest.TestCase):
+    """P0: best-effort must actually execute tasks serially, not skip them."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.st_root = self.root / "st"
+        self.st_root.mkdir()
+        self.base_build = self.root / "base"
+        self.base_build.mkdir()
+        self.run_st_script = self.root / "run_st.py"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _make_fake_runner(self, fail_testcase=None):
+        """A fake run_st.py that records invocations and can fail on a testcase."""
+        script = self.run_st_script
+        script.write_text(
+            "import sys, os\n"
+            "tc = sys.argv[sys.argv.index('-t')+1]\n"
+            "rec = os.environ.get('RECORD','')\n"
+            "with open(rec,'a') as f:\n"
+            "    f.write(tc + '\\n')\n"
+            "sys.exit(1 if tc == %r else 0)\n" % (fail_testcase if fail_testcase else "__none__")
+        )
+        return str(script)
+
+    def _manifest(self, tasks):
+        p = self.root / "tasks.tsv"
+        p.write_text("".join("%s\t%s\t0\n" % (t, ("F.case" + t)) for t in tasks))
+        return str(p)
+
+    def _args(self):
+        class A:
+            workers = 2
+            run_st_script = str(self.run_st_script)
+            st_root = str(self.st_root)
+            base_build_dir = str(self.base_build)
+            auto_mode = False
+            best_effort = True
+            assume_available = False
+        return A()
+
+    def test_serial_fallback_executes_all_tasks(self):
+        script = self._make_fake_runner()
+        manifest = self._manifest(["t1", "t2", "t3"])
+        tasks = rsp.parse_task_manifest(manifest)
+        record = self.root / "record.txt"
+        with mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            rc, executed = rsp.run_serial_fallback(tasks, self._args(), threading.Lock(), time.perf_counter)
+        self.assertEqual(rc, 0)
+        self.assertEqual(executed, 3)
+        self.assertEqual(record.read_text().splitlines(), ["t1", "t2", "t3"])
+
+    def test_serial_fallback_propagates_failure(self):
+        script = self._make_fake_runner(fail_testcase="t2")
+        manifest = self._manifest(["t1", "t2", "t3"])
+        tasks = rsp.parse_task_manifest(manifest)
+        record = self.root / "record.txt"
+        with mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            rc, executed = rsp.run_serial_fallback(tasks, self._args(), threading.Lock(), time.perf_counter)
+        self.assertEqual(rc, 1)
+        self.assertEqual(executed, 3)  # all tasks still attempted
+        self.assertEqual(record.read_text().splitlines(), ["t1", "t2", "t3"])
+
+
+class FullPoolLockingTest(unittest.TestCase):
+    """P1: if a candidate is locked, keep trying later candidates from the pool."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.lock_dir = self.root / "locks"
+        self.lock_dir.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_locks_skip_busy_candidate_and_take_later_one(self):
+        if rsp.fcntl is None:
+            self.skipTest("fcntl unavailable on this platform")
+        # Pre-lock device 0 so it cannot be acquired.
+        lk0 = rsp.lock_candidate(0, lock_dir=str(self.lock_dir))
+        self.assertIsNotNone(lk0)
+        try:
+            # Devices 0,1,2 available; 0 locked -> should pick 1,2.
+            lock1 = rsp.lock_candidate(1, lock_dir=str(self.lock_dir))
+            lock2 = rsp.lock_candidate(2, lock_dir=str(self.lock_dir))
+            self.assertIsNotNone(lock1)
+            self.assertIsNotNone(lock2)
+            self.assertEqual(lock1.device_id, 1)
+            self.assertEqual(lock2.device_id, 2)
+            # Locking 0 again must fail (still held).
+            lock0_again = rsp.lock_candidate(0, lock_dir=str(self.lock_dir))
+            self.assertIsNone(lock0_again)
+            rsp.release_lock(lock1)
+            rsp.release_lock(lock2)
+        finally:
+            rsp.release_lock(lk0)
+        # After release, 0 becomes lockable again.
+        lk0b = rsp.lock_candidate(0, lock_dir=str(self.lock_dir))
+        self.assertIsNotNone(lk0b)
+        rsp.release_lock(lk0b)
+
+
+class BuildShParsingTest(unittest.TestCase):
+    """P0: build.sh must consume --parallel and its value correctly."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.repo = Path(__file__).resolve().parents[2]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_parallel_parses_and_consumes(self):
+        # Extract checkopts from build.sh and run it with --parallel=2.
+        repo = str(self.repo).replace("\\", "/")
+        script = self.root / "extract.sh"
+        script.write_text(
+            "#!/bin/bash\n"
+            "PARALLEL_WORKERS=1\n"
+            "source <(sed -n '/^checkopts()/,/^}/p' %s/build.sh)\n"
+            "checkopts --run_simple --a3 --parallel=2\n"
+            "echo \"PARALLEL_WORKERS=$PARALLEL_WORKERS\"\n" % repo
+        )
+        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
+
+    def test_parallel_separate_form_parses(self):
+        repo = str(self.repo).replace("\\", "/")
+        script = self.root / "extract2.sh"
+        script.write_text(
+            "#!/bin/bash\n"
+            "PARALLEL_WORKERS=1\n"
+            "source <(sed -n '/^checkopts()/,/^}/p' %s/build.sh)\n"
+            "checkopts --run_simple --a3 --parallel 2 --auto_mode\n"
+            "echo \"PARALLEL_WORKERS=$PARALLEL_WORKERS\"\n" % repo
+        )
+        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

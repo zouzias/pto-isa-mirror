@@ -164,8 +164,8 @@ checkopts() {
         AUTO_MODE=TRUE
         ;;
       --parallel)
-        shift
-        PARALLEL_WORKERS="$1"
+        PARALLEL_WORKERS="$2"
+        shift 2
         ;;
       --parallel-best-effort)
         PARALLEL_BEST_EFFORT=TRUE
