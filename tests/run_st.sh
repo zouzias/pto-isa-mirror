@@ -20,6 +20,9 @@ ENABLE_ALL=false
 ENABLE_COMM=false
 ARGS=" "
 IS_AUTO_MODE=false
+PARALLEL_WORKERS=1
+PARALLEL_BEST_EFFORT=false
+PARALLEL_ASSUME_AVAILABLE=false
 
 usage() {
   cat >&2 <<'EOF'
@@ -99,6 +102,18 @@ checkopts() {
         IS_AUTO_MODE=true
         shift
         ;;
+      --parallel=*)
+        PARALLEL_WORKERS="${1#*=}"
+        shift
+        ;;
+      --parallel-best-effort)
+        PARALLEL_BEST_EFFORT=true
+        shift
+        ;;
+      --parallel-assume-available)
+        PARALLEL_ASSUME_AVAILABLE=true
+        shift
+        ;;
       --)
         shift
         break
@@ -133,129 +148,217 @@ if { [ "$ENABLE_A3" = "true" ] || [ "$ENABLE_A5" = "true" ]; } && \
   exit 1
 fi
 
+# Validate the parallel worker count: must be a positive integer.
+if ! [[ "$PARALLEL_WORKERS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_WORKERS" -lt 1 ]; then
+  echo "Error: --parallel must be a positive integer, got '$PARALLEL_WORKERS'." >&2
+  exit 1
+fi
+
+# Reject --parallel>1 for unsupported platform/mode combinations.
+if [ "$PARALLEL_WORKERS" -gt 1 ]; then
+  if [ "$ENABLE_A5" = "true" ] || [ "$ENABLE_KIRIN9030" = "true" ] || [ "$ENABLE_KIRINX90" = "true" ] \
+     || [ "$ENABLE_ALL" = "true" ] || [ "$ENABLE_COMM" = "true" ]; then
+    echo "Error: --parallel>1 is supported only for A3 --run_simple on NPU." >&2
+    exit 1
+  fi
+  if echo "$ARGS" | grep -q -- "-r sim"; then
+    echo "Error: --parallel>1 is supported only for A3 --run_simple on NPU." >&2
+    exit 1
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# A3 simple task registry / runner.
+# In serial mode (--parallel <= 1) each task runs immediately. In parallel mode
+# tasks are appended to a manifest for run_st_parallel.py to dispatch later.
+# -----------------------------------------------------------------------------
+A3_ST_ROOT="tests/npu/a2a3/src/st"
+A3_PARALLEL_ROOT="${A3_ST_ROOT}/.smoke-parallel/${$}"
+A3_TASK_MANIFEST=""
+
+run_a3_simple_task() {
+  local testcase="$1"
+  local gtest_filter="$2"
+  local debug_enable="$3"
+
+  # Internal dry-run mode: dump the manifest and skip execution, so a host
+  # without NPU can validate the registered tasks.
+  if [ -n "${PTO_ST_DUMP_TASKS:-}" ]; then
+    printf '%s\t%s\t%s\n' "$testcase" "$gtest_filter" "$debug_enable" >> "$PTO_ST_DUMP_TASKS"
+    return 0
+  fi
+
+  if [ "$PARALLEL_WORKERS" -le 1 ]; then
+    local cmd=(python3 tests/script/run_st.py)
+    # ARGS contains only script-owned tokens such as -r npu and -a.
+    cmd+=($ARGS -w -v a3 -t "$testcase")
+    if [ -n "$gtest_filter" ]; then
+      cmd+=(-g "$gtest_filter")
+    fi
+    if [ "$debug_enable" = "1" ]; then
+      cmd+=(-d)
+    fi
+    "${cmd[@]}"
+  else
+    printf '%s\t%s\t%s\n' "$testcase" "$gtest_filter" "$debug_enable" >> "$A3_TASK_MANIFEST"
+  fi
+}
+
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
-    python3 tests/script/build_st.py $ARGS -v a3 -t all
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubreluconv -g TSUBRELUCONVTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t taddreluconv -g TADDRELUCONVTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather -g TCOLGATHERTest.case_mask_half_16x64_16x64_P1111
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatdstidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy -g TAXPYTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolsum -g TCOLSUMTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolprod -g TCOLPRODTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolmax -g TCOLMAXTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolargmax -g TCOLCMAXTest.case01
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolmin -g TCOLMINTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolargmin -g TCOLCMINTest.case01
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trem -g TREMTest.case_float_16x64_16x128_16x128_16x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfmod -g TFMODTest.case_float_16x64_16x128_16x128_16x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trems -g TREMSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfmods -g TFMODSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubs -g TSUBSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmaxs -g TMAXSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tlrelu -g TLRELUTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tgatherb -g TGATHERBTest.case_float_2x128_2x16_2x128
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov -g TMOVTest.case14_scaling_dynamic_int32_int8_0_1_1_1_0_param
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov_acc2mat -g TMOVTest.case_nz2nz_fb_quant_4
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmrgsort -g TMRGSORTTest.case_topk1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmul -g TMULTest.case_float_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tdiv -g TDIVTest.case_float_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tstore -g TStoreTest.ND_float_1_1_1_2_128_1_1_1_2_128
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tstore_acc2gm -g TStoreAcc2gmTest.case7
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tstore_mat2gm -g TStoreMat2GMTest.case_nd1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowsum -g TROWSUMTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpand -g TROWEXPANDTest.case0
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandadd -g TROWEXPANDADDTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpanddiv -g TROWEXPANDDIVTest.case2
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandmax -g TROWEXPANDMAXTest.case3
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandmin -g TROWEXPANDMINTest.case4
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandmul -g TROWEXPANDMULTest.case13
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandsub -g TROWEXPANDSUBTest.case14
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowexpandexpdif -g TROWEXPANDEXPDIFTest.case7
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpandadd -g TColExpandAddTest.case_fp32_16_128_1_128
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpandmax -g TColExpandMaxTest.case_fp32_32_32_1_32
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpandmin -g TColExpandMinTest.case_fp16_4_256_1_256
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels -g TSELSTest.case_uint16_uint8_2x16_2x32_2x16_2x16:TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsort32 -g TSort32Test.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tand -g TANDTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tor -g TORTest.case2
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmax -g TPARTARGMAXTest.case_float_uint32_tile_diff_32k_small_0
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartargmin -g TPARTARGMINTest.case_float_uint32_tile_diff_32k_small_0
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpows -g TPOWSTest.case11
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel -g TSELTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmins
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trsqrt -g TRSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsqrt -g TSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t texp -g TEXPTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tabs -g TABSTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tlog -g TLOGTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trecip -g TRECIPTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tdivs \
-      -g TDIVSTest.case1:TDIVSTest.case4:TDIVSTest.case5
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuls -g TMULSTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tadds -g TADDSTest.case6
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tnot -g TNOTTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tprelu -g TPRELUTest.case5
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trelu -g TRELUTest.case_int32_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tands -g TANDSTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tors -g TORSTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tshl -g TSHLTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tshr -g TSHRTest.case2
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tshls -g TSHLSTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tshrs -g TSHRSTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t txor -g TXORTest.case_int16_64x64_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t txors -g TXORSTest.case_int16_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tdequant -g TDEQUANTTest.case4:TDEQUANTTest.case5
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64:TCONCATTest.case_int16_32x256_32x128_32x128_32x127_32x128:TCONCATTest.case_int32_64x128_64x64_64x64_64x64_64x64
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax -g TROWARGMAXTest.case_uint32_float_16x1_13x16_1x8_13x13:TROWARGMAXTest.case_uint32_float_8x1_3x4096_3x192_3x4095:TROWARGMAXTest.case_uint32_float_8x1_8x1_1x16384_1x768_1x16381
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_16x1_13x16_1x8_13x13:TROWARGMINTest.case_uint32_float_8x1_3x4096_3x192_3x4095:TROWARGMINTest.case_uint32_float_8x1_8x1_1x16384_1x768_1x16381
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec -g TExtractVecTest.case_nd_aligned_1:TExtractVecTest.case_nd_aligned_4_bf16:TExtractVecTest.case_nd_partial_validrow:TExtractVecTest.case_nd_unaligned_validcol_full_row:TExtractVecTest.case_nd_aligned_int8_strided:TExtractVecTest.case_nd_nonpow2_half:TExtractVecTest.case_nd_nonpow2_partial_float_unaligned_idxrow:TExtractVecTest.case_nd_unalignedvalid_int16:TExtractVecTest.case_nd_unalignedvalid_float_smallthan32B:TExtractVecTest.case_nd_unalignedvalid_uint16_taillarge:TExtractVecTest.case_nd_scalar_4_int8:TExtractVecTest.case_nd_scalar_nonpow2_float:TExtractVecTest.case_nz_1:TExtractVecTest.case_nz_multi_fractal_dst:TExtractVecTest.case_nz_half_large:TExtractVecTest.case_nz_nonpow2_float:TExtractVecTest.case_nz_partial_bf16:TExtractVecTest.case_nz_partial_float_unaligned_idxcol:TExtractVecTest.case_nz_unalignedvalid_validrow_half:TExtractVecTest.case_nz_scalar_5_int32:TExtractVecTest.case_nz_scalar_nonpow2_int8
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nd_aligned_1:TInsertVecTest.case_nd_aligned_4_bf16:TInsertVecTest.case_nd_partial_validrow:TInsertVecTest.case_nd_full_row_strided:TInsertVecTest.case_nd_aligned_uint16:TInsertVecTest.case_nd_partial_validboth_float:TInsertVecTest.case_nd_nonpow2_int8:TInsertVecTest.case_nd_nonpow2_int32:TInsertVecTest.case_nd_unalignedvalid_half:TInsertVecTest.case_nd_unalignedvalid_uint16_strided:TInsertVecTest.case_nd_unalignedvalid_float_smallthan32B:TInsertVecTest.case_nd_scalar_3_bf16:TInsertVecTest.case_nd_scalar_2_half:TInsertVecTest.case_nz_2:TInsertVecTest.case_nz_int32_partial:TInsertVecTest.case_nz_partial_float_unaligned_idxcol:TInsertVecTest.case_nz_nonpow2_partial_int8:TInsertVecTest.case_nz_unalignedvalid_int16:TInsertVecTest.case_nz_unalignedvalid_both_float:TInsertVecTest.case_nz_unalignedvalid_both_with_idx_bf16:TInsertVecTest.case_nz_scalar_5_int32:TInsertVecTest.case_nz_scalar_9_uint8_edge:TInsertVecTest.case_nz_scalar_nonpow2_int8
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_32x64_32x64_32x64:TPAIRREDUCESUMTest.case_float_32x128_32x128_32x128
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubrelu -g TSUBRELUTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+    if [ "$PARALLEL_WORKERS" -gt 1 ]; then
+      mkdir -p "$A3_PARALLEL_ROOT"
+      A3_TASK_MANIFEST="${A3_PARALLEL_ROOT}/tasks.tsv"
+      : > "$A3_TASK_MANIFEST"
+    fi
+    if [ -z "${PTO_ST_DUMP_TASKS:-}" ]; then
+      python3 tests/script/build_st.py $ARGS -v a3 -t all
+    fi
+    run_a3_simple_task "tsubreluconv" "TSUBRELUCONVTest.case1" "0"
+    run_a3_simple_task "taddreluconv" "TADDRELUCONVTest.case1" "0"
+    run_a3_simple_task "tcolgather" "TCOLGATHERTest.case_mask_half_16x64_16x64_P1111" "0"
+    run_a3_simple_task "tconcatdstidx" "TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16" "0"
+    run_a3_simple_task "tconcatidx" "TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16" "0"
+    run_a3_simple_task "taxpy" "TAXPYTest.case1" "0"
+    run_a3_simple_task "tcolexpand" "TCOLEXPANDTest.case1" "0"
+    run_a3_simple_task "tcolsum" "TCOLSUMTest.case1" "0"
+    run_a3_simple_task "tcolprod" "TCOLPRODTest.case1" "0"
+    run_a3_simple_task "tcolmax" "TCOLMAXTest.case1" "0"
+    run_a3_simple_task "tcolargmax" "TCOLCMAXTest.case01" "0"
+    run_a3_simple_task "tcolmin" "TCOLMINTest.case1" "0"
+    run_a3_simple_task "tcolargmin" "TCOLCMINTest.case01" "0"
+    run_a3_simple_task "trem" "TREMTest.case_float_16x64_16x128_16x128_16x64" "0"
+    run_a3_simple_task "tfmod" "TFMODTest.case_float_16x64_16x128_16x128_16x64" "0"
+    run_a3_simple_task "trems" "TREMSTest.case1" "0"
+    run_a3_simple_task "tfmods" "TFMODSTest.case1" "0"
+    run_a3_simple_task "tsubs" "TSUBSTest.case1" "0"
+    run_a3_simple_task "tmaxs" "TMAXSTest.case1" "0"
+    run_a3_simple_task "tlrelu" "TLRELUTest.case1" "0"
+    run_a3_simple_task "tgatherb" "TGATHERBTest.case_float_2x128_2x16_2x128" "0"
+    run_a3_simple_task "tmov" "TMOVTest.case14_scaling_dynamic_int32_int8_0_1_1_1_0_param" "0"
+    run_a3_simple_task "tmov_acc2mat" "TMOVTest.case_nz2nz_fb_quant_4" "0"
+    run_a3_simple_task "tmrgsort" "TMRGSORTTest.case_topk1" "0"
+    run_a3_simple_task "tmul" "TMULTest.case_float_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tdiv" "TDIVTest.case_float_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tstore" "TStoreTest.ND_float_1_1_1_2_128_1_1_1_2_128" "0"
+    run_a3_simple_task "tstore_acc2gm" "TStoreAcc2gmTest.case7" "0"
+    run_a3_simple_task "tstore_mat2gm" "TStoreMat2GMTest.case_nd1" "0"
+    run_a3_simple_task "trowsum" "TROWSUMTest.case1" "0"
+    run_a3_simple_task "trowexpand" "TROWEXPANDTest.case0" "0"
+    run_a3_simple_task "trowexpandadd" "TROWEXPANDADDTest.case1" "0"
+    run_a3_simple_task "trowexpanddiv" "TROWEXPANDDIVTest.case2" "0"
+    run_a3_simple_task "trowexpandmax" "TROWEXPANDMAXTest.case3" "0"
+    run_a3_simple_task "trowexpandmin" "TROWEXPANDMINTest.case4" "0"
+    run_a3_simple_task "trowexpandmul" "TROWEXPANDMULTest.case13" "0"
+    run_a3_simple_task "trowexpandsub" "TROWEXPANDSUBTest.case14" "0"
+    run_a3_simple_task "trowexpandexpdif" "TROWEXPANDEXPDIFTest.case7" "0"
+    run_a3_simple_task "tcolexpandadd" "TColExpandAddTest.case_fp32_16_128_1_128" "0"
+    run_a3_simple_task "tcolexpandmax" "TColExpandMaxTest.case_fp32_32_32_1_32" "0"
+    run_a3_simple_task "tcolexpandmin" "TColExpandMinTest.case_fp16_4_256_1_256" "0"
+    run_a3_simple_task "tsels" "TSELSTest.case_uint16_uint8_2x16_2x32_2x16_2x16:TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8" "0"
+    run_a3_simple_task "tsort32" "TSort32Test.case1" "0"
+    run_a3_simple_task "tadd" "TADDTest.case_float_64x64_64x64" "0"
+    run_a3_simple_task "tand" "TANDTest.case1" "0"
+    run_a3_simple_task "tor" "TORTest.case2" "0"
+    run_a3_simple_task "tpartargmax" "TPARTARGMAXTest.case_float_uint32_tile_diff_32k_small_0" "0"
+    run_a3_simple_task "tpartargmin" "TPARTARGMINTest.case_float_uint32_tile_diff_32k_small_0" "0"
+    run_a3_simple_task "tpows" "TPOWSTest.case11" "0"
+    run_a3_simple_task "tsel" "TSELTest.case1" "0"
+    run_a3_simple_task "tmins" "" "0"
+    run_a3_simple_task "trsqrt" "TRSQRTTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "tsqrt" "TSQRTTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "texp" "TEXPTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "tabs" "TABSTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "tlog" "TLOGTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "trecip" "TRECIPTest.case_float_64x64_64x64_64x64_inPlace_False" "0"
+    run_a3_simple_task "tdivs" "TDIVSTest.case1:TDIVSTest.case4:TDIVSTest.case5" "0"
+    run_a3_simple_task "tmuls" "TMULSTest.case1" "0"
+    run_a3_simple_task "tadds" "TADDSTest.case6" "0"
+    run_a3_simple_task "texpands" "TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL" "0"
+    run_a3_simple_task "tnot" "TNOTTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tprelu" "TPRELUTest.case5" "0"
+    run_a3_simple_task "trelu" "TRELUTest.case_int32_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tands" "TANDSTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tors" "TORSTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tshl" "TSHLTest.case1" "0"
+    run_a3_simple_task "tshr" "TSHRTest.case2" "0"
+    run_a3_simple_task "tshls" "TSHLSTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tshrs" "TSHRSTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "txor" "TXORTest.case_int16_64x64_64x64_64x64_64x64" "0"
+    run_a3_simple_task "txors" "TXORSTest.case_int16_64x64_64x64_64x64" "0"
+    run_a3_simple_task "tdequant" "TDEQUANTTest.case4:TDEQUANTTest.case5" "0"
+    run_a3_simple_task "tconcat" "TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64:TCONCATTest.case_int16_32x256_32x128_32x128_32x127_32x128:TCONCATTest.case_int32_64x128_64x64_64x64_64x64_64x64" "0"
+    run_a3_simple_task "trowargmax" "TROWARGMAXTest.case_uint32_float_16x1_13x16_1x8_13x13:TROWARGMAXTest.case_uint32_float_8x1_3x4096_3x192_3x4095:TROWARGMAXTest.case_uint32_float_8x1_8x1_1x16384_1x768_1x16381" "0"
+    run_a3_simple_task "trowargmin" "TROWARGMINTest.case_uint32_float_16x1_13x16_1x8_13x13:TROWARGMINTest.case_uint32_float_8x1_3x4096_3x192_3x4095:TROWARGMINTest.case_uint32_float_8x1_8x1_1x16384_1x768_1x16381" "0"
+    run_a3_simple_task "textract_vec" "TExtractVecTest.case_nd_aligned_1:TExtractVecTest.case_nd_aligned_4_bf16:TExtractVecTest.case_nd_partial_validrow:TExtractVecTest.case_nd_unaligned_validcol_full_row:TExtractVecTest.case_nd_aligned_int8_strided:TExtractVecTest.case_nd_nonpow2_half:TExtractVecTest.case_nd_nonpow2_partial_float_unaligned_idxrow:TExtractVecTest.case_nd_unalignedvalid_int16:TExtractVecTest.case_nd_unalignedvalid_float_smallthan32B:TExtractVecTest.case_nd_unalignedvalid_uint16_taillarge:TExtractVecTest.case_nd_scalar_4_int8:TExtractVecTest.case_nd_scalar_nonpow2_float:TExtractVecTest.case_nz_1:TExtractVecTest.case_nz_multi_fractal_dst:TExtractVecTest.case_nz_half_large:TExtractVecTest.case_nz_nonpow2_float:TExtractVecTest.case_nz_partial_bf16:TExtractVecTest.case_nz_partial_float_unaligned_idxcol:TExtractVecTest.case_nz_unalignedvalid_validrow_half:TExtractVecTest.case_nz_scalar_5_int32:TExtractVecTest.case_nz_scalar_nonpow2_int8" "0"
+    run_a3_simple_task "tinsert_vec" "TInsertVecTest.case_nd_aligned_1:TInsertVecTest.case_nd_aligned_4_bf16:TInsertVecTest.case_nd_partial_validrow:TInsertVecTest.case_nd_full_row_strided:TInsertVecTest.case_nd_aligned_uint16:TInsertVecTest.case_nd_partial_validboth_float:TInsertVecTest.case_nd_nonpow2_int8:TInsertVecTest.case_nd_nonpow2_int32:TInsertVecTest.case_nd_unalignedvalid_half:TInsertVecTest.case_nd_unalignedvalid_uint16_strided:TInsertVecTest.case_nd_unalignedvalid_float_smallthan32B:TInsertVecTest.case_nd_scalar_3_bf16:TInsertVecTest.case_nd_scalar_2_half:TInsertVecTest.case_nz_2:TInsertVecTest.case_nz_int32_partial:TInsertVecTest.case_nz_partial_float_unaligned_idxcol:TInsertVecTest.case_nz_nonpow2_partial_int8:TInsertVecTest.case_nz_unalignedvalid_int16:TInsertVecTest.case_nz_unalignedvalid_both_float:TInsertVecTest.case_nz_unalignedvalid_both_with_idx_bf16:TInsertVecTest.case_nz_scalar_5_int32:TInsertVecTest.case_nz_scalar_9_uint8_edge:TInsertVecTest.case_nz_scalar_nonpow2_int8" "0"
+    run_a3_simple_task "tpairreducesum" "TPAIRREDUCESUMTest.case_float_32x64_32x64_32x64:TPAIRREDUCESUMTest.case_float_32x128_32x128_32x128" "0"
+    run_a3_simple_task "tfusedmuladd" "TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127" "0"
+    run_a3_simple_task "tfusedmuladdrelu" "TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127" "0"
+    run_a3_simple_task "tsubrelu" "TSUBRELUTest.case_float_32x128_32x192_32x256_32x127" "0"
+    run_a3_simple_task "tmuladddst" "TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127" "0"
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
       # besides, auto-sync doesn't work with CCE intrinsics
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv -g TPushPopCVTest.case1_half_single_tile
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc -g TPushPopVCTest.case1_int8_single_k_tile
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_cv_nosplit -g TPushPopCVNoSplitTest.case1_half_single_tile
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_vc_nosplit -g TPushPopVCNoSplitTest.case1_int8_single_k_tile
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpushpop_subtile -g TPushTpopSubtileTest.case1_half_128x512
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t mscatter -g MSCATTERTest.case_elem2d_nz_float_16x16_2blk:MSCATTERTest.case_row_nz_float_clamp_16x8_1blk:MSCATTERTest.case_row_dyn_int32_3x16_8rows:MSCATTERTest.case_elem2d_dyn_float_4x8_64size:MSCATTERTest.case_elem_scalar_float_1x1_in_1x8_8size:MSCATTERTest.case_elem2d_half_atomic_add_4x16_8size:MSCATTERTest.case_elem2d_float_atomic_add_4x16_8size:MSCATTERTest.case_elem2d_int32_unaligned_3x3_in_3x8_64size:MSCATTERTest.case_elem2d_uint32_8x16_256size:MSCATTERTest.case_elem2d_float_8x32_256size:MSCATTERTest.case_elem2d_uint8_4x64_256size:MSCATTERTest.case_elem_uint32_32_64size:MSCATTERTest.case_elem_uint16_32_64size:MSCATTERTest.case_row_uint8_unaligned_3x32_32rows:MSCATTERTest.case_row_half_atomic_add_8x32_8rows:MSCATTERTest.case_row_float_8x32_64rows:MSCATTERTest.case_row_int32_wrap_8x16_8rows
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather -g MGATHERTest.case_row_float_8x32_64rows:MGATHERTest.case_row_half_16x64_64rows:MGATHERTest.case_row_float_partial_4x16_in_8x16:MGATHERTest.case_elem_half_64_128size:MGATHERTest.case_elem2d_half_4x32_256size:MGATHERTest.case_elem2d_int16_4x32_256size:MGATHERTest.case_row_dyn_int32_3x16_8rows:MGATHERTest.case_elem2d_nz_int32_16x8_1blk
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tfillpad -g TFILLPADTest.case_u16_GT_259_7_VT_260_32_BLK1_PADMIN_PADMAX_EXPAND -d
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tgather -g TGATHERTest.case1_float_P0101
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tload_gm2mat -g TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tmov_vect -g TMOVTest.vect_copy_case1
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul -g TPARTMULTest.case_float_64x64_64x64_64x64
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow -g TPOWTest.case11
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t trowprod -g TROWPRODTest.case1
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tscatter -g TSCATTERTest.case_mask_float_16x64_16x64_P1111
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_3d -g TTRANS3DTest.case3_int32_17_3_3_2_2:TTRANS3DTest.case1_float32_2_4_2_2_2:TTRANS3DTest.case7_uint16_4_8_2_2_3:TTRANS3DTest.case10_uint8_9_18_2_2_4
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttri -g TTRITest.case_float_128x128_128x31_1__444
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tcvt -g TCVTTest.case_fp16_fp32_2x64
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tcmp -g TCMPTest.case_eq_float_1x64_1x64_1x64
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tcmps -g TCMPSTest.case_gt_float_8x64_8x64_8x64
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter -g TCOLSCATTERTest.case_mask_half_16x64_16x64_P1111
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t textract -g TEXTRACTTest.case1_half_0_1_16_16_32_param
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv -g TTRANSConvTest.int8_1_63_2_128
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tci -g TCITest.case1_int32
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tquant -g TQUANTTEST.case_int8_sym_fp32_128x128_nd:TQUANTTEST.case_int8_asym_fp32_128x128_nd
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat -g TEXPANDSTest.case1
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t mgather_gm2l1 \
-        -g MGATHERGM2L1Test.case_row_float_16x16_64rows:MGATHERGM2L1Test.case_row_int32_16x8_32rows:MGATHERGM2L1Test.case_row_uint16_16x32_48rows:MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size
+      run_a3_simple_task "tpushpop_cv" "TPushPopCVTest.case1_half_single_tile" "0"
+      run_a3_simple_task "tpushpop_vc" "TPushPopVCTest.case1_int8_single_k_tile" "0"
+      run_a3_simple_task "tpushpop_cv_nosplit" "TPushPopCVNoSplitTest.case1_half_single_tile" "0"
+      run_a3_simple_task "tpushpop_vc_nosplit" "TPushPopVCNoSplitTest.case1_int8_single_k_tile" "0"
+      run_a3_simple_task "tpushpop_dir_both" "TPushPopDirBothTest.case1_float_dir_both" "0"
+      run_a3_simple_task "tpushpop_subtile" "TPushTpopSubtileTest.case1_half_128x512" "0"
+      run_a3_simple_task "mscatter" "MSCATTERTest.case_elem2d_nz_float_16x16_2blk:MSCATTERTest.case_row_nz_float_clamp_16x8_1blk:MSCATTERTest.case_row_dyn_int32_3x16_8rows:MSCATTERTest.case_elem2d_dyn_float_4x8_64size:MSCATTERTest.case_elem_scalar_float_1x1_in_1x8_8size:MSCATTERTest.case_elem2d_half_atomic_add_4x16_8size:MSCATTERTest.case_elem2d_float_atomic_add_4x16_8size:MSCATTERTest.case_elem2d_int32_unaligned_3x3_in_3x8_64size:MSCATTERTest.case_elem2d_uint32_8x16_256size:MSCATTERTest.case_elem2d_float_8x32_256size:MSCATTERTest.case_elem2d_uint8_4x64_256size:MSCATTERTest.case_elem_uint32_32_64size:MSCATTERTest.case_elem_uint16_32_64size:MSCATTERTest.case_row_uint8_unaligned_3x32_32rows:MSCATTERTest.case_row_half_atomic_add_8x32_8rows:MSCATTERTest.case_row_float_8x32_64rows:MSCATTERTest.case_row_int32_wrap_8x16_8rows" "0"
+      run_a3_simple_task "mgather" "MGATHERTest.case_row_float_8x32_64rows:MGATHERTest.case_row_half_16x64_64rows:MGATHERTest.case_row_float_partial_4x16_in_8x16:MGATHERTest.case_elem_half_64_128size:MGATHERTest.case_elem2d_half_4x32_256size:MGATHERTest.case_elem2d_int16_4x32_256size:MGATHERTest.case_row_dyn_int32_3x16_8rows:MGATHERTest.case_elem2d_nz_int32_16x8_1blk" "0"
+      run_a3_simple_task "tfillpad" "TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX" "0"
+      run_a3_simple_task "tfillpad" "TFILLPADTest.case_u16_GT_259_7_VT_260_32_BLK1_PADMIN_PADMAX_EXPAND" "1"
+      run_a3_simple_task "tgather" "TGATHERTest.case1_float_P0101" "0"
+      run_a3_simple_task "tload_gm2mat" "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1" "0"
+      run_a3_simple_task "tmov_vect" "TMOVTest.vect_copy_case1" "0"
+      run_a3_simple_task "tpartadd" "TPARTADDTest.case_float_64x64_64x64_64x64" "0"
+      run_a3_simple_task "tpartmul" "TPARTMULTest.case_float_64x64_64x64_64x64" "0"
+      run_a3_simple_task "tpow" "TPOWTest.case11" "0"
+      run_a3_simple_task "trowprod" "TROWPRODTest.case1" "0"
+      run_a3_simple_task "tscatter" "TSCATTERTest.case_mask_float_16x64_16x64_P1111" "0"
+      run_a3_simple_task "ttrans_3d" "TTRANS3DTest.case3_int32_17_3_3_2_2:TTRANS3DTest.case1_float32_2_4_2_2_2:TTRANS3DTest.case7_uint16_4_8_2_2_3:TTRANS3DTest.case10_uint8_9_18_2_2_4" "0"
+      run_a3_simple_task "ttri" "TTRITest.case_float_128x128_128x31_1__444" "0"
+      run_a3_simple_task "tcvt" "TCVTTest.case_fp16_fp32_2x64" "0"
+      run_a3_simple_task "tcmp" "TCMPTest.case_eq_float_1x64_1x64_1x64" "0"
+      run_a3_simple_task "tcmps" "TCMPSTest.case_gt_float_8x64_8x64_8x64" "0"
+      run_a3_simple_task "tcolscatter" "TCOLSCATTERTest.case_mask_half_16x64_16x64_P1111" "0"
+      run_a3_simple_task "textract" "TEXTRACTTest.case1_half_0_1_16_16_32_param" "0"
+      run_a3_simple_task "ttrans" "TTRANSTest.case1_float_16_8_16_8" "0"
+      run_a3_simple_task "ttrans_conv" "TTRANSConvTest.int8_1_63_2_128" "0"
+      run_a3_simple_task "tci" "TCITest.case1_int32" "0"
+      run_a3_simple_task "tquant" "TQUANTTEST.case_int8_sym_fp32_128x128_nd:TQUANTTEST.case_int8_asym_fp32_128x128_nd" "0"
+      run_a3_simple_task "texpands_mat" "TEXPANDSTest.case1" "0"
+      run_a3_simple_task "mgather_gm2l1" "MGATHERGM2L1Test.case_row_float_16x16_64rows:MGATHERGM2L1Test.case_row_int32_16x8_32rows:MGATHERGM2L1Test.case_row_uint16_16x32_48rows:MGATHERGM2L1Test.case_elem_bfloat16_16x16_256size" "0"
+    fi
+
+    # In parallel mode, dispatch the registered tasks to the orchestrator.
+    if [ "$PARALLEL_WORKERS" -gt 1 ]; then
+      local_st_root_abs="$(cd "$A3_ST_ROOT" && pwd)"
+      local_base_build_abs="$local_st_root_abs/build"
+      local_run_st_abs="$(pwd)/tests/script/run_st.py"
+      local_orchestrator_abs="$(pwd)/tests/script/run_st_parallel.py"
+      local_parallel_args=""
+      if [ "$PARALLEL_BEST_EFFORT" = "true" ]; then
+        local_parallel_args+=" --best-effort"
+      fi
+      if [ "$PARALLEL_ASSUME_AVAILABLE" = "true" ]; then
+        local_parallel_args+=" --assume-available"
+      fi
+      if [ "$IS_AUTO_MODE" = "true" ]; then
+        local_parallel_args+=" --auto-mode"
+      fi
+      # shellcheck disable=SC2086
+      python3 "$local_orchestrator_abs" \
+        --manifest "$A3_TASK_MANIFEST" \
+        --workers "$PARALLEL_WORKERS" \
+        --st-root "$local_st_root_abs" \
+        --base-build-dir "$local_base_build_abs" \
+        --run-st-script "$local_run_st_abs" \
+        --run-mode npu --soc-version a3 \
+        $local_parallel_args
     fi
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例

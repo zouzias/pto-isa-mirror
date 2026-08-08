@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import queue
+import subprocess
 import tempfile
 import threading
 import time
@@ -396,6 +397,62 @@ class ParallelSchedulingTest(unittest.TestCase):
         self.assertEqual(len(results), 2)  # both tasks drained
         self.assertEqual(results[0].returncode, 1)
         self.assertEqual(results[1].returncode, 0)
+
+
+class RegistryDumpTest(unittest.TestCase):
+    """Task 5: dump-mode registry invariants (host-only, no NPU)."""
+
+    def _dump(self):
+        """Run run_st.sh in dump mode and return the parsed task list."""
+        repo = Path(__file__).resolve().parents[2]  # repo root
+        dump = self.root / "dump.tsv"
+        env = dict(os.environ)
+        env["PTO_ST_DUMP_TASKS"] = str(dump)
+        # Replace python3 so the test runs on hosts where python3 resolves oddly.
+        shim = self.root / "pyshim"
+        shim.mkdir()
+        pyexe = sys.executable.replace("\\", "/")
+        (shim / "python3").write_text(
+            "#!/bin/bash\nexec %s \"$@\"\n" % pyexe
+        )
+        os.chmod(shim / "python3", 0o755)
+        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+        proc = subprocess.run(
+            ["bash", "tests/run_st.sh", "--a3", "--npu", "--simple"],
+            cwd=str(repo), env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        tasks = []
+        for line in dump.read_text().splitlines():
+            parts = line.split("\t")
+            tasks.append((parts[0], parts[1], parts[2]))
+        return tasks
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_registry_invariants(self):
+        tasks = self._dump()
+        # tfillpad: two tasks, one with debug enabled.
+        tfp = [t for t in tasks if t[0] == "tfillpad"]
+        self.assertEqual(len(tfp), 2)
+        self.assertEqual({t[2] for t in tfp}, {"0", "1"})
+        # mgather_gm2l1: single task, 4 unique filters.
+        mg = [t for t in tasks if t[0] == "mgather_gm2l1"]
+        self.assertEqual(len(mg), 1)
+        filters = mg[0][1].split(":")
+        self.assertEqual(len(filters), 4)
+        self.assertEqual(len(set(filters)), 4)
+        # tmins: empty filter.
+        tmins = [t for t in tasks if t[0] == "tmins"]
+        self.assertEqual(len(tmins), 1)
+        self.assertEqual(tmins[0][1], "")
+        # No empty-testcase rows.
+        self.assertTrue(all(t[0] for t in tasks))
 
 
 if __name__ == "__main__":
