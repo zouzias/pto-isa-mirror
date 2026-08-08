@@ -455,5 +455,67 @@ class RegistryDumpTest(unittest.TestCase):
         self.assertTrue(all(t[0] for t in tasks))
 
 
+class ParallelOptionValidationTest(unittest.TestCase):
+    """Task 6: build.sh / run_st.sh parallel option validation (host-only)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.repo = Path(__file__).resolve().parents[2]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run_sh(self, *args, parallel=None, best_effort=None, assume=None):
+        """Run run_st.sh in dump mode with given options; return returncode+stderr."""
+        dump = self.root / "dump.tsv"
+        env = dict(os.environ)
+        env["PTO_ST_DUMP_TASKS"] = str(dump)
+        shim = self.root / "pyshim"
+        shim.mkdir()
+        pyexe = sys.executable.replace("\\", "/")
+        (shim / "python3").write_text("#!/bin/bash\nexec %s \"$@\"\n" % pyexe)
+        os.chmod(shim / "python3", 0o755)
+        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+        cmd = ["bash", "tests/run_st.sh", "--a3", "--npu", "--simple"]
+        if parallel is not None:
+            cmd.append("--parallel=%s" % parallel)
+        if best_effort:
+            cmd.append("--parallel-best-effort")
+        if assume:
+            cmd.append("--parallel-assume-available")
+        proc = subprocess.run(cmd, cwd=str(self.repo), env=env,
+                              capture_output=True, text=True)
+        return proc.returncode, proc.stderr
+
+    def test_zero_parallel_rejected(self):
+        rc, err = self._run_sh(parallel="0")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("positive integer", err)
+
+    def test_non_numeric_parallel_rejected(self):
+        rc, err = self._run_sh(parallel="abc")
+        self.assertNotEqual(rc, 0)
+
+    def test_a5_parallel_rejected(self):
+        # run_st.sh itself rejects --parallel>1 for A5.
+        dump = self.root / "dump.tsv"
+        env = dict(os.environ); env["PTO_ST_DUMP_TASKS"] = str(dump)
+        shim = self.root / "pyshim2"
+        shim.mkdir()
+        (shim / "python3").write_text("#!/bin/bash\nexec %s \"$@\"\n" % sys.executable.replace("\\", "/"))
+        os.chmod(shim / "python3", 0o755)
+        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+        proc = subprocess.run(
+            ["bash", "tests/run_st.sh", "--a5", "--npu", "--simple", "--parallel=2"],
+            cwd=str(self.repo), env=env, capture_output=True, text=True)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("supported only for A3", proc.stderr)
+
+    def test_serial_dump_does_not_need_parallel(self):
+        rc, err = self._run_sh()  # no parallel option -> serial default
+        self.assertEqual(rc, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

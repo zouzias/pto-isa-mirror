@@ -88,8 +88,11 @@ checkopts() {
   INST_NAME=""
   AUTO_MODE=FALSE
   PACKAGE_TYPE="run"
+  PARALLEL_WORKERS=1
+  PARALLEL_BEST_EFFORT=FALSE
+  PARALLEL_ASSUME_AVAILABLE=FALSE
 
-  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,pkg-type:,run_all,a3,a5,sim,npu,comm,cpu,cpu_bf16,auto_mode,run_simple,build,cann_3rd_lib_path: -- "$@") || {
+  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,pkg-type:,run_all,a3,a5,sim,npu,comm,cpu,cpu_bf16,auto_mode,run_simple,build,parallel:,parallel-best-effort,parallel-assume-available,cann_3rd_lib_path: -- "$@") || {
   usage
   exit 1
   }
@@ -160,6 +163,18 @@ checkopts() {
         shift
         AUTO_MODE=TRUE
         ;;
+      --parallel)
+        shift
+        PARALLEL_WORKERS="$1"
+        ;;
+      --parallel-best-effort)
+        PARALLEL_BEST_EFFORT=TRUE
+        shift
+        ;;
+      --parallel-assume-available)
+        PARALLEL_ASSUME_AVAILABLE=TRUE
+        shift
+        ;;
       --)
         shift
         break
@@ -206,6 +221,15 @@ run_simple_st() {
   ARGS+="--$RUN_TYPE --simple "
   if [ "$AUTO_MODE" == "TRUE" ]; then
     ARGS+="--auto_mode "
+  fi
+  if [ "$PARALLEL_WORKERS" -gt 1 ]; then
+    ARGS+="--parallel=${PARALLEL_WORKERS} "
+    if [ "$PARALLEL_BEST_EFFORT" == "TRUE" ]; then
+      ARGS+="--parallel-best-effort "
+    fi
+    if [ "$PARALLEL_ASSUME_AVAILABLE" == "TRUE" ]; then
+      ARGS+="--parallel-assume-available "
+    fi
   fi
   ./tests/run_st.sh ${ARGS}
   echo "execute samples success"
@@ -300,6 +324,21 @@ run_example() {
 
 main() {
   checkopts "$@"
+
+  # Validate the parallel worker count: must be a positive integer.
+  if ! [[ "$PARALLEL_WORKERS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_WORKERS" -lt 1 ]; then
+    echo "Error: --parallel must be a positive integer, got '$PARALLEL_WORKERS'." >&2
+    exit 1
+  fi
+
+  # Reject --parallel>1 for unsupported platform/mode combinations.
+  if [ "$PARALLEL_WORKERS" -gt 1 ] && [ "$ENABLE_SIMPLE_ST" == "TRUE" ]; then
+    if [ "$ENABLE_A5" == "TRUE" ] || [ "$ENABLE_COMM" == "TRUE" ] || [ "$RUN_TYPE" == "sim" ]; then
+      echo "Error: --parallel>1 is supported only for A3 --run_simple on NPU." >&2
+      exit 1
+    fi
+  fi
+
   if [ "$RUN_TYPE" == "sim" ]; then
       ulimit -n 65535
   fi
