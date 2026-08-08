@@ -127,14 +127,17 @@ def build_project(run_mode, soc_version, testcase="all", debug_enable=False, aut
         os.chdir(original_dir)
 
 
-def run_gen_data(golden_path):
+def run_gen_data(golden_path, build_dir="build"):
     original_dir = os.getcwd()
     try:
-        cmd = ["cp", golden_path, "build/gen_data.py"]
+        build_dir_abs = os.path.abspath(build_dir)
+        if not os.path.isdir(build_dir_abs):
+            raise FileNotFoundError(f"build root not found: {build_dir_abs}")
+
+        cmd = ["cp", golden_path, os.path.join(build_dir_abs, "gen_data.py")]
         run_command(cmd)
 
-        build_dir = "build/"
-        os.chdir(build_dir)
+        os.chdir(build_dir_abs)
 
         gloden_gen_cmd = [sys.executable, "gen_data.py"]
         output = run_command(gloden_gen_cmd)
@@ -221,11 +224,13 @@ def find_mpirun():
     return None
 
 
-def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
+def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2, build_dir="build"):
     original_dir = os.getcwd()
     try:
-        build_dir = "build/bin/"
-        os.chdir(build_dir)
+        binary_dir = os.path.join(os.path.abspath(build_dir), "bin")
+        if not os.path.isdir(binary_dir):
+            raise FileNotFoundError(f"binary dir not found: {binary_dir}")
+        os.chdir(binary_dir)
 
         if run_mode == "sim":
             camodel_log_dir = "camodel_log"
@@ -282,6 +287,11 @@ def main():
     parser.add_argument("-w", "--without-build", action="store_true", help="关闭编译（需要预先编译）")
     parser.add_argument(
         "-n", "--nranks", type=int, default=8, help="comm测试的最大MPI rank数量（默认8，自动按2/4/8分轮执行）"
+    )
+    parser.add_argument(
+        "--build-dir",
+        default="build",
+        help="Build/data root containing bin/; defaults to the existing ./build directory",
     )
 
     args = parser.parse_args()
@@ -345,7 +355,7 @@ def main():
         golden_path = "testcase/" + testcase + "/gen_data.py"
         gen_data_start_ns = time.perf_counter_ns()
         try:
-            run_gen_data(golden_path)
+            run_gen_data(golden_path, args.build_dir)
         finally:
             gen_data_elapsed_ms = (time.perf_counter_ns() - gen_data_start_ns) / 1e6
             print(f"[TIMING] gen_data {testcase}: {gen_data_elapsed_ms:.0f} ms")
@@ -353,6 +363,7 @@ def main():
         def run_binary_with_timing(*run_args, **run_kwargs):
             run_binary_start_ns = time.perf_counter_ns()
             try:
+                run_kwargs.setdefault("build_dir", args.build_dir)
                 return run_binary(*run_args, **run_kwargs)
             finally:
                 run_binary_elapsed_ms = (time.perf_counter_ns() - run_binary_start_ns) / 1e6
