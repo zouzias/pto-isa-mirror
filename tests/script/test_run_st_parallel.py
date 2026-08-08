@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import queue
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -798,21 +799,83 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         script.write_text(
             "import signal, time, sys\n"
             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-            "sys.stdout.write('ready\\n'); sys.stdout.flush()\n"
+            "sys.stdout.write('ready' + chr(10)); sys.stdout.flush()\n"
             "time.sleep(30)\n"
         )
         proc = subprocess.Popen([sys.executable, str(script)],
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, start_new_session=True)
+        group = rsp._new_proc_group(proc)
         try:
             # Wait for it to signal readiness.
             proc.stdout.readline()
             # TERM to group, short timeout -> should escalate to KILL.
-            exited = rsp.terminate_proc_gracefully(proc, timeout=1)
+            exited = rsp.terminate_proc_gracefully(group, timeout=1)
             self.assertTrue(exited)
             # The process must be gone (KILLed).
             self.assertIsNotNone(proc.poll())
         finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+    @unittest.skipIf(os.name == "nt", "process groups not used on Windows")
+    def test_terminate_kills_grandchild_and_waits_for_group(self):
+        """Leader spawns an ignore-TERM grandchild, then exits; group must be killed.
+
+        The leader starts a grandchild in the same process group, then exits
+        immediately. terminate_proc_gracefully must discover the group is still
+        alive (grandchild), escalate to SIGKILL, and confirm the whole group is
+        gone before returning True.
+        """
+        grandchild = self.root / "grandchild.py"
+        grandchild.write_text(
+            "import signal, time, os, sys\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "sys.stdout.write('grandchild:' + str(os.getpid()) + chr(10))\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        leader = self.root / "leader.py"
+        leader.write_text(
+            "import subprocess, sys, os\n"
+            "p = subprocess.Popen([sys.executable, %r])\n"
+            "sys.stdout.write('leader:' + str(os.getpid()) + ':' + str(os.getpgrp()) + chr(10))\n"
+            "sys.stdout.flush()\n"
+            "sys.exit(0)\n" % str(grandchild)
+        )
+        proc = subprocess.Popen([sys.executable, str(leader)],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, start_new_session=True)
+        group = rsp._new_proc_group(proc)
+        try:
+            # Read the leader line: "leader:<pid>:<pgid>".
+            line = proc.stdout.readline()
+            self.assertTrue(line.startswith("leader:"), line)
+            _, leader_pid, pgid = line.strip().split(":")
+            # Wait for the grandchild to report its pid.
+            gline = proc.stdout.readline()
+            self.assertTrue(gline.startswith("grandchild:"), gline)
+            grandchild_pid = int(gline.strip().split(":")[1])
+            # Leader should have exited.
+            proc.wait(timeout=5)
+            # The process group must still exist because the grandchild is alive.
+            self.assertTrue(rsp.group_exists(group))
+            # Now terminate the group gracefully; it must SIGKILL the grandchild.
+            exited = rsp.terminate_proc_gracefully(group, timeout=2)
+            self.assertTrue(exited)
+            # The grandchild must be gone and the group dissolved.
+            self.assertFalse(rsp.group_exists(group))
+            import subprocess as _sp
+            try:
+                os.kill(grandchild_pid, 0)
+                grandchild_alive = True
+            except OSError:
+                grandchild_alive = False
+            self.assertFalse(grandchild_alive)
+        finally:
+            if group is not None and rsp.group_exists(group):
+                rsp.terminate_process_group(group, signal.SIGKILL)
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()
@@ -885,10 +948,25 @@ class ManifestTrapTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_exit_trap_removes_manifest_dir(self):
-        # In dump mode parallel is not triggered; instead directly test the trap
-        # by sourcing the relevant snippet. Simpler: check the trap line exists.
+        # The trap syntax must be present in run_st.sh.
         content = (self.repo / "tests" / "run_st.sh").read_text(encoding="utf-8")
         self.assertIn("trap 'rm -rf \"$A3_PARALLEL_ROOT\"' EXIT", content)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash not available")
+    def test_exit_trap_actually_removes_dir(self):
+        # Behaviorally verify the EXIT trap removes the directory on exit.
+        target = self.root / ".smoke-parallel" / "99999"
+        script = self.root / "trap_test.sh"
+        script.write_text(
+            "#!/bin/bash\n"
+            "A3_PARALLEL_ROOT=%s\n"
+            "mkdir -p \"$A3_PARALLEL_ROOT\"\n"
+            "trap 'rm -rf \"$A3_PARALLEL_ROOT\"' EXIT\n"
+            "exit 3\n" % str(target).replace("\\", "/")
+        )
+        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 3)
+        self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":

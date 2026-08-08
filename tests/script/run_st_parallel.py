@@ -27,71 +27,104 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 
 # Module-level tracking of live child processes so signal handlers can
 # terminate them. Guarded by threads calling Popen; reads iterate defensively.
+# Each entry is a ProcGroup holding the Popen and the PGID captured at launch.
 _ACTIVE_PROCS = []
 _ACTIVE_PROCS_LOCK = threading.Lock()
 
 
-def _pgid(pid):
-    """Return the process group id for pid, or None if unavailable."""
-    try:
-        return os.getpgid(pid)
-    except (OSError, ProcessLookupError):
-        return None
+@dataclass
+class ProcGroup:
+    """A launched task process plus its process-group id (captured at start)."""
+    proc: object
+    pgid: object  # int or None
 
 
-def terminate_process_group(pid, sig, ignore_errors=False):
-    """Send a signal to the whole process group of `pid` (if it is a leader)."""
-    if pid is None or os.name == "nt":
-        return False
-    pgid = _pgid(pid)
-    if pgid is None:
-        return False
-    try:
-        os.killpg(pgid, sig)
-        return True
-    except (OSError, ProcessLookupError):
-        if not ignore_errors:
-            pass
-        return False
+def _new_proc_group(proc):
+    """Wrap a Popen into a ProcGroup, capturing its PGID at launch time.
 
-
-def terminate_proc_gracefully(proc, timeout=10):
-    """TERM the process group, wait up to timeout, then SIGKILL on timeout.
-
-    Returns True if the process group exited, False otherwise.
+    The PGID is captured while the leader is still alive; after the leader
+    exits, os.getpgid(pid) may fail, so we must not re-query it later.
     """
-    if proc is None:
+    pgid = None
+    if os.name != "nt":
+        try:
+            pgid = os.getpgid(proc.pid)
+        except (OSError, ProcessLookupError):
+            pgid = proc.pid  # fall back to the leader pid as the group id
+    return ProcGroup(proc=proc, pgid=pgid)
+
+
+def group_exists(group):
+    """Return True if the process group still has any member."""
+    if group is None or group.pgid is None:
+        return False
+    try:
+        os.killpg(group.pgid, 0)
         return True
-    pid = proc.pid
-    # Prefer terminating the whole group so run_st.py AND its gtest/NPU
-    # children all receive the signal.
-    if terminate_process_group(pid, signal.SIGTERM):
+    except OSError:
+        return False
+
+
+def terminate_process_group(group, sig):
+    """Send a signal to the saved process group id."""
+    if group is None or group.pgid is None:
+        return False
+    try:
+        os.killpg(group.pgid, sig)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def wait_group_gone(group, timeout):
+    """Wait until the process group disappears, or timeout.
+
+    Returns True if the group is gone (or was never present), False otherwise.
+    """
+    if group is None or group.pgid is None:
+        # Nothing we can probe; treat as gone if the leader has exited.
+        try:
+            return group.proc.poll() is not None
+        except Exception:
+            return True
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not group_exists(group):
+            return True
+        time.sleep(0.05)
+    return not group_exists(group)
+
+
+def terminate_proc_gracefully(group, timeout=10):
+    """TERM the whole process group, wait for it to disappear, then SIGKILL.
+
+    Returns True only if the entire process group is confirmed gone.
+    """
+    if group is None:
+        return True
+    proc = group.proc
+    # TERM the whole group so run_st.py AND its gtest/NPU children get it.
+    if terminate_process_group(group, signal.SIGTERM):
+        if wait_group_gone(group, timeout):
+            return True
+    else:
+        # Group not available (e.g. already gone); just wait for the leader.
         try:
             proc.wait(timeout=timeout)
-            return True
-        except subprocess.TimeoutExpired:
-            pass
-    else:
-        try:
-            proc.terminate()
         except Exception:
             pass
-        try:
-            proc.wait(timeout=timeout)
-            return True
-        except subprocess.TimeoutExpired:
-            pass
-    # Escalate to SIGKILL on the whole group.
-    terminate_process_group(pid, signal.SIGKILL)
+        if proc.poll() is not None:
+            return not group_exists(group)
+        # Escalate
+        terminate_process_group(group, signal.SIGKILL)
+        return wait_group_gone(group, 5)
+    # Escalate to SIGKILL on the saved PGID.
+    terminate_process_group(group, signal.SIGKILL)
     try:
         proc.terminate()
     except Exception:
         pass
-    try:
-        proc.wait(timeout=5)
-        return True
-    except Exception:
-        return False
+    return wait_group_gone(group, 5)
 
 
 # ---------------------------------------------------------------------------
@@ -527,7 +560,7 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         start_new_session=True,
     )
     with _ACTIVE_PROCS_LOCK:
-        _ACTIVE_PROCS.append(proc)
+        _ACTIVE_PROCS.append(_new_proc_group(proc))
     log_handle = open(str(worker.log_path), "a", encoding="utf-8")
     try:
         try:
@@ -548,8 +581,7 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         proc.stdout.close()
         proc.wait()
         with _ACTIVE_PROCS_LOCK:
-            if proc in _ACTIVE_PROCS:
-                _ACTIVE_PROCS.remove(proc)
+            _ACTIVE_PROCS[:] = [g for g in _ACTIVE_PROCS if g.proc is not proc]
     elapsed_ms = int((now() - start) * 1000)
     with print_lock:
         print(f"[PARALLEL] task={task.index} testcase={task.testcase} "
@@ -631,7 +663,7 @@ def run_serial_fallback(tasks, args, print_lock, now):
                 cmd, cwd=str(args.st_root), start_new_session=True,
             )
             with _ACTIVE_PROCS_LOCK:
-                _ACTIVE_PROCS.append(proc)
+                _ACTIVE_PROCS.append(_new_proc_group(proc))
             proc.wait()
         except Exception as e:
             with print_lock:
@@ -643,8 +675,7 @@ def run_serial_fallback(tasks, args, print_lock, now):
         finally:
             if proc is not None:
                 with _ACTIVE_PROCS_LOCK:
-                    if proc in _ACTIVE_PROCS:
-                        _ACTIVE_PROCS.remove(proc)
+                    _ACTIVE_PROCS[:] = [g for g in _ACTIVE_PROCS if g.proc is not proc]
         elapsed_ms = int((now() - start) * 1000)
         executed += 1
         ok = proc.returncode == 0
@@ -691,21 +722,35 @@ def main():
             return
         try:
             # 1. Terminate the whole process group of every tracked child,
-            #    escalating TERM -> wait -> KILL. This ensures run_st.py AND
-            #    the gtest/NPU binaries it spawned are gone before we proceed.
+            #    escalating TERM -> wait -> KILL. Only a group-that-is-confirmed-
+            #    gone counts. Collect per-group results.
             with _ACTIVE_PROCS_LOCK:
-                procs = list(_ACTIVE_PROCS)
-            for p in procs:
-                terminate_proc_gracefully(p, timeout=10)
-            # 2. Join worker threads (bounded wait).
+                groups = list(_ACTIVE_PROCS)
+            all_groups_gone = True
+            for g in groups:
+                if not terminate_proc_gracefully(g, timeout=10):
+                    all_groups_gone = False
+
+            # 2. Join worker threads (bounded wait); track whether any is alive.
+            all_threads_stopped = True
             for thr in threads:
-                try:
-                    thr.join(timeout=5)
-                except Exception:
-                    pass
-            # 3. Only after processes and threads have exited, release locks.
-            for lk in locks:
-                release_lock(lk)
+                thr.join(timeout=5)
+                if thr.is_alive():
+                    all_threads_stopped = False
+
+            # 3. Only release device locks if every process group is confirmed
+            #    gone AND every worker thread has stopped. Otherwise emit a
+            #    clear P0 error and keep the locks held (never claim cleaned).
+            if all_groups_gone and all_threads_stopped:
+                for lk in locks:
+                    release_lock(lk)
+            else:
+                print(
+                    "[PARALLEL][P0-ERROR] cleanup incomplete: "
+                    "all_groups_gone=%s all_threads_stopped=%s; "
+                    "device locks NOT released" % (all_groups_gone, all_threads_stopped)
+                )
+
             # 4. Handle the run directory: remove on success, preserve on failure.
             if parallel_root is not None and parallel_root.exists():
                 if success:
