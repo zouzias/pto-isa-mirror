@@ -1,8 +1,16 @@
 # --------------------------------------------------------------------------------
 # coding=utf-8
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+
 # Host-only unit tests for the A3 parallel smoke orchestrator.
 # No NPU binaries or device access are required.
-# --------------------------------------------------------------------------------
 
 import os
 import sys
@@ -45,17 +53,6 @@ class BuildDirIsolationTest(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _run_gen_data_in_cwd(self, cwd, *args, **kwargs):
-        """Invoke run_gen_data with a controlled cwd and a mocked run_command."""
-        old = os.getcwd()
-        os.chdir(cwd)
-        try:
-            with mock.patch.object(run_st, "run_command", return_value="") as mock_rc:
-                run_st.run_gen_data(*args, **kwargs)
-            return mock_rc
-        finally:
-            os.chdir(old)
-
     def test_gen_data_copies_to_custom_build_dir(self):
         golden = os.path.join("testcase", "tfoo", "gen_data.py")
         mock_rc = self._run_gen_data_in_cwd(
@@ -97,6 +94,17 @@ class BuildDirIsolationTest(unittest.TestCase):
             run_st.run_gen_data(
                 os.path.join("testcase", "tfoo", "gen_data.py"), build_dir=str(missing)
             )
+
+    def _run_gen_data_in_cwd(self, cwd, *args, **kwargs):
+        """Invoke run_gen_data with a controlled cwd and a mocked run_command."""
+        old = os.getcwd()
+        os.chdir(cwd)
+        try:
+            with mock.patch.object(run_st, "run_command", return_value="") as mock_rc:
+                run_st.run_gen_data(*args, **kwargs)
+            return mock_rc
+        finally:
+            os.chdir(old)
 
 
 class DeviceListTest(unittest.TestCase):
@@ -166,14 +174,14 @@ class NpuSmiParseTest(unittest.TestCase):
 class DeviceSelectionTest(unittest.TestCase):
     def test_explicit_precedence(self):
         devices, source = rsp.select_devices(
-            2, explicit="3,5", inherited=[0, 1], smi_statuses=[]
+            2, rsp.DeviceSources(explicit="3,5", inherited=[0, 1], smi_statuses=[])
         )
         self.assertEqual(devices, [3, 5])
         self.assertEqual(source, "PTO_ST_PARALLEL_DEVICES")
 
     def test_inherited_used_when_no_explicit(self):
         devices, source = rsp.select_devices(
-            2, explicit=None, inherited=[0, 3], smi_statuses=[]
+            2, rsp.DeviceSources(explicit=None, inherited=[0, 3], smi_statuses=[])
         )
         self.assertEqual(devices, [0, 3])
         self.assertEqual(source, "ASCEND_RT_VISIBLE_DEVICES")
@@ -181,7 +189,7 @@ class DeviceSelectionTest(unittest.TestCase):
     def test_npu_smi_used_when_no_lists(self):
         statuses = [rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False)]
         devices, source = rsp.select_devices(
-            2, explicit=None, inherited=[], smi_statuses=statuses
+            2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
         )
         self.assertEqual(devices, [0, 3])
         self.assertEqual(source, "npu-smi")
@@ -193,18 +201,20 @@ class DeviceSelectionTest(unittest.TestCase):
             rsp.NpuStatus(3, True, False),   # ok
         ]
         devices, source = rsp.select_devices(
-            1, explicit=None, inherited=[], smi_statuses=statuses
+            1, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
         )
         self.assertEqual(devices, [3])
 
     def test_insufficient_strict_raises(self):
         statuses = [rsp.NpuStatus(0, True, False)]
         with self.assertRaises(rsp.DeviceDiscoveryError):
-            rsp.select_devices(2, explicit=None, inherited=[], smi_statuses=statuses)
+            rsp.select_devices(
+                2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
+            )
 
     def test_best_effort_falls_back(self):
         devices, source = rsp.select_devices(
-            2, explicit=None, inherited=[], smi_statuses=None,
+            2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=None),
             assume_available=False, best_effort=True,
         )
         self.assertEqual(devices, [])
@@ -214,10 +224,13 @@ class DeviceSelectionTest(unittest.TestCase):
         with unittest.mock.patch.object(rsp, "list_dev_davinci_ids", return_value=[0, 3]):
             # without assume_available -> strict error
             with self.assertRaises(rsp.DeviceDiscoveryError):
-                rsp.select_devices(2, explicit=None, inherited=[], smi_statuses=None)
+                rsp.select_devices(
+                    2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=None)
+                )
             # with assume_available -> /dev source
             devices, source = rsp.select_devices(
-                2, explicit=None, inherited=[], smi_statuses=None, assume_available=True
+                2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=None),
+                assume_available=True,
             )
             self.assertEqual(devices, [0, 3])
             self.assertEqual(source, "/dev")
@@ -302,30 +315,12 @@ class WorkerIsolationTest(unittest.TestCase):
 
 
 class ParallelSchedulingTest(unittest.TestCase):
-    def _fake_script(self, record_path):
-        """A fake run_st.py that records build-dir + device and 'runs' a task.
-
-        Simulates variable duration so early-finishing workers pick up more tasks.
-        """
-        script = self.root / "fake_run_st.py"
-        script.write_text(
-            "import sys, os, time, json\n"
-            "out = os.environ.get('RECORD', '')\n"
-            "with open(out, 'a') as f:\n"
-            "    f.write(json.dumps({'build_dir': sys.argv[sys.argv.index('--build-dir')+1],\n"
-            "        'dev': os.environ.get('ASCEND_RT_VISIBLE_DEVICES')}) + '\\n')\n"
-            f"time.sleep(0.05)\n"
-            "sys.exit(0)\n"
-        )
-        return str(script)
-
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
 
     def tearDown(self):
-        with rsp._ACTIVE_PROCS_LOCK:
-            rsp._ACTIVE_PROCS.clear()
+        rsp.reset_active_procs()
         self._tmp.cleanup()
 
     def test_two_workers_get_distinct_roots_and_devices(self):
@@ -365,11 +360,19 @@ class ParallelSchedulingTest(unittest.TestCase):
         q.put(None)
         print_lock = threading.Lock()
         results = []
-        env_patch = {**os.environ, "RECORD": str(record)}
+        ctx = rsp.WorkerContext(
+            run_st_script=str(script),
+            auto_mode=False,
+            print_lock=print_lock,
+            now=time.perf_counter,
+        )
         with unittest.mock.patch.dict(os.environ, {"RECORD": str(record)}):
-            th1 = threading.Thread(target=rsp.worker_loop, args=(w1, q, str(script), False, print_lock, results, time.perf_counter))
-            th2 = threading.Thread(target=rsp.worker_loop, args=(w2, q, str(script), False, print_lock, results, time.perf_counter))
-            th1.start(); th2.start(); th1.join(); th2.join()
+            th1 = threading.Thread(target=rsp.worker_loop, args=(w1, q, ctx, results))
+            th2 = threading.Thread(target=rsp.worker_loop, args=(w2, q, ctx, results))
+            th1.start()
+            th2.start()
+            th1.join()
+            th2.join()
 
         rows = [json.loads(l) for l in record.read_text().splitlines()]
         build_dirs = {r["build_dir"] for r in rows}
@@ -388,16 +391,24 @@ class ParallelSchedulingTest(unittest.TestCase):
         manifest = self.root / "tasks.tsv"
         manifest.write_text("tbad\tF.case1\t0\ntok\tF.case2\t0\n")
         tasks = rsp.parse_task_manifest(str(manifest))
-        base = self.root / "base"; (base / "bin").mkdir(parents=True)
+        base = self.root / "base"
+        (base / "bin").mkdir(parents=True)
         (base / "bin" / "fake_test").write_text("x")
         wb = self.root / "w" / "build"
         rsp.prepare_worker_build(base, wb)
         w = rsp.WorkerConfig(0, 0, wb, self.root / "w.log")
         q = queue.Queue()
-        for t in tasks: q.put(t)
+        for t in tasks:
+            q.put(t)
         q.put(None)
         results = []
-        rsp.worker_loop(w, q, str(script), False, threading.Lock(), results, time.perf_counter)
+        ctx = rsp.WorkerContext(
+            run_st_script=str(script),
+            auto_mode=False,
+            print_lock=threading.Lock(),
+            now=time.perf_counter,
+        )
+        rsp.worker_loop(w, q, ctx, results)
         self.assertEqual(len(results), 2)  # both tasks drained
         self.assertEqual(results[0].returncode, 1)
         self.assertEqual(results[1].returncode, 0)
@@ -683,8 +694,7 @@ class MainFlowRegressionTest(unittest.TestCase):
         self.manifest.write_text("t1\tF.case1\t0\nt2\tF.case2\t0\n")
 
     def tearDown(self):
-        with rsp._ACTIVE_PROCS_LOCK:
-            rsp._ACTIVE_PROCS.clear()
+        rsp.reset_active_procs()
         self._tmp.cleanup()
 
     def _base_argv(self):
@@ -763,18 +773,32 @@ class SchedulerBoundaryTest(unittest.TestCase):
     def test_inherited_insufficient_does_not_use_npu_smi(self):
         # inherited=[0] insufficient for 2, npu-smi=[0,3]. Must NOT pick 3.
         devices, source = rsp.select_devices(
-            2, explicit=None, inherited=[0], smi_statuses=[
-                rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False),
-            ], best_effort=True,
+            2,
+            rsp.DeviceSources(
+                explicit=None,
+                inherited=[0],
+                smi_statuses=[
+                    rsp.NpuStatus(0, True, False),
+                    rsp.NpuStatus(3, True, False),
+                ],
+            ),
+            best_effort=True,
         )
         self.assertEqual(devices, [])
         self.assertEqual(source, "ASCEND_RT_VISIBLE_DEVICES")
 
     def test_explicit_insufficient_does_not_use_npu_smi(self):
         devices, source = rsp.select_devices(
-            2, explicit="0", inherited=[], smi_statuses=[
-                rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False),
-            ], best_effort=True,
+            2,
+            rsp.DeviceSources(
+                explicit="0",
+                inherited=[],
+                smi_statuses=[
+                    rsp.NpuStatus(0, True, False),
+                    rsp.NpuStatus(3, True, False),
+                ],
+            ),
+            best_effort=True,
         )
         self.assertEqual(devices, [])
         self.assertEqual(source, "PTO_ST_PARALLEL_DEVICES")
@@ -788,8 +812,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         self.root = Path(self._tmp.name)
 
     def tearDown(self):
-        with rsp._ACTIVE_PROCS_LOCK:
-            rsp._ACTIVE_PROCS.clear()
+        rsp.reset_active_procs()
         self._tmp.cleanup()
 
     @unittest.skipIf(os.name == "nt", "process groups not used on Windows")
@@ -896,8 +919,7 @@ class SuccessCleanupTest(unittest.TestCase):
         self.manifest.write_text("t1\tF.case1\t0\n")
 
     def tearDown(self):
-        with rsp._ACTIVE_PROCS_LOCK:
-            rsp._ACTIVE_PROCS.clear()
+        rsp.reset_active_procs()
         self._tmp.cleanup()
 
     def _base_argv(self):

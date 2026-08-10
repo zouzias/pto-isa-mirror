@@ -224,8 +224,26 @@ def find_mpirun():
     return None
 
 
-def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2, build_dir="build"):
+def _build_mpi_command(mpirun, nranks):
+    """Build the mpirun prefix command for a communicator test."""
+    mpi_cmd = [mpirun, "-n", str(nranks)]
+    try:
+        ver = subprocess.run([mpirun, "--version"], capture_output=True, text=True)
+        ver_text = ver.stdout + ver.stderr
+        if "open mpi" in ver_text.lower() or "openmpi" in ver_text.lower():
+            mpi_cmd.append("--allow-run-as-root")
+    except OSError:
+        # mpirun may not support --version; best-effort detection only.
+        pass
+    mpi_lib_dir = os.path.dirname(mpirun).replace("/bin", "/lib")
+    if os.path.isdir(mpi_lib_dir):
+        os.environ["MPI_LIB_PATH"] = os.path.join(mpi_lib_dir, "libmpi.so")
+    return mpi_cmd
+
+
+def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2, **kwargs):
     original_dir = os.getcwd()
+    build_dir = kwargs.get("build_dir", "build")
     try:
         binary_dir = os.path.join(os.path.abspath(build_dir), "bin")
         if not os.path.isdir(binary_dir):
@@ -249,18 +267,7 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2, build_di
                     "mpirun not found. Install MPICH/OpenMPI or set MPI_HOME env.\n"
                     "Also set MPI_LIB_PATH to point to libmpi.so for runtime loading."
                 )
-            mpi_cmd = [mpirun, "-n", str(nranks)]
-            try:
-                ver = subprocess.run([mpirun, "--version"], capture_output=True, text=True)
-                ver_text = ver.stdout + ver.stderr
-                if "open mpi" in ver_text.lower() or "openmpi" in ver_text.lower():
-                    mpi_cmd.append("--allow-run-as-root")
-            except Exception:
-                pass
-            cmd = mpi_cmd + cmd
-            mpi_lib_dir = os.path.dirname(mpirun).replace("/bin", "/lib")
-            if os.path.isdir(mpi_lib_dir):
-                os.environ["MPI_LIB_PATH"] = os.path.join(mpi_lib_dir, "libmpi.so")
+            cmd = _build_mpi_command(mpirun, nranks) + cmd
 
         print(f"run command: {' '.join(cmd)}")
         output = run_command(cmd)

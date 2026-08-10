@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 # --------------------------------------------------------------------------------
 # coding=utf-8
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+
 # A3 simple multi-NPU parallel smoke orchestrator.
 # Standard library only. No NPU binaries are executed by this module directly.
-# --------------------------------------------------------------------------------
 
 import argparse
 import dataclasses
@@ -32,6 +40,12 @@ _ACTIVE_PROCS = []
 _ACTIVE_PROCS_LOCK = threading.Lock()
 
 
+def reset_active_procs():
+    """Clear the tracked process list (used by host-only tests)."""
+    with _ACTIVE_PROCS_LOCK:
+        _ACTIVE_PROCS.clear()
+
+
 @dataclass
 class ProcGroup:
     """A launched task process plus its process-group id (captured at start)."""
@@ -49,7 +63,7 @@ def _new_proc_group(proc):
     if os.name != "nt":
         try:
             pgid = os.getpgid(proc.pid)
-        except (OSError, ProcessLookupError):
+        except OSError:
             pgid = proc.pid  # fall back to the leader pid as the group id
     return ProcGroup(proc=proc, pgid=pgid)
 
@@ -72,7 +86,7 @@ def terminate_process_group(group, sig):
     try:
         os.killpg(group.pgid, sig)
         return True
-    except (OSError, ProcessLookupError):
+    except OSError:
         return False
 
 
@@ -85,7 +99,8 @@ def wait_group_gone(group, timeout):
         # Nothing we can probe; treat as gone if the leader has exited.
         try:
             return group.proc.poll() is not None
-        except Exception:
+        except OSError:
+            # Leader may have already been reaped; treat as gone.
             return True
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -111,7 +126,8 @@ def terminate_proc_gracefully(group, timeout=10):
         # Group not available (e.g. already gone); just wait for the leader.
         try:
             proc.wait(timeout=timeout)
-        except Exception:
+        except subprocess.TimeoutExpired:
+            # Leader still alive; escalate below.
             pass
         if proc.poll() is not None:
             return not group_exists(group)
@@ -122,7 +138,8 @@ def terminate_proc_gracefully(group, timeout=10):
     terminate_process_group(group, signal.SIGKILL)
     try:
         proc.terminate()
-    except Exception:
+    except OSError:
+        # Process may already be gone; ignore.
         pass
     return wait_group_gone(group, 5)
 
@@ -142,7 +159,8 @@ def finish_task_group(group, timeout=10):
     # Wait for the leader to return (bounded; leader may have already exited).
     try:
         proc.wait(timeout=timeout)
-    except Exception:
+    except subprocess.TimeoutExpired:
+        # Leader still running; it will be handled by the group cleanup below.
         pass
     # If the process group still exists, grandchildren are alive: clean them up.
     if group_exists(group):
@@ -188,6 +206,23 @@ class WorkerConfig:
     physical_device: int
     build_dir: object  # Path
     log_path: object  # Path
+
+
+@dataclass(frozen=True)
+class WorkerContext:
+    """Shared execution context for worker threads."""
+    run_st_script: object
+    auto_mode: bool
+    print_lock: object
+    now: object
+
+
+@dataclass(frozen=True)
+class DeviceSources:
+    """Candidate device sources for selection, in priority order."""
+    explicit: object  # Optional[str] from PTO_ST_PARALLEL_DEVICES
+    inherited: object  # list[int] from ASCEND_RT_VISIBLE_DEVICES
+    smi_statuses: object  # Optional[list[NpuStatus]]
 
 
 @dataclass(frozen=True)
@@ -391,14 +426,17 @@ def parse_npu_smi(stdout, stderr=""):
 # Device selection
 # ---------------------------------------------------------------------------
 
-def select_devices(requested, explicit=None, inherited=None, smi_statuses=None,
-                   assume_available=False, best_effort=False):
+def select_devices(requested, sources, assume_available=False, best_effort=False):
     """Select up to `requested` device ids using the documented priority.
 
+    `sources` is a DeviceSources with explicit/inherited/smi_statuses.
     Returns (devices, source) where source is one of:
       "PTO_ST_PARALLEL_DEVICES", "ASCEND_RT_VISIBLE_DEVICES", "npu-smi",
       "/dev", or None (insufficient).
     """
+    explicit = sources.explicit
+    inherited = sources.inherited
+    smi_statuses = sources.smi_statuses
     # 1. Explicit operator assignment.
     if explicit is not None:
         ids = parse_device_list(explicit)
@@ -481,21 +519,25 @@ def lock_candidate(device_id, lock_dir=None):
     try:
         os.write(fd, f"pid={os.getpid()}\n".encode())
     except OSError:
+        # The diagnostic annotation is best-effort; the lock is still valid.
         pass
     return DeviceLock(device_id=device_id, fd=fd, path=str(path))
 
 
 def release_lock(device_lock):
     """Release a device lock and close its fd, if any."""
-    if device_lock is None:
+    if device_lock is None or device_lock.fd is None:
         return
-    try:
-        fcntl.flock(device_lock.fd, fcntl.LOCK_UN)
-    except Exception:
-        pass
+    if fcntl is not None:
+        try:
+            fcntl.flock(device_lock.fd, fcntl.LOCK_UN)
+        except OSError:
+            # Lock fd may already be invalid during teardown; ignore.
+            pass
     try:
         os.close(device_lock.fd)
-    except Exception:
+    except OSError:
+        # fd may already be closed; ignore during teardown.
         pass
 
 
@@ -550,7 +592,7 @@ def build_task_command(task, worker, run_st_script, auto_mode):
     """Build an argument list (never a shell string) for one task."""
     cmd = [
         sys.executable,
-        str(run_st_script),
+        os.path.abspath(str(run_st_script)),
         "-r", "npu",
         "-w",
         "-v", "a3",
@@ -566,14 +608,14 @@ def build_task_command(task, worker, run_st_script, auto_mode):
     return cmd
 
 
-def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
+def run_one_task(task, worker, ctx):
     """Run one task on one worker; return TaskResult."""
-    cmd = build_task_command(task, worker, run_st_script, auto_mode)
+    cmd = build_task_command(task, worker, ctx.run_st_script, ctx.auto_mode)
     worker_env = dict(os.environ)
     worker_env["ASCEND_RT_VISIBLE_DEVICES"] = str(worker.physical_device)
 
-    start = now()
-    with print_lock:
+    start = ctx.now()
+    with ctx.print_lock:
         print(f"[PARALLEL] task={task.index} testcase={task.testcase} "
               f"worker={worker.index} start")
     proc = subprocess.Popen(
@@ -596,7 +638,7 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
                 line = raw.rstrip("\n")
                 log_handle.write(line + "\n")
                 log_handle.flush()
-                with print_lock:
+                with ctx.print_lock:
                     print(f"[worker-{worker.index}][device-{worker.physical_device}]"
                           f"[{task.testcase}] {line}")
             proc.wait()
@@ -611,8 +653,8 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         # finished and drop its tracking. This handles both normal completion
         # (grandchildren may outlive the leader) and the exception path.
         finish_task_group(group, timeout=10)
-    elapsed_ms = int((now() - start) * 1000)
-    with print_lock:
+    elapsed_ms = int((ctx.now() - start) * 1000)
+    with ctx.print_lock:
         print(f"[PARALLEL] task={task.index} testcase={task.testcase} "
               f"worker={worker.index} exit={proc.returncode} elapsed_ms={elapsed_ms}")
     return TaskResult(
@@ -624,7 +666,7 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
     )
 
 
-def worker_loop(worker, task_queue, run_st_script, auto_mode, print_lock, results, now):
+def worker_loop(worker, task_queue, ctx, results):
     """Consume tasks from the queue until the sentinel, appending results."""
     while True:
         item = task_queue.get()
@@ -633,7 +675,7 @@ def worker_loop(worker, task_queue, run_st_script, auto_mode, print_lock, result
             break
         task = item
         try:
-            result = run_one_task(task, worker, run_st_script, auto_mode, print_lock, now)
+            result = run_one_task(task, worker, ctx)
         except Exception as e:
             result = TaskResult(
                 task=task,
@@ -666,7 +708,7 @@ def run_serial_fallback(tasks, args, print_lock, now):
     for task in tasks:
         cmd = [
             sys.executable,
-            str(args.run_st_script),
+            os.path.abspath(str(args.run_st_script)),
             "-r", "npu",
             "-w",
             "-v", "a3",
@@ -822,9 +864,7 @@ def main():
         smi_statuses = None
     devices, source = select_devices(
         args.workers,
-        explicit=explicit,
-        inherited=inherited,
-        smi_statuses=smi_statuses,
+        DeviceSources(explicit=explicit, inherited=inherited, smi_statuses=smi_statuses),
         assume_available=args.assume_available,
         best_effort=args.best_effort,
     )
@@ -884,11 +924,16 @@ def main():
             task_queue.put(None)  # sentinel per worker
 
         results = []
+        ctx = WorkerContext(
+            run_st_script=args.run_st_script,
+            auto_mode=args.auto_mode,
+            print_lock=print_lock,
+            now=now,
+        )
         for w in workers:
             thr = threading.Thread(
                 target=worker_loop,
-                args=(w, task_queue, args.run_st_script, args.auto_mode,
-                      print_lock, results, now),
+                args=(w, task_queue, ctx, results),
             )
             thr.start()
             threads.append(thr)
