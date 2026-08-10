@@ -83,6 +83,8 @@ set(ALL_TESTCASES
     tload_hif4
     tmatmul_mx_hif4
     tmatmul_mx_e1m2
+    tmatmul_mx_e4m3e2m1
+    tmatmul_mx_mixed
 )
 
 if (AUTO_MODE)
