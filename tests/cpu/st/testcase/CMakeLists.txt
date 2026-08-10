@@ -48,6 +48,7 @@ tadddeqrelu
 taddc
 tadds
 taddsc
+tassign
 tand
 tands
 targreduceop
@@ -60,6 +61,8 @@ tcolexpand
 tcolexpandop
 tcolmax
 tcolmin
+tcolprod
+tcolreduceidx
 tcolsum
 tconcat
 tcvt
@@ -137,6 +140,7 @@ trowexpand
 trowexpandop
 trowmax
 trowmin
+trowreduceidx
 trowsum
 trowprod
 trsqrt
@@ -162,6 +166,7 @@ tsubview
 ttest
 ttrans
 ttri
+ttrace
 twait
 txor
 txors

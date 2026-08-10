@@ -590,8 +590,6 @@ struct GlobalTensor {
         return GetProperDataPart(data_, offset);
     }
 
-    void SetElement(const size_t offset, const DType& val) { SetProperDataPart(data(), offset, val); }
-
     void SetElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& val)
     {
         const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
@@ -600,8 +598,11 @@ struct GlobalTensor {
         SetProperDataPart(data(), offset, val);
     }
 
-    void AddToElement(const size_t offset, const DType& summand)
+    void AddToElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& summand)
     {
+        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
+                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
+                            i4 * GetStride(GlobalTensorDim::DIM_4);
         std::lock_guard<std::mutex> lock(cpu::AtomicAddMutex());
         if constexpr (IsTwinType<DType>()) {
             const auto val = GetProperDataPart(data(), offset);
@@ -609,14 +610,6 @@ struct GlobalTensor {
         } else {
             data()[offset] += summand;
         }
-    }
-
-    void AddToElement(int64_t i0, int64_t i1, int64_t i2, int64_t i3, int64_t i4, const DType& summand)
-    {
-        const auto offset = i0 * GetStride(GlobalTensorDim::DIM_0) + i1 * GetStride(GlobalTensorDim::DIM_1) +
-                            i2 * GetStride(GlobalTensorDim::DIM_2) + i3 * GetStride(GlobalTensorDim::DIM_3) +
-                            i4 * GetStride(GlobalTensorDim::DIM_4);
-        AddToElement(offset, summand);
     }
 #endif
 
@@ -1358,7 +1351,6 @@ public:
     PTO_INTERNAL void SetDstMposition(uint16_t dstMposition) { dstMposition_ = dstMposition; }
     PTO_INTERNAL uint16_t GetDstMposition() const { return dstMposition_; }
 #endif
-
 private:
     AICORE void assignData(TileDType data) { data_ = data; }
     TileDType data_;
@@ -1562,6 +1554,14 @@ public:
         }
         return data_;
     }
+    const TileDType& data() const
+    {
+        if (!data_) {
+            internalBuffer.resize(Rows * Cols);
+            data_ = internalBuffer.data();
+        }
+        return data_;
+    }
 #else
     AICORE TileDType& data() { return data_; }
     AICORE const TileDType& data() const { return data_; }
@@ -1694,9 +1694,9 @@ private:
     AICORE void assignData(TileDType data) { data_ = data; }
     bool isKAligned_; // K alignment flag for A3.
 
-#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
-    std::vector<DType> internalBuffer;
-    TileDType data_ = nullptr;
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+    mutable std::vector<DType> internalBuffer;
+    mutable TileDType data_ = nullptr;
 #else
     TileDType data_;
 #endif
