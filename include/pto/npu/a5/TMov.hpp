@@ -532,6 +532,144 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     } // end of VF
 }
 
+// ND -> ZN within-fractal transpose. The destination carries the "Right/NT" fractal
+// signature (BLayout::RowMajor + SLayout::ColMajor): a [K,N] ND source is repacked as
+// [K/K0, N/16, 16, K0] where K0 = 32B/sizeof(T) (so K0=32 for B8, 16 for B16, 8 for B32).
+// Each output fractal is the transpose of a K0 x 16 source slice:
+//   D[k1][n1][j][i] = S[k1*K0 + i][n1*16 + j]   (read S row-major, write transposed).
+// NZ (the existing TMovToVecNd2Nz path) only rearranges the block grid; ZN must also
+// transpose elements *inside* each fractal, so vsstb alone cannot do it. We use a gather
+// whose index decomposes the dest position d into the source coordinates (i, j):
+//   dest is laid out [16, K0] row-major, so for d in [0, K0*16):
+//     i = d & (K0-1)      (d % K0, pow2 mask; K0 is always a power of two)
+//     j = d >> log2(K0)   (d / K0, pow2 shift)
+//     src_idx = i*cols + j   (S is row-major with stride = cols)
+// The (i,j) extraction uses pow2 shifts/masks (no div/mod); the i*cols term uses vmuls
+// because cols is generally not a power of two. No vdiv anywhere.
+//
+// Element-width handling:
+//   - B16/B32: vgather2 indexes in units of T; one VL holds 128/64 T-elems; a fractal
+//     (K0*16 = 512B = 2 VL) takes 2 gathers, stored with DIST_NORM.
+//   - B8: vgather2 reads VL/2 = 128 byte indexes, each result zero-extended into a B16
+//     lane (vector_u16 dst, uint8_t* src). A fractal (32*16 = 512B = 4 VL-of-128) takes
+//     4 gathers, stored with PK_B16 to pack the 128 B16 lanes back to 128 bytes. This is
+//     the same primitive TTransB8 uses for its element-wise B8 transpose (its golden is a
+//     plain .transpose(1,0)), so the B8 path is an element-wise transpose, NOT a pair
+//     transpose. FP4 types (float4_e2m1x2_t/float4_e1m2x2_t) are 1-byte storage types
+//     (2 nibbles/byte) and go through the same B8 path — the layout transform moves whole
+//     bytes, preserving nibble pairing.
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void GenerateNd2ZnGather(__ubuf__ T* dstPtr, __ubuf__ T* srcPtr, uint32_t validRow, uint32_t validCol)
+{
+    constexpr uint32_t elemBytes = sizeof(T);
+    constexpr uint32_t k0 = BLOCK_BYTE_SIZE / elemBytes; // K0 = 32/16/8 for B8/B16/B32
+    // log2(K0) = log2(32/elemBytes) = 5 - log2(elemBytes):  B8->5, B16->4, B32->3.
+    constexpr uint32_t k0Log2 = (elemBytes == 1) ? 5 : (elemBytes == 2 ? 4 : 3);
+    constexpr uint32_t k0Mask = k0 - 1;
+    constexpr uint32_t nInner = FRACTAL_NZ_ROW; // 16
+    // Number of T-elements worth of *data* moved per gather VL. For B8 the gather reads
+    // 128 byte indexes (VL/2) and packs them via PK_B16, so each VL covers 128 B8 elems.
+    constexpr uint32_t elemsPerVL = (elemBytes == 1) ? (CCE_VL / 2) : (CCE_VL / elemBytes);
+    constexpr uint32_t elemsPerFractal = k0 * nInner; // = 512B / sizeof(T)
+    const uint32_t kFractals = validRow / k0;
+    const uint32_t nFractals = validCol / nInner;
+    constexpr uint32_t gathersPerFractal = elemsPerFractal / elemsPerVL; // B8->4, B16/B32->2
+    const uint16_t srcStride = (uint16_t)validCol;                       // i*cols term for the gather index
+
+    // B8 gathers as uint8_t source into a uint16_t dst register and stores PK_B16;
+    // B16/B32 gather and store at native width. Unify via WorkT (the gather src type)
+    // and GatherDstT (the gather dst register type).
+    using WorkT = std::conditional_t<elemBytes == 1, uint8_t, T>;
+    using GatherDstT = std::conditional_t<elemBytes == 1, uint16_t, T>;
+
+    __VEC_SCOPE__
+    {
+        // vgather2 index width matches the gather's element granularity: B16 lanes for
+        // B8/B16 gathers, B32 lanes for B32 gathers (see TTrans.hpp B8/B16/B32 paths).
+        using IdxT = std::conditional_t<elemBytes == 4, int32_t, int16_t>;
+        using UIdxT = std::conditional_t<elemBytes == 4, uint32_t, uint16_t>;
+        RegTensor<IdxT> vd;
+        RegTensor<UIdxT> vi, vj, vtIdx;
+        // For B8 the gather produces vector_u16 (zero-extended bytes) but the PK_B16
+        // store wants the source as vector_u8 — same register reinterpreted (TTransB8
+        // idiom: RegTensor<WorkT> vreg1, gathered via (RegTensor<uint16_t>&)vreg1). For
+        // B16/B32 the gather dst and store src are both the native T register.
+        RegTensor<WorkT> vout;
+        MaskReg pregAll = (elemBytes == 4) ? pset_b32(PAT_ALL) : pset_b16(PAT_ALL);
+        // vand with an immediate scalar does not accept a mode operand; broadcast the
+        // (K0-1) mask into a vector register once (vbr) and use the vector-vector form
+        // (5-arg with MODE_ZEROING), matching the tvcvtfp4sub ror8 idiom.
+        RegTensor<UIdxT> vMask;
+        vbr(vMask, (UIdxT)k0Mask);
+        // bisheng requires uint16_t induction variables inside __VEC_SCOPE__ loops.
+        const uint16_t kFractalsU16 = (uint16_t)kFractals;
+        const uint16_t nFractalsU16 = (uint16_t)nFractals;
+        constexpr uint16_t gathersPerFractalU16 = (uint16_t)gathersPerFractal;
+        for (uint16_t kf = 0; kf < kFractalsU16; ++kf) {
+            for (uint16_t nf = 0; nf < nFractalsU16; ++nf) {
+                // Source fractal base: row kf*k0, col nf*16 (the K0 x 16 source slice).
+                __ubuf__ WorkT* srcFractal =
+                    (__ubuf__ WorkT*)srcPtr + ((uint32_t)kf * k0) * validCol + ((uint32_t)nf * nInner);
+                // Destination fractal base in ZN = [K/K0, N/16, 16, K0] row-major:
+                // fractal (kf,nf) starts at (kf*nFractals + nf) * (16*K0) T-elements.
+                __ubuf__ T* dstFractal = dstPtr + (((uint32_t)kf * nFractals + (uint32_t)nf) * nInner * k0);
+                for (uint16_t g = 0; g < gathersPerFractalU16; ++g) {
+                    // Per-VL transpose index: d = [g*elemsPerVL .. +elemsPerVL).
+                    //   i = d & (K0-1)      (pow2 mask; the within-fractal-row index)
+                    //   j = d >> log2(K0)   (pow2 shift; the within-fractal-column index)
+                    //   src_idx = i*cols + j  (S[i][j] in the row-major source)
+                    vci(vd, (IdxT)(g * elemsPerVL), INC_ORDER);
+                    vand(vi, (RegTensor<UIdxT>&)vd, vMask, pregAll, MODE_ZEROING);
+                    vshrs(vj, (RegTensor<UIdxT>&)vd, (int16_t)k0Log2, pregAll, MODE_ZEROING);
+                    vmuls(vtIdx, vi, srcStride, pregAll, MODE_ZEROING); // i*cols (cols not pow2)
+                    vadd(vtIdx, vtIdx, vj, pregAll, MODE_ZEROING);      // + j
+                    // B8 gather writes vector_u16 (zero-extended bytes) — reinterpret the
+                    // uint8_t register as uint16_t for the gather, then store it back as
+                    // uint8_t with PK_B16 (the TTransB8 idiom).
+                    vgather2((RegTensor<GatherDstT>&)vout, srcFractal, vtIdx, pregAll);
+                    // B8: PK_B16 packs the 128 B16 lanes -> 128 bytes; B16/B32: DIST_NORM.
+                    if constexpr (elemBytes == 1) {
+                        constexpr auto pkB16 = std::integral_constant<
+                            ::DistVST, static_cast<::DistVST>(GetDistVst<WorkT, DistVST::DIST_PK_B16>())>();
+                        vsts(vout, (__ubuf__ WorkT*)dstFractal, g * elemsPerVL, pkB16, pregAll);
+                    } else {
+                        constexpr auto norm = std::integral_constant<
+                            ::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+                        vsts(vout, dstFractal, g * elemsPerVL, norm, pregAll);
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void TMovNdTo2Zn(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint32_t validRow,
+    uint32_t validCol)
+{
+    using T = typename DstTileData::DType;
+    static_assert(
+        (std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) || (std::is_same<T, float>::value) ||
+            (std::is_same<T, int32_t>::value) || (std::is_same<T, int8_t>::value) ||
+            (std::is_same<T, uint8_t>::value) || (std::is_same<T, float8_e4m3_t>::value) ||
+            (std::is_same<T, float8_e5m2_t>::value) || (std::is_same<T, hifloat8_t>::value) ||
+            (std::is_same<T, float4_e2m1x2_t>::value) || (std::is_same<T, float4_e1m2x2_t>::value),
+        "ND->ZN: Dst and src must be half/bfloat16_t/float/int32_t/int8_t/uint8_t/"
+        "float8_e4m3_t/float8_e5m2_t/hifloat8_t/float4_e2m1x2_t/float4_e1m2x2_t (1/2/4-byte types).");
+    // Fractal divisibility: K must be a multiple of K0 (32B block) and N a multiple of 16.
+    constexpr uint32_t k0 = BLOCK_BYTE_SIZE / sizeof(T);
+    static_assert((SrcTileData::Rows % k0 == 0) || (SrcTileData::Rows == -1), "ND->ZN: Rows must be divisible by K0.");
+    static_assert(
+        (SrcTileData::Cols % FRACTAL_NZ_ROW == 0) || (SrcTileData::Cols == -1),
+        "ND->ZN: Cols must be divisible by 16.");
+
+    __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+
+    GenerateNd2ZnGather<T, DstTileData, SrcTileData>(dstPtr, srcPtr, validRow, validCol);
+}
+
 template <typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL OP_NAME(TMOV) OP_TYPE(element_wise) void TMovVecToVec(
     typename DstTileData::TileDType __out__ dstData, typename SrcTileData::TileDType __in__ srcData, unsigned validRow,
@@ -674,6 +812,12 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
                 (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
                 TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
                     dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
+            } else if constexpr (
+                (SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
+                (DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::ColMajor))) {
+                // ND -> ZN: within-fractal transpose to the Right/NT cube operand layout.
+                // [K,N] ND repacked as [K/K0, N/16, 16, K0] (K0 = 32B/sizeof(T)).
+                TMovNdTo2Zn<DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } else {
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }
