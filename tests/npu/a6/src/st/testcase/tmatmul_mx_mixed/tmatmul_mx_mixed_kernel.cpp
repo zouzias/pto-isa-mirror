@@ -218,6 +218,7 @@ __global__ AICORE void RunMxHif4Matmul(
     RunMxHif4Impl<LeftT, validM, validK, validN>(out, aData, aScale, bData, bScale);
 }
 
+namespace TmatmulMxMixedA6 {
 template <int caseId>
 void Launch(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8_t* bScale, void* stream)
 {
@@ -263,14 +264,15 @@ void Launch(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     }
 }
+} // namespace TmatmulMxMixedA6
 
-template void Launch<1>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<2>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<3>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<4>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<5>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<6>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<7>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<8>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<9>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void Launch<10>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<1>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<2>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<3>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<4>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<5>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<6>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<7>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<8>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<9>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+template void TmatmulMxMixedA6::Launch<10>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
