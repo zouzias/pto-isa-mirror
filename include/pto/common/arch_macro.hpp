@@ -43,4 +43,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __out__
 #define __cce_get_tile_ptr
 #endif
+
 #endif // ARCH_MACRO_HPP
