@@ -254,7 +254,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
     }
     if constexpr (TileData::Loc == TileType::Vec) {
         CheckStaticForVecAndMat<TileData, GlobalData>();
-        TStore<GlobalData, TileData>(
+        TStore<GlobalData, TileData, currentAtomicType>(
             dst.data(), src.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
             dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
             dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),
