@@ -90,6 +90,34 @@ AICORE inline void RunTStoreColMajor(__gm__ T __out__* out, __gm__ T __in__* src
     out = dstGlobal.data();
 }
 
+template <typename T>
+AICORE inline void RunTStoreColMajorToNdStridedColumn(__gm__ T __out__* out, __gm__ T __in__* src)
+{
+    using SrcShape = Shape<1, 1, 1, 8, 1>;
+    using SrcStride = pto::Stride<8, 8, 8, 1, 8>;
+    using SrcGlobalData = GlobalTensor<T, SrcShape, SrcStride, Layout::DN>;
+
+    using DstShape = Shape<1, 1, 1, 8, 1>;
+    using DstStride = pto::Stride<16, 16, 16, 2, 1>;
+    using DstGlobalData = GlobalTensor<T, DstShape, DstStride, Layout::ND>;
+
+    using TileData = Tile<TileType::Vec, T, 8, 1, BLayout::ColMajor, -1, -1>;
+
+    TileData srcTile(8, 1);
+    TASSIGN(srcTile, 0x0);
+
+    SrcGlobalData srcGlobal(src);
+    DstGlobalData dstGlobal(out + 1);
+
+    TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstGlobal, srcTile);
+    out = dstGlobal.data();
+}
+
 template <
     typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0, int gWholeShape1,
     int gWholeShape2, int gWholeShape3, int gWholeShape4>
@@ -145,6 +173,11 @@ __global__ AICORE void TStoreKernel(__gm__ T* out, __gm__ T* src)
     }
 }
 
+__global__ AICORE void TStoreColMajorToNdStridedColumnKernel(__gm__ float* out, __gm__ float* src)
+{
+    RunTStoreColMajorToNdStridedColumn<float>(out, src);
+}
+
 template <
     int format, typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
@@ -163,6 +196,11 @@ void LaunchTStore(T* out, T* src, void* stream)
             T, pto::Layout::NZ, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
             gWholeShape3, gWholeShape4><<<1, nullptr, stream>>>(out, src);
     }
+}
+
+void LaunchTStoreColMajorToNdStridedColumn(float* out, float* src, void* stream)
+{
+    TStoreColMajorToNdStridedColumnKernel<<<1, nullptr, stream>>>(out, src);
 }
 
 template void LaunchTStore<0, float, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>(float* out, float* src, void* stream);
