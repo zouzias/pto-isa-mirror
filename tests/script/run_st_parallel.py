@@ -127,6 +127,33 @@ def terminate_proc_gracefully(group, timeout=10):
     return wait_group_gone(group, 5)
 
 
+def finish_task_group(group, timeout=10):
+    """Finish a task and confirm its whole process group is gone.
+
+    Called in both normal and exception paths. Waits for the leader to return,
+    then checks whether the saved PGID still has members (grandchildren such as
+    gtest/NPU processes). If it does, TERM -> wait -> KILL the group. Only after
+    the entire group is confirmed gone is the ProcGroup removed from
+    _ACTIVE_PROCS. Returns True if the group is confirmed gone, False otherwise.
+    """
+    if group is None:
+        return True
+    proc = group.proc
+    # Wait for the leader to return (bounded; leader may have already exited).
+    try:
+        proc.wait(timeout=timeout)
+    except Exception:
+        pass
+    # If the process group still exists, grandchildren are alive: clean them up.
+    if group_exists(group):
+        terminate_proc_gracefully(group, timeout=timeout)
+    gone = not group_exists(group)
+    # Only remove tracking once the whole group is confirmed gone.
+    with _ACTIVE_PROCS_LOCK:
+        _ACTIVE_PROCS[:] = [g for g in _ACTIVE_PROCS if g.proc is not proc]
+    return gone
+
+
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
@@ -559,8 +586,9 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
         bufsize=1,
         start_new_session=True,
     )
+    group = _new_proc_group(proc)
     with _ACTIVE_PROCS_LOCK:
-        _ACTIVE_PROCS.append(_new_proc_group(proc))
+        _ACTIVE_PROCS.append(group)
     log_handle = open(str(worker.log_path), "a", encoding="utf-8")
     try:
         try:
@@ -579,9 +607,10 @@ def run_one_task(task, worker, run_st_script, auto_mode, print_lock, now):
     finally:
         log_handle.close()
         proc.stdout.close()
-        proc.wait()
-        with _ACTIVE_PROCS_LOCK:
-            _ACTIVE_PROCS[:] = [g for g in _ACTIVE_PROCS if g.proc is not proc]
+        # Confirm the whole process group is gone before we consider the task
+        # finished and drop its tracking. This handles both normal completion
+        # (grandchildren may outlive the leader) and the exception path.
+        finish_task_group(group, timeout=10)
     elapsed_ms = int((now() - start) * 1000)
     with print_lock:
         print(f"[PARALLEL] task={task.index} testcase={task.testcase} "
@@ -658,12 +687,14 @@ def run_serial_fallback(tasks, args, print_lock, now):
         with print_lock:
             print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
         proc = None
+        group = None
         try:
             proc = subprocess.Popen(
                 cmd, cwd=str(args.st_root), start_new_session=True,
             )
+            group = _new_proc_group(proc)
             with _ACTIVE_PROCS_LOCK:
-                _ACTIVE_PROCS.append(_new_proc_group(proc))
+                _ACTIVE_PROCS.append(group)
             proc.wait()
         except Exception as e:
             with print_lock:
@@ -673,9 +704,14 @@ def run_serial_fallback(tasks, args, print_lock, now):
             executed += 1
             continue
         finally:
-            if proc is not None:
-                with _ACTIVE_PROCS_LOCK:
-                    _ACTIVE_PROCS[:] = [g for g in _ACTIVE_PROCS if g.proc is not proc]
+            if group is not None:
+                # Confirm the whole process group is gone before dropping its
+                # tracking (handles grandchildren outliving the leader).
+                if not finish_task_group(group, timeout=10):
+                    failed = True
+                    with print_lock:
+                        print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                              f"process group could not be confirmed stopped")
         elapsed_ms = int((now() - start) * 1000)
         executed += 1
         ok = proc.returncode == 0
@@ -719,7 +755,8 @@ def main():
 
     def cleanup(success):
         if _cleanup_state["done"]:
-            return
+            return True
+        clean = True
         try:
             # 1. Terminate the whole process group of every tracked child,
             #    escalating TERM -> wait -> KILL. Only a group-that-is-confirmed-
@@ -739,12 +776,13 @@ def main():
                     all_threads_stopped = False
 
             # 3. Only release device locks if every process group is confirmed
-            #    gone AND every worker thread has stopped. Otherwise emit a
-            #    clear P0 error and keep the locks held (never claim cleaned).
+            #    gone AND every worker thread has stopped. Otherwise record the
+            #    failure (returned to the caller) and keep locks.
             if all_groups_gone and all_threads_stopped:
                 for lk in locks:
                     release_lock(lk)
             else:
+                clean = False
                 print(
                     "[PARALLEL][P0-ERROR] cleanup incomplete: "
                     "all_groups_gone=%s all_threads_stopped=%s; "
@@ -760,13 +798,14 @@ def main():
                         print(f"[PARALLEL][WARN] {e}")
                 else:
                     print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+            return clean
         finally:
             _cleanup_state["done"] = True
 
     def handle_signal(signum, frame):
         print(f"[PARALLEL] received signal {signum}; terminating workers")
-        cleanup(success=False)
-        sys.exit(128 + signum)
+        clean = cleanup(success=False)
+        sys.exit(128 + signum if clean else 1)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
@@ -818,7 +857,7 @@ def main():
     print("[PARALLEL] requested_workers=%d locked_devices=%s"
           % (args.workers, ",".join(str(d) for d in locked_devices)))
 
-    success = False
+    result_holder = {"rc": 0}
     try:
         # --- private worker build roots ---
         parallel_root = Path(args.st_root) / ".smoke-parallel" / str(os.getpid())
@@ -865,12 +904,22 @@ def main():
                 print(f"[PARALLEL][RESULT] task={r.task.index} testcase={r.task.testcase} "
                       f"worker={r.worker_index} exit={r.returncode} elapsed_ms={r.elapsed_ms} {status}")
 
-        success = not failed
-        return 1 if failed else 0
+        result_holder["rc"] = 1 if failed else 0
     finally:
+        # If an exception is propagating out of the try, treat the run as
+        # failed so the diagnostic directory is preserved.
+        if sys.exc_info()[0] is not None:
+            result_holder["rc"] = 1
         # Always release locks, terminate/wait child processes, join threads.
         # Remove the run dir only on success; preserve it on failure/exception.
-        cleanup(success)
+        # A failed cleanup must override the return code to nonzero: the caller
+        # (and the pipeline success marker) must never see a clean run when a
+        # process group or worker thread could not be confirmed stopped.
+        clean = cleanup(result_holder["rc"] == 0)
+        if not clean:
+            result_holder["rc"] = 1
+            print("[PARALLEL][P0-ERROR] orchestrator returning nonzero because cleanup was incomplete")
+    return result_holder["rc"]
 
 
 if __name__ == "__main__":
