@@ -30,6 +30,25 @@ def _load_module(name, path):
     return module
 
 
+def _resolve_sibling_gen_data(sibling):
+    """Locate a sibling testcase's gen_data.py.
+
+    run_st.py copies this script to build/gen_data.py and runs it from build/,
+    so __file__-relative '..' points to tests/npu/a6/src/st (one level above
+    build), NOT to testcase/. The sibling scripts live under testcase/<sibling>/.
+    Fall back to '../<sibling>' for direct in-source execution.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(script_dir, "..", "testcase", sibling, "gen_data.py"),
+        os.path.join(script_dir, "..", sibling, "gen_data.py"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(f"could not find sibling gen_data.py for '{sibling}'")
+
+
 def _left_data_and_dequant(rng, left_kind, m, k):
     src = rng.uniform(-8.0, 8.0, (m, k)).astype(np.float32)
     if left_kind == "e4m3":
@@ -115,8 +134,8 @@ def main():
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    e2m1_mod = _load_module("mx_e2m1_mod", os.path.join(script_dir, "..", "tmatmul_mx_e4m3e2m1", "gen_data.py"))
-    hif4_mod = _load_module("mx_hif4_mod", os.path.join(script_dir, "..", "tmatmul_mx_hif4", "gen_data.py"))
+    e2m1_mod = _load_module("mx_e2m1_mod", _resolve_sibling_gen_data("tmatmul_mx_e4m3e2m1"))
+    hif4_mod = _load_module("mx_hif4_mod", _resolve_sibling_gen_data("tmatmul_mx_hif4"))
 
     if args.case < 0:
         for case in CASES:
