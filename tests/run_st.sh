@@ -524,6 +524,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_gmtensor -g TLOADMXTest.1_1_1_64_128_uint8_ADN2ZZ
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_shape2d -g TLOADSHAPE2DTest.1_1_1_59_119_1_1_1_64_128_64_128_int8_t_ND2NZ
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov -g TMOVTest.case_bias1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_nd2zn -g TMovNd2ZnTest.case_half_32x32
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmul -g TPARTMULTest.case_float_64x64_64x64_64x64
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartmax -g TPARTMAXTest.case_fp32_64x64_64x64_64x64
@@ -582,6 +583,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmins -g TMINSTest.case_float_1x3600_2x4096_1x3600
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_vect -g TMOVTest.vect_copy_case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_mx -g TMOVMXTest.case1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_nd2zn -g TMovNd2ZnTest.case_half_32x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul -g TMULTest.case_float_64x64_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuls -g TMULSTest.case1

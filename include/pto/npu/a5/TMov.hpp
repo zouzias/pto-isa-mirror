@@ -532,6 +532,102 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     } // end of VF
 }
 
+// ND -> ZN within-fractal transpose. See docs/isa/TMOV.md for full algorithm details.
+template <typename T, typename WorkT, typename GatherDstT, typename IdxT, typename UIdxT>
+PTO_INTERNAL void Nd2ZnGatherOneVL(
+    __ubuf__ WorkT* srcFractal, __ubuf__ T* dstFractal, uint16_t g, uint32_t elemsPerVL, uint32_t k0Log2,
+    uint16_t srcStride, RegTensor<UIdxT>& vMask, MaskReg pregAll, uint32_t elemBytes)
+{
+    RegTensor<IdxT> vd;
+    RegTensor<UIdxT> vi, vj, vtIdx;
+    RegTensor<WorkT> vout;
+    vci(vd, (IdxT)(g * elemsPerVL), INC_ORDER);
+    vand(vi, (RegTensor<UIdxT>&)vd, vMask, pregAll, MODE_ZEROING);
+    vshrs(vj, (RegTensor<UIdxT>&)vd, (int16_t)k0Log2, pregAll, MODE_ZEROING);
+    vmuls(vtIdx, vi, srcStride, pregAll, MODE_ZEROING);
+    vadd(vtIdx, vtIdx, vj, pregAll, MODE_ZEROING);
+    vgather2((RegTensor<GatherDstT>&)vout, srcFractal, vtIdx, pregAll);
+    if constexpr (
+        std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, hifloat8_t> ||
+        std::is_same_v<T, float8_e4m3_t> || std::is_same_v<T, float8_e5m2_t> || std::is_same_v<T, float4_e2m1x2_t> ||
+        std::is_same_v<T, float4_e1m2x2_t>) {
+        constexpr auto pkB16 =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<WorkT, DistVST::DIST_PK_B16>())>();
+        vsts(vout, (__ubuf__ WorkT*)dstFractal, g * elemsPerVL, pkB16, pregAll);
+    } else {
+        constexpr auto norm =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        vsts(vout, dstFractal, g * elemsPerVL, norm, pregAll);
+    }
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void GenerateNd2ZnGather(__ubuf__ T* dstPtr, __ubuf__ T* srcPtr, uint32_t validRow, uint32_t validCol)
+{
+    constexpr uint32_t elemBytes = sizeof(T);
+    constexpr uint32_t k0 = BLOCK_BYTE_SIZE / elemBytes;
+    constexpr uint32_t k0Log2 = (elemBytes == 1) ? 5 : (elemBytes == 2 ? 4 : 3);
+    constexpr uint32_t k0Mask = k0 - 1;
+    constexpr uint32_t nInner = FRACTAL_NZ_ROW;
+    constexpr uint32_t elemsPerVL = (elemBytes == 1) ? (CCE_VL / 2) : (CCE_VL / elemBytes);
+    constexpr uint32_t elemsPerFractal = k0 * nInner;
+    const uint32_t kFractals = validRow / k0;
+    const uint32_t nFractals = validCol / nInner;
+    constexpr uint32_t gathersPerFractal = elemsPerFractal / elemsPerVL;
+    const uint16_t srcStride = (uint16_t)validCol;
+
+    using WorkT = std::conditional_t<elemBytes == 1, uint8_t, T>;
+    using GatherDstT = std::conditional_t<elemBytes == 1, uint16_t, T>;
+    using IdxT = std::conditional_t<elemBytes == 4, int32_t, int16_t>;
+    using UIdxT = std::conditional_t<elemBytes == 4, uint32_t, uint16_t>;
+
+    __VEC_SCOPE__
+    {
+        MaskReg pregAll = (elemBytes == 4) ? pset_b32(PAT_ALL) : pset_b16(PAT_ALL);
+        RegTensor<UIdxT> vMask;
+        vbr(vMask, (UIdxT)k0Mask);
+        const uint16_t kFractalsU16 = (uint16_t)kFractals;
+        const uint16_t nFractalsU16 = (uint16_t)nFractals;
+        constexpr uint16_t gathersPerFractalU16 = (uint16_t)gathersPerFractal;
+        for (uint16_t kf = 0; kf < kFractalsU16; ++kf) {
+            for (uint16_t nf = 0; nf < nFractalsU16; ++nf) {
+                __ubuf__ WorkT* srcFractal =
+                    (__ubuf__ WorkT*)srcPtr + ((uint32_t)kf * k0) * validCol + ((uint32_t)nf * nInner);
+                __ubuf__ T* dstFractal = dstPtr + (((uint32_t)kf * nFractals + (uint32_t)nf) * nInner * k0);
+                for (uint16_t g = 0; g < gathersPerFractalU16; ++g) {
+                    Nd2ZnGatherOneVL<T, WorkT, GatherDstT, IdxT, UIdxT>(
+                        srcFractal, dstFractal, g, elemsPerVL, k0Log2, srcStride, vMask, pregAll, elemBytes);
+                }
+            }
+        }
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void TMovNdTo2Zn(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint32_t validRow,
+    uint32_t validCol)
+{
+    using T = typename DstTileData::DType;
+    static_assert(
+        (std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) || (std::is_same<T, float>::value) ||
+            (std::is_same<T, int32_t>::value) || (std::is_same<T, int8_t>::value) ||
+            (std::is_same<T, uint8_t>::value) || (std::is_same<T, float8_e4m3_t>::value) ||
+            (std::is_same<T, float8_e5m2_t>::value) || (std::is_same<T, hifloat8_t>::value) ||
+            (std::is_same<T, float4_e2m1x2_t>::value) || (std::is_same<T, float4_e1m2x2_t>::value),
+        "ND->ZN: unsupported type. See docs/isa/TMOV.md for supported types.");
+    constexpr uint32_t k0 = BLOCK_BYTE_SIZE / sizeof(T);
+    static_assert((SrcTileData::Rows % k0 == 0) || (SrcTileData::Rows == -1), "ND->ZN: Rows must be divisible by K0.");
+    static_assert(
+        (SrcTileData::Cols % FRACTAL_NZ_ROW == 0) || (SrcTileData::Cols == -1),
+        "ND->ZN: Cols must be divisible by 16.");
+
+    __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+
+    GenerateNd2ZnGather<T, DstTileData, SrcTileData>(dstPtr, srcPtr, validRow, validCol);
+}
+
 template <typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL OP_NAME(TMOV) OP_TYPE(element_wise) void TMovVecToVec(
     typename DstTileData::TileDType __out__ dstData, typename SrcTileData::TileDType __in__ srcData, unsigned validRow,
@@ -674,6 +770,10 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
                 (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
                 TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
                     dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
+            } else if constexpr (
+                (SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
+                (DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::ColMajor))) {
+                TMovNdTo2Zn<DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } else {
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }
