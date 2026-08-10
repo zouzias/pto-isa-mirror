@@ -53,7 +53,7 @@ class ProcGroup:
     pgid: object  # int or None
 
 
-def _new_proc_group(proc):
+def new_proc_group(proc):
     """Wrap a Popen into a ProcGroup, capturing its PGID at launch time.
 
     The PGID is captured while the leader is still alive; after the leader
@@ -608,6 +608,17 @@ def build_task_command(task, worker, run_st_script, auto_mode):
     return cmd
 
 
+def _stream_proc_output(proc, log_handle, task, worker, ctx):
+    """Stream a task's merged stdout/stderr to the log and live output."""
+    for raw in proc.stdout:
+        line = raw.rstrip("\n")
+        log_handle.write(line + "\n")
+        log_handle.flush()
+        with ctx.print_lock:
+            print(f"[worker-{worker.index}][device-{worker.physical_device}]"
+                  f"[{task.testcase}] {line}")
+
+
 def run_one_task(task, worker, ctx):
     """Run one task on one worker; return TaskResult."""
     cmd = build_task_command(task, worker, ctx.run_st_script, ctx.auto_mode)
@@ -628,19 +639,13 @@ def run_one_task(task, worker, ctx):
         bufsize=1,
         start_new_session=True,
     )
-    group = _new_proc_group(proc)
+    group = new_proc_group(proc)
     with _ACTIVE_PROCS_LOCK:
         _ACTIVE_PROCS.append(group)
     log_handle = open(str(worker.log_path), "a", encoding="utf-8")
     try:
         try:
-            for raw in proc.stdout:
-                line = raw.rstrip("\n")
-                log_handle.write(line + "\n")
-                log_handle.flush()
-                with ctx.print_lock:
-                    print(f"[worker-{worker.index}][device-{worker.physical_device}]"
-                          f"[{task.testcase}] {line}")
+            _stream_proc_output(proc, log_handle, task, worker, ctx)
             proc.wait()
         except Exception:
             proc.kill()
@@ -695,6 +700,64 @@ def worker_loop(worker, task_queue, ctx, results):
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def build_serial_command(task, args):
+    """Build the argument list for one serial-fallback task."""
+    cmd = [
+        sys.executable,
+        os.path.abspath(str(args.run_st_script)),
+        "-r", "npu",
+        "-w",
+        "-v", "a3",
+        "-t", task.testcase,
+        "--build-dir", str(args.base_build_dir),
+    ]
+    if task.gtest_filter:
+        cmd.extend(["-g", task.gtest_filter])
+    if task.debug_enable:
+        cmd.append("-d")
+    if args.auto_mode:
+        cmd.append("-a")
+    return cmd
+
+
+def _serial_run_one(task, args, print_lock, now):
+    """Run one serial-fallback task; returns (ok, executed_increment)."""
+    cmd = build_serial_command(task, args)
+    start = now()
+    with print_lock:
+        print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
+    proc = None
+    group = None
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(args.st_root), start_new_session=True,
+        )
+        group = new_proc_group(proc)
+        with _ACTIVE_PROCS_LOCK:
+            _ACTIVE_PROCS.append(group)
+        proc.wait()
+    except Exception as e:
+        with print_lock:
+            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                  f"error: {e}")
+        return False, 1
+    finally:
+        if group is not None:
+            # Confirm the whole process group is gone before dropping tracking.
+            if not finish_task_group(group, timeout=10):
+                with print_lock:
+                    print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                          f"process group could not be confirmed stopped")
+                return False, 1
+    elapsed_ms = int((now() - start) * 1000)
+    ok = proc.returncode == 0
+    with print_lock:
+        print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+              f"exit={proc.returncode} elapsed_ms={elapsed_ms} "
+              f"({'ok' if ok else 'FAIL'})")
+    return ok, 1
+
+
 def run_serial_fallback(tasks, args, print_lock, now):
     """Best-effort serial fallback: run every manifest task in order.
 
@@ -706,62 +769,9 @@ def run_serial_fallback(tasks, args, print_lock, now):
     executed = 0
     failed = False
     for task in tasks:
-        cmd = [
-            sys.executable,
-            os.path.abspath(str(args.run_st_script)),
-            "-r", "npu",
-            "-w",
-            "-v", "a3",
-            "-t", task.testcase,
-            "--build-dir", str(args.base_build_dir),
-        ]
-        if task.gtest_filter:
-            cmd.extend(["-g", task.gtest_filter])
-        if task.debug_enable:
-            cmd.append("-d")
-        if args.auto_mode:
-            cmd.append("-a")
-        # Serial fallback runs from the ST root with the shared build dir and
-        # leaves device visibility untouched (inherited environment). It uses a
-        # tracked Popen in its own process group so signal cleanup can terminate
-        # the whole tree (run_st.py + gtest/NPU children).
-        start = now()
-        with print_lock:
-            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
-        proc = None
-        group = None
-        try:
-            proc = subprocess.Popen(
-                cmd, cwd=str(args.st_root), start_new_session=True,
-            )
-            group = _new_proc_group(proc)
-            with _ACTIVE_PROCS_LOCK:
-                _ACTIVE_PROCS.append(group)
-            proc.wait()
-        except Exception as e:
-            with print_lock:
-                print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
-                      f"error: {e}")
-            failed = True
-            executed += 1
-            continue
-        finally:
-            if group is not None:
-                # Confirm the whole process group is gone before dropping its
-                # tracking (handles grandchildren outliving the leader).
-                if not finish_task_group(group, timeout=10):
-                    failed = True
-                    with print_lock:
-                        print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
-                              f"process group could not be confirmed stopped")
-        elapsed_ms = int((now() - start) * 1000)
-        executed += 1
-        ok = proc.returncode == 0
-        with print_lock:
-            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
-                  f"exit={proc.returncode} elapsed_ms={elapsed_ms} "
-                  f"({'ok' if ok else 'FAIL'})")
-        if not ok:
+        task_ok, inc = _serial_run_one(task, args, print_lock, now)
+        executed += inc
+        if not task_ok:
             failed = True
     print(f"[PARALLEL][SERIAL] done: executed={executed}/{len(tasks)} "
           f"failed={1 if failed else 0}")
@@ -847,7 +857,8 @@ def main():
     def handle_signal(signum, frame):
         print(f"[PARALLEL] received signal {signum}; terminating workers")
         clean = cleanup(success=False)
-        sys.exit(128 + signum if clean else 1)
+        code = 128 + signum if clean else 1
+        os._exit(code)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)

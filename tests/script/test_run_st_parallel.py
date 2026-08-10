@@ -22,13 +22,17 @@ import subprocess
 import tempfile
 import threading
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import run_st  # noqa: E402
-import run_st_parallel as rsp  # noqa: E402
+import run_st_parallel as rsp
+
+_BASH = shutil.which("bash") or "bash"
+  # noqa: E402
 
 
 class BuildDirIsolationTest(unittest.TestCase):
@@ -106,7 +110,6 @@ class BuildDirIsolationTest(unittest.TestCase):
         finally:
             os.chdir(old)
 
-
 class DeviceListTest(unittest.TestCase):
     def test_valid_lists(self):
         self.assertEqual(rsp.parse_device_list("0"), [0])
@@ -117,7 +120,6 @@ class DeviceListTest(unittest.TestCase):
         for bad in ("0,", "0,0", "-1,3", "0,a"):
             with self.assertRaises(ValueError, msg=f"should reject {bad!r}"):
                 rsp.parse_device_list(bad)
-
 
 class NpuSmiParseTest(unittest.TestCase):
     def test_healthy_no_processes(self):
@@ -169,7 +171,6 @@ class NpuSmiParseTest(unittest.TestCase):
     def test_unparseable_raises(self):
         with self.assertRaises(rsp.DeviceDiscoveryError):
             rsp.parse_npu_smi("no device rows here")
-
 
 class DeviceSelectionTest(unittest.TestCase):
     def test_explicit_precedence(self):
@@ -235,7 +236,6 @@ class DeviceSelectionTest(unittest.TestCase):
             self.assertEqual(devices, [0, 3])
             self.assertEqual(source, "/dev")
 
-
 class ManifestTest(unittest.TestCase):
     def test_parse_valid(self):
         with tempfile.NamedTemporaryFile("w", suffix=".tsv", delete=False) as f:
@@ -274,7 +274,6 @@ class ManifestTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
-
 class WorkerIsolationTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -312,7 +311,6 @@ class WorkerIsolationTest(unittest.TestCase):
         marker.mkdir(parents=True)
         rsp.remove_parallel_root(marker)
         self.assertFalse(marker.exists())
-
 
 class ParallelSchedulingTest(unittest.TestCase):
     def setUp(self):
@@ -413,35 +411,8 @@ class ParallelSchedulingTest(unittest.TestCase):
         self.assertEqual(results[0].returncode, 1)
         self.assertEqual(results[1].returncode, 0)
 
-
 class RegistryDumpTest(unittest.TestCase):
     """Task 5: dump-mode registry invariants (host-only, no NPU)."""
-
-    def _dump(self):
-        """Run run_st.sh in dump mode and return the parsed task list."""
-        repo = Path(__file__).resolve().parents[2]  # repo root
-        dump = self.root / "dump.tsv"
-        env = dict(os.environ)
-        env["PTO_ST_DUMP_TASKS"] = str(dump)
-        # Replace python3 so the test runs on hosts where python3 resolves oddly.
-        shim = self.root / "pyshim"
-        shim.mkdir()
-        pyexe = sys.executable.replace("\\", "/")
-        (shim / "python3").write_text(
-            "#!/bin/bash\nexec %s \"$@\"\n" % pyexe
-        )
-        os.chmod(shim / "python3", 0o755)
-        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
-        proc = subprocess.run(
-            ["bash", "tests/run_st.sh", "--a3", "--npu", "--simple"],
-            cwd=str(repo), env=env, capture_output=True, text=True,
-        )
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        tasks = []
-        for line in dump.read_text().splitlines():
-            parts = line.split("\t")
-            tasks.append((parts[0], parts[1], parts[2]))
-        return tasks
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -469,6 +440,31 @@ class RegistryDumpTest(unittest.TestCase):
         # No empty-testcase rows.
         self.assertTrue(all(t[0] for t in tasks))
 
+    def _dump(self):
+        """Run run_st.sh in dump mode and return the parsed task list."""
+        repo = Path(__file__).resolve().parents[2]  # repo root
+        dump = self.root / "dump.tsv"
+        env = dict(os.environ)
+        env["PTO_ST_DUMP_TASKS"] = str(dump)
+        # Replace python3 so the test runs on hosts where python3 resolves oddly.
+        shim = self.root / "pyshim"
+        shim.mkdir()
+        pyexe = sys.executable.replace("\\", "/")
+        (shim / "python3").write_text(
+            "#!/bin/bash\nexec %s \"$@\"\n" % pyexe
+        )
+        os.chmod(shim / "python3", 0o755)
+        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+        proc = subprocess.run(
+            [_BASH, "tests/run_st.sh", "--a3", "--npu", "--simple"],
+            cwd=str(repo), env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        tasks = []
+        for line in dump.read_text().splitlines():
+            parts = line.split("\t")
+            tasks.append((parts[0], parts[1], parts[2]))
+        return tasks
 
 class ParallelOptionValidationTest(unittest.TestCase):
     """Task 6: build.sh / run_st.sh parallel option validation (host-only)."""
@@ -480,28 +476,6 @@ class ParallelOptionValidationTest(unittest.TestCase):
 
     def tearDown(self):
         self._tmp.cleanup()
-
-    def _run_sh(self, *args, parallel=None, best_effort=None, assume=None):
-        """Run run_st.sh in dump mode with given options; return returncode+stderr."""
-        dump = self.root / "dump.tsv"
-        env = dict(os.environ)
-        env["PTO_ST_DUMP_TASKS"] = str(dump)
-        shim = self.root / "pyshim"
-        shim.mkdir()
-        pyexe = sys.executable.replace("\\", "/")
-        (shim / "python3").write_text("#!/bin/bash\nexec %s \"$@\"\n" % pyexe)
-        os.chmod(shim / "python3", 0o755)
-        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
-        cmd = ["bash", "tests/run_st.sh", "--a3", "--npu", "--simple"]
-        if parallel is not None:
-            cmd.append("--parallel=%s" % parallel)
-        if best_effort:
-            cmd.append("--parallel-best-effort")
-        if assume:
-            cmd.append("--parallel-assume-available")
-        proc = subprocess.run(cmd, cwd=str(self.repo), env=env,
-                              capture_output=True, text=True)
-        return proc.returncode, proc.stderr
 
     def test_zero_parallel_rejected(self):
         rc, err = self._run_sh(parallel="0")
@@ -515,14 +489,15 @@ class ParallelOptionValidationTest(unittest.TestCase):
     def test_a5_parallel_rejected(self):
         # run_st.sh itself rejects --parallel>1 for A5.
         dump = self.root / "dump.tsv"
-        env = dict(os.environ); env["PTO_ST_DUMP_TASKS"] = str(dump)
+        env = dict(os.environ)
+        env["PTO_ST_DUMP_TASKS"] = str(dump)
         shim = self.root / "pyshim2"
         shim.mkdir()
         (shim / "python3").write_text("#!/bin/bash\nexec %s \"$@\"\n" % sys.executable.replace("\\", "/"))
         os.chmod(shim / "python3", 0o755)
         env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
         proc = subprocess.run(
-            ["bash", "tests/run_st.sh", "--a5", "--npu", "--simple", "--parallel=2"],
+            [_BASH, "tests/run_st.sh", "--a5", "--npu", "--simple", "--parallel=2"],
             cwd=str(self.repo), env=env, capture_output=True, text=True)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("supported only for A3", proc.stderr)
@@ -531,6 +506,27 @@ class ParallelOptionValidationTest(unittest.TestCase):
         rc, err = self._run_sh()  # no parallel option -> serial default
         self.assertEqual(rc, 0)
 
+    def _run_sh(self, *args, parallel=None, best_effort=None, assume=None):
+        """Run run_st.sh in dump mode with given options; return returncode+stderr."""
+        dump = self.root / "dump.tsv"
+        env = dict(os.environ)
+        env["PTO_ST_DUMP_TASKS"] = str(dump)
+        shim = self.root / "pyshim"
+        shim.mkdir()
+        pyexe = sys.executable.replace("\\", "/")
+        (shim / "python3").write_text("#!/bin/bash\nexec %s \"$@\"\n" % pyexe)
+        os.chmod(shim / "python3", 0o755)
+        env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+        cmd = [_BASH, "tests/run_st.sh", "--a3", "--npu", "--simple"]
+        if parallel is not None:
+            cmd.append("--parallel=%s" % parallel)
+        if best_effort:
+            cmd.append("--parallel-best-effort")
+        if assume:
+            cmd.append("--parallel-assume-available")
+        proc = subprocess.run(cmd, cwd=str(self.repo), env=env,
+                              capture_output=True, text=True)
+        return proc.returncode, proc.stderr
 
 class BestEffortFallbackTest(unittest.TestCase):
     """P0: best-effort must actually execute tasks serially, not skip them."""
@@ -546,35 +542,6 @@ class BestEffortFallbackTest(unittest.TestCase):
 
     def tearDown(self):
         self._tmp.cleanup()
-
-    def _make_fake_runner(self, fail_testcase=None):
-        """A fake run_st.py that records invocations and can fail on a testcase."""
-        script = self.run_st_script
-        script.write_text(
-            "import sys, os\n"
-            "tc = sys.argv[sys.argv.index('-t')+1]\n"
-            "rec = os.environ.get('RECORD','')\n"
-            "with open(rec,'a') as f:\n"
-            "    f.write(tc + '\\n')\n"
-            "sys.exit(1 if tc == %r else 0)\n" % (fail_testcase if fail_testcase else "__none__")
-        )
-        return str(script)
-
-    def _manifest(self, tasks):
-        p = self.root / "tasks.tsv"
-        p.write_text("".join("%s\t%s\t0\n" % (t, ("F.case" + t)) for t in tasks))
-        return str(p)
-
-    def _args(self):
-        class A:
-            workers = 2
-            run_st_script = str(self.run_st_script)
-            st_root = str(self.st_root)
-            base_build_dir = str(self.base_build)
-            auto_mode = False
-            best_effort = True
-            assume_available = False
-        return A()
 
     def test_serial_fallback_executes_all_tasks(self):
         script = self._make_fake_runner()
@@ -598,6 +565,34 @@ class BestEffortFallbackTest(unittest.TestCase):
         self.assertEqual(executed, 3)  # all tasks still attempted
         self.assertEqual(record.read_text().splitlines(), ["t1", "t2", "t3"])
 
+    def _make_fake_runner(self, fail_testcase=None):
+        """A fake run_st.py that records invocations and can fail on a testcase."""
+        script = self.run_st_script
+        script.write_text(
+            "import sys, os\n"
+            "tc = sys.argv[sys.argv.index('-t')+1]\n"
+            "rec = os.environ.get('RECORD','')\n"
+            "with open(rec,'a') as f:\n"
+            "    f.write(tc + '\\n')\n"
+            "sys.exit(1 if tc == %r else 0)\n" % (fail_testcase if fail_testcase else "__none__")
+        )
+        return str(script)
+
+    def _manifest(self, tasks):
+        p = self.root / "tasks.tsv"
+        p.write_text("".join("%s\t%s\t0\n" % (t, ("F.case" + t)) for t in tasks))
+        return str(p)
+
+    def _args(self):
+        return types.SimpleNamespace(
+            workers=2,
+            run_st_script=str(self.run_st_script),
+            st_root=str(self.st_root),
+            base_build_dir=str(self.base_build),
+            auto_mode=False,
+            best_effort=True,
+            assume_available=False,
+        )
 
 class FullPoolLockingTest(unittest.TestCase):
     """P1: if a candidate is locked, keep trying later candidates from the pool."""
@@ -637,7 +632,6 @@ class FullPoolLockingTest(unittest.TestCase):
         self.assertIsNotNone(lk0b)
         rsp.release_lock(lk0b)
 
-
 class BuildShParsingTest(unittest.TestCase):
     """P0: build.sh must consume --parallel and its value correctly."""
 
@@ -660,7 +654,7 @@ class BuildShParsingTest(unittest.TestCase):
             "checkopts --run_simple --a3 --parallel=2\n"
             "echo \"PARALLEL_WORKERS=$PARALLEL_WORKERS\"\n" % repo
         )
-        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        proc = subprocess.run([_BASH, str(script)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
 
@@ -674,10 +668,9 @@ class BuildShParsingTest(unittest.TestCase):
             "checkopts --run_simple --a3 --parallel 2 --auto_mode\n"
             "echo \"PARALLEL_WORKERS=$PARALLEL_WORKERS\"\n" % repo
         )
-        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        proc = subprocess.run([_BASH, str(script)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
-
 
 class MainFlowRegressionTest(unittest.TestCase):
     """P1: main() orchestration regression tests (mocked devices/runner)."""
@@ -696,18 +689,6 @@ class MainFlowRegressionTest(unittest.TestCase):
     def tearDown(self):
         rsp.reset_active_procs()
         self._tmp.cleanup()
-
-    def _base_argv(self):
-        return [
-            "run_st_parallel.py",
-            "--manifest", str(self.manifest),
-            "--workers", "2",
-            "--st-root", str(self.st_root),
-            "--base-build-dir", str(self.base_build),
-            "--run-st-script", str(self.run_st_script),
-            "--run-mode", "npu",
-            "--soc-version", "a3",
-        ]
 
     def test_no_device_best_effort_enters_serial_fallback(self):
         """main() with no devices and best-effort must run all tasks serially."""
@@ -754,6 +735,17 @@ class MainFlowRegressionTest(unittest.TestCase):
             run_dir = self.st_root / ".smoke-parallel" / str(os.getpid())
             self.assertTrue(run_dir.exists())
 
+    def _base_argv(self):
+        return [
+            "run_st_parallel.py",
+            "--manifest", str(self.manifest),
+            "--workers", "2",
+            "--st-root", str(self.st_root),
+            "--base-build-dir", str(self.base_build),
+            "--run-st-script", str(self.run_st_script),
+            "--run-mode", "npu",
+            "--soc-version", "a3",
+        ]
 
 class NpuSmiNoProcessTableTest(unittest.TestCase):
     """P1: npu-smi with healthy rows but no process table must fail, not guess."""
@@ -765,7 +757,6 @@ class NpuSmiNoProcessTableTest(unittest.TestCase):
         )
         with self.assertRaises(rsp.DeviceDiscoveryError):
             rsp.parse_npu_smi(out)
-
 
 class SchedulerBoundaryTest(unittest.TestCase):
     """P0: insufficient ASCEND_RT_VISIBLE_DEVICES must not cross to npu-smi."""
@@ -803,7 +794,6 @@ class SchedulerBoundaryTest(unittest.TestCase):
         self.assertEqual(devices, [])
         self.assertEqual(source, "PTO_ST_PARALLEL_DEVICES")
 
-
 class ProcessGroupCleanupTest(unittest.TestCase):
     """P0: TERM->KILL escalation and process-group cleanup."""
 
@@ -816,6 +806,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         self._tmp.cleanup()
 
     @unittest.skipIf(os.name == "nt", "process groups not used on Windows")
+
     def test_terminate_proc_group_escalates_to_kill(self):
         # Spawn a child in its own session that ignores SIGTERM.
         script = self.root / "ignore_term.py"
@@ -828,7 +819,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         proc = subprocess.Popen([sys.executable, str(script)],
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, start_new_session=True)
-        group = rsp._new_proc_group(proc)
+        group = rsp.new_proc_group(proc)
         try:
             # Wait for it to signal readiness.
             proc.stdout.readline()
@@ -843,6 +834,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
                 proc.wait()
 
     @unittest.skipIf(os.name == "nt", "process groups not used on Windows")
+
     def test_terminate_kills_grandchild_and_waits_for_group(self):
         """Leader spawns an ignore-TERM grandchild, then exits; group must be killed.
 
@@ -870,7 +862,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         proc = subprocess.Popen([sys.executable, str(leader)],
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, start_new_session=True)
-        group = rsp._new_proc_group(proc)
+        group = rsp.new_proc_group(proc)
         try:
             # Read the leader line: "leader:<pid>:<pgid>".
             line = proc.stdout.readline()
@@ -903,7 +895,6 @@ class ProcessGroupCleanupTest(unittest.TestCase):
                 proc.kill()
                 proc.wait()
 
-
 class SuccessCleanupTest(unittest.TestCase):
     """P1: success path removes run dir; failure path preserves it."""
 
@@ -921,18 +912,6 @@ class SuccessCleanupTest(unittest.TestCase):
     def tearDown(self):
         rsp.reset_active_procs()
         self._tmp.cleanup()
-
-    def _base_argv(self):
-        return [
-            "run_st_parallel.py",
-            "--manifest", str(self.manifest),
-            "--workers", "2",
-            "--st-root", str(self.st_root),
-            "--base-build-dir", str(self.base_build),
-            "--run-st-script", str(self.run_st_script),
-            "--run-mode", "npu",
-            "--soc-version", "a3",
-        ]
 
     def test_success_removes_run_dir(self):
         fake = self.run_st_script
@@ -957,6 +936,17 @@ class SuccessCleanupTest(unittest.TestCase):
         run_dir = self.st_root / ".smoke-parallel" / str(os.getpid())
         self.assertFalse(run_dir.exists())
 
+    def _base_argv(self):
+        return [
+            "run_st_parallel.py",
+            "--manifest", str(self.manifest),
+            "--workers", "2",
+            "--st-root", str(self.st_root),
+            "--base-build-dir", str(self.base_build),
+            "--run-st-script", str(self.run_st_script),
+            "--run-mode", "npu",
+            "--soc-version", "a3",
+        ]
 
 class ManifestTrapTest(unittest.TestCase):
     """P1: run_st.sh EXIT trap removes the manifest directory."""
@@ -975,6 +965,7 @@ class ManifestTrapTest(unittest.TestCase):
         self.assertIn("trap 'rm -rf \"$A3_PARALLEL_ROOT\"' EXIT", content)
 
     @unittest.skipUnless(shutil.which("bash"), "bash not available")
+
     def test_exit_trap_actually_removes_dir(self):
         # Behaviorally verify the EXIT trap removes the directory on exit.
         target = self.root / ".smoke-parallel" / "99999"
@@ -986,7 +977,7 @@ class ManifestTrapTest(unittest.TestCase):
             "trap 'rm -rf \"$A3_PARALLEL_ROOT\"' EXIT\n"
             "exit 3\n" % str(target).replace("\\", "/")
         )
-        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+        proc = subprocess.run([_BASH, str(script)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 3)
         self.assertFalse(target.exists())
 
