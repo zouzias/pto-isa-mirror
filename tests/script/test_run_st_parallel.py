@@ -358,6 +358,38 @@ class ParallelSchedulingTest(unittest.TestCase):
         self.assertEqual(len(devices), 2)
         self.assertEqual(devices, {"3", "5"})
 
+    def test_failed_task_causes_nonzero_and_others_still_run(self):
+        script = self.root / "fake_run_st.py"
+        script.write_text(
+            "import sys\n"
+            "tc = sys.argv[sys.argv.index('-t')+1]\n"
+            "sys.exit(1 if tc=='tbad' else 0)\n"
+        )
+        manifest = self.root / "tasks.tsv"
+        manifest.write_text("tbad\tF.case1\t0\ntok\tF.case2\t0\n")
+        tasks = rsp.parse_task_manifest(str(manifest))
+        base = self.root / "base"
+        (base / "bin").mkdir(parents=True)
+        (base / "bin" / "fake_test").write_text("x")
+        wb = self.root / "w" / "build"
+        rsp.prepare_worker_build(base, wb)
+        w = rsp.WorkerConfig(0, 0, wb, self.root / "w.log")
+        q = queue.Queue()
+        for t in tasks:
+            q.put(t)
+        q.put(None)
+        results = []
+        ctx = rsp.WorkerContext(
+            run_st_script=str(script),
+            auto_mode=False,
+            print_lock=threading.Lock(),
+            now=time.perf_counter,
+        )
+        rsp.worker_loop(w, q, ctx, results)
+        self.assertEqual(len(results), 2)  # both tasks drained
+        self.assertEqual(results[0].returncode, 1)
+        self.assertEqual(results[1].returncode, 0)
+
     def _setup_worker_pair(self, record):
         """Prepare two workers and a task queue for the isolation test."""
         script = self.root / "fake_run_st.py"
@@ -402,38 +434,6 @@ class ParallelSchedulingTest(unittest.TestCase):
             now=time.perf_counter,
         )
         return w1, w2, q, ctx, results
-
-    def test_failed_task_causes_nonzero_and_others_still_run(self):
-        script = self.root / "fake_run_st.py"
-        script.write_text(
-            "import sys\n"
-            "tc = sys.argv[sys.argv.index('-t')+1]\n"
-            "sys.exit(1 if tc=='tbad' else 0)\n"
-        )
-        manifest = self.root / "tasks.tsv"
-        manifest.write_text("tbad\tF.case1\t0\ntok\tF.case2\t0\n")
-        tasks = rsp.parse_task_manifest(str(manifest))
-        base = self.root / "base"
-        (base / "bin").mkdir(parents=True)
-        (base / "bin" / "fake_test").write_text("x")
-        wb = self.root / "w" / "build"
-        rsp.prepare_worker_build(base, wb)
-        w = rsp.WorkerConfig(0, 0, wb, self.root / "w.log")
-        q = queue.Queue()
-        for t in tasks:
-            q.put(t)
-        q.put(None)
-        results = []
-        ctx = rsp.WorkerContext(
-            run_st_script=str(script),
-            auto_mode=False,
-            print_lock=threading.Lock(),
-            now=time.perf_counter,
-        )
-        rsp.worker_loop(w, q, ctx, results)
-        self.assertEqual(len(results), 2)  # both tasks drained
-        self.assertEqual(results[0].returncode, 1)
-        self.assertEqual(results[1].returncode, 0)
 
 
 class RegistryDumpTest(unittest.TestCase):
