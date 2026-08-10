@@ -47,6 +47,8 @@ def reset_active_procs():
 
 
 @dataclass
+
+
 class ProcGroup:
     """A launched task process plus its process-group id (captured at start)."""
     proc: object
@@ -176,6 +178,7 @@ def finish_task_group(group, timeout=10):
 # Errors
 # ---------------------------------------------------------------------------
 
+
 class SmokeError(Exception):
     """Base error for the orchestrator."""
 
@@ -193,6 +196,8 @@ class ManifestError(SmokeError):
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+
+
 class SmokeTask:
     index: int
     testcase: str
@@ -201,6 +206,8 @@ class SmokeTask:
 
 
 @dataclass(frozen=True)
+
+
 class WorkerConfig:
     index: int
     physical_device: int
@@ -209,6 +216,8 @@ class WorkerConfig:
 
 
 @dataclass(frozen=True)
+
+
 class WorkerContext:
     """Shared execution context for worker threads."""
     run_st_script: object
@@ -218,6 +227,8 @@ class WorkerContext:
 
 
 @dataclass(frozen=True)
+
+
 class DeviceSources:
     """Candidate device sources for selection, in priority order."""
     explicit: object  # Optional[str] from PTO_ST_PARALLEL_DEVICES
@@ -226,6 +237,8 @@ class DeviceSources:
 
 
 @dataclass(frozen=True)
+
+
 class TaskResult:
     task: SmokeTask
     worker_index: int
@@ -235,6 +248,8 @@ class TaskResult:
 
 
 @dataclass(frozen=True)
+
+
 class NpuStatus:
     device_id: int
     healthy: bool
@@ -242,6 +257,8 @@ class NpuStatus:
 
 
 @dataclass
+
+
 class DeviceLock:
     device_id: int
     fd: object  # file object
@@ -251,6 +268,7 @@ class DeviceLock:
 # ---------------------------------------------------------------------------
 # Task manifest parsing
 # ---------------------------------------------------------------------------
+
 
 def parse_task_manifest(manifest_path):
     """Parse the TSV manifest into an ordered list of SmokeTask.
@@ -292,6 +310,7 @@ def parse_task_manifest(manifest_path):
 # Device list parsing
 # ---------------------------------------------------------------------------
 
+
 def parse_device_list(value):
     """Return unique non-negative integer IDs.
 
@@ -330,6 +349,7 @@ def parse_inherited_visible(value):
 # ---------------------------------------------------------------------------
 # npu-smi query
 # ---------------------------------------------------------------------------
+
 
 def query_npu_smi(timeout_seconds=10):
     """Run `npu-smi info`, parse device health and process ownership.
@@ -426,6 +446,7 @@ def parse_npu_smi(stdout, stderr=""):
 # Device selection
 # ---------------------------------------------------------------------------
 
+
 def select_devices(requested, sources, assume_available=False, best_effort=False):
     """Select up to `requested` device ids using the documented priority.
 
@@ -496,6 +517,7 @@ def list_dev_davinci_ids():
 # Cooperative flock
 # ---------------------------------------------------------------------------
 
+
 def lock_candidate(device_id, lock_dir=None):
     """Acquire a nonblocking exclusive flock for a device, or return None.
 
@@ -545,6 +567,7 @@ def release_lock(device_lock):
 # Worker build-root isolation
 # ---------------------------------------------------------------------------
 
+
 def link_or_copy(src, dst):
     """Hard-link src to dst, falling back to copy2; return 'link' or 'copy'."""
     try:
@@ -587,6 +610,7 @@ def remove_parallel_root(root):
 # ---------------------------------------------------------------------------
 # Worker execution
 # ---------------------------------------------------------------------------
+
 
 def build_task_command(task, worker, run_st_script, auto_mode):
     """Build an argument list (never a shell string) for one task."""
@@ -700,6 +724,7 @@ def worker_loop(worker, task_queue, ctx, results):
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+
 def build_serial_command(task, args):
     """Build the argument list for one serial-fallback task."""
     cmd = [
@@ -728,6 +753,7 @@ def _serial_run_one(task, args, print_lock, now):
         print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} start")
     proc = None
     group = None
+    group_clean = True
     try:
         proc = subprocess.Popen(
             cmd, cwd=str(args.st_root), start_new_session=True,
@@ -744,11 +770,12 @@ def _serial_run_one(task, args, print_lock, now):
     finally:
         if group is not None:
             # Confirm the whole process group is gone before dropping tracking.
-            if not finish_task_group(group, timeout=10):
-                with print_lock:
-                    print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
-                          f"process group could not be confirmed stopped")
-                return False, 1
+            group_clean = finish_task_group(group, timeout=10)
+    if not group_clean:
+        with print_lock:
+            print(f"[PARALLEL][SERIAL] task={task.index} testcase={task.testcase} "
+                  f"process group could not be confirmed stopped")
+        return False, 1
     elapsed_ms = int((now() - start) * 1000)
     ok = proc.returncode == 0
     with print_lock:
@@ -931,7 +958,7 @@ def main():
         task_queue = queue.Queue()
         for t in tasks:
             task_queue.put(t)
-        for w in workers:
+        for _ in workers:
             task_queue.put(None)  # sentinel per worker
 
         results = []

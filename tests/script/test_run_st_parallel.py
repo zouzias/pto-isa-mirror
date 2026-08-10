@@ -32,7 +32,20 @@ import run_st  # noqa: E402
 import run_st_parallel as rsp
 
 _BASH = shutil.which("bash") or "bash"
-  # noqa: E402
+
+
+def _make_base_argv(manifest, st_root, base_build, run_st_script):
+    """Build the base argv for run_st_parallel.py in host-only tests."""
+    return [
+        "run_st_parallel.py",
+        "--manifest", str(manifest),
+        "--workers", "2",
+        "--st-root", str(st_root),
+        "--base-build-dir", str(base_build),
+        "--run-st-script", str(run_st_script),
+        "--run-mode", "npu",
+        "--soc-version", "a3",
+    ]
 
 
 class BuildDirIsolationTest(unittest.TestCase):
@@ -110,6 +123,7 @@ class BuildDirIsolationTest(unittest.TestCase):
         finally:
             os.chdir(old)
 
+
 class DeviceListTest(unittest.TestCase):
     def test_valid_lists(self):
         self.assertEqual(rsp.parse_device_list("0"), [0])
@@ -120,6 +134,7 @@ class DeviceListTest(unittest.TestCase):
         for bad in ("0,", "0,0", "-1,3", "0,a"):
             with self.assertRaises(ValueError, msg=f"should reject {bad!r}"):
                 rsp.parse_device_list(bad)
+
 
 class NpuSmiParseTest(unittest.TestCase):
     def test_healthy_no_processes(self):
@@ -171,6 +186,7 @@ class NpuSmiParseTest(unittest.TestCase):
     def test_unparseable_raises(self):
         with self.assertRaises(rsp.DeviceDiscoveryError):
             rsp.parse_npu_smi("no device rows here")
+
 
 class DeviceSelectionTest(unittest.TestCase):
     def test_explicit_precedence(self):
@@ -236,6 +252,7 @@ class DeviceSelectionTest(unittest.TestCase):
             self.assertEqual(devices, [0, 3])
             self.assertEqual(source, "/dev")
 
+
 class ManifestTest(unittest.TestCase):
     def test_parse_valid(self):
         with tempfile.NamedTemporaryFile("w", suffix=".tsv", delete=False) as f:
@@ -274,6 +291,7 @@ class ManifestTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+
 class WorkerIsolationTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -311,6 +329,7 @@ class WorkerIsolationTest(unittest.TestCase):
         marker.mkdir(parents=True)
         rsp.remove_parallel_root(marker)
         self.assertFalse(marker.exists())
+
 
 class ParallelSchedulingTest(unittest.TestCase):
     def setUp(self):
@@ -411,6 +430,7 @@ class ParallelSchedulingTest(unittest.TestCase):
         self.assertEqual(results[0].returncode, 1)
         self.assertEqual(results[1].returncode, 0)
 
+
 class RegistryDumpTest(unittest.TestCase):
     """Task 5: dump-mode registry invariants (host-only, no NPU)."""
 
@@ -465,6 +485,7 @@ class RegistryDumpTest(unittest.TestCase):
             parts = line.split("\t")
             tasks.append((parts[0], parts[1], parts[2]))
         return tasks
+
 
 class ParallelOptionValidationTest(unittest.TestCase):
     """Task 6: build.sh / run_st.sh parallel option validation (host-only)."""
@@ -527,6 +548,7 @@ class ParallelOptionValidationTest(unittest.TestCase):
         proc = subprocess.run(cmd, cwd=str(self.repo), env=env,
                               capture_output=True, text=True)
         return proc.returncode, proc.stderr
+
 
 class BestEffortFallbackTest(unittest.TestCase):
     """P0: best-effort must actually execute tasks serially, not skip them."""
@@ -594,6 +616,7 @@ class BestEffortFallbackTest(unittest.TestCase):
             assume_available=False,
         )
 
+
 class FullPoolLockingTest(unittest.TestCase):
     """P1: if a candidate is locked, keep trying later candidates from the pool."""
 
@@ -631,6 +654,7 @@ class FullPoolLockingTest(unittest.TestCase):
         lk0b = rsp.lock_candidate(0, lock_dir=str(self.lock_dir))
         self.assertIsNotNone(lk0b)
         rsp.release_lock(lk0b)
+
 
 class BuildShParsingTest(unittest.TestCase):
     """P0: build.sh must consume --parallel and its value correctly."""
@@ -671,6 +695,7 @@ class BuildShParsingTest(unittest.TestCase):
         proc = subprocess.run([_BASH, str(script)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
+
 
 class MainFlowRegressionTest(unittest.TestCase):
     """P1: main() orchestration regression tests (mocked devices/runner)."""
@@ -736,16 +761,10 @@ class MainFlowRegressionTest(unittest.TestCase):
             self.assertTrue(run_dir.exists())
 
     def _base_argv(self):
-        return [
-            "run_st_parallel.py",
-            "--manifest", str(self.manifest),
-            "--workers", "2",
-            "--st-root", str(self.st_root),
-            "--base-build-dir", str(self.base_build),
-            "--run-st-script", str(self.run_st_script),
-            "--run-mode", "npu",
-            "--soc-version", "a3",
-        ]
+        return _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+
 
 class NpuSmiNoProcessTableTest(unittest.TestCase):
     """P1: npu-smi with healthy rows but no process table must fail, not guess."""
@@ -757,6 +776,7 @@ class NpuSmiNoProcessTableTest(unittest.TestCase):
         )
         with self.assertRaises(rsp.DeviceDiscoveryError):
             rsp.parse_npu_smi(out)
+
 
 class SchedulerBoundaryTest(unittest.TestCase):
     """P0: insufficient ASCEND_RT_VISIBLE_DEVICES must not cross to npu-smi."""
@@ -793,6 +813,7 @@ class SchedulerBoundaryTest(unittest.TestCase):
         )
         self.assertEqual(devices, [])
         self.assertEqual(source, "PTO_ST_PARALLEL_DEVICES")
+
 
 class ProcessGroupCleanupTest(unittest.TestCase):
     """P0: TERM->KILL escalation and process-group cleanup."""
@@ -895,6 +916,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
                 proc.kill()
                 proc.wait()
 
+
 class SuccessCleanupTest(unittest.TestCase):
     """P1: success path removes run dir; failure path preserves it."""
 
@@ -937,16 +959,10 @@ class SuccessCleanupTest(unittest.TestCase):
         self.assertFalse(run_dir.exists())
 
     def _base_argv(self):
-        return [
-            "run_st_parallel.py",
-            "--manifest", str(self.manifest),
-            "--workers", "2",
-            "--st-root", str(self.st_root),
-            "--base-build-dir", str(self.base_build),
-            "--run-st-script", str(self.run_st_script),
-            "--run-mode", "npu",
-            "--soc-version", "a3",
-        ]
+        return _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+
 
 class ManifestTrapTest(unittest.TestCase):
     """P1: run_st.sh EXIT trap removes the manifest directory."""
