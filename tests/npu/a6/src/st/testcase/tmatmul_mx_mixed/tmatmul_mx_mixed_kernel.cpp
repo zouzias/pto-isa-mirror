@@ -202,47 +202,63 @@ AICORE inline void RunMxHif4Impl(
     TSTORE(outGm, cTile);
 }
 
+template <typename LeftT, int validM, int validK, int validN>
+__global__ AICORE void RunMxE2m1Matmul(
+    __gm__ bfloat16_t* out, __gm__ LeftT* aData, __gm__ uint8_t* aScale, __gm__ float4_e2m1x2_t* bData,
+    __gm__ uint8_t* bScale)
+{
+    RunMxE2m1Impl<LeftT, validM, validK, validN>(out, aData, aScale, bData, bScale);
+}
+
+template <typename LeftT, int validM, int validK, int validN>
+__global__ AICORE void RunMxHif4Matmul(
+    __gm__ bfloat16_t* out, __gm__ LeftT* aData, __gm__ uint8_t* aScale, __gm__ hifloat4x2_t* bData,
+    __gm__ uint8_t* bScale)
+{
+    RunMxHif4Impl<LeftT, validM, validK, validN>(out, aData, aScale, bData, bScale);
+}
+
 template <int caseId>
 void Launch(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8_t* bScale, void* stream)
 {
     if constexpr (caseId == 1) {
-        RunMxHif4Impl<float8_e4m3_t, 128, 128, 128><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<float8_e4m3_t, 128, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<float8_e4m3_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 2) {
-        RunMxHif4Impl<float8_e4m3_t, 64, 128, 64><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<float8_e4m3_t, 64, 128, 64><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<float8_e4m3_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 3) {
-        RunMxE2m1Impl<half, 128, 128, 128><<<1, nullptr, stream>>>(
+        RunMxE2m1Matmul<half, 128, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<half*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<float4_e2m1x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 4) {
-        RunMxE2m1Impl<half, 64, 128, 64><<<1, nullptr, stream>>>(
+        RunMxE2m1Matmul<half, 64, 128, 64><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<half*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<float4_e2m1x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 5) {
-        RunMxE2m1Impl<bfloat16_t, 128, 128, 128><<<1, nullptr, stream>>>(
+        RunMxE2m1Matmul<bfloat16_t, 128, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<bfloat16_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<float4_e2m1x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 6) {
-        RunMxE2m1Impl<bfloat16_t, 64, 128, 64><<<1, nullptr, stream>>>(
+        RunMxE2m1Matmul<bfloat16_t, 64, 128, 64><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<bfloat16_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<float4_e2m1x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 7) {
-        RunMxHif4Impl<half, 128, 128, 128><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<half, 128, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<half*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 8) {
-        RunMxHif4Impl<half, 64, 128, 64><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<half, 64, 128, 64><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<half*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 9) {
-        RunMxHif4Impl<bfloat16_t, 128, 128, 128><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<bfloat16_t, 128, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<bfloat16_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     } else if constexpr (caseId == 10) {
-        RunMxHif4Impl<bfloat16_t, 64, 128, 64><<<1, nullptr, stream>>>(
+        RunMxHif4Matmul<bfloat16_t, 64, 128, 64><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t*>(out), reinterpret_cast<bfloat16_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
             reinterpret_cast<hifloat4x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
     }
