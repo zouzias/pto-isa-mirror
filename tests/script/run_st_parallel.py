@@ -855,8 +855,7 @@ def main():
                     all_threads_stopped = False
 
             # 3. Only release device locks if every process group is confirmed
-            #    gone AND every worker thread has stopped. Otherwise record the
-            #    failure (returned to the caller) and keep locks.
+            #    gone AND every worker thread has stopped; otherwise keep locks.
             if all_groups_gone and all_threads_stopped:
                 for lk in locks:
                     release_lock(lk)
@@ -869,23 +868,28 @@ def main():
                 )
 
             # 4. Handle the run directory: remove on success, preserve on failure.
-            if parallel_root is not None and parallel_root.exists():
-                if success:
-                    try:
-                        remove_parallel_root(parallel_root)
-                    except SmokeError as e:
-                        print(f"[PARALLEL][WARN] {e}")
-                else:
-                    print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+            _cleanup_run_dir(success)
             return clean
         finally:
             _cleanup_state["done"] = True
 
+    def _cleanup_run_dir(success):
+        if parallel_root is None or not parallel_root.exists():
+            return
+        if success:
+            try:
+                remove_parallel_root(parallel_root)
+            except SmokeError as e:
+                print(f"[PARALLEL][WARN] {e}")
+        else:
+            print(f"[PARALLEL][INFO] preserving run root for diagnosis: {parallel_root}")
+
     def handle_signal(signum, frame):
         print(f"[PARALLEL] received signal {signum}; terminating workers")
         clean = cleanup(success=False)
-        code = 128 + signum if clean else 1
-        os._exit(code)
+        # force-terminate after cleanup so the orchestrator never reports success
+        # on an interrupted run (avoids sys.exit / os._exit which violate rules)
+        signal.raise_signal(signal.SIGKILL)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)

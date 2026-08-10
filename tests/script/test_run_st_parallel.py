@@ -342,6 +342,24 @@ class ParallelSchedulingTest(unittest.TestCase):
 
     def test_two_workers_get_distinct_roots_and_devices(self):
         record = self.root / "record.jsonl"
+        w1, w2, q, ctx, results = self._setup_worker_pair(record)
+        with unittest.mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            th1 = threading.Thread(target=rsp.worker_loop, args=(w1, q, ctx, results))
+            th2 = threading.Thread(target=rsp.worker_loop, args=(w2, q, ctx, results))
+            th1.start()
+            th2.start()
+            th1.join()
+            th2.join()
+
+        rows = [json.loads(l) for l in record.read_text().splitlines()]
+        build_dirs = {r["build_dir"] for r in rows}
+        devices = {r["dev"] for r in rows}
+        self.assertEqual(len(build_dirs), 2)
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices, {"3", "5"})
+
+    def _setup_worker_pair(self, record):
+        """Prepare two workers and a task queue for the isolation test."""
         script = self.root / "fake_run_st.py"
         script.write_text(
             "import sys, os, json\n"
@@ -383,20 +401,7 @@ class ParallelSchedulingTest(unittest.TestCase):
             print_lock=print_lock,
             now=time.perf_counter,
         )
-        with unittest.mock.patch.dict(os.environ, {"RECORD": str(record)}):
-            th1 = threading.Thread(target=rsp.worker_loop, args=(w1, q, ctx, results))
-            th2 = threading.Thread(target=rsp.worker_loop, args=(w2, q, ctx, results))
-            th1.start()
-            th2.start()
-            th1.join()
-            th2.join()
-
-        rows = [json.loads(l) for l in record.read_text().splitlines()]
-        build_dirs = {r["build_dir"] for r in rows}
-        devices = {r["dev"] for r in rows}
-        self.assertEqual(len(build_dirs), 2)
-        self.assertEqual(len(devices), 2)
-        self.assertEqual(devices, {"3", "5"})
+        return w1, w2, q, ctx, results
 
     def test_failed_task_causes_nonzero_and_others_still_run(self):
         script = self.root / "fake_run_st.py"
@@ -864,6 +869,22 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         alive (grandchild), escalate to SIGKILL, and confirm the whole group is
         gone before returning True.
         """
+        leader = self._make_leader_grandchild()
+        proc = subprocess.Popen([sys.executable, str(leader)],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, start_new_session=True)
+        group = rsp.new_proc_group(proc)
+        try:
+            self._verify_grandchild_killed(proc, group)
+        finally:
+            if group is not None and rsp.group_exists(group):
+                rsp.terminate_process_group(group, signal.SIGKILL)
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+    def _make_leader_grandchild(self):
+        """Create a leader that spawns an ignore-TERM grandchild, return leader path."""
         grandchild = self.root / "grandchild.py"
         grandchild.write_text(
             "import signal, time, os, sys\n"
@@ -880,41 +901,27 @@ class ProcessGroupCleanupTest(unittest.TestCase):
             "sys.stdout.flush()\n"
             "sys.exit(0)\n" % str(grandchild)
         )
-        proc = subprocess.Popen([sys.executable, str(leader)],
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, start_new_session=True)
-        group = rsp.new_proc_group(proc)
+        return leader
+
+    def _verify_grandchild_killed(self, proc, group):
+        """Drive the grandchild-kill scenario and assert the whole group is gone."""
+        line = proc.stdout.readline()
+        self.assertTrue(line.startswith("leader:"), line)
+        _, leader_pid, pgid = line.strip().split(":")
+        gline = proc.stdout.readline()
+        self.assertTrue(gline.startswith("grandchild:"), gline)
+        grandchild_pid = int(gline.strip().split(":")[1])
+        proc.wait(timeout=5)
+        self.assertTrue(rsp.group_exists(group))
+        exited = rsp.terminate_proc_gracefully(group, timeout=2)
+        self.assertTrue(exited)
+        self.assertFalse(rsp.group_exists(group))
         try:
-            # Read the leader line: "leader:<pid>:<pgid>".
-            line = proc.stdout.readline()
-            self.assertTrue(line.startswith("leader:"), line)
-            _, leader_pid, pgid = line.strip().split(":")
-            # Wait for the grandchild to report its pid.
-            gline = proc.stdout.readline()
-            self.assertTrue(gline.startswith("grandchild:"), gline)
-            grandchild_pid = int(gline.strip().split(":")[1])
-            # Leader should have exited.
-            proc.wait(timeout=5)
-            # The process group must still exist because the grandchild is alive.
-            self.assertTrue(rsp.group_exists(group))
-            # Now terminate the group gracefully; it must SIGKILL the grandchild.
-            exited = rsp.terminate_proc_gracefully(group, timeout=2)
-            self.assertTrue(exited)
-            # The grandchild must be gone and the group dissolved.
-            self.assertFalse(rsp.group_exists(group))
-            import subprocess as _sp
-            try:
-                os.kill(grandchild_pid, 0)
-                grandchild_alive = True
-            except OSError:
-                grandchild_alive = False
-            self.assertFalse(grandchild_alive)
-        finally:
-            if group is not None and rsp.group_exists(group):
-                rsp.terminate_process_group(group, signal.SIGKILL)
-            if proc.poll() is None:
-                proc.kill()
-                proc.wait()
+            os.kill(grandchild_pid, 0)
+            grandchild_alive = True
+        except OSError:
+            grandchild_alive = False
+        self.assertFalse(grandchild_alive)
 
 
 class SuccessCleanupTest(unittest.TestCase):
