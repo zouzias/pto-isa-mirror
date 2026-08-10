@@ -55,23 +55,15 @@ struct TPipe {
 
     PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
     {
-        if constexpr (SlotNum == 1) {
-            return tileIndex > 0;
-        } else {
-            if (tileIndex < SlotNum) {
-                return false;
-            }
-            return (tileIndex % SyncPeriod) == 0;
+        if (tileIndex < SlotNum) {
+            return false;
         }
+        return (tileIndex % SyncPeriod) == 0;
     }
 
     PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
     {
-        if constexpr (SlotNum == 1) {
-            return true;
-        } else {
-            return ((tileIndex + 1) % SyncPeriod) == 0;
-        }
+        return ((tileIndex + 1) % SyncPeriod) == 0;
     }
 
     struct Producer {
@@ -469,28 +461,17 @@ struct TPipe {
 
     PTO_INTERNAL explicit TPipe(__gm__ void* GM_SLOT_BUFFER, uint32_t C2V_CONSUMER_BUF, uint32_t V2C_CONSUMER_BUF)
         : fifo(GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF), prod(), cons()
-    {}
+    {
+        for (uint32_t i = 0; i < SyncPeriod; ++i) {
+            cons.free();
+        }
+    }
 
     // Destructor for TPipe: drain leftover free credits on FlagID+1.
     // Initial TPUSH calls skip allocate() via shouldWaitFree (tileIndex < SlotNum, or 0 for depth 1).
     PTO_INTERNAL ~TPipe()
     {
-        const uint32_t numPopFree = prod.tileIndex / SyncPeriod;
-        uint32_t numPushWait = 0;
-        if constexpr (SlotNum == 1) {
-            numPushWait = (prod.tileIndex > 0) ? prod.tileIndex - 1 : 0;
-        } else {
-            if (prod.tileIndex > SlotNum) {
-                constexpr uint32_t firstAligned =
-                    (SlotNum % SyncPeriod == 0) ? SlotNum : ((SlotNum / SyncPeriod) + 1) * SyncPeriod;
-                const uint32_t lastAligned = ((prod.tileIndex - 1) / SyncPeriod) * SyncPeriod;
-                if (lastAligned >= firstAligned) {
-                    numPushWait = (lastAligned - firstAligned) / SyncPeriod + 1;
-                }
-            }
-        }
-        const uint32_t drainCount = (numPopFree > numPushWait) ? (numPopFree - numPushWait) : 0;
-        for (uint32_t i = 0; i < drainCount; ++i) {
+        for (uint32_t i = 0; i < SyncPeriod; ++i) {
             prod.allocate();
         }
     }

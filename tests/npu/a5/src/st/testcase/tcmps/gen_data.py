@@ -60,11 +60,11 @@ def gen_golden_data_tcmps(param):
     elif param.mode == "LT":
         bool_result = (input1 < input2[0])
     elif param.mode == "GT":
-        bool_result = (input1 > input2[0]) 
+        bool_result = (input1 > input2[0])
     elif param.mode == "GE":
-        bool_result = (input1 >= input2[0]) 
+        bool_result = (input1 >= input2[0])
     elif param.mode == "LE":
-        bool_result = (input1 <= input2[0]) 
+        bool_result = (input1 <= input2[0])
 
     # Apply valid region constraints
     output = np.zeros((row, col), dtype=np.uint8)
