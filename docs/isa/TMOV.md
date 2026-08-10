@@ -39,6 +39,46 @@ NZ layout. No `tmp` is required.
 A `CompactMode::RowPlusOne` destination (`Rows = Vec_S0 + 1`) is the canonical idiom to
 avoid UB bank conflicts on the `vsstb` scatter.
 
+### ND → ZN (within-fractal transpose for the transposed Cube operand)
+
+The **Right (B, NT)** operand is the *transpose* of NZ: `BLayout = RowMajor` (the "Z" —
+row-major outer blocks) and `SLayout = ColMajor` (the "N" — column-major within each
+fractal). `TMOV(dstZN, src)` repacks a RowMajor `Vec` tile (`NoneBox`) of shape `[K, N]`
+into ZN layout `[K/K0, N/16, 16, K0]`, where $K_0 = 32\text{B}/\mathrm{sizeof}(T)$
+(so $K_0 = 32$ for B8, $16$ for B16, $8$ for B32). Requires $K \bmod K_0 = 0$ and
+$N \bmod 16 = 0$. Supported element types: `half`, `bfloat16_t`, `float`, `int32_t`,
+`int8_t`, `uint8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `hifloat8_t`,
+`float4_e2m1x2_t`, `float4_e1m2x2_t` (all 1/2/4-byte storage types).
+
+Unlike ND→NZ (which only rearranges 32 B blocks on the block grid via `vsstb` and leaves
+within-block data untouched), ND→ZN must also transpose the elements **inside** each
+$K_0 \times 16$ fractal, so `vsstb` alone is insufficient. Each output fractal is the
+transpose of a $K_0 \times 16$ source slice:
+
+$$D_{ZN}[k_1, n_1, j, i] = S_{ND}[k_1 K_0 + i][n_1 \cdot 16 + j], \quad i \in [0,K_0),\ j \in [0,16)$$
+
+The implementation uses a `vgather2` whose index decomposes the destination position $d$
+into the source coordinates $(i, j)$. With the destination fractal laid out $[16, K_0]$
+row-major ($j$ outer, $i$ inner):
+
+$$i = d \,\&\, (K_0-1) \quad (\text{pow2 mask, since } K_0 \text{ is always a power of two})$$
+$$j = d \gg \log_2 K_0 \quad (\text{pow2 shift})$$
+$$\mathrm{src\_idx} = i \cdot N + j \quad (\text{row-major source, stride } N)$$
+
+The $(i, j)$ extraction uses pow2 shifts/masks (no div/mod); the $i \cdot N$ term uses
+`vmuls` because $N$ is generally not a power of two. No `vdiv` appears anywhere. No `tmp`
+is required (the 2-arg `TMOV(dst, src)` form dispatches here when the destination is
+`RowMajor` + `ColMajor`).
+
+**Element-width handling.** A fractal is $K_0 \cdot 16$ elements = 512 B for every dtype.
+For B16/B32 the gather indexes in units of T (one VL holds 128/64 T-elements), so a
+fractal takes 2 gathers stored with `DIST_NORM`. For B8 the gather reads VL/2 = 128 byte
+indexes, each result zero-extended into a B16 lane (`vector_u16` dst, `uint8_t*` src);
+a fractal takes 4 gathers stored with `PK_B16` to pack the 128 B16 lanes back to 128
+bytes. This is the same primitive `TTransB8` uses for its element-wise B8 transpose
+(its golden is a plain `.transpose(1,0)`), so the B8 path is an element-wise transpose,
+not a pair transpose.
+
 ### X → ZZ (microscaling exponent repack)
 
 For MXFP8/MXFP4 matmuls the per-group E8M0 exponents must reach the Cube's scale operand
@@ -177,7 +217,6 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
     - plain/relu forms use cast pre-quant mode derived by `GetCastPreQuantMode<SrcDType, DstDType>()`
     - scalar-quant forms use `GetScalarPreQuantMode<SrcDType, DstDType>()`
     - vector-quant forms require an `FpTileData` operand with `FpTileData::Loc == TileType::Scaling`, and use `GetVectorPreQuantMode<SrcDType, DstDType>()`
-    - channel split is not supported
 
 ### A5 implementation checks
 
