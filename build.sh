@@ -88,9 +88,10 @@ checkopts() {
   INST_NAME=""
   AUTO_MODE=FALSE
   PACKAGE_TYPE="run"
-  PARALLEL_WORKERS=1
-  PARALLEL_BEST_EFFORT=FALSE
+  PARALLEL_WORKERS=2
+  PARALLEL_BEST_EFFORT=TRUE
   PARALLEL_ASSUME_AVAILABLE=FALSE
+  PARALLEL_EXPLICIT=FALSE
 
   parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,pkg-type:,run_all,a3,a5,sim,npu,comm,cpu,cpu_bf16,auto_mode,run_simple,build,parallel:,parallel-best-effort,parallel-assume-available,cann_3rd_lib_path: -- "$@") || {
   usage
@@ -165,6 +166,7 @@ checkopts() {
         ;;
       --parallel)
         PARALLEL_WORKERS="$2"
+        PARALLEL_EXPLICIT=TRUE
         shift 2
         ;;
       --parallel-best-effort)
@@ -222,7 +224,7 @@ run_simple_st() {
   if [ "$AUTO_MODE" == "TRUE" ]; then
     ARGS+="--auto_mode "
   fi
-  if [ "$PARALLEL_WORKERS" -gt 1 ]; then
+  if [ "$PARALLEL_WORKERS" -gt 1 ] && [ "$ENABLE_A3" == "TRUE" ] && [ "$ENABLE_A5" == "FALSE" ]; then
     ARGS+="--parallel=${PARALLEL_WORKERS} "
     if [ "$PARALLEL_BEST_EFFORT" == "TRUE" ]; then
       ARGS+="--parallel-best-effort "
@@ -331,8 +333,10 @@ main() {
     exit 1
   fi
 
-  # Reject --parallel>1 for unsupported platform/mode combinations.
-  if [ "$PARALLEL_WORKERS" -gt 1 ] && [ "$ENABLE_SIMPLE_ST" == "TRUE" ]; then
+  # If the user explicitly requested --parallel>1 on an unsupported combination,
+  # fail loudly. The default (parallel=2, best-effort) only applies to A3
+  # --run_simple on NPU; for other modes it is silently downgraded to serial.
+  if [ "$PARALLEL_EXPLICIT" == "TRUE" ] && [ "$PARALLEL_WORKERS" -gt 1 ]; then
     if [ "$ENABLE_A5" == "TRUE" ] || [ "$ENABLE_COMM" == "TRUE" ] || [ "$RUN_TYPE" == "sim" ]; then
       echo "Error: --parallel>1 is supported only for A3 --run_simple on NPU." >&2
       exit 1
