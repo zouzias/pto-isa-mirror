@@ -16,7 +16,7 @@ echo "start run test case, please wait ..."
 
 export ASCEND_GLOBAL_LOG_LEVEL=2
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
-
+pip3 install en_dtypes
 sudo apt update && sudo apt install -y mpich libmpich-dev
 sudo apt install -y openmpi-bin openmpi-common libopenmpi-dev
 mpicc --version
