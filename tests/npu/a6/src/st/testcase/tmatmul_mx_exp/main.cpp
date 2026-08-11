@@ -52,13 +52,11 @@ constexpr CaseGeometry GetGeometry()
 {
     constexpr int M = 128, K = 128, N = 128;
     constexpr int totalA = M * K, totalB = K * N;
-    if constexpr (caseId == 1) { // fp8 x fp8
-        return {fp8Bytes(totalA), fp8Bytes(totalB), totalA / 32, totalB / 32};
-    } else if constexpr (caseId == 2) { // fp4 x fp8
-        return {fp4Bytes(totalA), fp8Bytes(totalB), totalA / 32, totalB / 32};
-    } else if constexpr (caseId == 3) { // fp8 x fp4
+    // E1-E3: fp8_e4m3 (1B) A x fp4_e2m1 (0.5B) B.
+    // E4:    fp4_e1m2x2 (0.5B) A x fp4_e1m2x2 (0.5B) B.
+    if constexpr (caseId == 1 || caseId == 2 || caseId == 3) {
         return {fp8Bytes(totalA), fp4Bytes(totalB), totalA / 32, totalB / 32};
-    } else { // caseId == 4: fp4 x fp4
+    } else { // caseId == 4
         return {fp4Bytes(totalA), fp4Bytes(totalB), totalA / 32, totalB / 32};
     }
 }
@@ -137,7 +135,7 @@ void RunCase(const std::string& goldenDir)
     aclFinalize();
 }
 
-TEST_F(TMATMUL_MX_EXP_TEST, case_e1_fp8xfp8_pure_fp8) { RunCase<1>(GetGoldenDir()); }
-TEST_F(TMATMUL_MX_EXP_TEST, case_e2_fp4xfp8_swap) { RunCase<2>(GetGoldenDir()); }
-TEST_F(TMATMUL_MX_EXP_TEST, case_e3_fp8xfp4_neutral_both) { RunCase<3>(GetGoldenDir()); }
-TEST_F(TMATMUL_MX_EXP_TEST, case_e4_fp4xfp4_pure_e2m1) { RunCase<4>(GetGoldenDir()); }
+TEST_F(TMATMUL_MX_EXP_TEST, case_e1_fp8xfp4_varied) { RunCase<1>(GetGoldenDir()); }
+TEST_F(TMATMUL_MX_EXP_TEST, case_e2_fp8xfp4_neutral_a) { RunCase<2>(GetGoldenDir()); }
+TEST_F(TMATMUL_MX_EXP_TEST, case_e3_fp8xfp4_neutral_b) { RunCase<3>(GetGoldenDir()); }
+TEST_F(TMATMUL_MX_EXP_TEST, case_e4_fp4e1m2xfp4e1m2_baseline) { RunCase<4>(GetGoldenDir()); }

@@ -162,19 +162,14 @@ void Launch(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8
             reinterpret_cast<B_T*>(bData), reinterpret_cast<uint8_t*>(bScale));                          \
     }
 
-// E1: fp8_e4m3 x fp8_e4m3 (pure fp8 MX)
-DEFINE_EXP_LAUNCH(1, float8_e4m3_t, float8_e4m3_t, 128, 128, 128)
-// E2: fp4_e2m1 x fp8_e4m3 (swap — fp4 A, fp8 B)
-DEFINE_EXP_LAUNCH(2, float4_e2m1x2_t, float8_e4m3_t, 128, 128, 128)
-// E3: fp8_e4m3 x fp4_e2m1 (failing case — golden uses neutral scales, set in gen_data)
+// E1: fp8_e4m3 x fp4_e2m1, varied scales (failing baseline — reproduces NaN)
+DEFINE_EXP_LAUNCH(1, float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128)
+// E2: fp8_e4m3 x fp4_e2m1, neutral A-scale (isolates A-scale values)
+DEFINE_EXP_LAUNCH(2, float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128)
+// E3: fp8_e4m3 x fp4_e2m1, neutral B-scale (isolates B-scale values)
 DEFINE_EXP_LAUNCH(3, float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128)
-// E4: fp4_e2m1 x fp4_e2m1 (pure e2m1 baseline)
-DEFINE_EXP_LAUNCH(4, float4_e2m1x2_t, float4_e2m1x2_t, 128, 128, 128)
+// E4: fp4_e1m2x2 x fp4_e1m2x2, varied scales (passing baseline — harness sanity)
+DEFINE_EXP_LAUNCH(4, float4_e1m2x2_t, float4_e1m2x2_t, 128, 128, 128)
 
 #undef DEFINE_EXP_LAUNCH
 } // namespace TmatmulMxExp
-
-template void TmatmulMxExp::Launch<1>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void TmatmulMxExp::Launch<2>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void TmatmulMxExp::Launch<3>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
-template void TmatmulMxExp::Launch<4>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
