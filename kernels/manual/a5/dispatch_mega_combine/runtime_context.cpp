@@ -373,12 +373,12 @@ bool BuildRingHostRemoteWindowContext(
 } // namespace
 
 bool InitStandaloneRankRuntime(
-    StandaloneRankRuntime& runtime, int rank_id, int world_size, const HcclRootInfo& root_info)
+    StandaloneRankRuntime& runtime, int rank_id, int world_size, int device_id, const HcclRootInfo& root_info)
 {
     runtime.hccl.rank_id = rank_id;
     runtime.hccl.world_size = world_size;
 
-    if (aclrtSetDevice(rank_id) != ACL_SUCCESS) {
+    if (aclrtSetDevice(device_id) != ACL_SUCCESS) {
         return false;
     }
     if (aclrtCreateStream(&runtime.compute_stream) != ACL_SUCCESS) {

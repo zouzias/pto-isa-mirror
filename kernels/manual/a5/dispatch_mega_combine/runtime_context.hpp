@@ -69,5 +69,5 @@ struct StandaloneRankRuntime {
 };
 
 bool InitStandaloneRankRuntime(
-    StandaloneRankRuntime& runtime, int rank_id, int world_size, const HcclRootInfo& root_info);
+    StandaloneRankRuntime& runtime, int rank_id, int world_size, int device_id, const HcclRootInfo& root_info);
 void DestroyStandaloneRankRuntime(StandaloneRankRuntime& runtime);
