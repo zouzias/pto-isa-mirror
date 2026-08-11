@@ -14,10 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_NPU_ARCH_A5
 #endif
 
-#ifndef __CCE_AICORE__
-#define __CCE_AICORE__
-#endif
-
 #ifndef PIPE_FIX
 #define PIPE_FIX static_cast<pipe_t>(10)
 #endif

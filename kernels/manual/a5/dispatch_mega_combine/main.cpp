@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -97,6 +98,41 @@ int ParseEnvInt(const char* name, int defaultValue)
     } catch (const std::exception&) {
         throw std::runtime_error(std::string("invalid integer in env: ") + name);
     }
+}
+
+bool ParseFirstDevice(int argc, char** argv, int worldSize, int& firstDevice)
+{
+    firstDevice = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) != "--first-device") {
+            continue;
+        }
+        if (i + 1 >= argc) {
+            std::cerr << "--first-device requires a non-negative device ID" << std::endl;
+            return false;
+        }
+
+        const std::string valueText = argv[++i];
+        size_t parsed = 0;
+        long long value = -1;
+        try {
+            value = std::stoll(valueText, &parsed);
+        } catch (const std::exception&) {
+            parsed = 0;
+        }
+        if (parsed != valueText.size() || value < 0 || value > std::numeric_limits<int>::max()) {
+            std::cerr << "invalid --first-device value: " << valueText << std::endl;
+            return false;
+        }
+        firstDevice = static_cast<int>(value);
+    }
+
+    if (worldSize <= 0 || firstDevice > std::numeric_limits<int>::max() - (worldSize - 1)) {
+        std::cerr << "device range overflows int: first-device=" << firstDevice << " world-size=" << worldSize
+                  << std::endl;
+        return false;
+    }
+    return true;
 }
 
 uint64_t AlignUp(uint64_t value, uint64_t alignment)
@@ -190,10 +226,10 @@ void PrintOrderedByRank(int rankId, int worldSize, const std::string& text)
     CommMpiBarrier();
 }
 
-bool RunOneRank(int rankId, int worldSize, const std::string& caseDir, const HcclRootInfo& rootInfo)
+bool RunOneRank(int rankId, int worldSize, int deviceId, const std::string& caseDir, const HcclRootInfo& rootInfo)
 {
     StandaloneRankRuntime runtime;
-    if (!InitStandaloneRankRuntime(runtime, rankId, worldSize, rootInfo)) {
+    if (!InitStandaloneRankRuntime(runtime, rankId, worldSize, deviceId, rootInfo)) {
         return false;
     }
 
@@ -297,14 +333,25 @@ int main(int argc, char** argv)
 
     const int rankId = CommMpiRank();
     const int worldSize = CommMpiSize();
+    int firstDevice = 0;
+    if (!ParseFirstDevice(argc, argv, worldSize, firstDevice)) {
+        CommMpiFinalize();
+        return 1;
+    }
+    const int deviceId = firstDevice + rankId;
     const char* caseDirEnv = std::getenv("DISPATCH_MEGA_COMBINE_CASE_DIR");
     const std::string caseDir = caseDirEnv == nullptr ? "../out" : caseDirEnv;
+
+    if (rankId == 0) {
+        std::cout << "rank/device mapping: ranks=[0," << worldSize << ") physical_devices=[" << firstDevice << ","
+                  << firstDevice + worldSize << ")" << std::endl;
+    }
 
     if (aclInit(nullptr) != ACL_SUCCESS) {
         CommMpiFinalize();
         return 1;
     }
-    if (rtSetDevice(rankId) != 0 || aclrtSetDevice(rankId) != ACL_SUCCESS) {
+    if (rtSetDevice(deviceId) != 0 || aclrtSetDevice(deviceId) != ACL_SUCCESS) {
         aclFinalize();
         CommMpiFinalize();
         return 1;
@@ -312,7 +359,7 @@ int main(int argc, char** argv)
 
     HcclRootInfo rootInfo{};
     if (rankId == 0 && HcclGetRootInfo(&rootInfo) != HCCL_SUCCESS) {
-        aclrtResetDevice(rankId);
+        aclrtResetDevice(deviceId);
         aclFinalize();
         CommMpiFinalize();
         return 1;
@@ -320,7 +367,7 @@ int main(int argc, char** argv)
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    const bool ok = RunOneRank(rankId, worldSize, caseDir, rootInfo);
+    const bool ok = RunOneRank(rankId, worldSize, deviceId, caseDir, rootInfo);
 
     CommMpiBarrier();
     aclFinalize();
