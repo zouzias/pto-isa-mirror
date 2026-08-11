@@ -320,7 +320,7 @@ __global__ AICORE void TMOV2ScalingKernel(
 #endif
     TMOV(fbTile, fbMatTile);
 
-    TSTORE_FP<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
+    TSTORE<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
 
     out = dstGlobal.data();
 }
@@ -445,7 +445,7 @@ __global__ AICORE void TMOV2BiasAndScalingDyncmicKernel(
 #endif
     TMOV(scalingTile, scalingMatTile);
 
-    TSTORE_FP<AccTile, GlobalDataOut, ScalingTile>(dstGlobal, cTile, scalingTile);
+    TSTORE<AccTile, GlobalDataOut, ScalingTile>(dstGlobal, cTile, scalingTile);
 
     out = dstGlobal.data();
 }

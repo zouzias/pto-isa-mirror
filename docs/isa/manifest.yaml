@@ -1111,8 +1111,8 @@
     {
       "instruction": "TSTORE_FP",
       "category": "Memory (GM <-> Tile)",
-      "summary_en": "Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.",
-      "summary_zh": "使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。",
+      "summary_en": "Compatibility alias for the `TSTORE(..., fp, ...)` vector-quantization overload.",
+      "summary_zh": "`TSTORE(..., fp, ...)` 向量量化重载的兼容别名。",
       "diagram_template": "memory",
       "operands": [
         "tile",
@@ -1263,8 +1263,8 @@
     {
       "instruction": "TEXTRACT_FP",
       "category": "Data Movement / Layout",
-      "summary_en": "Extract with fp/scaling tile (vector-quantization parameters).",
-      "summary_zh": "带 fp/缩放 Tile 的提取（向量量化参数）。",
+      "summary_en": "Compatibility alias for the `TEXTRACT(..., fp, ...)` vector-quantization overload.",
+      "summary_zh": "`TEXTRACT(..., fp, ...)` 向量量化重载的兼容别名。",
       "diagram_template": "reshape_move",
       "operands": [
         "dst",
@@ -1299,8 +1299,8 @@
     {
       "instruction": "TINSERT_FP",
       "category": "Data Movement / Layout",
-      "summary_en": "Insert with fp/scaling tile (vector-quantization parameters).",
-      "summary_zh": "带 fp/缩放 Tile 的插入（向量量化参数）。",
+      "summary_en": "Compatibility alias for the `TINSERT(..., fp, ...)` vector-quantization overload.",
+      "summary_zh": "`TINSERT(..., fp, ...)` 向量量化重载的兼容别名。",
       "diagram_template": "reshape_move",
       "operands": [
         "dst",
@@ -1359,8 +1359,8 @@
     {
       "instruction": "TMOV_FP",
       "category": "Data Movement / Layout",
-      "summary_en": "Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.",
-      "summary_zh": "使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。",
+      "summary_en": "Compatibility alias for the no-`mode` `TMOV(..., fp, ...)` vector-quantization overload.",
+      "summary_zh": "无 `mode` 的 `TMOV(..., fp, ...)` 向量量化重载的兼容别名。",
       "diagram_template": "reshape_move",
       "operands": [
         "dst",

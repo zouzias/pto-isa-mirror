@@ -407,10 +407,10 @@ __global__ AICORE void RunTMOVFBQuant(
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
-            TINSERT_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
+            TINSERT<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
                 dstTileData, cTile, fbTile, indexRow, indexCol);
         } else {
-            TINSERT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            TINSERT<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
         }
     } else {
         if constexpr (isRelu) {

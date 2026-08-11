@@ -246,12 +246,12 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
 
     TMOV(fbTile, fbMatTile); // L1-> FB1
     if constexpr (isRelu) {
-        TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
+        TMOV<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
     } else {
         if constexpr (indexRow == 0 && indexCol == 0) {
-            TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+            TMOV<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
         } else if constexpr (!isInsert) {
-            TEXTRACT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            TEXTRACT<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
         } else {
             using GlobalDataSrc3 = GlobalTensor<
                 outType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
@@ -266,7 +266,7 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
 #endif
-            TINSERT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            TINSERT<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
         }
     }
 #ifndef __PTO_AUTO_

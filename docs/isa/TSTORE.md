@@ -48,9 +48,15 @@ template <typename TileData, typename GlobalData, AtomicType atomicType = Atomic
 PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events);
 
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-          typename... WaitEvents>
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events);
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events);
 ```
+
+`TSTORE_FP(...)` is kept as a compatibility alias that forwards to `TSTORE(..., fp, ...)`.
 
 ## Constraints
 
@@ -73,8 +79,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
         | --- | --- | --- |
         | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
         | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
-        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t` |
-        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half` |
+        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` | `float` | `int8_t`, `uint8_t` |
+        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half` |
 
         Other cross-type combinations are not supported.
     - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND then `1 <= TileData::Rows <= 8192`; if NZ, NC1HWC0, or NDC1HWC0 then `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`.
@@ -96,8 +102,8 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
       | --- | --- | --- |
       | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
       | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
-      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t`, `half`, `bfloat16_t`, `hifloat8_t`, `float8_e4m3_t`, `float` |
-      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half`, `bfloat16_t` |
+      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` | `float` | `int8_t`, `uint8_t`, `half`, `bfloat16_t`, `hifloat8_t`, `float8_e4m3_t`, `float` |
+      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half`, `bfloat16_t` |
 
       Other cross-type combinations are not supported.
     - Static shape constraints match A2A3 for rows/cols; `AtomicAdd` additionally restricts destination dtype to supported atomic types.

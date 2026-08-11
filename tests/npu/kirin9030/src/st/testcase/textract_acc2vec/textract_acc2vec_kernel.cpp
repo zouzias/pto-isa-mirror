@@ -339,10 +339,10 @@ __global__ AICORE void RunTMOVFBQuant(
 
     TMOV(fbTile, fbMatTile);
     if constexpr (isRelu) {
-        TEXTRACT_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
+        TEXTRACT<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
             dstTileData, cTile, fbTile, indexRow, indexCol);
     } else {
-        TEXTRACT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+        TEXTRACT<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
     }
 
     set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);

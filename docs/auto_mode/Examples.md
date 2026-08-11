@@ -133,7 +133,7 @@ __global__ AICORE void runTMatMul(__gm__ cType *out, __gm__ aType *src0, __gm__ 
     TMOV(fbTile, fbMatTile);
 
     /********************************TSTORE****************************/
-    TSTORE_FP<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
+    TSTORE<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
 }
 ```
 
@@ -210,6 +210,6 @@ __global__ AICORE void runTMatMul(__gm__ cType *out, __gm__ aType *src0, __gm__ 
     TMOV(fbTile, fbMatTile, evtMatmul_MovM2s);
 
     /********************************TSTORE****************************/
-    TSTORE_FP<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
+    TSTORE<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
 }
 ```

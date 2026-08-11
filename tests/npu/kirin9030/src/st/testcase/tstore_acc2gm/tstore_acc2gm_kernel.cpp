@@ -449,10 +449,10 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
-        TSTORE_FP(dstGlobal, cTile, scalingTile);
+        TSTORE(dstGlobal, cTile, scalingTile);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
+        TSTORE<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
@@ -548,10 +548,10 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
-        TSTORE_FP(dstGlobal, cTile, scalingTile);
+        TSTORE(dstGlobal, cTile, scalingTile);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
+        TSTORE<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
     }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);

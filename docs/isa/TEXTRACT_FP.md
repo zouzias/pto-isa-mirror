@@ -9,6 +9,8 @@
 
 Extract a sub-tile from a source tile, while also providing an `fp` (scaling) tile used for vector quantization parameters (target/implementation-defined).
 
+`TEXTRACT_FP` is a compatibility alias for `TEXTRACT(dst, src, fp, indexRow, indexCol, ...)`. Prefer the `TEXTRACT(..., fp, ...)` overload in new code.
+
 ## See also
 
 - TEXTRACT base instruction: `docs/isa/TEXTRACT.md`.
@@ -18,6 +20,10 @@ Extract a sub-tile from a source tile, while also providing an `fp` (scaling) ti
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);

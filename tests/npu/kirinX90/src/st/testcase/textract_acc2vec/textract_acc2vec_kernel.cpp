@@ -409,10 +409,10 @@ __global__ AICORE void RunTMOVFBQuant(
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
-            TEXTRACT_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
+            TEXTRACT<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(
                 dstTileData, cTile, fbTile, indexRow, indexCol);
         } else {
-            TEXTRACT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            TEXTRACT<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
         }
     } else {
         if constexpr (isRelu) {

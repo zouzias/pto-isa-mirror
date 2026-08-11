@@ -25,6 +25,8 @@ Include the unified entry header:
 
 This table tracks per-instruction backend availability:
 
+`TSTORE_FP`, `TEXTRACT_FP`, `TINSERT_FP`, and `TMOV_FP` are compatibility aliases for the corresponding fp overloads of `TSTORE`, `TEXTRACT`, `TINSERT`, and `TMOV`.
+
 - **CPU**: `__CPU_SIM` (CPU simulation backend). More information about this backend can be found in [docs/coding/cpu_sim.md](../docs/coding/cpu_sim.md)
 - **Costmodel**: `__COSTMODEL` (A2 / A3 cost model backend, including `stub` and `fit` paths; if either path supports an instruction, it is marked as supported).
 - **A2 (Ascend 910B) / A3 (Ascend 910C)**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).

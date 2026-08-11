@@ -397,15 +397,15 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType* out, __gm__ AType* src0, _
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
             if constexpr (phase == STPhase::Unspecified) {
-                TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
+                TMOV<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
             } else {
-                TMOV_FP<phase, DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
+                TMOV<phase, DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
             }
         } else {
             if constexpr (phase == STPhase::Unspecified) {
-                TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+                TMOV<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
             } else {
-                TMOV_FP<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+                TMOV<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
             }
         }
     } else {

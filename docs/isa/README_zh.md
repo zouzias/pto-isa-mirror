@@ -6,20 +6,21 @@
 
 本目录是 PTO Tile Lib ISA 的指令参考（每条指令一页）。
 
-- 权威来源（C++ 内建函数）：`include/pto/common/pto_instr.hpp`
-- [通用约定（操作数、事件、修饰符）](conventions_zh.md)
+- 权威来源：`include/pto/common/pto_instr.hpp`
+- 通用约定（操作数、事件、修饰符）：`docs/isa/conventions_zh.md`
 
 ## 同步
 - [TSYNC](TSYNC_zh.md) - 同步 PTO 执行（等待事件或插入每操作流水线屏障）。
-- [SYNCALL](SYNCALL_zh.md) - 跨核同步屏障（硬件 FFTS 或软件 GM 轮询）。
 
 ## 手动 / 资源绑定
 - [TASSIGN](TASSIGN_zh.md) - 将 Tile 对象绑定到实现定义的片上地址（手动放置）。
+- [TSETHF32MODE](TSETHF32MODE_zh.md) - 设置 HF32 变换模式（实现定义）。
+- [TSETTF32MODE](TSETTF32MODE_zh.md) - 设置 TF32 变换模式（实现定义）。
 - [SETFMATRIX](SETFMATRIX_zh.md) - 为类 IMG2COL 操作设置 FMATRIX 寄存器。
 - [SET_IMG2COL_RPT](SET_IMG2COL_RPT_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。
 - [SET_IMG2COL_PADDING](SET_IMG2COL_PADDING_zh.md) - 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。
-- [SET_QUANT_SCALAR](SET_QUANT_SCALAR_zh.md) - 设置标量量化参数，用于后续 TPUSH 操作。
-- [SET_QUANT_VECTOR](SET_QUANT_VECTOR_zh.md) - 从 Scaling Tile 设置向量量化参数，用于后续 TPUSH 操作。
+- [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
+- [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
 
 ## 逐元素（Tile-Tile）
 - [TADD](TADD_zh.md) - 两个 Tile 的逐元素加法。
@@ -50,16 +51,15 @@
 - [TNEG](TNEG_zh.md) - Tile 的逐元素取负。
 - [TREM](TREM_zh.md) - 两个 Tile 的逐元素余数，余数符号与除数相同。
 - [TFMOD](TFMOD_zh.md) - 两个 Tile 的逐元素余数，余数符号与被除数相同。
-- [TPOW](TPOW_zh.md) - 两个 Tile 的逐元素幂运算。
-- [TMULADDDST](TMULADDDST.md) - 三元逐元素运算：`src0 * src1 + dst`。
-- [TSUBRELU](TSUBRELU.md) - src0和src1逐元素相减后ReLU。
-- [TFUSEDMULADD](TFUSEDMULADD.md) - 三元逐元素运算：`src0 * dst + src1`。
-- [TFUSEDMULADDRELU](TFUSEDMULADDRELU.md) - 三元逐元素运算：`ReLU(src0 * dst + src1)`。
+- [TMULADDDST](TMULADDDST_zh.md) - 三元逐元素运算：`src0 * src1 + dst`。
+- [TFUSEDMULADD](TFUSEDMULADD_zh.md) - 三元逐元素运算：`src0 * dst + src1`。
+- [TSUBRELU](TSUBRELU_zh.md) - src0和src1逐元素相减后ReLU。
+- [TFUSEDMULADDRELU](TFUSEDMULADDRELU_zh.md) - 三元逐元素运算：`ReLU(src0 * dst + src1)`。
 
 ## Tile-标量 / Tile-立即数
 - [TEXPANDS](TEXPANDS_zh.md) - 将标量广播到目标 Tile 中。
 - [TCMPS](TCMPS_zh.md) - 将 Tile 与标量比较并写入逐元素比较结果。
-- [TSELS](TSELS_zh.md) - 使用掩码 Tile 在源 Tile 和标量之间进行选择（源 Tile 逐元素选择）。
+- [TSELS](TSELS_zh.md) - 使用标量 `selectMode` 在两个源 Tile 中选择一个（全局选择）。
 - [TMINS](TMINS_zh.md) - Tile 与标量的逐元素最小值。
 - [TADDS](TADDS_zh.md) - Tile 与标量的逐元素加法。
 - [TSUBS](TSUBS_zh.md) - 从 Tile 中逐元素减去一个标量。
@@ -77,20 +77,16 @@
 - [TLRELU](TLRELU_zh.md) - 带标量斜率的 Leaky ReLU。
 - [TADDSC](TADDSC_zh.md) - 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。
 - [TSUBSC](TSUBSC_zh.md) - 融合逐元素运算：`src0 - scalar + src1`。
-- [TPOWS](TPOWS_zh.md) - Tile 逐元素与标量幂运算。
 
 ## 轴归约 / 扩展
 - [TROWSUM](TROWSUM_zh.md) - 通过对列求和来归约每一行。
-- [TROWPROD](TROWPROD_zh.md) - 通过跨列乘积来归约每一行。
 - [TCOLSUM](TCOLSUM_zh.md) - 通过对行求和来归约每一列。
 - [TCOLPROD](TCOLPROD_zh.md) - 通过跨行乘积来归约每一列。
 - [TCOLMAX](TCOLMAX_zh.md) - 通过取行间最大值来归约每一列。
 - [TROWMAX](TROWMAX_zh.md) - 通过取列间最大值来归约每一行。
 - [TROWMIN](TROWMIN_zh.md) - 通过取列间最小值来归约每一行。
 - [TROWARGMAX](TROWARGMAX_zh.md) - 获取每行最大值对应列索引。
-- [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最小值对应列索引。
-- [TCOLARGMAX](TCOLARGMAX_zh.md) - 获取每列最大值对应行索引/获取每列最大值对应值和行索引。
-- [TCOLARGMIN](TCOLARGMIN_zh.md) - 获取每列最小值对应行索引/获取每列最大值对应值和行索引。
+- [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最大值对应列索引。
 - [TROWEXPAND](TROWEXPAND_zh.md) - 将每个源行的第一个元素广播到目标行中。
 - [TROWEXPANDDIV](TROWEXPANDDIV_zh.md) - 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。
 - [TROWEXPANDMUL](TROWEXPANDMUL_zh.md) - 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。
@@ -114,7 +110,7 @@
 - [TPREFETCH](TPREFETCH_zh.md) - 将数据从全局内存预取到 Tile 本地缓存/缓冲区（提示）。
 - [TPREFETCH_ASYNC](TPREFETCH_ASYNC_zh.md) - 通过 SDMA CMO 将 GlobalTensor 区域从 GM 异步预取到 L2 Cache。
 - [TSTORE](TSTORE_zh.md) - 将 Tile 中的数据存储到 GlobalTensor (GM)，可选使用原子写入或量化参数。
-- [TSTORE_FP](TSTORE_FP_zh.md) - 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
+- [TSTORE_FP](TSTORE_FP_zh.md) - `TSTORE(..., fp, ...)` 向量量化重载的兼容别名。
 - [MGATHER](MGATHER_zh.md) - 使用逐元素索引从全局内存收集加载元素到 Tile 中。
 - [MSCATTER](MSCATTER_zh.md) - 使用逐元素索引将 Tile 中的元素散播存储到全局内存。
 
@@ -130,50 +126,33 @@
 
 ## 数据搬运 / 布局
 - [TEXTRACT](TEXTRACT_zh.md) - 从源 Tile 中提取子 Tile。
-- [TEXTRACT_FP](TEXTRACT_FP_zh.md) - 带 fp/缩放 Tile 的提取（向量量化参数）。
+- [TEXTRACT_FP](TEXTRACT_FP_zh.md) - `TEXTRACT(..., fp, ...)` 向量量化重载的兼容别名。
 - [TIMG2COL](TIMG2COL_zh.md) - 用于类卷积工作负载的图像到列变换。
 - [TINSERT](TINSERT_zh.md) - 在 (indexRow, indexCol) 偏移处将子 Tile 插入到目标 Tile 中。
-- [TINSERT_FP](TINSERT_FP_zh.md) - 带 fp/缩放 Tile 的插入（向量量化参数）。
+- [TINSERT_FP](TINSERT_FP_zh.md) - `TINSERT(..., fp, ...)` 向量量化重载的兼容别名。
 - [TFILLPAD](TFILLPAD_zh.md) - 复制 Tile 并在有效区域外使用编译时填充值进行填充。
 - [TFILLPAD_INPLACE](TFILLPAD_INPLACE_zh.md) - 原地填充/填充变体。
 - [TFILLPAD_EXPAND](TFILLPAD_EXPAND_zh.md) - 填充/填充时允许目标大于源。
 - [TMOV](TMOV_zh.md) - 在 Tile 之间移动/复制，可选应用实现定义的转换模式。
-- [TMOV_FP](TMOV_FP_zh.md) - 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。
+- [TMOV_FP](TMOV_FP_zh.md) - 无 `mode` 的 `TMOV(..., fp, ...)` 向量量化重载的兼容别名。
 - [TRESHAPE](TRESHAPE_zh.md) - 将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。
 - [TTRANS](TTRANS_zh.md) - 使用实现定义的临时 Tile 进行转置。
-- [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
-- [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
-- [TCONCAT](TCONCAT_zh.md) - 将两个 Tile 沿列维度水平拼接。
-- [TInterleave](TINTERLEAVE_zh.md) - 将两个源 Tile 交织为交替的偶/奇元素流，拆分为两个目标半部分。
-- [TDeInterleave](TDEINTERLEAVE_zh.md) - 将源 Tile 反交织为偶数位置和奇数位置的元素流（TInterleave 的逆操作）。
-- [TPAIRREDUCESUM](TPairReduceSum_zh.md) - 对归约求和：将每两个相邻元素相加，结果写入目标 Tile 的下半部分。
 
 ## 复杂指令
 - [TPRINT](TPRINT_zh.md) - 调试/打印 Tile 中的元素（实现定义）。
 - [TMRGSORT](TMRGSORT_zh.md) - 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。
-- [TSORT32](TSORT32_zh.md) - 对 `src` 的每个 32 元素块，与 `idx` 中对应的索引一起进行排序，并将排序后的值-索引对写入 `dst`。
+- [TSORT32](TSORT32_zh.md) - 对固定大小的 32 元素块进行排序并生成索引映射。
 - [TGATHER](TGATHER_zh.md) - 使用索引 Tile 或编译时掩码模式来收集/选择元素。
 - [TCI](TCI_zh.md) - 生成连续整数序列到目标 Tile 中。
 - [TTRI](TTRI_zh.md) - 生成三角（下/上）掩码 Tile。
-- [TRANDOM](TRANDOM_zh.md) - 使用基于计数器的密码算法在目标 Tile 中生成随机数。
 - [TPARTADD](TPARTADD_zh.md) - 部分逐元素加法，对不匹配的有效区域具有实现定义的处理方式。
 - [TPARTMUL](TPARTMUL_zh.md) - 部分逐元素乘法，对有效区域不一致的处理为实现定义。
 - [TPARTMAX](TPARTMAX_zh.md) - 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。
 - [TPARTMIN](TPARTMIN_zh.md) - 部分逐元素最小值，对不匹配的有效区域具有实现定义的处理方式。
-- [TPARTARGMAX](TPARTARGMAX_zh.md) - 部分逐元素最大值选择并返回对应索引（argmax），对不匹配的有效区域具有实现定义的处理方式。
-- [TPARTARGMIN](TPARTARGMIN_zh.md) - 部分逐元素最小值选择并返回对应索引（argmin），对不匹配的有效区域具有实现定义的处理方式。
 - [TGATHERB](TGATHERB_zh.md) - 使用字节偏移量收集元素。
 - [TSCATTER](TSCATTER_zh.md) - 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。
 - [TQUANT](TQUANT_zh.md) - 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。
 - [TDEQUANT](TDEQUANT_zh.md) - 对量化 Tile 做仿射反量化（S8/S16 -> FP32）：dst = (src - offset) * scale。
 - [THISTOGRAM](THISTOGRAM_zh.md) - 对源元素的某个字节统计直方图（256 桶），可按高位字节级联过滤；基数排序的桶计数原语。
-
-## 核间通信
-- [TALLOC](TALLOC_zh.md) - 将 TPipe FIFO 槽位分配为一个 GlobalTensor 视图。
-- [TPUSH](TPUSH_zh.md) - 将生产者 tile 推入 TPipe FIFO，用于 Cube-Vector 通信。
-- [TPOP](TPOP_zh.md) - 从 TPipe FIFO 弹出消费者 tile/globalTensor，用于 Cube-Vector 通信。
-- [TFREE](TFREE_zh.md) - 释放 TPipe 的 FIFO 空间；对于 TileData/GlobalTensor 的 TPOP 流程，该操作为空操作。
-
-## 通信
-
-完整的通信 ISA 指令参考（点对点、异步、同步原语及集合通信）见 [comm/README_zh.md](comm/README_zh.md)。
+- [TADDReluConv](TADDReluConv_zh.md) - 融合逐元素加法、ReLU 限幅和类型转换：dst = convert(max(0, src0 + src1))。
+- [TAddDeqRelu](TAddDeqRelu_zh.md) - 融合逐元素加法、反量化缩放和 ReLU 限幅：dst = half(max(0, (src0 + src1) * deqScale))。

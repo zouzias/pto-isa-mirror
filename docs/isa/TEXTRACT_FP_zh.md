@@ -8,6 +8,8 @@
 
 带 fp/缩放 Tile 的提取（向量量化参数）。
 
+`TEXTRACT_FP` 是 `TEXTRACT(dst, src, fp, indexRow, indexCol, ...)` 的兼容别名。新代码优先使用 `TEXTRACT(..., fp, ...)` 重载。
+
 ## 数学语义
 
 除非另有说明，语义在有效区域上定义，目标相关的行为标记为实现定义。
@@ -32,6 +34,10 @@ pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) o
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);

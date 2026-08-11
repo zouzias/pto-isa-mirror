@@ -60,7 +60,7 @@ AICORE inline void RunTStoreRowMajorQuant(
         TASSIGN(qTile, 0x400 + Rows * Cols * sizeof(SrcT));
 
         TLOAD(qTile, fpGlobal);
-        TSTORE_FP<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
+        TSTORE<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
     } else {
         TSTORE<TileData, GlobalDataDst, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, fbQuant[0]);
     }
@@ -114,7 +114,7 @@ AICORE inline void RunTStoreColMajorQuant(
         TASSIGN(qTile, 0x400 + Rows * Cols * sizeof(SrcT));
 
         TLOAD(qTile, fpGlobal);
-        TSTORE_FP<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
+        TSTORE<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
     } else {
         TSTORE<TileData, GlobalDataDst, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, fbQuant[0]);
     }
@@ -166,7 +166,7 @@ AICORE inline void RunTStoreNZQuant(__gm__ Dst __out__* out, __gm__ SrcT __in__*
         TASSIGN(qTile, 0x400 + Rows * Cols * sizeof(SrcT));
 
         TLOAD(qTile, fpGlobal);
-        TSTORE_FP<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
+        TSTORE<TileData, GlobalDataDst, QuantTile, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, qTile);
     } else {
         TSTORE<TileData, GlobalDataDst, AtomicType::AtomicNone, reluPreMode>(dstGlobal, srcTile, fbQuant[0]);
     }

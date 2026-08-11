@@ -8,6 +8,8 @@
 
 带 fp/缩放 Tile 的插入（向量量化参数）。
 
+`TINSERT_FP` 是 `TINSERT(dst, src, fp, indexRow, indexCol, ...)` 的兼容别名。新代码优先使用 `TINSERT(..., fp, ...)` 重载。
+
 ## 数学语义
 
 除非另有说明，语义在有效区域上定义，目标相关的行为标记为实现定义。
@@ -32,6 +34,10 @@ pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_b
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);

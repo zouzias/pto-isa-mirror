@@ -100,6 +100,22 @@ template <typename DstTileData, typename SrcTileData, typename FpTileData, AccTo
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
@@ -108,6 +124,8 @@ template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPre
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
 ```
+
+`TMOV_FP(...)` 保留为兼容别名，转发到无 `mode` 的 `TMOV(..., fp, ...)` 重载。
 
 ### ND → NZ / X → ZZ重载
 
@@ -118,13 +136,15 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...eve
 
 // X -> ZZ（3 参数，带 tmp）。grp_axis=1（默认）= ND->ZZ；grp_axis=0 = DN->ZZ。
 template <typename DstTileData, typename SrcTileData, typename TmpTileData, typename... WaitEvents,
-          std::enable_if_t<is_tile_data_v<TmpTileData>, int> = 0>
+          std::enable_if_t<is_tile_data_v<TmpTileData> && (TmpTileData::Loc != TileType::Scaling), int> = 0>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, WaitEvents &...events);
 
 template <int grp_axis, typename DstTileData, typename SrcTileData, typename TmpTileData, typename... WaitEvents,
-          std::enable_if_t<is_tile_data_v<TmpTileData>, int> = 0>
+          std::enable_if_t<is_tile_data_v<TmpTileData> && (TmpTileData::Loc != TileType::Scaling), int> = 0>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, WaitEvents &...events);
 ```
+
+三参数 `tmp` 重载排除 `TileType::Scaling`；第三操作数为 `Scaling` 时选择向量量化 `TMOV(..., fp, ...)` 重载。
 
 | 重载 | `grp_axis` | 转换 | 是否使用 `tmp`？ |
 |------|-----------|------|----------------|
@@ -140,7 +160,7 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
     - 纯移动：`TMOV(dst, src)`
     - relu形式：`TMOV<..., reluMode>(dst, src)`
     - 累加器到向量形式：`TMOV<..., mode, reluMode>(dst, src)`
-    - 向量量化形式：`TMOV<..., FpTileData, mode, reluMode>(dst, src, fp)`
+    - 向量量化形式：`TMOV<..., FpTileData, reluMode>(dst, src, fp)` 和 `TMOV<..., FpTileData, mode, reluMode>(dst, src, fp)`；`TMOV_FP(...)` 是无 `mode` 形式的兼容别名
     - 标量量化形式：`TMOV<..., reluMode>(dst, src, preQuantScalar)` 和 `TMOV<..., mode, reluMode>(dst, src, preQuantScalar)`
 - `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
 - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。

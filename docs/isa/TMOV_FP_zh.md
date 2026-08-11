@@ -8,6 +8,8 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。
 
+`TMOV_FP` 是无 `mode` fp 重载 `TMOV(dst, src, fp, ...)` 的兼容别名。新代码优先使用 `TMOV(..., fp, ...)`。
+
 ## 数学语义
 
 概念上使用从 `fp` 派生的实现定义的量化/反量化配置转换每个元素：
@@ -42,6 +44,18 @@ pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -52,7 +66,7 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
 - **实现检查 (A5)**:
     - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
-    - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
     - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
 
 ## 示例
@@ -72,7 +86,7 @@ void example_auto() {
   AccT acc;
   DstT dst;
   FpT fp;
-  TMOV_FP(dst, acc, fp);
+  TMOV(dst, acc, fp);
 }
 ```
 
@@ -94,7 +108,7 @@ void example_manual() {
   TASSIGN(acc, 0x1000);
   TASSIGN(dst, 0x2000);
   TASSIGN(fp,  0x3000);
-  TMOV_FP(dst, acc, fp);
+  TMOV(dst, acc, fp);
 }
 ```
 

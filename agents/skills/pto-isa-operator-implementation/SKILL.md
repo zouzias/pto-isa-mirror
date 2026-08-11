@@ -507,7 +507,7 @@ template void launchOperator<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, aclF
 |------|------|--------|---------|
 | TMOV | L1 → L0A/L0B | MatTile → LeftTile/RightTile | Cube计算 (矩阵乘法) |
 | TMOV | Tile之间移动 | srcTile → dstTile | 数据格式转换 |
-| TMOV_FP | 带缩放的移动 | srcTile * scale → dstTile | 量化操作 |
+| TMOV(..., fp) | 带缩放的移动 | srcTile * scale → dstTile | 量化操作（`TMOV_FP` 为兼容别名） |
 | TRESHAPE | Tile重解释 | 保持字节，改变类型/形状 | 类型转换 |
 | TTRANS | Tile转置 | srcTile^T → dstTile | 矩阵转置 |
 

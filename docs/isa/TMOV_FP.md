@@ -9,7 +9,7 @@
 
 Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.
 
-`TMOV_FP` is a named wrapper around the `TMOV_IMPL(..., fp)` path and is part of the `TMOV` family (see `docs/isa/TMOV.md`).
+`TMOV_FP` is a compatibility alias for the no-`mode` fp overload `TMOV(dst, src, fp, ...)` and is part of the `TMOV` family (see `docs/isa/TMOV.md`).
 
 ## Math Interpretation
 
@@ -43,8 +43,22 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
+
+Prefer `TMOV(..., fp, ...)` in new code. `TMOV_FP(...)` forwards to that overload for source compatibility.
 
 ## Constraints
 
@@ -73,7 +87,7 @@ void example_auto() {
   AccT acc;
   DstT dst;
   FpT fp;
-  TMOV_FP(dst, acc, fp);
+  TMOV(dst, acc, fp);
 }
 ```
 
@@ -95,7 +109,7 @@ void example_manual() {
   TASSIGN(acc, 0x1000);
   TASSIGN(dst, 0x2000);
   TASSIGN(fp,  0x3000);
-  TMOV_FP(dst, acc, fp);
+  TMOV(dst, acc, fp);
 }
 ```
 

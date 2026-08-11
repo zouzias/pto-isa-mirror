@@ -147,7 +147,7 @@ void runTINSERT_Vector(typename Conf::DT* dst, typename Conf::ST* src, uint64_t*
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     static constexpr ReluPreMode reluMode = Conf::applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
-    TINSERT_FP<DstTile, SrcTile, FbTile, reluMode>(
+    TINSERT<DstTile, SrcTile, FbTile, reluMode>(
         dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(Conf::idxRow), static_cast<uint16_t>(Conf::idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);

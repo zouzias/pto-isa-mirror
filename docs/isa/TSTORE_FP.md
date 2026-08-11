@@ -9,7 +9,7 @@
 
 Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.
 
-`TSTORE_FP` is the fp-quantization overload of `TSTORE` (see `docs/isa/TSTORE.md`).
+`TSTORE_FP` is a compatibility alias for the fp-quantization overload `TSTORE(dst, src, fp, ...)` (see `docs/isa/TSTORE.md`).
 
 ## Math Interpretation
 
@@ -43,8 +43,14 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 ```cpp
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
 ```
+
+Prefer `TSTORE(..., fp, ...)` in new code. `TSTORE_FP(...)` forwards to that overload for source compatibility.
 
 ## Constraints
 
@@ -78,7 +84,7 @@ void example_auto(__gm__ int8_t* out) {
   GT gout(out);
   AccT acc;
   FpT fp(16);
-  TSTORE_FP(gout, acc, fp);
+  TSTORE(gout, acc, fp);
 }
 ```
 
@@ -101,7 +107,7 @@ void example_manual(__gm__ int8_t* out) {
   FpT fp(16);
   TASSIGN(acc, 0x1000);
   TASSIGN(fp,  0x2000);
-  TSTORE_FP(gout, acc, fp);
+  TSTORE(gout, acc, fp);
 }
 ```
 

@@ -142,7 +142,7 @@ __global__ AICORE void runTMovL12Fb(__gm__ cType* out, __gm__ aType* src0, __gm_
     Event<Op::TMATMUL, Op::TSTORE_ACC> evtMatmul_Store = TMATMUL(cTile, aTile, bTile, evtMov2L_Matmul, evtMov2R_Matmul);
 
     /********************************TSTORE****************************/
-    TSTORE_FP(dstGlobal, cTile, fbTile, evtMov2S_Store, evtMatmul_Store);
+    TSTORE(dstGlobal, cTile, fbTile, evtMov2S_Store, evtMatmul_Store);
 }
 
 template <int32_t tilingKey>

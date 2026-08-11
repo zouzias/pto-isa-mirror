@@ -25,6 +25,8 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 
 下表用于跟踪每条指令在不同后端的可用性：
 
+`TSTORE_FP`、`TEXTRACT_FP`、`TINSERT_FP`、`TMOV_FP` 是对应 `TSTORE`、`TEXTRACT`、`TINSERT`、`TMOV` fp 重载的兼容别名。
+
 - **CPU**：`__CPU_SIM`（CPU 仿真后端）。
 - **Costmodel**：`__COSTMODEL`（A2 / A3 性能仿真后端，包含 `stub` 与 `fit` 两条路径；任一路径支持即记为支持）。
 - **A2（Ascend 910B）/ A3（Ascend 910C）**：当前共享 `include/pto/npu/a2a3/` 的实现（因此两列状态相同）。

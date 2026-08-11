@@ -8,6 +8,8 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
 
+`TSTORE_FP` 是 `TSTORE(dst, src, fp, ...)` fp 量化重载的兼容别名。新代码优先使用 `TSTORE(..., fp, ...)`。
+
 ## 数学语义
 
 设 `R = src.GetValidRow()`，`C = src.GetValidCol()`。概念上（二维视图，带基础偏移），对 `0 <= i < R` 且 `0 <= j < C`：
@@ -40,6 +42,10 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
@@ -77,7 +83,7 @@ void example_auto(__gm__ int8_t* out) {
   GT gout(out);
   AccT acc;
   FpT fp(16);
-  TSTORE_FP(gout, acc, fp);
+  TSTORE(gout, acc, fp);
 }
 ```
 
@@ -100,7 +106,7 @@ void example_manual(__gm__ int8_t* out) {
   FpT fp(16);
   TASSIGN(acc, 0x1000);
   TASSIGN(fp,  0x2000);
-  TSTORE_FP(gout, acc, fp);
+  TSTORE(gout, acc, fp);
 }
 ```
 
