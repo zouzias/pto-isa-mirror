@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_>
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
 AICORE void runTPutAsync(__gm__ T __out__* out, __gm__ T __in__* input)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
@@ -25,20 +25,30 @@ AICORE void runTPutAsync(__gm__ T __out__* out, __gm__ T __in__* input)
     GlobalData inputGlobal(input);
     GlobalData outputGlobal(out);
 
-    comm::TPUT_ASYNC(outputGlobal, inputGlobal, session);
+    if constexpr (Peer) {
+        comm::TPUT_ASYNC(outputGlobal, inputGlobal, session, 0u);
+    } else {
+        comm::TPUT_ASYNC(outputGlobal, inputGlobal, session);
+    }
     out = outputGlobal.data();
 }
 
-template <typename T, int kGRows_, int kGCols_>
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
 void LaunchTPutAsync(T* out, T* src, void* stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTPutAsync<half, kGRows_, kGCols_>((half*)(out), (half*)(src));
-    else
-        runTPutAsync<T, kGRows_, kGCols_>(out, src);
+    if constexpr (std::is_same_v<T, aclFloat16>) {
+        runTPutAsync<half, kGRows_, kGCols_, Peer>((half*)(out), (half*)(src));
+    } else {
+        runTPutAsync<T, kGRows_, kGCols_, Peer>(out, src);
+    }
 }
 
-template void LaunchTPutAsync<float, 64, 64>(float* out, float* src, void* stream);
-template void LaunchTPutAsync<int32_t, 64, 64>(int32_t* out, int32_t* src, void* stream);
-template void LaunchTPutAsync<aclFloat16, 16, 256>(aclFloat16* out, aclFloat16* src, void* stream);
-template void LaunchTPutAsync<int16_t, 64, 64>(int16_t* out, int16_t* src, void* stream);
+template void LaunchTPutAsync<float, 64, 64, false>(float* out, float* src, void* stream);
+template void LaunchTPutAsync<int32_t, 64, 64, false>(int32_t* out, int32_t* src, void* stream);
+template void LaunchTPutAsync<aclFloat16, 16, 256, false>(aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTPutAsync<int16_t, 64, 64, false>(int16_t* out, int16_t* src, void* stream);
+
+template void LaunchTPutAsync<float, 64, 64, true>(float* out, float* src, void* stream);
+template void LaunchTPutAsync<int32_t, 64, 64, true>(int32_t* out, int32_t* src, void* stream);
+template void LaunchTPutAsync<aclFloat16, 16, 256, true>(aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTPutAsync<int16_t, 64, 64, true>(int16_t* out, int16_t* src, void* stream);
