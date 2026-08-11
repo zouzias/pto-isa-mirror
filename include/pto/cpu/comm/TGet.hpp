@@ -73,6 +73,13 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, 
     return AsyncEvent(0, engine);
 }
 
+template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, const AsyncSession& session,
+                                        uint32_t peer)
+{
+    return TGET_ASYNC_IMPL<engine>(dst, src, session);
+}
+
 } // namespace comm
 } // namespace pto
 #endif

@@ -348,12 +348,13 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 /**
- * @brief Asynchronous remote write with explicit peer (A5 only).
+ * @brief Asynchronous remote write with explicit peer (A5 / CPU stub).
  *
  * For URMA: @p peer selects SQ/CQ/MR in UrmaInfo (session need not bind peer).
  * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
+ * For CPU: @p peer is ignored; use default implementation
  */
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
@@ -378,12 +379,13 @@ PTO_INST AsyncEvent TGET_ASYNC(
     return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 /**
- * @brief Asynchronous remote read with explicit peer (A5 only).
+ * @brief Asynchronous remote read with explicit peer (A5 / CPU stub).
  *
  * For URMA: @p peer selects SQ/CQ/MR in UrmaInfo (session need not bind peer).
  * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
+ * For CPU: @p peer is ignored; use default implementation
  */
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TGET_ASYNC(
