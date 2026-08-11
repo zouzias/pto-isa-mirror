@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -56,6 +57,21 @@ struct DeviceBuffer {
     }
 };
 
+struct RankBuffers {
+    DeviceBuffer x;
+    DeviceBuffer weight1;
+    DeviceBuffer weight2;
+    DeviceBuffer expertIdx;
+    DeviceBuffer scale1;
+    DeviceBuffer scale2;
+    DeviceBuffer probs;
+    DeviceBuffer out;
+    DeviceBuffer expertTokenNums;
+    DeviceBuffer workspace;
+    DeviceBuffer tiling;
+    std::vector<uint16_t> expectedOut;
+};
+
 DeviceBuffer MakeDeviceBuffer(size_t bytes, const void* hostSrc = nullptr)
 {
     DeviceBuffer buffer;
@@ -71,6 +87,12 @@ DeviceBuffer MakeDeviceBuffer(size_t bytes, const void* hostSrc = nullptr)
         throw std::runtime_error("aclrtMemcpy host->device failed");
     }
     return buffer;
+}
+
+DeviceBuffer LoadDeviceBuffer(const std::string& path)
+{
+    const std::vector<uint8_t> data = ReadBinaryFile(path);
+    return MakeDeviceBuffer(data.size(), data.data());
 }
 
 std::vector<uint16_t> BytesToU16(const std::vector<uint8_t>& bytes)
@@ -97,6 +119,41 @@ int ParseEnvInt(const char* name, int defaultValue)
     } catch (const std::exception&) {
         throw std::runtime_error(std::string("invalid integer in env: ") + name);
     }
+}
+
+bool ParseFirstDevice(int argc, char** argv, int worldSize, int& firstDevice)
+{
+    firstDevice = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) != "--first-device") {
+            continue;
+        }
+        if (i + 1 >= argc) {
+            std::cerr << "--first-device requires a non-negative device ID" << std::endl;
+            return false;
+        }
+
+        const std::string valueText = argv[++i];
+        size_t parsed = 0;
+        long long value = -1;
+        try {
+            value = std::stoll(valueText, &parsed);
+        } catch (const std::exception&) {
+            parsed = 0;
+        }
+        if (parsed != valueText.size() || value < 0 || value > std::numeric_limits<int>::max()) {
+            std::cerr << "invalid --first-device value: " << valueText << std::endl;
+            return false;
+        }
+        firstDevice = static_cast<int>(value);
+    }
+
+    if (worldSize <= 0 || firstDevice > std::numeric_limits<int>::max() - (worldSize - 1)) {
+        std::cerr << "device range overflows int: first-device=" << firstDevice << " world-size=" << worldSize
+                  << std::endl;
+        return false;
+    }
+    return true;
 }
 
 uint64_t AlignUp(uint64_t value, uint64_t alignment)
@@ -149,6 +206,24 @@ void ValidateConfiguration(const CaseConfig& cfg)
     }
 }
 
+CaseConfig LoadAndValidateCase(const std::string& caseDir, int worldSize)
+{
+    CaseConfig cfg = LoadCaseConfig(caseDir + "/case.json");
+    if (cfg.world_size != static_cast<uint32_t>(worldSize)) {
+        throw std::runtime_error("case world_size does not match MPI world size");
+    }
+
+    const int aicNum = ParseEnvInt("DISPATCH_MEGA_COMBINE_AIC_NUM", kDefaultAicNum);
+    const int aivNum = ParseEnvInt("DISPATCH_MEGA_COMBINE_AIV_NUM", kDefaultAivNum);
+    if (aicNum <= 0 || aivNum != aicNum * 2) {
+        throw std::runtime_error("A5 requires positive AIC_NUM and AIV_NUM == AIC_NUM * 2");
+    }
+    cfg.aic_num = static_cast<uint32_t>(aicNum);
+    cfg.aiv_num = static_cast<uint32_t>(aivNum);
+    ValidateConfiguration(cfg);
+    return cfg;
+}
+
 void ZeroDeviceBuffer(const DeviceBuffer& buffer, const char* name)
 {
     if (buffer.bytes != 0U && aclrtMemset(buffer.ptr, buffer.bytes, 0, buffer.bytes) != ACL_SUCCESS) {
@@ -190,94 +265,102 @@ void PrintOrderedByRank(int rankId, int worldSize, const std::string& text)
     CommMpiBarrier();
 }
 
-bool RunOneRank(int rankId, int worldSize, const std::string& caseDir, const HcclRootInfo& rootInfo)
+RankBuffers CreateRankBuffers(const RankFileSet& files, const CaseConfig& cfg, const MegaMoeBuildResult& build)
+{
+    return {
+        LoadDeviceBuffer(files.x),
+        LoadDeviceBuffer(files.weight1),
+        LoadDeviceBuffer(files.weight2),
+        LoadDeviceBuffer(files.expert_idx),
+        LoadDeviceBuffer(files.scale1),
+        LoadDeviceBuffer(files.scale2),
+        LoadDeviceBuffer(files.probs),
+        MakeDeviceBuffer(static_cast<size_t>(cfg.m) * cfg.k * sizeof(uint16_t)),
+        MakeDeviceBuffer(static_cast<size_t>(cfg.expert_per_rank) * sizeof(int32_t)),
+        MakeDeviceBuffer(build.workspace_bytes),
+        MakeDeviceBuffer(sizeof(build.tiling), &build.tiling),
+        BytesToU16(ReadBinaryFile(files.expected_out)),
+    };
+}
+
+void* GetFftsAddress()
+{
+    uint64_t fftsAddr = 0;
+    uint32_t fftsLen = 0;
+    if (rtGetC2cCtrlAddr(&fftsAddr, &fftsLen) != 0) {
+        fftsAddr = 0;
+    }
+    return reinterpret_cast<void*>(fftsAddr);
+}
+
+MegaMoeLaunchArgs CreateLaunchArgs(const RankBuffers& buffers, const MegaMoeBuildResult& build)
+{
+    MegaMoeLaunchArgs args;
+    args.ffts = GetFftsAddress();
+    args.x = buffers.x.ptr;
+    args.weight1 = buffers.weight1.ptr;
+    args.weight2 = buffers.weight2.ptr;
+    args.expert_idx = buffers.expertIdx.ptr;
+    args.scale1 = buffers.scale1.ptr;
+    args.scale2 = buffers.scale2.ptr;
+    args.probs = buffers.probs.ptr;
+    args.out = buffers.out.ptr;
+    args.expert_token_nums = buffers.expertTokenNums.ptr;
+    args.workspace = buffers.workspace.ptr;
+    args.tiling = buffers.tiling.ptr;
+    args.block_dim = build.block_dim;
+    args.start_sync = ParseEnvInt("DISPATCH_MEGA_COMBINE_START_SYNC", 0) != 0 ? 1U : 0U;
+    return args;
+}
+
+void RunKernel(const StandaloneRankRuntime& runtime, const RankBuffers& buffers, const MegaMoeLaunchArgs& args)
+{
+    PrepareLaunchBuffers(runtime, buffers.out, buffers.expertTokenNums, buffers.workspace);
+    CommMpiBarrier();
+    launchMegaMoe(args, runtime.compute_stream);
+    if (aclrtSynchronizeStream(runtime.compute_stream) != ACL_SUCCESS) {
+        throw std::runtime_error("stream sync failed");
+    }
+    CommMpiBarrier();
+}
+
+bool VerifyRankOutput(
+    int rankId, int worldSize, const std::string& caseDir, const CaseConfig& cfg, const RankBuffers& buffers)
+{
+    std::vector<uint16_t> actualOut(static_cast<size_t>(cfg.m) * cfg.k);
+    const size_t outputBytes = actualOut.size() * sizeof(uint16_t);
+    if (aclrtMemcpy(actualOut.data(), outputBytes, buffers.out.ptr, outputBytes, ACL_MEMCPY_DEVICE_TO_HOST) !=
+        ACL_SUCCESS) {
+        throw std::runtime_error("device->host output copy failed");
+    }
+    WriteBinaryFile(caseDir + "/output_rank" + std::to_string(rankId) + ".bin", actualOut.data(), outputBytes);
+
+    const AccuracyReport report = CompareFp16File(buffers.expectedOut, actualOut, cfg.compare_atol, cfg.compare_rtol);
+    PrintOrderedByRank(rankId, worldSize, BuildAccuracyReport(rankId, report));
+    return report.pass;
+}
+
+bool ExecuteRankCase(int rankId, int worldSize, const std::string& caseDir, const StandaloneRankRuntime& runtime)
+{
+    const CaseConfig cfg = LoadAndValidateCase(caseDir, worldSize);
+    const RankFileSet files = BuildRankFileSet(caseDir, rankId);
+    const MegaMoeBuildResult build = BuildMegaMoeTiling(cfg, runtime);
+    const RankBuffers buffers = CreateRankBuffers(files, cfg, build);
+    const MegaMoeLaunchArgs args = CreateLaunchArgs(buffers, build);
+    RunKernel(runtime, buffers, args);
+    return VerifyRankOutput(rankId, worldSize, caseDir, cfg, buffers);
+}
+
+bool RunOneRank(int rankId, int worldSize, int deviceId, const std::string& caseDir, const HcclRootInfo& rootInfo)
 {
     StandaloneRankRuntime runtime;
-    if (!InitStandaloneRankRuntime(runtime, rankId, worldSize, rootInfo)) {
+    if (!InitStandaloneRankRuntime(runtime, rankId, worldSize, deviceId, rootInfo)) {
         return false;
     }
 
     bool ok = false;
     try {
-        CaseConfig cfg = LoadCaseConfig(caseDir + "/case.json");
-        if (cfg.world_size != static_cast<uint32_t>(worldSize)) {
-            throw std::runtime_error("case world_size does not match MPI world size");
-        }
-
-        const int aicNum = ParseEnvInt("DISPATCH_MEGA_COMBINE_AIC_NUM", kDefaultAicNum);
-        const int aivNum = ParseEnvInt("DISPATCH_MEGA_COMBINE_AIV_NUM", kDefaultAivNum);
-        if (aicNum <= 0 || aivNum != aicNum * 2) {
-            throw std::runtime_error("A5 requires positive AIC_NUM and AIV_NUM == AIC_NUM * 2");
-        }
-        cfg.aic_num = static_cast<uint32_t>(aicNum);
-        cfg.aiv_num = static_cast<uint32_t>(aivNum);
-        ValidateConfiguration(cfg);
-
-        const RankFileSet files = BuildRankFileSet(caseDir, rankId);
-        MegaMoeBuildResult build = BuildMegaMoeTiling(cfg, runtime);
-
-        const std::vector<uint8_t> x = ReadBinaryFile(files.x);
-        const std::vector<uint8_t> weight1 = ReadBinaryFile(files.weight1);
-        const std::vector<uint8_t> weight2 = ReadBinaryFile(files.weight2);
-        const std::vector<uint8_t> expertIdx = ReadBinaryFile(files.expert_idx);
-        const std::vector<uint8_t> scale1 = ReadBinaryFile(files.scale1);
-        const std::vector<uint8_t> scale2 = ReadBinaryFile(files.scale2);
-        const std::vector<uint8_t> probs = ReadBinaryFile(files.probs);
-        const std::vector<uint16_t> expectedOut = BytesToU16(ReadBinaryFile(files.expected_out));
-
-        DeviceBuffer xDev = MakeDeviceBuffer(x.size(), x.data());
-        DeviceBuffer weight1Dev = MakeDeviceBuffer(weight1.size(), weight1.data());
-        DeviceBuffer weight2Dev = MakeDeviceBuffer(weight2.size(), weight2.data());
-        DeviceBuffer expertIdxDev = MakeDeviceBuffer(expertIdx.size(), expertIdx.data());
-        DeviceBuffer scale1Dev = MakeDeviceBuffer(scale1.size(), scale1.data());
-        DeviceBuffer scale2Dev = MakeDeviceBuffer(scale2.size(), scale2.data());
-        DeviceBuffer probsDev = MakeDeviceBuffer(probs.size(), probs.data());
-        DeviceBuffer outDev = MakeDeviceBuffer(static_cast<size_t>(cfg.m) * cfg.k * sizeof(uint16_t));
-        DeviceBuffer expertTokenNumsDev = MakeDeviceBuffer(static_cast<size_t>(cfg.expert_per_rank) * sizeof(int32_t));
-        DeviceBuffer workspaceDev = MakeDeviceBuffer(build.workspace_bytes);
-        DeviceBuffer tilingDev = MakeDeviceBuffer(sizeof(build.tiling), &build.tiling);
-
-        uint64_t fftsAddr = 0;
-        uint32_t fftsLen = 0;
-        if (rtGetC2cCtrlAddr(&fftsAddr, &fftsLen) != 0) {
-            fftsAddr = 0;
-        }
-
-        MegaMoeLaunchArgs args;
-        args.ffts = reinterpret_cast<void*>(fftsAddr);
-        args.x = xDev.ptr;
-        args.weight1 = weight1Dev.ptr;
-        args.weight2 = weight2Dev.ptr;
-        args.expert_idx = expertIdxDev.ptr;
-        args.scale1 = scale1Dev.ptr;
-        args.scale2 = scale2Dev.ptr;
-        args.probs = probsDev.ptr;
-        args.out = outDev.ptr;
-        args.expert_token_nums = expertTokenNumsDev.ptr;
-        args.workspace = workspaceDev.ptr;
-        args.tiling = tilingDev.ptr;
-        args.block_dim = build.block_dim;
-        args.start_sync = ParseEnvInt("DISPATCH_MEGA_COMBINE_START_SYNC", 0) != 0 ? 1U : 0U;
-
-        PrepareLaunchBuffers(runtime, outDev, expertTokenNumsDev, workspaceDev);
-        CommMpiBarrier();
-        launchMegaMoe(args, runtime.compute_stream);
-        if (aclrtSynchronizeStream(runtime.compute_stream) != ACL_SUCCESS) {
-            throw std::runtime_error("stream sync failed");
-        }
-        CommMpiBarrier();
-
-        std::vector<uint16_t> actualOut(static_cast<size_t>(cfg.m) * cfg.k);
-        const size_t outputBytes = actualOut.size() * sizeof(uint16_t);
-        if (aclrtMemcpy(actualOut.data(), outputBytes, outDev.ptr, outputBytes, ACL_MEMCPY_DEVICE_TO_HOST) !=
-            ACL_SUCCESS) {
-            throw std::runtime_error("device->host output copy failed");
-        }
-        WriteBinaryFile(caseDir + "/output_rank" + std::to_string(rankId) + ".bin", actualOut.data(), outputBytes);
-
-        const AccuracyReport report = CompareFp16File(expectedOut, actualOut, cfg.compare_atol, cfg.compare_rtol);
-        ok = report.pass;
-        PrintOrderedByRank(rankId, worldSize, BuildAccuracyReport(rankId, report));
+        ok = ExecuteRankCase(rankId, worldSize, caseDir, runtime);
     } catch (const std::exception& ex) {
         std::cerr << "rank=" << rankId << " error: " << ex.what() << std::endl;
         ok = false;
@@ -297,14 +380,25 @@ int main(int argc, char** argv)
 
     const int rankId = CommMpiRank();
     const int worldSize = CommMpiSize();
+    int firstDevice = 0;
+    if (!ParseFirstDevice(argc, argv, worldSize, firstDevice)) {
+        CommMpiFinalize();
+        return 1;
+    }
+    const int deviceId = firstDevice + rankId;
     const char* caseDirEnv = std::getenv("DISPATCH_MEGA_COMBINE_CASE_DIR");
     const std::string caseDir = caseDirEnv == nullptr ? "../out" : caseDirEnv;
+
+    if (rankId == 0) {
+        std::cout << "rank/device mapping: ranks=[0," << worldSize << ") physical_devices=[" << firstDevice << ","
+                  << firstDevice + worldSize << ")" << std::endl;
+    }
 
     if (aclInit(nullptr) != ACL_SUCCESS) {
         CommMpiFinalize();
         return 1;
     }
-    if (rtSetDevice(rankId) != 0 || aclrtSetDevice(rankId) != ACL_SUCCESS) {
+    if (rtSetDevice(deviceId) != 0 || aclrtSetDevice(deviceId) != ACL_SUCCESS) {
         aclFinalize();
         CommMpiFinalize();
         return 1;
@@ -312,7 +406,7 @@ int main(int argc, char** argv)
 
     HcclRootInfo rootInfo{};
     if (rankId == 0 && HcclGetRootInfo(&rootInfo) != HCCL_SUCCESS) {
-        aclrtResetDevice(rankId);
+        aclrtResetDevice(deviceId);
         aclFinalize();
         CommMpiFinalize();
         return 1;
@@ -320,7 +414,7 @@ int main(int argc, char** argv)
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    const bool ok = RunOneRank(rankId, worldSize, caseDir, rootInfo);
+    const bool ok = RunOneRank(rankId, worldSize, deviceId, caseDir, rootInfo);
 
     CommMpiBarrier();
     aclFinalize();

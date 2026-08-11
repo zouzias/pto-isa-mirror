@@ -10,6 +10,7 @@
 set -euo pipefail
 
 WORLD_SIZE=2
+FIRST_DEVICE=0
 M=16
 K=128
 N=128
@@ -43,6 +44,7 @@ export MPI_LIB_PATH
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --world-size) WORLD_SIZE="$2"; shift 2 ;;
+    --first-device) FIRST_DEVICE="$2"; shift 2 ;;
     --m) M="$2"; shift 2 ;;
     --k) K="$2"; shift 2 ;;
     --n) N="$2"; shift 2 ;;
@@ -60,6 +62,22 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown option: $1"; exit 1 ;;
   esac
 done
+
+if [[ ! "${WORLD_SIZE}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "--world-size must be a positive integer, got: ${WORLD_SIZE}" >&2
+  exit 1
+fi
+if [[ ! "${FIRST_DEVICE}" =~ ^[0-9]+$ ]]; then
+  echo "--first-device must be a non-negative device ID, got: ${FIRST_DEVICE}" >&2
+  exit 1
+fi
+FIRST_DEVICE=$((10#${FIRST_DEVICE}))
+if [[ -n "${ASCEND_RT_VISIBLE_DEVICES:-}" ]]; then
+  echo "[INFO] Ignoring ASCEND_RT_VISIBLE_DEVICES; binding physical devices with --first-device"
+  unset ASCEND_RT_VISIBLE_DEVICES
+fi
+echo "[INFO] Mapping MPI ranks 0-$((WORLD_SIZE - 1)) to physical NPU devices" \
+  "${FIRST_DEVICE}-$((FIRST_DEVICE + WORLD_SIZE - 1))"
 
 if [[ "${AIV_NUM}" -ne $((AIC_NUM * 2)) ]]; then
   echo "dispatch_mega_combine expects a 1:2 mixed-core shape: aiv-num must equal aic-num*2" >&2
@@ -122,4 +140,4 @@ export DISPATCH_MEGA_COMBINE_CASE_DIR="${OUT_DIR}"
 export DISPATCH_MEGA_COMBINE_AIC_NUM="${AIC_NUM}"
 export DISPATCH_MEGA_COMBINE_AIV_NUM="${AIV_NUM}"
 export DISPATCH_MEGA_COMBINE_START_SYNC="${START_SYNC}"
-"${MPI_RUNNER}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_mega_combine"
+"${MPI_RUNNER}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_mega_combine" --first-device "${FIRST_DEVICE}"
