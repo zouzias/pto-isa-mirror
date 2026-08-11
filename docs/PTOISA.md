@@ -39,8 +39,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Elementwise (Tile-Tile) | [`TLOG`](isa/TLOG.md) | Elementwise natural logarithm of a tile. |
 | Elementwise (Tile-Tile) | [`TRECIP`](isa/TRECIP.md) | Elementwise reciprocal of a tile. |
 | Elementwise (Tile-Tile) | [`TPRELU`](isa/TPRELU.md) | Elementwise PReLU (parametric ReLU) with a per-element slope tile. |
-| Elementwise (Tile-Tile) | [`TADDC`](isa/TADDC.md) | Elementwise ternary add: `src0 + src1 + src2`. |
-| Elementwise (Tile-Tile) | [`TSUBC`](isa/TSUBC.md) | Elementwise ternary op: `src0 - src1 + src2`. |
 | Elementwise (Tile-Tile) | [`TCVT`](isa/TCVT.md) | Elementwise type conversion with a specified rounding mode. |
 | Elementwise (Tile-Tile) | [`TSEL`](isa/TSEL.md) | Select between two tiles using a mask tile (per-element selection). |
 | Elementwise (Tile-Tile) | [`TRSQRT`](isa/TRSQRT.md) | Elementwise reciprocal square root. |
@@ -70,8 +68,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Tile-Scalar / Tile-Immediate | [`TSHRS`](isa/TSHRS.md) | Elementwise shift-right a tile by a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TXORS`](isa/TXORS.md) | Elementwise bitwise XOR of a tile and a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TLRELU`](isa/TLRELU.md) | Leaky ReLU with a scalar slope. |
-| Tile-Scalar / Tile-Immediate | [`TADDSC`](isa/TADDSC.md) | Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`. |
-| Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TPOWS`](isa/TPOWS.md) | Elementwise power of a tile by a scalar. |
 | Axis Reduce / Expand | [`TROWSUM`](isa/TROWSUM.md) | Reduce each row by summing across columns. |
 | Axis Reduce / Expand | [`TROWPROD`](isa/TROWPROD.md) | Reduce each row by multiplying across columns. |
@@ -128,7 +124,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TRESHAPE`](isa/TRESHAPE.md) | Reinterpret a tile as another tile type/shape while preserving the underlying bytes. |
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
 | Data Movement / Layout | [`TSUBVIEW`](isa/TSUBVIEW.md) | Reinterpret a tile as a subtile of another tile. |
-| Data Movement / Layout | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR.md) | Bind the on-chip address of output tile to a scaled factor of that of input tile. |
 | Data Movement / Layout | [`TCONCAT`](isa/TCONCAT.md) | Concatenate two tiles horizontally along the column dimension. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |

@@ -39,8 +39,6 @@
 | 逐元素（Tile-Tile） | [`TLOG`](isa/TLOG_zh.md) | Tile 的逐元素自然对数。 |
 | 逐元素（Tile-Tile） | [`TRECIP`](isa/TRECIP_zh.md) | Tile 的逐元素倒数。 |
 | 逐元素（Tile-Tile） | [`TPRELU`](isa/TPRELU_zh.md) | 带逐元素斜率 Tile 的逐元素参数化 ReLU (PReLU)。 |
-| 逐元素（Tile-Tile） | [`TADDC`](isa/TADDC_zh.md) | 三元逐元素加法：`src0 + src1 + src2`。 |
-| 逐元素（Tile-Tile） | [`TSUBC`](isa/TSUBC_zh.md) | 三元逐元素运算：`src0 - src1 + src2`。 |
 | 逐元素（Tile-Tile） | [`TCVT`](isa/TCVT_zh.md) | 带指定舍入模式的逐元素类型转换。 |
 | 逐元素（Tile-Tile） | [`TSEL`](isa/TSEL_zh.md) | 使用掩码 Tile 在两个 Tile 之间进行选择（逐元素选择）。 |
 | 逐元素（Tile-Tile） | [`TRSQRT`](isa/TRSQRT_zh.md) | 逐元素倒数平方根。 |
@@ -71,8 +69,6 @@
 | Tile-标量 / Tile-立即数 | [`TXORS`](isa/TXORS_zh.md) | Tile 与标量的逐元素按位异或。 |
 | Tile-标量 / Tile-立即数 | [`TLRELU`](isa/TLRELU_zh.md) | 带标量斜率的 Leaky ReLU。 |
 | Tile-标量 / Tile-立即数 | [`TPOWS`](isa/TPOWS_zh.md) | Tile 逐元素与标量幂运算。 |
-| Tile-标量 / Tile-立即数 | [`TADDSC`](isa/TADDSC_zh.md) | 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。 |
-| Tile-标量 / Tile-立即数 | [`TSUBSC`](isa/TSUBSC_zh.md) | 融合逐元素运算：`src0 - scalar + src1`。 |
 | 轴归约 / 扩展 | [`TROWSUM`](isa/TROWSUM_zh.md) | 通过对列求和来归约每一行。 |
 | 轴归约 / 扩展 | [`TROWPROD`](isa/TROWPROD_zh.md) | 通过跨列乘积来归约每一行。 |
 | 轴归约 / 扩展 | [`TCOLSUM`](isa/TCOLSUM_zh.md) | 通过对行求和来归约每一列。 |
@@ -128,7 +124,6 @@
 | 数据搬运 / 布局 | [`TRESHAPE`](isa/TRESHAPE_zh.md) | 将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。 |
 | 数据搬运 / 布局 | [`TTRANS`](isa/TTRANS_zh.md) | 使用实现定义的临时 Tile 进行转置。 |
 | 数据搬运 / 布局 | [`TSUBVIEW`](isa/TSUBVIEW_zh.md) | 表达一个tile是另一个tile的subview |
-| 数据搬运 / 布局 | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR_zh.md) | 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。 |
 | 数据搬运 / 布局 | [`TCONCAT`](isa/TCONCAT_zh.md) | 将两个 Tile 沿列维度水平拼接。 |
 | 复杂指令 | [`TPRINT`](isa/TPRINT_zh.md) | 调试/打印 Tile 中的元素（实现定义）。 |
 | 复杂指令 | [`TMRGSORT`](isa/TMRGSORT_zh.md) | 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。 |

@@ -608,22 +608,6 @@ PTO_INST RecordEvent TPRINT(TileData& src, WaitEvents&... events)
     return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TADDC(TileData& dst, TileData& src0, TileData& src1, TileData& src2, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TADDC, dst, src0, src1, src2);
-    return {};
-}
-
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSUBC(TileData& dst, TileData& src0, TileData& src1, TileData& src2, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TSUBC, dst, src0, src1, src2);
-    return {};
-}
-
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, WaitEvents&... events)
 {
@@ -1600,24 +1584,6 @@ TLRELU(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, W
     return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent
-TADDSC(TileData& dst, TileData& src0, typename TileData::DType scalar, TileData& src1, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TADDSC, dst, src0, scalar, src1);
-    return {};
-}
-
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent
-TSUBSC(TileData& dst, TileData& src0, typename TileData::DType scalar, TileData& src1, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TSUBSC, dst, src0, scalar, src1);
-    return {};
-}
-
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TCOLMIN(TileDataOut& dst, TileDataIn& src, WaitEvents&... events)
 {
@@ -1846,14 +1812,6 @@ TQUANT(TileDataOut& dst, TileDataSrc& src, TileDataPara& scale, TileDataPara* of
     TSYNC(events...);
     MAP_INSTR_IMPL_T(
         TQUANT, PTO_TEMPLATE_ARGS(quant_type, TileDataOut, TileDataSrc, TileDataPara), dst, src, scale, offset);
-    return {};
-}
-
-template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
-PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut& dst, TileDataIn& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TGET_SCALE_ADDR, dst, src);
     return {};
 }
 

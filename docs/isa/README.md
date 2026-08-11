@@ -38,8 +38,6 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TLOG](TLOG.md) - Elementwise natural logarithm of a tile.
 - [TRECIP](TRECIP.md) - Elementwise reciprocal of a tile.
 - [TPRELU](TPRELU.md) - Elementwise PReLU (parametric ReLU) with a per-element slope tile.
-- [TADDC](TADDC.md) - Elementwise ternary add: `src0 + src1 + src2`.
-- [TSUBC](TSUBC.md) - Elementwise ternary op: `src0 - src1 + src2`.
 - [TCVT](TCVT.md) - Elementwise type conversion with a specified rounding mode.
 - [TSEL](TSEL.md) - Select between two tiles using a mask tile (per-element selection).
 - [TRSQRT](TRSQRT.md) - Elementwise reciprocal square root.
@@ -51,10 +49,6 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TREM](TREM.md) - Elementwise remainder of two tiles.
 - [TFMOD](TFMOD.md) - Elementwise fmod of two tiles.
 - [TPOW](TPOW.md) - Elementwise power of two tiles.
-- [TMULADDDST](TMULADDDST.md) - Elementwise ternary op: `src0 * src1 + dst`.
-- [TSUBRELU](TSUBRELU.md) - Elementwise subtract then ReLU of two tiles.
-- [TFUSEDMULADD](TFUSEDMULADD.md) - Elementwise ternary op: `src0 * dst + src1`.
-- [TFUSEDMULADDRELU](TFUSEDMULADDRELU.md) - Elementwise ternary op: `ReLU(src0 * dst + src1)`.
 
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
@@ -75,8 +69,6 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TSHRS](TSHRS.md) - Elementwise shift-right a tile by a scalar.
 - [TXORS](TXORS.md) - Elementwise bitwise XOR of a tile and a scalar.
 - [TLRELU](TLRELU.md) - Leaky ReLU with a scalar slope.
-- [TADDSC](TADDSC.md) - Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`.
-- [TSUBSC](TSUBSC.md) - Elementwise fused op: `src0 - scalar + src1`.
 - [TPOWS](TPOWS.md) - Elementwise power of a tile by a scalar.
 
 ## Axis Reduce / Expand
@@ -142,11 +134,9 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TRESHAPE](TRESHAPE.md) - Reinterpret a tile as another tile type/shape while preserving the underlying bytes.
 - [TTRANS](TTRANS.md) - Transpose with an implementation-defined temporary tile.
 - [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
-- [TGET_SCALE_ADDR](TGET_SCALE_ADDR.md) - Bind the on-chip address of output tile to a scaled factor of that of input tile.
 - [TCONCAT](TCONCAT.md) - Concatenate two tiles horizontally along the column dimension.
 - [TInterleave](TINTERLEAVE.md) - Interleave two source tiles into an alternating even/odd element stream, split into two destination halves.
 - [TDeInterleave](TDEINTERLEAVE.md) - De-interleave source tiles back into even-position and odd-position element streams (inverse of TInterleave).
-- [TPAIRREDUCESUM](TPairReduceSum.md) - Pair-reduction sum: add every 2 adjacent elements and write results to the lower half of dst.
 
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
