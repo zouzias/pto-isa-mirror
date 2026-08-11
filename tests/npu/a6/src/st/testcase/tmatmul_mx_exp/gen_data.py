@@ -245,7 +245,7 @@ def gen_case(case_id, out_dir):
         b_codes, b_scale, _ = _gen_e2m1_input(K, N, "col")
         a_deq = a_f32 * np.repeat(np.power(2.0, a_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32), 32, axis=1)
         b_deq = decode_e2m1(b_codes) * np.repeat(np.power(2.0, b_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32), 32, axis=0)
-        a_data = a_fp8.astype(np.uint8).tobytes()
+        a_data = a_fp8.view(np.uint8).tobytes()
         b_data = pack_fp4_nd(b_codes.ravel())
     elif case_id == 2:  # fp8 x fp4_e2m1, neutral A-scale
         a_fp8, a_f32 = _gen_fp8_input(M, K, -8, 8)
@@ -253,7 +253,7 @@ def gen_case(case_id, out_dir):
         b_codes, b_scale, _ = _gen_e2m1_input(K, N, "col")
         a_deq = a_f32  # scale = 1.0
         b_deq = decode_e2m1(b_codes) * np.repeat(np.power(2.0, b_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32), 32, axis=0)
-        a_data = a_fp8.astype(np.uint8).tobytes()
+        a_data = a_fp8.view(np.uint8).tobytes()
         b_data = pack_fp4_nd(b_codes.ravel())
     elif case_id == 3:  # fp8 x fp4_e2m1, neutral B-scale
         a_fp8, a_f32 = _gen_fp8_input(M, K, -8, 8)
@@ -262,7 +262,7 @@ def gen_case(case_id, out_dir):
         b_scale = np.full((K // 32, N), E8M0_BIAS, dtype=np.uint8)  # neutral
         a_deq = a_f32 * np.repeat(np.power(2.0, a_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32), 32, axis=1)
         b_deq = decode_e2m1(b_codes)  # scale = 1.0
-        a_data = a_fp8.astype(np.uint8).tobytes()
+        a_data = a_fp8.view(np.uint8).tobytes()
         b_data = pack_fp4_nd(b_codes.ravel())
     else:  # case_id == 4: fp4_e1m2 x fp4_e1m2, varied scales (passing baseline)
         a_codes, a_scale, _ = _gen_e1m2_input(M, K, "row")

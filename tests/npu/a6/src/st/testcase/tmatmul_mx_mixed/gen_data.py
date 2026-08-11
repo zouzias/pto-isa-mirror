@@ -53,7 +53,7 @@ def _left_data_and_dequant(rng, left_kind, m, k):
     src = rng.uniform(-8.0, 8.0, (m, k)).astype(np.float32)
     if left_kind == "e4m3":
         left = src.astype(ml_dtypes.float8_e4m3fn)
-        left_bytes = left.astype(np.uint8).tobytes()
+        left_bytes = left.view(np.uint8).tobytes()
         left_float = left.astype(np.float32)
     elif left_kind == "fp16":
         left = src.astype(np.float16)

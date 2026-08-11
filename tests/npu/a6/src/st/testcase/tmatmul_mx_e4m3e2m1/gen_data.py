@@ -231,7 +231,7 @@ def gen_case(valid_m, valid_k, valid_n, out_dir):
     b_scale_nn = convert_x2_scale_format(b_scale, 16, 2)
 
     with open(os.path.join(out_dir, "a_data.bin"), "wb") as f:
-        f.write(a_fp8.astype(np.uint8).tobytes())
+        f.write(a_fp8.view(np.uint8).tobytes())
     with open(os.path.join(out_dir, "a_scale.bin"), "wb") as f:
         f.write(a_scale_zz.tobytes())
     with open(os.path.join(out_dir, "b_data.bin"), "wb") as f:
