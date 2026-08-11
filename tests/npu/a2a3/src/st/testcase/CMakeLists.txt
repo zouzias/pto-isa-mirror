@@ -192,9 +192,6 @@ tcolexpand
 ttri
 tnot
 trelu
-taddreluconv
-tadddeqrelu
-tsubreluconv
 tands
 tors
 tshls
@@ -228,12 +225,7 @@ tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_dir_both_concurrent
 tpushpop_subtile
-tfusedmuladd
-tmuladddst
-tsubrelu
-tfusedmuladdrelu
 syncall
-tpairreducesum
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.

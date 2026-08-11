@@ -7,19 +7,17 @@
 This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 - Source of truth (C++ intrinsics): `include/pto/common/pto_instr.hpp`
-- [Common conventions (operands, events, modifiers)](conventions.md)
+- Common conventions (operands, events, modifiers): `docs/isa/conventions.md`
 
 ## Synchronization
 - [TSYNC](TSYNC.md) - Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).
-- [SYNCALL](SYNCALL.md) - Cross-core synchronization barrier (hardware FFTS or software GM polling).
 
 ## Manual / Resource Binding
 - [TASSIGN](TASSIGN.md) - Bind a Tile object to an implementation-defined on-chip address (manual placement).
 - [SETFMATRIX](SETFMATRIX.md) - Set FMATRIX register(s) for IMG2COL-like ops.
 - [SET_IMG2COL_RPT](SET_IMG2COL_RPT.md) - Set IMG2COL repeat metadata from an IMG2COL configuration tile.
 - [SET_IMG2COL_PADDING](SET_IMG2COL_PADDING.md) - Set IMG2COL padding metadata from an IMG2COL configuration tile.
-- [SET_QUANT_SCALAR](SET_QUANT_SCALAR.md) - Set the scalar quantization parameter for subsequent TPUSh operations.
-- [SET_QUANT_VECTOR](SET_QUANT_VECTOR.md) - Set the vector quantization parameter from a Scaling tile for subsequent TPUSH operations.
+- [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
 
 ## Elementwise (Tile-Tile)
 - [TADD](TADD.md) - Elementwise add of two tiles.
@@ -38,8 +36,6 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TLOG](TLOG.md) - Elementwise natural logarithm of a tile.
 - [TRECIP](TRECIP.md) - Elementwise reciprocal of a tile.
 - [TPRELU](TPRELU.md) - Elementwise PReLU (parametric ReLU) with a per-element slope tile.
-- [TADDC](TADDC.md) - Elementwise ternary add: `src0 + src1 + src2`.
-- [TSUBC](TSUBC.md) - Elementwise ternary op: `src0 - src1 + src2`.
 - [TCVT](TCVT.md) - Elementwise type conversion with a specified rounding mode.
 - [TSEL](TSEL.md) - Select between two tiles using a mask tile (per-element selection).
 - [TRSQRT](TRSQRT.md) - Elementwise reciprocal square root.
@@ -50,16 +46,11 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TNEG](TNEG.md) - Elementwise negation of a tile.
 - [TREM](TREM.md) - Elementwise remainder of two tiles.
 - [TFMOD](TFMOD.md) - Elementwise fmod of two tiles.
-- [TPOW](TPOW.md) - Elementwise power of two tiles.
-- [TMULADDDST](TMULADDDST.md) - Elementwise ternary op: `src0 * src1 + dst`.
-- [TSUBRELU](TSUBRELU.md) - Elementwise subtract then ReLU of two tiles.
-- [TFUSEDMULADD](TFUSEDMULADD.md) - Elementwise ternary op: `src0 * dst + src1`.
-- [TFUSEDMULADDRELU](TFUSEDMULADDRELU.md) - Elementwise ternary op: `ReLU(src0 * dst + src1)`.
 
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
 - [TCMPS](TCMPS.md) - Compare a tile against a scalar and write per-element comparison results.
-- [TSELS](TSELS.md) - Select between source tile and scalar using a mask tile (per-element selection for source tile).
+- [TSELS](TSELS.md) - Select one of two source tiles using a scalar `selectMode` (global select).
 - [TMINS](TMINS.md) - Elementwise minimum of a tile and a scalar.
 - [TADDS](TADDS.md) - Elementwise add a scalar to a tile.
 - [TSUBS](TSUBS.md) - Elementwise subtract a scalar from a tile.
@@ -75,13 +66,9 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TSHRS](TSHRS.md) - Elementwise shift-right a tile by a scalar.
 - [TXORS](TXORS.md) - Elementwise bitwise XOR of a tile and a scalar.
 - [TLRELU](TLRELU.md) - Leaky ReLU with a scalar slope.
-- [TADDSC](TADDSC.md) - Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`.
-- [TSUBSC](TSUBSC.md) - Elementwise fused op: `src0 - scalar + src1`.
-- [TPOWS](TPOWS.md) - Elementwise power of a tile by a scalar.
 
 ## Axis Reduce / Expand
 - [TROWSUM](TROWSUM.md) - Reduce each row by summing across columns.
-- [TROWPROD](TROWPROD.md) - Reduce each row by multiplying across columns.
 - [TCOLSUM](TCOLSUM.md) - Reduce each column by summing across rows.
 - [TCOLPROD](TCOLPROD.md) - Reduce each column by multiplying across rows.
 - [TCOLMAX](TCOLMAX.md) - Reduce each column by taking the maximum across rows.
@@ -89,8 +76,6 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TROWMIN](TROWMIN.md) - Reduce each row by taking the minimum across columns.
 - [TROWARGMAX](TROWARGMAX.md) - Get the column index of the maximum element for each row.
 - [TROWARGMIN](TROWARGMIN.md) - Get the column index of the minimum element for each row.
-- [TCOLARGMAX](TCOLARGMAX.md) - Get the row index /(value and row index) of the maximum element for each column.
-- [TCOLARGMIN](TCOLARGMIN.md) - Get the row index /(value and row index) of the minimum element for each column.
 - [TROWEXPAND](TROWEXPAND.md) - Broadcast the first element of each source row across the destination row.
 - [TROWEXPANDDIV](TROWEXPANDDIV.md) - Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`.
 - [TROWEXPANDMUL](TROWEXPANDMUL.md) - Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`.
@@ -141,39 +126,20 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TMOV_FP](TMOV_FP.md) - Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.
 - [TRESHAPE](TRESHAPE.md) - Reinterpret a tile as another tile type/shape while preserving the underlying bytes.
 - [TTRANS](TTRANS.md) - Transpose with an implementation-defined temporary tile.
-- [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
-- [TGET_SCALE_ADDR](TGET_SCALE_ADDR.md) - Bind the on-chip address of output tile to a scaled factor of that of input tile.
-- [TCONCAT](TCONCAT.md) - Concatenate two tiles horizontally along the column dimension.
-- [TInterleave](TINTERLEAVE.md) - Interleave two source tiles into an alternating even/odd element stream, split into two destination halves.
-- [TDeInterleave](TDEINTERLEAVE.md) - De-interleave source tiles back into even-position and odd-position element streams (inverse of TInterleave).
-- [TPAIRREDUCESUM](TPairReduceSum.md) - Pair-reduction sum: add every 2 adjacent elements and write results to the lower half of dst.
 
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
 - [TMRGSORT](TMRGSORT.md) - Merge sort for multiple sorted lists (implementation-defined element format and layout).
-- [TSORT32](TSORT32.md) - Sort each 32-element block of `src` together with the corresponding indices from `idx`, and write the sorted value-index pairs into `dst`.
+- [TSORT32](TSORT32.md) - Sort a fixed-size 32-element block and produce an index mapping.
 - [TGATHER](TGATHER.md) - Gather/select elements using either an index tile or a compile-time mask pattern.
 - [TCI](TCI.md) - Generate a contiguous integer sequence into a destination tile.
 - [TTRI](TTRI.md) - Generate a triangular (lower/upper) mask tile.
-- [TRANDOM](TRANDOM.md) - Generates random numbers in the destination tile using a counter-based cipher algorithm.
 - [TPARTADD](TPARTADD.md) - Partial elementwise add with implementation-defined handling of mismatched valid regions.
 - [TPARTMUL](TPARTMUL.md) - Partial elementwise multiply with implementation-defined handling of mismatched valid regions.
 - [TPARTMAX](TPARTMAX.md) - Partial elementwise max with implementation-defined handling of mismatched valid regions.
 - [TPARTMIN](TPARTMIN.md) - Partial elementwise min with implementation-defined handling of mismatched valid regions.
-- [TPARTARGMAX](TPARTARGMAX.md) - Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions.
-- [TPARTARGMIN](TPARTARGMIN.md) - Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions.
 - [TGATHERB](TGATHERB.md) - Gather elements using byte offsets.
 - [TSCATTER](TSCATTER.md) - Scatter rows of a source tile into a destination tile using per-element row indices.
 - [TQUANT](TQUANT.md) - Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
 - [TDEQUANT](TDEQUANT.md) - Affine dequantization of a quantized tile (S8/S16 -> FP32): dst = (src - offset) * scale.
 - [THISTOGRAM](THISTOGRAM.md) - Per-byte histogram (256 bins) over a selected byte of each source element, with optional cascaded upper-byte filtering; the radix-sort bucket-count primitive.
-
-## Cross-core Communication
-- [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.
-- [TPUSH](TPUSH.md) - Push a producer tile into a TPipe FIFO for Cube-Vector communication.
-- [TPOP](TPOP.md) - Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.
-- [TFREE](TFREE.md) - Release FIFO space for a TPipe entry; no-op for TileData TPOP flow.
-
-## Communication
-
-See [comm/README.md](comm/README.md) for the full per-instruction communication ISA reference (point-to-point, async, synchronization, and collective operations).
