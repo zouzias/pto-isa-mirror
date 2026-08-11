@@ -8,6 +8,8 @@
 
 带 fp/缩放 Tile 的提取（向量量化参数）。
 
+`TEXTRACT_FP(...)` 保留为无 mode fp 提取形态的源码兼容 C++ 调用入口。它转发到同一个无 mode 的 `TEXTRACT(..., fp, indexRow, indexCol, ...)` 重载，实现路径对应不显式传入 mode 模板参数的 `TEXTRACT_IMPL(dst, src, fp, indexRow, indexCol)`。
+
 ## 数学语义
 
 除非另有说明，语义在有效区域上定义，目标相关的行为标记为实现定义。
@@ -32,6 +34,10 @@ pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) o
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
