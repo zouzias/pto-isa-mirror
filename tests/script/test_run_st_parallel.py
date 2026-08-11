@@ -702,8 +702,8 @@ class BuildShParsingTest(unittest.TestCase):
         self.assertIn("PARALLEL_WORKERS=2", proc.stdout)
 
 
-class MainFlowRegressionTest(unittest.TestCase):
-    """P1: main() orchestration regression tests (mocked devices/runner)."""
+class _ParallelSmokeBase(unittest.TestCase):
+    """Common fixture for main()-orchestration regression tests."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -719,6 +719,15 @@ class MainFlowRegressionTest(unittest.TestCase):
     def tearDown(self):
         rsp.reset_active_procs()
         self._tmp.cleanup()
+
+    def _base_argv(self):
+        return _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+
+
+class MainFlowRegressionTest(_ParallelSmokeBase):
+    """P1: main() orchestration regression tests (mocked devices/runner)."""
 
     def test_no_device_best_effort_enters_serial_fallback(self):
         """main() with no devices and best-effort must run all tasks serially."""
@@ -765,37 +774,14 @@ class MainFlowRegressionTest(unittest.TestCase):
             run_dir = self.st_root / ".smoke-parallel" / str(os.getpid())
             self.assertTrue(run_dir.exists())
 
-    def _base_argv(self):
-        return _make_base_argv(
-            self.manifest, self.st_root, self.base_build, self.run_st_script
-        )
 
-
-class DeviceProbeTest(unittest.TestCase):
+class DeviceProbeTest(_ParallelSmokeBase):
     """P0: a device that fails the usability probe must not run parallel workers.
 
     A nominally-OK device can still crash testcases (Bad address/SIGSEGV), so
     after locking we probe each device; on failure we must release locks and
     fall back to serial (best-effort) or raise (strict).
     """
-
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
-        self.st_root = self.root / "st"
-        self.st_root.mkdir()
-        self.base_build = self.root / "base"
-        self.base_build.mkdir()
-        self.run_st_script = self.root / "run_st.py"
-        self.manifest = self.root / "tasks.tsv"
-        self.manifest.write_text("t1\tF.case1\t0\nt2\tF.case2\t0\n")
-
-    def tearDown(self):
-        rsp.reset_active_procs()
-        self._tmp.cleanup()
-
-    def _lock(self, dev):
-        return rsp.DeviceLock(dev, fd=None, path=str(self.root / ("l%d" % dev)))
 
     def test_probe_failure_best_effort_falls_back_to_serial(self):
         """A failed probe + best-effort runs every task serially (rc 0)."""
@@ -894,6 +880,9 @@ class DeviceProbeTest(unittest.TestCase):
         self.run_st_script.write_text("import sys\nsys.exit(1)\n")
         ok = rsp.probe_device(2, worker_build, self.run_st_script, auto_mode=False)
         self.assertFalse(ok)
+
+    def _lock(self, dev):
+        return rsp.DeviceLock(dev, fd=None, path=str(self.root / ("l%d" % dev)))
 
 
 class NpuSmiNoProcessTableTest(unittest.TestCase):
