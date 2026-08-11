@@ -211,20 +211,36 @@ run_simple_st() {
   echo "Start to run simple st"
   chmod +x ./tests/run_st.sh
   ARGS=" "
+  # Resolve the effective SoC mode once and use it for both the run_st.sh
+  # arguments and the parallel trigger. When neither --a3 nor --a5 is given,
+  # the default is A3 (matching the run_st.sh default), so parallel must also
+  # apply in that case. Previously the parallel condition keyed off the
+  # ENABLE_A3 flag only, which stays FALSE in default mode and silently fell
+  # back to serial even though A3 cases were being run.
+  EFFECTIVE_A3="TRUE"
+  EFFECTIVE_A5="FALSE"
   if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
-    ARGS+="--a3 "
+    EFFECTIVE_A3="TRUE"
+    EFFECTIVE_A5="FALSE"
   elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="--a5 "
+    EFFECTIVE_A3="FALSE"
+    EFFECTIVE_A5="TRUE"
   elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="--a3_a5 "
-  else
+    EFFECTIVE_A3="TRUE"
+    EFFECTIVE_A5="TRUE"
+  fi
+  if [ "$EFFECTIVE_A3" = "TRUE" ] && [ "$EFFECTIVE_A5" = "FALSE" ]; then
     ARGS+="--a3 "
+  elif [ "$EFFECTIVE_A3" = "FALSE" ] && [ "$EFFECTIVE_A5" = "TRUE" ]; then
+    ARGS+="--a5 "
+  else
+    ARGS+="--a3_a5 "
   fi
   ARGS+="--$RUN_TYPE --simple "
   if [ "$AUTO_MODE" == "TRUE" ]; then
     ARGS+="--auto_mode "
   fi
-  if [ "$PARALLEL_WORKERS" -gt 1 ] && [ "$ENABLE_A3" == "TRUE" ] && [ "$ENABLE_A5" == "FALSE" ]; then
+  if [ "$PARALLEL_WORKERS" -gt 1 ] && [ "$EFFECTIVE_A3" == "TRUE" ] && [ "$EFFECTIVE_A5" == "FALSE" ]; then
     ARGS+="--parallel=${PARALLEL_WORKERS} "
     if [ "$PARALLEL_BEST_EFFORT" == "TRUE" ]; then
       ARGS+="--parallel-best-effort "
