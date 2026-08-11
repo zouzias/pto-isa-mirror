@@ -50,8 +50,6 @@
 | 逐元素（Tile-Tile） | [TLOG](../../../../docs/isa/TLOG_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TLOG_zh.md` |
 | 逐元素（Tile-Tile） | [TRECIP](../../../../docs/isa/TRECIP_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TRECIP_zh.md` |
 | 逐元素（Tile-Tile） | [TPRELU](../../../../docs/isa/TPRELU_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TPRELU_zh.md` |
-| 逐元素（Tile-Tile） | [TADDC](../../../../docs/isa/TADDC_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TADDC_zh.md` |
-| 逐元素（Tile-Tile） | [TSUBC](../../../../docs/isa/TSUBC_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TSUBC_zh.md` |
 | 逐元素（Tile-Tile） | [TCVT](../../../../docs/isa/TCVT_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TCVT_zh.md` |
 | 逐元素（Tile-Tile） | [TSEL](../../../../docs/isa/TSEL_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TSEL_zh.md` |
 | 逐元素（Tile-Tile） | [TRSQRT](../../../../docs/isa/TRSQRT_zh.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TRSQRT_zh.md` |
@@ -80,8 +78,6 @@
 | Tile-标量 / Tile-立即数 | [TSHRS](../../../../docs/isa/TSHRS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSHRS_zh.md` |
 | Tile-标量 / Tile-立即数 | [TXORS](../../../../docs/isa/TXORS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TXORS_zh.md` |
 | Tile-标量 / Tile-立即数 | [TLRELU](../../../../docs/isa/TLRELU_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TLRELU_zh.md` |
-| Tile-标量 / Tile-立即数 | [TADDSC](../../../../docs/isa/TADDSC_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TADDSC_zh.md` |
-| Tile-标量 / Tile-立即数 | [TSUBSC](../../../../docs/isa/TSUBSC_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSUBSC_zh.md` |
 | Tile-标量 / Tile-立即数 | [TPOWS](../../../../docs/isa/TPOWS_zh.md) | `scalar` | `dst, src, scalar` | `docs/isa/TPOWS_zh.md` |
 | 轴归约 / 扩展 | [TROWSUM](../../../../docs/isa/TROWSUM_zh.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWSUM_zh.md` |
 | 轴归约 / 扩展 | [TROWPROD](../../../../docs/isa/TROWPROD_zh.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWPROD_zh.md` |
@@ -139,7 +135,6 @@
 | 数据搬运 / 布局 | [TRESHAPE](../../../../docs/isa/TRESHAPE_zh.md) | `reshape_move` | `dst, src` | `docs/isa/TRESHAPE_zh.md` |
 | 数据搬运 / 布局 | [TTRANS](../../../../docs/isa/TTRANS_zh.md) | `reshape_move` | `dst, src` | `docs/isa/TTRANS_zh.md` |
 | 数据搬运 / 布局 | [TSUBVIEW](../../../../docs/isa/TSUBVIEW_zh.md) | `reshape_move` | `dst, src, rowOffset, colOffset` | `docs/isa/TSUBVIEW_zh.md` |
-| 数据搬运 / 布局 | [TGET_SCALE_ADDR](../../../../docs/isa/TGET_SCALE_ADDR_zh.md) | `reshape_move` | `dst, src` | `docs/isa/TGET_SCALE_ADDR_zh.md` |
 | 数据搬运 / 布局 | [TCONCAT](../../../../docs/isa/TCONCAT_zh.md) | `reshape_move` | `dst, src0, src1` | `docs/isa/TCONCAT_zh.md` |
 | 复杂指令 | [TPRINT](../../../../docs/isa/TPRINT_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TPRINT_zh.md` |
 | 复杂指令 | [TMRGSORT](../../../../docs/isa/TMRGSORT_zh.md) | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT_zh.md` |
