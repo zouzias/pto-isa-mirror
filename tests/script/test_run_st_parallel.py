@@ -771,6 +771,131 @@ class MainFlowRegressionTest(unittest.TestCase):
         )
 
 
+class DeviceProbeTest(unittest.TestCase):
+    """P0: a device that fails the usability probe must not run parallel workers.
+
+    A nominally-OK device can still crash testcases (Bad address/SIGSEGV), so
+    after locking we probe each device; on failure we must release locks and
+    fall back to serial (best-effort) or raise (strict).
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.st_root = self.root / "st"
+        self.st_root.mkdir()
+        self.base_build = self.root / "base"
+        self.base_build.mkdir()
+        self.run_st_script = self.root / "run_st.py"
+        self.manifest = self.root / "tasks.tsv"
+        self.manifest.write_text("t1\tF.case1\t0\nt2\tF.case2\t0\n")
+
+    def tearDown(self):
+        rsp.reset_active_procs()
+        self._tmp.cleanup()
+
+    def _lock(self, dev):
+        return rsp.DeviceLock(dev, fd=None, path=str(self.root / ("l%d" % dev)))
+
+    def test_probe_failure_best_effort_falls_back_to_serial(self):
+        """A failed probe + best-effort runs every task serially (rc 0)."""
+        fake = self.run_st_script
+        fake.write_text(
+            "import sys, os\n"
+            "rec = os.environ['RECORD']\n"
+            "with open(rec, 'a') as f: f.write('x\\n')\n"
+            "sys.exit(0)\n"
+        )
+        record = self.root / "rec.txt"
+        argv = _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+        argv.append("--best-effort")
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(rsp, "select_devices", return_value=([0, 3], "npu-smi")), \
+             mock.patch.object(rsp, "query_npu_smi", return_value=[
+                 rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False)]), \
+             mock.patch.object(rsp, "lock_candidate", side_effect=[
+                 self._lock(0), self._lock(3)]), \
+             mock.patch.object(rsp, "prepare_worker_build",
+                               return_value=self.root / "wb"), \
+             mock.patch.object(rsp, "probe_device",
+                               side_effect=[True, False]), \
+             mock.patch.dict(os.environ, {"RECORD": str(record)}):
+            rc = rsp.main()
+        self.assertEqual(rc, 0)
+        # Serial fallback executed both tasks despite a failed device probe.
+        self.assertEqual(record.read_text().count("x"), 2)
+
+    def test_probe_failure_strict_raises(self):
+        """A failed probe without best-effort raises SmokeError (no parallel)."""
+        fake = self.run_st_script
+        fake.write_text("import sys\nsys.exit(0)\n")
+        argv = _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(rsp, "select_devices", return_value=([0, 3], "npu-smi")), \
+             mock.patch.object(rsp, "query_npu_smi", return_value=[
+                 rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False)]), \
+             mock.patch.object(rsp, "lock_candidate", side_effect=[
+                 self._lock(0), self._lock(3)]), \
+             mock.patch.object(rsp, "prepare_worker_build",
+                               return_value=self.root / "wb"), \
+             mock.patch.object(rsp, "probe_device", side_effect=[True, False]):
+            with self.assertRaises(rsp.SmokeError):
+                rsp.main()
+
+    def test_probe_all_pass_runs_parallel(self):
+        """All devices usable: worker_loop is invoked (parallel path)."""
+        fake = self.run_st_script
+        fake.write_text("import sys\nsys.exit(0)\n")
+        argv = _make_base_argv(
+            self.manifest, self.st_root, self.base_build, self.run_st_script
+        )
+        ran = []
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(rsp, "select_devices", return_value=([0, 3], "npu-smi")), \
+             mock.patch.object(rsp, "query_npu_smi", return_value=[
+                 rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False)]), \
+             mock.patch.object(rsp, "lock_candidate", side_effect=[
+                 self._lock(0), self._lock(3)]), \
+             mock.patch.object(rsp, "prepare_worker_build",
+                               return_value=self.root / "wb"), \
+             mock.patch.object(rsp, "probe_device", return_value=True), \
+             mock.patch.object(rsp, "worker_loop",
+                               side_effect=lambda *a, **k: ran.append("run")):
+            rc = rsp.main()
+        self.assertEqual(rc, 0)
+        # Two workers started on the parallel path.
+        self.assertEqual(ran.count("run"), 2)
+
+    def test_probe_device_ok_when_exit_zero(self):
+        """probe_device returns True when the probe binary exits 0."""
+        worker_build = self.root / "wb"
+        worker_build.mkdir(parents=True)
+        self.run_st_script.write_text(
+            "import sys, os\n"
+            "with open(os.environ['PROBE_REC'], 'a') as f:\n"
+            "    f.write(os.environ['ASCEND_RT_VISIBLE_DEVICES'] + '\\n')\n"
+            "sys.exit(0)\n"
+        )
+        record = self.root / "probe_rec.txt"
+        with mock.patch.dict(os.environ, {"PROBE_REC": str(record)}):
+            ok = rsp.probe_device(2, worker_build, self.run_st_script, auto_mode=False)
+        self.assertTrue(ok)
+        # The probe ran on the requested device via ASCEND_RT_VISIBLE_DEVICES.
+        self.assertEqual(record.read_text().splitlines(), ["2"])
+
+    def test_probe_device_unusable_on_nonzero_exit(self):
+        """probe_device returns False when the probe binary exits nonzero."""
+        worker_build = self.root / "wb"
+        worker_build.mkdir(parents=True)
+        self.run_st_script.write_text("import sys\nsys.exit(1)\n")
+        ok = rsp.probe_device(2, worker_build, self.run_st_script, auto_mode=False)
+        self.assertFalse(ok)
+
+
 class NpuSmiNoProcessTableTest(unittest.TestCase):
     """P1: npu-smi with healthy rows but no process table must fail, not guess."""
 

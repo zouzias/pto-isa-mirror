@@ -612,6 +612,64 @@ def remove_parallel_root(root):
 # ---------------------------------------------------------------------------
 
 
+# Probe testcase used to sanity-check that a device can actually run a
+# gtest binary. `tadd` is the smallest, most reliable A3 case; a device that
+# cannot run it (e.g. a nominally-"OK" but unhealthy NPU) is treated as
+# unusable so the orchestrator can fall back to serial instead of crashing.
+PROBE_TESTCASE = "tadd"
+PROBE_GTEST_FILTER = "TADDTest.case_float_64x64_64x64"
+PROBE_TIMEOUT_SECONDS = 120
+
+
+def probe_device(device, worker_build, run_st_script, auto_mode):
+    """Run the probe testcase on `device` and report whether it is usable.
+
+    Returns True only if the probe binary exits 0. A nonzero exit, a crash
+    (SIGSEGV/SIGABRT), or a timeout all mean the device is not trustworthy for
+    parallel test execution.
+    """
+    cmd = [
+        sys.executable,
+        os.path.abspath(str(run_st_script)),
+        "-r", "npu",
+        "-w",
+        "-v", "a3",
+        "-t", PROBE_TESTCASE,
+        "--build-dir", str(worker_build),
+        "-g", PROBE_GTEST_FILTER,
+    ]
+    if auto_mode:
+        cmd.append("-a")
+    env = dict(os.environ)
+    env["ASCEND_RT_VISIBLE_DEVICES"] = str(device)
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(worker_build),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=PROBE_TIMEOUT_SECONDS,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def _probe_all_devices(workers, run_st_script, auto_mode, print_lock):
+    """Probe every worker device and return the list of unusable device ids."""
+    bad_devices = []
+    for w in workers:
+        ok = probe_device(w.physical_device, w.build_dir,
+                          run_st_script, auto_mode)
+        with print_lock:
+            print("[PARALLEL] probe device=%d %s"
+                  % (w.physical_device, "ok" if ok else "UNUSABLE"))
+        if not ok:
+            bad_devices.append(w.physical_device)
+    return bad_devices
+
+
 def build_task_command(task, worker, run_st_script, auto_mode):
     """Build an argument list (never a shell string) for one task."""
     cmd = [
@@ -957,6 +1015,34 @@ def main():
             ))
             print("[PARALLEL] worker=%d device=%d build_dir=%s"
                   % (i, dev, worker_build))
+
+        # --- device usability probe ---
+        # A device that reports OK in npu-smi can still crash testcases (e.g.
+        # aclrtMallocHost -> Bad address/SIGSEGV on a nominally-healthy NPU).
+        # Run the smallest probe case on every locked device before committing
+        # to parallel execution; if any device is unusable, release the locks
+        # and fall back to serial (best-effort) or fail loudly.
+        bad_devices = _probe_all_devices(workers, args.run_st_script,
+                                         args.auto_mode, print_lock)
+        if bad_devices:
+            print("[PARALLEL][WARN] unusable device(s): %s; %s"
+                  % (",".join(str(d) for d in bad_devices),
+                     "falling back to serial" if args.best_effort
+                     else "refusing to run parallel"))
+            # Release locks first so other jobs are not blocked while we fall
+            # back. release_lock is idempotent and locks is cleared so the
+            # finally-cleanup does not double-release.
+            for lk in locks:
+                release_lock(lk)
+            locks.clear()
+            if args.best_effort:
+                return run_serial_fallback(tasks, args, print_lock, now)[0]
+            raise SmokeError(
+                "device usability probe failed for device(s): %s; "
+                "provide working devices via PTO_ST_PARALLEL_DEVICES, or use "
+                "--parallel-best-effort to fall back to serial"
+                % ",".join(str(d) for d in bad_devices)
+            )
 
         # --- dynamic scheduling ---
         task_queue = queue.Queue()
