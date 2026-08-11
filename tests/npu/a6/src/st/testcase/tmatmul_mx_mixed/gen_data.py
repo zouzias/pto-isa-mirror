@@ -64,7 +64,15 @@ def _left_data_and_dequant(rng, left_kind, m, k):
         left_bytes = left.tobytes()
         left_float = left.astype(np.float32)
 
-    a_scale = rng.integers(126, 130, size=(m, k // MX_SCALE_GROUP), dtype=np.uint8)
+    # fp8_e4m3 is a microscaled type (OCP MX) -> it takes a real e8m0 A-scale.
+    # half/bf16 are full-precision 16-bit types, NOT microscaled -> the MMAD_MX
+    # instruction does NOT apply an A-side e8m0 scale for them. Feed neutral
+    # (all-127, scale=1.0) A-scale bytes so the tile is harmless if the hardware
+    # reads it, and the golden must NOT apply an A-scale (see _gen_case).
+    if left_kind == "e4m3":
+        a_scale = rng.integers(126, 130, size=(m, k // MX_SCALE_GROUP), dtype=np.uint8)
+    else:  # fp16 / bf16: neutral A-scale
+        a_scale = np.full((m, k // MX_SCALE_GROUP), E8M0_BIAS, dtype=np.uint8)
     return left_bytes, left_float, a_scale
 
 
@@ -74,8 +82,13 @@ def _gen_case(case, e2m1_mod, hif4_mod, out_dir):
 
     left_bytes, left_float, a_scale = _left_data_and_dequant(rng, left_kind, m, k)
     a_scale_zz = e2m1_mod.convert_x1_scale_format(a_scale, 16, 2)
-    a_scale_factor = np.power(2.0, a_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32)
-    left_deq = left_float * np.repeat(a_scale_factor, MX_SCALE_GROUP, axis=1)
+    # fp8_e4m3 A is microscaled -> apply e8m0 A-scale. half/bf16 A are
+    # full-precision -> NOT microscaled, no A-scale applied (neutral bytes fed).
+    if left_kind == "e4m3":
+        a_scale_factor = np.power(2.0, a_scale.astype(np.int16) - E8M0_BIAS).astype(np.float32)
+        left_deq = left_float * np.repeat(a_scale_factor, MX_SCALE_GROUP, axis=1)
+    else:  # fp16 / bf16: no A-scale
+        left_deq = left_float
 
     if right_kind == "e2m1":
         b_src = hif4_mod.make_bf16_matrix(k, n, group_axis="col").astype(np.float32)
