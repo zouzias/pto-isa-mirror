@@ -85,6 +85,7 @@ set(ALL_TESTCASES
     tmatmul_mx_e1m2
     tmatmul_mx_e4m3e2m1
     tmatmul_mx_mixed
+    tmatmul_f16
 )
 
 if (AUTO_MODE)
