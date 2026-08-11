@@ -140,11 +140,113 @@ AICORE inline void RunMxExpImpl(__gm__ float* out, __gm__ AType* aData, __gm__ u
     TSTORE(outGm, cTile);
 }
 
+// E5 variant: same as RunMxExpImpl but SKIPS TSTORE entirely (fixpipe removed).
+// Purpose: verify whether cube_invld_input still fires on MMAD_MX when no
+// fixpipe (FIX_L0C_TO_DST) instruction follows. If it still fires, the cube
+// itself rejects the E4M3E2M1 instruction — independent of fixpipe.
+template <typename AType, typename BType, int validM, int validK, int validN>
+AICORE inline void RunMxExpNoStoreImpl(__gm__ float* out, __gm__ AType* aData, __gm__ uint8_t* aScale,
+                                      __gm__ BType* bData, __gm__ uint8_t* bScale)
+{
+    (void)out; // no store — output buffer unused
+    constexpr int M = CeilAlign<int>(validM, 16);
+    constexpr int N = CeilAlign<int>(validN, 16);
+    constexpr int K = CeilAlign<int>(validK, 16);
+    constexpr int scaleK = validK / MX_SCALE_GROUP;
+
+    using TileMatA = Tile<
+        TileType::Mat, AType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, TileConfig::fractalABSize>;
+    using TileMatB = Tile<
+        TileType::Mat, BType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, TileConfig::fractalABSize>;
+    using TileScaleA =
+        Tile<TileType::Mat, uint8_t, M, scaleK, BLayout::RowMajor, validM, scaleK, SLayout::RowMajor, 32>;
+    using TileScaleB =
+        Tile<TileType::Mat, uint8_t, scaleK, N, BLayout::ColMajor, scaleK, validN, SLayout::ColMajor, 32>;
+
+    using GlobalDataA = GlobalTensor<
+        AType, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<validM * validK, validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataB = GlobalTensor<
+        BType, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<validK * validN, validK * validN, validK * validN, validN, 1>>;
+    using MxShapeA = TileShape2D<uint8_t, M, scaleK, Layout::MX_A_ZZ>;
+    using MxStrideA = BaseShape2D<uint8_t, M, scaleK, Layout::MX_A_ZZ>;
+    using GlobalScaleA = GlobalTensor<uint8_t, MxShapeA, MxStrideA, Layout::MX_A_ZZ>;
+    using MxShapeB = TileShape2D<uint8_t, scaleK, N, Layout::MX_B_NN>;
+    using MxStrideB = BaseShape2D<uint8_t, scaleK, N, Layout::MX_B_NN>;
+    using GlobalScaleB = GlobalTensor<uint8_t, MxShapeB, MxStrideB, Layout::MX_B_NN>;
+
+    GlobalDataA aDataGm(aData);
+    GlobalDataB bDataGm(bData);
+    GlobalScaleA aScaleGm(aScale);
+    GlobalScaleB bScaleGm(bScale);
+
+    using LeftTile = TileLeft<AType, M, K, validM, validK>;
+    using RightTile = TileRight<BType, K, N, validK, validN>;
+    using LeftScaleTile = TileLeftScale<uint8_t, M, scaleK, validM, scaleK>;
+    using RightScaleTile = TileRightScale<uint8_t, scaleK, N, scaleK, validN>;
+    using AccTile = TileAcc<float, M, N, validM, validN>;
+
+    TileMatA aMatTile;
+    TileMatB bMatTile;
+    TileScaleA aScaleTile;
+    TileScaleB bScaleTile;
+    TASSIGN(aMatTile, 0x0u);
+    TASSIGN(bMatTile, 0x20000u);
+    TASSIGN(aScaleTile, 0x40000u);
+    TASSIGN(bScaleTile, 0x60000u);
+
+    LeftTile al0;
+    RightTile bl0;
+    LeftScaleTile aScaleL0;
+    RightScaleTile bScaleL0;
+    AccTile cTile;
+    TASSIGN(al0, 0x0u);
+    TASSIGN(bl0, 0x0u);
+    TASSIGN(aScaleL0, GetScaleAddr(al0.data()));
+    TASSIGN(bScaleL0, GetScaleAddr(bl0.data()));
+    TASSIGN(cTile, 0x0u);
+
+    TLOAD(aMatTile, aDataGm);
+    TLOAD(bMatTile, bDataGm);
+    TLOAD<TileScaleA, GlobalScaleA>(aScaleTile, aScaleGm);
+    TLOAD<TileScaleB, GlobalScaleB>(bScaleTile, bScaleGm);
+
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+
+    TEXTRACT(al0, aMatTile, 0, 0);
+    TEXTRACT(aScaleL0, aScaleTile, 0, 0);
+    TEXTRACT(bl0, bMatTile, 0, 0);
+    TEXTRACT(bScaleL0, bScaleTile, 0, 0);
+
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+
+    // MMAD_MX only — NO TSTORE, NO fixpipe. Inspect the sim log for
+    // cube_invld_input: if it fires here, the cube rejects E4M3E2M1 upstream
+    // of fixpipe.
+    TMATMUL_MX(cTile, al0, aScaleL0, bl0, bScaleL0);
+}
+
 template <typename AType, typename BType, int validM, int validK, int validN>
 __global__ AICORE void RunMxExp(__gm__ float* out, __gm__ AType* aData, __gm__ uint8_t* aScale,
                                 __gm__ BType* bData, __gm__ uint8_t* bScale)
 {
     RunMxExpImpl<AType, BType, validM, validK, validN>(out, aData, aScale, bData, bScale);
+}
+
+// E5: MMAD_MX only, no TSTORE (fixpipe removed). Same args signature so the
+// host Launch path is uniform; the output buffer is allocated but unused.
+template <typename AType, typename BType, int validM, int validK, int validN>
+__global__ AICORE void RunMxExpNoStore(__gm__ float* out, __gm__ AType* aData, __gm__ uint8_t* aScale,
+                                       __gm__ BType* bData, __gm__ uint8_t* bScale)
+{
+    RunMxExpNoStoreImpl<AType, BType, validM, validK, validN>(out, aData, aScale, bData, bScale);
 }
 
 namespace TmatmulMxExp {
@@ -170,6 +272,15 @@ DEFINE_EXP_LAUNCH(2, float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128)
 DEFINE_EXP_LAUNCH(3, float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128)
 // E4: fp4_e1m2x2 x fp4_e1m2x2, varied scales (passing baseline — harness sanity)
 DEFINE_EXP_LAUNCH(4, float4_e1m2x2_t, float4_e1m2x2_t, 128, 128, 128)
+
+// E5: fp8_e4m3 x fp4_e2m1, NO TSTORE (fixpipe removed) — check cube_invld_input
+template <>
+void Launch<5>(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8_t* bScale, void* stream)
+{
+    RunMxExpNoStore<float8_e4m3_t, float4_e2m1x2_t, 128, 128, 128><<<1, nullptr, stream>>>(
+        reinterpret_cast<float*>(out), reinterpret_cast<float8_e4m3_t*>(aData), reinterpret_cast<uint8_t*>(aScale),
+        reinterpret_cast<float4_e2m1x2_t*>(bData), reinterpret_cast<uint8_t*>(bScale));
+}
 
 #undef DEFINE_EXP_LAUNCH
 } // namespace TmatmulMxExp

@@ -139,3 +139,73 @@ TEST_F(TMATMUL_MX_EXP_TEST, case_e1_fp8xfp4_varied) { RunCase<1>(GetGoldenDir())
 TEST_F(TMATMUL_MX_EXP_TEST, case_e2_fp8xfp4_neutral_a) { RunCase<2>(GetGoldenDir()); }
 TEST_F(TMATMUL_MX_EXP_TEST, case_e3_fp8xfp4_neutral_b) { RunCase<3>(GetGoldenDir()); }
 TEST_F(TMATMUL_MX_EXP_TEST, case_e4_fp4e1m2xfp4e1m2_baseline) { RunCase<4>(GetGoldenDir()); }
+
+// E5: fp8_e4m3 x fp4_e2m1, NO TSTORE (fixpipe fully removed). The kernel runs
+// only TLOAD -> TEXTRACT -> TMATMUL_MX. There is no output to compare; this
+// case exists to inspect the sim log: does cube_invld_input still fire on
+// MMAD_MX.E4M3E2M1 when no fixpipe instruction follows? If yes, the cube
+// itself rejects the instruction (upstream of fixpipe), refuting the claim
+// that fixpipe is the source of the NaN.
+TEST_F(TMATMUL_MX_EXP_TEST, case_e5_fp8xfp4_no_store_no_fixp)
+{
+    // Same geometry as E1 (fp8 A, fp4 B); output buffer allocated but unused.
+    constexpr auto geo = GetGeometry<1>();
+    constexpr size_t outBytes = 128 * 128 * sizeof(float);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *aDataHost, *aScaleHost, *bDataHost, *bScaleHost;
+    uint8_t *aDataDev, *aScaleDev, *bDataDev, *bScaleDev, *outDev;
+    aclrtMallocHost((void**)(&aDataHost), geo.aDataBytes);
+    aclrtMallocHost((void**)(&aScaleHost), geo.aScaleBytes);
+    aclrtMallocHost((void**)(&bDataHost), geo.bDataBytes);
+    aclrtMallocHost((void**)(&bScaleHost), geo.bScaleBytes);
+    aclrtMalloc((void**)&aDataDev, geo.aDataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&aScaleDev, geo.aScaleBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&bDataDev, geo.bDataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&bScaleDev, geo.bScaleBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&outDev, outBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    size_t rd = geo.aDataBytes;
+    ReadFile(GetGoldenDir() + "/a_data.bin", rd, aDataHost, geo.aDataBytes);
+    rd = geo.aScaleBytes;
+    ReadFile(GetGoldenDir() + "/a_scale.bin", rd, aScaleHost, geo.aScaleBytes);
+    rd = geo.bDataBytes;
+    ReadFile(GetGoldenDir() + "/b_data.bin", rd, bDataHost, geo.bDataBytes);
+    rd = geo.bScaleBytes;
+    ReadFile(GetGoldenDir() + "/b_scale.bin", rd, bScaleHost, geo.bScaleBytes);
+    aclrtMemcpy(aDataDev, geo.aDataBytes, aDataHost, geo.aDataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(aScaleDev, geo.aScaleBytes, aScaleHost, geo.aScaleBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(bDataDev, geo.bDataBytes, bDataHost, geo.bDataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(bScaleDev, geo.bScaleBytes, bScaleHost, geo.bScaleBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    // Reuse the E1 golden dir (same inputs). The Launch<5> kernel skips TSTORE.
+    std::string goldenDir = "../TMATMUL_MX_EXP_TEST.case_e1_fp8xfp4_varied";
+    TmatmulMxExp::Launch<5>(outDev, aDataDev, aScaleDev, bDataDev, bScaleDev, stream);
+
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    // We do NOT assert sync success — a cube_invld_input may surface here.
+    // The point is to run MMAD_MX without fixpipe and inspect the sim log.
+    if (syncRet != ACL_SUCCESS) {
+        std::cout << "[E5] aclrtSynchronizeStream ret=" << syncRet << " (" << aclGetRecentErrMsg() << ")" << std::endl;
+    } else {
+        std::cout << "[E5] kernel completed without TSTORE — inspect sim log for cube_invld_input" << std::endl;
+    }
+
+    aclrtFree(outDev);
+    aclrtFree(bScaleDev);
+    aclrtFree(bDataDev);
+    aclrtFree(aScaleDev);
+    aclrtFree(aDataDev);
+    aclrtFreeHost(bScaleHost);
+    aclrtFreeHost(bDataHost);
+    aclrtFreeHost(aScaleHost);
+    aclrtFreeHost(aDataHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+    SUCCEED() << "E5 ran MMAD_MX without fixpipe; check sim log for cube_invld_input";
+}

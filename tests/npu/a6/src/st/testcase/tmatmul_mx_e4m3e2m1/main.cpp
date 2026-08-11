@@ -129,13 +129,3 @@ TEST_F(TMATMUL_MX_E4M3E2M1_TEST, case_e4m3e2m1_128x128x128_nd)
 {
     RunE4m3E2m1MxMatmulCase<128, 128, 128>(GetGoldenDir());
 }
-
-// Experiment A: neutral A-scale (all e8m0 = 127, scale = 1.0). Same kernel/
-// dtype as the baseline case; only the A-scale bytes differ. If this case
-// STILL produces NaN at MMAD_MX output, the failure is the MX_A_ZZ A-scale
-// tile being incompatible with a non-fp4 A dtype (presence/encoding), NOT
-// the specific A-scale values. See gen_data.py --neutral_a_scale.
-TEST_F(TMATMUL_MX_E4M3E2M1_TEST, case_e4m3e2m1_128x128x128_neutral_a_scale)
-{
-    RunE4m3E2m1MxMatmulCase<128, 128, 128>(GetGoldenDir());
-}

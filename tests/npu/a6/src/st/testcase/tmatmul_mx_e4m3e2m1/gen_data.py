@@ -202,7 +202,7 @@ def make_bf16_matrix(valid_m, valid_n, group_axis="row"):
     return values_t.T.astype(bfloat16)
 
 
-def gen_case(valid_m, valid_k, valid_n, out_dir, neutral_a_scale=False):
+def gen_case(valid_m, valid_k, valid_n, out_dir):
     assert valid_k % 64 == 0
     assert valid_k % MX_SCALE_GROUP == 0
 
@@ -212,16 +212,7 @@ def gen_case(valid_m, valid_k, valid_n, out_dir, neutral_a_scale=False):
 
     a_fp32 = np.random.uniform(-8.0, 8.0, (valid_m, valid_k)).astype(np.float32)
     a_fp8 = a_fp32.astype(fp8_e4m3fn)
-    if neutral_a_scale:
-        # Experiment A: every A-scale byte = 127 (e8m0 neutral, scale = 2^0 = 1.0).
-        # Isolates whether the all-NaN MMAD_MX.E4M3E2M1 failure is caused by
-        # specific A-scale VALUES being misread, or by the MX_A_ZZ A-scale
-        # tile PRESENCE/ENCODING being incompatible with a non-fp4 A dtype.
-        # With scale=1.0 the golden reduces to fp8(A) @ dequant_e2m1(B); any
-        # NaN/Inf at MMAD_MX output then cannot come from scale values.
-        a_scale = np.full((valid_m, valid_k // MX_SCALE_GROUP), E8M0_BIAS, dtype=np.uint8)
-    else:
-        a_scale = np.random.randint(126, 130, (valid_m, valid_k // MX_SCALE_GROUP), dtype=np.uint8)
+    a_scale = np.random.randint(126, 130, (valid_m, valid_k // MX_SCALE_GROUP), dtype=np.uint8)
 
     b_src = make_bf16_matrix(valid_k, valid_n, group_axis="col").astype(np.float32)
     b_codes, b_scale = e2m1_mx_quantize(b_src, group_axis="col")
@@ -259,13 +250,7 @@ def gen_case(valid_m, valid_k, valid_n, out_dir, neutral_a_scale=False):
     )
 
 
-DEFAULT_CASES = [
-    ("TMATMUL_MX_E4M3E2M1_TEST.case_e4m3e2m1_128x128x128_nd", 128, 128, 128, False),
-    # Experiment A: neutral A-scale (all 127). If this case still produces
-    # NaN at MMAD_MX output, the failure is the MX_A_ZZ A-scale tile being
-    # incompatible with a non-fp4 A dtype (presence/encoding), NOT scale values.
-    ("TMATMUL_MX_E4M3E2M1_TEST.case_e4m3e2m1_128x128x128_neutral_a_scale", 128, 128, 128, True),
-]
+DEFAULT_CASES = [("TMATMUL_MX_E4M3E2M1_TEST.case_e4m3e2m1_128x128x128_nd", 128, 128, 128)]
 
 
 def main():
@@ -275,15 +260,13 @@ def main():
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if args.case < 0:
-        for name, m, k, n, neutral in DEFAULT_CASES:
-            gen_case(m, k, n, os.path.join(script_dir, name), neutral_a_scale=neutral)
-        # Backward-compat: also emit the baseline (non-neutral) golden at the
-        # script dir, as run_st.py's in-tree direct execution expects.
-        name0, m0, k0, n0, _ = DEFAULT_CASES[0]
-        gen_case(m0, k0, n0, script_dir)
+        for name, m, k, n in DEFAULT_CASES:
+            gen_case(m, k, n, os.path.join(script_dir, name))
+            if name == DEFAULT_CASES[0][0]:
+                gen_case(m, k, n, script_dir)
     else:
-        name, m, k, n, neutral = DEFAULT_CASES[args.case]
-        gen_case(m, k, n, os.path.join(script_dir, name), neutral_a_scale=neutral)
+        name, m, k, n = DEFAULT_CASES[args.case]
+        gen_case(m, k, n, os.path.join(script_dir, name))
 
 
 if __name__ == "__main__":
