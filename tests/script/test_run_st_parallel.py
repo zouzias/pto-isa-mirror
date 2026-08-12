@@ -203,24 +203,53 @@ class DeviceSelectionTest(unittest.TestCase):
         self.assertEqual(devices, [0, 3])
         self.assertEqual(source, "ASCEND_RT_VISIBLE_DEVICES")
 
-    def test_npu_smi_used_when_no_lists(self):
+    def test_npu_smi_without_logical_mapping_is_rejected(self):
+        """npu-smi physical ids must not become ASCEND_RT_VISIBLE_DEVICES values.
+
+        npu-smi reports physical ids; without an ASCEND_RT_VISIBLE_DEVICES
+        logical mapping they cannot be set back as device visibility, so
+        strict mode raises and best-effort falls back to serial.
+        """
         statuses = [rsp.NpuStatus(0, True, False), rsp.NpuStatus(3, True, False)]
+        with self.assertRaises(rsp.DeviceDiscoveryError):
+            rsp.select_devices(
+                2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
+            )
         devices, source = rsp.select_devices(
-            2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
+            2, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses),
+            best_effort=True,
         )
-        self.assertEqual(devices, [0, 3])
-        self.assertEqual(source, "npu-smi")
+        self.assertEqual(devices, [])
+        self.assertIsNone(source)
+
+    def test_inherited_logical_ids_used_over_npu_smi(self):
+        """ASCEND_RT_VISIBLE_DEVICES logical ids take priority over npu-smi."""
+        statuses = [rsp.NpuStatus(2, True, False), rsp.NpuStatus(3, True, False)]
+        devices, source = rsp.select_devices(
+            2, rsp.DeviceSources(explicit=None, inherited=[0, 1], smi_statuses=statuses)
+        )
+        self.assertEqual(devices, [0, 1])
+        self.assertEqual(source, "ASCEND_RT_VISIBLE_DEVICES")
 
     def test_busy_and_unhealthy_excluded(self):
+        """Without a logical mapping, npu-smi-only selection falls back (best-effort)."""
         statuses = [
             rsp.NpuStatus(0, True, True),   # busy
             rsp.NpuStatus(1, False, False),  # unhealthy
-            rsp.NpuStatus(3, True, False),   # ok
+            rsp.NpuStatus(3, True, False),   # ok physical
         ]
+        # best-effort -> serial fallback, never using physical ids as logical.
         devices, source = rsp.select_devices(
-            1, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
+            1, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses),
+            best_effort=True,
         )
-        self.assertEqual(devices, [3])
+        self.assertEqual(devices, [])
+        self.assertIsNone(source)
+        # strict -> raises rather than fabricate a logical mapping.
+        with self.assertRaises(rsp.DeviceDiscoveryError):
+            rsp.select_devices(
+                1, rsp.DeviceSources(explicit=None, inherited=[], smi_statuses=statuses)
+            )
 
     def test_insufficient_strict_raises(self):
         statuses = [rsp.NpuStatus(0, True, False)]
@@ -863,15 +892,18 @@ class DeviceProbeTest(_ParallelSmokeBase):
         self.run_st_script.write_text(
             "import sys, os\n"
             "with open(os.environ['PROBE_REC'], 'a') as f:\n"
-            "    f.write(os.environ['ASCEND_RT_VISIBLE_DEVICES'] + '\\n')\n"
+            "    f.write(os.environ.get('ASCEND_RT_VISIBLE_DEVICES', '<unset>') + '\\n')\n"
             "sys.exit(0)\n"
         )
         record = self.root / "probe_rec.txt"
-        with mock.patch.dict(os.environ, {"PROBE_REC": str(record)}):
+        # The probe inherits the pod's ASCEND_RT_VISIBLE_DEVICES (logical
+        # numbering) rather than overwriting it with a raw npu-smi physical id.
+        with mock.patch.dict(os.environ, {"PROBE_REC": str(record),
+                                          "ASCEND_RT_VISIBLE_DEVICES": "0,1"}):
             ok = rsp.probe_device(2, worker_build, self.run_st_script, auto_mode=False)
         self.assertTrue(ok)
-        # The probe ran on the requested device via ASCEND_RT_VISIBLE_DEVICES.
-        self.assertEqual(record.read_text().splitlines(), ["2"])
+        # The inherited logical device list is preserved (not replaced by 2).
+        self.assertEqual(record.read_text().splitlines(), ["0,1"])
 
     def test_probe_device_unusable_on_nonzero_exit(self):
         """probe_device returns False when the probe binary exits nonzero."""

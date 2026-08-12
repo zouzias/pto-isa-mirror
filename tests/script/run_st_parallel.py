@@ -483,10 +483,23 @@ def select_devices(requested, sources, assume_available=False, best_effort=False
             f"ASCEND_RT_VISIBLE_DEVICES has {len(ids)} ids, need {requested}"
         )
     # 3. npu-smi healthy + idle.
+    # npu-smi reports *physical* device ids. Those are not valid values for
+    # ASCEND_RT_VISIBLE_DEVICES, which carries the scheduler's *logical*
+    # numbering for this pod. When the pod did not expose ASCEND_RT_VISIBLE_DEVICES
+    # (inherited is empty), we cannot map physical -> logical ids, so using the
+    # physical id to set ASCEND_RT_VISIBLE_DEVICES would fail even on a healthy
+    # card and force a spurious serial fallback. Only trust /dev enumeration when
+    # the operator explicitly opted in (assume_available); otherwise fall back.
     if smi_statuses is not None:
         candidates = [s.device_id for s in smi_statuses if s.healthy and not s.busy]
         if len(candidates) >= requested:
-            return candidates, "npu-smi"
+            if best_effort:
+                return [], None
+            raise DeviceDiscoveryError(
+                "npu-smi reports healthy idle devices but no ASCEND_RT_VISIBLE_DEVICES "
+                "logical mapping is available; set PTO_ST_PARALLEL_DEVICES, provide "
+                "ASCEND_RT_VISIBLE_DEVICES, or use --parallel-assume-available"
+            )
 
     # 4. /dev enumeration only with explicit opt-in.
     if assume_available:
@@ -627,6 +640,15 @@ def probe_device(device, worker_build, run_st_script, auto_mode):
     Returns True only if the probe binary exits 0. A nonzero exit, a crash
     (SIGSEGV/SIGABRT), or a timeout all mean the device is not trustworthy for
     parallel test execution.
+
+    The probe inherits the pod's ASCEND_RT_VISIBLE_DEVICES (logical device
+    numbering) instead of overwriting it with a raw npu-smi physical id.
+    npu-smi reports physical ids (e.g. 2,3) that are not valid values for
+    ASCEND_RT_VISIBLE_DEVICES when the scheduler has remapped the pod's
+    devices; overwriting with a physical id fails on a healthy card and would
+    produce a spurious UNUSABLE verdict (and a serial fallback). Leaving the
+    environment untouched keeps the probe on the same device the serial
+    fallback would use, so a healthy pod is never misjudged.
     """
     cmd = [
         sys.executable,
@@ -640,13 +662,15 @@ def probe_device(device, worker_build, run_st_script, auto_mode):
     ]
     if auto_mode:
         cmd.append("-a")
-    env = dict(os.environ)
-    env["ASCEND_RT_VISIBLE_DEVICES"] = str(device)
+    # probe inherits the pod's ASCEND_RT_VISIBLE_DEVICES (logical device
+    # numbering) instead of overwriting it with a raw npu-smi physical id.
+    # Overwriting with a physical id fails on a healthy card whenever the
+    # scheduler remapped the pod's devices, yielding a spurious UNUSABLE
+    # verdict and a needless serial fallback.
     try:
         result = subprocess.run(
             cmd,
             cwd=str(worker_build),
-            env=env,
             capture_output=True,
             text=True,
             timeout=PROBE_TIMEOUT_SECONDS,
