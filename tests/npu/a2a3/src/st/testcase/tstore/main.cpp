@@ -20,6 +20,9 @@ template <
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 void LaunchTStore(T* out, T* src, void* stream);
 
+void LaunchTStoreColMajorToNdAlignedColumn(float* out, float* src, void* stream);
+void LaunchTStoreColMajorToNdTwoCoreAlignedColumns(float* out, float* src, void* stream);
+
 class TStoreTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -41,6 +44,10 @@ template <
 void test_tstore()
 {
     size_t dataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(DataType);
+    size_t inputDataSize = dataSize;
+    if constexpr (format == 4) {
+        inputDataSize = 2 * 8 * sizeof(DataType);
+    }
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -57,12 +64,20 @@ void test_tstore()
     aclrtMalloc((void**)&dstDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
+    size_t inputFileSize = inputDataSize;
+    ReadFile(GetGoldenDir() + "/input.bin", inputFileSize, srcHost, inputDataSize);
 
-    aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTStore<
-        format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-        gWholeShape3, gWholeShape4>(dstDevice, srcDevice, stream);
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
+    aclrtMemcpy(srcDevice, inputDataSize, srcHost, inputDataSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    if constexpr (format == 3) {
+        LaunchTStoreColMajorToNdAlignedColumn(dstDevice, srcDevice, stream);
+    } else if constexpr (format == 4) {
+        LaunchTStoreColMajorToNdTwoCoreAlignedColumns(dstDevice, srcDevice, stream);
+    } else {
+        LaunchTStore<
+            format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
+            gWholeShape3, gWholeShape4>(dstDevice, srcDevice, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dataSize, dstDevice, dataSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -81,8 +96,10 @@ void test_tstore()
 
     std::vector<DataType> golden(dataSize);
     std::vector<DataType> devFinal(dataSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", dataSize, golden.data(), dataSize);
-    ReadFile(GetGoldenDir() + "/output.bin", dataSize, devFinal.data(), dataSize);
+    size_t goldenFileSize = dataSize;
+    size_t outputFileSize = dataSize;
+    ReadFile(GetGoldenDir() + "/golden.bin", goldenFileSize, golden.data(), dataSize);
+    ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), dataSize);
 
     bool ret = ResultCmp<DataType>(golden, devFinal, 0.001f);
     EXPECT_TRUE(ret);
@@ -121,4 +138,14 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32) { test_tstore<1, int64_t, 1, 
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, ColMajor_float_8x1_to_ND_aligned_column)
+{
+    test_tstore<3, float, 1, 1, 1, 8, 1, 1, 1, 1, 8, 16>();
+}
+
+TEST_F(TStoreTest, ColMajor_float_8x1_to_ND_two_core_aligned_columns)
+{
+    test_tstore<4, float, 1, 1, 1, 8, 32, 1, 1, 1, 8, 32>();
 }
