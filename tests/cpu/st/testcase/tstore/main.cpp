@@ -40,7 +40,8 @@ template <
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 void test_tstore()
 {
-    size_t dataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(DataType);
+    size_t dataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(DataType) /
+                      (IsTwinType<DataType>() ? 2 : 1);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -123,4 +124,24 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32) { test_tstore<1, int64_t, 1, 
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, ND_float4_e2m1x2_1_1_1_2_128_1_1_1_2_128)
+{
+    test_tstore<0, float4_e2m1x2_t, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, DN_float4_e2m1x2_1_1_1_4_21_1_1_1_8_32)
+{
+    test_tstore<1, float4_e2m1x2_t, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>();
+}
+
+TEST_F(TStoreTest, ND_float4_e1m2x2_1_1_1_2_128_1_1_1_2_128)
+{
+    test_tstore<0, float4_e1m2x2_t, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, DN_float4_e1m2x2_1_1_1_4_21_1_1_1_8_32)
+{
+    test_tstore<1, float4_e1m2x2_t, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>();
 }
