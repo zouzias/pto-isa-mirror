@@ -554,6 +554,12 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp4e2m1_1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_fp4e2m1_1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp8e4_2
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_1
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_4
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_9
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_11
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_12
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn -g TInsertZNTest.case_zn_offset_13
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul -g TMATMULTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul_mx -g TMATMULMXTest.case1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
@@ -740,6 +746,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tscatter
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tquant
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_zn
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_acc2vec
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_zz
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tmatmul
