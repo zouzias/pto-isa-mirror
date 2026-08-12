@@ -30,10 +30,10 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_>
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
 void LaunchTPutAsync(T* out, T* src, void* stream);
 
-template <typename T, int kGRows_, int kGCols_>
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
 void test_tput_async()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
@@ -55,7 +55,7 @@ void test_tput_async()
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize));
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTPutAsync<T, kGRows_, kGCols_>(dstDevice, srcDevice, stream);
+    LaunchTPutAsync<T, kGRows_, kGCols_, Peer>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -81,7 +81,11 @@ void test_tput_async()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TPUT_ASYNC_Test, case_float_64x64) { test_tput_async<float, 64, 64>(); }
-TEST_F(TPUT_ASYNC_Test, case_int32_64x64) { test_tput_async<int32_t, 64, 64>(); }
-TEST_F(TPUT_ASYNC_Test, case_int16_64x64) { test_tput_async<int16_t, 64, 64>(); }
-TEST_F(TPUT_ASYNC_Test, case_half_16x256) { test_tput_async<aclFloat16, 16, 256>(); }
+TEST_F(TPUT_ASYNC_Test, case_float_64x64) { test_tput_async<float, 64, 64, false>(); }
+TEST_F(TPUT_ASYNC_Test, case_int32_64x64) { test_tput_async<int32_t, 64, 64, false>(); }
+TEST_F(TPUT_ASYNC_Test, case_int16_64x64) { test_tput_async<int16_t, 64, 64, false>(); }
+TEST_F(TPUT_ASYNC_Test, case_half_16x256) { test_tput_async<aclFloat16, 16, 256, false>(); }
+TEST_F(TPUT_ASYNC_Test, case_float_64x64_peer) { test_tput_async<float, 64, 64, true>(); }
+TEST_F(TPUT_ASYNC_Test, case_int32_64x64_peer) { test_tput_async<int32_t, 64, 64, true>(); }
+TEST_F(TPUT_ASYNC_Test, case_int16_64x64_peer) { test_tput_async<int16_t, 64, 64, true>(); }
+TEST_F(TPUT_ASYNC_Test, case_half_16x256_peer) { test_tput_async<aclFloat16, 16, 256, true>(); }
