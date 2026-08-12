@@ -13,52 +13,130 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 template <typename T, typename U>
-PTO_INTERNAL void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
+PTO_INTERNAL void DivDiffCompensationFloatImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
 {
     constexpr uint32_t infNanBound = 0xff800000u;
-    constexpr uint32_t signBitNum = 0x80000000u;
-    RegTensor<T> regNegZero;
-    RegTensor<T> tmpDst;
+    constexpr uint32_t signBit = 0x80000000u;
+    constexpr uint32_t exponentMask = 0x7f800000u;
+    constexpr int32_t exponentBias = 127;
+    constexpr int32_t precisionThreshold = -64;
+
+    RegTensor<T> negZero;
+    RegTensor<T> rawDst;
     RegTensor<T> r, z, y;
-    RegTensor<uint32_t> infNan;
-
-    MaskReg cmpMaskReg;
-    MaskReg infNanCmp;
-    MaskReg zeroCmp;
-    MaskReg preg;
-    preg = pset_b8(PAT_ALL);
-    vdup((vector_u32&)regNegZero, signBitNum, preg, MODE_ZEROING);
-    vdiv(z, srcReg0, srcReg1, mask, MODE_ZEROING);
-    vor(infNan, (vector_u32&)z, (vector_u32&)regNegZero, mask, MODE_ZEROING);
-    tmpDst = z;
-    vcmps_eq(zeroCmp, z, 0.0f, mask);
-    vcmps_ge(infNanCmp, infNan, infNanBound, mask);
-    por(infNanCmp, infNanCmp, zeroCmp, mask);
-
-    vmuls(y, srcReg1, -1.0f, mask, MODE_ZEROING);
-    r = srcReg0;
-    vmula(r, z, y, mask, MODE_ZEROING);
     RegTensor<T> rPre, rNext, zPre, zNext;
+    RegTensor<uint32_t> absResultBits;
+    RegTensor<uint32_t> exponentMaskReg;
+    RegTensor<uint32_t> src0ExponentBits;
+    RegTensor<int32_t> src0Exponent;
+    RegTensor<int32_t> exponentBiasReg;
+    RegTensor<int32_t> scaleExponent;
+    RegTensor<int32_t> thresholdReg;
+    RegTensor<int32_t> zeroReg;
+    RegTensor<int32_t> scaleBiasedExponent;
+    RegTensor<uint32_t> scaleBits;
+    RegTensor<T> scale;
+    RegTensor<T> scaleOne;
+    RegTensor<T> scaledSrc0;
+    RegTensor<T> scaledSrc1;
 
+    MaskReg zeroResultMask;
+    MaskReg specialResultMask;
+    MaskReg needScaleMask;
+    MaskReg compareMask;
+    MaskReg allMask = pset_b8(PAT_ALL);
+
+    // Keep the hardware result for Zero/Inf/NaN lanes and only compensate finite non-zero results.
+    vdup((vector_u32&)negZero, signBit, allMask, MODE_ZEROING);
+    vdiv(z, srcReg0, srcReg1, mask, MODE_ZEROING);
+    rawDst = z;
+    vor(absResultBits, (vector_u32&)z, (vector_u32&)negZero, mask, MODE_ZEROING);
+    vcmps_eq(zeroResultMask, z, 0.0f, mask);
+    vcmps_ge(specialResultMask, absResultBits, infNanBound, mask);
+    por(specialResultMask, specialResultMask, zeroResultMask, mask);
+
+    // Scale very small dividends before residual calculation. Scaling both operands preserves the quotient.
+    vdup(exponentMaskReg, exponentMask, mask, MODE_ZEROING);
+    vand(src0ExponentBits, (RegTensor<uint32_t>&)srcReg0, exponentMaskReg, mask, MODE_ZEROING);
+    vshrs(src0ExponentBits, src0ExponentBits, (int16_t)23, mask, MODE_ZEROING);
+    vdup(exponentBiasReg, exponentBias, mask, MODE_ZEROING);
+    vsub(src0Exponent, (RegTensor<int32_t>&)src0ExponentBits, exponentBiasReg, mask, MODE_ZEROING);
+    vcmps_lt(needScaleMask, src0Exponent, precisionThreshold, mask);
+
+    vdup(thresholdReg, precisionThreshold, mask, MODE_ZEROING);
+    vdup(zeroReg, 0, mask, MODE_ZEROING);
+    vsub(scaleExponent, thresholdReg, src0Exponent, mask, MODE_ZEROING);
+    vmax(scaleExponent, scaleExponent, zeroReg, mask, MODE_ZEROING);
+    vadds(scaleBiasedExponent, scaleExponent, exponentBias, needScaleMask, MODE_ZEROING);
+    vshls(scaleBits, (RegTensor<uint32_t>&)scaleBiasedExponent, (int16_t)23, needScaleMask, MODE_ZEROING);
+    vdup(scaleOne, 1.0f, mask, MODE_ZEROING);
+    vsel(scale, (RegTensor<T>&)scaleBits, scaleOne, needScaleMask);
+    vmul(scaledSrc0, srcReg0, scale, mask, MODE_ZEROING);
+    vmul(scaledSrc1, srcReg1, scale, mask, MODE_ZEROING);
+
+    // Difference compensation: choose the quotient with the smallest residual from q and q +/- 1 ulp.
+    vmuls(y, scaledSrc1, -1.0f, mask, MODE_ZEROING);
+    r = scaledSrc0;
+    vmula(r, z, y, mask, MODE_ZEROING);
     vadds((vector_s32&)zPre, (vector_s32&)z, -1, mask, MODE_ZEROING);
     vadds((vector_s32&)zNext, (vector_s32&)z, 1, mask, MODE_ZEROING);
 
-    rPre = srcReg0;
-    rNext = srcReg0;
-
+    rPre = scaledSrc0;
+    rNext = scaledSrc0;
     vmula(rPre, zPre, y, mask, MODE_ZEROING);
     vmula(rNext, zNext, y, mask, MODE_ZEROING);
 
     vabs(r, r, mask, MODE_ZEROING);
     vabs(rPre, rPre, mask, MODE_ZEROING);
     vabs(rNext, rNext, mask, MODE_ZEROING);
-    vcmp_lt(cmpMaskReg, r, rPre, mask);
+    vcmp_lt(compareMask, r, rPre, mask);
+    vsel(r, r, rPre, compareMask);
+    vsel(z, z, zPre, compareMask);
+    vcmp_lt(compareMask, rNext, r, mask);
+    vsel(z, zNext, z, compareMask);
+
+    vsel(dstReg, rawDst, z, specialResultMask);
+}
+
+template <typename T, typename U>
+PTO_INTERNAL void DivPrecisionImpl(
+    U& dstReg, U& srcReg0, U& srcReg1, MaskReg& activeMask, MaskReg& correctMask)
+{
+    RegTensor<T> rawDst;
+    RegTensor<T> r, z, y;
+    RegTensor<T> rPre, rNext, zPre, zNext;
+
+    MaskReg cmpMaskReg;
+
+    // VDIV runs on every active lane so Zero/Inf keep the hardware division result.
+    vdiv(z, srcReg0, srcReg1, activeMask, MODE_ZEROING);
+    rawDst = z;
+
+    // Apply +/-1 ulp correction only to lanes selected by the caller. NaN is canonicalized later.
+    vmuls(y, srcReg1, -1.0f, correctMask, MODE_ZEROING);
+    r = srcReg0;
+    vmula(r, z, y, correctMask, MODE_ZEROING);
+
+    vadds((vector_s32&)zPre, (vector_s32&)z, -1, correctMask, MODE_ZEROING);
+    vadds((vector_s32&)zNext, (vector_s32&)z, 1, correctMask, MODE_ZEROING);
+
+    rPre = srcReg0;
+    rNext = srcReg0;
+    vmula(rPre, zPre, y, correctMask, MODE_ZEROING);
+    vmula(rNext, zNext, y, correctMask, MODE_ZEROING);
+
+    vabs(r, r, correctMask, MODE_ZEROING);
+    vabs(rPre, rPre, correctMask, MODE_ZEROING);
+    vabs(rNext, rNext, correctMask, MODE_ZEROING);
+    vcmp_lt(cmpMaskReg, r, rPre, correctMask);
     vsel(r, r, rPre, cmpMaskReg);
     vsel(z, z, zPre, cmpMaskReg);
 
-    vcmp_lt(cmpMaskReg, rNext, r, mask);
+    vcmp_lt(cmpMaskReg, rNext, r, correctMask);
     vsel(z, zNext, z, cmpMaskReg);
-    vsel(dstReg, tmpDst, z, infNanCmp);
+
+    // Correctable lanes use the compensated quotient; other active lanes keep raw VDIV.
+    vsel(dstReg, z, rawDst, correctMask);
 }
 
 template <typename T, typename U>
@@ -80,13 +158,9 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
     FloatUnion min_denormal;
     min_denormal.i = 0x1; // Minimum denormal value detection (smallest positive float32 = 2^-149)
 
-    // Scaling factors for denormal normalization:
-    // normalizeScaleEnlarge = 2^23: shifts denormals into normal range
-    // normalizeScaleReduce = 2^-23: inverse operation for denormal result
+    // Scaling factor for denormal normalization: 2^23 shifts denormals into normal range.
     FloatUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x4B000000; // 2^23
-    FloatUnion normalizeScaleReduce;
-    normalizeScaleReduce.i = 0x34000000; // 2^-23
 
     RegTensor<float> maxSubnormal;
     RegTensor<uint32_t> tmp0;
@@ -106,9 +180,7 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
     RegTensor<float> src1AbsNorm;
 
     MaskReg mask0;
-    MaskReg maskSrc0Normal;
     MaskReg maskSrc0Subnormal;
-    MaskReg maskSrc1Normal;
     MaskReg maskSrc1Subnormal;
     MaskReg maskTmp;
     MaskReg maskNan;      // divisor or dividend 0
@@ -123,8 +195,8 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
 
     RegTensor<float> z1;
     RegTensor<float> z2;
+    RegTensor<int32_t> normalizeAdjust;
     RegTensor<int32_t> scale;
-    RegTensor<uint32_t> dstExponent;
     RegTensor<uint32_t> dstSign;
 
     // ========== Implementation: SIMD-optimized IEEE 754 float32 division ==========
@@ -155,21 +227,26 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
     pnot(maskValid, maskValid, mask);
 
     // ========== Normalize Subnormal Numbers (Denormals) ==========
+    // Encode the post-division compensation in a vector so the subnormal predicates
+    // do not have to stay live across DivPrecisionImpl.
+    vdup(normalizeAdjust, 0, mask, MODE_ZEROING);
+
     // get positions of subnormal numbers in dividend
     vcmp_eq(maskSrc0Subnormal, src0Abs, maxSubnormal, mask);
-    // Invert to get normal positions
-    pnot(maskSrc0Normal, maskSrc0Subnormal, mask);
     // Scale subnormals up to normal range (multiply by 2^23)
     vmuls(src0Subnormal, src0, normalizeScaleEnlarge.f, maskSrc0Subnormal, MODE_ZEROING);
+    vdup(tmp1, -23, maskSrc0Subnormal, MODE_ZEROING);
+    vsel(normalizeAdjust, tmp1, normalizeAdjust, maskSrc0Subnormal);
 
     // Detect subnormal elements in divisor
     vcmp_lt(maskSrc1Subnormal, src1Abs, maxSubnormal, mask);
-    pnot(maskSrc1Normal, maskSrc1Subnormal, mask);
     vmuls(src1Subnormal, src1, normalizeScaleEnlarge.f, maskSrc1Subnormal, MODE_ZEROING);
+    vadds(tmp1, normalizeAdjust, 23, maskSrc1Subnormal, MODE_ZEROING);
+    vsel(normalizeAdjust, tmp1, normalizeAdjust, maskSrc1Subnormal);
 
-    // Merge normalized subnormals with normal values
-    vsel(src0All, src0, src0Subnormal, maskSrc0Normal);
-    vsel(src1All, src1, src1Subnormal, maskSrc1Normal);
+    // Merge normalized subnormals with normal values. Both subnormal predicates die here.
+    vsel(src0All, src0Subnormal, src0, maskSrc0Subnormal);
+    vsel(src1All, src1Subnormal, src1, maskSrc1Subnormal);
 
     // ========== Standardize Exponent Bits ==========
     // zero out the exponent bits 00000000
@@ -184,25 +261,20 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
     // Merge back with mantissa-only values
     vsel(src0Norm, src0Norm, src0All, maskValid);
     vsel(src1Norm, src1Norm, src1All, maskValid);
-    // Extract absolute values again after exponent manipulation
+
+    // mask controls the tile range; maskValid controls which lanes receive precision correction.
+    // NaN lanes are canonicalized at the end of this function, so their temporary value is discarded.
+    DivPrecisionImpl<float, U>(dst, src0Norm, src1Norm, mask, maskValid);
+
+    // Compare normalized operands after the precision division to avoid keeping maskNorm alive across the call.
     vabs(src0AbsNorm, src0Norm, maskValid);
     vabs(src1AbsNorm, src1Norm, maskValid);
     vcmp_le(maskNorm, src0AbsNorm, src1AbsNorm, maskValid);
 
-    DivPrecisionImpl<float, U>(dst, src0Norm, src1Norm, mask);
-
-    // subnormal dividend, normal divisor
-    pand(mask0, maskSrc0Subnormal, maskSrc1Normal, mask);
-    // normalization compensation
-    vmuls(z1, dst, normalizeScaleReduce.f, mask0, MODE_ZEROING);
-    vsel(dst, z1, dst, mask0);
-
-    // normal dividend, subnormal divisor
-    pand(mask0, maskSrc0Normal, maskSrc1Subnormal, mask);
-    // normalization compensation
-    vmuls(z1, dst, normalizeScaleEnlarge.f, mask0, MODE_ZEROING);
-    // merge the compensated result
-    vsel(dst, z1, dst, mask0);
+    // Apply 2^normalizeAdjust. The subnormal predicates are no longer needed here.
+    vadds(tmp1, normalizeAdjust, 127, mask, MODE_ZEROING);
+    vshls(tmp1, tmp1, (int16_t)23, mask);
+    vmul(dst, dst, (RegTensor<float>&)tmp1, mask, MODE_ZEROING);
 
     // preserve sign for error handling section below
     vdup(tmp0, signExtractor, mask, MODE_ZEROING);
@@ -215,12 +287,10 @@ PTO_INTERNAL void DivIEEE754FloatImpl(
     vdup(tmp0, F32_INF, mask, MODE_ZEROING);
     vand(src0Exponent, (RegTensor<uint32_t>&)src0All, tmp0, mask);
     vand(src1Exponent, (RegTensor<uint32_t>&)src1All, tmp0, mask);
-    vand(dstExponent, (RegTensor<uint32_t>&)dst, tmp0, mask);
 
     // exponent subtraction (effectively fp number division)
     vshrs(src0Exponent, src0Exponent, (int16_t)23, mask);
     vshrs(src1Exponent, src1Exponent, (int16_t)23, mask);
-    vshrs(dstExponent, dstExponent, (int16_t)23, mask);
     vsub(scale, (RegTensor<int32_t>&)src0Exponent, (RegTensor<int32_t>&)src1Exponent, mask);
     vadds(scale, scale, 127, mask);
     // ===========================================================
@@ -305,8 +375,6 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
 
     HalfUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x6400; // 2^10
-    HalfUnion normalizeScaleReduce;
-    normalizeScaleReduce.i = 0x1400; // 2^-10
 
     RegTensor<half> maxSubnormal;
     RegTensor<uint16_t> tmp0;
@@ -326,9 +394,7 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
     RegTensor<half> src1AbsNorm;
 
     MaskReg mask0;
-    MaskReg maskSrc0Normal;
     MaskReg maskSrc0Subnormal;
-    MaskReg maskSrc1Normal;
     MaskReg maskSrc1Subnormal;
     MaskReg maskTmp;
     MaskReg maskNan;      // divisor or dividend 0
@@ -343,8 +409,8 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
 
     RegTensor<half> z1;
     RegTensor<half> z2;
+    RegTensor<int16_t> normalizeAdjust;
     RegTensor<int16_t> scale;
-    RegTensor<uint16_t> dstExponent;
     RegTensor<uint16_t> dstSign;
 
     // subnormal threshold
@@ -371,22 +437,27 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
     por(maskValid, maskValid, maskSrc1Zero, mask);
     pnot(maskValid, maskValid, mask);
 
+    // Encode the post-division compensation in a vector so the subnormal predicates
+    // do not have to stay live across vdiv.
+    vdup(normalizeAdjust, 0, mask, MODE_ZEROING);
+
     // normalize subnormal elements of src0
     // get positions of subnormal numbers in dividend
     vcmp_lt(maskSrc0Subnormal, src0Abs, maxSubnormal, mask);
-    // negating for normal positions
-    pnot(maskSrc0Normal, maskSrc0Subnormal, mask);
     // normalizatoin
     vmuls(src0Subnormal, src0, normalizeScaleEnlarge.f, maskSrc0Subnormal, MODE_ZEROING);
+    vdup(tmp1, -10, maskSrc0Subnormal, MODE_ZEROING);
+    vsel(normalizeAdjust, tmp1, normalizeAdjust, maskSrc0Subnormal);
 
     // normalize subnormal elements of src1
     vcmp_lt(maskSrc1Subnormal, src1Abs, maxSubnormal, mask);
-    pnot(maskSrc1Normal, maskSrc1Subnormal, mask);
     vmuls(src1Subnormal, src1, normalizeScaleEnlarge.f, maskSrc1Subnormal, MODE_ZEROING);
+    vadds(tmp1, normalizeAdjust, 10, maskSrc1Subnormal, MODE_ZEROING);
+    vsel(normalizeAdjust, tmp1, normalizeAdjust, maskSrc1Subnormal);
 
-    // merge the normalized subnormal elements with normal elements
-    vsel(src0All, src0, src0Subnormal, maskSrc0Normal);
-    vsel(src1All, src1, src1Subnormal, maskSrc1Normal);
+    // Merge normalized subnormals with normal values. Both subnormal predicates die here.
+    vsel(src0All, src0Subnormal, src0, maskSrc0Subnormal);
+    vsel(src1All, src1Subnormal, src1, maskSrc1Subnormal);
 
     // standardized the exponent bits of src0 vand src1
     // zero out the exponent bits 00000000
@@ -399,24 +470,18 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
     vadd((RegTensor<uint16_t>&)src1Norm, (RegTensor<uint16_t>&)src1Norm, tmp0, maskValid);
     vsel(src0Norm, src0Norm, src0All, maskValid);
     vsel(src1Norm, src1Norm, src1All, maskValid);
+
+    vdiv(dst, src0Norm, src1Norm, mask, MODE_ZEROING);
+
+    // Compare normalized operands after vdiv to avoid keeping maskNorm live across the call.
     vabs(src0AbsNorm, src0Norm, maskValid);
     vabs(src1AbsNorm, src1Norm, maskValid);
     vcmp_le(maskNorm, src0AbsNorm, src1AbsNorm, maskValid);
 
-    vdiv(dst, src0Norm, src1Norm, mask, MODE_ZEROING);
-
-    // subnormal dividend, normal divisor
-    pand(mask0, maskSrc0Subnormal, maskSrc1Normal, mask);
-    // normalization compensation
-    vmuls(z1, dst, normalizeScaleReduce.f, mask0, MODE_ZEROING);
-    vsel(dst, z1, dst, mask0);
-
-    // normal dividend, subnormal divisor
-    pand(mask0, maskSrc0Normal, maskSrc1Subnormal, mask);
-    // normalization compensation
-    vmuls(z1, dst, normalizeScaleEnlarge.f, mask0);
-    // merge the compensated result
-    vsel(dst, z1, dst, mask0);
+    // Apply 2^normalizeAdjust. The subnormal predicates are no longer needed here.
+    vadds(tmp1, normalizeAdjust, 15, mask, MODE_ZEROING);
+    vshls(tmp1, tmp1, (int16_t)10, mask);
+    vmul(dst, dst, (RegTensor<half>&)tmp1, mask, MODE_ZEROING);
 
     // preserve sign for error handling section below
     vdup(tmp0, signExtractor, mask, MODE_ZEROING);
@@ -429,12 +494,10 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
     vdup(tmp0, F16_INF, mask, MODE_ZEROING);
     vand(src0Exponent, (RegTensor<uint16_t>&)src0All, tmp0, mask);
     vand(src1Exponent, (RegTensor<uint16_t>&)src1All, tmp0, mask);
-    vand(dstExponent, (RegTensor<uint16_t>&)dst, tmp0, mask);
 
     // exponent subtraction (effectively fp number division)
     vshrs(src0Exponent, src0Exponent, (int16_t)10, mask);
     vshrs(src1Exponent, src1Exponent, (int16_t)10, mask);
-    vshrs(dstExponent, dstExponent, (int16_t)10, mask);
     vsub(scale, (RegTensor<int16_t>&)src0Exponent, (RegTensor<int16_t>&)src1Exponent, mask);
     vadds(scale, scale, 15, mask);
     // ===========================================================
