@@ -52,8 +52,7 @@ kernels/manual/a5/dispatch_mega_combine/
 │   ├── combine.h                   # 远端结果写回
 │   ├── unpermute.h                 # TopK 加权归约
 │   └── utils/                      # PTO、同步和 HCCL 辅助代码
-├── overview.md                     # A5 适配概览
-└── gmm2_combine_cv_direct_design.md # CV 直通设计说明
+└── overview.md # A5 适配概览
 ```
 
 ## 算子说明
@@ -212,8 +211,7 @@ gmPermutedToken[int8] x weight2[int8]
   -> FP16 CV tile
 ```
 
-Tile 在两个配对 AIV 间轮转，每个被选中的 AIV 使用 `TILE_NO_SPLIT` 消费一个完整 tile。同步细节见
-[gmm2_combine_cv_direct_design.md](gmm2_combine_cv_direct_design.md)。
+Tile 在两个配对 AIV 间轮转，每个被选中的 AIV 使用 `TILE_NO_SPLIT` 消费一个完整 tile。
 
 ## Combine / Unpermute 阶段
 
