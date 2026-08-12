@@ -268,10 +268,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_scalar_nonpow2_int8
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_32x64_32x64_32x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpairreducesum -g TPAIRREDUCESUMTest.case_float_32x128_32x128_32x128
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubrelu -g TSUBRELUTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
@@ -416,10 +416,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladd
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsubrelu
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula
     if [ "$IS_AUTO_MODE" = "false" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter
@@ -575,9 +575,9 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_int16_16x16_256size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1 -g MGATHERGM2L1Test.case_elem_simt_float_clamp_16x16_64size
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu -g TFUSEDMULADDRELUTest.case_float_32x128_32x192_32x256_32x127
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ -g TLOADSCALETest.4_3_3_16_2_4_10_5_16_2_192_10_scale_ZZ2ZZ
@@ -756,9 +756,9 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t txors
       python3 tests/script/run_st.py $ARGS -w -v a5 -t mgather_gm2l1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladd
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tfusedmuladdrelu
-      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuladddst
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tload_mx_NZ
