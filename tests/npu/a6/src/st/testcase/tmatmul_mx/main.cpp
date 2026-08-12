@@ -86,6 +86,17 @@ CFG(24, 512, 128, 512, HIF4, HIF4)
 CFG(25, 128, 128, 256, HIF4, HIF4)
 CFG(26, 256, 128, 512, HIF4, HIF4)
 
+// Holistic additions: GEMV (M=1), partial/unaligned, shape variety
+CFG(27, 1,   256, 64,  E4M3, E2M1)  // GEMV e4m3 x e2m1
+CFG(28, 1,   256, 64,  F16,  E2M1)  // GEMV f16 x e2m1
+CFG(29, 1,   256, 64,  BF16, HIF4)  // GEMV bf16 x hif4
+CFG(30, 17,  64,  31,  E2M1, E2M1)  // partial M/N, K=64 (K must be %64==0)
+CFG(31, 64,  64,  64,  E1M2, E2M1)  // small aligned
+CFG(32, 64,  64,  64,  E2M1, E1M2)  // small aligned
+CFG(33, 128, 256, 128, E4M3, E2M1)  // deep K
+CFG(34, 128, 256, 128, F16,  HIF4)  // deep K
+CFG(35, 128, 128, 256, E4M3, HIF4)  // wide N
+
 #undef CFG
 
 static constexpr size_t elemBytes(AKind k)
@@ -106,16 +117,30 @@ static size_t bDataBytes(BKind k, int kk, int n)
     return elems / 2; // B is always fp4-family (e1m2/e2m1/hif4): 0.5 B/elem packed
 }
 
+// Scale tile byte sizes. The MX_A_ZZ (A) / MX_B_NN (B) / HIF4 fractal layouts
+// pad the M-axis (A) and N-axis (B) up to 16 rows, so the on-GM scale buffer
+// is larger than the raw M*K/32 element count for small M/N. These must match
+// what gen_data.py writes (convert_x1/x2_scale_format pads to block_size=16).
 static size_t aScaleBytes(AKind k, int m, int kk)
 {
     size_t total = static_cast<size_t>(m) * kk;
-    return (k == AKind::HIF4) ? (total / 64) * 4 : total / 32;
+    if (k == AKind::HIF4) {
+        size_t mPadded = static_cast<size_t>((m + 15) / 16) * 16;
+        return (mPadded * kk / 64) * 4;
+    }
+    size_t mPadded = static_cast<size_t>((m + 15) / 16) * 16;
+    return mPadded * kk / 32;
 }
 
 static size_t bScaleBytes(BKind k, int kk, int n)
 {
     size_t total = static_cast<size_t>(kk) * n;
-    return (k == BKind::HIF4) ? (total / 64) * 4 : total / 32;
+    if (k == BKind::HIF4) {
+        size_t nPadded = static_cast<size_t>((n + 15) / 16) * 16;
+        return (kk * nPadded / 64) * 4;
+    }
+    size_t nPadded = static_cast<size_t>((n + 15) / 16) * 16;
+    return kk * nPadded / 32;
 }
 
 std::vector<float> Bf16BytesToFloat(const uint8_t* raw, int n)
@@ -234,5 +259,16 @@ CASE(23, case_mmad_mx_hif4hif4_128x512x128)
 CASE(24, case_mmad_mx_hif4hif4_512x128x512)
 CASE(25, case_mmad_mx_hif4hif4_128x128x256)
 CASE(26, case_mmad_mx_hif4hif4_256x128x512)
+
+// Holistic additions
+CASE(27, case_mmad_mx_e4m3e2m1_1x256x64_gemv)
+CASE(28, case_mmad_mx_fp16e2m1_1x256x64_gemv)
+CASE(29, case_mmad_mx_bf16hi4_1x256x64_gemv)
+CASE(30, case_mmad_mx_e2m1e2m1_17x64x31)
+CASE(31, case_mmad_mx_e1m2e2m1_64x64x64)
+CASE(32, case_mmad_mx_e2m1e1m2_64x64x64)
+CASE(33, case_mmad_mx_e4m3e2m1_128x256x128)
+CASE(34, case_mmad_mx_fp16hi4_128x256x128)
+CASE(35, case_mmad_mx_e4m3hi4_128x128x256)
 
 #undef CASE

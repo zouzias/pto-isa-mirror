@@ -466,6 +466,26 @@ LAUNCH_HIF4AB(24, 512, 128, 512)
 LAUNCH_HIF4AB(25, 128, 128, 256)
 LAUNCH_HIF4AB(26, 256, 128, 512)
 
+// --- Holistic additions: GEMV (M=1), partial/unaligned, shape variety ---
+// GEMV: e4m3 x e2m1, M=1 (validates the gemvCtrl=false path)
+LAUNCH_E2M1(27, float8_e4m3_t, float4_e2m1x2_t, 1, 256, 64)
+// GEMV: f16 x e2m1, M=1
+LAUNCH_E2M1(28, half, float4_e2m1x2_t, 1, 256, 64)
+// GEMV: bf16 x hif4, M=1
+LAUNCH_HIF4B(29, bfloat16_t, 1, 256, 64)
+// Partial/unaligned: e2m1 x e2m1, 17x33x31 (just over 16, exercises padding)
+LAUNCH_E2M1(30, float4_e2m1x2_t, float4_e2m1x2_t, 17, 64, 31)
+// Partial: e1m2 x e2m1, 64x64x64 (smaller aligned)
+LAUNCH_E2M1(31, float4_e1m2x2_t, float4_e2m1x2_t, 64, 64, 64)
+// Partial: e2m1 x e1m2, 64x64x64
+LAUNCH_E2M1(32, float4_e2m1x2_t, float4_e1m2x2_t, 64, 64, 64)
+// Larger K: e4m3 x e2m1, 128x256x128 (deep contraction)
+LAUNCH_E2M1(33, float8_e4m3_t, float4_e2m1x2_t, 128, 256, 128)
+// Larger K: f16 x hif4, 128x256x128
+LAUNCH_HIF4B(34, half, 128, 256, 128)
+// Larger N: e4m3 x hif4, 128x128x256
+LAUNCH_HIF4B(35, float8_e4m3_t, 128, 128, 256)
+
 #undef LAUNCH_E2M1
 #undef LAUNCH_HIF4B
 #undef LAUNCH_HIF4AB

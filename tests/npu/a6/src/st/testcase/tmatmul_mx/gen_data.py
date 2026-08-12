@@ -428,6 +428,16 @@ CASES = [
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_hif4hif4_512x128x512", 24, "hif4", "hif4", 512, 128, 512),
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_hif4hif4_128x128x256", 25, "hif4", "hif4", 128, 128, 256),
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_hif4hif4_256x128x512", 26, "hif4", "hif4", 256, 128, 512),
+    # Holistic additions: GEMV (M=1), partial/unaligned, shape variety
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e4m3e2m1_1x256x64_gemv", 27, "e4m3", "e2m1", 1,   256, 64),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_fp16e2m1_1x256x64_gemv", 28, "f16",  "e2m1", 1,   256, 64),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_bf16hi4_1x256x64_gemv",  29, "bf16", "hif4", 1,   256, 64),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e2m1e2m1_17x64x31",       30, "e2m1", "e2m1", 17,  64,  31),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e1m2e2m1_64x64x64",       31, "e1m2", "e2m1", 64,  64,  64),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e2m1e1m2_64x64x64",       32, "e2m1", "e1m2", 64,  64,  64),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e4m3e2m1_128x256x128",    33, "e4m3", "e2m1", 128, 256, 128),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_fp16hi4_128x256x128",    34, "f16",  "hif4", 128, 256, 128),
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_e4m3hi4_128x128x256",    35, "e4m3", "hif4", 128, 128, 256),
 ]
 
 E8M0_NEUTRAL = lambda m, k: np.full((m, k // MX_SCALE_GROUP), E8M0_BIAS, dtype=np.uint8)
