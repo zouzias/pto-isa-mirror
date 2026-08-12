@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include "acl/acl.h"
 #include <gtest/gtest.h>
+#include <cstring>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -123,9 +124,7 @@ std::vector<float> Bf16BytesToFloat(const uint8_t* raw, int n)
     const auto* u16 = reinterpret_cast<const uint16_t*>(raw);
     for (int i = 0; i < n; i++) {
         uint32_t bits = static_cast<uint32_t>(u16[i]) << 16;
-        if (memcpy_s(&v[i], sizeof(float), &bits, sizeof(bits)) != EOK) {
-            return {};
-        }
+        std::memcpy(&v[i], &bits, sizeof(bits));
     }
     return v;
 }
