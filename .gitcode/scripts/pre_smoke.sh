@@ -21,6 +21,7 @@ sudo apt update && sudo apt install -y mpich libmpich-dev
 sudo apt install -y openmpi-bin openmpi-common libopenmpi-dev
 mpicc --version
 mpirun --version
+pip3 install en_dtypes
 rm -rf /opt/rh/devtoolset-7
 source /usr/local/Ascend/cann/set_env.sh
 echo "bash build.sh --run_simple"
