@@ -56,7 +56,7 @@ main() {
     sudo apt-get update && sudo apt-get install clang -y
     clang --version
     clang++ --version
-
+    pip3 install en_dtypes
     # Only run UT tests on the master branch
     if [[ "${TARGET_BRANCH}" != "master" ]]; then
         echo "Skip UT test on non-master branch"
