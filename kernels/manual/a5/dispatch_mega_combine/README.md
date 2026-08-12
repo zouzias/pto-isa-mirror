@@ -52,8 +52,7 @@ kernels/manual/a5/dispatch_mega_combine/
 │   ├── combine.h                   # Remote result writeback
 │   ├── unpermute.h                 # TopK weighted reduction
 │   └── utils/                      # PTO, synchronization, and HCCL helpers
-├── overview.md                     # A5 adaptation overview
-└── gmm2_combine_cv_direct_design.md # CV-direct design details
+└── overview.md # CV-dir A5 adaptation overview
 ```
 
 ## Operator Description
@@ -213,7 +212,6 @@ gmPermutedToken[int8] x weight2[int8]
 ```
 
 Tiles alternate between the two paired AIVs. Each selected AIV consumes one complete tile with `TILE_NO_SPLIT`.
-Detailed synchronization is documented in [gmm2_combine_cv_direct_design.md](gmm2_combine_cv_direct_design.md).
 
 ## Combine / Unpermute Stages
 
