@@ -14,8 +14,18 @@ import os
 import struct
 import ctypes
 import numpy as np
+import en_dtypes as en
 
 np.random.seed(19)
+
+
+def pack_fp4(data):
+    old_shape = list(data.shape)
+    old_shape[-1] //= 2
+    new_data = data.view(np.uint8).reshape([-1, 2])
+    new_data = np.bitwise_or(new_data[:, 0] * 16, new_data[:, 1])
+    return new_data.reshape(old_shape)
+
 
 def gen_golden_data(case_name, gInfo):
     data_type = gInfo.datatype
@@ -32,25 +42,30 @@ def gen_golden_data(case_name, gInfo):
 
     if gInfo.format == "ND" or gInfo.format == "NZ":
         input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
+                                                   gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
         output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type)
+                                     gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type)
         output_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape3, 0: gShape4] \
-                    = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape3, 0: gShape4]
+            = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape3, 0: gShape4]
     elif gInfo.format == "DN":
         input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
+                                                   gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
         output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type)
+                                     gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type)
         output_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape4, 0: gShape3] \
-                    = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape4, 0: gShape3]
+            = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape4, 0: gShape3]
+
+    if input_arr.dtype.name in ("float4_e2m1", "float4_e1m2"):
+        input_arr = pack_fp4(input_arr)
+        output_arr = pack_fp4(output_arr)
 
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
+
 class GlobalTensorInfo:
     def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
-                gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
+                 gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
         self.datatype = datatype
         self.format = format
         self.gShape0 = gShape0
@@ -63,6 +78,7 @@ class GlobalTensorInfo:
         self.gWholeShape2 = gWholeShape2
         self.gWholeShape3 = gWholeShape3
         self.gWholeShape4 = gWholeShape4
+
 
 if __name__ == "__main__":
     # 用例名称
@@ -80,6 +96,10 @@ if __name__ == "__main__":
         "TStoreTest.ND_uint64_t_1_2_1_23_121_3_2_2_35_125",
         "TStoreTest.DN_int64_1_1_1_4_21_1_1_1_8_32",
         "TStoreTest.DN_uint64_t_3_1_1_1_124_5_1_1_2_128",
+        "TStoreTest.ND_float4_e2m1x2_1_1_1_2_128_1_1_1_2_128",
+        "TStoreTest.DN_float4_e2m1x2_1_1_1_4_21_1_1_1_8_32",
+        "TStoreTest.ND_float4_e1m2x2_1_1_1_2_128_1_1_1_2_128",
+        "TStoreTest.DN_float4_e1m2x2_1_1_1_4_21_1_1_1_8_32",
     ]
 
     case_params_list = [
@@ -96,9 +116,15 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.uint64, "ND", 1, 2, 1, 23, 121, 3, 2, 2, 35, 125),
         GlobalTensorInfo(np.int64, "DN", 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
         GlobalTensorInfo(np.uint64, "DN", 3, 1, 1, 1, 124, 5, 1, 1, 2, 128),
+        GlobalTensorInfo(en.float4_e2m1, "ND", 1, 1,
+                         1, 2, 128, 1, 1, 1, 2, 128),
+        GlobalTensorInfo(en.float4_e2m1, "DN", 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
+        GlobalTensorInfo(en.float4_e1m2, "ND", 1, 1,
+                         1, 2, 128, 1, 1, 1, 2, 128),
+        GlobalTensorInfo(en.float4_e1m2, "DN", 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
     ]
 
-    for i, case_name  in enumerate(case_name_list):
+    for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()
