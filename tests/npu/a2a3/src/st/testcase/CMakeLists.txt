@@ -100,6 +100,7 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
 tmatmul
+tpushpop_mixed_tile_size
 trowsum
 trowprod
 trowmax
@@ -257,6 +258,7 @@ if (AUTO_MODE)
     tpushpop_dir_both
     tpushpop_dir_both_concurrent
     tpushpop_subtile
+    tpushpop_mixed_tile_size
   # the following case wait to be fix 
     mgather
     tfillpad
