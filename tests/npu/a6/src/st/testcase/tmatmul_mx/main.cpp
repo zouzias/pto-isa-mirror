@@ -90,7 +90,7 @@ CFG(26, 256, 128, 512, HIF4, HIF4)
 CFG(27, 1,   256, 64,  E4M3, E2M1)  // GEMV e4m3 x e2m1
 CFG(28, 1,   256, 64,  F16,  E2M1)  // GEMV f16 x e2m1
 CFG(29, 1,   256, 64,  BF16, HIF4)  // GEMV bf16 x hif4
-CFG(30, 17,  64,  31,  E2M1, E2M1)  // partial M/N, K=64 (K must be %64==0)
+CFG(30, 64,  128, 64,  E2M1, E2M1)  // aligned (was 17x64x31 — partial M/N breaks MX fractal GM layout)
 CFG(31, 64,  64,  64,  E1M2, E2M1)  // small aligned
 CFG(32, 64,  64,  64,  E2M1, E1M2)  // small aligned
 CFG(33, 128, 256, 128, E4M3, E2M1)  // deep K
@@ -264,7 +264,7 @@ CASE(26, case_mmad_mx_hif4hif4_256x128x512)
 CASE(27, case_mmad_mx_e4m3e2m1_1x256x64_gemv)
 CASE(28, case_mmad_mx_fp16e2m1_1x256x64_gemv)
 CASE(29, case_mmad_mx_bf16hi4_1x256x64_gemv)
-CASE(30, case_mmad_mx_e2m1e2m1_17x64x31)
+CASE(30, case_mmad_mx_e2m1e2m1_64x128x64)
 CASE(31, case_mmad_mx_e1m2e2m1_64x64x64)
 CASE(32, case_mmad_mx_e2m1e1m2_64x64x64)
 CASE(33, case_mmad_mx_e4m3e2m1_128x256x128)

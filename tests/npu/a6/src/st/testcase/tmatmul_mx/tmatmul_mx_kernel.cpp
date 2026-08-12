@@ -474,7 +474,7 @@ LAUNCH_E2M1(28, half, float4_e2m1x2_t, 1, 256, 64)
 // GEMV: bf16 x hif4, M=1
 LAUNCH_HIF4B(29, bfloat16_t, 1, 256, 64)
 // Partial/unaligned: e2m1 x e2m1, 17x33x31 (just over 16, exercises padding)
-LAUNCH_E2M1(30, float4_e2m1x2_t, float4_e2m1x2_t, 17, 64, 31)
+LAUNCH_E2M1(30, float4_e2m1x2_t, float4_e2m1x2_t, 64, 128, 64)  // was 17x64x31 (partial M/N breaks MX fractal GM layout)
 // Partial: e1m2 x e2m1, 64x64x64 (smaller aligned)
 LAUNCH_E2M1(31, float4_e1m2x2_t, float4_e2m1x2_t, 64, 64, 64)
 // Partial: e2m1 x e1m2, 64x64x64
