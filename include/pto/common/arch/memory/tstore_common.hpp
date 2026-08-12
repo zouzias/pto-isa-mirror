@@ -374,6 +374,7 @@ PTO_INTERNAL void TStoreUb2gmNd2nd(
     int64_t srcStride2 = gShape3 * TileData::Cols;
     int64_t srcStride1 = gShape2 * srcStride2;
     int64_t srcStride0 = gShape1 * srcStride1;
+    uint64_t dstBaseAddr = reinterpret_cast<uint64_t>(dstAddr);
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t dstAddr0 = i * gStride0;
         int64_t srcAddr0 = i * srcStride0;
@@ -389,6 +390,55 @@ PTO_INTERNAL void TStoreUb2gmNd2nd(
     }
 }
 
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreUb2gmNd2ndScalarAligned(
+    typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
+    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int validRow, int validCol)
+{
+    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
+    PTO_ASSERT(
+        validRow == gShape0 * gShape1 * gShape2 * gShape3,
+        "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
+
+    int64_t srcStride2 = gShape3 * TileData::Cols;
+    int64_t srcStride1 = gShape2 * srcStride2;
+    int64_t srcStride0 = gShape1 * srcStride1;
+
+#ifndef __PTO_AUTO__
+    PtoSetWaitFlag<PIPE_V, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+    PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+#endif
+    for (uint32_t i = 0; i < gShape0; i++) {
+        int64_t dstAddr0 = i * gStride0;
+        int64_t srcAddr0 = i * srcStride0;
+        for (uint32_t j = 0; j < gShape1; j++) {
+            int64_t dstAddr1 = j * gStride1;
+            int64_t srcAddr1 = j * srcStride1;
+            for (uint32_t k = 0; k < gShape2; k++) {
+                int64_t dstAddr2 = dstAddr0 + dstAddr1 + k * gStride2;
+                int64_t srcAddr2 = srcAddr0 + srcAddr1 + k * srcStride2;
+                for (uint32_t r = 0; r < gShape3; r++) {
+                    int64_t dstRowAddr = dstAddr2 + r * gStride3;
+                    int64_t srcRowAddr = srcAddr2 + r * TileData::Cols;
+                    PTO_ASSERT(
+                        ((dstBaseAddr + dstRowAddr * sizeof(typename TileData::DType)) % BLOCK_BYTE_SIZE) == 0,
+                        "TSTORE: scalar ND sub-block store requires each row destination to be 32-byte aligned.");
+                    for (uint32_t c = 0; c < gShape4; c++) {
+                        dstAddr[dstRowAddr + c * gStride4] = srcAddr[srcRowAddr + c];
+                    }
+                }
+            }
+        }
+    }
+#ifndef __PTO_AUTO__
+    PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE2>();
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+#endif
+}
+
 template <typename GlobalData, typename TileData, AtomicType currentAtomicType = AtomicType::AtomicNone>
 __tf__ PTO_INTERNAL void TStore(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src, int gShape0, int gShape1,
@@ -398,18 +448,39 @@ __tf__ PTO_INTERNAL void TStore(
     __ubuf__ typename TileData::DType* srcAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(src);
     typename GlobalData::DType* dstAddr = dst;
 
-    if constexpr (TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
-        TStoreUb2gmNd2nd<GlobalData, TileData>(
-            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
-            gStride4, validRow, validCol);
-    } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
+    if constexpr (
+        (GlobalData::layout == Layout::ND) && (TileData::SFractal == SLayout::NoneBox) &&
+        (TileData::isRowMajor || TileData::Rows == 1 || TileData::Cols == 1)) {
+        bool isSubBlockScalar = validCol * sizeof(typename TileData::DType) < BLOCK_BYTE_SIZE && gStride3 != gShape4;
+        if constexpr (currentAtomicType == AtomicType::AtomicNone) {
+            if (isSubBlockScalar) {
+                TStoreUb2gmNd2ndScalarAligned<GlobalData, TileData>(
+                    dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2,
+                    gStride3, gStride4, validRow, validCol);
+            } else {
+                TStoreUb2gmNd2nd<GlobalData, TileData>(
+                    dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2,
+                    gStride3, gStride4, validRow, validCol);
+            }
+        } else {
+            PTO_ASSERT(!isSubBlockScalar, "TSTORE: atomic ND sub-block scalar stores are unsupported.");
+            TStoreUb2gmNd2nd<GlobalData, TileData>(
+                dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
+                gStride4, validRow, validCol);
+        }
+    } else if constexpr (
+        (GlobalData::layout == Layout::DN) && (TileData::SFractal == SLayout::NoneBox) &&
+        (!TileData::isRowMajor || TileData::Rows == 1 || TileData::Cols == 1)) {
         TStoreUb2gmDn2dn<GlobalData, TileData>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
-    } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
+    } else if constexpr (
+        (GlobalData::layout == Layout::NZ) && (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor))) {
         TStoreUb2gmNz2nz<GlobalData, TileData>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
+    } else {
+        static_assert(sizeof(GlobalData) == 0, "TSTORE: Unsupported GlobalTensor and VecTile layout combination.");
     }
 }
 

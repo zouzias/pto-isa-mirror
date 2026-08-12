@@ -48,6 +48,33 @@ def gen_golden_data(case_name, gInfo):
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
+
+def gen_colmajor_to_nd_aligned_column(datatype):
+    input_arr = np.zeros(shape=(8, 16), dtype=datatype)
+    output_arr = np.zeros(shape=(8, 16), dtype=datatype)
+
+    values = np.arange(100, 108, dtype=datatype)
+    input_arr.reshape(-1)[:8] = values
+    output_arr[:, 8] = values
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
+
+def gen_colmajor_to_nd_two_core_aligned_columns(datatype):
+    input_arr = np.zeros(shape=(2, 8), dtype=datatype)
+    output_arr = np.zeros(shape=(8, 32), dtype=datatype)
+
+    col0 = np.arange(100, 108, dtype=datatype)
+    col1 = np.arange(200, 208, dtype=datatype)
+    input_arr[0, :] = col0
+    input_arr[1, :] = col1
+    output_arr[:, 0] = col0
+    output_arr[:, 16] = col1
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
 class GlobalTensorInfo:
     def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
                 gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
@@ -80,6 +107,8 @@ if __name__ == "__main__":
         "TStoreTest.ND_uint64_t_1_2_1_23_121_3_2_2_35_125",
         "TStoreTest.DN_int64_1_1_1_4_21_1_1_1_8_32",
         "TStoreTest.DN_uint64_t_3_1_1_1_124_5_1_1_2_128",
+        "TStoreTest.ColMajor_float_8x1_to_ND_aligned_column",
+        "TStoreTest.ColMajor_float_8x1_to_ND_two_core_aligned_columns",
     ]
 
     case_params_list = [
@@ -96,6 +125,8 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.uint64, "ND", 1, 2, 1, 23, 121, 3, 2, 2, 35, 125),
         GlobalTensorInfo(np.int64, "DN", 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
         GlobalTensorInfo(np.uint64, "DN", 3, 1, 1, 1, 124, 5, 1, 1, 2, 128),
+        GlobalTensorInfo(np.float32, "COL_MAJOR_TO_ND_ALIGNED_COLUMN", 1, 1, 1, 8, 1, 1, 1, 1, 8, 16),
+        GlobalTensorInfo(np.float32, "COL_MAJOR_TO_ND_TWO_CORE_ALIGNED_COLUMNS", 1, 1, 1, 8, 32, 1, 1, 1, 8, 32),
     ]
 
     for i, case_name  in enumerate(case_name_list):
@@ -103,5 +134,10 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_name, case_params_list[i])
+        if case_params_list[i].format == "COL_MAJOR_TO_ND_ALIGNED_COLUMN":
+            gen_colmajor_to_nd_aligned_column(case_params_list[i].datatype)
+        elif case_params_list[i].format == "COL_MAJOR_TO_ND_TWO_CORE_ALIGNED_COLUMNS":
+            gen_colmajor_to_nd_two_core_aligned_columns(case_params_list[i].datatype)
+        else:
+            gen_golden_data(case_name, case_params_list[i])
         os.chdir(original_dir)
