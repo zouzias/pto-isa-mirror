@@ -38,8 +38,6 @@
 - [TLOG](TLOG_zh.md) - Tile 的逐元素自然对数。
 - [TRECIP](TRECIP_zh.md) - Tile 的逐元素倒数。
 - [TPRELU](TPRELU_zh.md) - 带逐元素斜率 Tile 的逐元素参数化 ReLU (PReLU)。
-- [TADDC](TADDC_zh.md) - 三元逐元素加法：`src0 + src1 + src2`。
-- [TSUBC](TSUBC_zh.md) - 三元逐元素运算：`src0 - src1 + src2`。
 - [TCVT](TCVT_zh.md) - 带指定舍入模式的逐元素类型转换。
 - [TSEL](TSEL_zh.md) - 使用掩码 Tile 在两个 Tile 之间进行选择（逐元素选择）。
 - [TRSQRT](TRSQRT_zh.md) - 逐元素倒数平方根。
@@ -51,10 +49,6 @@
 - [TREM](TREM_zh.md) - 两个 Tile 的逐元素余数，余数符号与除数相同。
 - [TFMOD](TFMOD_zh.md) - 两个 Tile 的逐元素余数，余数符号与被除数相同。
 - [TPOW](TPOW_zh.md) - 两个 Tile 的逐元素幂运算。
-- [TMULADDDST](TMULADDDST.md) - 三元逐元素运算：`src0 * src1 + dst`。
-- [TSUBRELU](TSUBRELU.md) - src0和src1逐元素相减后ReLU。
-- [TFUSEDMULADD](TFUSEDMULADD.md) - 三元逐元素运算：`src0 * dst + src1`。
-- [TFUSEDMULADDRELU](TFUSEDMULADDRELU.md) - 三元逐元素运算：`ReLU(src0 * dst + src1)`。
 
 ## Tile-标量 / Tile-立即数
 - [TEXPANDS](TEXPANDS_zh.md) - 将标量广播到目标 Tile 中。
@@ -75,8 +69,6 @@
 - [TSHRS](TSHRS_zh.md) - Tile 按标量逐元素右移。
 - [TXORS](TXORS_zh.md) - Tile 与标量的逐元素按位异或。
 - [TLRELU](TLRELU_zh.md) - 带标量斜率的 Leaky ReLU。
-- [TADDSC](TADDSC_zh.md) - 与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。
-- [TSUBSC](TSUBSC_zh.md) - 融合逐元素运算：`src0 - scalar + src1`。
 - [TPOWS](TPOWS_zh.md) - Tile 逐元素与标量幂运算。
 
 ## 轴归约 / 扩展
@@ -142,11 +134,9 @@
 - [TRESHAPE](TRESHAPE_zh.md) - 将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。
 - [TTRANS](TTRANS_zh.md) - 使用实现定义的临时 Tile 进行转置。
 - [TSUBVIEW](TSUBVIEW_zh.md) - 表达一个tile是另一个tile的subview。
-- [TGET_SCALE_ADDR](TGET_SCALE_ADDR_zh.md) - 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。
 - [TCONCAT](TCONCAT_zh.md) - 将两个 Tile 沿列维度水平拼接。
 - [TInterleave](TINTERLEAVE_zh.md) - 将两个源 Tile 交织为交替的偶/奇元素流，拆分为两个目标半部分。
 - [TDeInterleave](TDEINTERLEAVE_zh.md) - 将源 Tile 反交织为偶数位置和奇数位置的元素流（TInterleave 的逆操作）。
-- [TPAIRREDUCESUM](TPairReduceSum_zh.md) - 对归约求和：将每两个相邻元素相加，结果写入目标 Tile 的下半部分。
 
 ## 复杂指令
 - [TPRINT](TPRINT_zh.md) - 调试/打印 Tile 中的元素（实现定义）。

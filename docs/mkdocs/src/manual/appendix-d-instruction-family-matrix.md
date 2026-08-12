@@ -50,8 +50,6 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Elementwise (Tile-Tile) | [TLOG](../../../../docs/isa/TLOG.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TLOG.md` |
 | Elementwise (Tile-Tile) | [TRECIP](../../../../docs/isa/TRECIP.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TRECIP.md` |
 | Elementwise (Tile-Tile) | [TPRELU](../../../../docs/isa/TPRELU.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TPRELU.md` |
-| Elementwise (Tile-Tile) | [TADDC](../../../../docs/isa/TADDC.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TADDC.md` |
-| Elementwise (Tile-Tile) | [TSUBC](../../../../docs/isa/TSUBC.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TSUBC.md` |
 | Elementwise (Tile-Tile) | [TCVT](../../../../docs/isa/TCVT.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TCVT.md` |
 | Elementwise (Tile-Tile) | [TSEL](../../../../docs/isa/TSEL.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TSEL.md` |
 | Elementwise (Tile-Tile) | [TRSQRT](../../../../docs/isa/TRSQRT.md) | `elementwise` | `dst, src0, src1` | `docs/isa/TRSQRT.md` |
@@ -80,8 +78,6 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Tile-Scalar / Tile-Immediate | [TSHRS](../../../../docs/isa/TSHRS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSHRS.md` |
 | Tile-Scalar / Tile-Immediate | [TXORS](../../../../docs/isa/TXORS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TXORS.md` |
 | Tile-Scalar / Tile-Immediate | [TLRELU](../../../../docs/isa/TLRELU.md) | `scalar` | `dst, src, scalar` | `docs/isa/TLRELU.md` |
-| Tile-Scalar / Tile-Immediate | [TADDSC](../../../../docs/isa/TADDSC.md) | `scalar` | `dst, src, scalar` | `docs/isa/TADDSC.md` |
-| Tile-Scalar / Tile-Immediate | [TSUBSC](../../../../docs/isa/TSUBSC.md) | `scalar` | `dst, src, scalar` | `docs/isa/TSUBSC.md` |
 | Tile-Scalar / Tile-Immediate | [TPOWS](../../../../docs/isa/TPOWS.md) | `scalar` | `dst, src, scalar` | `docs/isa/TPOWS.md` |
 | Axis Reduce / Expand | [TROWSUM](../../../../docs/isa/TROWSUM.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWSUM.md` |
 | Axis Reduce / Expand | [TROWPROD](../../../../docs/isa/TROWPROD.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWPROD.md` |
@@ -139,7 +135,6 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Data Movement / Layout | [TRESHAPE](../../../../docs/isa/TRESHAPE.md) | `reshape_move` | `dst, src` | `docs/isa/TRESHAPE.md` |
 | Data Movement / Layout | [TTRANS](../../../../docs/isa/TTRANS.md) | `reshape_move` | `dst, src` | `docs/isa/TTRANS.md` |
 | Data Movement / Layout | [TSUBVIEW](../../../../docs/isa/TSUBVIEW.md) | `reshape_move` | `dst, src, rowOffset, colOffset` | `docs/isa/TSUBVIEW.md` |
-| Data Movement / Layout | [TGET_SCALE_ADDR](../../../../docs/isa/TGET_SCALE_ADDR.md) | `reshape_move` | `dst, src` | `docs/isa/TGET_SCALE_ADDR.md` |
 | Data Movement / Layout | [TCONCAT](../../../../docs/isa/TCONCAT.md) | `reshape_move` | `dst, src0, src1` | `docs/isa/TCONCAT.md` |
 | Complex | [TPRINT](../../../../docs/isa/TPRINT.md) | `complex` | `dst, src0, src1` | `docs/isa/TPRINT.md` |
 | Complex | [TMRGSORT](../../../../docs/isa/TMRGSORT.md) | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT.md` |
