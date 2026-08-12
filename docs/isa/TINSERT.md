@@ -13,7 +13,7 @@ Insert a source sub-tile into a destination tile at `(indexRow, indexCol)`. Conc
 
 - Acc → Mat insertion (with optional relu, scalar-quant, or vector-quant)
 - Acc → Vec insertion (with optional `AccToVecMode`, relu, scalar-quant, or vector-quant) *(A5)*
-- Vec → Mat insertion (ND and NZ layouts) *(A5)*
+- Vec → Mat insertion (ND, NZ, and ZN layouts) *(A5)*
 - Vec → Vec insertion (ND and NZ layouts) *(A5)*
 - NZ split insertion (`SPLIT2`, `SPLIT4`) *(A5)*
 
@@ -178,6 +178,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - Supported element types: `half`, `bfloat16_t`, `float`, `int32_t`, `int8_t`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`.
     - ND path: source must be `isRowMajor`; uses `copy_ubuf_to_cbuf`. Data bytes per row must be aligned to `BLOCK_BYTE_SIZE` (32 bytes) for row-wise burst.
     - NZ path: source must be `(!isRowMajor, SFractal: RowMajor)`; uses `ComputeNZBlockParams` for fractal-block `copy_ubuf_to_cbuf`. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validCol and indexCol are halved for byte addressing.
+    - ZN path: source and destination must both be `(isRowMajor, SFractal: ColMajor)`; uses `ComputeZNBlockParams` for fractal-block `copy_ubuf_to_cbuf`. ZN is the transpose-dual of NZ: rows are the fractal dimension and columns are the free dimension. `indexRow` and `validRow` must be aligned to the fractal row size (`BLOCK_BYTE_SIZE / sizeof(T)`); `indexCol` and `validCol` are unconstrained (free dimension), matching the NZ row dimension. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validRow and indexRow are halved for byte addressing.
 
 - **NZ Split** (`TInsertMode::SPLIT2` / `TInsertMode::SPLIT4`, A5 only):
     - Destination must be `TileType::Mat`; source must be `TileType::Vec`.
