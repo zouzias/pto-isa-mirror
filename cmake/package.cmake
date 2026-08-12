@@ -85,6 +85,22 @@ function(pack_built_in)
       REGEX "include/pto/README_zh\\.md$" EXCLUDE
   )
 
+  # pkg_inc: 存放非对外暴露的（internal）头文件，仅内部模块使用。
+  # 与 include 并列安装到 <arch>-linux/pkg_inc 下，安装后顶层会生成
+  # pkg_inc -> <arch>-linux/pkg_inc 软链接（由公共基础块创建）。
+  set(pto_pkg_inc_source ${CMAKE_CURRENT_SOURCE_DIR}/pkg_inc)
+  install(DIRECTORY ${pto_pkg_inc_source}/
+      DESTINATION ${CMAKE_SYSTEM_PROCESSOR}-linux/pkg_inc
+      COMPONENT pto-isa
+      FILE_PERMISSIONS
+      OWNER_READ OWNER_WRITE
+      GROUP_READ GROUP_EXECUTE
+      REGEX "pkg_inc/README\\.md$" EXCLUDE
+      REGEX "pkg_inc/README_zh\\.md$" EXCLUDE
+      REGEX "pkg_inc/pto/README\\.md$" EXCLUDE
+      REGEX "pkg_inc/pto/README_zh\\.md$" EXCLUDE
+  )
+
   string(FIND "${ASCEND_COMPUTE_UNIT}" ";" SEMICOLON_INDEX)
   if (SEMICOLON_INDEX GREATER -1)
       # 截取分号前的字串
