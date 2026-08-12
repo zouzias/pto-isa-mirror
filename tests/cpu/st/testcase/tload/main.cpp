@@ -111,9 +111,10 @@ void tload_test()
     aclrtResetDevice(0);
     aclFinalize();
 
+    using VecType = std::conditional_t<IsTwinType<T>(), uint8_t, T>;
     int elements = actual_out_byteSize / sizeof(T);
-    std::vector<T> golden(elements);
-    std::vector<T> devFinal(elements);
+    std::vector<VecType> golden(elements);
+    std::vector<VecType> devFinal(elements);
     size_t oFileSize = actual_out_byteSize;
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", oFileSize, golden.data(), oFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", oFileSize, devFinal.data(), oFileSize));
@@ -158,3 +159,15 @@ TEST_F(TLOADTest, case_NZ_float_1_1_1_16_8_1_1_2_16_8) { tload_test<11, float, 1
 TEST_F(TLOADTest, case_NZ_int16_t_2_2_2_16_16_5_3_3_16_16) { tload_test<12, int16_t, 1>(); }
 
 TEST_F(TLOADTest, case_NZ_int8_t_1_2_1_16_32_2_4_2_16_32) { tload_test<13, uint8_t, 1>(); }
+
+TEST_F(TLOADTest, case_float4_e2m1x2_GT_128_128_VT_128_128_BLK1) { tload_test<14, float4_e2m1x2_t, 1>(); }
+
+TEST_F(TLOADTest, case_float4_e2m1x2_GT_2_2_2_256_64_VT_256_64_BLK8) { tload_test<15, float4_e2m1x2_t, 8>(); }
+
+TEST_F(TLOADTest, case_float4_e2m1x2_GT_128_127_VT_128_128_BLK1_PADMAX) { tload_test<16, float4_e2m1x2_t, 1>(); }
+
+TEST_F(TLOADTest, case_float4_e1m2x2_GT_128_128_VT_128_128_BLK1) { tload_test<17, float4_e1m2x2_t, 1>(); }
+
+TEST_F(TLOADTest, case_float4_e1m2x2_GT_2_2_2_256_64_VT_256_64_BLK8) { tload_test<18, float4_e1m2x2_t, 8>(); }
+
+TEST_F(TLOADTest, case_float4_e1m2x2_GT_128_127_VT_128_128_BLK1_PADMAX) { tload_test<19, float4_e1m2x2_t, 1>(); }
