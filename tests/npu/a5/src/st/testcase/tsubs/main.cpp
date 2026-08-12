@@ -11,9 +11,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <acl/acl.h>
+#include <type_traits>
 
 using namespace std;
 using namespace PtoTestCommon;
+
+template <uint32_t caseId, typename T>
+void launchTSUBSTestCase(void* out, void* src, T scalar, aclrtStream stream);
 
 template <uint32_t caseId>
 void launchTSUBSTestCase(void* out, void* src, float scalar, aclrtStream stream);
@@ -50,7 +54,8 @@ bool TSubSTestFramework()
     T* srcHost;
     T* dstDevice;
     T* srcDevice;
-    float scalar;
+    using ScalarT = std::conditional_t<std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>, T, float>;
+    ScalarT scalar;
 
     aclrtMallocHost((void**)(&dstHost), dstByteSize);
     aclrtMallocHost((void**)(&srcHost), srcByteSize);
@@ -62,11 +67,15 @@ bool TSubSTestFramework()
     std::string scalar_file = GetGoldenDir() + "/divider.bin";
     std::ifstream file(scalar_file, std::ios::binary);
 
-    file.read(reinterpret_cast<char*>(&scalar), 4);
+    file.read(reinterpret_cast<char*>(&scalar), sizeof(ScalarT));
     file.close();
 
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSUBSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        launchTSUBSTestCase<caseId, T>(dstDevice, srcDevice, scalar, stream);
+    } else {
+        launchTSUBSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    }
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -87,6 +96,9 @@ bool TSubSTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        return ResultCmpExact(golden, devFinal.data());
+    }
     return ResultCmp<T>(golden, devFinal, 0.001f);
 }
 
@@ -155,3 +167,7 @@ TEST_F(TSUBSTest, case11)
     bool ret = TSubSTestFramework<11, uint8_t, 1, 64, 1, 1, 32, 32>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TSUBSTest, case_int64_4x16) { EXPECT_TRUE((TSubSTestFramework<12, int64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TSUBSTest, case_uint64_4x16) { EXPECT_TRUE((TSubSTestFramework<13, uint64_t, 4, 16, 4, 4, 16, 16>())); }

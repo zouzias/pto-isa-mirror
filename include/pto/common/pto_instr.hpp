@@ -59,70 +59,29 @@ PTO_INST void SYNCALL()
 #endif
 }
 
+// Soft SYNCALL: GM shared-counter barrier. CoreType selects AIV-only / AIC-only / MIX.
+// Hard Mode with a workspace argument is accepted but ignores gmWorkspace (same as SYNCALL()).
 template <
-    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData, typename TileData,
-    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Vec, int> =
-        0>
-PTO_INST void SYNCALL(GlobalData& gmWorkspace, TileData& ubWorkspace, int32_t usedCores = 0)
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
+    std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INST void SYNCALL(GlobalData& gmWorkspace, int32_t usedCores = 0)
 {
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
     if constexpr (Mode == SyncAllMode::Hard) {
         (void)gmWorkspace;
-        (void)ubWorkspace;
         (void)usedCores;
         SYNCALL_IMPL<CoreType>();
+    } else if constexpr (CoreType == SyncCoreType::AIVOnly) {
+#ifndef __PTO_AUTO__
+        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), usedCores);
+#endif
+    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
+#ifndef __PTO_AUTO__
+        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), usedCores);
+#endif
     } else {
 #ifndef __PTO_AUTO__
-        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), usedCores);
-#endif
-    }
-#else
-    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
-#endif
-}
-
-template <
-    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AICOnly, typename GlobalData, typename TileData,
-    std::enable_if_t<is_global_data_v<GlobalData> && is_tile_data_v<TileData> && TileData::Loc == TileType::Mat, int> =
-        0>
-PTO_INST void SYNCALL(GlobalData& gmWorkspace, TileData& l1Workspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    PTO_STATIC_ASSERT(CoreType == SyncCoreType::AICOnly, "GM+L1 overload is for AIC-only mode.");
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)l1Workspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else {
-#ifndef __PTO_AUTO__
-        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), l1Workspace.data(), usedCores);
-#endif
-    }
-#else
-    PTO_STATIC_ASSERT(Mode != Mode, "SYNCALL is not supported on this backend.");
-#endif
-}
-
-template <
-    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::Mix, typename GlobalData, typename UbTileData,
-    typename L1TileData,
-    std::enable_if_t<
-        is_global_data_v<GlobalData> && is_tile_data_v<UbTileData> && UbTileData::Loc == TileType::Vec &&
-            is_tile_data_v<L1TileData> && L1TileData::Loc == TileType::Mat,
-        int> = 0>
-PTO_INST void SYNCALL(GlobalData& gmWorkspace, UbTileData& ubWorkspace, L1TileData& l1Workspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)ubWorkspace;
-        (void)l1Workspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else {
-#ifndef __PTO_AUTO__
-        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), ubWorkspace.data(), l1Workspace.data(), usedCores);
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), usedCores);
 #endif
     }
 #else
@@ -538,7 +497,7 @@ PTO_INST RecordEvent TSUBC(TileData& dst, TileData& src0, TileData& src1, TileDa
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6) || defined(__CPU_SIM)
 template <
     typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
     typename... WaitEvents>
@@ -1097,30 +1056,35 @@ PTO_INST RecordEvent TFILLPAD(TileData& dst, TileData& src, WaitEvents&... event
 }
 
 template <
-    typename DstTileData, typename SrcTileData,
+    TFillPadMode mode = TFillPadMode::Normal, typename DstTileData, typename SrcTileData,
     std::enable_if_t<(DstTileData::Loc == TileType::Vec) && (SrcTileData::Loc == TileType::Vec), int> = 0,
     typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
+    static_assert(
+        mode == TFillPadMode::Normal || mode == TFillPadMode::InPlace || mode == TFillPadMode::Expand,
+        "TFILLPAD: invalid mode.");
     TSYNC(events...);
-    TFILLPAD_IMPL<DstTileData, SrcTileData>(dst, src);
+    if constexpr (mode == TFillPadMode::Normal) {
+        TFILLPAD_IMPL<DstTileData, SrcTileData>(dst, src);
+    } else if constexpr (mode == TFillPadMode::InPlace) {
+        MAP_INSTR_IMPL(TFILLPAD_INPLACE, dst, src);
+    } else if constexpr (mode == TFillPadMode::Expand) {
+        MAP_INSTR_IMPL(TFILLPAD_EXPAND, dst, src);
+    }
     return {};
 }
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD_INPLACE(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TFILLPAD_INPLACE, dst, src);
-    return {};
+    return TFILLPAD<TFillPadMode::InPlace>(dst, src, events...);
 }
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TFILLPAD_EXPAND, dst, src);
-    return {};
+    return TFILLPAD<TFillPadMode::Expand>(dst, src, events...);
 }
 
 // TSORT32不自动实现wait, 需手动TSYNC(events...)
@@ -2477,6 +2441,19 @@ PTO_INST RecordEvent TQUANT(
 {
     TSYNC(events...);
     TQUANT_IMPL<grp_axis, mx_alg, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
+        dst, src, exp, max, scaling);
+    return {};
+}
+
+template <
+    int grp_axis, auto mx_alg, bool interleave, typename TileDataOut = void, typename TileDataSrc = void,
+    typename TileDataExp = void, typename TileDataMax = void, typename TileDataScaling = void, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling,
+    WaitEvents&... events)
+{
+    TSYNC(events...);
+    TQUANT_IMPL<grp_axis, mx_alg, interleave, TileDataOut, TileDataSrc, TileDataExp, TileDataMax, TileDataScaling>(
         dst, src, exp, max, scaling);
     return {};
 }

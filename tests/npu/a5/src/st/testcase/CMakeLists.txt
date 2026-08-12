@@ -240,6 +240,7 @@ set(ALL_TESTCASES
     textract_vec
     tmov_zz
     tmov_nd2nz
+    tmov_nd2zn
     textract_acc2vec
     syncall
     tpushpop_cv

@@ -15,19 +15,20 @@ on:
       task_name:
         required: true
         type: string
+      ge_st_rt2:
+        required: false
+        type: string
 
 jobs:
   JOB_ut:
-    name: ut
-    select: selected_by_default
-    needs: []
+    name: UT
     steps:
       -
         name: Checkout
         identifier: process_checkout
         uses: checkout
         with:
-          ref: ${{ atomgit.event.pull_request.merge_commit_sha || atomgit.sha }}
+          ref: ${{ atomgit.event.pull_request.merge_commit_sha }}
           token: ${{secrets.GIT_TOKEN}}
       -
         name: download
@@ -51,6 +52,7 @@ jobs:
           cd ${{ steps.process_checkout.outputs.path }}
           export ut_type=${{ inputs.ut_type }}
           export task_name=${{ inputs.task_name }}
+          export ge_st_rt2=${{ inputs.ge_st_rt2 }}
           bash ut.sh
       -
         name: upload

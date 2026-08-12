@@ -40,27 +40,30 @@ void test_tmaxs()
     size_t dstfileSize = dstRow * dstCol * sizeof(T);
     size_t scalarFileSize = sizeof(T);
 
+    std::vector<T> src0Host(srcfileSize / sizeof(T));
+    std::vector<T> src1Host(scalarFileSize / sizeof(T));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input1.bin", srcfileSize, src0Host.data(), srcfileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input_scalar.bin", scalarFileSize, src1Host.data(), scalarFileSize));
+
+    T* dstHost;
+    T* dstDevice;
+    T* src0Device;
+    T* src1Device;
+
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    T *dstHost, *src0Host, *src1Host;
-    T *dstDevice, *src0Device, *src1Device;
-
     aclrtMallocHost((void**)(&dstHost), dstfileSize);
-    aclrtMallocHost((void**)(&src0Host), srcfileSize);
-    aclrtMallocHost((void**)(&src1Host), scalarFileSize);
 
     aclrtMalloc((void**)&dstDevice, dstfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, srcfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, scalarFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input1.bin", srcfileSize, src0Host, srcfileSize);
-    ReadFile(GetGoldenDir() + "/input_scalar.bin", scalarFileSize, src1Host, scalarFileSize);
-
-    aclrtMemcpy(src0Device, srcfileSize, src0Host, srcfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, scalarFileSize, src1Host, scalarFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemset(dstDevice, dstfileSize, 0, dstfileSize);
+    aclrtMemcpy(src0Device, srcfileSize, src0Host.data(), srcfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, scalarFileSize, src1Host.data(), scalarFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTMaxs<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, kPadValue_>(
         dstDevice, src0Device, src1Device, stream);
 
@@ -74,18 +77,21 @@ void test_tmaxs()
     aclrtFree(src1Device);
 
     aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(dstfileSize);
-    std::vector<T> devFinal(dstfileSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", dstfileSize, golden.data(), dstfileSize);
-    ReadFile(GetGoldenDir() + "/output.bin", dstfileSize, devFinal.data(), dstfileSize);
+    std::vector<T> golden(dstfileSize / sizeof(T));
+    std::vector<T> devFinal(dstfileSize / sizeof(T));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", dstfileSize, golden.data(), dstfileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", dstfileSize, devFinal.data(), dstfileSize));
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.0001f);
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp<T>(golden, devFinal, 0.0001f);
+    }
 
     EXPECT_TRUE(ret);
 }
@@ -109,3 +115,5 @@ TEST_F(TMAXSTest, case_half_16x256_20x224_16x200)
     test_tmaxs<aclFloat16, 16, 256, 20, 224, 16, 200, PAD_VALUE_MAX>();
 }
 TEST_F(TMAXSTest, case_half_1x256_1x224_1x200) { test_tmaxs<aclFloat16, 1, 256, 1, 224, 1, 200, PAD_VALUE_MAX>(); }
+TEST_F(TMAXSTest, case_int64_4x16_4x16_4x16) { test_tmaxs<int64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(); }
+TEST_F(TMAXSTest, case_uint64_4x16_4x16_4x16) { test_tmaxs<uint64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(); }

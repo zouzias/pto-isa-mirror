@@ -69,11 +69,11 @@ AICORE inline void RunTStoreRowMajorQuant(
 }
 
 template <
-    typename Dst, typename SrcT, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
+    typename DstT, typename SrcT, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, bool is_v_quant, bool saturate_inf,
     bool apply_relu>
 AICORE inline void RunTStoreColMajorQuant(
-    __gm__ Dst __out__* out, __gm__ SrcT __in__* src, __gm__ uint64_t __in__* fbQuant)
+    __gm__ DstT __out__* out, __gm__ SrcT __in__* src, __gm__ uint64_t __in__* fbQuant)
 {
     constexpr int gStride[5] = {
         gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape2 * gWholeShape3 * gWholeShape4,
@@ -87,8 +87,8 @@ AICORE inline void RunTStoreColMajorQuant(
 
     using DynShapeDim5 = Shape<gShape0, gShape1, gShape2, gShape3, gShape4>;
     using DynStridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
-    using GlobalDataDst = GlobalTensor<Dst, DynShapeDim5, DynStridDim5>;
-    using GlobalDataSrc = GlobalTensor<SrcT, DynShapeDim5, DynStridDim5>;
+    using GlobalDataDst = GlobalTensor<DstT, DynShapeDim5, DynStridDim5, pto::Layout::DN>;
+    using GlobalDataSrc = GlobalTensor<SrcT, DynShapeDim5, DynStridDim5, pto::Layout::DN>;
     using TileData = Tile<TileType::Vec, SrcT, Rows, Cols, BLayout::ColMajor, -1, -1>;
 
     constexpr ReluPreMode reluPreMode = apply_relu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
@@ -229,7 +229,7 @@ template void LaunchTStoreQuant<0, int8_t, int32_t, 2, 2, 3, 23, 47, 3, 3, 4, 32
     int8_t* out, int32_t* src, uint64_t* fbQuant, void* stream);
 template void LaunchTStoreQuant<1, aclFloat16, float, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32, false, true, true>(
     aclFloat16* out, float* src, uint64_t* fbQuant, void* stream);
-template void LaunchTStoreQuant<1, aclFloat16, float, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, true, false, false>(
+template void LaunchTStoreQuant<1, aclFloat16, float, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128, false, false, false>(
     aclFloat16* out, float* src, uint64_t* fbQuant, void* stream);
 template void LaunchTStoreQuant<1, int8_t, int32_t, 2, 1, 2, 32, 32, 3, 4, 3, 64, 35, false, true, false>(
     int8_t* out, int32_t* src, uint64_t* fbQuant, void* stream);

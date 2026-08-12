@@ -20,11 +20,9 @@ constexpr int32_t kInt32PerCacheLine = 8;
 constexpr uint64_t kMixFlagUbAddr = 0x0;
 constexpr uint64_t kMixReadUbAddr = 0x1000;
 constexpr uint64_t kMixOutUbAddr = 0x2000;
-constexpr uint64_t kMixSoftUbAddr = 0x3000;
 constexpr uint64_t kMixFlagL1Addr = 0x0;
 constexpr uint64_t kMixReadL1Addr = 0x1000;
 constexpr uint64_t kMixOutL1Addr = 0x2000;
-constexpr uint64_t kMixSoftL1Addr = 0x3000;
 
 // aicBlocks is the physical cube count, decided at runtime (910B1=24, 910B4=20).
 // - Cube core: logical idx == cube block index.
@@ -49,7 +47,7 @@ PTO_INTERNAL void StoreMixInt32Line(__gm__ int32_t* dst, int32_t value, uint64_t
     pipe_barrier(PIPE_ALL);
     copy_ubuf_to_gm(static_cast<__gm__ void*>(dst), static_cast<__ubuf__ void*>(ub), 0, 1, 1, 0, 0);
     pipe_barrier(PIPE_ALL);
-    dcci(static_cast<__gm__ void*>(dst), SINGLE_CACHE_LINE);
+    dcci(static_cast<__gm__ void*>(dst), cache_line_t::SINGLE_CACHE_LINE);
     dsb(DSB_DDR);
 #elif defined(__DAV_CUBE__)
     (void)ubAddr;
@@ -59,7 +57,7 @@ PTO_INTERNAL void StoreMixInt32Line(__gm__ int32_t* dst, int32_t value, uint64_t
     pipe_barrier(PIPE_ALL);
     copy_cbuf_to_gm(static_cast<__gm__ void*>(dst), static_cast<__cbuf__ void*>(l1), 0, 1, 1, 0, 0);
     pipe_barrier(PIPE_ALL);
-    dcci(static_cast<__gm__ void*>(dst), SINGLE_CACHE_LINE);
+    dcci(static_cast<__gm__ void*>(dst), cache_line_t::SINGLE_CACHE_LINE);
     dsb(DSB_DDR);
 #else
     (void)dst;
@@ -73,7 +71,7 @@ PTO_INTERNAL void InvalidateMixInt32Lines(__gm__ int32_t* addr, int32_t lines)
 {
     for (int32_t i = 0; i < lines; ++i) {
         __asm__ __volatile__("");
-        dcci(static_cast<__gm__ void*>(addr + i * kInt32PerCacheLine), SINGLE_CACHE_LINE);
+        dcci(static_cast<__gm__ void*>(addr + i * kInt32PerCacheLine), cache_line_t::SINGLE_CACHE_LINE);
         __asm__ __volatile__("");
     }
     dsb(DSB_DDR);
@@ -101,7 +99,7 @@ CheckMixFlags(__gm__ int32_t* flags, int32_t totalParticipants, uint64_t ubAddr,
     int32_t allVisible = 1;
     for (int32_t i = 0; i < totalParticipants; ++i) {
         __gm__ int32_t* flag = flags + i * kInt32PerCacheLine;
-        dcci(static_cast<__gm__ void*>(flag), SINGLE_CACHE_LINE);
+        dcci(static_cast<__gm__ void*>(flag), cache_line_t::SINGLE_CACHE_LINE);
         dsb(DSB_DDR);
         if (flag[0] != (i + 1) * multiplier) {
             allVisible = 0;
@@ -130,13 +128,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
 
     if constexpr (UseSoft) {
         GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
-        Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
-        Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
-#ifndef __PTO_AUTO__
-        syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t*>(kMixSoftUbAddr);
-        syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t*>(kMixSoftL1Addr);
-#endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, totalParticipants);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }
@@ -145,13 +137,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
 
     if constexpr (UseSoft) {
         GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
-        Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
-        Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
-#ifndef __PTO_AUTO__
-        syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t*>(kMixSoftUbAddr);
-        syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t*>(kMixSoftL1Addr);
-#endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, totalParticipants);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }
@@ -160,13 +146,7 @@ PTO_INTERNAL void RunMixSyncAllBody(
 
     if constexpr (UseSoft) {
         GlobalTensor<int32_t, pto::Shape<>, pto::Stride<>> gmWs(syncWorkspace);
-        Tile<TileType::Vec, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncUbTile;
-        Tile<TileType::Mat, int32_t, 1, SYNCALL_SOFT_SLOT_INT32> syncL1Tile;
-#ifndef __PTO_AUTO__
-        syncUbTile.data() = reinterpret_cast<__ubuf__ int32_t*>(kMixSoftUbAddr);
-        syncL1Tile.data() = reinterpret_cast<__cbuf__ int32_t*>(kMixSoftL1Addr);
-#endif
-        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, syncUbTile, syncL1Tile, totalParticipants);
+        SYNCALL<SyncAllMode::Soft, SyncCoreType::Mix>(gmWs, totalParticipants);
     } else {
         SYNCALL<SyncCoreType::Mix>();
     }

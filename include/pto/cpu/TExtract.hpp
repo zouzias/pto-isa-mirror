@@ -80,7 +80,7 @@ __tf__ PTO_INTERNAL void TExtractToBConv(
     uint16_t mStep = dstValidColAlign >> SHIFT_BLOCK_LEN;
     uint16_t kStep = (dstValidRowAlign * sizeof(DataType)) >> SHIFT_BLOCK_BYTE;
     uint16_t srcStride = srcCol >> SHIFT_BLOCK_LEN;
-    uint16_t dstStride = dstValidColAlign >> SHIFT_BLOCK_LEN;
+    uint16_t dstStride = DstTileData::Cols >> SHIFT_BLOCK_LEN;
 
     copy_fractal_shapes<DataType>(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride);
 }
@@ -173,7 +173,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint32_t idxRow, uint32_t idxCol)
 {
-    constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
 
     std::vector<uint64_t> scalars(dst.GetValidCol(), 0);
@@ -188,7 +188,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint32_t idxRow, uint32_t idxCol)
 {
-    constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
 
     std::vector<uint64_t> scalars(dst.GetValidCol(), 0);
