@@ -132,7 +132,15 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     const size_t validCol = dst.GetValidCol();
 
     // Filling padding
-    std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), getPadValue<TileData>());
+    auto tmpPadVal = getPadValue<TileData>();
+    if constexpr (IsTwinType<typename TileData::DType>()) {
+        uint8_t padVal = getPadValue<TileData>().RawData();
+        std::fill(
+            reinterpret_cast<uint8_t*>(dst.data()), reinterpret_cast<uint8_t*>(dst.data()) + TileData::GetSizeInBytes(),
+            (padVal << HALF_BYTE_SHIFT) | padVal);
+    } else {
+        std::fill(dst.data(), dst.data() + TileData::GetSizeInUnits(), getPadValue<TileData>());
+    }
 
     const std::vector<int64_t> shapes = {
         src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
@@ -146,7 +154,7 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
             const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
-            dst.SetElement(row, col, GetProperDataPart(src.data(), dstOffset));
+            dst.SetElement(row, col, src.GetElement(dstOffset));
         }
     }
 }

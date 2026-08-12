@@ -171,3 +171,12 @@ template void LaunchTStore<0, int64_t, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>(int64_t
 template void LaunchTStore<0, uint64_t, 1, 2, 1, 23, 121, 3, 2, 2, 35, 125>(uint64_t* out, uint64_t* src, void* stream);
 template void LaunchTStore<1, int64_t, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>(int64_t* out, int64_t* src, void* stream);
 template void LaunchTStore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>(uint64_t* out, uint64_t* src, void* stream);
+// MXFP4
+template void LaunchTStore<0, float4_e2m1x2_t, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>(
+    float4_e2m1x2_t* out, float4_e2m1x2_t* src, void* stream);
+template void LaunchTStore<1, float4_e2m1x2_t, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>(
+    float4_e2m1x2_t* out, float4_e2m1x2_t* src, void* stream);
+template void LaunchTStore<0, float4_e1m2x2_t, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>(
+    float4_e1m2x2_t* out, float4_e1m2x2_t* src, void* stream);
+template void LaunchTStore<1, float4_e1m2x2_t, 1, 1, 1, 4, 21, 1, 1, 1, 8, 32>(
+    float4_e1m2x2_t* out, float4_e1m2x2_t* src, void* stream);
