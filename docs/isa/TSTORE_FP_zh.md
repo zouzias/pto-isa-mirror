@@ -8,6 +8,8 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
 
+`TSTORE_FP(...)` 保留为 fp 量化存储形态的源码兼容 C++ 调用入口。它转发到同一个无 mode 的 `TSTORE(..., fp, ...)` 重载，实现路径对应 `TSTORE_IMPL(dst, src, fp)`。
+
 ## 数学语义
 
 设 `R = src.GetValidRow()`，`C = src.GetValidCol()`。概念上（二维视图，带基础偏移），对 `0 <= i < R` 且 `0 <= j < C`：
@@ -40,6 +42,10 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
