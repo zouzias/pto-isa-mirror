@@ -324,10 +324,11 @@ static pto::comm::rdma::WorkspaceInitResult AgreeOnRdmaPreflight(int nRanks)
 //
 // Per rank: phyId, RDMA NIC IPv4, symmetric-buffer base VA.
 //   phyId    : ResolvePhyId(), else PTO_ROCE_PHYIDS[rank], else ACL device id
-//   local IP : rootinfo CLOS entry, then virtualTopology.xml, then PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS
+//   local IP : rootinfo CLOS entry, then HCOMM's fixed virtualTopology.xml, then the manual ST fallbacks
+//              PTO_ROCE_LOCAL_IP (per process) / PTO_ROCE_IPS (MPI-rank-ordered list)
 //   sym addr : MPI_Allgather of local symmetric buffer VA
 // Missing local IP on any rank -> collective skip (not a false pass).
-// Optional: PTO_ROCE_ROOTINFO, PTO_ROCE_BASE_PORT, PTO_ROCE_VERBOSE=1
+// Optional: PTO_ROCE_ROOTINFO, PTO_ROCE_LOCAL_IP, PTO_ROCE_IPS, PTO_ROCE_BASE_PORT, PTO_ROCE_VERBOSE=1
 // ============================================================================
 struct RoceBootstrap {
     bool skipped{false};
