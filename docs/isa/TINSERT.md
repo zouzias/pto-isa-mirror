@@ -89,6 +89,13 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src,
                                 WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             FpTileData &fp,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
           AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -105,6 +112,8 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
 #endif
 ```
 
+`TINSERT_FP(...)` is retained for source compatibility and forwards to the no-`mode` `TINSERT(..., fp, indexRow, indexCol, ...)` overload.
+
 ## Constraints
 
 ### General constraints / checks
@@ -114,7 +123,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - relu form: `TINSERT<..., reluMode>(dst, src, indexRow, indexCol)`
     - accumulator-to-vector form: `TINSERT<..., mode, reluMode>(dst, src, indexRow, indexCol)`
     - scalar-quant form: `TINSERT<..., reluMode>(dst, src, preQuantScalar, indexRow, indexCol)` and `TINSERT<..., mode, reluMode>(dst, src, preQuantScalar, indexRow, indexCol)`
-    - vector-quant form: `TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)` and `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)`
+    - vector-quant form: `TINSERT<..., FpTileData, reluMode>(dst, src, fp, indexRow, indexCol)`, `TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)`, and `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)`
     - NZ split form *(A5 only)*: `TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` or `TINSERT<TInsertMode::SPLIT4>(...)`
 - `reluMode` is `ReluPreMode::{NoRelu, NormalRelu}`.
 - `mode` is `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
@@ -131,7 +140,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
 - **Scalar-quant** supported dtype pairs:
     - `float` Acc → `int8_t`
     - `int32_t` Acc → `int8_t`, `uint8_t`, `half`, `int16_t`
-- **Vector-quant** (`TINSERT_FP`) supported dtype pairs:
+- **Vector-quant** (`TINSERT` with `FpTileData`; `TINSERT_FP` forwarding alias) supported dtype pairs:
     - `float` Acc → `int8_t`
     - `int32_t` Acc → `int8_t`, `uint8_t`, `half`, `int16_t`
 - Vector-quant requires an `FpTileData` scaling operand (`TileType::Scaling`).
@@ -149,7 +158,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - **Scalar-quant** destination types:
         - `float` Acc → `int8_t`, `uint8_t`, `hifloat8_t`, `half`, `bfloat16_t`, `float8_e4m3_t`
         - `int32_t` Acc → `int8_t`, `uint8_t`, `half`, `bfloat16_t`
-    - **Vector-quant** (`TINSERT_FP`) destination types: same as scalar-quant above.
+    - **Vector-quant** (`TINSERT` with `FpTileData`; `TINSERT_FP` forwarding alias) destination types: same as scalar-quant above.
 
 - **Acc → Vec** (`TileType::Acc → TileType::Vec`):
     - Source Acc type must be `float` or `int32_t`; source layout must be `(BFractal: ColMajor, SFractal: RowMajor)`.
@@ -159,7 +168,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - **Scalar-quant** destination types:
         - `float` Acc → `int8_t`, `uint8_t`, `hifloat8_t`, `half`, `bfloat16_t`, `float8_e4m3_t`
         - `int32_t` Acc → `int8_t`, `uint8_t`, `half`, `bfloat16_t`
-    - **Vector-quant** (`TINSERT_FP` / `TINSERT` with `FpTileData`) destination types: same as scalar-quant above.
+    - **Vector-quant** (`TINSERT` with `FpTileData`; `TINSERT_FP` forwarding alias) destination types: same as scalar-quant above.
     - Destination layout must be one of: NZ-to-NZ (`!isRowMajor, SFractal: RowMajor`), NZ-to-ND (`isRowMajor, SFractal: NoneBox`), or NZ-to-DN (`!isRowMajor, SFractal: NoneBox`).
     - `AccToVecMode` selects `SingleModeVec0`, `SingleModeVec1`, `DualModeSplitM`, or `DualModeSplitN`.
     - Dual-destination modes (`DualModeSplitM`, `DualModeSplitN`) require `QuantMode_t::NoQuant` and do not support the NZ-to-DN path.

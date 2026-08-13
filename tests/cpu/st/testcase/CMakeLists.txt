@@ -110,6 +110,7 @@ tnotify
 tor
 tors
 tpairreducesum
+pto_instr_fp_overload
 tpartadd
 tpartargmax
 tpartargmin

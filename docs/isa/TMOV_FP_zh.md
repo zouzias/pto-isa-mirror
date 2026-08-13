@@ -8,6 +8,8 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。
 
+`TMOV_FP(...)` 保留为无 mode fp 移动形态的源码兼容 C++ 调用入口，并包含 `STPhase` 重载。它转发到同一个无 mode 的 `TMOV(..., fp, ...)` 重载，实现路径对应不显式传入 mode 模板参数的 `TMOV_IMPL(dst, src, fp)`。
+
 ## 数学语义
 
 概念上使用从 `fp` 派生的实现定义的量化/反量化配置转换每个元素：
@@ -42,6 +44,18 @@ pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -52,7 +66,6 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
     - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
 - **实现检查 (A5)**:
     - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
-    - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
     - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
 
 ## 示例
