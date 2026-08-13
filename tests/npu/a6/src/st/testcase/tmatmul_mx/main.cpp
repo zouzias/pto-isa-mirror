@@ -90,7 +90,7 @@ CFG(26, 256, 128, 512, HIF4, HIF4)
 CFG(27, 1,   256, 64,  E4M3, E2M1)  // GEMV e4m3 x e2m1
 CFG(28, 1,   256, 64,  F16,  E2M1)  // GEMV f16 x e2m1
 CFG(29, 1,   256, 64,  BF16, HIF4)  // GEMV bf16 x hif4
-CFG(30, 64,  128, 64,  E2M1, E2M1)  // aligned (was 17x64x31 — partial M/N breaks MX fractal GM layout)
+CFG(30, 64,  128, 64,  E2M1, E2M1)  // small aligned
 CFG(31, 64,  64,  64,  E1M2, E2M1)  // small aligned
 CFG(32, 64,  64,  64,  E2M1, E1M2)  // small aligned
 CFG(33, 128, 256, 128, E4M3, E2M1)  // deep K
@@ -123,24 +123,14 @@ static size_t bDataBytes(BKind k, int kk, int n)
 // what gen_data.py writes (convert_x1/x2_scale_format pads to block_size=16).
 static size_t aScaleBytes(AKind k, int m, int kk)
 {
-    size_t total = static_cast<size_t>(m) * kk;
-    if (k == AKind::HIF4) {
-        size_t mPadded = static_cast<size_t>((m + 15) / 16) * 16;
-        return (mPadded * kk / 64) * 4;
-    }
     size_t mPadded = static_cast<size_t>((m + 15) / 16) * 16;
-    return mPadded * kk / 32;
+    return (k == AKind::HIF4) ? (mPadded * kk / 64) * 4 : mPadded * kk / 32;
 }
 
 static size_t bScaleBytes(BKind k, int kk, int n)
 {
-    size_t total = static_cast<size_t>(kk) * n;
-    if (k == BKind::HIF4) {
-        size_t nPadded = static_cast<size_t>((n + 15) / 16) * 16;
-        return (kk * nPadded / 64) * 4;
-    }
     size_t nPadded = static_cast<size_t>((n + 15) / 16) * 16;
-    return kk * nPadded / 32;
+    return (k == BKind::HIF4) ? (kk * nPadded / 64) * 4 : kk * nPadded / 32;
 }
 
 std::vector<float> Bf16BytesToFloat(const uint8_t* raw, int n)
@@ -158,7 +148,6 @@ template <int caseId>
 void RunCase(const std::string& goldenDir)
 {
     constexpr auto cfg = GetCaseConfig<caseId>();
-    constexpr int totalOut = 0; // computed below from cfg (not constexpr-friendly across funcs)
     const int m = cfg.m, k = cfg.k, n = cfg.n;
     const int totalOutElems = m * n;
     const size_t aBytes = aDataBytes(cfg.aKind, m, k);
