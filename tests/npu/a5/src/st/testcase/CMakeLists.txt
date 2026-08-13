@@ -239,6 +239,7 @@ set(ALL_TESTCASES
     tinsert_zn
     textract_nd_vec
     textract_vec
+    textract_ndto2xnz
     tmov_zz
     tmov_nd2nz
     tmov_nd2zn
