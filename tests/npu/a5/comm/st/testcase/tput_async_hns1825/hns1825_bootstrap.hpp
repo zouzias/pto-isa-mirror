@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //
 //   1. ResolvePhyId — global physical device id via aclrt/runtime (HCCP/topo use phyId, not ACL id).
 //   2. ResolveLocalRdmaIp — CLOS IPv4 for that phyId from /etc/hccl_rootinfo.json (or path override).
+//   3. ResolveLocalRdmaIpFromVirtualTopology — RoCE IPv4 selected from topologyd's virtualTopology.xml.
 //
 // Optional symbols are resolved with dlsym(RTLD_DEFAULT, ...); missing symbols degrade gracefully
 // so callers can fall back to environment overrides.
@@ -26,6 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <dlfcn.h>
 
 #include <cctype>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -39,6 +41,7 @@ namespace hns_1825 {
 namespace bootstrap {
 
 constexpr const char* kDefaultRootInfoPath = "/etc/hccl_rootinfo.json";
+constexpr const char* kDefaultVirtualTopologyPath = "/var/run/ascend-topologyd/virtualTopology.xml";
 
 // Resolve the global physical device id used by HCOMM and the topology data.
 // Returns false (and leaves phyId untouched) if the runtime symbols are unavailable or fail.
@@ -194,6 +197,40 @@ inline bool ResolveLocalRdmaIp(uint32_t phyId, std::string& ip, const char* root
         scan = blockEnd;
     }
     return false;
+}
+
+// Resolve the RoCE IPv4 selected for `phyId` by HCOMM's virtual-topology parser.
+// The parser consumes /var/run/ascend-topologyd/virtualTopology.xml directly; it
+// does not generate or modify rootinfo. The symbol belongs to HCOMM's topology
+// component, so older installations may not provide it and callers must retain
+// another bootstrap fallback.
+inline bool ResolveLocalRdmaIpFromVirtualTopology(uint32_t phyId, std::string& ip)
+{
+    if (phyId > static_cast<uint32_t>(INT_MAX)) {
+        return false;
+    }
+
+    using ResolveFn = int (*)(int, char*, size_t);
+    void* topoHandle = nullptr;
+    auto resolve = reinterpret_cast<ResolveFn>(dlsym(RTLD_DEFAULT, "GetRoceIpFromXml"));
+    if (resolve == nullptr) {
+        topoHandle = dlopen("libtopoaddrinfo.so", RTLD_NOW | RTLD_LOCAL);
+        if (topoHandle == nullptr) {
+            return false;
+        }
+        resolve = reinterpret_cast<ResolveFn>(dlsym(topoHandle, "GetRoceIpFromXml"));
+    }
+
+    char ipBuffer[64] = {0};
+    const bool resolved = resolve != nullptr && resolve(static_cast<int>(phyId), ipBuffer, sizeof(ipBuffer)) == 0 &&
+                          detail::LooksLikeIpv4(ipBuffer);
+    if (resolved) {
+        ip = ipBuffer;
+    }
+    if (topoHandle != nullptr) {
+        dlclose(topoHandle);
+    }
+    return resolved;
 }
 
 } // namespace bootstrap

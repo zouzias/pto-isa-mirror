@@ -66,6 +66,9 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
 - 仅测试 bootstrap：`PTO_ROCE_ROOTINFO`（默认 `/etc/hccl_rootinfo.json`）、`PTO_ROCE_PHYIDS`、
   `PTO_ROCE_LOCAL_IP`、`PTO_ROCE_IPS`、`PTO_ROCE_BASE_PORT`。
 
+ST 按 root-info JSON、HCOMM 解析的 `/var/run/ascend-topologyd/virtualTopology.xml`、显式 IP 变量的顺序
+确定本地 RDMA IPv4；PTO 不生成或改写 rootinfo/XML。
+
 若 provider 不在默认路径，设置 `IBV_EXTEND_DRIVERS=<path>/libhrn5-rdmav34.so`。PUT 和 GET 均已在目标
 HNS1825 环境跑通；二者使用对等的独立 target，便于分别回归和定位。
 

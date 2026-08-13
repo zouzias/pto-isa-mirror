@@ -127,14 +127,16 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
 `run_st.py` 会删除并重建 `build/`；修改后端后不得使用 `-w` 复用旧产物。
 
 测试 bootstrap 解析每个 rank 的物理设备 id、RDMA 网卡 IPv4 和已注册缓冲区 Device 地址，再通过 MPI
-交换。相关变量如下：
+交换。它先读取 root-info JSON，再调用 HCOMM topology 组件解析
+`/var/run/ascend-topologyd/virtualTopology.xml`，最后才使用显式 IP 变量兜底；PTO 不生成或改写这两类
+拓扑输入。相关变量如下：
 
 | 变量 | 作用域 | 说明 |
 |---|---|---|
 | `PTO_RDMA_BACKEND` | 配置阶段 | 当前仅支持 `HNS_1825`；其他值使本次构建不包含 RDMA。|
 | `PTO_ROCE_ROOTINFO` | 仅 ST | root-info JSON 路径，默认 `/etc/hccl_rootinfo.json`。|
 | `PTO_ROCE_PHYIDS` | 仅 ST | 可选的按 rank 索引、逗号分隔的物理设备 id。|
-| `PTO_ROCE_LOCAL_IP` | 仅 ST | root-info 解析失败时，当前 rank 使用的 RDMA IPv4 fallback。|
+| `PTO_ROCE_LOCAL_IP` | 仅 ST | root-info 与 virtual topology 均解析失败时，当前 rank 使用的 RDMA IPv4 fallback。|
 | `PTO_ROCE_IPS` | 仅 ST | 可选的按 rank 索引、逗号分隔的 RDMA IPv4 列表。|
 | `PTO_ROCE_BASE_PORT` | 仅 ST | 所有 rank 一致的 channel base port，默认 `60032`。|
 | `PTO_ROCE_VERBOSE` | 控制面/ST | 设为 `1`，打印 endpoint、MR、channel 和释放过程。|

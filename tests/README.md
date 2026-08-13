@@ -129,14 +129,16 @@ definitions. It is not read by the generated test binary. Unset, empty, and unsu
 changing the backend.
 
 The test bootstrap resolves each rank's physical device id, RDMA NIC IPv4 address, and registered-buffer device
-address, then exchanges the values over MPI. Its variables are:
+address, then exchanges the values over MPI. It first reads the root-info JSON, then asks HCOMM's topology component
+to parse `/var/run/ascend-topologyd/virtualTopology.xml`; explicit IP variables are the final fallback. PTO neither
+generates nor rewrites either topology input. Its variables are:
 
 | Variable | Scope | Description |
 |---|---|---|
 | `PTO_RDMA_BACKEND` | Configure time | Only `HNS_1825` is supported; other values disable RDMA for this build. |
 | `PTO_ROCE_ROOTINFO` | ST only | Root-info JSON path; defaults to `/etc/hccl_rootinfo.json`. |
 | `PTO_ROCE_PHYIDS` | ST only | Optional comma-separated physical device ids indexed by rank. |
-| `PTO_ROCE_LOCAL_IP` | ST only | Fallback local RDMA IPv4 for a rank when root-info resolution fails. |
+| `PTO_ROCE_LOCAL_IP` | ST only | Fallback local RDMA IPv4 when root-info and virtual-topology resolution fail. |
 | `PTO_ROCE_IPS` | ST only | Optional comma-separated RDMA IPv4 list indexed by rank. |
 | `PTO_ROCE_BASE_PORT` | ST only | Common channel base port; defaults to `60032`. |
 | `PTO_ROCE_VERBOSE` | Control plane/ST | Set to `1` for detailed endpoint, MR, channel, and cleanup progress. |
