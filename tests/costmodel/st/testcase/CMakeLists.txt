@@ -58,6 +58,7 @@ set(ALL_TESTCASES
     tmul
     tmuls
     tneg
+    pto_instr_fp_overload
     trecip
     trowexpand
     trowmax
