@@ -40,7 +40,7 @@ $$ \mathrm{dst}_{r, c} = \mathrm{table}[\mathrm{idx}_{r, c}] \quad\text{for } 0 
 ```cpp
 enum class GatherOOB : uint8_t {
     Undefined = 0,  // 不检查边界；调用者保证索引有效
-    Clamp     = 1,  // 将索引钳制到 capacity - 1
+    Clamp     = 1,  // 将索引限制到 capacity - 1
     Wrap      = 2,  // 索引模 capacity
     Zero      = 3   // OOB 返回零；界内索引正常加载
 };
@@ -250,7 +250,7 @@ A5:
 当 `GlobalTable::layout == Layout::NZ` 且 `TileDst` 是匹配的 `BLayout::ColMajor + SLayout::RowMajor + SFractalSize = 512` tile时，`MGATHER`（Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）运行专用的NZ路径（`MGatherRowNzImpl`、`MGatherElemNzImpl`）。
 
 - **常量。** `kC0 = C0_SIZE_BYTE / sizeof(T)`；`kFRow = FRACTAL_NZ_ROW = 16`。每个分形块为 `kFRow × kC0` 元素（= 512Byte）。
-- **逻辑形状。** 逻辑行 = `gShape2 * kFRow`。逻辑列 = `gShape0 * gShape1 * kC0`。Row模式的OOB以逻辑行数进行夹制/取模；Elem模式以总元素数进行。
+- **逻辑形状。** 逻辑行 = `gShape2 * kFRow`。逻辑列 = `gShape0 * gShape1 * kC0`。Row模式的OOB以逻辑行数进行限制/取模；Elem模式以总元素数进行。
 - **Row模式。** 对每个逻辑行 `r`，内核将 `idx[r]` 映射到 `(srcBlockRow, srcRowInBlock)`，将 `r` 映射到 `(dstBlockRow, dstRowInBlock)`，然后对每个外层批次发出 **一次多burst MTE2传输**。当 `Oob == GatherOOB::Zero` 时，内核在DMA循环前对整个tile预填 `T(0)` 并跳过OOB行的DMA。
 - **Elem模式。** 对每个 `(r, c)`，内核将 `idx` 映射到 `(logicalRow, logicalCol) = (idx / nLogicalCols, idx % nLogicalCols)`，然后通过 `MGatherNZGmOffset` 转换为NZ物理偏移。遍历顺序为**块列 → 行 → 块内列**，确保连续写入目标连续32Byte UB块。
 

@@ -105,7 +105,7 @@ PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ### 其他目标特定约束
 
-具体的布局、分块和对齐约束可能因后端目标而异。参见 `include/pto/npu/*/TRowExpand*.hpp` 下的后端头文件。
+具体的布局、分形和对齐约束可能因后端目标而异。参见 `include/pto/npu/*/TRowExpand*.hpp` 下的后端头文件。
 
 ### 临时Tile
 
