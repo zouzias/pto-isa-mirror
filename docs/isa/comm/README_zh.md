@@ -11,6 +11,7 @@
 
 ## 点对点通信（异步）
 - [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：异步远程写（GM → DMA 引擎 → GM）
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY_zh.md)：远程写并更新远端 `int32_t` signal
 - [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
 
 ## 基于信号的同步
@@ -77,16 +78,16 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 ### DmaEngine
 
-`TPUT_ASYNC` 和 `TGET_ASYNC` 的 DMA 后端选择：
+`TPUT_ASYNC`、`TPUT_ASYNC_NOTIFY` 和 `TGET_ASYNC` 的 DMA 后端选择：
 
 | 值 | 说明 |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
+| `DmaEngine::SDMA` | SDMA 接口（A2/A3 使用 SDMA；A5 TGET 使用 SDMA，TPUT/TPUT_ASYNC_NOTIFY 当前使用 MTE fallback）|
+| `DmaEngine::URMA` | `TPUT_ASYNC`/`TGET_ASYNC` 的 URMA 引擎（仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）；`TPUT_ASYNC_NOTIFY<URMA>` 尚未实现 |
 
 ### AsyncEvent
 
-由 `TPUT_ASYNC` / `TGET_ASYNC` 返回，用于同步传输完成状态：
+由 `TPUT_ASYNC` / `TPUT_ASYNC_NOTIFY` / `TGET_ASYNC` 返回，用于同步传输完成状态：
 
 ```cpp
 struct AsyncEvent {
@@ -99,6 +100,9 @@ struct AsyncEvent {
 };
 ```
 
+注意：A5 `TPUT_ASYNC_NOTIFY<SDMA>` 当前同步完成并返回 `handle == 0`，因此其成功 event 的
+`valid()` 也为 `false`。具体判断方式参见 [TPUT_ASYNC_NOTIFY](TPUT_ASYNC_NOTIFY_zh.md)。
+
 ### AsyncSession
 
 用于异步 DMA 操作的引擎无关会话对象，构建一次后传递给所有异步调用：
@@ -109,6 +113,8 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
 定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
+使用 A2/A3 `TPUT_ASYNC_NOTIFY` 时必须显式设置 `channelGroupIdx = 0`，不能直接使用上述默认值；
+具体示例参见 [TPUT_ASYNC_NOTIFY](TPUT_ASYNC_NOTIFY_zh.md)。
 
 ### ParallelGroup
 

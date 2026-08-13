@@ -22,12 +22,14 @@ namespace detail {
 // fallback. Complete every payload chunk before issuing the Scalar notification,
 // then return handle 0 to represent an already-completed operation.
 //
-// Ordering and concurrency boundaries:
+// Intended ordering and concurrency semantics:
 // - Repeated calls from one AICore are fully serialized.
 // - AtomicAdd to one signal may aggregate completions from multiple AICores or
 //   ranks, provided every payload uses a non-conflicting destination range.
 // - Set does not define a winner when multiple AICores or ranks write one signal;
 //   use one signal slot per producer or AtomicAdd for completion counting.
+// Receiver-side visibility and multi-producer cases require dedicated hardware
+// stress tests; the current ST covers sequential calls from one sender AICore.
 template <typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData>
 PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_MTE_FALLBACK(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
@@ -47,9 +49,11 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_MTE_FALLBACK(
         notifyOp == NotifyOp::Set || notifyOp == NotifyOp::AtomicAdd,
         "TPUT_ASYNC_NOTIFY: notifyOp must be Set or AtomicAdd.");
 
-    // TPUT_ASYNC_MTE_FALLBACK waits for every MTE3 store before returning.
-    // TNOTIFY_IMPL then publishes the Scalar SET/ADD with DCCI + DSB_DDR.
+    // TPUT_ASYNC_MTE_FALLBACK uses MTE3 -> MTE2 events for UB reuse. Add an
+    // explicit all-pipeline barrier before the Scalar notification so payload
+    // completion does not rely on an implicit MTE-to-Scalar ordering assumption.
     (void)TPUT_ASYNC_MTE_FALLBACK(dstGlobalData, srcGlobalData, session);
+    pipe_barrier(PIPE_ALL);
     TNOTIFY_IMPL(dstSignalData, signalValue, notifyOp);
     return AsyncEvent(0, DmaEngine::SDMA);
 }

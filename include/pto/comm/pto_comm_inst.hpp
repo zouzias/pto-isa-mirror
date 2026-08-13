@@ -366,11 +366,14 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 }
 #endif
 
-#ifdef PTO_NPU_ARCH_A2A3
 // ============================================================================
-// TPUT_ASYNC_NOTIFY: A2/A3 asynchronous remote write followed by int32 signal update.
-// Payload and signal are submitted to one SDMA SQ; the returned event covers both.
+// TPUT_ASYNC_NOTIFY: Remote write followed by an int32 signal update.
+// The architecture-specific implementation is selected at compile time:
+// - A2/A3 SDMA submits payload and signal to one SQ.
+// - A5 SDMA-named path uses synchronous MTE followed by Scalar SET/AtomicAdd
+//   and returns an already-completed event with handle 0.
 // ============================================================================
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)
 template <
     DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
     typename... WaitEvents>
@@ -385,25 +388,6 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
-// ============================================================================
-// TPUT_ASYNC_NOTIFY: A5 SDMA-named path uses synchronous MTE payload transfer
-// followed by Scalar SET/AtomicAdd. The returned handle is 0 (already complete).
-//
-// Multiple producers must not use Set on one shared signal when the winner
-// matters. Use separate signal slots or AtomicAdd for completion counting.
-// ============================================================================
-template <
-    DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
-    typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
-    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
-    NotifyOp notifyOp, const AsyncSession& session, WaitEvents&... events)
-{
-    WaitAllEvents(events...);
-    return ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
-        dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
-}
-
 /**
  * @brief A5 overload matching TPUT_ASYNC's explicit-peer API.
  *

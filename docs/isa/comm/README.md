@@ -11,6 +11,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ## Point-to-Point Communication (Asynchronous)
 - [**TPUT_ASYNC**](TPUT_ASYNC.md): Asynchronous remote write (GM → DMA engine → GM)
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY.md): Remote write followed by a remote `int32_t` signal update
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
 ## Signal-Based Synchronization
@@ -77,16 +78,16 @@ Atomic operation type for `TPUT` (defined in `include/pto/common/constants.hpp`)
 
 ### DmaEngine
 
-DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
+DMA backend selection for `TPUT_ASYNC`, `TPUT_ASYNC_NOTIFY`, and `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
-| `DmaEngine::SDMA` | SDMA engine (supports 1D transfer) |
-| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only; requires CANN >= 9.1.0) |
+| `DmaEngine::SDMA` | SDMA API (A2/A3 uses SDMA; on A5, TGET uses SDMA while TPUT/TPUT_ASYNC_NOTIFY currently use an MTE fallback) |
+| `DmaEngine::URMA` | URMA engine for `TPUT_ASYNC`/`TGET_ASYNC` (Ascend950 / NPU_ARCH 3510 only; requires CANN >= 9.1.0); `TPUT_ASYNC_NOTIFY<URMA>` is not implemented |
 
 ### AsyncEvent
 
-Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
+Returned by `TPUT_ASYNC` / `TPUT_ASYNC_NOTIFY` / `TGET_ASYNC`. Use to synchronize completion:
 
 ```cpp
 struct AsyncEvent {
@@ -99,6 +100,10 @@ struct AsyncEvent {
 };
 ```
 
+Note: A5 `TPUT_ASYNC_NOTIFY<SDMA>` currently completes synchronously and returns `handle == 0`, so its
+successful event also has `valid() == false`. See [TPUT_ASYNC_NOTIFY](TPUT_ASYNC_NOTIFY.md) for the required
+handling.
+
 ### AsyncSession
 
 Engine-agnostic session for async DMA operations. Build once, pass to all async calls:
@@ -109,6 +114,8 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
 Defined in `include/pto/comm/async_common/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
+For A2/A3 `TPUT_ASYNC_NOTIFY`, explicitly set `channelGroupIdx = 0` instead of using the default shown above;
+see [TPUT_ASYNC_NOTIFY](TPUT_ASYNC_NOTIFY.md).
 
 ### ParallelGroup
 
