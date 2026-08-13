@@ -58,7 +58,7 @@ PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
     - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
+    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `int16_t`, `uint16_t`, `half`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.

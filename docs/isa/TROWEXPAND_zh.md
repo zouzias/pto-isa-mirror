@@ -50,7 +50,8 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 
 - Tile类型：`dst` 和 `src` 必须是 `TileType::Vec`。
 - Tile布局：`src` 和 `dst` 均为ND分形（`isRowMajor` 且 `SLayout::NoneBox`）。
-- 数据类型：Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品/Ascend 950PR/Ascend 950DT元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- 数据类型（Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）：元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- 数据类型（Ascend 950PR/Ascend 950DT）：元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
 - 运行期有效区域检查：
     - Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任意一个为零则提前返回。
     - Ascend 950PR/Ascend 950DT：断言 `srcValidRow == dstValidRow`，且断言 `srcValidRow != 0 && srcValidCol != 0`。

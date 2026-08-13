@@ -78,7 +78,7 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ### Ascend 950PR/Ascend 950DT实现检查
 
-- Ascend 950PR/Ascend 950DT共享列归约检查允许的元素类型为：`half`、`float`、`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`bfloat16_t`。
+- Ascend 950PR/Ascend 950DT共享列归约检查允许的元素类型为：`half`、`float`、`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`bfloat16_t`。
 - 已检查到的Ascend 950PR/Ascend 950DT `TCOLSUM` 路径中，`tmp` 仍只用于二叉累加路径；`TCOLSUM_IMPL` 中没有额外显式加入 `tmp` 的编译期类型/布局断言。
 
 ## 临时空间

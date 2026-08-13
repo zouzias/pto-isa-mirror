@@ -49,7 +49,7 @@ PTO_INST RecordEvent TMAXS(TileDataDst& dst, TileDataSrc& src, typename TileData
     - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
+    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Common constraints**:
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).

@@ -100,7 +100,7 @@ For each row `i` in `src0`, compare each element `src0[i, j]` against threshold 
     - `src1.GetValidCol() == TmpTileData::Cols` and `src1.GetValidRow() == TmpTileData::Rows`.
     - `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 - **Index-based gather: implementation checks (A5)**:
-    - `sizeof(DstTileData::DType)` must be 1, 2, or 4 bytes: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+    - `sizeof(DstTileData::DType)` must be 1, 2, 4, or 8 bytes: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
     - `sizeof(Src1TileData::DType)` must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
     - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
     - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
@@ -111,10 +111,10 @@ For each row `i` in `src0`, compare each element `src0[i, j]` against threshold 
     - `dst` and `src` must both be `TileType::Vec` and row-major.
     - `sizeof(dst element) == sizeof(src element)` and `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 - **Mask-pattern gather: implementation checks (A5)**:
-    - Source element size must be `1` or `2` or `4` bytes.
+    - Source element size must be `1`, `2`, `4`, or `8` bytes.
     - `dst` and `src` must both be `TileType::Vec` and row-major.
     - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
-    or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
+    or `int64_t` or `uint64_t` or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
     - Supported dtypes are restricted to a target-defined set (checked via `static_assert` in the implementation), and `sizeof(dst element) == sizeof(src element)`, `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 - **Comparison-based gather: implementation checks**: type and `cmpMode` constraints are detailed in [C++ Built-in Interface → Comparison-based Gather Constraints](#comparison-based-gather-constraints).
 - **Bounds / validity**:
