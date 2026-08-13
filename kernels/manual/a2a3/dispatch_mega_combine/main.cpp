@@ -1,17 +1,6 @@
-/**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-*/
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -32,7 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tiling_builder.hpp"
 
 extern "C" rtError_t rtSetDevice(int32_t device);
-extern "C" rtError_t rtGetC2cCtrlAddr(uint64_t* addr, uint32_t* len);
+extern "C" rtError_t rtGetC2cCtrlAddr(uint64_t *addr, uint32_t *len);
 
 namespace {
 
@@ -41,21 +30,20 @@ constexpr int kDefaultMeasureIters = 5;
 constexpr double kMicrosecondsPerSecond = 1000.0 * 1000.0;
 constexpr double kBytesPerGiB = 1024.0 * 1024.0 * 1024.0;
 static double g_sys_cnt_multiple = 20.0; // Default A2/A3, in ns per SYS_CNT tick.
-constexpr uint32_t kHostCombineImplDirectAuto = 3U;
 
 struct DeviceBuffer {
-    void* ptr = nullptr;
+    void *ptr = nullptr;
     size_t bytes = 0;
 
     DeviceBuffer() = default;
-    DeviceBuffer(const DeviceBuffer&) = delete;
-    DeviceBuffer& operator=(const DeviceBuffer&) = delete;
-    DeviceBuffer(DeviceBuffer&& other) noexcept : ptr(other.ptr), bytes(other.bytes)
+    DeviceBuffer(const DeviceBuffer &) = delete;
+    DeviceBuffer &operator=(const DeviceBuffer &) = delete;
+    DeviceBuffer(DeviceBuffer &&other) noexcept : ptr(other.ptr), bytes(other.bytes)
     {
         other.ptr = nullptr;
         other.bytes = 0;
     }
-    DeviceBuffer& operator=(DeviceBuffer&& other) noexcept
+    DeviceBuffer &operator=(DeviceBuffer &&other) noexcept
     {
         if (this != &other) {
             if (ptr != nullptr) {
@@ -78,18 +66,18 @@ struct DeviceBuffer {
 };
 
 struct HostBuffer {
-    void* ptr = nullptr;
+    void *ptr = nullptr;
     size_t bytes = 0;
 
     HostBuffer() = default;
-    HostBuffer(const HostBuffer&) = delete;
-    HostBuffer& operator=(const HostBuffer&) = delete;
-    HostBuffer(HostBuffer&& other) noexcept : ptr(other.ptr), bytes(other.bytes)
+    HostBuffer(const HostBuffer &) = delete;
+    HostBuffer &operator=(const HostBuffer &) = delete;
+    HostBuffer(HostBuffer &&other) noexcept : ptr(other.ptr), bytes(other.bytes)
     {
         other.ptr = nullptr;
         other.bytes = 0;
     }
-    HostBuffer& operator=(HostBuffer&& other) noexcept
+    HostBuffer &operator=(HostBuffer &&other) noexcept
     {
         if (this != &other) {
             if (ptr != nullptr) {
@@ -121,9 +109,7 @@ struct PerfStats {
 struct RunOptions {
     int warmup_iters = kDefaultWarmupIters;
     int measure_iters = kDefaultMeasureIters;
-    bool skip_accuracy = false;
     bool start_sync_debug = false;
-    bool workload_audit = false;
 };
 
 struct RankHostInputs {
@@ -134,7 +120,6 @@ struct RankHostInputs {
     std::vector<uint8_t> scale1;
     std::vector<uint8_t> scale2;
     std::vector<uint8_t> probs;
-    std::vector<uint8_t> x_active_mask;
     std::vector<uint16_t> expected_out;
 };
 
@@ -154,7 +139,7 @@ struct RankDeviceBuffers {
     HostBuffer profile_host;
 };
 
-DeviceBuffer MakeDeviceBuffer(size_t bytes, const void* host_src = nullptr)
+DeviceBuffer MakeDeviceBuffer(size_t bytes, const void *host_src = nullptr)
 {
     DeviceBuffer buffer;
     buffer.bytes = bytes;
@@ -184,7 +169,7 @@ HostBuffer MakeHostBuffer(size_t bytes)
     return buffer;
 }
 
-std::vector<uint16_t> BytesToU16(const std::vector<uint8_t>& bytes)
+std::vector<uint16_t> BytesToU16(const std::vector<uint8_t> &bytes)
 {
     if (bytes.size() % sizeof(uint16_t) != 0) {
         throw std::runtime_error("fp16 file size is not aligned");
@@ -198,20 +183,18 @@ std::vector<uint16_t> BytesToU16(const std::vector<uint8_t>& bytes)
     return out;
 }
 
-int ParseEnvInt(const char* name, int default_value)
+int ParseEnvInt(const char *name, int default_value)
 {
-    const char* value = std::getenv(name);
+    const char *value = std::getenv(name);
     if (value == nullptr || value[0] == '\0') {
         return default_value;
     }
     try {
         return std::stoi(value);
-    } catch (const std::exception&) {
+    } catch (const std::exception &) {
         throw std::runtime_error(std::string("invalid integer in env: ") + name);
     }
 }
-
-bool TraceEnabled() { return ParseEnvInt("DISPATCH_MEGA_COMBINE_TRACE", 0) != 0; }
 
 uint64_t AlignUpU64(uint64_t value, uint64_t align)
 {
@@ -234,25 +217,17 @@ uint64_t SwigluFullRowUbBytes(uint32_t n)
     return ub_offset;
 }
 
-void Trace(int rank_id, const std::string& message)
-{
-    if (!TraceEnabled()) {
-        return;
-    }
-    std::cerr << "[trace] rank=" << rank_id << " " << message << std::endl;
-}
-
-bool ZeroWindowMemory(const StandaloneRankRuntime& runtime)
+bool ZeroWindowMemory(const StandaloneRankRuntime &runtime)
 {
     const uint64_t window_bytes = runtime.hccl.WindowBytes();
-    void* window_ptr = runtime.hccl.WindowIn(static_cast<uint32_t>(runtime.hccl.rank_id));
+    void *window_ptr = runtime.hccl.WindowIn(static_cast<uint32_t>(runtime.hccl.rank_id));
     if (aclrtMemset(window_ptr, window_bytes, 0, window_bytes) != ACL_SUCCESS) {
         return false;
     }
     return true;
 }
 
-void ZeroDeviceBuffer(const DeviceBuffer& buffer, const char* name)
+void ZeroDeviceBuffer(const DeviceBuffer &buffer, const char *name)
 {
     if (buffer.bytes == 0) {
         return;
@@ -262,9 +237,9 @@ void ZeroDeviceBuffer(const DeviceBuffer& buffer, const char* name)
     }
 }
 
-void PrepareIterationState(
-    const StandaloneRankRuntime& runtime, const DeviceBuffer& out_dev, const DeviceBuffer& expert_token_nums_dev,
-    const DeviceBuffer& workspace_dev, const DeviceBuffer& profile_dev)
+void PrepareIterationState(const StandaloneRankRuntime &runtime, const DeviceBuffer &out_dev,
+                           const DeviceBuffer &expert_token_nums_dev, const DeviceBuffer &workspace_dev,
+                           const DeviceBuffer &profile_dev)
 {
     if (!ZeroWindowMemory(runtime)) {
         throw std::runtime_error("failed to zero HCCL windows");
@@ -275,7 +250,7 @@ void PrepareIterationState(
     ZeroDeviceBuffer(profile_dev, "profile buffer");
 }
 
-PerfStats CalcStats(const std::vector<double>& samples)
+PerfStats CalcStats(const std::vector<double> &samples)
 {
     PerfStats stats;
     if (samples.empty()) {
@@ -293,15 +268,27 @@ PerfStats CalcStats(const std::vector<double>& samples)
     return stats;
 }
 
-double ToTokensPerSecond(double tokens, double us) { return us > 0.0 ? tokens * kMicrosecondsPerSecond / us : 0.0; }
+double ToTokensPerSecond(double tokens, double us)
+{
+    return us > 0.0 ? tokens * kMicrosecondsPerSecond / us : 0.0;
+}
 
-double ToTflops(double flops, double us) { return us > 0.0 ? flops * kMicrosecondsPerSecond / us / 1e12 : 0.0; }
+double ToTflops(double flops, double us)
+{
+    return us > 0.0 ? flops * kMicrosecondsPerSecond / us / 1e12 : 0.0;
+}
 
-double ToGbs(double bytes, double us) { return us > 0.0 ? bytes * kMicrosecondsPerSecond / us / kBytesPerGiB : 0.0; }
+double ToGbs(double bytes, double us)
+{
+    return us > 0.0 ? bytes * kMicrosecondsPerSecond / us / kBytesPerGiB : 0.0;
+}
 
-double SysCntTicksToUs(uint64_t ticks) { return static_cast<double>(ticks) * g_sys_cnt_multiple / 1000.0; }
+double SysCntTicksToUs(uint64_t ticks)
+{
+    return static_cast<double>(ticks) * g_sys_cnt_multiple / 1000.0;
+}
 
-std::vector<double> GatherMaxSamplesToRoot(const std::vector<double>& local_samples, int rank_id, int world_size)
+std::vector<double> GatherMaxSamplesToRoot(const std::vector<double> &local_samples, int rank_id, int world_size)
 {
     if (local_samples.empty()) {
         return {};
@@ -312,9 +299,8 @@ std::vector<double> GatherMaxSamplesToRoot(const std::vector<double>& local_samp
     if (rank_id == 0) {
         gathered.resize(sample_count * static_cast<size_t>(world_size));
     }
-    CommMpiGather(
-        local_samples.data(), bytes_per_rank, COMM_MPI_CHAR,
-        rank_id == 0 ? static_cast<void*>(gathered.data()) : nullptr, bytes_per_rank, COMM_MPI_CHAR, 0);
+    CommMpiGather(local_samples.data(), bytes_per_rank, COMM_MPI_CHAR,
+                  rank_id == 0 ? static_cast<void *>(gathered.data()) : nullptr, bytes_per_rank, COMM_MPI_CHAR, 0);
     if (rank_id != 0) {
         return {};
     }
@@ -330,25 +316,24 @@ std::vector<double> GatherMaxSamplesToRoot(const std::vector<double>& local_samp
     return max_samples;
 }
 
-double ReadKernelProfileUs(const DeviceBuffer& profile_dev, HostBuffer& profile_host, uint32_t block_dim)
+double ReadKernelProfileUs(const DeviceBuffer &profile_dev, HostBuffer &profile_host, uint32_t block_dim)
 {
     if (profile_dev.bytes == 0 || profile_host.bytes == 0 || block_dim == 0) {
         return 0.0;
     }
-    if (aclrtMemcpy(
-            profile_host.ptr, profile_host.bytes, profile_dev.ptr, profile_dev.bytes, ACL_MEMCPY_DEVICE_TO_HOST) !=
-        ACL_SUCCESS) {
+    if (aclrtMemcpy(profile_host.ptr, profile_host.bytes, profile_dev.ptr, profile_dev.bytes,
+                    ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
         throw std::runtime_error("device->host profile copy failed");
     }
 
     uint64_t start_min = std::numeric_limits<uint64_t>::max();
     uint64_t end_max = 0;
-    const auto* profile = static_cast<const uint8_t*>(profile_host.ptr);
+    const auto *profile = static_cast<const uint8_t *>(profile_host.ptr);
     for (uint32_t block = 0; block < block_dim; ++block) {
         for (size_t profile_idx = 0; profile_idx < kMegaMoeProfileEntriesPerBlock; ++profile_idx) {
-            const uint64_t* entry = reinterpret_cast<const uint64_t*>(
-                profile + static_cast<size_t>(block) * kMegaMoeProfileBytesPerBlock +
-                profile_idx * kMegaMoeProfileEntryBytes);
+            const uint64_t *entry =
+                reinterpret_cast<const uint64_t *>(profile + static_cast<size_t>(block) * kMegaMoeProfileBytesPerBlock +
+                                                   profile_idx * kMegaMoeProfileEntryBytes);
             const uint64_t start = entry[kMegaMoeProfileKernelStart];
             const uint64_t end = entry[kMegaMoeProfileKernelEnd];
             if (start == 0 && end == 0) {
@@ -365,7 +350,7 @@ double ReadKernelProfileUs(const DeviceBuffer& profile_dev, HostBuffer& profile_
     return SysCntTicksToUs(duration_ticks);
 }
 
-std::string BuildAccuracyReportText(int rank_id, const AccuracyReport& report)
+std::string BuildAccuracyReportText(int rank_id, const AccuracyReport &report)
 {
     std::ostringstream os;
     os << std::setprecision(6) << "rank=" << rank_id << " max_diff=" << report.max_abs_err
@@ -374,7 +359,7 @@ std::string BuildAccuracyReportText(int rank_id, const AccuracyReport& report)
     return os.str();
 }
 
-void PrintOrderedByRank(int rank_id, int world_size, const std::string& text)
+void PrintOrderedByRank(int rank_id, int world_size, const std::string &text)
 {
     for (int turn = 0; turn < world_size; ++turn) {
         CommMpiBarrier();
@@ -385,9 +370,8 @@ void PrintOrderedByRank(int rank_id, int world_size, const std::string& text)
     CommMpiBarrier();
 }
 
-void PrintPerfSummary(
-    const CaseConfig& cfg, uint32_t launch_block_dim, int warmup_iters, int measure_iters,
-    const std::vector<double>& kernel_samples_us)
+void PrintPerfSummary(const CaseConfig &cfg, uint32_t launch_block_dim, int warmup_iters, int measure_iters,
+                      const std::vector<double> &kernel_samples_us)
 {
     if (kernel_samples_us.empty()) {
         return;
@@ -414,168 +398,14 @@ void PrintPerfSummary(
               << " routed_tokens/s=" << ToTokensPerSecond(cfg.routed_tokens_all_ranks, kernel_stats.avg)
               << " eq_compute=" << ToTflops(cfg.compute_flops_all_ranks, kernel_stats.avg) << " TFLOPS"
               << " eq_comm=" << ToGbs(cfg.comm_bytes_all_ranks, kernel_stats.avg) << " GB/s\n";
-    std::cout
-        << "  note: equivalent compute/comm are derived from case.json logical workload, not hardware counters.\n";
+    std::cout << "  note: equivalent compute/comm are logical workload estimates, not hardware counters.\n";
     std::cout << "===============================================================\n" << std::endl;
 }
 
-int32_t LoadI32(const std::vector<uint8_t>& bytes, size_t index)
+void ValidateFullPathConstraints(const CaseConfig &cfg)
 {
-    const size_t byteOffset = index * sizeof(int32_t);
-    if (byteOffset + sizeof(int32_t) > bytes.size()) {
-        return 0;
-    }
-    uint32_t value = 0U;
-    for (size_t byteIdx = 0; byteIdx < sizeof(int32_t); ++byteIdx) {
-        value |= static_cast<uint32_t>(bytes[byteOffset + byteIdx]) << (byteIdx * 8U);
-    }
-    return static_cast<int32_t>(value);
-}
-
-struct WorkloadAuditLayout {
-    size_t global_expert_num = 0;
-    size_t fixed_fields = 6;
-    size_t per_rank_offset = 6;
-    size_t per_expert_offset = 0;
-    size_t fields = 0;
-};
-
-WorkloadAuditLayout BuildWorkloadAuditLayout(const CaseConfig& cfg)
-{
-    WorkloadAuditLayout layout;
-    layout.global_expert_num = static_cast<size_t>(cfg.world_size) * cfg.expert_per_rank;
-    layout.per_rank_offset = layout.fixed_fields;
-    layout.per_expert_offset = layout.per_rank_offset + cfg.world_size;
-    layout.fields = layout.per_expert_offset + layout.global_expert_num;
-    return layout;
-}
-
-std::vector<uint64_t> BuildLocalWorkloadAudit(
-    const CaseConfig& cfg, const WorkloadAuditLayout& layout, int rank_id, const std::vector<uint8_t>& expert_idx,
-    const std::vector<uint8_t>& x_active_mask, size_t actual_output_elems)
-{
-    std::vector<uint64_t> local(layout.fields, 0);
-    uint64_t active_tokens = 0;
-    uint64_t valid_routes = 0;
-    uint64_t remote_routes = 0;
-    uint64_t invalid_expert_routes = 0;
-    const size_t expert_idx_count = expert_idx.size() / sizeof(int32_t);
-    for (uint32_t token = 0; token < cfg.m; ++token) {
-        const bool active = token < x_active_mask.size() && x_active_mask[token] != 0;
-        if (!active) {
-            continue;
-        }
-        ++active_tokens;
-        for (uint32_t topk = 0; topk < cfg.topk; ++topk) {
-            const size_t slot = static_cast<size_t>(token) * cfg.topk + topk;
-            if (slot >= expert_idx_count) {
-                ++invalid_expert_routes;
-                continue;
-            }
-            const int32_t expert = LoadI32(expert_idx, slot);
-            if (expert < 0 || static_cast<size_t>(expert) >= layout.global_expert_num || cfg.expert_per_rank == 0U) {
-                ++invalid_expert_routes;
-                continue;
-            }
-            const uint32_t dst_rank = static_cast<uint32_t>(expert) / cfg.expert_per_rank;
-            ++valid_routes;
-            if (static_cast<int>(dst_rank) != rank_id) {
-                ++remote_routes;
-            }
-            ++local[layout.per_rank_offset + dst_rank];
-            ++local[layout.per_expert_offset + static_cast<size_t>(expert)];
-        }
-    }
-    local[0] = active_tokens;
-    local[1] = active_tokens * cfg.topk;
-    local[2] = valid_routes;
-    local[3] = remote_routes;
-    local[4] = invalid_expert_routes;
-    local[5] = actual_output_elems;
-    return local;
-}
-
-std::vector<uint64_t> GatherWorkloadAuditTotals(
-    const std::vector<uint64_t>& local, size_t fields, int rank_id, int world_size)
-{
-    const int local_bytes = static_cast<int>(local.size() * sizeof(uint64_t));
-    std::vector<uint64_t> gathered(rank_id == 0 ? fields * static_cast<size_t>(world_size) : 0, 0);
-    CommMpiGather(
-        local.data(), local_bytes, COMM_MPI_CHAR, rank_id == 0 ? gathered.data() : nullptr, local_bytes, COMM_MPI_CHAR,
-        0);
-
-    std::vector<uint64_t> total(rank_id == 0 ? fields : 0, 0);
-    if (rank_id != 0) {
-        return total;
-    }
-    for (int rank = 0; rank < world_size; ++rank) {
-        const uint64_t* rank_fields = gathered.data() + static_cast<size_t>(rank) * fields;
-        for (size_t idx = 0; idx < fields; ++idx) {
-            total[idx] += rank_fields[idx];
-        }
-    }
-    return total;
-}
-
-void PrintWorkloadAuditTotals(
-    const CaseConfig& cfg, const WorkloadAuditLayout& layout, const std::vector<uint64_t>& total, bool skip_accuracy)
-{
-    const auto dest_begin = total.begin() + static_cast<std::ptrdiff_t>(layout.per_rank_offset);
-    const auto dest_end = dest_begin + cfg.world_size;
-    const auto expert_begin = total.begin() + static_cast<std::ptrdiff_t>(layout.per_expert_offset);
-    const auto expert_end = expert_begin + static_cast<std::ptrdiff_t>(layout.global_expert_num);
-    const uint64_t min_dest_rows = dest_begin == dest_end ? 0 : *std::min_element(dest_begin, dest_end);
-    const uint64_t max_dest_rows = dest_begin == dest_end ? 0 : *std::max_element(dest_begin, dest_end);
-    const uint64_t min_expert_rows = expert_begin == expert_end ? 0 : *std::min_element(expert_begin, expert_end);
-    const uint64_t max_expert_rows = expert_begin == expert_end ? 0 : *std::max_element(expert_begin, expert_end);
-    const size_t nonzero_experts =
-        static_cast<size_t>(std::count_if(expert_begin, expert_end, [](uint64_t rows) { return rows != 0; }));
-    const uint64_t expected_output_elems =
-        static_cast<uint64_t>(cfg.world_size) * static_cast<uint64_t>(cfg.m) * static_cast<uint64_t>(cfg.k);
-    const bool routes_match_case = static_cast<double>(total[0]) == cfg.input_tokens_all_ranks &&
-                                   static_cast<double>(total[2]) == cfg.routed_tokens_all_ranks &&
-                                   static_cast<double>(total[3]) == cfg.remote_routed_tokens_all_ranks;
-    const bool output_shape_match = total[5] == expected_output_elems;
-
-    std::cout << "[WORKLOAD_AUDIT] dispatch_mega_combine "
-              << (routes_match_case && output_shape_match && total[4] == 0 ? "PASS" : "CHECK")
-              << " accuracy=" << (skip_accuracy ? "SKIP" : "FULL") << '\n';
-    std::cout << "  source active_tokens=" << total[0] << " topk_slots=" << total[1] << " valid_routes=" << total[2]
-              << " remote_routes=" << total[3] << " invalid_expert_routes=" << total[4] << '\n';
-    std::cout << "  case_json input_tokens=" << static_cast<uint64_t>(cfg.input_tokens_all_ranks)
-              << " routed_tokens=" << static_cast<uint64_t>(cfg.routed_tokens_all_ranks)
-              << " remote_routed_tokens=" << static_cast<uint64_t>(cfg.remote_routed_tokens_all_ranks) << '\n';
-    std::cout << "  dest_rows total=" << total[2] << " per_rank_min=" << min_dest_rows
-              << " per_rank_max=" << max_dest_rows << " max_output_size=" << cfg.max_output_size << '\n';
-    std::cout << "  expert_rows nonzero=" << nonzero_experts << "/" << layout.global_expert_num
-              << " min=" << min_expert_rows << " max=" << max_expert_rows << '\n';
-    std::cout << "  output_elements total=" << total[5] << " expected=" << expected_output_elems << std::endl;
-}
-
-void PrintWorkloadAuditIfEnabled(
-    const CaseConfig& cfg, int rank_id, int world_size, const std::vector<uint8_t>& expert_idx,
-    const std::vector<uint8_t>& x_active_mask, size_t actual_output_elems, bool skip_accuracy)
-{
-    const WorkloadAuditLayout layout = BuildWorkloadAuditLayout(cfg);
-    const std::vector<uint64_t> local =
-        BuildLocalWorkloadAudit(cfg, layout, rank_id, expert_idx, x_active_mask, actual_output_elems);
-    const std::vector<uint64_t> total = GatherWorkloadAuditTotals(local, layout.fields, rank_id, world_size);
-    if (rank_id == 0) {
-        PrintWorkloadAuditTotals(cfg, layout, total, skip_accuracy);
-    }
-}
-
-void ValidateFullPathConstraints(const CaseConfig& cfg)
-{
-    if (cfg.expert_per_rank + 1U > MEGA_MOE_D2C_MAX_LOGICAL_GROUP_EVENTS) {
-        throw std::runtime_error(
-            "D2C hard flag budget exceeded: expert_per_rank=" + std::to_string(cfg.expert_per_rank) +
-            " max=" + std::to_string(MEGA_MOE_D2C_MAX_LOGICAL_GROUP_EVENTS));
-    }
-    if (cfg.expert_per_rank > MEGA_MOE_GMM2_TO_COMBINE_MAX_LOGICAL_GROUP_EVENTS) {
-        throw std::runtime_error(
-            "GMM2->combine hard flag budget exceeded: expert_per_rank=" + std::to_string(cfg.expert_per_rank) +
-            " max=" + std::to_string(MEGA_MOE_GMM2_TO_COMBINE_MAX_LOGICAL_GROUP_EVENTS));
+    if (cfg.expert_per_rank != 8U && cfg.expert_per_rank != 16U && cfg.expert_per_rank != 32U) {
+        throw std::runtime_error("expert_per_rank must be one of 8, 16 or 32");
     }
     if (cfg.k % 128U != 0U) {
         throw std::runtime_error("GMM1 requires K % 128 == 0");
@@ -604,31 +434,25 @@ RunOptions LoadRunOptions()
     RunOptions options;
     options.warmup_iters = ParseEnvInt("DISPATCH_MEGA_COMBINE_WARMUP_ITERS", kDefaultWarmupIters);
     options.measure_iters = ParseEnvInt("DISPATCH_MEGA_COMBINE_MEASURE_ITERS", kDefaultMeasureIters);
-    options.skip_accuracy = ParseEnvInt("DISPATCH_MEGA_COMBINE_SKIP_ACCURACY", 0) != 0;
     options.start_sync_debug = ParseEnvInt("DISPATCH_MEGA_COMBINE_START_SYNC_DEBUG", 0) != 0;
-    options.workload_audit = ParseEnvInt("DISPATCH_MEGA_COMBINE_WORKLOAD_AUDIT", 0) != 0;
     if (options.warmup_iters < 0 || options.measure_iters < 0) {
         throw std::runtime_error("warmup/measure iters must be non-negative");
     }
     return options;
 }
 
-MegaMoeBuildResult BuildAndValidateTiling(const CaseConfig& cfg, const StandaloneRankRuntime& runtime, int rank_id)
+MegaMoeBuildResult BuildAndValidateTiling(const CaseConfig &cfg, const StandaloneRankRuntime &runtime)
 {
     MegaMoeBuildResult build = BuildMegaMoeTiling(cfg, runtime);
-    const auto& front = build.tiling.frontReorderTiling;
+    const auto &front = build.tiling.frontReorderTiling;
     if (!FrontCaseIsSupported(front.frontCase)) {
         throw std::runtime_error("front unsupported case has no legacy fallback");
     }
-    build.tiling.combineTiling.combineImplMode = kHostCombineImplDirectAuto;
     ValidateFullPathConstraints(cfg);
-    Trace(
-        rank_id,
-        "tiling built frontCase=" + std::to_string(front.frontCase) + " block_dim=" + std::to_string(build.block_dim));
     return build;
 }
 
-RankHostInputs LoadRankHostInputs(const RankFileSet& files, bool skip_accuracy)
+RankHostInputs LoadRankHostInputs(const RankFileSet &files)
 {
     RankHostInputs inputs;
     inputs.x = ReadBinaryFile(files.x);
@@ -638,15 +462,12 @@ RankHostInputs LoadRankHostInputs(const RankFileSet& files, bool skip_accuracy)
     inputs.scale1 = ReadBinaryFile(files.scale1);
     inputs.scale2 = ReadBinaryFile(files.scale2);
     inputs.probs = ReadBinaryFile(files.probs);
-    inputs.x_active_mask = ReadBinaryFile(files.x_active_mask);
-    if (!skip_accuracy) {
-        inputs.expected_out = BytesToU16(ReadBinaryFile(files.expected_out));
-    }
+    inputs.expected_out = BytesToU16(ReadBinaryFile(files.expected_out));
     return inputs;
 }
 
-RankDeviceBuffers AllocateRankDeviceBuffers(
-    const CaseConfig& cfg, const MegaMoeBuildResult& build, const RankHostInputs& inputs)
+RankDeviceBuffers AllocateRankDeviceBuffers(const CaseConfig &cfg, const MegaMoeBuildResult &build,
+                                            const RankHostInputs &inputs)
 {
     RankDeviceBuffers buffers;
     buffers.x = MakeDeviceBuffer(inputs.x.size(), inputs.x.data());
@@ -666,8 +487,8 @@ RankDeviceBuffers AllocateRankDeviceBuffers(
     return buffers;
 }
 
-MegaMoeLaunchArgs BuildLaunchArgs(
-    const MegaMoeBuildResult& build, const RankDeviceBuffers& buffers, bool start_sync_debug)
+MegaMoeLaunchArgs BuildLaunchArgs(const MegaMoeBuildResult &build, const RankDeviceBuffers &buffers,
+                                  bool start_sync_debug)
 {
     uint64_t ffts_addr = 0;
     uint32_t ffts_len = 0;
@@ -675,7 +496,7 @@ MegaMoeLaunchArgs BuildLaunchArgs(
         throw std::runtime_error("rtGetC2cCtrlAddr failed");
     }
     MegaMoeLaunchArgs args;
-    args.ffts = reinterpret_cast<void*>(ffts_addr);
+    args.ffts = reinterpret_cast<void *>(ffts_addr);
     args.block_dim = build.block_dim;
     args.tiling = buffers.tiling.ptr;
     args.workspace = buffers.workspace.ptr;
@@ -693,97 +514,82 @@ MegaMoeLaunchArgs BuildLaunchArgs(
     return args;
 }
 
-void LaunchAndSync(int rank_id, const MegaMoeLaunchArgs& args, aclrtStream stream, const char* trace_tag)
+void LaunchAndSync(const MegaMoeLaunchArgs &args, aclrtStream stream)
 {
-    Trace(rank_id, std::string(trace_tag) + " launch begin");
     launchMegaMoe(args, stream);
-    Trace(rank_id, std::string(trace_tag) + " launch submitted");
     if (aclrtSynchronizeStream(stream) != ACL_SUCCESS) {
         throw std::runtime_error("stream sync failed");
     }
-    Trace(rank_id, std::string(trace_tag) + " launch synced");
 }
 
-void RunWarmupIterations(
-    const StandaloneRankRuntime& runtime, const RankDeviceBuffers& buffers, const MegaMoeLaunchArgs& args,
-    int warmup_iters, int rank_id)
+void RunWarmupIterations(const StandaloneRankRuntime &runtime, const RankDeviceBuffers &buffers,
+                         const MegaMoeLaunchArgs &args, int warmup_iters)
 {
     CommMpiBarrier();
     for (int iter = 0; iter < warmup_iters; ++iter) {
         PrepareIterationState(runtime, buffers.out, buffers.expert_token_nums, buffers.workspace, buffers.profile);
         CommMpiBarrier();
-        LaunchAndSync(rank_id, args, runtime.compute_stream, "warmup");
+        LaunchAndSync(args, runtime.compute_stream);
         CommMpiBarrier();
     }
 }
 
-std::vector<double> RunMeasureIterations(
-    const StandaloneRankRuntime& runtime, RankDeviceBuffers& buffers, const MegaMoeLaunchArgs& args,
-    const MegaMoeBuildResult& build, int measure_iters, int rank_id)
+std::vector<double> RunMeasureIterations(const StandaloneRankRuntime &runtime, RankDeviceBuffers &buffers,
+                                         const MegaMoeLaunchArgs &args, const MegaMoeBuildResult &build,
+                                         int measure_iters)
 {
     std::vector<double> kernel_times_us;
     kernel_times_us.reserve(static_cast<size_t>(measure_iters));
     for (int iter = 0; iter < measure_iters; ++iter) {
         PrepareIterationState(runtime, buffers.out, buffers.expert_token_nums, buffers.workspace, buffers.profile);
         CommMpiBarrier();
-        LaunchAndSync(rank_id, args, runtime.compute_stream, "measure");
+        LaunchAndSync(args, runtime.compute_stream);
         CommMpiBarrier();
         kernel_times_us.push_back(ReadKernelProfileUs(buffers.profile, buffers.profile_host, build.block_dim));
     }
     return kernel_times_us;
 }
 
-std::vector<uint16_t> CopyActualOutputToHost(const CaseConfig& cfg, const DeviceBuffer& out_dev)
+std::vector<uint16_t> CopyActualOutputToHost(const CaseConfig &cfg, const DeviceBuffer &out_dev)
 {
     std::vector<uint16_t> actual_out(static_cast<size_t>(cfg.m) * cfg.k);
-    if (aclrtMemcpy(
-            actual_out.data(), actual_out.size() * sizeof(uint16_t), out_dev.ptr, actual_out.size() * sizeof(uint16_t),
-            ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
+    if (aclrtMemcpy(actual_out.data(), actual_out.size() * sizeof(uint16_t), out_dev.ptr,
+                    actual_out.size() * sizeof(uint16_t), ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
         throw std::runtime_error("device->host output copy failed");
     }
     return actual_out;
 }
 
-bool ReportRankAccuracy(
-    int rank_id, int world_size, const CaseConfig& cfg, const RankHostInputs& inputs,
-    const std::vector<uint16_t>& actual_out, bool skip_accuracy)
+bool ReportRankAccuracy(int rank_id, int world_size, const CaseConfig &cfg, const RankHostInputs &inputs,
+                        const std::vector<uint16_t> &actual_out)
 {
-    if (skip_accuracy) {
-        PrintOrderedByRank(
-            rank_id, world_size,
-            "rank=" + std::to_string(rank_id) + " accuracy=SKIP\nPASS rank=" + std::to_string(rank_id));
-        return true;
-    }
     const AccuracyReport report = CompareFp16File(inputs.expected_out, actual_out, cfg.compare_atol, cfg.compare_rtol);
-    PrintOrderedByRank(
-        rank_id, world_size,
-        BuildAccuracyReportText(rank_id, report) + "\n" + (report.pass ? "PASS" : "FAIL") + std::string(" rank=") +
-            std::to_string(rank_id));
+    PrintOrderedByRank(rank_id, world_size,
+                       BuildAccuracyReportText(rank_id, report) + "\n" + (report.pass ? "PASS" : "FAIL") +
+                           std::string(" rank=") + std::to_string(rank_id));
     return report.pass;
 }
 
-bool RunOneRank(int rank_id, int world_size, const std::string& case_dir, const HcclRootInfo& root_info)
+bool RunOneRank(int rank_id, int world_size, const std::string &case_dir, const HcclRootInfo &root_info)
 {
     StandaloneRankRuntime runtime;
     if (!InitStandaloneRankRuntime(runtime, rank_id, world_size, root_info)) {
         return false;
     }
-    Trace(rank_id, "runtime initialized");
 
     bool ok = false;
     try {
         const RunOptions options = LoadRunOptions();
         const CaseConfig cfg = LoadCaseConfig(case_dir + "/case.json");
         const RankFileSet files = BuildRankFileSet(case_dir, rank_id);
-        const MegaMoeBuildResult build = BuildAndValidateTiling(cfg, runtime, rank_id);
-        const RankHostInputs inputs = LoadRankHostInputs(files, options.skip_accuracy);
+        const MegaMoeBuildResult build = BuildAndValidateTiling(cfg, runtime);
+        const RankHostInputs inputs = LoadRankHostInputs(files);
         RankDeviceBuffers buffers = AllocateRankDeviceBuffers(cfg, build, inputs);
-        Trace(rank_id, "buffers allocated");
 
         const MegaMoeLaunchArgs args = BuildLaunchArgs(build, buffers, options.start_sync_debug);
-        RunWarmupIterations(runtime, buffers, args, options.warmup_iters, rank_id);
+        RunWarmupIterations(runtime, buffers, args, options.warmup_iters);
         const std::vector<double> kernel_times_us =
-            RunMeasureIterations(runtime, buffers, args, build, options.measure_iters, rank_id);
+            RunMeasureIterations(runtime, buffers, args, build, options.measure_iters);
 
         const std::vector<double> kernel_max_samples = GatherMaxSamplesToRoot(kernel_times_us, rank_id, world_size);
         if (rank_id == 0) {
@@ -792,20 +598,14 @@ bool RunOneRank(int rank_id, int world_size, const std::string& case_dir, const 
 
         PrepareIterationState(runtime, buffers.out, buffers.expert_token_nums, buffers.workspace, buffers.profile);
         CommMpiBarrier();
-        LaunchAndSync(rank_id, args, runtime.compute_stream, "final");
+        LaunchAndSync(args, runtime.compute_stream);
         CommMpiBarrier();
 
         const std::vector<uint16_t> actual_out = CopyActualOutputToHost(cfg, buffers.out);
-        if (options.workload_audit) {
-            PrintWorkloadAuditIfEnabled(
-                cfg, rank_id, world_size, inputs.expert_idx, inputs.x_active_mask, actual_out.size(),
-                options.skip_accuracy);
-        }
-        WriteBinaryFile(
-            case_dir + "/output_rank" + std::to_string(rank_id) + ".bin", actual_out.data(),
-            actual_out.size() * sizeof(uint16_t));
-        ok = ReportRankAccuracy(rank_id, world_size, cfg, inputs, actual_out, options.skip_accuracy);
-    } catch (const std::exception& ex) {
+        WriteBinaryFile(case_dir + "/output_rank" + std::to_string(rank_id) + ".bin", actual_out.data(),
+                        actual_out.size() * sizeof(uint16_t));
+        ok = ReportRankAccuracy(rank_id, world_size, cfg, inputs, actual_out);
+    } catch (const std::exception &ex) {
         std::cerr << "rank=" << rank_id << " error: " << ex.what() << std::endl;
         ok = false;
     }
@@ -816,7 +616,7 @@ bool RunOneRank(int rank_id, int world_size, const std::string& case_dir, const 
 
 } // namespace
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     if (!CommMpiInit(&argc, &argv)) {
         return 1;
@@ -824,7 +624,7 @@ int main(int argc, char** argv)
 
     const int rank_id = CommMpiRank();
     const int world_size = CommMpiSize();
-    const char* case_dir_env = std::getenv("DISPATCH_MEGA_COMBINE_CASE_DIR");
+    const char *case_dir_env = std::getenv("DISPATCH_MEGA_COMBINE_CASE_DIR");
     const std::string case_dir = case_dir_env ? case_dir_env : "../out";
 
     if (aclInit(nullptr) != ACL_SUCCESS) {
