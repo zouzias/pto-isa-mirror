@@ -5,6 +5,7 @@ PTO 通信指令集，提供 NPU 间数据传输、信号同步与集合通信�
 ## 推荐的 include
 
 - `pto_comm_inst.hpp`：统一公共 API 头文件。上层代码只需 include 该文件，它会引入所有必要的类型定义，并根据编译宏分发到正确的后端（NPU 原生实现或 CPU 仿真）。
+- `async/rdma/rdma_workspace_manager.hpp`：Host-only RDMA 控制面接口。仅创建 RDMA workspace 的 Host 代码需要显式包含。
 
 ## 目录结构
 
@@ -17,6 +18,7 @@ comm/
 │                                #   宏选择对应架构实现
 ├── comm_types.hpp               # 公共类型：ParallelGroup、Signal、Signal2D、
 │                                #   NotifyOp、WaitCmp、ReduceOp、DmaEngine、AsyncEvent
+├── rdma_backend.hpp             # RDMA 后端标识（NONE / HNS_1825）
 │
 ├── a2a3/                        # A2/A3（Ascend 910B/910C）架构实现
 │   ├── TPut.hpp                 # TPUT_IMPL  — 远程写（本地 GM → UB → 远端 GM）
@@ -35,15 +37,26 @@ comm/
 ├── a5/                          # A5（Ascend 950）架构实现
 │   ├── T*.hpp                   # 同步指令（include a2a3/ 对应文件）
 │   └── async/
-│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA）
-│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（SDMA + URMA）
+│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA + RDMA）
+│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（SDMA + URMA + RDMA）
 │
-└── async_common/                # 异步公共实现（a2a3/a5 共享）
-    ├── async_types.hpp          # SDMA/URMA 会话与上下文类型
+├── async/                       # 对外引擎接口与 Host workspace manager
+│   ├── sdma/                    # SDMA intrinsic、类型、CMO 与 workspace manager
+│   ├── urma/                    # URMA intrinsic、类型与 HCCL/HCCP 控制面
+│   └── rdma/
+│       └── rdma_workspace_manager.hpp # Host 控制面门面
+│
+└── async_common/                # 异步公共 API（a2a3/a5 共享）
+    ├── async_types.hpp          # SDMA/URMA/RDMA 会话与上下文类型
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test、BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # TPUT_ASYNC 公共辅助函数 + SDMA 实现
     └── TGetAsyncCommonDetail.hpp # TGET_ASYNC 公共辅助函数 + SDMA 实现
 ```
+
+新增的 RDMA 内部头文件遵循 PTO internal header 的包边界，位于
+`pkg_inc/pto/comm/async/rdma/`。其中包含 Device 分发、共享 workspace 布局、构建期后端选择，以及
+`backends/hns_1825/` 下的 HCOMM 控制面和 WQE/CQE、doorbell 实现。构建同时配置两个包内 include 根目录
+后，这些文件仍使用 `pto/comm/...` 形式相互包含。
 
 ## 架构
 
@@ -57,16 +70,25 @@ comm/
  pto_comm_instr_impl.hpp        ← 编译期分发
     │
     ├── PTO_NPU_ARCH_A5    →  a5/T*.hpp / a5/async/T*Async.hpp
+    │                         ├── DmaEngine::SDMA
+    │                         ├── DmaEngine::URMA
+    │                         └── DmaEngine::RDMA
+    │                              └── async/rdma/rdma_async_intrin.hpp
+    │                                   └── RdmaBackend::HNS_1825
     ├── __CCE_AICORE__     →  a2a3/T*.hpp / a2a3/async/T*Async.hpp
     └── __CPU_SIM          →  pto/cpu/comm/T*.hpp（CPU 仿真 stubs）
 ```
+
+用户 Kernel 通过 `DmaEngine::RDMA` 选择 RDMA 路径，`RdmaBackend` 表示编入当前二进制的网卡实现；当前
+支持值为 `RdmaBackend::HNS_1825`。Host 代码使用 `rdma::RdmaWorkspaceManager`，并由
+`rdma::hns_1825::WorkspaceManager` 完成 HNS1825 控制面初始化与释放。
 
 ## 指令分类
 
 | 类别 | 指令 | 说明 |
 |---|---|---|
 | 点对点（同步） | `TPUT`、`TGET` | 通过 UB 暂存 Tile 的远程写/读。支持单缓冲和 ping-pong 双缓冲模式。 |
-| 点对点（异步） | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA 或 URMA 引擎进行 GM-to-GM DMA。返回 `AsyncEvent` 用于后续 Wait/Test。 |
+| 点对点（异步） | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA、URMA 或 RDMA 引擎进行 GM-to-GM DMA。返回 `AsyncEvent` 用于后续 Wait/Test。 |
 | 信号同步 | `TNOTIFY`、`TWAIT`、`TTEST` | 基于标志的跨 NPU 同步。信号为 `int32_t` 标量或二维网格。 |
 | 集合通信 | `TGATHER`、`TSCATTER`、`TBROADCAST`、`TREDUCE` | 基于 `ParallelGroup` 的多 rank 操作。由 root 发起，支持 2D 分块滑动和 ping-pong 双缓冲。 |
 
@@ -77,9 +99,13 @@ comm/
 - **`Signal2D<Rows, Cols>`** — 编译期形状的二维信号网格，支持密集布局和带步长的子区域视图。
 - **`AsyncEvent`** — 异步指令返回的句柄，调用 `.Wait(session)` 或 `.Test(session)` 进行同步。
 - **`AsyncSession`** — 引擎无关的会话，通过 `BuildAsyncSession<engine>()` 构建。
+- **`RdmaBackend`** — `DmaEngine::RDMA` 下面的具体网卡后端；当前为 `NONE` 或 `HNS_1825`。
+- **`rdma::RdmaWorkspaceManager`** — Host-only 门面，初始化/释放所选 RDMA 控制面并提供 Device workspace。
 
 ## 相关文档
 
 - 指令语义与示例：`docs/isa/`
 - CPU 仿真 stubs：`pto/cpu/comm/`
-- NPU 异步后端：`pto/comm/async/`
+- 对外异步接口：`include/pto/comm/async/`
+- 内部异步后端：`pkg_inc/pto/comm/async/`
+- RDMA 配置与约束：`docs/isa/comm/README_zh.md`

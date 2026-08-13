@@ -13,6 +13,7 @@
 - `engine`：
     - `DmaEngine::SDMA`（默认）
     - `DmaEngine::URMA`（Ascend 950PR/Ascend 950DT，仅NPU_ARCH 3510）
+    - `DmaEngine::RDMA`（Ascend 950PR/Ascend 950DT，仅NPU_ARCH 3510；当前为 HNS1825）
 
 > **注意（SDMA路径）**
 > `TPUT_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维tensor**。
@@ -27,14 +28,21 @@ template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                const AsyncSession &session, WaitEvents &... events);
+
+// A5：为本次操作显式指定远端 rank。
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session, uint32_t peer,
+                               WaitEvents &... events);
 ```
 
-`AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择DMA后端，使代码对未来引擎（CCU等）保持前向兼容。
+`AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择 DMA 引擎，使代码对未来引擎（CCU等）保持前向兼容。
 
 ## AsyncSession构建
 
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。
-该函数有两个重载——分别用于SDMA和URMA，参数列表不同。
+该函数分别为 SDMA、URMA 和 RDMA 提供不同参数列表的重载。
 
 ### SDMA构建（默认）
 
@@ -79,17 +87,60 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 
 URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作。
 
+### RDMA构建（HNS1825，仅NPU_ARCH 3510）
+
+`DmaEngine::RDMA` 表示使用 RDMA 路径，Device workspace 记录具体网卡后端；当前构建仅支持 HNS1825。
+
+```cpp
+#ifdef PTO_RDMA_SUPPORTED
+template <DmaEngine engine, typename ScratchTile>
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
+                                    __gm__ uint8_t *workspace,
+                                    uint32_t myPe,
+                                    AsyncSession &session,
+                                    uint32_t syncId = 0);
+
+template <DmaEngine engine, typename ScratchTile>
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
+                                    __gm__ uint8_t *workspace,
+                                    uint32_t destRankId,
+                                    uint32_t myPe,
+                                    AsyncSession &session,
+                                    uint32_t syncId = 0);
+#endif
+```
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `scratchTile` | — | 用于暂存一条 HNS1825 WQE 和检查 CQE 的 UB/Vec scratch，至少 64 字节。|
+| `workspace` | — | Host 侧 `rdma::RdmaWorkspaceManager::GetWorkspaceAddr()` 返回的 Device workspace。|
+| `destRankId` | — | 仅 peer-bound 重载使用的目标 rank。|
+| `myPe` | — | 本地 rank id，用于选择本地已注册 MR。|
+| `session` | — | 输出的 `AsyncSession`。|
+| `syncId` | `0` | `[0, 7]` 范围内的 MTE3/S pipe event id，不得与 Kernel 中其他同步冲突。|
+
+第一个重载构建不绑定远端 rank 的 session，供 `TPUT_ASYNC(..., session, peer)` 跨 peer 复用；第二个重载
+通过 `destRankId` 绑定远端 rank，兼容原有 `TPUT_ASYNC(..., session)` 调用。
+
+Host 必须在启动 Kernel 前完成 RDMA 控制面初始化和 peer 信息交换，详见
+[RDMA 后端与 Host 控制面](README_zh.md#rdma-后端与-host-控制面)。
+
 ## 约束
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
 - `GlobalSrcData::layout == GlobalDstData::layout`
 - SDMA和URMA路径均要求源tensor为**扁平连续的逻辑一维**
+- RDMA 路径要求源和目标 tensor 都是**扁平连续的逻辑一维**
 - SDMA workspace必须是由主机侧 `SdmaWorkspaceManager` 分配的有效GM指针
 - URMA workspace必须是由主机侧 `UrmaWorkspaceManager` 分配的有效GM指针
 - Session和workspace的生命周期必须覆盖相关Event的完成阶段
 - URMA仅在NPU_ARCH 3510（Ascend 950PR/Ascend 950DT）上可用
 - URMA要求CANN Toolkit **>= 9.1.0**
 - 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层MR注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到4KB小页，导致注册失败
+- RDMA 必须在配置阶段使能，workspace 必须由 `rdma::RdmaWorkspaceManager` 创建
+- 当前 HNS1825 RDMA 后端仅支持 NPU_ARCH 3510（Ascend 950PR/Ascend 950DT）
+- 本地源范围和远端目标范围必须完整位于 RDMA manager 注册的 MR 内
+- HNS1825 单次传输最多 `0x7fffffff` 字节
 
 若不满足一维连续要求，当前实现返回无效async event（`handle == 0`）。
 
@@ -112,18 +163,25 @@ URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直�
 
 推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>`（256Byte）。
 
+对于 `DmaEngine::RDMA`，Tile 类型要求相同，但可用空间必须至少为 64 字节。该 scratch 用于 HNS1825
+WQE/CQE 控制数据，而不是传输 payload。
+
 ## 完成语义（Quiet语义）
 
 不同引擎的底层完成机制不同，但用户侧的quiet语义行为一致：
 
 - **SDMA**：每次`TPUT_ASYNC`都会提交数据传输SQE和用于标记本次操作完成的flag SQE。对其返回的Event调用`Wait`或`Test`时，通过轮询对应flag判断该次`TPUT_ASYNC`是否完成；完成后也能保证同一Session中此前提交的所有SDMA操作均已完成。
 - **URMA**：`TPUT_ASYNC` 立即提交RDMA WRITE WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
+- **RDMA/HNS1825**：`TPUT_ASYNC` 立即提交 RDMA WRITE WQE 并敲 SQ doorbell。`Wait` 消费至目标 producer
+  index 的所有 CQE；`Test` 只读检查是否完成，不推进 CQ。
 
-- `event.Wait(session)` —阻塞，直到**自上次Wait以来所有已发出的异步操作**全部完成
+- `event.Wait(session)` —— 阻塞，直到同一 peer/queue 上截至该 event 的操作全部完成
 
-这意味着多次 `TPUT_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有pending操作完成（类似shmem的quiet语义）。
+同一 peer/queue 连续调用多次 `TPUT_ASYNC` 时，只需等待最后一个 `AsyncEvent`；显式选择的不同
+peer/queue 必须分别完成。
 
-同一Session最多可有64个未完成操作，超过后提交可能产生背压。
+SDMA 实现中，同一 Session 最多可有 64 个未完成操作，超过后提交可能产生背压；RDMA 队列容量来自所选
+后端的 HCOMM 队列上下文。
 
 wait成功后，所有已发出的 `dstGlobalData` 写入均已全部完成。
 
@@ -232,5 +290,46 @@ __global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
 
     auto event = comm::TPUT_ASYNC<comm::DmaEngine::URMA>(dstG, srcG, session);
     (void)event.Wait(session);
+}
+```
+
+### RDMA/HNS1825示例（NPU_ARCH 3510）
+
+Host 将 `RdmaWorkspaceManager` 返回的 workspace 传给 Kernel。远端地址由已注册的 peer MR base 加应用定义的
+offset 得到。
+
+```cpp
+template <typename T>
+__global__ AICORE void SimplePutRdma(__gm__ T *localSrc, __gm__ uint8_t *rdmaWorkspace,
+                                     uint32_t myPe, uint32_t destRankId, uint64_t remoteOffset)
+{
+    using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+
+    const uint64_t peerBase = comm::rdma::PeerMrBaseAddr(rdmaWorkspace, destRankId);
+    if (peerBase == 0) {
+        return;
+    }
+
+    ShapeDyn shape(1, 1, 1, 1, 1024);
+    StrideDyn stride(1024, 1024, 1024, 1024, 1);
+    GT dstG(reinterpret_cast<__gm__ T *>(peerBase + remoteOffset), shape, stride);
+    GT srcG(localSrc, shape, stride);
+
+    ScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+
+    comm::AsyncSession session;
+    if (!comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
+            scratchTile, rdmaWorkspace, myPe, session)) {
+        return;
+    }
+
+    auto event = comm::TPUT_ASYNC<comm::DmaEngine::RDMA>(dstG, srcG, session, destRankId);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```

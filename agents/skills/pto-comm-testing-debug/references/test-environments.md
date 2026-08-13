@@ -29,7 +29,7 @@ python3 tests/run_cpu.py --testcase tgather --gtest_filter 'TGatherTest.*'
 | 信号同步 | 模拟 AtomicAdd/Set | 硬件原子操作 |
 | pipe_barrier | 忽略 | 真实流水线同步 |
 | 多 rank | 单进程模拟 | MPI + 多 NPU |
-| 异步 DMA | 返回无效 event | SDMA/URMA 引擎 |
+| 异步 DMA | 返回无效 event | SDMA/URMA/RDMA 引擎 |
 
 **建议**：CPU 仿真验证数据流和逻辑正确性，但最终必须在 NPU 硬件上验证同步和性能。
 
@@ -45,6 +45,29 @@ python3 tests/script/run_st.py -r npu -v a3 -t tput -g TPutTest.*
 # 运行所有通信 ST
 python3 tests/script/run_st.py -r npu -v a3 --comm
 ```
+
+### A5 HNS1825 RDMA ST
+
+HNS1825 PUT/GET 使用可独立选择的 target。要求 A5、HNS1825 网卡/驱动、HCOMM 和可达的
+RDMA IPv4：
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_hns1825 -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
+```
+
+`PTO_RDMA_BACKEND` 只在 CMake 配置阶段读取；运行时不选择后端。`run_st.py` 默认删除并重建 `build/`，
+`-w` 则跳过编译，因此修改变量后不得用 `-w` 运行旧产物。
+
+测试环境变量分两类：
+
+- PTO/HCOMM 控制面：`PTO_ROCE_VERBOSE=1`、`HCCL_RDMA_TC`、`HCCL_RDMA_SL`；
+- 仅测试 bootstrap：`PTO_ROCE_ROOTINFO`（默认 `/etc/hccl_rootinfo.json`）、`PTO_ROCE_PHYIDS`、
+  `PTO_ROCE_LOCAL_IP`、`PTO_ROCE_IPS`、`PTO_ROCE_BASE_PORT`。
+
+若 provider 不在默认路径，设置 `IBV_EXTEND_DRIVERS=<path>/libhrn5-rdmav34.so`。PUT 和 GET 均已在目标
+HNS1825 环境跑通；二者使用对等的独立 target，便于分别回归和定位。
 
 ### 算子级测试
 

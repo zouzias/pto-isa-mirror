@@ -9,6 +9,11 @@ template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, WaitEvents&... events);
+
+// A5 显式 peer 重载
+AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
+                      const AsyncSession &session, uint32_t peer,
+                      WaitEvents&... events);
 ```
 
 ## TGET_ASYNC — 异步远程读
@@ -20,6 +25,11 @@ template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, WaitEvents&... events);
+
+// A5 显式 peer 重载
+AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
+                      const AsyncSession &session, uint32_t peer,
+                      WaitEvents&... events);
 ```
 
 ---
@@ -51,6 +61,25 @@ bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
 bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session);
 ```
 
+### RDMA 构建（HNS1825，仅 Ascend950 / NPU_ARCH 3510）
+
+```cpp
+template <DmaEngine engine, typename ScratchTile>
+bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
+                       uint32_t myPe,
+                       AsyncSession &session, uint32_t syncId = 0);
+
+template <DmaEngine engine, typename ScratchTile>
+bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
+                       uint32_t destRankId, uint32_t myPe,
+                       AsyncSession &session, uint32_t syncId = 0);
+```
+
+`workspace` 由 Host 侧 `rdma::RdmaWorkspaceManager` 创建，`myPe` 为本地 rank。第一个重载配合
+`TPUT_ASYNC/TGET_ASYNC(..., session, peer)` 跨 peer 复用；第二个重载通过 `destRankId` 绑定远端 rank，
+兼容原有调用。HNS1825 要求 UB/Vec `scratchTile` 至少 64B，`syncId` 范围为 `[0, 7]`。
+Host 必须按 `Preflight → Init → Kernel → Finalize` 管理生命周期。
+
 ---
 
 ## 异步约束
@@ -60,13 +89,17 @@ bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSess
 - URMA workspace 必须由 Host 侧 `UrmaWorkspaceManager` 分配
 - URMA 需要大页内存（`ACL_MEM_MALLOC_HUGE_ONLY`），小页分配导致注册失败
 - `scratchTile` 仅用于控制元数据，不是数据暂存缓冲
+- RDMA 必须在 CMake 配置前通过 `PTO_RDMA_BACKEND=HNS_1825` 使能，当前仅支持 Ascend950 /
+  NPU_ARCH 3510
+- RDMA 的本地和远端完整传输范围都必须位于 `RdmaWorkspaceManager::Init` 注册的通信缓冲区
+- HNS1825 单次传输最多 `0x7fffffff` 字节，scratch 至少 64B
 
 ---
 
 ## 完成语义（Quiet 语义）
 
-- `event.Wait(session)` 阻塞直到**自上次 Wait 以来所有已发出的异步操作**全部完成
-- 多次异步调用后，只需对最后一个 `AsyncEvent` 调用一次 `Wait`
+- `event.Wait(session)` 阻塞直到同一 peer/queue 上截至该 event 的操作全部完成
+- 同一 peer/queue 连续调用时，只需等待最后一个 `AsyncEvent`；不同 peer/queue 分别等待
 - 类似 shmem 的 quiet 语义
 
 ---
