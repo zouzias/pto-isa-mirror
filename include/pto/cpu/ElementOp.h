@@ -26,8 +26,8 @@ enum class ElementOp {
     OP_SUBRELU,
     OP_MUL,
     OP_DIV,
-    OP_MULADDDST,
-    OP_FUSEDMULADD,
+    OP_MULA,
+    OP_MADD,
     OP_FUSEDMULADDRELU,
     OP_REM,
     OP_SHL,
@@ -134,14 +134,14 @@ struct ElementOpCal<DType, ElementOp::OP_DIV> {
 };
 
 template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_MULADDDST> {
+struct ElementOpCal<DType, ElementOp::OP_MULA> {
     static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = static_cast<DType>(src0 * src1) + dst; }
 
     static void apply(DType& dst, const DType& src0, const DType& src1) { dst = static_cast<DType>(src0 * src1) + dst; }
 };
 
 template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_FUSEDMULADD> {
+struct ElementOpCal<DType, ElementOp::OP_MADD> {
     static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = src0 * dst + src1; }
 
     static void apply(DType& dst, const DType& src0, const DType& src1) { dst = src0 * dst + src1; }
