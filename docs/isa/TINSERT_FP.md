@@ -9,6 +9,8 @@
 
 Vector-quantization variant of `TINSERT` that also takes an `fp` (scaling) tile.
 
+`TINSERT_FP(...)` is retained as a source-compatible C++ interface for the no-mode fp insertion form. It forwards to the same no-mode `TINSERT(..., fp, indexRow, indexCol, ...)` overload, which maps to the `TINSERT_IMPL(dst, src, fp, indexRow, indexCol)` implementation path without an explicit mode template argument.
+
 ## See also
 
 - TINSERT base instruction: `docs/isa/TINSERT.md`.
@@ -18,6 +20,10 @@ Vector-quantization variant of `TINSERT` that also takes an `fp` (scaling) tile.
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
