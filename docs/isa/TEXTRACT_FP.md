@@ -9,6 +9,8 @@
 
 Extract a sub-tile from a source tile, while also providing an `fp` (scaling) tile used for vector quantization parameters (target/implementation-defined).
 
+`TEXTRACT_FP(...)` is retained as a source-compatible C++ interface for the no-mode fp extraction form. It forwards to the same no-mode `TEXTRACT(..., fp, indexRow, indexCol, ...)` overload, which maps to the `TEXTRACT_IMPL(dst, src, fp, indexRow, indexCol)` implementation path without an explicit mode template argument.
+
 ## See also
 
 - TEXTRACT base instruction: `docs/isa/TEXTRACT.md`.
@@ -18,6 +20,10 @@ Extract a sub-tile from a source tile, while also providing an `fp` (scaling) ti
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
@@ -32,13 +38,13 @@ Unless otherwise specified, semantics are defined over the valid region and targ
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.textract_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
+pto.textract_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 ## Constraints
 
@@ -54,7 +60,7 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.textract_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
@@ -64,13 +70,13 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.textract_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### PTO Assembly Form
 
 ```text
-%dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.textract_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 # AS Level 2 (DPS)
-pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
+pto.textract_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
