@@ -1,18 +1,7 @@
-#!/bin/bash
-# --------------------------------------------------------------------------------
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-# CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-# See LICENSE in the root of the software repository for the full text of the License.
-# --------------------------------------------------------------------------------
-
+#!/usr/bin/env bash
 set -euo pipefail
 
 WORLD_SIZE=8
-SOC=Ascend910B
 M=2048
 K=7168
 N=4096
@@ -28,11 +17,9 @@ WARMUP_ITERS=${DISPATCH_MEGA_COMBINE_WARMUP_ITERS:-3}
 MEASURE_ITERS=${DISPATCH_MEGA_COMBINE_MEASURE_ITERS:-5}
 GOLDEN_BACKEND=${DISPATCH_MEGA_COMBINE_GOLDEN_BACKEND:-python-batch}
 GOLDEN_CHUNK_ROWS=${DISPATCH_MEGA_COMBINE_GOLDEN_CHUNK_ROWS:-512}
-GOLDEN_PROFILE=${DISPATCH_MEGA_COMBINE_GOLDEN_PROFILE:-0}
 REUSE_DATA=${DISPATCH_MEGA_COMBINE_REUSE_DATA:-0}
 
 : "${ASCEND_HOME_PATH:?ASCEND_HOME_PATH must be set before running run.sh}"
-CMAKE_COMPILER=${CMAKE_COMPILER:-bisheng}
 MPI_ENV_BIN=${MPI_ENV_BIN:-/home/ntlab/miniconda3/envs/ltr_pto/bin}
 MPI_ENV_LIB=${MPI_ENV_LIB:-/home/ntlab/miniconda3/envs/ltr_pto/lib}
 MPI_LIB_PATH=${MPI_LIB_PATH:-${MPI_ENV_LIB}/libmpi.so}
@@ -45,7 +32,7 @@ export MPI_LIB_PATH
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --soc) SOC="$2"; shift 2 ;;
+    --soc) shift 2 ;;
     --world-size) WORLD_SIZE="$2"; shift 2 ;;
     --m) M="$2"; shift 2 ;;
     --k) K="$2"; shift 2 ;;
@@ -59,7 +46,6 @@ while [[ $# -gt 0 ]]; do
     --rtol) RTOL="$2"; shift 2 ;;
     --golden-backend) GOLDEN_BACKEND="$2"; shift 2 ;;
     --golden-chunk-rows) GOLDEN_CHUNK_ROWS="$2"; shift 2 ;;
-    --golden-profile) GOLDEN_PROFILE=1; shift ;;
     --reuse-data) REUSE_DATA=1; shift ;;
     *) echo "unknown option: $1"; exit 1 ;;
   esac
@@ -72,9 +58,6 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 GEN_DATA_EXTRA_ARGS=()
 GEN_DATA_EXTRA_ARGS+=(--golden-backend "${GOLDEN_BACKEND}")
 GEN_DATA_EXTRA_ARGS+=(--golden-chunk-rows "${GOLDEN_CHUNK_ROWS}")
-if [[ "${GOLDEN_PROFILE}" != "0" ]]; then
-  GEN_DATA_EXTRA_ARGS+=(--golden-profile)
-fi
 if [[ "${REUSE_DATA}" != "0" ]]; then
   GEN_DATA_EXTRA_ARGS+=(--reuse-data)
 fi
@@ -109,9 +92,7 @@ python3 "${SCRIPT_DIR}/scripts/gen_data.py" \
   --rtol "${RTOL}" \
   "${GEN_DATA_EXTRA_ARGS[@]}"
 
-cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" \
-  -DSOC_VERSION="${SOC}" \
-  -DCMAKE_COMPILER="${CMAKE_COMPILER}"
+cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}"
 cmake --build "${BUILD_DIR}" --target dispatch_mega_combine -j16
 
 export LD_LIBRARY_PATH="${BUILD_DIR}/lib:${LD_LIBRARY_PATH}"

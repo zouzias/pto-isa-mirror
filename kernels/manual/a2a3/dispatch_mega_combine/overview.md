@@ -16,12 +16,12 @@ h2, h3 {
 
 <img src="../../../../docs/figures/megamoe/moe_ffn_flow_improved.png"  width="800" />
 
-- ① 本地token permute：源卡内 [token,expert,k] 按expert排序 [expert,token,k]
+- ① 本地token permuate：源卡内 [token,expert,k] 按expert排序 [expert,token,k]
 - ② All2All通信：发送 [expert,token,k] 到目标卡
-- ③ 通信后permute： 目标卡将收到的token按照expert再做一次排序 [expert,srcRank,token,k]
+- ③ 通信后permuate： 目标卡将收到的token按照expert再做一次排序 [expert,srcRank,token,k]
 - ④ FFN计算：执行GMM1、Swiglu激活函数和GMM2计算。
-- ⑤ 计算后unpermute：目标卡将token按照 [srcRank,expert,token,k] 重新排序
-- ⑥ AlltoallV还原：将 [expert,token,k] all2allv发回srcRank源卡
+- ⑤ 计算后unpermuate：目标卡将token按照 [srcRank,expert,token,k] 重新排序
+- ⑥ AlltoallV还原：将 [expert,token,k] all2allv发回srcRank源卡 
 - ⑦ 源卡按照topk结果累加，并还原原始token顺序 [token，k]
 
 **实际的效果是串行衔接：**
@@ -38,15 +38,15 @@ h2, h3 {
 
 <img src="../../../../docs/figures/megamoe/megamoe_pipeline_swiglu_2seg_fixed.png"  width="800" />
 
-- ① 开头：两次permute合并到一起，通过一次轻量的all2all通信对齐内存布局
+- ① 开头：两次permuate合并到一起，通过一次轻量的all2all通信对齐内存布局
 
-   <img src="../../../../docs/figures/megamoe/permute_all2all_count.png"  width="250" />
+   <img src="../../../../docs/figures/megamoe/permuate_all2all_count.png"  width="250" />
 
 - ② 中间：
   - a.按照expert逐个做AIC和AIV的overlap,第i个专家的GMM可以与第i-1专家的AlltoallV
   - b.swiglu拆成了两段，当GMM1结束的时候，第一段swgilu也已经结束，可以马上开始GMM2
 - ③ 结尾: 由于是expert级流水，因此后all2all阶段也省掉了[expert,srcRank,token,k] -> [srcRank,expert,token,k]的重排
-
+  
 **ascendc针对decode 小token量场景也做了针对性的优化：**
   - 前重排阶段，能用UB直接完成的场景，全部放到UB里做
   - combine阶段，采用subtile模式提高多核并发
@@ -336,13 +336,14 @@ else:                                                 # 非 copy core 只参与 
 
 关键流程：
 
-- AIC 按 local expert 逐组计算，`cumsumMM[rankSize-1, expert]` 给每个 expert 的 `currentM`。
+- AIC 按 local expert 逐组计算，`cumsumMM[rankSize-1, expert]` 给每个 expert 的 raw row 数；实际 `currentM` 会按 `maxOutputSize` 裁剪。
 - 每个 expert 的 tile 数是 `ceil(currentM / 128) * ceil(N / 256)`；AIC 以 `loopIdx += coreNum` 分担 tile。
 - `startCoreIdx = (startCoreIdx + coreLoops) % coreNum`，让下一个 expert 从不同 AIC 起步，避免总是 core0 吃第一个 tile。
 - 输出 tile 使用 `GmmCommonGetBlockCoordMN()` 做 N 方向 9 列 swizzle，奇数 N-block 反向走 M 维，形成蛇形调度。
 - A 来自 dispatch 后的 `gmA`，B 来自 packed `weight1`，C 写 `gmC`。
 - GMM pipeline 固定为 `L1(M,N,K)=(128,256,512)`、`L0(M,N,K)=(128,256,128)`。
 - L1 A/B 是 2 stage ping-pong；L0A/L0B 是 2 stage ping-pong；L0C 是 1 stage。`RunTile()` 先预取下一块 L1 K tile，再计算上一块 pending K tile。
+- GMM1 在首个 SwiGLU segment 覆盖的 expert 计算完后发 C2V ready，最后一个 expert 结束后再发最后一个 segment 的 C2V ready。
 
 关键 PTO 接口：
 
@@ -357,9 +358,14 @@ else:                                                 # 非 copy core 只参与 
 伪码：
 
 <pre><code>
+<span class="pto-api">CrossCoreWaitFlag</span>(DISPATCH_INITIAL_READY)           # 等 dispatch 建立 D2C 等待链
+segmentIdx = 0
+firstSegmentEnd = MoeSwigluEpilogueGranularity(expertPerRank)
+
 for localExpert:
   <span class="pto-api">CrossCoreWaitFlag</span>(DISPATCH_GROUP_READY[localExpert])  # 等 dispatch 搬完该 expert 的 gmA
-  currentM = cumsumMM[lastRank, localExpert] - previousExpertRows
+  currentMRaw = cumsumMM[lastRank, localExpert]
+  currentM = clip_to_max_output(currentMRaw, groupBase, maxOutputSize)
   coreLoops = ceil(currentM / 128) * ceil(N / 256)        # 本 expert 的 L1 output tile 总数
   startLoopIdx = rotate_by_previous_expert_work(startCoreIdx, coreIdx)  # expert 间轮转，避免 core0 总吃首 tile
 
@@ -394,6 +400,13 @@ for localExpert:
     <span class="pto-api">TMOV</span>(scale_fixpipe, scale_l1)
     <span class="pto-api">TSTORE_FP</span>(gmC[groupBase + blockM * 128, blockN * 256], acc, scale_fixpipe)
 
+  groupEnd = localExpert + 1
+  if groupEnd == firstSegmentEnd or groupEnd == expertPerRank:
+    SynchronizeBlock()                                    # segment 覆盖的 GMM1 tile 全部完成
+    <span class="pto-api">CrossCoreSetFlag</span>(GMM1_TO_SWIGLU_READY[segmentIdx])
+    segmentIdx += 1
+
+  groupBase += currentM
   startCoreIdx = (startCoreIdx + coreLoops) % coreNum     # 下个 expert 从不同 AIC 起步
 </code></pre>
 
@@ -403,6 +416,7 @@ for localExpert:
 
 - AIV-only 阶段；按 `MoeSwigluSegmentNum(expertPerRank)` 切 segment，和 GMM1/GMM2 做阶段级 overlap。
 - 每个 segment 开始时等待 GMM1 的 C2V ready flag；core0 写 segment metadata，其它 AIV 读取后按 row 平均分担。
+- segment 数由 `MoeSwigluSegmentNum(expertPerRank)` 决定：`expertPerRank <= 1` 时为 0/1 段，否则为 2 段；默认 16 expert 时第一段覆盖前 13 个 expert，第二段覆盖剩余 3 个 expert。
 - full-row pipeline 使用 2 个 UB stage：当前 row 计算时预取下一 row，输出 store 完成后释放对应 buffer。
 - `gmC[row, 0:N]` 先转 fp32，再乘 `perTokenScale1[row]` 做 GMM1 反量化。
 - 对 `N` 维拆两半：前半 `x` 做 `silu(x)=x/(1+exp(-x))`，后半作为 `gate`，输出 `silu(x) * gate`。
@@ -435,6 +449,7 @@ for segmentIdx in swigluSegments:                       # segment 级与 GMM1/GM
       segmentRowBase, segmentRows,
       rowSplitBase, rowSplitRem
     }
+  <span class="pto-api">SYNCALL&lt;AIVOnly&gt;</span>()                                  # segment metadata 对所有 AIV 可见
 
   read sharedSegmentMeta[segmentIdx]                    # 各 AIV 按 row 平均分担本 segment
   localRows = rowSplitBase + (coreIdx < rowSplitRem ? 1 : 0)
@@ -488,6 +503,7 @@ for segmentIdx in swigluSegments:                       # segment 级与 GMM1/GM
       <span class="pto-api">PtoStoreVector</span>(perTokenScale2[chunkRows], scaleChunkBuffer)
 
   flush remaining scaleChunkBuffer with <span class="pto-api">PtoStoreVector</span>
+  <span class="pto-api">SYNCALL&lt;AIVOnly&gt;</span>()                                  # 本 segment 的 gmPermutedToken/scale2 全部写完
   <span class="pto-api">CrossCoreSetFlag</span>(SWIGLU_TO_GMM2_READY[segmentIdx])     # 通知 GMM2 本 segment 可开始
 </code></pre>
 
@@ -497,7 +513,7 @@ for segmentIdx in swigluSegments:                       # segment 级与 GMM1/GM
 
 - AIC-only；按 `MoeSwigluSegmentNum(expertPerRank)` 切 segment，和 SwiGLU 做阶段级 overlap。
 - 每个 segment 开始时等待 SwiGLU 的 V2C ready flag，再处理该 segment 覆盖的 local expert 组。
-- 每个 expert 的 `currentM` 仍来自 `cumsumMM[lastRank, expert]`；tile 数 `ceil(currentM / 128) * ceil(K / 256)`。
+- 每个 expert 的 `currentMRaw` 仍来自 `cumsumMM[lastRank, expert]`，再按 `maxOutputSize` 和 `groupBase` 裁剪；tile 数 `ceil(currentM / 128) * ceil(K / 256)`。
 - AIC 以 `loopIdx += coreNum` 分担 tile；`startCoreIdx = (startCoreIdx + coreLoops) % coreNum` 做 expert 间轮转负载均衡。
 - 输出 tile 同样用 `GmmCommonGetBlockCoordMN()` 做 N 方向 9 列 swizzle，奇数 N-block 反向走 M 维。
 - A 来自 SwiGLU 输出的 `gmPermutedToken[rows, N/2]`，B 来自 packed `weight2[expert, N/2, K]`，C 写 `gmm2Output[rows, K]`。
@@ -522,7 +538,8 @@ for segmentIdx in swigluSegments:                       # segment 级与 SwiGLU 
   <span class="pto-api">CrossCoreWaitFlag</span>(SWIGLU_TO_GMM2_READY[segmentIdx])  # 等本 segment 的 SwiGLU 输出就绪
 
   for localExpert in experts covered by this segment:
-    currentM = cumsumMM[lastRank, localExpert] - previousExpertRows
+    currentMRaw = cumsumMM[lastRank, localExpert]
+    currentM = clip_to_max_output(currentMRaw, groupBase, maxOutputSize)
     coreLoops = ceil(currentM / 128) * ceil(K / 256)
     startLoopIdx = rotate_by_previous_expert_work(startCoreIdx, coreIdx)  # 与 GMM1 相同的 tile 轮转
 
@@ -568,7 +585,9 @@ for segmentIdx in swigluSegments:                       # segment 级与 SwiGLU 
 关键流程：
 
 - 目的 rank 按 local expert 和 source rank 分段，把 GMM2 结果送回源 rank remote window。
-- large token path 按 row 处理；small token path 按 `(subtileRows, subtileCols)` 处理，减少无效搬运。
+- `combineImplMode` 支持 direct large / direct small / auto；auto 下 `M * topK <= 4096` 走 small，否则走 large。
+- large token path 按 source rank 再切 lane，默认每个 srcRank 最多 2 个 AIV lane 并行按 row 搬完整 K。
+- small token path 复用 GMM2 的 `128 x 256` tile 切分，每个 tile 再按 16 行 subtile 切给两个 AIV subcore。
 - 用 `perTokenScale2` 将 `gmm2Output` 反量化，再 cast 成最终输出元素类型。
 - 写到 `srcRank.remoteWindow.offsetD[dstRow]`，供源 rank unpermute 使用。
 
@@ -583,36 +602,61 @@ for segmentIdx in swigluSegments:                       # segment 级与 SwiGLU 
 伪码：
 
 <pre><code>
-for localExpert:
-  <span class="pto-api">CrossCoreWaitFlag</span>(GMM2_TO_COMBINE_READY[localExpert])  # 等本 expert 的 GMM2 输出就绪
+if large token path:                                    # token 量大：按 row 完整 K 处理
+  groupBase = 0
+  for localExpert:
+    currentM = cumsumMM[lastRank, localExpert]
+    <span class="pto-api">CrossCoreWaitFlag</span>(GMM2_TO_COMBINE_READY[localExpert])
+    <span class="pto-api">SYNCALL&lt;AIVOnly&gt;</span>()                                # large path 等所有 AIV 看到同一 expert ready
 
-  if large token path:                                  # token 量大：按 row 完整 K 处理
-    for srcRank segment:
+    lanesPerRank = min(max(coreNum / rankSize, 1), 2)
+    for taskIdx assigned to this AIV in rankSize * lanesPerRank:
+      srcRank = taskIdx / lanesPerRank
+      laneIdx = taskIdx % lanesPerRank
       srcRows = tokenPerExpert[srcRank, globalExpert]
-      for row in srcRows:
+      rowBegin, rowNum = split_rows_by_lane(srcRows, laneIdx, lanesPerRank)
+      srcRowBase = groupBase + cumsumMM_before_srcRank(srcRank, localExpert) + rowBegin
+      dstRowBase = preSumBeforeRank[srcRank, localExpert] + rowBegin
+
+      for row in rowNum:
         c = <span class="pto-api">TLOAD</span>(gmm2Output[srcRow, 0:K])
         fp32 = <span class="pto-api">TCVT</span>(c, CAST_NONE)
         fp32 = <span class="pto-api">TMULS</span>(fp32, perTokenScale2[srcRow])       # per-row 反量化
         d = <span class="pto-api">TCVT</span>(fp32, CAST_RINT)
         <span class="pto-api">TSTORE</span>(srcRank.remoteWindow.offsetD[dstRow, 0:K], d)  # 写回源 rank
+    groupBase += currentM
 
-  if small token path:                                  # token 量小：按 GMM2 tile 切 2D subtile
-    for GMM2 tile assigned to this AIV:
-      c = <span class="pto-api">TLOAD</span>(gmm2Output[tileRows, tileCols])
-      scale = <span class="pto-api">TLOAD</span>(perTokenScale2[tileRows])
-      fp32 = <span class="pto-api">TCVT</span>(c, CAST_NONE)
-      fp32 = <span class="pto-api">TMULS</span>(fp32, scale)
-      d = <span class="pto-api">TCVT</span>(fp32, CAST_RINT)
-      for intersected srcRank segment:                  # 一个 tile 可能跨多个 srcRank 段
-        <span class="pto-api">TSTORE</span>(srcRank.remoteWindow.offsetD[dstRows, tileCols], d)
+elif small token path:                                  # token 量小：按 GMM2 tile 切 2D subtile
+  groupBase = 0
+  startCoreIdx = 0
+  for localExpert:
+    currentM = clip_to_max_output(cumsumMM[lastRank, localExpert], groupBase, maxOutputSize)
+    <span class="pto-api">CrossCoreWaitFlag</span>(GMM2_TO_COMBINE_READY[localExpert])
+
+    for GMM2 128x256 tile assigned to this AIC-indexed block:
+      subtileRows = split_tile_rows_by_subcore(tileRows, 16, subblockId)  # 两个 AIV subcore 各处理一半 subtile
+      for subtile in subtileRows:
+        c = <span class="pto-api">TLOAD</span>(gmm2Output[subtileRows, tileCols])
+        scale = <span class="pto-api">TLOAD</span>(perTokenScale2[subtileRows])
+        fp32 = <span class="pto-api">TCVT</span>(c, CAST_NONE)
+        fp32 = <span class="pto-api">TMULS</span>(fp32, scale)
+        d = <span class="pto-api">TCVT</span>(fp32, CAST_RINT)
+        for intersected srcRank segment:                # 一个 subtile 可能跨多个 srcRank 段
+          <span class="pto-api">TSTORE</span>(srcRank.remoteWindow.offsetD[dstRows, tileCols], d)
+
+    groupBase += currentM
+    startCoreIdx = rotate_by_previous_expert_work(startCoreIdx, coreLoops)
 
 final boundary:
+  wait local load/store pipe idle
+  <span class="pto-api">SYNCALL&lt;AIVOnly&gt;</span>()                                  # offsetD 写回本地可见
   zeros = <span class="pto-api">PtoFillUb</span>(0)
   <span class="pto-api">PtoStoreVector</span>(tokenPerExpert, zeros)              # 清零 count window，供下次复用
+  remoteWindow.CrossRankSync()                             # 确保所有 rank 的 offsetD 写回完成后再 unpermute
 
 </code></pre>
 
-#### 7.Unpermute：源 rank 按 topK 权重累加回原 token 顺序
+#### 7.Unpermute：源 rank 按 topK 权重累加回原 token 顺序 
 
 关键流程：
 
