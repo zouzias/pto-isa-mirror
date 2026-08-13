@@ -40,6 +40,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/a5/TGet.hpp"
 // Point-to-Point Communication (Asynchronous)
 #include "pto/comm/a5/async/TPutAsync.hpp"
+#include "pto/comm/a5/async/TPutAsyncNotify.hpp"
 #include "pto/comm/a5/async/TGetAsync.hpp"
 // Signal-Based Synchronization
 #include "pto/comm/a5/TNotify.hpp"

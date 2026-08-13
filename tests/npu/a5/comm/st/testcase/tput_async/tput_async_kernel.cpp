@@ -176,9 +176,159 @@ bool RunPutAsyncRootPut(int n_ranks, int n_devices, int first_rank_id, int first
         });
 }
 
+template <typename T, size_t count>
+__global__ AICORE void TPutAsyncNotifyKernelImpl(
+    __gm__ T* sendBuf, __gm__ T* recvBuf, __gm__ int32_t* signal, __gm__ int32_t* eventStatus,
+    __gm__ CommDeviceContext* hcclCtx, __gm__ uint8_t* sdmaWorkspace, pto::comm::NotifyOp notifyOp, int32_t signalValue)
+{
+    constexpr int kRootRank = 0;
+    constexpr int kTargetRank = 1;
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+    using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
+
+    if (static_cast<int>(hcclCtx->rankId) != kRootRank) {
+        return;
+    }
+
+    constexpr int kElemCount = static_cast<int>(count);
+    ShapeDyn shape(1, 1, 1, 1, kElemCount);
+    StrideDyn stride(kElemCount, kElemCount, kElemCount, kElemCount, 1);
+    Global sendGlobal(sendBuf, shape, stride);
+    Global remoteRecvGlobal(CommRemotePtr(hcclCtx, recvBuf, kTargetRank), shape, stride);
+    pto::comm::Signal remoteSignal(CommRemotePtr(hcclCtx, signal, kTargetRank));
+
+    ScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+    pto::comm::AsyncSession session;
+    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, 0)) {
+        *eventStatus = -1;
+        return;
+    }
+
+    pto::comm::AsyncEvent event;
+    constexpr int kNotifyRepeats = 2;
+    for (int repeat = 0; repeat < kNotifyRepeats; ++repeat) {
+        const int32_t currentSignalValue = signalValue + repeat;
+        if (notifyOp == pto::comm::NotifyOp::Set) {
+            // Exercise the explicit-peer overload. The A5 MTE fallback ignores peer
+            // because both destination tensors already contain remote virtual addresses.
+            event = pto::comm::TPUT_ASYNC_NOTIFY(
+                remoteRecvGlobal, sendGlobal, remoteSignal, currentSignalValue, notifyOp, session,
+                static_cast<uint32_t>(kTargetRank));
+        } else {
+            event = pto::comm::TPUT_ASYNC_NOTIFY(
+                remoteRecvGlobal, sendGlobal, remoteSignal, currentSignalValue, notifyOp, session);
+        }
+    }
+
+    const bool completed = event.handle == 0 && event.Wait(session) && event.Test(session);
+    *eventStatus = completed ? 1 : -2;
+    __asm__ __volatile__("");
+    dcci(eventStatus, cache_line_t::SINGLE_CACHE_LINE);
+    dsb(DSB_DDR);
+}
+
+template <typename T, size_t count>
+bool RunPutAsyncNotifyKernel(
+    int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo* rootInfo, pto::comm::NotifyOp notifyOp)
+{
+    constexpr int kRootRank = 0;
+    constexpr int kTargetRank = 1;
+    constexpr int32_t kInitialSignal = 7;
+    constexpr int32_t kSignalValue = 5;
+
+    TestContext ctx;
+    if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo)) {
+        return false;
+    }
+
+    std::vector<T> input(count);
+    std::vector<T> output(count, static_cast<T>(-1));
+    for (size_t i = 0; i < count; ++i) {
+        input[i] = static_cast<T>(i + 101);
+    }
+
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rankId];
+    size_t winOffset = 0;
+    WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t));
+    auto* eventStatus = reinterpret_cast<int32_t*>(WindowAlloc(localWinBase, winOffset, sizeof(int32_t)));
+    auto* signal = reinterpret_cast<int32_t*>(WindowAlloc(localWinBase, winOffset, sizeof(int32_t)));
+    auto* sendBuf = reinterpret_cast<T*>(WindowAlloc(localWinBase, winOffset, count * sizeof(T)));
+    auto* recvBuf = reinterpret_cast<T*>(WindowAlloc(localWinBase, winOffset, count * sizeof(T)));
+
+    int32_t initialStatus = 0;
+    aclrtMemcpy(eventStatus, sizeof(int32_t), &initialStatus, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(signal, sizeof(int32_t), &kInitialSignal, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(sendBuf, count * sizeof(T), input.data(), count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recvBuf, count * sizeof(T), output.data(), count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    constexpr size_t kDummyWorkspaceBytes = 16 * 1024;
+    void* dummyWorkspace = nullptr;
+    if (aclrtMalloc(&dummyWorkspace, kDummyWorkspaceBytes, ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        return false;
+    }
+    aclrtMemset(dummyWorkspace, kDummyWorkspaceBytes, 0, kDummyWorkspaceBytes);
+
+    HcclHostBarrier(ctx.comm, ctx.stream);
+    TPutAsyncNotifyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
+        sendBuf, recvBuf, signal, eventStatus, ctx.deviceCtx, reinterpret_cast<uint8_t*>(dummyWorkspace), notifyOp,
+        kSignalValue);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    HcclHostBarrier(ctx.comm, ctx.stream);
+
+    bool isOk = ctx.aclStatus == 0;
+    if (rankId == kRootRank) {
+        int32_t actualStatus = 0;
+        aclrtMemcpy(&actualStatus, sizeof(int32_t), eventStatus, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        isOk = isOk && actualStatus == 1;
+    }
+    if (rankId == kTargetRank) {
+        int32_t actualSignal = 0;
+        aclrtMemcpy(&actualSignal, sizeof(int32_t), signal, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(output.data(), count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+
+        constexpr int32_t kSecondSignalValue = kSignalValue + 1;
+        const int32_t expectedSignal = notifyOp == pto::comm::NotifyOp::Set ?
+                                           kSecondSignalValue :
+                                           kInitialSignal + kSignalValue + kSecondSignalValue;
+        isOk = isOk && actualSignal == expectedSignal;
+        for (size_t i = 0; i < count && isOk; ++i) {
+            isOk = output[i] == input[i];
+        }
+    }
+
+    aclrtFree(dummyWorkspace);
+    return ctx.Finalize() && isOk;
+}
+
+template <typename T, size_t count>
+bool RunPutAsyncNotify(int nRanks, int nDevices, int firstRankId, int firstDeviceId, pto::comm::NotifyOp notifyOp)
+{
+    return ForkAndRunWithHcclRootInfo(
+        nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo* rootInfo) {
+            return RunPutAsyncNotifyKernel<T, count>(rankId, nRanks, nDevices, firstDeviceId, rootInfo, notifyOp);
+        });
+}
+
+template <typename T, size_t count>
+bool RunPutAsyncNotifySet(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+{
+    return RunPutAsyncNotify<T, count>(nRanks, nDevices, firstRankId, firstDeviceId, pto::comm::NotifyOp::Set);
+}
+
+template <typename T, size_t count>
+bool RunPutAsyncNotifyAdd(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+{
+    return RunPutAsyncNotify<T, count>(nRanks, nDevices, firstRankId, firstDeviceId, pto::comm::NotifyOp::AtomicAdd);
+}
+
 // Explicit instantiations
 template bool RunPutAsyncRootPut<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunPutAsyncRootPut<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunPutAsyncRootPut<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunPutAsyncRootPut<uint8_t, 64>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunPutAsyncRootPut<float, 64>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunPutAsyncNotifySet<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunPutAsyncNotifyAdd<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

@@ -59,6 +59,23 @@ TEST(TPutAsync, Vec_FloatSmall_4Ranks)
     ASSERT_TRUE((RunPutAsyncRootPut<float, 256>(4, 4, 0, 0)));
 }
 
+// ============================================================================
+// A5 SDMA-named TPUT_ASYNC_NOTIFY uses synchronous MTE payload transfer
+// followed by Scalar SET/AtomicAdd. Each test performs two consecutive calls
+// from one AICore; a 16-KiB payload forces multi-chunk staging.
+// ============================================================================
+TEST(TPutAsyncNotify, RepeatedMteScalarSetMultiChunk_2Ranks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncNotifySet<int32_t, 4096>(2, 2, 0, 0)));
+}
+
+TEST(TPutAsyncNotify, RepeatedMteScalarAddMultiChunk_2Ranks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncNotifyAdd<int32_t, 4096>(2, 2, 0, 0)));
+}
+
 int main(int argc, char** argv)
 {
     CommMpiInit(&argc, &argv);

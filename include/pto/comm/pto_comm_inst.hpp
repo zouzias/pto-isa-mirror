@@ -384,6 +384,45 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
 }
 #endif
 
+#ifdef PTO_NPU_ARCH_A5
+// ============================================================================
+// TPUT_ASYNC_NOTIFY: A5 SDMA-named path uses synchronous MTE payload transfer
+// followed by Scalar SET/AtomicAdd. The returned handle is 0 (already complete).
+//
+// Multiple producers must not use Set on one shared signal when the winner
+// matters. Use separate signal slots or AtomicAdd for completion counting.
+// ============================================================================
+template <
+    DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
+    typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
+    NotifyOp notifyOp, const AsyncSession& session, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
+        dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
+}
+
+/**
+ * @brief A5 overload matching TPUT_ASYNC's explicit-peer API.
+ *
+ * The SDMA-named MTE fallback obtains the remote VA from GlobalTensor, so peer
+ * is accepted for API consistency and ignored. URMA notify is not implemented.
+ */
+template <
+    DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
+    typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
+    NotifyOp notifyOp, const AsyncSession& session, uint32_t peer, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
+        dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session, peer);
+}
+#endif
+
 // ============================================================================
 // TGET_ASYNC: Asynchronous remote read (GM-to-GM via DMA engine).
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
