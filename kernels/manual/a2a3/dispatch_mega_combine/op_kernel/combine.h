@@ -21,38 +21,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils/common_helpers.hpp"
 #include "utils/const_args.hpp"
 #include "utils/hccl_window.hpp"
-#include "utils/pto_sync_substrate.hpp"
+#include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
 constexpr uint32_t kCombineVecTileElems = 8192U;
 constexpr uint32_t kCombineBufferNum = 2U;
-constexpr uint32_t kCombineInvalidTask = 0xFFFFFFFFU;
-constexpr uint32_t kCombineSmallTokenThreshold = 4096U;
-constexpr uint32_t kCombineSmallTokenSubtileRows = 16U;
-constexpr uint32_t kCombineSmallTokenSubtileCols = 256U;
-constexpr uint32_t kCombineSmallMaxElems = 8192U;
-constexpr uint32_t kCombineSmallScaleElems = kCombineSmallMaxElems / kCombineSmallTokenSubtileCols;
-constexpr uint32_t kCombineImplDirectLarge = 1U;
-constexpr uint32_t kCombineImplDirectSmall = 2U;
-constexpr uint32_t kCombineImplDirectAuto = 3U;
-constexpr uint32_t kCombineDirectLargeUbStages = 2U;
-constexpr uint32_t kCombineDirectSmallUbStages = 2U;
-constexpr uint32_t kCombineLargeLanesPerRank = 2U;
 
 template <typename OutputElement>
 class Combine {
 public:
     AICORE inline void Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData* tilingData);
-    AICORE inline void Process();
+    AICORE inline void ProcessFixed(uint32_t groupLocalId, uint32_t groupSize);
+    AICORE inline void ProcessFixedFinalBoundary(uint32_t role, uint32_t flatAivId, bool combineActive);
 
 private:
     static_assert(
         std::is_same_v<OutputElement, half> || std::is_same_v<OutputElement, bfloat16_t>,
         "combine output must be half or bfloat16");
 
-    using VectorShape = pto::Shape<1, 1, 1, 1, pto::DYNAMIC>;
-    using VectorStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
-    using ScaleGlobal = pto::GlobalTensor<float, VectorShape, VectorStride, pto::Layout::ND>;
     using BlockShape = pto::Shape<1, 1, 1, pto::DYNAMIC, pto::DYNAMIC>;
     using BlockStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
     using CBlockGlobal = pto::GlobalTensor<half, BlockShape, BlockStride, pto::Layout::ND>;
@@ -60,32 +46,9 @@ private:
     using TileC = pto::Tile<pto::TileType::Vec, half, 1, kCombineVecTileElems, pto::BLayout::RowMajor, -1, -1>;
     using TileFp32 = pto::Tile<pto::TileType::Vec, float, 1, kCombineVecTileElems, pto::BLayout::RowMajor, -1, -1>;
     using TileD = pto::Tile<pto::TileType::Vec, OutputElement, 1, kCombineVecTileElems, pto::BLayout::RowMajor, -1, -1>;
-    using SmallTileC = pto::Tile<
-        pto::TileType::Vec, half, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols, pto::BLayout::RowMajor,
-        -1, -1>;
-    using SmallTileFp32 = pto::Tile<
-        pto::TileType::Vec, float, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols, pto::BLayout::RowMajor,
-        -1, -1>;
-    using SmallTileD = pto::Tile<
-        pto::TileType::Vec, OutputElement, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols,
-        pto::BLayout::RowMajor, -1, -1>;
-
-    AICORE inline uint64_t TokenVolume() const { return static_cast<uint64_t>(problemM_) * topK_; }
-    AICORE inline bool IsSmallTokenPath() const { return TokenVolume() <= kCombineSmallTokenThreshold; }
-    AICORE inline uint32_t CombineImplMode() const { return tilingData_->combineTiling.combineImplMode; }
-    AICORE inline bool DirectLargeEnabled() const
+    AICORE inline bool RankStreamingEnabled() const
     {
-        const uint32_t mode = CombineImplMode();
-        return (mode == kCombineImplDirectLarge || mode == kCombineImplDirectAuto) && !IsSmallTokenPath();
-    }
-    AICORE inline bool DirectSmallEnabled() const
-    {
-        const uint32_t mode = CombineImplMode();
-        return (mode == kCombineImplDirectSmall || mode == kCombineImplDirectAuto) && IsSmallTokenPath();
-    }
-    AICORE inline uint16_t Gmm2ToCombineFlagId(uint32_t groupIdx) const
-    {
-        return MEGA_MOE_GMM2_TO_COMBINE_HARD_FLAG_BASE + groupIdx / CROSS_CORE_FLAG_MAX_SET_COUNT;
+        return tilingData_->unpermuteTiling.unpermuteImplMode == kMegaMoeUnpermuteImplRankStreaming;
     }
     AICORE inline uint32_t CurrentM(uint32_t groupIdx) const
     {
@@ -125,7 +88,23 @@ private:
         if (lanes == 0U) {
             lanes = 1U;
         }
-        return lanes > kCombineLargeLanesPerRank ? kCombineLargeLanesPerRank : lanes;
+        const uint32_t configuredLanes = tilingData_->fixedGroupTiling.combineLargeLanesPerRank;
+        return lanes > configuredLanes ? configuredLanes : lanes;
+    }
+    AICORE inline uint32_t DirectLargeTaskCount() const { return rankSize_ * LargeLanesPerRank(); }
+    AICORE inline uint32_t DirectLargeWorkerCount() const
+    {
+        const uint32_t taskCount = DirectLargeTaskCount();
+        return coreNum_ < taskCount ? coreNum_ : taskCount;
+    }
+    AICORE inline uint32_t ReadyCoordinatorCore() const
+    {
+        const uint32_t workerCount = DirectLargeWorkerCount();
+        if (workerCount == 0U) {
+            return 0U;
+        }
+        const uint64_t firstLocalTask = static_cast<uint64_t>(rank_) * LargeLanesPerRank();
+        return static_cast<uint32_t>(firstLocalTask % workerCount);
     }
     AICORE inline uint32_t LargeLaneRowBegin(uint32_t rows, uint32_t laneIdx, uint32_t lanesPerRank) const
     {
@@ -145,26 +124,18 @@ private:
     AICORE inline void InitUbLayout();
     AICORE inline void SetInitialFlags() const;
     AICORE inline void FinalizeLocalPipe() const;
+    AICORE inline void FinalizeExpertStores() const;
     AICORE inline uint32_t TokenPerExpertResetElems() const;
-    AICORE inline bool ResetTokenPerExpert(uint32_t elems) const;
-    AICORE inline void ProcessFinalBoundary();
-    AICORE inline void WaitGmm2Ready(uint32_t groupIdx, bool aivSyncAfterWait) const;
+    AICORE inline bool ResetTokenPerExpertByOwner(uint32_t elems, bool resetOwner) const;
+    AICORE inline void PublishAssignedExpertProgress(uint32_t readyExpertCount) const;
+    AICORE inline void FinalizeRankStreamingLane();
+    AICORE inline uint32_t Gmm2ProducerCount(uint32_t groupIdx) const;
+    AICORE inline void WaitGmm2Ready(uint32_t groupIdx) const;
     AICORE inline void ProcessDirectLargeSegmentRows(
         uint32_t srcRank, uint32_t srcRowOffset, uint32_t rows, uint32_t dstRowOffset);
     AICORE inline void ProcessDirectLargeTokenPath();
-    AICORE inline void LoadSmallSubtile(
-        uint32_t bufferId, uint32_t srcRowOffset, uint32_t rowNum, uint32_t colBegin, uint32_t colNum) const;
-    AICORE inline void DequantDirectSmallSubtile(uint32_t bufferId, uint32_t rowNum, uint32_t colNum);
-    AICORE inline void StoreSmallSubtileIntersection(
-        uint32_t bufferId, __gm__ OutputElement* dstBase, uint32_t dstRowOffset, uint32_t ubRowOffset, uint32_t rowNum,
-        uint32_t colBegin, uint32_t colNum);
-    AICORE inline void StoreSmallSubtileToRanks(
-        uint32_t groupIdx, const GmmCommonTileInfo& tileInfo, uint32_t tileRowBegin, uint32_t rows, uint32_t bufferId);
-    AICORE inline void ProcessDirectSmallTile(
-        uint32_t groupIdx, uint32_t groupBase, const GmmCommonTileInfo& tileInfo, uint32_t subtileBegin,
-        uint32_t subtileCount);
-    AICORE inline void ProcessDirectSmallTokenPath();
 
+    GM_ADDR workspaceGM_ = nullptr;
     const __gm__ MegaMoeTilingData* tilingData_ = nullptr;
 
     PtoRemoteWindow remoteWindow_;
@@ -175,9 +146,7 @@ private:
     __gm__ int32_t* preSumBeforeRankPtr_ = nullptr;
     __gm__ int32_t* tokenPerExpertPtr_ = nullptr;
 
-    uint32_t problemM_ = 0;
     uint32_t problemK_ = 0;
-    uint32_t topK_ = 0;
     uint32_t maxOutputSize_ = 0;
     uint32_t expertPerRank_ = 0;
     uint32_t expertNumAligned_ = 0;
@@ -186,22 +155,20 @@ private:
     uint32_t coreIdx_ = 0;
     uint32_t coreNum_ = 1;
     uint32_t pingpongId_ = 0;
+    int32_t dataReadyEpoch_ = 0;
     uint64_t ubCOffset_[kCombineBufferNum] = {0, 0};
     uint64_t ubFp32Offset_[kCombineBufferNum] = {0, 0};
     uint64_t ubDOffset_[kCombineBufferNum] = {0, 0};
-    uint64_t ubScaleOffset_[kCombineBufferNum] = {0, 0};
-    mutable uint32_t smallScaleSourceOffset_[kCombineBufferNum] = {kCombineInvalidTask, kCombineInvalidTask};
 };
 
 template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData* tilingData)
 {
+    workspaceGM_ = workspaceGM;
     tilingData_ = tilingData;
     pingpongId_ = 0;
 
-    problemM_ = tilingData_->megaMoeInfo.M;
     problemK_ = tilingData_->megaMoeInfo.K;
-    topK_ = tilingData_->megaMoeInfo.topK;
     maxOutputSize_ = tilingData_->megaMoeInfo.maxOutputSize;
     expertPerRank_ = tilingData_->megaMoeInfo.expertPerRank;
     expertNumAligned_ = tilingData_->frontReorderTiling.expertNumAligned;
@@ -224,6 +191,7 @@ AICORE inline void Combine<OutputElement>::Init(GM_ADDR workspaceGM, const __gm_
         reinterpret_cast<__gm__ int32_t*>(workspaceGM + tilingData_->frontReorderTiling.preSumBeforeRankOffset);
     tokenPerExpertPtr_ =
         reinterpret_cast<__gm__ int32_t*>(remoteWindow_.LocalBase() + peerMemoryLayout_.offsetPeerTokenPerExpert);
+    dataReadyEpoch_ = RankStreamingEnabled() ? remoteWindow_.DataReadyEpoch() : 0;
 
     InitUbLayout();
 }
@@ -232,30 +200,13 @@ template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::InitUbLayout()
 {
     uint64_t ubOffset = 0;
-    if (DirectLargeEnabled()) {
-        for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
-            ubCOffset_[i] = ubOffset;
-            ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(half), UB_ALIGN);
-            ubDOffset_[i] = ubOffset;
-            ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(OutputElement), UB_ALIGN);
-            ubFp32Offset_[i] = ubOffset;
-            ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(float), UB_ALIGN);
-            ubScaleOffset_[i] = 0U;
-            smallScaleSourceOffset_[i] = kCombineInvalidTask;
-        }
-        return;
-    }
-
     for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
         ubCOffset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallMaxElems) * sizeof(half), UB_ALIGN);
+        ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(half), UB_ALIGN);
         ubDOffset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallMaxElems) * sizeof(OutputElement), UB_ALIGN);
+        ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(OutputElement), UB_ALIGN);
         ubFp32Offset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallMaxElems) * sizeof(float), UB_ALIGN);
-        ubScaleOffset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallScaleElems) * sizeof(float), UB_ALIGN);
-        smallScaleSourceOffset_[i] = kCombineInvalidTask;
+        ubOffset += alignUp(static_cast<uint64_t>(problemK_) * sizeof(float), UB_ALIGN);
     }
 }
 
@@ -278,15 +229,28 @@ AICORE inline void Combine<OutputElement>::FinalizeLocalPipe() const
 }
 
 template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::FinalizeExpertStores() const
+{
+    for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
+        wait_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(i));
+    }
+    for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
+        set_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(i));
+    }
+    pipe_barrier(PIPE_ALL);
+    dsb(DSB_DDR);
+}
+
+template <typename OutputElement>
 AICORE inline uint32_t Combine<OutputElement>::TokenPerExpertResetElems() const
 {
     return rankSize_ * expertNumAligned_;
 }
 
 template <typename OutputElement>
-AICORE inline bool Combine<OutputElement>::ResetTokenPerExpert(uint32_t elems) const
+AICORE inline bool Combine<OutputElement>::ResetTokenPerExpertByOwner(uint32_t elems, bool resetOwner) const
 {
-    if (coreIdx_ != coreNum_ - 1U) {
+    if (!resetOwner) {
         return false;
     }
     PtoFillUb<int32_t>(0U, 0, elems);
@@ -298,20 +262,91 @@ AICORE inline bool Combine<OutputElement>::ResetTokenPerExpert(uint32_t elems) c
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::ProcessFinalBoundary()
+AICORE inline void Combine<OutputElement>::ProcessFixedFinalBoundary(
+    uint32_t role, uint32_t flatAivId, bool combineActive)
 {
-    FinalizeLocalPipe();
+    if (role == kMegaMoeFixedRoleCombine && combineActive) {
+        FinalizeLocalPipe();
+    }
     pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
-    (void)ResetTokenPerExpert(TokenPerExpertResetElems());
+    ResetTokenPerExpertByOwner(TokenPerExpertResetElems(), flatAivId + 1U == kMegaMoeFixedPhysicalAivNum);
     remoteWindow_.CrossRankSync();
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::WaitGmm2Ready(uint32_t groupIdx, bool aivSyncAfterWait) const
+AICORE inline void Combine<OutputElement>::PublishAssignedExpertProgress(uint32_t readyExpertCount) const
 {
-    CrossCoreWaitFlag<0x2>(Gmm2ToCombineFlagId(groupIdx));
-    if (aivSyncAfterWait) {
-        pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+    const uint32_t lanesPerRank = LargeLanesPerRank();
+    const uint32_t taskCount = DirectLargeTaskCount();
+    for (uint32_t taskIdx = coreIdx_; taskIdx < taskCount; taskIdx += coreNum_) {
+        const uint32_t ownerRank = taskIdx / lanesPerRank;
+        remoteWindow_.PublishExpertProgress(static_cast<int32_t>(ownerRank), readyExpertCount, dataReadyEpoch_);
+    }
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::FinalizeRankStreamingLane()
+{
+    const uint32_t taskCount = DirectLargeTaskCount();
+    const uint32_t combineWorkerCount = DirectLargeWorkerCount();
+    if (coreIdx_ >= combineWorkerCount) {
+        return;
+    }
+
+    remoteWindow_.AcquireDataReady();
+    const uint32_t lanesPerRank = LargeLanesPerRank();
+    for (uint32_t taskIdx = coreIdx_; taskIdx < taskCount; taskIdx += coreNum_) {
+        const uint32_t ownerRank = taskIdx / lanesPerRank;
+        remoteWindow_.PublishExpertProgress(static_cast<int32_t>(ownerRank), expertPerRank_, dataReadyEpoch_);
+        remoteWindow_.PublishDataReady(static_cast<int32_t>(ownerRank), dataReadyEpoch_);
+    }
+    remoteWindow_.PublishLocalCombineDone(coreIdx_, dataReadyEpoch_);
+
+    if (coreIdx_ != 0U) {
+        return;
+    }
+    remoteWindow_.WaitLocalCombineDoneMte(combineWorkerCount, dataReadyEpoch_);
+    ResetTokenPerExpertByOwner(TokenPerExpertResetElems(), true);
+    const uint32_t workerCount = tilingData_->fixedGroupTiling.physicalAivNum;
+    const uint32_t initialWorkerCount = tilingData_->fixedGroupTiling.gmm1GroupSize * 2U;
+    const uint32_t helperCount = workerCount > initialWorkerCount ? workerCount - initialWorkerCount : 0U;
+    remoteWindow_.PublishUnpermuteStartRangeMte(initialWorkerCount, helperCount, dataReadyEpoch_);
+}
+
+template <typename OutputElement>
+AICORE inline uint32_t Combine<OutputElement>::Gmm2ProducerCount(uint32_t groupIdx) const
+{
+    const __gm__ MegaMoeFixedGroupTiling& fixed = tilingData_->fixedGroupTiling;
+    if (groupIdx < fixed.gmm2JoinCheckStartExpert) {
+        return fixed.gmm2GroupSize;
+    }
+
+    const int32_t decision = WaitEpochAcquire(
+        FixedSyncSlot(workspaceGM_, tilingData_, FixedSyncLayout(tilingData_).gmm2JoinSlot),
+        static_cast<int32_t>(groupIdx + 1U));
+    const uint32_t encodedExpert = static_cast<uint32_t>(decision & kMegaMoeFixedGmm2JoinDecisionMask);
+    const bool joined =
+        (decision & kMegaMoeFixedGmm2JoinDecisionBit) != 0 && encodedExpert != 0U && groupIdx + 1U >= encodedExpert;
+    return joined ? fixed.physicalAicNum : fixed.gmm2GroupSize;
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::WaitGmm2Ready(uint32_t groupIdx) const
+{
+    const MegaMoeSyncLayout sync = FixedSyncLayout(tilingData_);
+    const uint32_t readyLocalId = coreIdx_ % tilingData_->fixedGroupTiling.gmm2GroupSize;
+    const uint32_t readySlot = sync.combineReadyBase + readyLocalId;
+    const int32_t expectedEpoch = static_cast<int32_t>(groupIdx * 2U + 2U);
+    if (coreIdx_ == ReadyCoordinatorCore()) {
+        const uint32_t producerCount = Gmm2ProducerCount(groupIdx);
+        const uint32_t producerBaseOffset = producerCount == tilingData_->fixedGroupTiling.physicalAicNum ?
+                                                0U :
+                                                tilingData_->fixedGroupTiling.gmm1GroupSize;
+        CoordinateGroupConsumersMte(
+            workspaceGM_, tilingData_, sync.gmm2ArrivalBase + producerBaseOffset, sync.combineReadyBase, producerCount,
+            tilingData_->fixedGroupTiling.gmm2GroupSize, groupIdx);
+    } else {
+        WaitEpochAcquire(FixedSyncSlot(workspaceGM_, tilingData_, readySlot), expectedEpoch);
     }
 }
 
@@ -375,14 +410,23 @@ template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::ProcessDirectLargeTokenPath()
 {
     uint32_t groupBase = 0;
+    const bool delayedStart = expertPerRank_ != 0U;
+    const uint32_t initialReadyExpert = expertPerRank_ > tilingData_->fixedGroupTiling.combineStartAfterGmm2Expert ?
+                                            tilingData_->fixedGroupTiling.combineStartAfterGmm2Expert :
+                                            expertPerRank_ - 1U;
+    if (delayedStart && coreIdx_ < DirectLargeTaskCount()) {
+        WaitGmm2Ready(initialReadyExpert);
+    }
     for (uint32_t groupIdx = 0; groupIdx < expertPerRank_; ++groupIdx) { // 逐个group遍历
         const uint32_t currentM = CurrentM(groupIdx);                    // expert 总共有多少输出 row
-        WaitGmm2Ready(groupIdx, true);
         const uint32_t lanesPerRank = LargeLanesPerRank();
+        const uint32_t taskCount = rankSize_ * lanesPerRank;
+        if (!delayedStart || groupIdx > initialReadyExpert) {
+            WaitGmm2Ready(groupIdx);
+        }
         if (lanesPerRank == 0U) {
             continue;
         }
-        const uint32_t taskCount = rankSize_ * lanesPerRank; // 卡按照lane再切分，当前默认每卡 2 lane
         for (uint32_t taskIdx = coreIdx_; taskIdx < taskCount; taskIdx += coreNum_) {
             const uint32_t safeLanes = lanesPerRank == 0U ? 1U : lanesPerRank;
             const uint32_t srcRank = taskIdx / safeLanes;
@@ -395,195 +439,33 @@ AICORE inline void Combine<OutputElement>::ProcessDirectLargeTokenPath()
             const uint32_t dstRowOffset = DstRowOffset(srcRank, groupIdx);
             ProcessDirectLargeSegmentRows(srcRank, srcRowOffset + rowBegin, rowNum, dstRowOffset + rowBegin);
         }
+        const uint32_t readyExpertCount = groupIdx + 1U;
+        const uint32_t phase1ReadyExpertCount = tilingData_->fixedGroupTiling.unpermutePhase1ReadyExpertCount;
+        if (RankStreamingEnabled() && lanesPerRank == 1U && coreIdx_ < DirectLargeWorkerCount() &&
+            readyExpertCount == phase1ReadyExpertCount && readyExpertCount < expertPerRank_) {
+            FinalizeExpertStores();
+            PublishAssignedExpertProgress(readyExpertCount);
+        }
         groupBase += currentM;
     }
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::LoadSmallSubtile(
-    uint32_t bufferId, uint32_t srcRowOffset, uint32_t rowNum, uint32_t colBegin, uint32_t colNum) const
-{
-    wait_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(bufferId));
-    SmallTileC cTile(rowNum, colNum);
-    pto::TASSIGN(cTile, ubCOffset_[bufferId]);
-    BlockShape cShape(rowNum, colNum);
-    BlockStride cStride(
-        static_cast<int64_t>(rowNum) * problemK_, static_cast<int64_t>(rowNum) * problemK_,
-        static_cast<int64_t>(rowNum) * problemK_, problemK_);
-    CBlockGlobal cGlobal(gmm2OutputPtr_ + static_cast<uint64_t>(srcRowOffset) * problemK_ + colBegin, cShape, cStride);
-    pto::TLOAD(cTile, cGlobal);
-
-    if (smallScaleSourceOffset_[bufferId] != srcRowOffset) {
-        SmallTileFp32 scaleTile(1, rowNum);
-        pto::TASSIGN(scaleTile, ubScaleOffset_[bufferId]);
-        VectorShape scaleShape(rowNum);
-        VectorStride scaleStride(rowNum, rowNum, rowNum, rowNum);
-        ScaleGlobal scaleGlobal(perTokenScale2Ptr_ + srcRowOffset, scaleShape, scaleStride);
-        pto::TLOAD(scaleTile, scaleGlobal);
-        smallScaleSourceOffset_[bufferId] = srcRowOffset;
-    }
-    set_flag(PIPE_MTE2, PIPE_V, LoadReadyEvent(bufferId));
-    set_flag(PIPE_MTE2, PIPE_S, LoadReadyEvent(bufferId));
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::DequantDirectSmallSubtile(
-    uint32_t bufferId, uint32_t rowNum, uint32_t colNum)
-{
-    wait_flag(PIPE_MTE2, PIPE_V, LoadReadyEvent(bufferId));
-    SmallTileFp32 fp32Tile(rowNum, colNum);
-    SmallTileC cTile(rowNum, colNum);
-    pto::TASSIGN(fp32Tile, ubFp32Offset_[bufferId]);
-    pto::TASSIGN(cTile, ubCOffset_[bufferId]);
-    pto::TCVT(fp32Tile, cTile, pto::RoundMode::CAST_NONE);
-    pipe_barrier(PIPE_V);
-    set_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(bufferId));
-
-    wait_flag(PIPE_MTE2, PIPE_S, LoadReadyEvent(bufferId));
-    SmallTileFp32 scaleTile(1, rowNum);
-    pto::TASSIGN(scaleTile, ubScaleOffset_[bufferId]);
-    for (uint32_t row = 0; row < rowNum; ++row) {
-        const float scale = scaleTile.GetValue(row);
-        SmallTileFp32 rowTile(1, colNum);
-        pto::TASSIGN(
-            rowTile,
-            ubFp32Offset_[bufferId] + static_cast<uint64_t>(row) * kCombineSmallTokenSubtileCols * sizeof(float));
-        pto::TMULS(rowTile, rowTile, scale);
-    }
-    pipe_barrier(PIPE_V);
-    wait_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(bufferId));
-    SmallTileD dTile(rowNum, colNum);
-    pto::TASSIGN(dTile, ubDOffset_[bufferId]);
-    pto::TCVT(dTile, fp32Tile, pto::RoundMode::CAST_RINT);
-    set_flag(PIPE_V, PIPE_MTE3, StoreReadyEvent(bufferId));
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::StoreSmallSubtileIntersection(
-    uint32_t bufferId, __gm__ OutputElement* dstBase, uint32_t dstRowOffset, uint32_t ubRowOffset, uint32_t rowNum,
-    uint32_t colBegin, uint32_t colNum)
-{
-    SmallTileD dTile(rowNum, colNum);
-    pto::TASSIGN(
-        dTile, ubDOffset_[bufferId] +
-                   static_cast<uint64_t>(ubRowOffset) * kCombineSmallTokenSubtileCols * sizeof(OutputElement));
-    BlockShape dShape(rowNum, colNum);
-    BlockStride dStride(
-        static_cast<int64_t>(rowNum) * problemK_, static_cast<int64_t>(rowNum) * problemK_,
-        static_cast<int64_t>(rowNum) * problemK_, problemK_);
-    DBlockGlobal dGlobal(dstBase + static_cast<uint64_t>(dstRowOffset) * problemK_ + colBegin, dShape, dStride);
-    pto::TSTORE(dGlobal, dTile);
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::StoreSmallSubtileToRanks(
-    uint32_t groupIdx, const GmmCommonTileInfo& tileInfo, uint32_t tileRowBegin, uint32_t rows, uint32_t bufferId)
-{
-    const uint32_t stTile = tileRowBegin;
-    const uint32_t edTile = tileRowBegin + rows;
-    uint32_t preSumRankInExpert = 0U;
-    uint32_t tileOffset = 0U;
-    wait_flag(PIPE_V, PIPE_MTE3, StoreReadyEvent(bufferId));
-    for (uint32_t srcRank = 0; srcRank < rankSize_; ++srcRank) {
-        const uint32_t lenRankInExpert = RowsRaw(srcRank, groupIdx);
-        const uint32_t dstExpertOffset = DstRowOffset(srcRank, groupIdx);
-        const uint32_t stRankInExpert = preSumRankInExpert;
-        const uint32_t edRankInExpert = stRankInExpert + lenRankInExpert;
-        preSumRankInExpert += lenRankInExpert;
-        if (stRankInExpert >= edTile) {
-            break;
-        }
-        if (edRankInExpert <= stTile) {
-            continue;
-        }
-        const uint32_t stData = stRankInExpert > stTile ? stRankInExpert : stTile;
-        const uint32_t edData = edRankInExpert < edTile ? edRankInExpert : edTile;
-        if (edData <= stData) {
-            continue;
-        }
-        const uint32_t lenData = edData - stData;
-        const uint32_t dstOffsetInExpert = stTile > stRankInExpert ? stTile - stRankInExpert : 0U;
-        __gm__ OutputElement* dstBase = reinterpret_cast<__gm__ OutputElement*>(
-            remoteWindow_.RemoteBase(peerMemoryLayout_.offsetD, static_cast<int32_t>(srcRank)));
-        if (dstBase != nullptr) {
-            StoreSmallSubtileIntersection(
-                bufferId, dstBase, dstExpertOffset + dstOffsetInExpert, tileOffset, lenData, tileInfo.blockColStart,
-                tileInfo.actualN);
-        }
-        tileOffset += lenData;
-    }
-    set_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(bufferId));
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::ProcessDirectSmallTile(
-    uint32_t groupIdx, uint32_t groupBase, const GmmCommonTileInfo& tileInfo, uint32_t subtileBegin,
-    uint32_t subtileCount)
-{
-    for (uint32_t subtile = 0; subtile < subtileCount; ++subtile) {
-        const uint32_t rowInTile = (subtileBegin + subtile) * kCombineSmallTokenSubtileRows;
-        if (rowInTile >= tileInfo.actualM) {
-            continue;
-        }
-        const uint32_t rows = (tileInfo.actualM - rowInTile > kCombineSmallTokenSubtileRows) ?
-                                  kCombineSmallTokenSubtileRows :
-                                  (tileInfo.actualM - rowInTile);
-        const uint32_t tileRowBegin = tileInfo.blockRowStart + rowInTile;
-        const uint32_t srcRow = groupBase + tileRowBegin;
-        const uint32_t bufferId = pingpongId_;
-        pingpongId_ = (pingpongId_ + 1U) % kCombineBufferNum;
-        LoadSmallSubtile(bufferId, srcRow, rows, tileInfo.blockColStart, tileInfo.actualN);
-        DequantDirectSmallSubtile(bufferId, rows, tileInfo.actualN);
-        StoreSmallSubtileToRanks(groupIdx, tileInfo, tileRowBegin, rows, bufferId);
-    }
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::ProcessDirectSmallTokenPath()
-{
-    uint32_t groupBase = 0;
-    uint32_t startCoreIdx = 0;
-    const uint32_t aicCoreIdx = get_block_idx();
-    const uint32_t aicCoreNum = get_block_num();
-    const uint32_t aivSubCoreIdx = get_subblockid();
-    const uint32_t l1TileM = tilingData_->gmm2Tiling.l1TileM;
-    const uint32_t l1TileN = tilingData_->gmm2Tiling.l1TileN;
-    for (uint32_t groupIdx = 0; groupIdx < expertPerRank_; ++groupIdx) {
-        const uint32_t currentM = MoeClipCurrentM(CurrentM(groupIdx), groupBase, maxOutputSize_);
-        WaitGmm2Ready(groupIdx, false);
-        const uint32_t coreLoops = GmmCommonCoreLoops(currentM, problemK_, l1TileM, l1TileN); // 按照L1的size做切tile
-        const uint32_t startLoopIdx =
-            aicCoreNum == 0U ? 0U : GmmCommonStartLoopIdx(aicCoreIdx, aicCoreNum, startCoreIdx);
-        for (uint32_t loopIdx = startLoopIdx; aicCoreNum != 0U && loopIdx < coreLoops; loopIdx += aicCoreNum) {
-            const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfo(currentM, problemK_, l1TileM, l1TileN, loopIdx);
-            const uint32_t subtileCount = static_cast<uint32_t>(
-                ceilDiv(tileInfo.actualM, kCombineSmallTokenSubtileRows)); // 按照m维度做切分成subtile
-            const uint32_t firstHalfSubtiles = subtileCount / 2U;
-            const uint32_t firstSubtile = aivSubCoreIdx == 0U ? 0U : firstHalfSubtiles;
-            uint32_t assignedSubtiles = subtileCount / 2U;
-            if (aivSubCoreIdx == 1U && assignedSubtiles * 2U < subtileCount) {
-                ++assignedSubtiles;
-            }
-            ProcessDirectSmallTile(groupIdx, groupBase, tileInfo, firstSubtile, assignedSubtiles);
-        }
-        startCoreIdx = aicCoreNum == 0U ? 0U : (startCoreIdx + coreLoops) % aicCoreNum;
-        groupBase += currentM;
-    }
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::Process()
+AICORE inline void Combine<OutputElement>::ProcessFixed(uint32_t groupLocalId, uint32_t groupSize)
 {
     if ASCEND_IS_AIC {
         return;
     }
+    coreIdx_ = groupLocalId;
+    coreNum_ = groupSize;
     SetInitialFlags();
-    if (DirectSmallEnabled()) { // problemM_ * topK_ 小于4096的时候走small case
-        ProcessDirectSmallTokenPath();
-    } else if (DirectLargeEnabled()) {
+    if (coreIdx_ < DirectLargeTaskCount()) {
         ProcessDirectLargeTokenPath();
     }
-    ProcessFinalBoundary();
+    if (RankStreamingEnabled()) {
+        FinalizeLocalPipe();
+        FinalizeRankStreamingLane();
+    }
 }
 
 #endif // DISPATCH_MEGA_COMBINE_COMBINE_H

@@ -11,13 +11,17 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-set(CMAKE_COMPILER "bisheng" CACHE STRING "Compiler used for host and CCE sources")
-if(NOT DEFINED CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER "${CMAKE_COMPILER}")
+if(NOT DEFINED ENV{ASCEND_HOME_PATH})
+    message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
 endif()
-if(NOT DEFINED CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER "${CMAKE_COMPILER}")
+set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
+
+get_filename_component(ASCEND_BISHENG_COMPILER "${ASCEND_HOME_PATH}/bin/bisheng" REALPATH)
+if(NOT EXISTS "${ASCEND_BISHENG_COMPILER}")
+    message(FATAL_ERROR "Cannot find ${ASCEND_HOME_PATH}/bin/bisheng, please run the CANN set_env.sh.")
 endif()
+set(CMAKE_C_COMPILER "${ASCEND_BISHENG_COMPILER}" CACHE FILEPATH "C compiler" FORCE)
+set(CMAKE_CXX_COMPILER "${ASCEND_BISHENG_COMPILER}" CACHE FILEPATH "CXX compiler" FORCE)
 
 project(pto_example LANGUAGES C CXX)
 
@@ -31,14 +35,63 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-if(NOT DEFINED ENV{ASCEND_HOME_PATH})
-    message(FATAL_ERROR "Cannot find ASCEND_HOME_PATH, please run set_env.sh.")
-else()
-    set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
-endif()
-
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
+# The CANN environment exposes include/bin links for its active ARM or x86 package.
+# Resolve that link instead of duplicating CANN's platform selection logic here.
+get_filename_component(ASCEND_KERNEL_PLATFORM_INCLUDE "${ASCEND_HOME_PATH}/include" REALPATH)
+get_filename_component(ASCEND_KERNEL_PLATFORM_ROOT "${ASCEND_KERNEL_PLATFORM_INCLUDE}" DIRECTORY)
+if(NOT IS_DIRECTORY "${ASCEND_KERNEL_PLATFORM_INCLUDE}")
+    message(FATAL_ERROR "Cannot resolve the active CANN platform directory from ${ASCEND_HOME_PATH}/include.")
+endif()
+
+# CANN 9.x uses asc/, while older compatibility packages use include/ascendc/.
+set(KERNEL_INCLUDE_CANDIDATES
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/basic_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/interface
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/utils
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/impl/basic_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api/interface
+    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api/impl
+)
+
+set(KERNEL_INCLUDE_DIRS)
+set(KERNEL_OPERATOR_HEADER_FOUND FALSE)
+set(KERNEL_TPIPE_HEADER_FOUND FALSE)
+set(KERNEL_TPIPE_IMPL_HEADER_FOUND FALSE)
+foreach(KERNEL_INCLUDE_CANDIDATE IN LISTS KERNEL_INCLUDE_CANDIDATES)
+    if(IS_DIRECTORY "${KERNEL_INCLUDE_CANDIDATE}")
+        list(APPEND KERNEL_INCLUDE_DIRS "${KERNEL_INCLUDE_CANDIDATE}")
+        if(EXISTS "${KERNEL_INCLUDE_CANDIDATE}/kernel_operator.h")
+            set(KERNEL_OPERATOR_HEADER_FOUND TRUE)
+        endif()
+        if(EXISTS "${KERNEL_INCLUDE_CANDIDATE}/kernel_tpipe.h")
+            set(KERNEL_TPIPE_HEADER_FOUND TRUE)
+        endif()
+        if(EXISTS "${KERNEL_INCLUDE_CANDIDATE}/kernel_tpipe_impl.h")
+            set(KERNEL_TPIPE_IMPL_HEADER_FOUND TRUE)
+        endif()
+    endif()
+endforeach()
+
+if(NOT KERNEL_OPERATOR_HEADER_FOUND
+   OR NOT KERNEL_TPIPE_HEADER_FOUND
+   OR NOT KERNEL_TPIPE_IMPL_HEADER_FOUND)
+    message(FATAL_ERROR
+        "Incomplete AscendC headers under ASCEND_HOME_PATH=${ASCEND_HOME_PATH}: expected kernel_operator.h, "
+        "kernel_tpipe.h, and kernel_tpipe_impl.h. Check the active CANN environment.")
+endif()
+
+if(EXISTS ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/highlevel_api/lib/std/tuple.h)
+    list(APPEND KERNEL_INCLUDE_DIRS ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/highlevel_api)
+endif()
+if(EXISTS ${ASCEND_KERNEL_PLATFORM_ROOT}/pkg_inc/runtime/runtime)
+    list(APPEND KERNEL_INCLUDE_DIRS ${ASCEND_KERNEL_PLATFORM_ROOT}/pkg_inc/runtime/runtime)
+endif()
+list(REMOVE_DUPLICATES KERNEL_INCLUDE_DIRS)
 add_compile_options(
     -D_FORTIFY_SOURCE=2
     -O2 -std=c++17
@@ -62,39 +115,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
 
-if(DEBUG_MODE)
-    message(STATUS "Debug Mode Enabled, Add Debug Options")
-    add_compile_definitions(_DEBUG)
-    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
-endif()
-
-set(A2A3_SOC_VERSIONS
-    Ascend910B1
-    Ascend910B
-    Ascend910C
-    Ascend910_93
-    Ascend910_9391
-    Ascend910_9381
-    Ascend910_9372
-    Ascend910_9392
-    Ascend910_9382
-    Ascend910_9362
-    ascend910_93
-    ascend910_9391
-    ascend910_9381
-    ascend910_9372
-    ascend910_9392
-    ascend910_9382
-    ascend910_9362
-)
-
-if("${SOC_VERSION}" IN_LIST A2A3_SOC_VERSIONS)
-    set(CCE_AICORE_ARCH "dav-c220")
-elseif("${SOC_VERSION}" STREQUAL "Ascend910_9599")
-    set(CCE_AICORE_ARCH "dav-c310")
-else()
-    message(FATAL_ERROR "Unsupported SOC_VERSION: ${SOC_VERSION}")
-endif()
+set(CCE_AICORE_ARCH "dav-c220")
 
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
@@ -124,12 +145,7 @@ function(pto_example_mixed NAME)
         ${PROJECT_SOURCE_DIR}/op_kernel
         ${PROJECT_SOURCE_DIR}/op_kernel/utils
         ${PROJECT_BINARY_DIR}
-        ${ASCEND_HOME_PATH}/aarch64-linux/pkg_inc/runtime/runtime
-        ${ASCEND_HOME_PATH}/aarch64-linux/include/ascendc/basic_api
-        ${ASCEND_HOME_PATH}/aarch64-linux/asc
-        ${ASCEND_HOME_PATH}/aarch64-linux/asc/include/basic_api
-        ${ASCEND_HOME_PATH}/aarch64-linux/asc/include/interface
-        ${ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api/impl
+        ${KERNEL_INCLUDE_DIRS}
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 

@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils/common_helpers.hpp"
 #include "utils/const_args.hpp"
 #include "utils/hccl_window.hpp"
-#include "utils/pto_sync_substrate.hpp"
+#include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
 constexpr uint32_t kDispatchBufferNum = 2U;
@@ -42,6 +42,7 @@ public:
     AICORE inline void Init(GM_ADDR expertTokenNumsGM, GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData* tilingData)
     {
         (void)expertTokenNumsGM;
+        workspaceGM_ = workspaceGM;
         tilingData_ = tilingData;
 
         const auto& info = tilingData_->megaMoeInfo;
@@ -74,11 +75,12 @@ public:
         offsetAPtr_ = reinterpret_cast<__gm__ int8_t*>(remoteWindow_.LocalBase() + peerMemoryLayout_.offsetA);
     }
 
-    AICORE inline void Process() const
+    AICORE inline void ProcessFixed(uint32_t groupLocalId, uint32_t groupSize)
     {
-        if ASCEND_IS_AIV {
-            ProcessRankSplitCopy();
-        }
+        coreIdx_ = groupLocalId;
+        coreNum_ = groupSize;
+        dispatchGatherScratchPtr_ = reinterpret_cast<__gm__ uint8_t*>(workspaceGM_ + DispatchGatherScratchCoreOffset());
+        ProcessRankSplitCopy();
     }
 
 private:
@@ -95,11 +97,6 @@ private:
     {
         return ubRowStride == kDispatchGatherPackedTileCols && problemK_ % sizeof(uint32_t) == 0U &&
                problemK_ / sizeof(uint32_t) <= kDispatchGatherPackedWordTileCols;
-    }
-
-    AICORE inline void SetGmm1ReadyByLogicalEvent(uint32_t logicalGroupEventIdx) const
-    {
-        CrossCoreSetFlag<0x2, PIPE_MTE3>(MegaMoeD2CHardFlagId(logicalGroupEventIdx));
     }
 
     AICORE inline uint64_t DispatchGatherScratchCoreOffset() const
@@ -131,10 +128,6 @@ private:
             dispatchGatherScratchPtr_ +
             static_cast<uint64_t>(bufferId) * tilingData_->dispatchTiling.dispatchGatherTileBytes);
     }
-
-    AICORE inline void SetGmm1InitialReady() const { SetGmm1ReadyByLogicalEvent(0U); }
-
-    AICORE inline void SetGmm1GroupReady(uint32_t groupIdx) const { SetGmm1ReadyByLogicalEvent(groupIdx + 1U); }
 
     AICORE inline void PrepareDispatchGatherCopyEvents() const
     {
@@ -170,22 +163,22 @@ private:
     }
 
     AICORE inline void FetchRankGroupRows(
-        uint32_t srcRank, uint32_t groupIdx, uint32_t prevGroupSum, uint32_t& prevSum, int32_t& pingpongIdx) const
+        uint32_t srcRank, uint32_t groupIdx, uint32_t prevGroupSum, int32_t& pingpongIdx) const
     {
         const uint32_t rawRows = RawRowsForLocalGroup(srcRank, groupIdx);
         const uint32_t dstRowBase = prevGroupSum + CopyCumsumBeforeSource(srcRank, groupIdx);
-        const uint32_t srcRowBase = prevSum;
         uint32_t rows = 0U;
         if (dstRowBase < maxOutputSize_) {
             rows = rawRows;
             if (dstRowBase + rows > maxOutputSize_) {
                 rows = maxOutputSize_ - dstRowBase;
             }
-            prevSum += rows;
         }
         if (rows == 0U) {
             return;
         }
+        const uint32_t srcRowBase =
+            static_cast<uint32_t>(preSumBeforeRankPtr_[static_cast<uint64_t>(srcRank) * expertPerRank_ + groupIdx]);
         __gm__ int8_t* remotePackedRows = reinterpret_cast<__gm__ int8_t*>(
             remoteWindow_.RemoteBase(peerMemoryLayout_.offsetA, static_cast<int32_t>(srcRank)));
         __gm__ int8_t* remoteSrc = remotePackedRows + static_cast<uint64_t>(srcRowBase) * PackedRowStride();
@@ -309,32 +302,35 @@ private:
 
     AICORE inline void ProcessRankSplitCopy() const
     {
-        SetGmm1InitialReady();
-        if (coreIdx_ < rankSize_) {
-            uint32_t prevSum =
-                static_cast<uint32_t>(preSumBeforeRankPtr_[static_cast<uint64_t>(coreIdx_) * expertPerRank_]);
+        if ASCEND_IS_AIV {
+            const bool activeCopyCore = rankSize_ != 0U && coreIdx_ < rankSize_;
             uint32_t prevGroupSum = 0U;
             int32_t pingpongIdx = 0;
             for (uint32_t groupIdx = 0U; groupIdx < expertPerRank_; ++groupIdx) {
-                PrepareDispatchGatherCopyEvents();
                 const uint32_t currentM = static_cast<uint32_t>(
                     cumsumMMPtr_[static_cast<uint64_t>(rankSize_ - 1U) * expertPerRank_ + groupIdx]);
-                for (uint32_t srcRank = coreIdx_; srcRank < rankSize_; srcRank += coreNum_) {
-                    FetchRankGroupRows(srcRank, groupIdx, prevGroupSum, prevSum, pingpongIdx);
+                if (activeCopyCore) {
+                    PrepareDispatchGatherCopyEvents();
+                    for (uint32_t srcRank = coreIdx_; srcRank < rankSize_; srcRank += coreNum_) {
+                        FetchRankGroupRows(srcRank, groupIdx, prevGroupSum, pingpongIdx);
+                    }
+                    prevGroupSum += currentM;
+                    WaitDispatchGatherCopyEvents();
                 }
-                prevGroupSum += currentM;
-                WaitDispatchGatherCopyEvents();
-                pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
-                SetGmm1GroupReady(groupIdx);
-            }
-        } else {
-            for (uint32_t groupIdx = 0U; groupIdx < expertPerRank_; ++groupIdx) {
-                pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
-                SetGmm1GroupReady(groupIdx);
+
+                const __gm__ MegaMoeFixedGroupTiling& fixed = tilingData_->fixedGroupTiling;
+                const MegaMoeSyncLayout sync = FixedSyncLayout(tilingData_);
+                const uint32_t gmm1ConsumerCount =
+                    groupIdx < fixed.fullAicGmm1ExpertCount ? fixed.physicalAicNum : fixed.gmm1GroupSize;
+                const uint32_t coordinatorLocalId = rankSize_ == 0U ? 0U : rank_ % rankSize_;
+                NotifyGroupConsumersMte(
+                    workspaceGM_, tilingData_, sync.dispatchArrivalBase, sync.dispatchReadyBase, rankSize_,
+                    gmm1ConsumerCount, coreIdx_, coordinatorLocalId, groupIdx);
             }
         }
     }
 
+    GM_ADDR workspaceGM_ = nullptr;
     const __gm__ MegaMoeTilingData* tilingData_ = nullptr;
 
     __gm__ int8_t* gmAPtr_ = nullptr;
