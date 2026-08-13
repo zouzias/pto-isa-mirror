@@ -300,12 +300,9 @@ PTO_INTERNAL AsyncEvent SdmaPostAsync(
     return FinishSdmaPost(config, state, session);
 }
 
-PTO_INTERNAL void StoreSignalOperand(
-    int32_t signalValue, __gm__ uint8_t* flagPayload, const SdmaSession& session, UbTmpBuf& tmpBuf)
+PTO_INTERNAL void StoreSignalOperand(int32_t signalValue, __gm__ uint8_t* signalOperand)
 {
-    (void)session;
-    (void)tmpBuf;
-    volatile __gm__ int32_t* operand = reinterpret_cast<volatile __gm__ int32_t*>(GetSignalOperandAddr(flagPayload));
+    volatile __gm__ int32_t* operand = reinterpret_cast<volatile __gm__ int32_t*>(signalOperand);
     for (uint32_t index = 0U; index < kSignalOperandBytes / sizeof(int32_t); ++index) {
         operand[index] = index == 0U ? signalValue : 0;
     }
@@ -327,22 +324,30 @@ PTO_INTERNAL bool ValidateSingleNotifyPostSqCapacity(
 }
 
 PTO_INTERNAL void SubmitSignalSqe(
-    __gm__ BatchWriteChannelInfo* channels, __gm__ uint8_t* remoteSignal, __gm__ uint8_t* flagPayload,
+    __gm__ BatchWriteChannelInfo* channels, __gm__ uint8_t* remoteSignal, __gm__ uint8_t* signalOperand,
     NotifyOp notifyOp, SdmaRuntimeContext& runtimeCtx)
 {
     const uint64_t opcode = notifyOp == NotifyOp::AtomicAdd ? kSdmaInt32AtomicAddOpcode : 0U;
     AddOneMemcpySqe(
-        channels, GetSignalOperandAddr(flagPayload), remoteSignal, opcode, kSignalOperandBytes, runtimeCtx.sqTail[0],
+        channels, signalOperand, remoteSignal, opcode, kSignalOperandBytes, runtimeCtx.sqTail[0],
         runtimeCtx.sqTail[0] - runtimeCtx.sqHead[0]);
     runtimeCtx.sqTail[0] = (runtimeCtx.sqTail[0] + 1U) % channels[0].sq_depth;
     pipe_barrier(PIPE_ALL);
 }
 
+struct SdmaNotifyPostState {
+    SdmaPostState post;
+    __gm__ uint8_t* signalOperand;
+};
+
 PTO_INTERNAL bool BeginSdmaNotifyPost(
-    uint64_t messageLen, int32_t signalValue, const SdmaSession& session, SdmaConfig& config, SdmaPostState& state)
+    uint64_t messageLen, int32_t signalValue, const SdmaSession& session, SdmaConfig& config,
+    SdmaNotifyPostState& notifyState)
 {
+    SdmaPostState& state = notifyState.post;
     const SdmaExecContext& execCtx = session.execCtx;
-    if (!session.valid || !BuildTransferConfig(execCtx.baseConfig, messageLen, config) || config.iter_num == 0U ||
+    if (!session.valid || execCtx.channelGroupIdx != 0U ||
+        !BuildTransferConfig(execCtx.baseConfig, messageLen, config) || config.iter_num == 0U ||
         config.queue_num == 0U || config.queue_num > kPostMaxQueues ||
         execCtx.channelGroupIdx >= kSdmaMaxChannel / config.queue_num) {
         return false;
@@ -367,7 +372,8 @@ PTO_INTERNAL bool BeginSdmaNotifyPost(
         !EncodeSdmaEventHandle(postId, state.postQueueCount, state.eventHandle)) {
         return false;
     }
-    StoreSignalOperand(signalValue, state.flagPayload, session, state.tmpBuf);
+    notifyState.signalOperand = GetNotifyOperandAddr(ResolveNotifyOperandBase(execCtx), postId);
+    StoreSignalOperand(signalValue, notifyState.signalOperand);
     runtimeCtx.nextPostId = postId;
     runtimeCtx.usedQueueCount = state.postQueueCount;
     return true;
@@ -383,15 +389,16 @@ PTO_INTERNAL AsyncEvent SdmaPostAsyncNotify(
     }
 
     SdmaConfig config{};
-    SdmaPostState state{};
-    if (!BeginSdmaNotifyPost(messageLen, signalValue, session, config, state)) {
+    SdmaNotifyPostState notifyState{};
+    if (!BeginSdmaNotifyPost(messageLen, signalValue, session, config, notifyState)) {
         return {};
     }
+    SdmaPostState& state = notifyState.post;
 
     SdmaConfig payloadConfig = config;
     payloadConfig.queue_num = 1U;
     SubmitDataTransferSqes(state.channels, recvBuffer, sendBuffer, 0U, payloadConfig, session.runtimeCtx);
-    SubmitSignalSqe(state.channels, remoteSignal, state.flagPayload, notifyOp, session.runtimeCtx);
+    SubmitSignalSqe(state.channels, remoteSignal, notifyState.signalOperand, notifyOp, session.runtimeCtx);
     SubmitFlagTransferSqes(state.channels, state.flagPayload, state.postQueueCount, session.runtimeCtx);
 
     const SdmaExecContext& execCtx = session.execCtx;

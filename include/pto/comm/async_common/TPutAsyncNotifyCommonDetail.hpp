@@ -27,7 +27,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_SDMA_IMPL(
         std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TPUT_ASYNC_NOTIFY: signal type must be int32_t");
 
     PTO_ASSERT(
-        session.valid && session.engine == DmaEngine::SDMA, "TPUT_ASYNC_NOTIFY: session must be a valid SDMA session.");
+        session.valid && session.engine == DmaEngine::SDMA && session.channelGroupIdx == 0U,
+        "TPUT_ASYNC_NOTIFY: A2/A3 first version requires a valid SDMA session with channelGroupIdx == 0.");
     PTO_ASSERT(
         srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr && dstSignalData.data() != nullptr,
         "TPUT_ASYNC_NOTIFY: src, dst and signal pointers must not be null.");

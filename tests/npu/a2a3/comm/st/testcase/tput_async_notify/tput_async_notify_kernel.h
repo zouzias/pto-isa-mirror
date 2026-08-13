@@ -16,3 +16,6 @@ bool RunTPutAsyncNotifySet(int nRanks, int nDevices, int firstRankId, int firstD
 bool RunTPutAsyncNotifyAdd(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
 
 bool RunTPutAsyncNotifyAddRingReuse(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
+
+bool RunTPutAsyncNotifyRejectNonZeroGroup(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
