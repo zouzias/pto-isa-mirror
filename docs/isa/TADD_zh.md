@@ -50,7 +50,7 @@ PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域；假定 `src0/src1` 是兼容的（此操作中不通过显式运行时检查进行验证）。

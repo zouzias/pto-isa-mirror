@@ -65,7 +65,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
       - 数据类型必须与 `TileDataDst::DType` 匹配。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - `dst` 和 `src` 必须使用相同的元素类型。
-    - 支持的元素类型：`float`、`int32_t`、`uint32_t`、`half`、`int16_t` 和 `uint16_t`。
+    - 支持的元素类型：`float`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`int16_t` 和 `uint16_t`。
     - `dst` 和 `src` 必须是向量Tile。
     - 两个Tile的静态有效边界都必须满足 `ValidRow <= Rows` 且 `ValidCol <= Cols`。
     - 运行时：`dst.GetValidRow() == src.GetValidRow()` 且 `dst.GetValidCol() == src.GetValidCol()`。

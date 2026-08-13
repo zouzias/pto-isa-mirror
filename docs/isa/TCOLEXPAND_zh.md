@@ -47,7 +47,8 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 ## 约束
 
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
-- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品 / Ascend 950PR/Ascend 950DT)**：`TileData::DType` 必须为 1、2 或 4 字节类型（b8/b16/b32）：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**：`TileData::DType` 必须为 1、2 或 4 字节类型（b8/b16/b32）：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- **实现检查 (Ascend 950PR/Ascend 950DT)**：`TileData::DType` 必须为 1、2、4 或 8 字节类型（b8/b16/b32/b64）：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
 
 ## 示例
 

@@ -52,7 +52,7 @@ PTO_INST RecordEvent TSHRS(TileDataDst &dst, TileDataSrc &src, typename TileData
     - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
     - Scalar only supports zero and positive values.
 - **Implementation checks (A5)**:
-    - Supported element types are `int32_t`, `int16_t`, `int8_t`, `uint32_t`, `uint16_t`, and `uint8_t`.
+    - Supported element types are `int32_t`, `int16_t`, `int8_t`, `uint32_t`, `int64_t`, `uint64_t`, `uint16_t`, and `uint8_t`.
     - `dst` and `src` must use the same element type.
     - `dst` and `src` must be vector tiles.
     - Static valid bounds must satisfy `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
