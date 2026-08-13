@@ -203,5 +203,4 @@ inline void SetProperDataPart(T* buf, size_t offset, T val)
         buf[offset] = val;
     }
 }
-
 #endif

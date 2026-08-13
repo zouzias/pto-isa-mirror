@@ -216,6 +216,44 @@ size_t inline MapTileIndicesToGlobalOffset(
         i1 = (r / (shape2 * shape4)) % shape1;
         i0 = r / (shape1 * shape2 * shape4);
         i3 = c;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_A_ZZ) {
+        i0 = 0;
+        i1 = r / MX_ROW_LEN;
+        i2 = c / MX_COL_LEN;
+        i3 = r % MX_ROW_LEN;
+        i4 = c % MX_COL_LEN;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_B_NN) {
+        i0 = 0;
+        i1 = c / MX_ROW_LEN;
+        i2 = r / MX_COL_LEN;
+        i3 = c % MX_ROW_LEN;
+        i4 = r % MX_COL_LEN;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_A_ND) {
+        i0 = 0;
+        i1 = 0;
+        i2 = r;
+        i3 = c / MX_COL_LEN;
+        i4 = c % MX_COL_LEN;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_A_DN) {
+        i0 = 0;
+        i1 = 0;
+        i2 = c / MX_COL_LEN;
+        i3 = r;
+        i4 = c % MX_COL_LEN;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_B_ND) {
+        i0 = 0;
+        i1 = 0;
+        i2 = r / MX_COL_LEN;
+        i3 = c;
+        i4 = r % MX_COL_LEN;
+    } else if constexpr (GlobalData::layout == pto::Layout::MX_B_DN) {
+        i0 = 0;
+        i1 = 0;
+        i2 = c;
+        i3 = r / MX_COL_LEN;
+        i4 = r % MX_COL_LEN;
+    } else {
+        throw std::invalid_argument("Unsupported layout in MapTileIndicesToGlobalOffset");
     }
 
     const auto offset = i0 * globalStrides[GlobalTensorDim::DIM_0] + i1 * globalStrides[GlobalTensorDim::DIM_1] +

@@ -24,7 +24,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
     if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT(dst, src, 0, 0);
     } else {
-        assert(src.GetValidRow() == dst.GetValidRow() && src.GetValidRow() == dst.GetValidRow());
+        assert(src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol());
         for (size_t c = 0; c < src.GetValidCol(); c++) {
             for (size_t r = 0; r < src.GetValidRow(); r++) {
                 dst.SetElement(r, c, src.GetElement(r, c));
