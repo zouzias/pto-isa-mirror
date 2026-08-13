@@ -11,7 +11,7 @@
 set -e
 set -o pipefail
 
-mkdir -p /home/taskspace && cd /home/taskspace
+# mkdir -p /home/taskspace && cd /home/taskspace
 echo "start run test case, please wait ..."
 
 export ASCEND_GLOBAL_LOG_LEVEL=2
