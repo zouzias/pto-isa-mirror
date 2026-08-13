@@ -20,6 +20,8 @@ template <
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 void LaunchTStore(T* out, T* src, void* stream);
 
+void LaunchTStoreMultiCoreColMajorToNdStridedColumns(float* out, float* src, void* stream);
+
 class TStoreTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -59,10 +61,15 @@ void test_tstore()
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
 
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTStore<
-        format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
-        gWholeShape3, gWholeShape4>(dstDevice, srcDevice, stream);
+    if constexpr (format == 3) {
+        LaunchTStoreMultiCoreColMajorToNdStridedColumns(dstDevice, srcDevice, stream);
+    } else {
+        LaunchTStore<
+            format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
+            gWholeShape3, gWholeShape4>(dstDevice, srcDevice, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dataSize, dstDevice, dataSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -121,4 +128,9 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32) { test_tstore<1, int64_t, 1, 
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, MultiCoreColMajor_float_8x1_to_ND_strided_columns)
+{
+    test_tstore<3, float, 1, 1, 1, 8, 1, 1, 1, 1, 8, 2>();
 }
