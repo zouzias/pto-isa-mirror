@@ -81,8 +81,7 @@ endfunction()
 set(ALL_TESTCASES
     tquant
     tload_hif4
-    tmatmul_mx_hif4
-    tmatmul_mx_e1m2
+    tmatmul_mx
 )
 
 if (AUTO_MODE)
