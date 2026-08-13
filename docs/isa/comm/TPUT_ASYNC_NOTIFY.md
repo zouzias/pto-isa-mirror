@@ -45,8 +45,9 @@ The `AtomicAdd` signal update is atomic. It does not make payload writes from di
 - `WaitEvents...`: PTO pipeline event types that must complete before this instruction starts and provide a
   zero-argument `Wait()`. The current `AsyncEvent` requires `Wait(session)` and cannot be passed here directly.
 
-The URMA notify path is not implemented on A2/A3 or A5. Explicitly instantiating
-`TPUT_ASYNC_NOTIFY<DmaEngine::URMA>` is rejected at compile time.
+The URMA notify path is not implemented on A2/A3 or A5, and the A5 RoCE notify path is also reserved but not
+implemented. Explicitly instantiating `TPUT_ASYNC_NOTIFY<DmaEngine::URMA>` or
+`TPUT_ASYNC_NOTIFY<DmaEngine::ROCE>` is rejected at compile time.
 
 ## C++ Intrinsic
 

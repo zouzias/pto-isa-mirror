@@ -84,6 +84,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 接口（A2/A3 使用 SDMA；A5 TGET 使用 SDMA，TPUT/TPUT_ASYNC_NOTIFY 当前使用 MTE fallback）|
 | `DmaEngine::URMA` | `TPUT_ASYNC`/`TGET_ASYNC` 的 URMA 引擎（仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）；`TPUT_ASYNC_NOTIFY<URMA>` 尚未实现 |
+| `DmaEngine::ROCE` | 为后续 A5 RoCE backend 预留；当前异步通信指令均在编译期拒绝该引擎 |
 
 ### AsyncEvent
 

@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 
 #include <pto/pto-inst.hpp>
+#include "pto/comm/async_common/async_types.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 
@@ -21,6 +22,7 @@ namespace {
 
 constexpr uint32_t kElemCount = 256U;
 constexpr uint64_t kBlockBytes = 64U;
+constexpr uint32_t kOrdinaryElemCount = static_cast<uint32_t>(kBlockBytes / sizeof(int32_t));
 constexpr uint32_t kSignalPollLimit = 10000000U;
 constexpr uint32_t kSignalSlotInt32Count = 1U;
 constexpr uint32_t kGuardInt32Count = 16U;
@@ -34,6 +36,7 @@ constexpr uint32_t kDeviceWaitFailed = 2U;
 constexpr uint32_t kDeviceSignalTimeout = 3U;
 constexpr uint32_t kDevicePayloadMismatch = 4U;
 constexpr uint32_t kDeviceUnexpectedValidEvent = 5U;
+constexpr uint32_t kDeviceUnexpectedPostId = 6U;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -43,7 +46,7 @@ using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::U
 __global__ AICORE void TPutAsyncNotifyKernel(
     __gm__ int32_t* commBuf, __gm__ CommDeviceContext* hcclCtx, __gm__ uint8_t* sdmaWorkspace, uint32_t queueNum,
     int32_t signalValue, int32_t expectedSignal, uint32_t notifyOp, uint32_t postCount, uint32_t channelGroupIdx,
-    uint32_t expectInvalid)
+    uint32_t expectInvalid, uint32_t ordinaryPostsBetweenNotifies)
 {
     __gm__ int32_t* sendBuf = commBuf;
     __gm__ int32_t* recvBuf = sendBuf + kElemCount;
@@ -75,12 +78,21 @@ __global__ AICORE void TPutAsyncNotifyKernel(
         Global src(sendBuf, shape, stride);
         Global priorDst(CommRemotePtr(hcclCtx, priorRecvBuf, 1), shape, stride);
         Global dst(CommRemotePtr(hcclCtx, recvBuf, 1), shape, stride);
+        ShapeDyn ordinaryShape(1, 1, 1, 1, kOrdinaryElemCount);
+        StrideDyn ordinaryStride(kOrdinaryElemCount, kOrdinaryElemCount, kOrdinaryElemCount, kOrdinaryElemCount, 1);
+        Global ordinarySrc(sendBuf, ordinaryShape, ordinaryStride);
+        Global ordinaryDst(CommRemotePtr(hcclCtx, priorRecvBuf, 1), ordinaryShape, ordinaryStride);
         pto::comm::Signal signal(CommRemotePtr(hcclCtx, localSignal, 1));
         // First use all configured queues. Waiting only for the following notify event
         // must fence those queues locally through runtimeCtx.usedQueueCount. It does not
         // make the remote signal order prior transfers from other queues.
         if (expectInvalid == 0U) {
-            (void)pto::comm::TPUT_ASYNC(priorDst, src, session);
+            const pto::comm::AsyncEvent priorEvent = pto::comm::TPUT_ASYNC(priorDst, src, session);
+            if (!priorEvent.valid()) {
+                *localStatus = kDeviceInvalidEvent;
+                pipe_barrier(PIPE_ALL);
+                return;
+            }
         }
         const pto::comm::NotifyOp op = notifyOp == 0U ? pto::comm::NotifyOp::Set : pto::comm::NotifyOp::AtomicAdd;
         pto::comm::AsyncEvent event;
@@ -90,11 +102,26 @@ __global__ AICORE void TPutAsyncNotifyKernel(
             if (!event.valid()) {
                 break;
             }
+            if (post + 1U < postCount) {
+                for (uint32_t ordinaryPost = 0U; ordinaryPost < ordinaryPostsBetweenNotifies; ++ordinaryPost) {
+                    const pto::comm::AsyncEvent ordinaryEvent =
+                        pto::comm::TPUT_ASYNC(ordinaryDst, ordinarySrc, session);
+                    if (!ordinaryEvent.valid()) {
+                        *localStatus = kDeviceInvalidEvent;
+                        pipe_barrier(PIPE_ALL);
+                        return;
+                    }
+                }
+            }
         }
+        const uint64_t expectedPostId =
+            1ULL + postCount + static_cast<uint64_t>(postCount - 1U) * ordinaryPostsBetweenNotifies;
         if (expectInvalid != 0U) {
             *localStatus = event.valid() ? kDeviceUnexpectedValidEvent : kDeviceSuccess;
         } else if (!event.valid()) {
             *localStatus = kDeviceInvalidEvent;
+        } else if (session.sdmaRuntimeCtx.nextPostId != expectedPostId) {
+            *localStatus = kDeviceUnexpectedPostId;
         } else if (!event.Wait(session)) {
             *localStatus = kDeviceWaitFailed;
         } else {
@@ -136,7 +163,7 @@ __global__ AICORE void TPutAsyncNotifyKernel(
 bool RunNotifyCase(
     int rankId, int nRanks, int nDevices, int firstDeviceId, const HcclRootInfo* rootInfo, uint32_t queueNum,
     int32_t signalInitial, int32_t signalValue, int32_t expectedSignal, pto::comm::NotifyOp notifyOp,
-    uint32_t postCount, uint32_t channelGroupIdx, bool expectInvalid)
+    uint32_t postCount, uint32_t channelGroupIdx, bool expectInvalid, uint32_t ordinaryPostsBetweenNotifies)
 {
     TestContext ctx;
     if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo)) {
@@ -191,7 +218,7 @@ bool RunNotifyCase(
     TPutAsyncNotifyKernel<<<1, nullptr, ctx.stream>>>(
         commBuf, ctx.deviceCtx, reinterpret_cast<uint8_t*>(sdmaMgr.GetWorkspaceAddr()), queueNum, signalValue,
         expectedSignal, notifyOp == pto::comm::NotifyOp::Set ? 0U : 1U, postCount, channelGroupIdx,
-        expectInvalid ? 1U : 0U);
+        expectInvalid ? 1U : 0U, ordinaryPostsBetweenNotifies);
     ctx.aclStatus |= aclrtSynchronizeStream(ctx.stream);
     HcclHostBarrier(ctx.comm, ctx.stream);
 
@@ -240,7 +267,7 @@ bool RunNotifyCase(
 bool RunNotify(
     int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum, int32_t signalInitial,
     int32_t signalValue, int32_t expectedSignal, pto::comm::NotifyOp notifyOp, uint32_t postCount,
-    uint32_t channelGroupIdx, bool expectInvalid)
+    uint32_t channelGroupIdx, bool expectInvalid, uint32_t ordinaryPostsBetweenNotifies = 0U)
 {
     if (nRanks != 2 || queueNum == 0U || postCount == 0U) {
         return false;
@@ -249,7 +276,7 @@ bool RunNotify(
         nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo* rootInfo) {
             return RunNotifyCase(
                 rankId, nRanks, nDevices, firstDeviceId, rootInfo, queueNum, signalInitial, signalValue, expectedSignal,
-                notifyOp, postCount, channelGroupIdx, expectInvalid);
+                notifyOp, postCount, channelGroupIdx, expectInvalid, ordinaryPostsBetweenNotifies);
         });
 }
 
@@ -277,6 +304,21 @@ bool RunTPutAsyncNotifyAddRingReuse(int nRanks, int nDevices, int firstRankId, i
         kAddInitial + static_cast<int32_t>(kPostCount) * kAddValue +
             static_cast<int32_t>((kPostCount - 1U) * kPostCount / 2U),
         pto::comm::NotifyOp::AtomicAdd, kPostCount, 0U, false);
+}
+
+bool RunTPutAsyncNotifyInterleavedRingReuse(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum)
+{
+    // The first notify uses postId 2. After 127 ordinary posts, the second notify
+    // uses postId 130 and reuses operand slot 2, while postId 66 was an ordinary
+    // post in the same flag slot. This verifies that waiting for postId 66 safely
+    // protects the older notify operand before it is overwritten.
+    constexpr uint32_t kNotifyPostCount = 2U;
+    constexpr uint32_t kOrdinaryPostsBetweenNotifies = 127U;
+    return RunNotify(
+        nRanks, nDevices, firstRankId, firstDeviceId, queueNum, kAddInitial, kAddValue,
+        kAddInitial + static_cast<int32_t>(kNotifyPostCount) * kAddValue + 1, pto::comm::NotifyOp::AtomicAdd,
+        kNotifyPostCount, 0U, false, kOrdinaryPostsBetweenNotifies);
 }
 
 bool RunTPutAsyncNotifyRejectNonZeroGroup(

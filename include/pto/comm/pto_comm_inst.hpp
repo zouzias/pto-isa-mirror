@@ -392,7 +392,8 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
  * @brief A5 overload matching TPUT_ASYNC's explicit-peer API.
  *
  * The SDMA-named MTE fallback obtains the remote VA from GlobalTensor, so peer
- * is accepted for API consistency and ignored. URMA notify is not implemented.
+ * is accepted for API consistency and ignored. URMA and RoCE notify paths are
+ * reserved but not implemented.
  */
 template <
     DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,

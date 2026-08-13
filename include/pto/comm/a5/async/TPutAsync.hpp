@@ -148,6 +148,9 @@ TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, cons
         static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC: URMA engine requires NPU_ARCH 3510");
         return AsyncEvent(0, engine);
 #endif
+    } else if constexpr (engine == DmaEngine::ROCE) {
+        static_assert(engine != DmaEngine::ROCE, "TPUT_ASYNC: RoCE path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
     } else {
         PTO_ASSERT(false, "TPUT_ASYNC: unsupported engine");
         return AsyncEvent(0, engine);
@@ -168,6 +171,9 @@ TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, cons
         static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC: URMA engine requires NPU_ARCH 3510");
         return AsyncEvent(0, engine);
 #endif
+    } else if constexpr (engine == DmaEngine::ROCE) {
+        static_assert(engine != DmaEngine::ROCE, "TPUT_ASYNC: RoCE peer path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
     } else {
         PTO_ASSERT(false, "TPUT_ASYNC: unsupported engine");
         return AsyncEvent(0, engine);

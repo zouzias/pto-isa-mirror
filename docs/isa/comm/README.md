@@ -84,6 +84,7 @@ DMA backend selection for `TPUT_ASYNC`, `TPUT_ASYNC_NOTIFY`, and `TGET_ASYNC`:
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA API (A2/A3 uses SDMA; on A5, TGET uses SDMA while TPUT/TPUT_ASYNC_NOTIFY currently use an MTE fallback) |
 | `DmaEngine::URMA` | URMA engine for `TPUT_ASYNC`/`TGET_ASYNC` (Ascend950 / NPU_ARCH 3510 only; requires CANN >= 9.1.0); `TPUT_ASYNC_NOTIFY<URMA>` is not implemented |
+| `DmaEngine::ROCE` | Reserved for future A5 RoCE backends; current async communication instructions reject it at compile time |
 
 ### AsyncEvent
 

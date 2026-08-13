@@ -68,9 +68,15 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_IMPL(
     if constexpr (engine == DmaEngine::SDMA) {
         return detail::TPUT_ASYNC_NOTIFY_MTE_FALLBACK(
             dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
+    } else if constexpr (engine == DmaEngine::URMA) {
+        static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC_NOTIFY: A5 URMA path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
+    } else if constexpr (engine == DmaEngine::ROCE) {
+        static_assert(engine != DmaEngine::ROCE, "TPUT_ASYNC_NOTIFY: A5 RoCE path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
     } else {
-        static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC_NOTIFY: A5 URMA path is not implemented yet");
-        return {};
+        static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC_NOTIFY: unsupported DMA engine");
+        return AsyncEvent(0, engine);
     }
 }
 
@@ -79,8 +85,22 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_IMPL(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
     NotifyOp notifyOp, const AsyncSession& session, uint32_t peer)
 {
-    (void)peer;
-    return TPUT_ASYNC_NOTIFY_IMPL<engine>(dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
+    if constexpr (engine == DmaEngine::SDMA) {
+        (void)peer;
+        return detail::TPUT_ASYNC_NOTIFY_MTE_FALLBACK(
+            dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
+    } else if constexpr (engine == DmaEngine::URMA) {
+        static_assert(
+            engine != DmaEngine::URMA, "TPUT_ASYNC_NOTIFY: A5 URMA peer path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
+    } else if constexpr (engine == DmaEngine::ROCE) {
+        static_assert(
+            engine != DmaEngine::ROCE, "TPUT_ASYNC_NOTIFY: A5 RoCE peer path is reserved but not implemented yet");
+        return AsyncEvent(0, engine);
+    } else {
+        static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC_NOTIFY: unsupported DMA engine");
+        return AsyncEvent(0, engine);
+    }
 }
 
 } // namespace comm

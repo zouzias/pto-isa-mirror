@@ -45,8 +45,8 @@ payload 操作之后，根据 `notifyOp` 更新 signal：
 - `WaitEvents...`：调用本指令前必须完成、且提供零参数 `Wait()` 的 PTO pipeline event 类型。当前
   `AsyncEvent` 需要 `Wait(session)`，不能直接作为该参数传入。
 
-当前 A2/A3 和 A5 的 URMA notify 路径均未实现。显式指定
-`TPUT_ASYNC_NOTIFY<DmaEngine::URMA>` 会在编译期被拒绝。
+当前 A2/A3 和 A5 的 URMA notify 路径以及 A5 的 RoCE notify 路径均未实现。显式指定
+`TPUT_ASYNC_NOTIFY<DmaEngine::URMA>` 或 `TPUT_ASYNC_NOTIFY<DmaEngine::ROCE>` 会在编译期被拒绝。
 
 ## C++ 内建接口
 

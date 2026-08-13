@@ -121,6 +121,7 @@ enum class ReduceOp : uint8_t {
 enum class DmaEngine : uint8_t {
     SDMA = 0, // Supports 2D transfer
     URMA = 1, // Supports 1D transfer (HCCP V2 Jetty, NPU_ARCH 3510 only)
+    ROCE = 2, // Reserved for the A5 RoCE transport
 };
 
 // ============================================================================
