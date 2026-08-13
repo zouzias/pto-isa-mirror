@@ -23,12 +23,8 @@ enum class ElementOp {
     OP_ADD = 0,
     OP_POW,
     OP_SUB,
-    OP_SUBRELU,
     OP_MUL,
     OP_DIV,
-    OP_MULADDDST,
-    OP_FUSEDMULADD,
-    OP_FUSEDMULADDRELU,
     OP_REM,
     OP_SHL,
     OP_SHR,
@@ -55,8 +51,6 @@ enum class ElementOp {
 
     // ternary operation
     OP_SEL,
-    OP_ADDC,
-    OP_SUBC,
 
     // Tile-Scalar Operation
     // Input scala
@@ -81,8 +75,6 @@ enum class ElementOp {
     OP_SHRS,
     // Input tile0 tile1 and scala
     OP_SELS,
-    OP_ADDCS,
-    OP_SUBCS,
 };
 
 template <typename DType, ElementOp op>
@@ -105,13 +97,6 @@ struct ElementOpCal<DType, ElementOp::OP_SUB> {
 };
 
 template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_SUBRELU> {
-    static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = ReLU(src0 - src1); }
-
-    static void apply(DType& dst, const DType& src0, const DType& src1) { dst = ReLU(src0 - src1); }
-};
-
-template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_MUL> {
     static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = src0 * src1; }
 
@@ -130,33 +115,6 @@ struct ElementOpCal<DType, ElementOp::OP_DIV> {
     {
         assert(src1 != static_cast<DType>(0) && "Divider cannot be equal to zero");
         dst = src0 / src1;
-    }
-};
-
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_MULADDDST> {
-    static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = static_cast<DType>(src0 * src1) + dst; }
-
-    static void apply(DType& dst, const DType& src0, const DType& src1) { dst = static_cast<DType>(src0 * src1) + dst; }
-};
-
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_FUSEDMULADD> {
-    static void apply(DType& dst, DType& src0, DType& src1, size_t) { dst = src0 * dst + src1; }
-
-    static void apply(DType& dst, const DType& src0, const DType& src1) { dst = src0 * dst + src1; }
-};
-
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_FUSEDMULADDRELU> {
-    static void apply(DType& dst, DType& src0, DType& src1, size_t)
-    {
-        dst = ReLU(static_cast<DType>(src0 * dst) + src1);
-    }
-
-    static void apply(DType& dst, const DType& src0, const DType& src1)
-    {
-        dst = ReLU(static_cast<DType>(src0 * dst) + src1);
     }
 };
 
@@ -367,16 +325,6 @@ struct ElementOpCal<DType, ElementOp::OP_SEL> {
 };
 
 template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_ADDC> {
-    static void apply(DType& dst, DType& src0, DType& src1, DType& src2) { dst = src0 + src1 + src2; }
-};
-
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_SUBC> {
-    static void apply(DType& dst, DType& src0, DType& src1, DType& src2) { dst = src0 - src1 + src2; }
-};
-
-template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_EXPANDS> {
     static void apply(DType& dst, DType& scalar) { dst = scalar; }
 };
@@ -530,14 +478,5 @@ struct ElementOpCal<DType, ElementOp::OP_SELS> {
     }
 };
 
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_ADDCS> {
-    static void apply(DType& dst, DType& src0, DType& scalar, DType& src1) { dst = src0 + scalar + src1; }
-};
-
-template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_SUBCS> {
-    static void apply(DType& dst, DType& src0, DType& scalar, DType& src1) { dst = src0 - scalar + src1; }
-};
 } // namespace pto
 #endif
