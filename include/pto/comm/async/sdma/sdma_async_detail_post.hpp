@@ -170,15 +170,15 @@ PTO_INTERNAL void RingDoorbell(
 #endif
 }
 
-PTO_INTERNAL void PublishDataTransferSqes(
-    __gm__ BatchWriteChannelInfo* channels, uint32_t dataQueueCount, const uint32_t* sqTail, UbTmpBuf& tmpBuf,
+PTO_INTERNAL void FlushDataCacheAndRingDoorbells(
+    __gm__ BatchWriteChannelInfo* channels, uint32_t queueCount, const uint32_t* sqTail, UbTmpBuf& tmpBuf,
     uint32_t syncId)
 {
     __asm__ __volatile__("");
     dcci((__gm__ void*)channels->sq_base, cache_line_t::ENTIRE_DATA_CACHE);
     __asm__ __volatile__("");
     dsb(DSB_DDR);
-    for (uint32_t queue = 0U; queue < dataQueueCount; ++queue) {
+    for (uint32_t queue = 0U; queue < queueCount; ++queue) {
         RingDoorbell(channels + queue, sqTail[queue], tmpBuf, syncId);
     }
     pipe_barrier(PIPE_ALL);
@@ -303,7 +303,7 @@ PTO_INTERNAL AsyncEvent FinishSdmaPost(const SdmaConfig& config, const SdmaPostS
     const SdmaExecContext& execCtx = session.execCtx;
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     UbTmpBuf tmpBuf = state.tmpBuf;
-    PublishDataTransferSqes(state.channels, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
+    FlushDataCacheAndRingDoorbells(state.channels, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
     SubmitFlagTransferSqes(state.channels, state.flagPayload, state.postQueueCount, runtimeCtx);
     PersistSqTails(state.channels, config.queue_num, runtimeCtx, tmpBuf, execCtx.syncId);
     PublishFlagTransferSqes(state.channels, 0U, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
@@ -424,7 +424,7 @@ PTO_INTERNAL AsyncEvent SdmaPostAsyncNotify(
     payloadConfig.queue_num = 1U;
     SubmitDataTransferSqes(state.channels, recvBuffer, sendBuffer, 0U, payloadConfig, session.runtimeCtx);
     // Publish payload first so SDMA can start transferring while the signal and completion SQEs are prepared.
-    PublishDataTransferSqes(
+    FlushDataCacheAndRingDoorbells(
         state.channels, state.dataQueueCount, session.runtimeCtx.sqTail, state.tmpBuf, session.execCtx.syncId);
 
     SubmitSignalSqe(state.channels, remoteSignal, notifyState.signalOperand, notifyOp, session.runtimeCtx);
@@ -433,7 +433,7 @@ PTO_INTERNAL AsyncEvent SdmaPostAsyncNotify(
     const SdmaExecContext& execCtx = session.execCtx;
     PersistSqTails(state.channels, config.queue_num, session.runtimeCtx, state.tmpBuf, execCtx.syncId);
     // Flush and publish the signal and postDone SQEs after the payload doorbell.
-    PublishDataTransferSqes(
+    FlushDataCacheAndRingDoorbells(
         state.channels, state.postQueueCount, session.runtimeCtx.sqTail, state.tmpBuf, execCtx.syncId);
     return AsyncEvent(state.eventHandle, DmaEngine::SDMA);
 }
