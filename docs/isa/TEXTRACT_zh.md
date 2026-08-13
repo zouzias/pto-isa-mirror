@@ -54,8 +54,14 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQu
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
+
+`TEXTRACT_FP(...)` 为源码兼容保留，并转发到无 `mode` 的 `TEXTRACT(..., fp, indexRow, indexCol, ...)` 重载。
 
 ## 约束
 
@@ -84,7 +90,7 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
     - 对于 `ScaleRight`：`(SFractal == ColMajor && !isRowMajor)`
 - 在以 `Left` 为目标的GEMV场景中，已检查到的源布局还允许 `(SrcTileData::Rows == 1 && SrcTileData::isRowMajor)`。
 - 目标支持 `TileType::Mat -> TileType::Left/Right/Scale`、`TileType::Acc -> TileType::Mat`（含relu、标量量化、向量量化形式）、`TileType::Acc -> TileType::Vec`，以及特定的 `TileType::Vec -> TileType::Mat` 提取路径。
-- 向量量化形式额外要求提供 `FpTileData` 缩放操作数，对应 `TEXTRACT_FP(...)` 接口。
+- 向量量化形式额外要求提供 `FpTileData` 缩放操作数，对应无 `mode` 的 `TEXTRACT(..., fp, ...)` 接口。`TEXTRACT_FP(...)` 仍作为源码兼容转发别名保留。
 - 对于 `TileType::Acc -> TileType::Vec`，当目标为32位类型（`float`/`int32_t`）且使用 `DualModeSplitN` 时，切分前的 `ValidCol` 必须是 `32` 的整数倍。
 
 ### Vec → Vec 抽取路径
