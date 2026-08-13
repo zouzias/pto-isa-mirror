@@ -147,7 +147,7 @@ constexpr uint64_t kCycleToTimeBase = 50;
 #else
 constexpr uint64_t kCycleToTimeBase = 1000;
 #endif
-constexpr uint64_t kPollCqTimeoutUs = 15ULL * 1000 * 1000;
+constexpr uint64_t kPollCqTimeoutUs = 60ULL * 1000 * 1000;
 constexpr uint64_t kPollCqTimeoutCycles = kPollCqTimeoutUs * kCycleToTimeBase;
 
 // Backend-local aliases preserve the vocabulary used by the verified HNS WQE
