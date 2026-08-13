@@ -55,7 +55,7 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
     - 目标Tile必须是行主序（`isRowMajor`），由 `static_assert` 强制执行。
     - 支持的元素类型：`int32_t`、`int`、`int16_t`、`uint32_t`、`uint16_t`、`half`、`float16_t`、`float`、`float32_t`。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - 支持的元素类型：`int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t`、`uint8_t`、`half`、`float16_t`、`float32_t`、`bfloat16_t`。
+    - 支持的元素类型：`int32_t`、`int16_t`、`int8_t`、`uint32_t`、`int64_t`、`uint64_t`、`uint16_t`、`uint8_t`、`half`、`float16_t`、`float32_t`、`bfloat16_t`。
     - 下三角（`upperOrLower == 0`）和上三角（`upperOrLower == 1`）由 `if constexpr` 分支区分。
 - 有效区域通过 `dst.GetValidRow()` / `dst.GetValidCol()` 获取。
 

@@ -71,7 +71,7 @@ PTO_INST RecordEvent TPARTADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 
 ### Ascend 950PR/Ascend 950DT实现检查
 
-- 支持的元素类型：`uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`float`、`bfloat16_t`。
+- 支持的元素类型：`uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`int64_t`、`uint64_t`、`half`、`float`、`bfloat16_t`。
 
 ## 示例
 

@@ -57,8 +57,8 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
     - `dst` and `src` must be row-major.
     - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
-    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
+    - `sizeof(TileDataDst::DType)` may be `1`, `2`, `4`, or `8` bytes.
+    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, and `float`.
     - `dst` and `src` must use the same element type.
     - `dst`, `mask`, and `src` must be row-major.
     - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.

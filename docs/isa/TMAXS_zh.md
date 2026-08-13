@@ -50,7 +50,7 @@ PTO_INST RecordEvent TMAXS(TileDataDst& dst, TileDataSrc& src, typename TileData
     - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
 - **通用约束**:
     - Tile位置必须是向量（`TileData::Loc == TileType::Vec`）。

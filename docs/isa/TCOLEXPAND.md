@@ -46,7 +46,8 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 ## Constraints
 
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- **Implementation checks (A2A3/A5)**: `TileData::DType` must be a 1-, 2-, or 4-byte type (b8/b16/b32): `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+- **Implementation checks (A2A3)**: `TileData::DType` must be a 1-, 2-, or 4-byte type (b8/b16/b32): `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+- **Implementation checks (A5)**: `TileData::DType` must be a 1-, 2-, 4-, or 8-byte type (b8/b16/b32/b64): `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
 
 ## Examples
 
