@@ -28,7 +28,12 @@ static_assert(kSdmaEventSlotCount > 0, "SDMA_EVENT_SLOT_COUNT must be >= 1");
 using UbTmpBuf = TmpBuffer;
 constexpr uint32_t kPostIdFlagBytes = sizeof(uint64_t);
 constexpr uint32_t kPostDoneStrideBytes = 64U;
-constexpr uint32_t kFlagPayloadSlotBytes = kPostIdFlagBytes;
+constexpr uint32_t kSignalOperandOffsetBytes = 64U;
+constexpr uint32_t kSignalOperandBytes = kSdmaMinTransferBytes;
+constexpr uint32_t kFlagPayloadSlotBytes = 128U;
+constexpr uint64_t kSdmaInt32AtomicAddOpcode = 0x21U;
+static_assert((kSdmaMinTransferBytes & (kSdmaMinTransferBytes - 1U)) == 0U);
+static_assert(kSignalOperandOffsetBytes + kSignalOperandBytes <= kFlagPayloadSlotBytes);
 constexpr uint32_t kPostMaxQueues = kPostStateMaxQueues;
 constexpr uint32_t kFlagPayloadBytes = kFlagPayloadDepth * kFlagPayloadSlotBytes;
 constexpr uint32_t kPostPollLimit = 100000U;
@@ -221,6 +226,11 @@ PTO_INTERNAL __gm__ uint8_t* GetPostDoneRecordAddr(__gm__ uint8_t* postDoneBase,
 PTO_INTERNAL __gm__ uint8_t* GetFlagPayloadAddr(__gm__ uint8_t* flagPayloadBase, uint64_t postId)
 {
     return flagPayloadBase + (postId % kFlagPayloadDepth) * kFlagPayloadSlotBytes;
+}
+
+PTO_INTERNAL __gm__ uint8_t* GetSignalOperandAddr(__gm__ uint8_t* flagPayload)
+{
+    return flagPayload + kSignalOperandOffsetBytes;
 }
 
 PTO_INTERNAL __gm__ uint8_t* ResolveFlagPayloadBase(const SdmaExecContext& execCtx)

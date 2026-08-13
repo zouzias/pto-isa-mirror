@@ -366,6 +366,24 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 }
 #endif
 
+#ifdef PTO_NPU_ARCH_A2A3
+// ============================================================================
+// TPUT_ASYNC_NOTIFY: A2/A3 asynchronous remote write followed by int32 signal update.
+// Payload and signal are submitted to one SDMA SQ; the returned event covers both.
+// ============================================================================
+template <
+    DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
+    typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
+    NotifyOp notifyOp, const AsyncSession& session, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
+        dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session);
+}
+#endif
+
 // ============================================================================
 // TGET_ASYNC: Asynchronous remote read (GM-to-GM via DMA engine).
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
