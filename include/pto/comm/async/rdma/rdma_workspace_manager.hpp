@@ -23,7 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <vector>
 
-#include "pto/comm/async/rdma/rdma_backend_config.hpp"
+#include "pto/comm/rdma_backend.hpp"
 #ifdef PTO_RDMA_BACKEND_HNS_1825_SUPPORTED
 #include "pto/comm/async/rdma/backends/hns_1825/hns_1825_arch.hpp"
 #include "pto/comm/async/rdma/backends/hns_1825/hns_1825_workspace_manager.hpp"
@@ -60,9 +60,23 @@ public:
     RdmaWorkspaceManager(const RdmaWorkspaceManager&) = delete;
     RdmaWorkspaceManager& operator=(const RdmaWorkspaceManager&) = delete;
 
-    static RdmaBackend ConfiguredBackend() { return GetBackendSelection().backend; }
+    static RdmaBackend ConfiguredBackend()
+    {
+#ifdef PTO_RDMA_BACKEND_HNS_1825_SUPPORTED
+        return RdmaBackend::HNS_1825;
+#else
+        return RdmaBackend::NONE;
+#endif
+    }
 
-    static const char* ConfiguredBackendName() { return GetBackendSelection().name; }
+    static const char* ConfiguredBackendName()
+    {
+#ifdef PTO_RDMA_BACKEND_HNS_1825_SUPPORTED
+        return "HNS_1825";
+#else
+        return "NONE";
+#endif
+    }
 
     static WorkspaceInitResult Preflight()
     {
