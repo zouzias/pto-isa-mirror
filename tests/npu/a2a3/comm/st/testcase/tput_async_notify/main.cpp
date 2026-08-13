@@ -22,6 +22,11 @@ TEST(TPutAsyncNotify, SdmaAtomicAdd65PostsRingReuse_2Ranks)
     ASSERT_TRUE(RunTPutAsyncNotifyAddRingReuse(2, 2, 0, 0, 4));
 }
 
+TEST(TPutAsyncNotify, SdmaAtomicAdd700PostsSqCapacityReuse_2Ranks)
+{
+    ASSERT_TRUE(RunTPutAsyncNotifySqCapacityReuse(2, 2, 0, 0, 4));
+}
+
 TEST(TPutAsyncNotify, SdmaAtomicAddInterleavedOrdinaryRingReuse_2Ranks)
 {
     ASSERT_TRUE(RunTPutAsyncNotifyInterleavedRingReuse(2, 2, 0, 0, 4));

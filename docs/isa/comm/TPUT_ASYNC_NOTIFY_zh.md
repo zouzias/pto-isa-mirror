@@ -176,6 +176,9 @@ workspace 初始化和其他构建参数参见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
 `event.valid() == true`。若 `event.valid() == false`，表示本次 A2/A3 提交失败，不能仅通过
 `Wait()` 的返回值把它当作成功。
 
+提交通常会在操作完成前返回。当 SDMA 发送队列接近环回时，提交过程可能等待同一 session
+中的最新 event 完成并回收已消费的 SQ entry，然后再继续提交新任务。
+
 成功提交后调用：
 
 ```cpp

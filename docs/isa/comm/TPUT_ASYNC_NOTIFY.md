@@ -179,6 +179,9 @@ The returned `AsyncEvent` covers the payload, signal update, and completion mark
 has `event.valid() == true`. If `event.valid() == false`, the A2/A3 submission failed; do not treat
 `Wait()` alone as proof of success.
 
+Submission normally returns before completion. When the SDMA send queue approaches ring wrap, submission
+may wait for the latest event in the session and reclaim completed SQ entries before posting more work.
+
 After a successful submission:
 
 ```cpp

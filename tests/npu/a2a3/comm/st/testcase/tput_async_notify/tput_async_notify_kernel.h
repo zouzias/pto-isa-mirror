@@ -17,6 +17,9 @@ bool RunTPutAsyncNotifyAdd(int nRanks, int nDevices, int firstRankId, int firstD
 
 bool RunTPutAsyncNotifyAddRingReuse(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
 
+bool RunTPutAsyncNotifySqCapacityReuse(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
+
 bool RunTPutAsyncNotifyInterleavedRingReuse(
     int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
 
