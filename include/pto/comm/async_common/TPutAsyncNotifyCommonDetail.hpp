@@ -32,8 +32,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_SDMA_IMPL(
         srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr && dstSignalData.data() != nullptr,
         "TPUT_ASYNC_NOTIFY: src, dst and signal pointers must not be null.");
     PTO_ASSERT(
-        (reinterpret_cast<uint64_t>(dstSignalData.data()) & (sdma::kSdmaMinTransferBytes - 1U)) == 0U,
-        "TPUT_ASYNC_NOTIFY: A2/A3 SDMA signal address must be 64-byte aligned.");
+        (reinterpret_cast<uint64_t>(dstSignalData.data()) & (sizeof(uint64_t) - 1U)) == 0U,
+        "TPUT_ASYNC_NOTIFY: A2/A3 SDMA signal address must be 8-byte aligned.");
     PTO_ASSERT(
         TPutAsyncIsFlatContiguous1D(srcGlobalData) && TPutAsyncIsFlatContiguous1D(dstGlobalData),
         "TPUT_ASYNC_NOTIFY: src and dst tensors must be flat contiguous 1D.");

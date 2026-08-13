@@ -22,7 +22,7 @@ namespace {
 constexpr uint32_t kElemCount = 256U;
 constexpr uint64_t kBlockBytes = 64U;
 constexpr uint32_t kSignalPollLimit = 10000000U;
-constexpr uint32_t kSignalSlotInt32Count = 16U;
+constexpr uint32_t kSignalSlotInt32Count = 2U;
 constexpr uint32_t kGuardInt32Count = 16U;
 constexpr int32_t kGuardValue = 0x13579BDF;
 constexpr int32_t kSetValue = 7;
