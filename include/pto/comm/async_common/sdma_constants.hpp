@@ -20,7 +20,7 @@ namespace sdma {
 constexpr uint32_t kSdmaContextWorkspaceBytes = 16U * 1024U;
 constexpr uint32_t kSdmaFlagPayloadBytesPerGroup = 512U;
 constexpr uint32_t kSdmaMaxChannelGroups = 48U;
-constexpr uint32_t kSdmaNotifyOperandBytes = 512U;
+constexpr uint32_t kSdmaNotifyOperandBytes = 256U;
 constexpr uint32_t kSdmaWorkspaceBytes =
     kSdmaContextWorkspaceBytes + kSdmaMaxChannelGroups * kSdmaFlagPayloadBytesPerGroup + kSdmaNotifyOperandBytes;
 
