@@ -24,6 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "kernel_launch.hpp"
 #include "swiglu.h"
 #include "unpermute.h"
+#include "utils/mega_expert_sync.hpp"
 
 template <typename InputElement, uint32_t ExpertPerRank>
 AICORE inline void FrontRunVmsSort(FrontReorderVmsSort<InputElement>& path)
@@ -77,6 +78,9 @@ public:
     __aicore__ inline void Process();
 
 private:
+    __aicore__ inline void ProcessFixedGroups(uint16_t stageNum);
+    __aicore__ inline void ProcessFixedGmm1(uint32_t physicalBlockId);
+
     GM_ADDR xGM_ = nullptr;
     GM_ADDR weight1GM_ = nullptr;
     GM_ADDR weight2GM_ = nullptr;
@@ -110,35 +114,142 @@ __aicore__ inline void MegaMoe<CType_, ExpertPerRank>::Init(
 }
 
 template <typename CType_, uint32_t ExpertPerRank>
-__aicore__ inline void MegaMoe<CType_, ExpertPerRank>::Process()
+__aicore__ inline void MegaMoe<CType_, ExpertPerRank>::ProcessFixedGmm1(uint32_t physicalBlockId)
 {
-    using OutputElement = half;
-
-    FrontReorderProcess<CType_, ExpertPerRank>(xGM_, expertIdGM_, expertTokenNumsGM_, workspaceGM_, tilingData_);
-
-    DispatchGather<CType_> dispatchGather;
-    dispatchGather.Init(expertTokenNumsGM_, workspaceGM_, tilingData_);
-    dispatchGather.Process();
-
     Gmm1<CType_> gmm1;
     gmm1.Init(weight1GM_, scale1GM_, expertTokenNumsGM_, workspaceGM_, tilingData_);
-    gmm1.Process();
+    gmm1.ProcessFixed(physicalBlockId, tilingData_->fixedGroupTiling.physicalAicNum);
+}
 
-    Swiglu<CType_> swiglu;
-    swiglu.Init(expertTokenNumsGM_, workspaceGM_, tilingData_);
-    swiglu.Process();
+template <typename CType_, uint32_t ExpertPerRank>
+__aicore__ inline void MegaMoe<CType_, ExpertPerRank>::ProcessFixedGroups(uint16_t stageNum)
+{
+    const MegaMoeFixedCoreRoleInfo role = FixedCoreRole(tilingData_);
+    const __gm__ MegaMoeFixedGroupTiling& fixed = tilingData_->fixedGroupTiling;
+    const bool rankStreaming = tilingData_->unpermuteTiling.unpermuteImplMode == kMegaMoeUnpermuteImplRankStreaming;
+    const uint32_t rankStreamingWorkerCount = fixed.physicalAivNum;
 
-    Gmm2<CType_> gmm2;
-    gmm2.Init(weight2GM_, scale2GM_, expertTokenNumsGM_, workspaceGM_, tilingData_);
-    gmm2.Process();
+    if (role.role == kMegaMoeFixedRoleDispatch && role.groupLocalId < tilingData_->runtimeInfo.rankSize &&
+        stageNum >= 9U) {
+        DispatchGather<CType_> dispatchGather;
+        dispatchGather.Init(expertTokenNumsGM_, workspaceGM_, tilingData_);
+        dispatchGather.ProcessFixed(role.groupLocalId, role.groupSize);
+    } else if ((role.role == kMegaMoeFixedRoleGmm1 || role.role == kMegaMoeFixedRoleGmm2) && stageNum >= 10U) {
+        ProcessFixedGmm1(role.physicalBlockId);
+        const bool dynamicGmm2Join = stageNum >= 12U;
+        if (dynamicGmm2Join && role.role == kMegaMoeFixedRoleGmm1 && role.groupLocalId == 0U) {
+            pipe_barrier(PIPE_ALL);
+            dsb(DSB_DDR);
+            PublishScalarEpoch(
+                FixedSyncSlot(workspaceGM_, tilingData_, FixedSyncLayout(tilingData_).gmm1DoneSlot),
+                kMegaMoeFixedGmm1DoneMarker);
+        }
+        if (stageNum >= 12U && (role.role == kMegaMoeFixedRoleGmm2 || dynamicGmm2Join)) {
+            Gmm2<CType_> gmm2;
+            gmm2.Init(weight2GM_, scale2GM_, expertTokenNumsGM_, workspaceGM_, tilingData_);
+            if (role.role == kMegaMoeFixedRoleGmm2) {
+                gmm2.ProcessFixed(role.groupLocalId, role.groupSize);
+            } else {
+                gmm2.ProcessFixedHelper(role.groupLocalId);
+            }
+        }
+    } else if (
+        role.role == kMegaMoeFixedRoleSwiglu && role.groupLocalId < fixed.swigluActiveGroupSize && stageNum >= 11U) {
+        Swiglu<CType_> swiglu;
+        swiglu.Init(expertTokenNumsGM_, workspaceGM_, tilingData_);
+        swiglu.ProcessFixed(role.groupLocalId, fixed.swigluActiveGroupSize);
+    } else if (role.role == kMegaMoeFixedRoleCombine && role.groupLocalId < role.groupSize && stageNum >= 13U) {
+        Combine<half> combine;
+        combine.Init(workspaceGM_, tilingData_);
+        combine.ProcessFixed(role.groupLocalId, role.groupSize);
+    }
 
-    Combine<OutputElement> combine;
-    combine.Init(workspaceGM_, tilingData_);
-    combine.Process();
+    if ASCEND_IS_AIV {
+        if (!rankStreaming && stageNum >= 13U) {
+            Combine<half> finalBoundary;
+            finalBoundary.Init(workspaceGM_, tilingData_);
+            finalBoundary.ProcessFixedFinalBoundary(
+                role.role, role.flatAivId, role.role != kMegaMoeFixedRoleCombine || role.groupLocalId < role.groupSize);
+        }
+        if (rankStreaming && stageNum == 13U && role.physicalBlockId == 0U && role.subblockId == 0U) {
+            PtoRemoteWindow remoteWindow;
+            remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+            const int32_t epoch = remoteWindow.DataReadyEpoch();
+            for (uint32_t producerRank = 0U; producerRank < tilingData_->runtimeInfo.rankSize; ++producerRank) {
+                WaitEpochAcquire(remoteWindow.LocalDataReadySlot(producerRank), epoch);
+            }
+        }
 
-    Unpermute<OutputElement> unpermute;
-    unpermute.Init(workspaceGM_, probsGM_, outGM_, tilingData_);
-    unpermute.Process();
+        const uint32_t initialUnpermuteGroupSize = fixed.gmm1GroupSize * 2U;
+        const bool initialUnpermuteGroup = role.physicalBlockId < fixed.gmm1GroupSize;
+        const uint32_t rankStreamingWorkerIdx = initialUnpermuteGroup ?
+                                                    role.physicalBlockId + role.subblockId * fixed.gmm1GroupSize :
+                                                    initialUnpermuteGroupSize + role.groupLocalId;
+        const bool unpermuteWorker = !rankStreaming || rankStreamingWorkerIdx < rankStreamingWorkerCount;
+        if (rankStreaming && stageNum >= 14U && initialUnpermuteGroup) {
+            PtoRemoteWindow remoteWindow;
+            remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+            const int32_t epoch = remoteWindow.DataReadyEpoch();
+            if (role.role == kMegaMoeFixedRoleDispatch) {
+                remoteWindow.PublishDispatchRelease(role.groupLocalId, epoch);
+            } else if (role.role == kMegaMoeFixedRoleSwiglu) {
+                remoteWindow.PublishSwigluRelease(role.groupLocalId, epoch);
+            }
+
+            if (rankStreamingWorkerIdx == 0U) {
+                remoteWindow.WaitDispatchReleaseMte(fixed.dispatchGroupSize, epoch);
+                remoteWindow.WaitSwigluReleaseMte(fixed.swigluGroupSize, epoch);
+
+                uint32_t readyExpertCounts[COMBINE_EXPERT_PROGRESS_MAX_RANKS] = {0U};
+                const uint32_t rankCount = tilingData_->runtimeInfo.rankSize;
+                const uint32_t expertPerRank = tilingData_->megaMoeInfo.expertPerRank;
+                const uint32_t configuredCut = fixed.unpermutePhase1ReadyExpertCount;
+                const uint32_t readyCut = configuredCut < expertPerRank ? configuredCut : expertPerRank;
+                uint32_t minimumReady = 0U;
+                while (minimumReady < readyCut) {
+                    minimumReady = remoteWindow.ReadExpertProgressMte(epoch, expertPerRank, readyExpertCounts);
+                    if (minimumReady < readyCut) {
+                        RemoteWindowSyncPollBackoff();
+                    }
+                }
+                remoteWindow.AcquireDataReady();
+                uint32_t readyRankMask = 0U;
+                for (uint32_t producerRank = 0U; producerRank < rankCount; ++producerRank) {
+                    if (readyExpertCounts[producerRank] >= readyCut) {
+                        readyRankMask |= 1U << producerRank;
+                    }
+                }
+                remoteWindow.PublishUnpermutePhase1Progress(readyExpertCounts, rankCount, readyRankMask, epoch);
+                const uint32_t initialWorkerCount = rankStreamingWorkerCount < initialUnpermuteGroupSize ?
+                                                        rankStreamingWorkerCount :
+                                                        initialUnpermuteGroupSize;
+                remoteWindow.PublishUnpermuteStartRangeMte(0U, initialWorkerCount, epoch);
+            }
+        }
+        if (stageNum >= 14U && unpermuteWorker) {
+            uint32_t workerIdx = role.flatAivId;
+            uint32_t workerCount = tilingData_->fixedGroupTiling.physicalAivNum;
+            if (rankStreaming) {
+                workerIdx = rankStreamingWorkerIdx;
+                workerCount = rankStreamingWorkerCount;
+                PtoRemoteWindow remoteWindow;
+                remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+                WaitEpochAcquire(remoteWindow.LocalUnpermuteStartSlot(workerIdx), remoteWindow.DataReadyEpoch());
+            }
+            Unpermute<half> unpermute;
+            unpermute.Init(workspaceGM_, expertIdGM_, probsGM_, outGM_, tilingData_, workerIdx, workerCount);
+            unpermute.Process();
+        }
+    }
+}
+
+template <typename CType_, uint32_t ExpertPerRank>
+__aicore__ inline void MegaMoe<CType_, ExpertPerRank>::Process()
+{
+    const uint16_t stageNum = tilingData_->frontReorderTiling.stageNum;
+
+    FrontReorderProcess<CType_, ExpertPerRank>(xGM_, expertIdGM_, expertTokenNumsGM_, workspaceGM_, tilingData_);
+    ProcessFixedGroups(stageNum);
 }
 
 #endif // DISPATCH_MEGA_COMBINE_H

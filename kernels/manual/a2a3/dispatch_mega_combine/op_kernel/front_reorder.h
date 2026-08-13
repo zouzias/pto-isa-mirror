@@ -1011,7 +1011,7 @@ AICORE inline void FrontEndBuildCountExchangeAndPreSum(const FrontReorderCommonS
 template <uint32_t Pitch>
 AICORE inline void FrontEndBuildCumsumForPitch(const FrontReorderCommonState& op)
 {
-    static_assert(Pitch == 8U || Pitch == 16U, "front cumsum supports expertPerRank 8 or 16");
+    static_assert(Pitch == 8U || Pitch == 16U || Pitch == 32U, "front cumsum supports expertPerRank 8, 16 or 32");
     using CumsumTile = pto::Tile<pto::TileType::Vec, int32_t, 16, Pitch, pto::BLayout::RowMajor, -1, -1>;
     using CumsumGlobal = pto::GlobalTensor<int32_t, FrontEndShapeDyn, FrontEndStrideDyn, pto::Layout::ND>;
     const uint32_t localBegin = op.rank_ * Pitch;
@@ -1050,7 +1050,9 @@ AICORE inline void FrontEndBuildCumsumForPitch(const FrontReorderCommonState& op
 template <uint32_t ExpertPerRank>
 AICORE inline void FrontEndBuildCumsumAndExpertTokenNums(const FrontReorderCommonState& op)
 {
-    static_assert(ExpertPerRank == 8U || ExpertPerRank == 16U, "front cumsum supports expertPerRank 8 or 16");
+    static_assert(
+        ExpertPerRank == 8U || ExpertPerRank == 16U || ExpertPerRank == 32U,
+        "front cumsum supports expertPerRank 8, 16 or 32");
     if (op.coreIdx_ == 0U) {
         FrontEndBuildCumsumForPitch<ExpertPerRank>(op);
     }

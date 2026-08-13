@@ -114,29 +114,7 @@ struct MegaMoeGmm1Tiling {
 struct MegaMoeSwigluTiling {
     uint64_t gmPermutedTokenOffset = 0;
     uint64_t perTokenScale2Offset = 0;
-    uint64_t swigluSegmentMetaOffset = 0;
-    uint64_t swigluSegmentMetaBytes = 0;
-    uint32_t reservedSwigluParams[5] = {0, 0, 0, 0, 0};
-    uint32_t reserved0[2] = {0, 0};
-};
-
-struct MegaMoeSwigluSegmentRuntimeMeta {
-    uint32_t segmentIdx = 0;
-    uint32_t segmentStartExpert = 0;
-    uint32_t segmentEndExpert = 0;
-    uint32_t segmentRowBase = 0;
-    uint32_t segmentRows = 0;
-    uint32_t cumsumRows = 0;
-    uint32_t expertTokenRows = 0;
-    uint32_t rowSplitBase = 0;
-    uint32_t rowSplitRem = 0;
-    uint32_t valid = 0;
-    uint32_t generation = 0;
-    uint32_t producerCoreIdx = 0;
-    uint32_t metadataMode = 0;
-    uint32_t segmentNum = 0;
-    uint32_t epilogueGranularity = 0;
-    uint32_t marker = 0;
+    uint32_t reserved[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 };
 
 struct MegaMoeGmm2Tiling {
@@ -157,21 +135,104 @@ struct MegaMoeCombineTiling {
     uint64_t reservedCombineScratchBytes = 0;
     uint64_t reservedCombineScratchBytesPerAiv = 0;
     uint32_t reservedCombineTileCols = 0;
-    uint32_t combineImplMode = 0;
+    uint32_t reserved0 = 0;
 };
 
 struct MegaMoeUnpermuteTiling {
     uint32_t unpermuteTileCols = 1024;
     uint32_t unpermuteTokenBatch = 256;
-    uint32_t reservedUnpermuteLayoutVersion = 0;
+    uint32_t unpermuteImplMode = 0;
     uint32_t reserved0[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 };
 
+constexpr uint32_t kMegaMoeUnpermuteImplBarrier = 0U;
+constexpr uint32_t kMegaMoeUnpermuteImplRankStreaming = 1U;
+constexpr uint32_t kMegaMoeFixedLayoutVersion = 11U;
+constexpr uint32_t kMegaMoeFixedPhysicalAicNum = 24U;
+constexpr uint32_t kMegaMoeFixedPhysicalAivNum = 48U;
+constexpr uint32_t kMegaMoeExpertProgressMaxRanks = 16U;
+constexpr uint32_t kMegaMoeRankStreamingMaxTokensPerWorker = 256U;
+constexpr uint32_t kMegaMoeFixedMaxExperts = 32U;
+
+constexpr uint32_t kMegaMoeFixedSyncSlotBytes = 64U;
+constexpr uint32_t kMegaMoeFixedSyncHeadCanarySlot = 0U;
+constexpr uint32_t kMegaMoeFixedSyncBytes = 8704U;
+constexpr uint32_t kMegaMoeFixedHeadCanary = 0x13579BDFU;
+constexpr uint32_t kMegaMoeFixedTailCanary = 0x2468ACE0U;
+constexpr int32_t kMegaMoeFixedGmm1DoneMarker = 1;
+constexpr int32_t kMegaMoeFixedGmm2JoinDecisionBit = 0x40000000;
+constexpr int32_t kMegaMoeFixedGmm2JoinDecisionMask = kMegaMoeFixedGmm2JoinDecisionBit - 1;
+
+enum MegaMoeFixedRole : uint32_t {
+    kMegaMoeFixedRoleGmm1 = 1U,
+    kMegaMoeFixedRoleGmm2 = 2U,
+    kMegaMoeFixedRoleSwiglu = 3U,
+    kMegaMoeFixedRoleCombine = 4U,
+    kMegaMoeFixedRoleDispatch = 5U,
+};
+
+struct MegaMoeFixedGroupTiling {
+    uint64_t syncOffset = 0;
+    uint64_t syncBytes = 0;
+    uint32_t layoutVersion = kMegaMoeFixedLayoutVersion;
+    uint32_t physicalAicNum = 0;
+    uint32_t physicalAivNum = 0;
+    uint32_t dispatchGroupSize = 16U;
+    uint32_t gmm1GroupSize = 16U;
+    uint32_t gmm2GroupSize = 8U;
+    uint32_t swigluGroupSize = 16U;
+    uint32_t swigluActiveGroupSize = 16U;
+    uint32_t combineGroupSize = 8U;
+    uint32_t shapeConfigM = 0;
+    uint32_t fullAicGmm1ExpertCount = 2U;
+    uint32_t unpermutePhase1ReadyExpertCount = 13U;
+    uint32_t gmm2JoinCheckStartExpert = 13U;
+    uint32_t combineStartAfterGmm2Expert = 2U;
+    uint32_t combineLargeLanesPerRank = 1U;
+    uint32_t reserved0 = 0;
+    uint32_t syncSlotBytes = kMegaMoeFixedSyncSlotBytes;
+    uint32_t maxExperts = kMegaMoeFixedMaxExperts;
+};
+
+struct MegaMoeSyncLayout {
+    uint32_t dispatchArrivalBase = 0;
+    uint32_t dispatchReadyBase = 0;
+    uint32_t gmm1ArrivalBase = 0;
+    uint32_t swigluReadyBase = 0;
+    uint32_t swigluArrivalBase = 0;
+    uint32_t gmm2ReadyBase = 0;
+    uint32_t gmm2ArrivalBase = 0;
+    uint32_t combineReadyBase = 0;
+    uint32_t gmm1DoneSlot = 0;
+    uint32_t gmm2JoinSlot = 0;
+    uint32_t tailCanarySlot = 0;
+    uint32_t slotCount = 0;
+};
+
+template <typename FixedT>
+inline MegaMoeSyncLayout MakeMegaMoeSyncLayout(const FixedT& fixed)
+{
+    MegaMoeSyncLayout layout;
+    layout.dispatchArrivalBase = kMegaMoeFixedSyncHeadCanarySlot + 1U;
+    layout.dispatchReadyBase = layout.dispatchArrivalBase + fixed.dispatchGroupSize;
+    layout.gmm1ArrivalBase = layout.dispatchReadyBase + fixed.physicalAicNum;
+    layout.swigluReadyBase = layout.gmm1ArrivalBase + fixed.gmm1GroupSize;
+    layout.swigluArrivalBase = layout.swigluReadyBase + fixed.swigluGroupSize;
+    layout.gmm2ReadyBase = layout.swigluArrivalBase + fixed.swigluGroupSize;
+    layout.gmm2ArrivalBase = layout.gmm2ReadyBase + fixed.gmm2GroupSize;
+    layout.combineReadyBase = layout.gmm2ArrivalBase + fixed.physicalAicNum;
+    layout.gmm1DoneSlot = layout.combineReadyBase + fixed.gmm2GroupSize;
+    layout.gmm2JoinSlot = layout.gmm1DoneSlot + 1U;
+    layout.tailCanarySlot = layout.gmm2JoinSlot + 1U;
+    layout.slotCount = layout.tailCanarySlot + 1U;
+    return layout;
+}
+
 static_assert(sizeof(MegaMoeSwigluTiling) == 64);
-static_assert(sizeof(MegaMoeSwigluSegmentRuntimeMeta) == 64);
 static_assert(sizeof(MegaMoeGmm2Tiling) == 56);
 static_assert(sizeof(MegaMoeCombineTiling) == 48);
 static_assert(sizeof(MegaMoeUnpermuteTiling) == 56);
+static_assert(sizeof(MegaMoeFixedGroupTiling) == 88);
 
 struct MegaMoeTilingData {
     MegaMoeInfo megaMoeInfo;
@@ -183,4 +244,5 @@ struct MegaMoeTilingData {
     MegaMoeGmm2Tiling gmm2Tiling;
     MegaMoeCombineTiling combineTiling;
     MegaMoeUnpermuteTiling unpermuteTiling;
+    MegaMoeFixedGroupTiling fixedGroupTiling;
 };

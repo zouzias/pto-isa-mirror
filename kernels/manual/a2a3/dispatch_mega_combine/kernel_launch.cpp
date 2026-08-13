@@ -49,11 +49,6 @@ extern "C" __global__ __aicore__ void dispatch_mega_combine_kernel(
     GM_ADDR probs, GM_ADDR c, GM_ADDR expertTokenNums, GM_ADDR workspaceGM, GM_ADDR tilingGM, GM_ADDR profileGM,
     uint32_t startSyncDebug)
 {
-#ifdef _DEBUG
-    cce::printf(
-        "MegaMoe kernel enter block=%d sub=%d DAV_VEC=%d workspace=%d tiling=%d\n", int(get_block_idx()),
-        int(get_subblockid()), int(DAV_VEC), int(workspaceGM != nullptr), int(tilingGM != nullptr));
-#endif
     __gm__ uint64_t* profileEntry = nullptr;
     if (profileGM != nullptr) {
         std::size_t profileOffset = static_cast<std::size_t>(get_block_idx()) * kMegaMoeProfileBytesPerBlock;
@@ -66,12 +61,18 @@ extern "C" __global__ __aicore__ void dispatch_mega_combine_kernel(
     set_ffts_base_addr(reinterpret_cast<uint64_t>(fftsAddr));
     if (workspaceGM != nullptr && tilingGM != nullptr) {
         const __gm__ MegaMoeTilingData* tilingData = reinterpret_cast<__gm__ MegaMoeTilingData*>(tilingGM);
-#ifdef _DEBUG
-        cce::printf(
-            "MegaMoe kernel tiling block=%d sub=%d stage=%d M=%d topK=%d expertNum=%d\n", int(get_block_idx()),
-            int(get_subblockid()), int(tilingData->frontReorderTiling.stageNum), int(tilingData->megaMoeInfo.M),
-            int(tilingData->megaMoeInfo.topK), int(tilingData->frontReorderTiling.expertNum));
+#if defined(__DAV_VEC__)
+        if (get_block_idx() == 0U && get_subblockid() == 0U) {
+            ResetFixedSyncWorkspace(workspaceGM, tilingData);
+            if (tilingData->frontReorderTiling.stageNum >= 13U &&
+                tilingData->unpermuteTiling.unpermuteImplMode == kMegaMoeUnpermuteImplRankStreaming) {
+                PtoRemoteWindow remoteWindow;
+                remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData->runtimeInfo.remoteWindowContext));
+                remoteWindow.PrepareDataReadyEpoch();
+            }
+        }
 #endif
+        pto::SYNCALL<pto::SyncCoreType::Mix>();
         if (startSyncDebug != 0U) {
             PtoRemoteWindow remoteWindow;
             remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData->runtimeInfo.remoteWindowContext));
@@ -86,8 +87,11 @@ extern "C" __global__ __aicore__ void dispatch_mega_combine_kernel(
         if (tilingData->megaMoeInfo.expertPerRank == 8U) {
             RunMegaMoeSpecialized<8U>(
                 x, w1, w2, expertId, scale1, scale2, probs, c, expertTokenNums, workspaceGM, tilingData);
-        } else {
+        } else if (tilingData->megaMoeInfo.expertPerRank == 16U) {
             RunMegaMoeSpecialized<16U>(
+                x, w1, w2, expertId, scale1, scale2, probs, c, expertTokenNums, workspaceGM, tilingData);
+        } else if (tilingData->megaMoeInfo.expertPerRank == 32U) {
+            RunMegaMoeSpecialized<32U>(
                 x, w1, w2, expertId, scale1, scale2, probs, c, expertTokenNums, workspaceGM, tilingData);
         }
     }

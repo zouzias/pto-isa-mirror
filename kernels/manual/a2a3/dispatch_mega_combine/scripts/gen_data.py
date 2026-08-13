@@ -12,7 +12,6 @@
 
 import argparse
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -201,26 +200,6 @@ def make_weight2(rank: int, args: argparse.Namespace, case_mode: str) -> np.ndar
     return make_periodic_int8((args.experts, args.n // 2, args.k), 9, rank * 19 + 11, 4)
 
 
-class ProfileTimer:
-    def __init__(self, enabled: bool):
-        self.enabled = enabled
-        self.records: list[tuple[str, float]] = []
-
-    def run(self, name: str, fn):
-        start = time.perf_counter()
-        result = fn()
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        if self.enabled:
-            self.records.append((name, elapsed_ms))
-        return result
-
-    def print(self) -> None:
-        if not self.enabled:
-            return
-        for name, elapsed_ms in self.records:
-            print(f"[GEN_PROFILE] {name:<20} {elapsed_ms:.3f} ms", flush=True)
-
-
 @dataclass
 class GoldenInputs:
     xs: list[np.ndarray]
@@ -230,7 +209,6 @@ class GoldenInputs:
     scale2_origin: list[np.ndarray]
     expert_idx_list: list[np.ndarray]
     probs_list: list[np.ndarray]
-    active_mask_list: list[np.ndarray]
 
 
 @dataclass
@@ -259,20 +237,16 @@ class RankWriteContext:
     data: GoldenInputs
     expected_out_list: list[np.ndarray]
     rank_file_sizes: dict[str, int]
-    args: argparse.Namespace
     out_dir: Path
     reuse_static_rank_files: bool
 
 
 def build_route_groups(
-    expert_idx_list: list[np.ndarray], x_active_mask_list: list[np.ndarray], args: argparse.Namespace
-) -> tuple[list[list[list[tuple[int, int, int]]]], dict[str, float]]:
+    expert_idx_list: list[np.ndarray], args: argparse.Namespace
+) -> list[list[list[tuple[int, int, int]]]]:
     route_groups: list[list[list[tuple[int, int, int]]]] = [
         [[] for _ in range(args.experts)] for _ in range(args.world_size)
     ]
-    total_routed_tokens = 0.0
-    total_remote_routed_tokens = 0.0
-    total_input_tokens = float(sum(int(mask.sum()) for mask in x_active_mask_list))
 
     for dst_rank in range(args.world_size):
         kept_tokens = 0
@@ -280,11 +254,8 @@ def build_route_groups(
             global_expert = dst_rank * args.experts + local_expert
             routes = route_groups[dst_rank][local_expert]
             for src_rank in range(args.world_size):
-                active_mask = x_active_mask_list[src_rank]
                 expert_idx = expert_idx_list[src_rank]
                 for token_idx in range(args.m):
-                    if active_mask[token_idx] == 0:
-                        continue
                     for topk_idx in range(args.topk):
                         if int(expert_idx[token_idx, topk_idx]) != global_expert:
                             continue
@@ -292,19 +263,7 @@ def build_route_groups(
                             continue
                         routes.append((src_rank, token_idx, topk_idx))
                         kept_tokens += 1
-                        total_routed_tokens += 1.0
-                        if src_rank != dst_rank:
-                            total_remote_routed_tokens += 1.0
-
-    workload = {
-        "input_tokens_all_ranks": total_input_tokens,
-        "routed_tokens_all_ranks": total_routed_tokens,
-        "remote_routed_tokens_all_ranks": total_remote_routed_tokens,
-        "compute_flops_all_ranks": total_routed_tokens * 3.0 * args.k * args.n,
-        "comm_bytes_all_ranks": total_remote_routed_tokens
-        * (args.k * (np.dtype(np.int8).itemsize + np.dtype(np.float16).itemsize) + np.dtype(np.float32).itemsize),
-    }
-    return route_groups, workload
+    return route_groups
 
 
 def prequantize_inputs(xs: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]:
@@ -376,11 +335,9 @@ def matmul_weight2(lhs: np.ndarray, dst_rank: int, local_expert: int, args: argp
     return matmul_int8_exact(lhs, make_weight2(dst_rank, args, args.case_mode)[local_expert], args.n // 2)
 
 
-def compute_outputs_naive_and_workload(
-    data: GoldenInputs, args: argparse.Namespace
-) -> tuple[list[np.ndarray], dict[str, float]]:
+def compute_outputs_naive(data: GoldenInputs, args: argparse.Namespace) -> list[np.ndarray]:
     outputs = [np.zeros((args.m, args.k), dtype=np.float32) for _ in range(args.world_size)]
-    route_groups, workload = build_route_groups(data.expert_idx_list, data.active_mask_list, args)
+    route_groups = build_route_groups(data.expert_idx_list, args)
 
     for dst_rank in range(args.world_size):
         for local_expert in range(args.experts):
@@ -402,7 +359,7 @@ def compute_outputs_naive_and_workload(
                 result = fp32_to_fp16_value(gmm2_output * per_token_scale2[:, None])[0]
 
                 outputs[src_rank][token_idx, :] += data.probs_list[src_rank][token_idx, topk_idx] * result
-    return outputs, workload
+    return outputs
 
 
 def collect_batch_inputs(
@@ -464,28 +421,22 @@ def run_expert_batches(ctx: BatchGoldenContext) -> None:
                     run_batch_chunk(ctx, dst_rank, local_expert, chunk)
 
 
-def compute_outputs_batch_and_workload(
-    data: GoldenInputs, args: argparse.Namespace, profile: ProfileTimer
-) -> tuple[list[np.ndarray], dict[str, float]]:
-    route_groups, workload = profile.run(
-        "route_table", lambda: build_route_groups(data.expert_idx_list, data.active_mask_list, args)
-    )
-    qx_by_rank, scale1_by_rank = profile.run("prequant_x", lambda: prequantize_inputs(data.xs))
+def compute_outputs_batch(data: GoldenInputs, args: argparse.Namespace) -> list[np.ndarray]:
+    route_groups = build_route_groups(data.expert_idx_list, args)
+    qx_by_rank, scale1_by_rank = prequantize_inputs(data.xs)
     outputs = [np.zeros((args.m, args.k), dtype=np.float32) for _ in range(args.world_size)]
     ctx = BatchGoldenContext(
         data, args, route_groups, qx_by_rank, scale1_by_rank, outputs, max(1, int(args.golden_chunk_rows))
     )
-    profile.run("golden_batch", lambda: run_expert_batches(ctx))
-    return outputs, workload
+    run_expert_batches(ctx)
+    return outputs
 
 
-def compute_outputs_and_workload(
-    data: GoldenInputs, args: argparse.Namespace, profile: ProfileTimer
-) -> tuple[list[np.ndarray], dict[str, float]]:
+def compute_outputs(data: GoldenInputs, args: argparse.Namespace) -> list[np.ndarray]:
     if args.golden_backend == "python-naive":
-        return profile.run("golden_naive", lambda: compute_outputs_naive_and_workload(data, args))
+        return compute_outputs_naive(data, args)
     if args.golden_backend == "python-batch":
-        return compute_outputs_batch_and_workload(data, args, profile)
+        return compute_outputs_batch(data, args)
     raise ValueError(f"unsupported golden backend: {args.golden_backend}")
 
 
@@ -523,7 +474,6 @@ def expected_rank_file_sizes(args: argparse.Namespace) -> dict[str, int]:
         "scale1": args.experts * args.n * np.dtype(np.int64).itemsize,
         "scale2": args.experts * args.k * np.dtype(np.int64).itemsize,
         "probs": args.m * args.topk * np.dtype(np.float32).itemsize,
-        "x_active_mask": args.m * np.dtype(np.uint8).itemsize,
         "expected_out": args.m * args.k * np.dtype(np.uint16).itemsize,
     }
 
@@ -619,7 +569,6 @@ def build_rank_case(rank: int, ctx: RankWriteContext) -> None:
         lambda: pack_scale_fp32_to_int64(data.scale2_origin[rank]),
     )
     write(out_dir / f"rank{rank}_probs.bin", data.probs_list[rank].astype(np.float32))
-    write(out_dir / f"rank{rank}_x_active_mask.bin", data.active_mask_list[rank].astype(np.uint8))
     write(out_dir / f"rank{rank}_expected_out.bin", fp32_to_fp16_bits(ctx.expected_out_list[rank]))
 
 
@@ -638,7 +587,6 @@ def main() -> None:
     parser.add_argument("--case-mode", choices=["zero", "cpu-golden"], default="cpu-golden")
     parser.add_argument("--golden-backend", choices=["python-batch", "python-naive"], default="python-batch")
     parser.add_argument("--golden-chunk-rows", type=int, default=512)
-    parser.add_argument("--golden-profile", action="store_true")
     parser.add_argument("--reuse-data", action="store_true")
     parser.add_argument("--seed", type=int, default=20260515)
     parser.add_argument("--atol", type=float, default=1e-4)
@@ -653,7 +601,6 @@ def main() -> None:
         parser.error("--golden-chunk-rows must be positive")
 
     np.random.seed(args.seed)
-    profile = ProfileTimer(args.golden_profile)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.reuse_data:
@@ -669,22 +616,15 @@ def main() -> None:
         reuse_static_rank_files and args.case_mode == "cpu-golden" and args.golden_backend == "python-batch"
     )
 
-    xs = profile.run("make_x", lambda: [make_x(rank, args) for rank in range(args.world_size)])
-    probs_list = profile.run("make_probs", lambda: [make_probs(rank, args) for rank in range(args.world_size)])
-    expert_idx_list = profile.run(
-        "make_expert_idx", lambda: [make_expert_idx(rank, args) for rank in range(args.world_size)]
-    )
-    x_active_mask_list = [np.ones((args.m,), dtype=np.uint8) for _ in range(args.world_size)]
+    xs = [make_x(rank, args) for rank in range(args.world_size)]
+    probs_list = [make_probs(rank, args) for rank in range(args.world_size)]
+    expert_idx_list = [make_expert_idx(rank, args) for rank in range(args.world_size)]
     if skip_weight_arrays:
         weight1_nd = [None for _ in range(args.world_size)]
         weight2_nd = [None for _ in range(args.world_size)]
     else:
-        weight1_nd = profile.run(
-            "make_weight1", lambda: [make_weight1(rank, args, args.case_mode) for rank in range(args.world_size)]
-        )
-        weight2_nd = profile.run(
-            "make_weight2", lambda: [make_weight2(rank, args, args.case_mode) for rank in range(args.world_size)]
-        )
+        weight1_nd = [make_weight1(rank, args, args.case_mode) for rank in range(args.world_size)]
+        weight2_nd = [make_weight2(rank, args, args.case_mode) for rank in range(args.world_size)]
     scale1_origin = [
         make_scale_origin(args.experts, args.n, rank * 17, args.case_mode) for rank in range(args.world_size)
     ]
@@ -693,22 +633,19 @@ def main() -> None:
     ]
 
     xs = [fp32_to_bf16_value(x) for x in xs]
-    data = GoldenInputs(
-        xs, weight1_nd, weight2_nd, scale1_origin, scale2_origin, expert_idx_list, probs_list, x_active_mask_list
-    )
-    expected_out_list, workload = compute_outputs_and_workload(data, args, profile)
+    data = GoldenInputs(xs, weight1_nd, weight2_nd, scale1_origin, scale2_origin, expert_idx_list, probs_list)
+    expected_out_list = compute_outputs(data, args)
 
-    case_json = {**build_case_metadata(args), **workload}
+    case_json = build_case_metadata(args)
     (out_dir / "case.json").write_text(json.dumps(case_json, indent=2), encoding="utf-8")
 
     def write_all_rank_cases() -> None:
         rank_file_sizes = expected_rank_file_sizes(args)
-        write_ctx = RankWriteContext(data, expected_out_list, rank_file_sizes, args, out_dir, reuse_static_rank_files)
+        write_ctx = RankWriteContext(data, expected_out_list, rank_file_sizes, out_dir, reuse_static_rank_files)
         for rank in range(args.world_size):
             build_rank_case(rank, write_ctx)
 
-    profile.run("write_files", write_all_rank_cases)
-    profile.print()
+    write_all_rank_cases()
 
 
 if __name__ == "__main__":
