@@ -145,6 +145,11 @@ struct AsyncSession {
 
     uint32_t destRankId{0};
     uint32_t qpIdx{0};
+
+    // RDMA reuses the common workspace, scratch, queue, and destination fields
+    // above. Only the selected NIC backend and local rank are RDMA-specific.
+    RdmaBackend rdmaBackend{RdmaBackend::NONE};
+    uint32_t myPe{0};
 };
 
 } // namespace comm
