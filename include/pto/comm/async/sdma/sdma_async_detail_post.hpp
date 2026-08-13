@@ -123,49 +123,21 @@ PTO_INTERNAL bool StoreFlagPayload(
     return true;
 }
 
-PTO_INTERNAL bool EnsureSdmaPostSqCapacity(
-    __gm__ BatchWriteChannelInfo* channels, const uint32_t* sqeCount, uint32_t postQueueCount,
-    const SdmaSession& session, UbTmpBuf& tmpBuf)
+PTO_INTERNAL bool ValidateSinglePostSqCapacity(
+    __gm__ BatchWriteChannelInfo* channels, const SdmaConfig& config, uint32_t dataQueueCount, uint32_t postQueueCount)
 {
-    SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
-    bool reclaimRequired = false;
     for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
+        uint32_t dataSqes = 0U;
+        if (queue < dataQueueCount) {
+            dataSqes = (config.iter_num - 1U - queue) / config.queue_num + 1U;
+        }
+        const uint32_t sqesPerPost = dataSqes + 1U;
         const uint32_t sqDepth = channels[queue].sq_depth;
-        // Keep one entry unused so a wrapped tail never aliases the consumer head.
-        if (sqDepth == 0U || sqeCount[queue] >= sqDepth) {
+        if (sqDepth == 0U || sqesPerPost > sqDepth) {
             return false;
         }
-        if (runtimeCtx.pendingSqeCount[queue] > sqDepth - 1U - sqeCount[queue]) {
-            reclaimRequired = true;
-        }
-    }
-    if (!reclaimRequired) {
-        return true;
-    }
-
-    // The latest post covers the cumulative queue prefix. Once it completes, every
-    // earlier SQE on those ordered queues has been consumed and the ring can be reused.
-    if (runtimeCtx.nextPostId == 0ULL || runtimeCtx.usedQueueCount == 0U) {
-        return false;
-    }
-    const uint64_t queueMask = QueueCountToMask(runtimeCtx.usedQueueCount);
-    if (!CheckPostDoneIds(runtimeCtx.postDoneBase, runtimeCtx.nextPostId, queueMask, tmpBuf, true)) {
-        return false;
-    }
-    UpdateCachedPostDoneIds(runtimeCtx.nextPostId, queueMask, runtimeCtx);
-    for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
-        runtimeCtx.sqHead[queue] = runtimeCtx.sqTail[queue];
-        runtimeCtx.pendingSqeCount[queue] = 0U;
     }
     return true;
-}
-
-PTO_INTERNAL void RecordSdmaPostSqUsage(
-    const uint32_t* sqeCount, uint32_t postQueueCount, SdmaRuntimeContext& runtimeCtx)
-{
-    for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
-        runtimeCtx.pendingSqeCount[queue] += sqeCount[queue];
-    }
 }
 
 PTO_INTERNAL void SubmitDataTransferSqes(
@@ -314,15 +286,7 @@ PTO_INTERNAL bool BeginSdmaPost(
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     state.postQueueCount =
         runtimeCtx.usedQueueCount > state.dataQueueCount ? runtimeCtx.usedQueueCount : state.dataQueueCount;
-    uint32_t sqeCount[kPostMaxQueues] = {};
-    for (uint32_t queue = 0U; queue < state.postQueueCount; ++queue) {
-        uint32_t dataSqes = 0U;
-        if (queue < state.dataQueueCount) {
-            dataSqes = (config.iter_num - 1U - queue) / config.queue_num + 1U;
-        }
-        sqeCount[queue] = dataSqes + 1U;
-    }
-    if (!EnsureSdmaPostSqCapacity(state.channels, sqeCount, state.postQueueCount, session, state.tmpBuf)) {
+    if (!ValidateSinglePostSqCapacity(state.channels, config, state.dataQueueCount, state.postQueueCount)) {
         return false;
     }
 
@@ -330,7 +294,6 @@ PTO_INTERNAL bool BeginSdmaPost(
     if (!ReserveSdmaPostEvent(session, state, postId)) {
         return false;
     }
-    RecordSdmaPostSqUsage(sqeCount, state.postQueueCount, runtimeCtx);
     UpdateSdmaRuntimeContext(session, state, postId);
     return true;
 }
@@ -377,6 +340,19 @@ PTO_INTERNAL void StoreSignalOperand(int32_t signalValue, __gm__ uint8_t* signal
     pipe_barrier(PIPE_ALL);
 }
 
+PTO_INTERNAL bool ValidateSingleNotifyPostSqCapacity(
+    __gm__ BatchWriteChannelInfo* channels, uint32_t payloadSqeCount, uint32_t postQueueCount)
+{
+    for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
+        const uint32_t sqesPerPost = queue == 0U ? payloadSqeCount + 2U : 1U;
+        const uint32_t sqDepth = channels[queue].sq_depth;
+        if (sqDepth == 0U || sqesPerPost > sqDepth) {
+            return false;
+        }
+    }
+    return true;
+}
+
 PTO_INTERNAL void SubmitSignalSqe(
     __gm__ BatchWriteChannelInfo* channels, __gm__ uint8_t* remoteSignal, __gm__ uint8_t* signalOperand,
     NotifyOp notifyOp, SdmaRuntimeContext& runtimeCtx)
@@ -406,15 +382,7 @@ PTO_INTERNAL bool BeginSdmaNotifyPost(
     state.dataQueueCount = 1U;
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     state.postQueueCount = runtimeCtx.usedQueueCount > 1U ? runtimeCtx.usedQueueCount : 1U;
-    if (config.iter_num > UINT32_MAX - 2U) {
-        return false;
-    }
-    uint32_t sqeCount[kPostMaxQueues] = {};
-    sqeCount[0] = config.iter_num + 2U;
-    for (uint32_t queue = 1U; queue < state.postQueueCount; ++queue) {
-        sqeCount[queue] = 1U;
-    }
-    if (!EnsureSdmaPostSqCapacity(state.channels, sqeCount, state.postQueueCount, session, state.tmpBuf)) {
+    if (!ValidateSingleNotifyPostSqCapacity(state.channels, config.iter_num, state.postQueueCount)) {
         return false;
     }
 
@@ -424,7 +392,6 @@ PTO_INTERNAL bool BeginSdmaNotifyPost(
     }
     notifyState.signalOperand = GetNotifyOperandAddr(ResolveNotifyOperandBase(session.execCtx), postId);
     StoreSignalOperand(signalValue, notifyState.signalOperand);
-    RecordSdmaPostSqUsage(sqeCount, state.postQueueCount, runtimeCtx);
     UpdateSdmaRuntimeContext(session, state, postId);
     return true;
 }

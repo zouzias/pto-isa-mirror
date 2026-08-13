@@ -74,7 +74,6 @@ struct SdmaRuntimeContext {
     uint8_t flagPayloadQueueCount[kFlagPayloadDepth]; // Queue count recorded for each flag payload ring slot.
     uint32_t sqTail[kPostStateMaxQueues];             // Cached producer tail index for each send queue.
     uint32_t sqHead[kPostStateMaxQueues];             // Cached reclaimed head index for each send queue.
-    uint32_t pendingSqeCount[kPostStateMaxQueues];    // SQEs submitted since the last completion-based reclaim.
     uint32_t usedQueueCount;                          // Cumulative queue prefix covered by session events.
     __gm__ uint8_t* postDoneBase;                     // GM base of the per-queue completion records.
 };

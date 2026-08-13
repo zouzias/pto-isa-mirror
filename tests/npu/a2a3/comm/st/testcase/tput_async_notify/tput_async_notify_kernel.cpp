@@ -306,20 +306,6 @@ bool RunTPutAsyncNotifyAddRingReuse(int nRanks, int nDevices, int firstRankId, i
         pto::comm::NotifyOp::AtomicAdd, kPostCount, 0U, false);
 }
 
-bool RunTPutAsyncNotifySqCapacityReuse(
-    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum)
-{
-    // Queue 0 receives five SQEs from the initial ordinary post and three SQEs
-    // from every notify post. This crosses the 2048-entry hardware ring and
-    // verifies completion-based reclamation before the producer tail wraps.
-    constexpr uint32_t kPostCount = 700U;
-    return RunNotify(
-        nRanks, nDevices, firstRankId, firstDeviceId, queueNum, kAddInitial, kAddValue,
-        kAddInitial + static_cast<int32_t>(kPostCount) * kAddValue +
-            static_cast<int32_t>((kPostCount - 1U) * kPostCount / 2U),
-        pto::comm::NotifyOp::AtomicAdd, kPostCount, 0U, false);
-}
-
 bool RunTPutAsyncNotifyInterleavedRingReuse(
     int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum)
 {
