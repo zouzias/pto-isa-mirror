@@ -74,7 +74,7 @@ textract_conv
 textract_quant
 tfillpad
 tflashattn
-tfusemuladd
+tmadd
 tfusemuladdrelu
 tfmod
 tfmods
@@ -102,7 +102,7 @@ tmins
 tmov
 tmrgsort
 tmul
-tmuladddst
+tmula
 tmuls
 tneg
 tnot

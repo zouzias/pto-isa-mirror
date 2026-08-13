@@ -255,8 +255,8 @@ set(ALL_TESTCASES
     tinterleave
     tdeinterleave
     tpairreducesum
-    tfusedmuladd
-    tmuladddst
+    tmadd
+    tmula
     tsubrelu
     tfusedmuladdrelu
 )

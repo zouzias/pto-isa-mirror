@@ -229,8 +229,8 @@ tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_dir_both_concurrent
 tpushpop_subtile
-tfusedmuladd
-tmuladddst
+tmadd
+tmula
 tsubrelu
 tfusedmuladdrelu
 syncall
