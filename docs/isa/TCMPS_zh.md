@@ -78,7 +78,7 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0,
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
     - 当输入类型为 `int32_t` 时，仅支持 `CmpMode::EQ`；其他比较模式会回退到 `EQ`。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`uint8_t`、`int8_t`、`bfloat16_t`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`float`、`int16_t`、`uint16_t`、`half`、`uint8_t`、`int8_t`、`bfloat16_t`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
 - **通用约束**:
     - `src` 和 `dst` 的Tile位置都必须是向量（`TileData::Loc == TileType::Vec`）。
