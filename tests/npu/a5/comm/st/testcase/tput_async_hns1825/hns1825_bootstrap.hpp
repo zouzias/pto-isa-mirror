@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Host-only bootstrap helpers for the RoCE (HNS_1825) control plane.
 //
 //   1. ResolvePhyId — global physical device id via aclrt/runtime (HCCP/topo use phyId, not ACL id).
-//   2. ResolveLocalRdmaIp — CLOS IPv4 for that phyId from /etc/hccl_rootinfo.json (or path override).
+//   2. ResolveLocalRdmaIp — CLOS IPv4 for that phyId from /etc/hccl_rootinfo.json.
 //   3. ResolveLocalRdmaIpFromVirtualTopology — RoCE IPv4 selected from topologyd's virtualTopology.xml.
 //
 // Optional symbols are resolved with dlsym(RTLD_DEFAULT, ...); missing symbols degrade gracefully
@@ -149,9 +149,9 @@ inline bool LooksLikeIpv4(const std::string& v)
 // ("net_type":"CLOS") IPv4 address from that rank's block. This dependency-free
 // targeted scan bounds each rank block by the next "device_id" occurrence;
 // level_list entries do not contain "device_id".
-inline bool ResolveLocalRdmaIp(uint32_t phyId, std::string& ip, const char* rootInfoPath = kDefaultRootInfoPath)
+inline bool ResolveLocalRdmaIp(uint32_t phyId, std::string& ip)
 {
-    std::ifstream f(rootInfoPath);
+    std::ifstream f(kDefaultRootInfoPath);
     if (!f.is_open()) {
         return false;
     }

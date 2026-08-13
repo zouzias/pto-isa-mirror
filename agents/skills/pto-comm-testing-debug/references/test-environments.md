@@ -63,13 +63,13 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
 测试环境变量分两类：
 
 - PTO/HCOMM 控制面：`PTO_ROCE_VERBOSE=1`、`HCCL_RDMA_TC`、`HCCL_RDMA_SL`；
-- 仅测试 bootstrap：`PTO_ROCE_ROOTINFO`（默认 `/etc/hccl_rootinfo.json`）、`PTO_ROCE_PHYIDS`、
-  `PTO_ROCE_LOCAL_IP`、`PTO_ROCE_IPS`、`PTO_ROCE_BASE_PORT`。
+- 仅测试 bootstrap：`PTO_ROCE_PHYIDS`、`PTO_ROCE_LOCAL_IP`、`PTO_ROCE_IPS`、`PTO_ROCE_BASE_PORT`。
 
-ST 按 root-info JSON、HCOMM 解析的 `/var/run/ascend-topologyd/virtualTopology.xml`、显式 IP 变量的顺序
-确定本地 RDMA IPv4；PTO 不生成或改写 rootinfo/XML。HCOMM 当前固定 XML 路径且不接收路径参数，PTO
-因此不提供 XML 路径覆盖变量。`PTO_ROCE_LOCAL_IP` 是当前 MPI 进程的 fallback；它优先于
-`PTO_ROCE_IPS`。后者必须是各 rank 一致、按 MPI rank 排序且数量等于 rank 数的 IPv4 列表。
+ST 先解析固定路径 `/etc/hccl_rootinfo.json`；文件不可读、解析失败、缺少当前物理设备或没有该设备可用的
+RDMA IPv4 时，再由 HCOMM 解析固定路径 `/var/run/ascend-topologyd/virtualTopology.xml`，最后使用显式 IP
+变量。PTO 不生成或改写 rootinfo/XML，也不提供两者的路径覆盖变量。`PTO_ROCE_LOCAL_IP` 是当前 MPI
+进程的 fallback；它优先于 `PTO_ROCE_IPS`。后者必须是各 rank 一致、按 MPI rank 排序且数量等于 rank
+数的 IPv4 列表。
 
 若 provider 不在默认路径，设置 `IBV_EXTEND_DRIVERS=<path>/libhrn5-rdmav34.so`。PUT 和 GET 均已在目标
 HNS1825 环境跑通；二者使用对等的独立 target，便于分别回归和定位。

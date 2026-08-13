@@ -324,11 +324,11 @@ static pto::comm::rdma::WorkspaceInitResult AgreeOnRdmaPreflight(int nRanks)
 //
 // Per rank: phyId, RDMA NIC IPv4, symmetric-buffer base VA.
 //   phyId    : ResolvePhyId(), else PTO_ROCE_PHYIDS[rank], else ACL device id
-//   local IP : rootinfo CLOS entry, then HCOMM's fixed virtualTopology.xml, then the manual ST fallbacks
+//   local IP : fixed rootinfo CLOS entry, then HCOMM's fixed virtualTopology.xml, then the manual ST fallbacks
 //              PTO_ROCE_LOCAL_IP (per process) / PTO_ROCE_IPS (MPI-rank-ordered list)
 //   sym addr : MPI_Allgather of local symmetric buffer VA
 // Missing local IP on any rank -> collective skip (not a false pass).
-// Optional: PTO_ROCE_ROOTINFO, PTO_ROCE_LOCAL_IP, PTO_ROCE_IPS, PTO_ROCE_BASE_PORT, PTO_ROCE_VERBOSE=1
+// Optional: PTO_ROCE_LOCAL_IP, PTO_ROCE_IPS, PTO_ROCE_BASE_PORT, PTO_ROCE_VERBOSE=1
 // ============================================================================
 struct RoceBootstrap {
     bool skipped{false};
@@ -373,11 +373,7 @@ struct RoceBootstrap {
 
         // ---- local RDMA NIC IPv4: rootinfo, virtual topology, then IP env fallback ----
         std::string localIp;
-        const char* rootPath = std::getenv("PTO_ROCE_ROOTINFO");
-        if (rootPath == nullptr || rootPath[0] == '\0') {
-            rootPath = pto::comm::rdma::hns_1825::bootstrap::kDefaultRootInfoPath;
-        }
-        if (!pto::comm::rdma::hns_1825::bootstrap::ResolveLocalRdmaIp(phyId, localIp, rootPath) &&
+        if (!pto::comm::rdma::hns_1825::bootstrap::ResolveLocalRdmaIp(phyId, localIp) &&
             !pto::comm::rdma::hns_1825::bootstrap::ResolveLocalRdmaIpFromVirtualTopology(phyId, localIp)) {
             const char* ipEnv = std::getenv("PTO_ROCE_LOCAL_IP");
             if (ipEnv != nullptr && ipEnv[0] != '\0') {
@@ -391,8 +387,8 @@ struct RoceBootstrap {
         }
         const bool localIpReady = !localIp.empty();
         if (!localIpReady) {
-            std::cerr << "[SKIP] RoCE test could not resolve local RDMA IP for phyId " << phyId
-                      << " (no rootinfo CLOS entry, no usable "
+            std::cerr << "[SKIP] RoCE test could not resolve local RDMA IP for phyId " << phyId << " (no usable "
+                      << pto::comm::rdma::hns_1825::bootstrap::kDefaultRootInfoPath << " CLOS entry, no usable "
                       << pto::comm::rdma::hns_1825::bootstrap::kDefaultVirtualTopologyPath
                       << ", and no PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS)" << std::endl;
         }

@@ -129,15 +129,15 @@ definitions. It is not read by the generated test binary. Unset, empty, and unsu
 changing the backend.
 
 The test bootstrap resolves each rank's physical device id, RDMA NIC IPv4 address, and registered-buffer device
-address, then exchanges the values over MPI. It first reads the root-info JSON, then asks HCOMM's topology component
-to parse `/var/run/ascend-topologyd/virtualTopology.xml`; explicit IP variables are the final fallback. PTO neither
-generates nor rewrites either topology input. The current HCOMM XML API fixes this path and does not accept a path
-argument, so PTO does not expose a virtual-topology path override. Its variables are:
+address, then exchanges the values over MPI. It first reads `/etc/hccl_rootinfo.json`. If the file cannot be read or
+parsed, has no matching physical device, or lacks a usable RDMA IPv4 for that device, it asks HCOMM's topology
+component to parse `/var/run/ascend-topologyd/virtualTopology.xml`; explicit IP variables are the final fallback.
+PTO neither generates nor rewrites either topology input. Both topology paths are fixed, so PTO exposes no path
+override for them. Its variables are:
 
 | Variable | Scope | Description |
 |---|---|---|
 | `PTO_RDMA_BACKEND` | Configure time | Only `HNS_1825` is supported; other values disable RDMA for this build. |
-| `PTO_ROCE_ROOTINFO` | ST only | Root-info JSON path; defaults to `/etc/hccl_rootinfo.json`. |
 | `PTO_ROCE_PHYIDS` | ST only | Optional comma-separated physical device ids indexed by rank. |
 | `PTO_ROCE_LOCAL_IP` | ST only | Fallback IPv4 for the current MPI process. Set it per rank when ranks use different NICs. |
 | `PTO_ROCE_IPS` | ST only | Final fallback: exactly one comma-separated IPv4 per MPI rank, in rank order; use the same list on every rank. |

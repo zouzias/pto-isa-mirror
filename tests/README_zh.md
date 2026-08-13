@@ -127,15 +127,14 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
 `run_st.py` 会删除并重建 `build/`；修改后端后不得使用 `-w` 复用旧产物。
 
 测试 bootstrap 解析每个 rank 的物理设备 id、RDMA 网卡 IPv4 和已注册缓冲区 Device 地址，再通过 MPI
-交换。它先读取 root-info JSON，再调用 HCOMM topology 组件解析
-`/var/run/ascend-topologyd/virtualTopology.xml`，最后才使用显式 IP 变量兜底；PTO 不生成或改写这两类
-拓扑输入。当前 HCOMM XML 接口固定使用该路径且不接收路径参数，因此 PTO 不提供 virtual topology 路径
-覆盖变量。相关变量如下：
+交换。它先读取 `/etc/hccl_rootinfo.json`；文件读取或解析失败、缺少当前物理设备，或没有该设备可用的
+RDMA IPv4 时，再调用 HCOMM topology 组件解析 `/var/run/ascend-topologyd/virtualTopology.xml`，最后才使用
+显式 IP 变量兜底。PTO 不生成或改写这两类拓扑输入，且两者均使用固定路径，不提供路径覆盖变量。相关
+变量如下：
 
 | 变量 | 作用域 | 说明 |
 |---|---|---|
 | `PTO_RDMA_BACKEND` | 配置阶段 | 当前仅支持 `HNS_1825`；其他值使本次构建不包含 RDMA。|
-| `PTO_ROCE_ROOTINFO` | 仅 ST | root-info JSON 路径，默认 `/etc/hccl_rootinfo.json`。|
 | `PTO_ROCE_PHYIDS` | 仅 ST | 可选的按 rank 索引、逗号分隔的物理设备 id。|
 | `PTO_ROCE_LOCAL_IP` | 仅 ST | 当前 MPI 进程使用的 fallback IPv4；各 rank 使用不同网卡时必须按 rank 分别设置。|
 | `PTO_ROCE_IPS` | 仅 ST | 最终 fallback；按 MPI rank 排序、数量必须等于 rank 数的 IPv4 列表，各 rank 必须使用同一列表。|
