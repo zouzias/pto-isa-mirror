@@ -496,8 +496,7 @@ def _elementwise_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         "TREM": "remainder(src0, src1)",
         "TFMOD": "fmod(src0, src1)",
     }
-    ternary = {"TADDC": "src0 + src1 + src2", "TSUBC": "src0 - src1 + src2"}
-
+    ternary = {"TMULADDDST": "src0 * src1 + dst", "TFUSEDMULADD": "src0 * dst + src1"}
     if instr in unary:
         expr = f"dst[r,c] = {unary[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -505,7 +504,7 @@ def _elementwise_spec(instr: str) -> Tuple[List[str], str, List[str]]:
     if instr in ternary:
         expr = f"dst[r,c] = {ternary[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1", "src2"], expr, proc)
+        return (["src0", "src1"], expr, proc)
     if instr == "TSEL":
         expr = "dst[r,c] = (mask[r,c] != 0) ? src0[r,c] : src1[r,c]"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -561,15 +560,6 @@ def _scalar_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         expr = "dst[r,c] = (x>0) ? x : slope*x"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", "    x = src[r,c]", f"    {expr}"]
         return (["src(tile)"], expr, proc)
-    if instr == "TADDSC":
-        expr = "dst[r,c] = src0[r,c] + s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-    if instr == "TSUBSC":
-        expr = "dst[r,c] = src0[r,c] - s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-
     if instr in tile_scalar:
         expr = f"dst[r,c] = {tile_scalar[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -667,7 +657,7 @@ def _render_scalar(instr: str, summary: str, accent: str, bg: str) -> str:
     y_src = SRC_Y
     y_dst = DST_Y
 
-    src_labels = ["src0", "src1"] if instr in {"TADDSC", "TSUBSC", "TSELS"} else ["src"]
+    src_labels = ["src0", "src1"] if instr == "TSELS" else ["src"]
     src_prefixes = ["a", "b"] if len(src_labels) == 2 else ["a"]
 
     xs = _layout_row_lefts(CANVAS_W // 2, [tile_w] * len(src_labels), gap)
