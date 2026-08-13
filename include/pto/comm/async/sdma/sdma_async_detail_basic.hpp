@@ -28,7 +28,12 @@ static_assert(kSdmaEventSlotCount > 0, "SDMA_EVENT_SLOT_COUNT must be >= 1");
 using UbTmpBuf = TmpBuffer;
 constexpr uint32_t kPostIdFlagBytes = sizeof(uint64_t);
 constexpr uint32_t kPostDoneStrideBytes = 64U;
+constexpr uint32_t kSignalOperandBytes = sizeof(int32_t);
 constexpr uint32_t kFlagPayloadSlotBytes = kPostIdFlagBytes;
+constexpr uint32_t kNotifyOperandSlotBytes = kSignalOperandBytes;
+constexpr uint64_t kSdmaInt32AtomicAddOpcode = 0x21U;
+static_assert((kSignalOperandBytes & (kSignalOperandBytes - 1U)) == 0U);
+static_assert(kFlagPayloadDepth * kNotifyOperandSlotBytes == kSdmaNotifyOperandBytes);
 constexpr uint32_t kPostMaxQueues = kPostStateMaxQueues;
 constexpr uint32_t kFlagPayloadBytes = kFlagPayloadDepth * kFlagPayloadSlotBytes;
 constexpr uint32_t kPostPollLimit = 100000U;
@@ -223,10 +228,21 @@ PTO_INTERNAL __gm__ uint8_t* GetFlagPayloadAddr(__gm__ uint8_t* flagPayloadBase,
     return flagPayloadBase + (postId % kFlagPayloadDepth) * kFlagPayloadSlotBytes;
 }
 
+PTO_INTERNAL __gm__ uint8_t* GetNotifyOperandAddr(__gm__ uint8_t* notifyOperandBase, uint64_t postId)
+{
+    return notifyOperandBase + (postId % kFlagPayloadDepth) * kNotifyOperandSlotBytes;
+}
+
 PTO_INTERNAL __gm__ uint8_t* ResolveFlagPayloadBase(const SdmaExecContext& execCtx)
 {
     return execCtx.contextGm + kSdmaContextWorkspaceBytes +
            static_cast<uint64_t>(execCtx.channelGroupIdx) * kSdmaFlagPayloadBytesPerGroup;
+}
+
+PTO_INTERNAL __gm__ uint8_t* ResolveNotifyOperandBase(const SdmaExecContext& execCtx)
+{
+    return execCtx.contextGm + kSdmaContextWorkspaceBytes +
+           static_cast<uint64_t>(kSdmaMaxChannelGroups) * kSdmaFlagPayloadBytesPerGroup;
 }
 
 PTO_INTERNAL __gm__ uint8_t* ResolvePostDoneBase(const SdmaExecContext& execCtx)

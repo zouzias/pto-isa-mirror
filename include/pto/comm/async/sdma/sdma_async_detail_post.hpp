@@ -170,15 +170,15 @@ PTO_INTERNAL void RingDoorbell(
 #endif
 }
 
-PTO_INTERNAL void PublishDataTransferSqes(
-    __gm__ BatchWriteChannelInfo* channels, uint32_t dataQueueCount, const uint32_t* sqTail, UbTmpBuf& tmpBuf,
+PTO_INTERNAL void FlushDataCacheAndRingDoorbells(
+    __gm__ BatchWriteChannelInfo* channels, uint32_t queueCount, const uint32_t* sqTail, UbTmpBuf& tmpBuf,
     uint32_t syncId)
 {
     __asm__ __volatile__("");
     dcci((__gm__ void*)channels->sq_base, cache_line_t::ENTIRE_DATA_CACHE);
     __asm__ __volatile__("");
     dsb(DSB_DDR);
-    for (uint32_t queue = 0U; queue < dataQueueCount; ++queue) {
+    for (uint32_t queue = 0U; queue < queueCount; ++queue) {
         RingDoorbell(channels + queue, sqTail[queue], tmpBuf, syncId);
     }
     pipe_barrier(PIPE_ALL);
@@ -228,15 +228,15 @@ PTO_INTERNAL void PublishFlagTransferSqes(
 }
 
 struct SdmaPostState {
-    __gm__ BatchWriteChannelInfo* channels;
-    __gm__ uint8_t* flagPayload;
-    UbTmpBuf tmpBuf;
-    uint32_t dataQueueCount;
-    uint32_t postQueueCount;
-    uint64_t eventHandle;
+    __gm__ BatchWriteChannelInfo* channels; // Base of the channel array used by this session.
+    __gm__ uint8_t* flagPayload;            // GM source slot containing the post ID for completion SQEs.
+    UbTmpBuf tmpBuf;                        // UB scratch buffer used for SDMA metadata operations.
+    uint32_t dataQueueCount;                // Number of queues carrying payload SQEs for this post.
+    uint32_t postQueueCount;                // Number of queues covered by this post's completion event.
+    uint64_t eventHandle;                   // Encoded post ID and completion queue count returned to the caller.
 };
 
-PTO_INTERNAL bool BeginSdmaPost(
+PTO_INTERNAL bool PrepareSdmaPostBase(
     uint64_t messageLen, const SdmaSession& session, SdmaConfig& config, SdmaPostState& state)
 {
     const SdmaExecContext& execCtx = session.execCtx;
@@ -245,26 +245,56 @@ PTO_INTERNAL bool BeginSdmaPost(
         execCtx.channelGroupIdx >= kSdmaMaxChannel / config.queue_num) {
         return false;
     }
-    state.dataQueueCount = config.iter_num < config.queue_num ? config.iter_num : config.queue_num;
+
     __gm__ BatchWriteChannelInfo* channelBase =
         reinterpret_cast<__gm__ BatchWriteChannelInfo*>(execCtx.contextGm + sizeof(BatchWriteFlagInfo));
     state.channels = channelBase + execCtx.channelGroupIdx * config.queue_num;
     state.tmpBuf = execCtx.tmpBuf;
+    return true;
+}
+
+PTO_INTERNAL bool ReserveSdmaPostEvent(const SdmaSession& session, SdmaPostState& state, uint64_t& postId)
+{
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
-    state.postQueueCount =
-        runtimeCtx.usedQueueCount > state.dataQueueCount ? runtimeCtx.usedQueueCount : state.dataQueueCount;
-    if (!ValidateSinglePostSqCapacity(state.channels, config, state.dataQueueCount, state.postQueueCount) ||
-        runtimeCtx.nextPostId >= kSdmaHandlePostIdMask) {
+    if (runtimeCtx.nextPostId >= kSdmaHandlePostIdMask) {
         return false;
     }
-    const uint64_t postId = runtimeCtx.nextPostId + 1ULL;
-    state.flagPayload = GetFlagPayloadAddr(ResolveFlagPayloadBase(execCtx), postId);
+
+    postId = runtimeCtx.nextPostId + 1ULL;
+    state.flagPayload = GetFlagPayloadAddr(ResolveFlagPayloadBase(session.execCtx), postId);
     if (!StoreFlagPayload(postId, state.postQueueCount, state.flagPayload, session, state.tmpBuf) ||
         !EncodeSdmaEventHandle(postId, state.postQueueCount, state.eventHandle)) {
         return false;
     }
-    runtimeCtx.nextPostId = postId;
-    runtimeCtx.usedQueueCount = state.postQueueCount;
+    return true;
+}
+
+PTO_INTERNAL void UpdateSdmaRuntimeContext(const SdmaSession& session, const SdmaPostState& state, uint64_t postId)
+{
+    session.runtimeCtx.nextPostId = postId;
+    session.runtimeCtx.usedQueueCount = state.postQueueCount;
+}
+
+PTO_INTERNAL bool BeginSdmaPost(
+    uint64_t messageLen, const SdmaSession& session, SdmaConfig& config, SdmaPostState& state)
+{
+    if (!PrepareSdmaPostBase(messageLen, session, config, state)) {
+        return false;
+    }
+
+    state.dataQueueCount = config.iter_num < config.queue_num ? config.iter_num : config.queue_num;
+    SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
+    state.postQueueCount =
+        runtimeCtx.usedQueueCount > state.dataQueueCount ? runtimeCtx.usedQueueCount : state.dataQueueCount;
+    if (!ValidateSinglePostSqCapacity(state.channels, config, state.dataQueueCount, state.postQueueCount)) {
+        return false;
+    }
+
+    uint64_t postId = 0ULL;
+    if (!ReserveSdmaPostEvent(session, state, postId)) {
+        return false;
+    }
+    UpdateSdmaRuntimeContext(session, state, postId);
     return true;
 }
 
@@ -273,7 +303,7 @@ PTO_INTERNAL AsyncEvent FinishSdmaPost(const SdmaConfig& config, const SdmaPostS
     const SdmaExecContext& execCtx = session.execCtx;
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     UbTmpBuf tmpBuf = state.tmpBuf;
-    PublishDataTransferSqes(state.channels, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
+    FlushDataCacheAndRingDoorbells(state.channels, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
     SubmitFlagTransferSqes(state.channels, state.flagPayload, state.postQueueCount, runtimeCtx);
     PersistSqTails(state.channels, config.queue_num, runtimeCtx, tmpBuf, execCtx.syncId);
     PublishFlagTransferSqes(state.channels, 0U, state.dataQueueCount, runtimeCtx.sqTail, tmpBuf, execCtx.syncId);
@@ -288,16 +318,124 @@ PTO_INTERNAL AsyncEvent SdmaPostAsync(
     __gm__ uint8_t* recvBuffer, __gm__ uint8_t* sendBuffer, uint64_t opcode, uint64_t messageLen,
     const SdmaSession& session)
 {
+    PTO_ASSERT(
+        recvBuffer != nullptr && sendBuffer != nullptr, "SdmaPostAsync: source and destination must not be null.");
     if (recvBuffer == nullptr || sendBuffer == nullptr) {
         return {};
     }
     SdmaConfig config{};
     SdmaPostState state{};
-    if (!BeginSdmaPost(messageLen, session, config, state)) {
+    const bool postReady = BeginSdmaPost(messageLen, session, config, state);
+    if (!postReady) {
+        PTO_ASSERT(false, "SdmaPostAsync: failed to prepare the SDMA post.");
         return {};
     }
     SubmitDataTransferSqes(state.channels, recvBuffer, sendBuffer, opcode, config, session.runtimeCtx);
     return FinishSdmaPost(config, state, session);
+}
+
+PTO_INTERNAL void StoreSignalOperand(int32_t signalValue, __gm__ uint8_t* signalOperand)
+{
+    *reinterpret_cast<volatile __gm__ int32_t*>(signalOperand) = signalValue;
+    pipe_barrier(PIPE_ALL);
+}
+
+PTO_INTERNAL bool ValidateSingleNotifyPostSqCapacity(
+    __gm__ BatchWriteChannelInfo* channels, uint32_t payloadSqeCount, uint32_t postQueueCount)
+{
+    for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
+        const uint32_t sqesPerPost = queue == 0U ? payloadSqeCount + 2U : 1U;
+        const uint32_t sqDepth = channels[queue].sq_depth;
+        if (sqDepth == 0U || sqesPerPost > sqDepth) {
+            return false;
+        }
+    }
+    return true;
+}
+
+PTO_INTERNAL void SubmitSignalSqe(
+    __gm__ BatchWriteChannelInfo* channels, __gm__ uint8_t* remoteSignal, __gm__ uint8_t* signalOperand,
+    NotifyOp notifyOp, SdmaRuntimeContext& runtimeCtx)
+{
+    const uint64_t opcode = notifyOp == NotifyOp::AtomicAdd ? kSdmaInt32AtomicAddOpcode : 0U;
+    AddOneMemcpySqe(
+        channels, signalOperand, remoteSignal, opcode, kSignalOperandBytes, runtimeCtx.sqTail[0],
+        runtimeCtx.sqTail[0] - runtimeCtx.sqHead[0]);
+    runtimeCtx.sqTail[0] = (runtimeCtx.sqTail[0] + 1U) % channels[0].sq_depth;
+    pipe_barrier(PIPE_ALL);
+}
+
+struct SdmaNotifyPostState {
+    SdmaPostState post;
+    __gm__ uint8_t* signalOperand;
+};
+
+PTO_INTERNAL bool BeginSdmaNotifyPost(
+    uint64_t messageLen, int32_t signalValue, const SdmaSession& session, SdmaConfig& config,
+    SdmaNotifyPostState& notifyState)
+{
+    SdmaPostState& state = notifyState.post;
+    if (session.execCtx.channelGroupIdx != 0U || !PrepareSdmaPostBase(messageLen, session, config, state)) {
+        return false;
+    }
+
+    state.dataQueueCount = 1U;
+    SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
+    state.postQueueCount = runtimeCtx.usedQueueCount > 1U ? runtimeCtx.usedQueueCount : 1U;
+    if (!ValidateSingleNotifyPostSqCapacity(state.channels, config.iter_num, state.postQueueCount)) {
+        return false;
+    }
+
+    uint64_t postId = 0ULL;
+    if (!ReserveSdmaPostEvent(session, state, postId)) {
+        return false;
+    }
+    notifyState.signalOperand = GetNotifyOperandAddr(ResolveNotifyOperandBase(session.execCtx), postId);
+    StoreSignalOperand(signalValue, notifyState.signalOperand);
+    UpdateSdmaRuntimeContext(session, state, postId);
+    return true;
+}
+
+PTO_INTERNAL AsyncEvent SdmaPostAsyncNotify(
+    __gm__ uint8_t* recvBuffer, __gm__ uint8_t* sendBuffer, __gm__ uint8_t* remoteSignal, int32_t signalValue,
+    NotifyOp notifyOp, uint64_t messageLen, const SdmaSession& session)
+{
+    PTO_ASSERT(
+        recvBuffer != nullptr && sendBuffer != nullptr && remoteSignal != nullptr,
+        "SdmaPostAsyncNotify: source, destination and remote signal must not be null.");
+    PTO_ASSERT(
+        notifyOp == NotifyOp::Set || notifyOp == NotifyOp::AtomicAdd,
+        "SdmaPostAsyncNotify: notifyOp must be Set or AtomicAdd.");
+    if (recvBuffer == nullptr || sendBuffer == nullptr || remoteSignal == nullptr ||
+        (notifyOp != NotifyOp::Set && notifyOp != NotifyOp::AtomicAdd)) {
+        return {};
+    }
+
+    SdmaConfig config{};
+    SdmaNotifyPostState notifyState{};
+    const bool postReady = BeginSdmaNotifyPost(messageLen, signalValue, session, config, notifyState);
+    if (!postReady) {
+        PTO_ASSERT(false, "SdmaPostAsyncNotify: failed to prepare the SDMA notify post.");
+        return {};
+    }
+    SdmaPostState& state = notifyState.post;
+
+    SdmaConfig payloadConfig = config;
+    payloadConfig.queue_num = 1U;
+    SubmitDataTransferSqes(state.channels, recvBuffer, sendBuffer, 0U, payloadConfig, session.runtimeCtx);
+    // Publish payload first so SDMA can start transferring while the signal and completion SQEs are prepared.
+    FlushDataCacheAndRingDoorbells(
+        state.channels, state.dataQueueCount, session.runtimeCtx.sqTail, state.tmpBuf, session.execCtx.syncId);
+
+    SubmitSignalSqe(state.channels, remoteSignal, notifyState.signalOperand, notifyOp, session.runtimeCtx);
+    SubmitFlagTransferSqes(state.channels, state.flagPayload, state.postQueueCount, session.runtimeCtx);
+
+    const SdmaExecContext& execCtx = session.execCtx;
+    PersistSqTails(state.channels, config.queue_num, session.runtimeCtx, state.tmpBuf, execCtx.syncId);
+    // Flush and publish the signal and postDone SQEs after the payload doorbell.
+    FlushDataCacheAndRingDoorbells(
+        state.channels, state.postQueueCount, session.runtimeCtx.sqTail, state.tmpBuf, execCtx.syncId);
+    return AsyncEvent(state.eventHandle, DmaEngine::SDMA);
 }
 
 PTO_INTERNAL bool SdmaEventCheck(uint64_t postId, uint64_t queueMask, const SdmaSession& session, bool blocking)
