@@ -68,6 +68,48 @@ __global__ AICORE void runTCmps(__gm__ uint8_t* out, __gm__ T* src0, __gm__ T* s
     TSTORE(dstGlobal, dstTile);
 }
 
+template <typename T, CmpMode cmpMode>
+__global__ AICORE void runTCmpsWideInt64(__gm__ uint8_t* out, __gm__ T* src0, __gm__ T* src1)
+{
+    constexpr int cols = 16364;
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    constexpr int dstCols = (cols + 7) / 8;
+    constexpr int dstTileCols = 32;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using SrcGlobal = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using DstGlobal = GlobalTensor<uint8_t, DynShapeDim5, DynStrideDim5>;
+    using SrcTile = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, uint8_t, tileRows, dstTileCols, BLayout::RowMajor, -1, -1>;
+
+    T scalar = *src1;
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        int dstValidCols = (validCols + 7) / 8;
+        SrcGlobal src0Global(src0 + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        DstGlobal dstGlobal(out + col / 8, DynShapeDim5(tileRows, dstValidCols), DynStrideDim5(dstCols, 1));
+        SrcTile src0Tile(tileRows, validCols);
+        DstTile dstTile(tileRows, dstValidCols);
+        TASSIGN(src0Tile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        TLOAD(src0Tile, src0Global);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        TCMPS(dstTile, src0Tile, scalar, cmpMode);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <
     typename T, int Rows, int Cols, int ValidRows, int ValidCols, CmpMode cmpMode, bool isSrc1Tile, bool isBf16 = false>
 void LaunchTCmps(uint8_t* out, T* src0, T* src1, void* stream)
@@ -80,6 +122,9 @@ void LaunchTCmps(uint8_t* out, T* src0, T* src1, void* stream)
             runTCmps<half, Rows, Cols, ValidRows, ValidCols, cmpMode, isSrc1Tile>
                 <<<1, nullptr, stream>>>((out), (half*)(src0), (half*)(src1));
         }
+    } else if constexpr ((std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && Rows == 1 &&
+                         Cols == 16364 && ValidRows == 1 && ValidCols == 16364 && !isSrc1Tile) {
+        runTCmpsWideInt64<T, cmpMode><<<1, nullptr, stream>>>(out, src0, src1);
     } else {
         runTCmps<T, Rows, Cols, ValidRows, ValidCols, cmpMode, isSrc1Tile><<<1, nullptr, stream>>>(out, src0, src1);
     }
@@ -123,5 +168,9 @@ template void LaunchTCmps<int16_t, 77, 80, 32, 32, CmpMode::LE, false, true>(
     INSTANTIATE_TCMPS_INT64(Type, LE)
 INSTANTIATE_TCMPS_INT64_MODES(int64_t)
 INSTANTIATE_TCMPS_INT64_MODES(uint64_t)
+template void LaunchTCmps<int64_t, 1, 16364, 1, 16364, CmpMode::EQ, false, false>(
+    uint8_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCmps<uint64_t, 1, 16364, 1, 16364, CmpMode::EQ, false, false>(
+    uint8_t* out, uint64_t* src0, uint64_t* src1, void* stream);
 #undef INSTANTIATE_TCMPS_INT64_MODES
 #undef INSTANTIATE_TCMPS_INT64
