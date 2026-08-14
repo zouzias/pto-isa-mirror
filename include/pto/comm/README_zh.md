@@ -35,11 +35,11 @@ comm/
 ├── a5/                          # A5（Ascend 950）架构实现
 │   ├── T*.hpp                   # 同步指令（include a2a3/ 对应文件）
 │   └── async/
-│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA）
-│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（SDMA + URMA）
+│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA + RDMA）
+│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（SDMA + URMA + RDMA）
 │
 └── async_common/                # 异步公共实现（a2a3/a5 共享）
-    ├── async_types.hpp          # SDMA/URMA 会话与上下文类型
+    ├── async_types.hpp          # SDMA/URMA/RDMA 会话与上下文类型
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test、BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # TPUT_ASYNC 公共辅助函数 + SDMA 实现
     └── TGetAsyncCommonDetail.hpp # TGET_ASYNC 公共辅助函数 + SDMA 实现
@@ -66,7 +66,7 @@ comm/
 | 类别 | 指令 | 说明 |
 |---|---|---|
 | 点对点（同步） | `TPUT`、`TGET` | 通过 UB 暂存 Tile 的远程写/读。支持单缓冲和 ping-pong 双缓冲模式。 |
-| 点对点（异步） | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA 或 URMA 引擎进行 GM-to-GM DMA。返回 `AsyncEvent` 用于后续 Wait/Test。 |
+| 点对点（异步） | `TPUT_ASYNC`、`TGET_ASYNC` | 通过 SDMA、URMA 或 RDMA 引擎进行 GM-to-GM DMA。返回 `AsyncEvent` 用于后续 Wait/Test。 |
 | 信号同步 | `TNOTIFY`、`TWAIT`、`TTEST` | 基于标志的跨 NPU 同步。信号为 `int32_t` 标量或二维网格。 |
 | 集合通信 | `TGATHER`、`TSCATTER`、`TBROADCAST`、`TREDUCE` | 基于 `ParallelGroup` 的多 rank 操作。由 root 发起，支持 2D 分块滑动和 ping-pong 双缓冲。 |
 

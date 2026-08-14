@@ -11,6 +11,21 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_test)
 
+# PTO_RDMA_BACKEND is a configure-time input.  Capture it once and translate
+# the only currently supported value into one consistent set of host/device
+# compile definitions.  The generated binaries do not read this variable.
+set(PTO_RDMA_BACKEND_CONFIGURED "$ENV{PTO_RDMA_BACKEND}")
+if("${PTO_RDMA_BACKEND_CONFIGURED}" STREQUAL "HNS_1825")
+    add_compile_definitions(PTO_RDMA_SUPPORTED PTO_RDMA_BACKEND_HNS_1825_SUPPORTED)
+    message(STATUS "PTO RDMA backend compiled into this build: HNS_1825")
+elseif("${PTO_RDMA_BACKEND_CONFIGURED}" STREQUAL "")
+    message(STATUS "PTO RDMA disabled for this build: PTO_RDMA_BACKEND is unset or empty")
+else()
+    message(WARNING
+        "Unsupported PTO_RDMA_BACKEND='${PTO_RDMA_BACKEND_CONFIGURED}'; "
+        "RDMA is disabled for this build (only HNS_1825 is currently supported)")
+endif()
+
 # bisheng/cce-ld does not support --dependency-file; disable linker dep tracking
 # that CMake 3.27+ enables by default.
 set(CMAKE_LINK_DEPENDS_USE_LINKER FALSE)
@@ -76,6 +91,7 @@ endif()
 # 公共 include 路径
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../../../include
+    ${PROJECT_SOURCE_DIR}/../../../../../pkg_inc
     ${PROJECT_SOURCE_DIR}/../../../../..
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
