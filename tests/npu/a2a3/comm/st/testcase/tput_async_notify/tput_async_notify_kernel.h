@@ -10,14 +10,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 
-template <typename T, size_t count>
-bool RunPutAsyncRootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunTPutAsyncNotifySet(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
+bool RunTPutAsyncNotifyAdd(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
 
-template <typename T, size_t count>
-bool RunPutAsyncNotifySet(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunTPutAsyncNotifyAddRingReuse(int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
 
-template <typename T, size_t count>
-bool RunPutAsyncNotifyAdd(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunTPutAsyncNotifyInterleavedRingReuse(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
+
+bool RunTPutAsyncNotifyRejectNonZeroGroup(
+    int nRanks, int nDevices, int firstRankId, int firstDeviceId, uint32_t queueNum);
