@@ -44,10 +44,7 @@ mscatter
 setgetval
 tabs
 tadd
-tadddeqrelu
-taddc
 tadds
-taddsc
 tand
 tands
 targreduceop
@@ -74,15 +71,12 @@ textract_conv
 textract_quant
 tfillpad
 tflashattn
-tfusemuladd
-tfusemuladdrelu
 tfmod
 tfmods
 tgather
 tgatherb
 tget
 tget_async
-tget_scale_addr
 thistogram
 timg2col
 tinsert
@@ -110,7 +104,6 @@ tnot
 tnotify
 tor
 tors
-tpairreducesum
 tpartadd
 tpartargmax
 tpartargmin
@@ -155,11 +148,7 @@ tstore_acc2gm
 tstore_quant
 tstore_conv
 tsub
-tsubc
-tsubrelu
 tsubs
-tsubsc
-tsubview
 ttest
 ttrans
 ttri
