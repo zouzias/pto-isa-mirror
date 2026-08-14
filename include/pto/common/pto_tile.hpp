@@ -1400,7 +1400,7 @@ public:
         if constexpr (SFractalSize_ == TileConfig::fractalCSize) {
             return TileConfig::fixedRowSize;
         } else if constexpr (SFractalSize_ == TileConfig::fractalMxSize) {
-            return TileConfig::fixedMxRowSize;
+            return isInnerRowMajor ? TileConfig::fixedMxRowSize : TileConfig::fixedMxColSize;
         } else {
             return isBoxedLayout ?
                        (isInnerRowMajor ? TileConfig::fixedRowSize : TileConfig::alignedSize / sizeof(DType)) :
@@ -1413,7 +1413,7 @@ public:
         if constexpr (SFractalSize_ == TileConfig::fractalCSize) {
             return TileConfig::fixedColSize;
         } else if constexpr (SFractalSize_ == TileConfig::fractalMxSize) {
-            return TileConfig::fixedMxColSize;
+            return isInnerRowMajor ? TileConfig::fixedMxColSize : TileConfig::fixedMxRowSize;
         } else {
             return isBoxedLayout ?
                        (isInnerRowMajor ? TileConfig::alignedSize / sizeof(DType) : TileConfig::fixedColSize) :

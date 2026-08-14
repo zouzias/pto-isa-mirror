@@ -162,6 +162,36 @@ constexpr bool isSupportedFp8Combo = (std::is_same_v<A, float8_e4m3_t> && std::i
                                      (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e4m3_t>) ||
                                      (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e5m2_t>);
 
+template <typename A, typename B>
+constexpr bool isSupportedFp8Fp4Combo = (std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, float4_e2m1x2_t>) ||
+                                        (std::is_same_v<A, float4_e2m1x2_t> && std::is_same_v<B, float8_e4m3_t>);
+
+template <typename A, typename B>
+constexpr bool isSupportedFp16Fp4Combo = std::is_same_v<A, half> && std::is_same_v<B, float4_e2m1x2_t>;
+
+template <typename A, typename B>
+constexpr bool isSupportedBf16Fp4Combo = std::is_same_v<A, bfloat16_t> && std::is_same_v<B, float4_e2m1x2_t>;
+
+#if defined(PTO_NPU_ARCH_A6)
+template <typename A, typename B>
+constexpr bool isSupportedFp8Hif4Combo = std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, hifloat4x2_t>;
+
+template <typename A, typename B>
+constexpr bool isSupportedFp16Hif4Combo = std::is_same_v<A, half> && std::is_same_v<B, hifloat4x2_t>;
+
+template <typename A, typename B>
+constexpr bool isSupportedBf16Hif4Combo = std::is_same_v<A, bfloat16_t> && std::is_same_v<B, hifloat4x2_t>;
+#else
+template <typename A, typename B>
+constexpr bool isSupportedFp8Hif4Combo = false;
+
+template <typename A, typename B>
+constexpr bool isSupportedFp16Hif4Combo = false;
+
+template <typename A, typename B>
+constexpr bool isSupportedBf16Hif4Combo = false;
+#endif
+
 #if defined(PTO_NPU_ARCH_A6)
 template <typename A, typename B>
 constexpr bool isSupportedHif4Combo = std::is_same_v<A, hifloat4x2_t> && std::is_same_v<B, hifloat4x2_t>;
@@ -179,12 +209,20 @@ PTO_INTERNAL void CheckMadMxValid()
     using CType = typename TileRes::DType;
     constexpr bool isFp4 = isSupportedFp4Combo<AType, BType>;
     constexpr bool isFp8 = isSupportedFp8Combo<AType, BType>;
+    constexpr bool isFp8Fp4 = isSupportedFp8Fp4Combo<AType, BType>;
+    constexpr bool isFp16Fp4 = isSupportedFp16Fp4Combo<AType, BType>;
+    constexpr bool isBf16Fp4 = isSupportedBf16Fp4Combo<AType, BType>;
+    constexpr bool isFp8Hif4 = isSupportedFp8Hif4Combo<AType, BType>;
+    constexpr bool isFp16Hif4 = isSupportedFp16Hif4Combo<AType, BType>;
+    constexpr bool isBf16Hif4 = isSupportedBf16Hif4Combo<AType, BType>;
     constexpr bool isHif4 = isSupportedHif4Combo<AType, BType>;
 
     static_assert(
-        (isFp4 || isFp8 || isHif4) && std::is_same_v<CType, float>, "TMatmulMX:No supported data type combination.");
+        (isFp4 || isFp8 || isFp8Fp4 || isFp16Fp4 || isBf16Fp4 || isFp8Hif4 || isFp16Hif4 || isBf16Hif4 || isHif4) &&
+            std::is_same_v<CType, float>,
+        "TMatmulMX:No supported data type combination.");
     static_assert((TileLeft::Cols % BASEK == 0), "TMatmulMX: aMatrixCol must be a multiple of 64.");
-    if constexpr (isFp4 || isHif4) {
+    if constexpr (isFp4 || isFp8Fp4 || isHif4) {
         static_assert(
             (TileLeft::Cols % 2 == 0), "TMatmulMX:For FP4/HiF4 data types, aMatrixCol must be an even number.");
     }

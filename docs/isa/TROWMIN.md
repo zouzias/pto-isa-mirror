@@ -64,7 +64,7 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 ### A2A3 implementation checks
 
 - Supported element types (A2A3): `half`, `float`, `int32_t`, `int16_t`.
-- Supported element types (A5): `half`, `float`, `int32_t`, `int16_t`, `int8_t`, `uint8_t`.
+- Supported element types (A5): `half`, `float`, `int32_t`, `int64_t`, `uint64_t`, `int16_t`, `int8_t`, `uint8_t`.
 - The implementation accepts both ND output and DN output with `Cols == 1`.
 - Runtime checks follow the shared row-reduce check path:
     - `src.GetValidRow() != 0`

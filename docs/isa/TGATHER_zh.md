@@ -101,7 +101,7 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, TileDataS1 &k_valu
     - `src1.GetValidCol() == TmpTileData::Cols` 且 `src1.GetValidRow() == TmpTileData::Rows`。
     - `dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
 - **基于索引的gather：实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `DstTileData::DType` 必须为 1、2 或 4 字节类型：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float` 之一。
+    - `DstTileData::DType` 必须为 1、2、4 或 8 字节类型：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float` 之一。
     - `sizeof(Src1TileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t` 之一。
     - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
     - `src1.GetValidCol() == Src1TileData::Cols` 且 `dst.GetValidCol() == DstTileData::Cols`。
@@ -111,9 +111,9 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, TileDataS1 &k_valu
     - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
     - `sizeof(dst element) == sizeof(src element)` 且 `dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
 - **基于掩码模式的gather：实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - 源元素大小必须是`1`、`2`或`4`字节。
+    - 源元素大小必须是`1`、`2`、`4`或`8`字节。
     - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
-    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`、`float8_e4m3_t`、`float8_e5m2_t` 或 `hifloat8_t` 之一。
+    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`、`float8_e4m3_t`、`float8_e5m2_t` 或 `hifloat8_t` 之一。
     - 支持的数据类型限制为目标定义的集合（通过实现中的 `static_assert` 强制执行），且 `sizeof(dst element) == sizeof(src element)`，`dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
 - **基于比较的gather：实现检查**：类型与 `cmpMode` 约束详见 [C++内建接口 → 基于比较的Gather约束](#基于比较的gather约束) 一节。
 - **边界 / 有效性**:

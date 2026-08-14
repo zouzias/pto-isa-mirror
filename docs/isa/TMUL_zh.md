@@ -53,7 +53,7 @@ PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
     - 运行时：`src0`、`src1` 和 `dst` tiles应具有相同的 `validRow/validCol`。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16`。
     - Tile位置必须是向量（`TileData::Loc == TileType::Vec`）。
     - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。

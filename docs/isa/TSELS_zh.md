@@ -59,8 +59,8 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
     - `dst` 和 `src` 必须是行主序。
     - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `sizeof(TileDataDst::DType)` 可以是 `1`、`2`或`4`字节。
-    - 支持的数据类型为 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half` 和 `float`。
+    - `sizeof(TileDataDst::DType)` 可以是 `1`、`2`、`4`或`8`字节。
+    - 支持的数据类型为 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half` 和 `float`。
     - `dst` 和 `src` 必须使用相同的元素类型。
     - `dst`、`mask` 和 `src` 必须是行主序。
     - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。

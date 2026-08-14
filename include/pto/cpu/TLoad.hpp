@@ -57,15 +57,18 @@ PTO_INLINE void CheckTileData(TileData& dst, GlobalData& src)
         "Source dtype must be same with dst dtype");
     static_assert(
         GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN ||
-            GlobalData::layout == pto::Layout::NZ,
-        "Only ND, DN and NZ GLobal Tensors are currently supported");
+            GlobalData::layout == pto::Layout::NZ || GlobalData::layout == pto::Layout::MX_A_ND ||
+            GlobalData::layout == pto::Layout::MX_A_DN || GlobalData::layout == pto::Layout::MX_A_ZZ ||
+            GlobalData::layout == pto::Layout::MX_B_ND || GlobalData::layout == pto::Layout::MX_B_DN ||
+            GlobalData::layout == pto::Layout::MX_B_NN,
+        "Only ND, DN, NZ and MX_* GLobal Tensors are currently supported");
 
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         assert(
             dst.GetValidRow() == src.GetShape(GlobalTensorDim::DIM_2) * src.GetShape(GlobalTensorDim::DIM_3) &&
             dst.GetValidCol() == src.GetShape(GlobalTensorDim::DIM_0) * src.GetShape(GlobalTensorDim::DIM_1) *
                                      src.GetShape(GlobalTensorDim::DIM_4));
-    } else {
+    } else if constexpr (GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN) {
         assert(
             (src.GetShape(GlobalTensorDim::DIM_0) * src.GetShape(GlobalTensorDim::DIM_1) *
                      src.GetShape(GlobalTensorDim::DIM_2) * src.GetShape(GlobalTensorDim::DIM_3) ==

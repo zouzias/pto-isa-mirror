@@ -59,8 +59,8 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
-    - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
-    - `TileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节。
+    - `TileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `int64_t` 或 `uint64_t` 或 `half` 或 `bfloat16_t` 或 `float`。
     - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
     - `dst`、`src0` 和 `src1` 必须是行主序。
     - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。

@@ -223,8 +223,8 @@ stages:
   stage5:
     name: PreSmoke
     jobs:
-      PreSmoke_A2:
-        name: PreSmoke_A2
+      PreSmoke_A2_part1:
+        name: PreSmoke_A2_part1
         steps:
           -
             name: Checkout
@@ -233,15 +233,6 @@ stages:
             with:
               ref: ${{ atomgit.event.pull_request.merge_commit_sha }}
               token: ${{secrets.GIT_TOKEN}}
-              path: "./runner"
-          -
-            name: Checkout gitcode
-            identifier: process_checkout_gitcode
-            uses: checkout
-            with:
-              repository: "https://gitcode.com/cann/.gitcode.git"
-              ref: master
-              path: "./runner/ci"
           -
             name: download pr files
             uses: obs-download
@@ -257,54 +248,90 @@ stages:
                 ${{ env.obs_path }}/pre_smoke.sh
               path: ${{ steps.process_checkout.outputs.path }}
           -
-            name: tar businesscode
+            name: smoke executor
+            timeout-minutes: 30
             run: |
-              cd ${{ steps.process_checkout.outputs.path }}
-              tar -zcf ../smoke_data.tar.gz .
-              mv ../smoke_data.tar.gz ./
-          -
-            name: upload
-            identifier: process_upload
+                set -e
+                # set env
+                export WORKSPACE=${{ steps.process_checkout.outputs.path }}
+                export download_path=${{ steps.process_download.outputs.download-path }}
+                export package_name=${{jobs.Compile_Ascend_ARM_ubuntu24.outputs.package_name}}
+                export obs_path=${{env.obs_path}}
+                export repo_name=${{env.repo_name}}
+                export obs_smoke_path=${{ env.obs_smoke_path }}
+                export pr_id=${{ env.MERGE_ID }}
+                export AK=${{secrets.AK}}
+                export SK=${{secrets.SK}}
+                export ST_PART=1
+                bash ${{ steps.process_checkout.outputs.path }}/pre_smoke.sh
+          - name: upload
             uses: obs-upload
             with:
               endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
               bucket: "ascend-ci"
-              access-key: ${{secrets.AK}}
-              secret-key: ${{secrets.SK}}
-              artifact-path: |
-                ${{ steps.process_checkout.outputs.path }}/smoke_data.tar.gz
-              object-prefix: ${{ env.obs_smoke_path }}/
+              access-key: ${{ secrets.AK }}
+              secret-key: ${{ secrets.SK }}
+              artifact-path: "${{ steps.process_checkout.outputs.path }}/slog.tar.gz"
+              object-prefix: ${obs_smoke_path}/plog/
+        if: "${{ default() }}"
+        runs-on: ['self-hosted','npu=1','smoke=204']
+        container:
+          image: swr.cn-south-1.myhuaweicloud.com/pre_smoke/${{ jobs.JOB_image.outputs.PreSmoke_npupool }}
+
+      PreSmoke_A2_part2:
+        name: PreSmoke_A2_part2
+        steps:
+          -
+            name: Checkout
+            identifier: process_checkout
+            uses: checkout
+            with:
+              ref: ${{ atomgit.event.pull_request.merge_commit_sha }}
+              token: ${{secrets.GIT_TOKEN}}
+          -
+            name: download pr files
+            uses: obs-download
+            with:
+              endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
+              bucket: "ascend-ci"
+              access-key: ${{ secrets.AK }}
+              secret-key: ${{ secrets.SK }}
+              key: |
+                ${{ env.obs_path }}/pr_filelist.txt
+                ${{ env.obs_path }}/pr_filelist_mod.txt
+                ${{ env.obs_path }}/update_file_detail.txt
+                ${{ env.obs_path }}/pre_smoke.sh
+              path: ${{ steps.process_checkout.outputs.path }}
           -
             name: smoke executor
             timeout-minutes: 30
-            uses: manifest-management-plugin
-            with:
-              action: DEPLOY
-              repo: ${{ steps.process_checkout.outputs.path }}
-              file_path: ${{ steps.process_checkout.outputs.path }}/ci/smoke-conf/smoke-A2.yaml
-              manifest_image: swr.cn-south-1.myhuaweicloud.com/pre_smoke/${{ jobs.JOB_image.outputs.PreSmoke_npupool }}
-              custom_shell_script: |-
+            run: |
                 set -e
                 # set env
+                export WORKSPACE=${{ steps.process_checkout.outputs.path }}
+                export download_path=${{ steps.process_download.outputs.download-path }}
+                export package_name=${{jobs.Compile_Ascend_ARM_ubuntu24.outputs.package_name}}
+                export obs_path=${{env.obs_path}}
                 export repo_name=${{env.repo_name}}
-                export pr_id=${{ env.MERGE_ID }}
                 export obs_smoke_path=${{ env.obs_smoke_path }}
+                export pr_id=${{ env.MERGE_ID }}
                 export AK=${{secrets.AK}}
                 export SK=${{secrets.SK}}
-                mkdir -p /home/taskspace && cd /home/taskspace
-                wget -nv ${{ steps.process_upload.outputs.primary-url }}
-                tar -zxf $(basename "${{ steps.process_upload.outputs.primary-url }}")
-                bash /home/taskspace/pre_smoke.sh
-          -
-            name: smoke resource clean
-            uses: manifest-management-plugin
-            if: ${{ always() }}
+                export ST_PART=2
+                bash ${{ steps.process_checkout.outputs.path }}/pre_smoke.sh
+          - name: upload
+            uses: obs-upload
             with:
-              action: CRUSH
-              repo: ${{ steps.process_checkout.outputs.path }}
-              file_path: ${{ steps.process_checkout.outputs.path }}/ci/smoke-conf/smoke-A2.yaml
-        if: env.TARGET_BRANCH == 'master'
-        runs-on: ['self-hosted','arch=arm','smoke=204']
+              endpoint: "https://obs.cn-north-4.myhuaweicloud.com"
+              bucket: "ascend-ci"
+              access-key: ${{ secrets.AK }}
+              secret-key: ${{ secrets.SK }}
+              artifact-path: "${{ steps.process_checkout.outputs.path }}/slog.tar.gz"
+              object-prefix: ${obs_smoke_path}/plog/
+        if: "${{ default() }}"
+        runs-on: ['self-hosted','npu=1','smoke=204']
+        container:
+          image: swr.cn-south-1.myhuaweicloud.com/pre_smoke/${{ jobs.JOB_image.outputs.PreSmoke_npupool }}
     pre:
     - type: auto
     fail-fast: true

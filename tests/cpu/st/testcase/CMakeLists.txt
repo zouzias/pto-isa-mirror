@@ -95,6 +95,7 @@ tlrelu
 tmatmul
 tmatmul_layout
 tmatmul_mx
+tmatmul_mx_nddn
 tmax
 tmaxs
 tmin
