@@ -439,19 +439,23 @@ PTO_INTERNAL void TEXTRACT_ND2XNZ_IMPL(
     CheckTExtractNdToNz<T, Dst0TileData, SrcTileData>();
     CheckTExtractNdToNz<T, Dst1TileData, SrcTileData>();
 
-    uint16_t validRow0 = static_cast<uint16_t>(dst0.GetValidRow());
-    uint16_t validCol0 = static_cast<uint16_t>(dst0.GetValidCol());
     uint16_t validRow1 = static_cast<uint16_t>(dst1.GetValidRow());
     uint16_t validCol1 = static_cast<uint16_t>(dst1.GetValidCol());
+    uint16_t validRow0 = static_cast<uint16_t>(dst0.GetValidRow());
+    uint16_t validCol0 = static_cast<uint16_t>(dst0.GetValidCol());
 
     PTO_ASSERT(
-        indexRow0 + validRow0 <= SrcTileData::Rows, "TEXTRACT ND->2xNZ : window0 indexRow + validRow exceeds srcRows!");
+        indexRow0 + validRow0 <= SrcTileData::Rows,
+        "TEXTRACT A2A3 ND->2xNZ : window0 indexRow + validRow exceeds srcRows!");
     PTO_ASSERT(
-        indexCol0 + validCol0 <= SrcTileData::Cols, "TEXTRACT ND->2xNZ : window0 indexCol + validCol exceeds srcCols!");
+        indexCol0 + validCol0 <= SrcTileData::Cols,
+        "TEXTRACT A2A3 ND->2xNZ : window0 indexCol + validCol exceeds srcCols!");
     PTO_ASSERT(
-        indexRow1 + validRow1 <= SrcTileData::Rows, "TEXTRACT ND->2xNZ : window1 indexRow + validRow exceeds srcRows!");
+        indexRow1 + validRow1 <= SrcTileData::Rows,
+        "TEXTRACT A2A3 ND->2xNZ : window1 indexRow + validRow exceeds srcRows!");
     PTO_ASSERT(
-        indexCol1 + validCol1 <= SrcTileData::Cols, "TEXTRACT ND->2xNZ : window1 indexCol + validCol exceeds srcCols!");
+        indexCol1 + validCol1 <= SrcTileData::Cols,
+        "TEXTRACT A2A3 ND->2xNZ : window1 indexCol + validCol exceeds srcCols!");
 
     DispatchNdToNz<T, Dst0TileData, SrcTileData>(dst0, src, indexRow0, indexCol0, validRow0, validCol0);
     DispatchNdToNz<T, Dst1TileData, SrcTileData>(dst1, src, indexRow1, indexCol1, validRow1, validCol1);

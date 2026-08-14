@@ -1093,13 +1093,17 @@ PTO_INTERNAL void TEXTRACT_ND2XNZ_IMPL(
     uint16_t validCol1 = static_cast<uint16_t>(dst1.GetValidCol());
 
     PTO_ASSERT(
-        indexRow0 + validRow0 <= SrcTileData::Rows, "TEXTRACT ND->2xNZ : window0 indexRow + validRow exceeds srcRows!");
+        indexRow0 + validRow0 <= SrcTileData::Rows,
+        "TEXTRACT A5 ND->2xNZ : window0 indexRow + validRow exceeds srcRows!");
     PTO_ASSERT(
-        indexCol0 + validCol0 <= SrcTileData::Cols, "TEXTRACT ND->2xNZ : window0 indexCol + validCol exceeds srcCols!");
+        indexCol0 + validCol0 <= SrcTileData::Cols,
+        "TEXTRACT A5 ND->2xNZ : window0 indexCol + validCol exceeds srcCols!");
     PTO_ASSERT(
-        indexRow1 + validRow1 <= SrcTileData::Rows, "TEXTRACT ND->2xNZ : window1 indexRow + validRow exceeds srcRows!");
+        indexRow1 + validRow1 <= SrcTileData::Rows,
+        "TEXTRACT A5 ND->2xNZ : window1 indexRow + validRow exceeds srcRows!");
     PTO_ASSERT(
-        indexCol1 + validCol1 <= SrcTileData::Cols, "TEXTRACT ND->2xNZ : window1 indexCol + validCol exceeds srcCols!");
+        indexCol1 + validCol1 <= SrcTileData::Cols,
+        "TEXTRACT A5 ND->2xNZ : window1 indexCol + validCol exceeds srcCols!");
 
     if (validRow0 == 1 && validCol0 == 1) {
         TExtractNdToNzScalar<T, Dst0TileData, SrcTileData>(dst0.data(), src.data(), indexRow0, indexCol0);
