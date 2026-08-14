@@ -35,7 +35,7 @@ PTO_INST RecordEvent TAXPY(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 | `dst` | input/output | Accumulation base and result tile ($y$), read-modify-write, `Vec` |
 | `src0` | input | Scaled source tile ($x$), read-only, `Vec`, same valid shape as `dst` |
 | `scalar` | input | Scalar scale factor ($a$), of type `TileDataSrc::DType` |
-| `events...` | input | Wait events (`WaitEvents`); an implicit `TSYNC` precedes the op |
+| `events...` | input | Wait events (`WaitEvents`); an implicit event synchronization precedes the op |
 
 ## Tile Sizes & Data Types
 

@@ -149,7 +149,7 @@ Unpermute:
 
 - 排序：`TSORT32`、`TMRGSORT`、`TGATHER`
 - Tile 绑定 / GM 向量：`TASSIGN`、`TLOAD`、`TSTORE`
-- 动态量化：`TCVT`、`TABS`、`TROWMAX`、`TSYNC<Op::TROWMAX>`、`TMAX`、`TSYNC<Op::TMAX>`、`TDIV`
+- 动态量化：`TCVT`、`TABS`、`TROWMAX`、`synchronization after TROWMAX`、`TMAX`、`synchronization after TMAX`、`TDIV`
 - GM/UB helper：`PtoLoadVector`、`PtoStoreVector`、`PtoStoreAtomicAddVector`、`PtoFillUb`、`PtoAddUb`、`PtoAddScalarUb`、`PtoSetValue`
 - 跨 rank count ready：`TWAIT`
 - 核间同步：`SYNCALL<AIVOnly>`
@@ -228,9 +228,9 @@ else:  # OneCore / MultiCore 共享尾段 FrontRunPostSortPipeline
         <span class="pto-api">TCVT</span>(fp32Ub, rawUb)                           # 输入 cast 到 fp32
         absUb = <span class="pto-api">TABS</span>(fp32Ub)
         <span class="pto-api">TROWMAX</span>(chunkMaxTile, absUb)
-        <span class="pto-api">TSYNC&lt;Op::TROWMAX&gt;</span>()
+        <span class="pto-api">event synchronization&lt;Op::TROWMAX&gt;</span>()
         <span class="pto-api">TMAX</span>(maxAbsTile, previousMaxAbs, chunkMaxTile)
-        <span class="pto-api">TSYNC&lt;Op::TMAX&gt;</span>()
+        <span class="pto-api">event synchronization&lt;Op::TMAX&gt;</span>()
         scale = maxAbsTile.GetValue(0) / 127              # per-token dynamic scale
         qFp32 = <span class="pto-api">TDIV</span>(fp32Ub, scale)
         qInt8 = <span class="pto-api">TCVT</span>(qFp32, CAST_ROUND)
@@ -417,7 +417,7 @@ for localExpert:
 - 类型转换：`TCVT`
 - 反量化 / 量化缩放：`TMULS`
 - SwiGLU 激活：`TEXP`、`TADDS`、`TDIV`、`TMUL`
-- 动态量化归约：`TABS`、`TROWMAX`、`TSYNC<Op::TROWMAX>`、`TMAX`、`TSYNC<Op::TMAX>`
+- 动态量化归约：`TABS`、`TROWMAX`、`synchronization after TROWMAX`、`TMAX`、`synchronization after TMAX`
 - scale 暂存和写回：`PtoSetValue`、`PtoStoreVector`
 
 伪码：
@@ -466,11 +466,11 @@ for segmentIdx in swigluSegments:                       # segment 级与 GMM1/GM
     # 3. per-row dynamic quant
     absY = <span class="pto-api">TABS</span>(y)
     <span class="pto-api">TROWMAX</span>(chunkMaxTile, absY)        # 发起当前 chunk 的 max(abs(y)) 归约
-    <span class="pto-api">TSYNC&lt;Op::TROWMAX&gt;</span>()              # 等 chunkMaxTile 写好，后面才能读/合并
+    <span class="pto-api">event synchronization&lt;Op::TROWMAX&gt;</span>()              # 等 chunkMaxTile 写好，后面才能读/合并
     chunkMax = chunkMaxTile.GetValue(0)
 
     <span class="pto-api">TMAX</span>(maxAbsTile, previousMaxAbs, chunkMax)  # 合并多个 chunk 的 max
-    <span class="pto-api">TSYNC&lt;Op::TMAX&gt;</span>()                         # 等 maxAbsTile 写好，后面才能算 scale2
+    <span class="pto-api">event synchronization&lt;Op::TMAX&gt;</span>()                         # 等 maxAbsTile 写好，后面才能算 scale2
     maxAbs = maxAbsTile.GetValue(0)
 
     scale2 = maxAbs / 127                                 # perTokenScale2，combine 阶段再用

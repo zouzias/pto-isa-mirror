@@ -588,7 +588,7 @@ private:
                     // If the current tile is the first tile on the k axis, the accumulator needs to be reset to 0
                     bool initC = (params.isKLoopFirst && (kPartIdx == 0));
                     AccTile cTile(mPartActual, nPartActual);
-                    pto::TSUBVIEW(cTile, accPanel, mPartIdx * L0_M, nPartIdx * L0_N);
+                    pto::detail::PtoSubTileView(cTile, accPanel, mPartIdx * L0_M, nPartIdx * L0_N);
                     LaunchPtoMatmul(cTile, aTile, bTile, initC);
 
                     constexpr uint32_t kPipeBarrierThreshold = 10;
