@@ -69,15 +69,13 @@ constexpr uint32_t kPostStateMaxQueues = 48U;
 constexpr uint32_t kFlagPayloadDepth = 64U;
 
 struct SdmaRuntimeContext {
-    uint64_t nextPostId;
-    uint64_t postDoneId[kPostStateMaxQueues];
-    // Per-slot metadata for the shared flag payload ring. Slot index is postId % flag payload depth.
-    uint8_t flagPayloadQueueCount[kFlagPayloadDepth];
-    uint32_t sqTail[kPostStateMaxQueues];
-    uint32_t sqHead[kPostStateMaxQueues];
-    // Cumulative queue prefix used by this session. Every Post fences these queues.
-    uint32_t usedQueueCount;
-    __gm__ uint8_t* postDoneBase;
+    uint64_t nextPostId;                              // Most recently allocated post ID.
+    uint64_t postDoneId[kPostStateMaxQueues];         // Latest completed post ID cached for each queue.
+    uint8_t flagPayloadQueueCount[kFlagPayloadDepth]; // Queue count recorded for each flag payload ring slot.
+    uint32_t sqTail[kPostStateMaxQueues];             // Cached producer tail index for each send queue.
+    uint32_t sqHead[kPostStateMaxQueues];             // Cached reclaimed head index for each send queue.
+    uint32_t usedQueueCount;                          // Cumulative queue prefix covered by session events.
+    __gm__ uint8_t* postDoneBase;                     // GM base of the per-queue completion records.
 };
 
 } // namespace detail
