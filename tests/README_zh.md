@@ -109,6 +109,49 @@ mpirun -n 2 echo "MPI OK"
 
 异步指令依赖 CANN 9.0 引入的 SDMA opapi 接口（如 `aclnnShmemSdmaStarsQuery`），在低版本 CANN 上会因符号缺失而运行失败。因此 `run_comm_test.sh` **默认不包含异步指令测试**，需通过 `-a` 参数显式启用。
 
+名称中含 `_async` 的引擎专用测试遵循同一默认排除规则，并由 `-a` 一并启用。
+
+### RDMA异步测试（HNS1825 后端，A5）
+
+RDMA 测试当前使用 HNS1825 后端，要求 A5、对应网卡及驱动、HCOMM，以及可达的 RDMA 网卡 IPv4。必须在
+配置构建前选择后端：
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
+```
+
+`PTO_RDMA_BACKEND` 由 CMake 在配置阶段读取，并转换成 Host/Kernel 一致的编译定义；生成的测试二进制不会
+读取该变量。未设置、空值或不支持的值都会生成不含 RDMA 的产物。除非指定 `-w/--without-build`，
+`run_st.py` 会删除并重建 `build/`；修改后端后不得使用 `-w` 复用旧产物。
+
+测试 bootstrap 解析每个 rank 的物理设备 id、RDMA 网卡 IPv4 和已注册缓冲区 Device 地址，再通过 MPI
+交换。它先读取 `/etc/hccl_rootinfo.json`；文件读取或解析失败、缺少当前物理设备，或没有该设备可用的
+RDMA IPv4 时，再调用 HCOMM topology 组件解析 `/var/run/ascend-topologyd/virtualTopology.xml`，最后才使用
+显式 IP 变量兜底。PTO 不生成或改写这两类拓扑输入，且两者均使用固定路径，不提供路径覆盖变量。相关
+变量如下：
+
+| 变量 | 作用域 | 说明 |
+|---|---|---|
+| `PTO_RDMA_BACKEND` | 配置阶段 | 当前仅支持 `HNS_1825`；其他值使本次构建不包含 RDMA。|
+| `PTO_ROCE_PHYIDS` | 仅 ST | 可选的按 rank 索引、逗号分隔的物理设备 id。|
+| `PTO_ROCE_LOCAL_IP` | 仅 ST | 当前 MPI 进程使用的 fallback IPv4；各 rank 使用不同网卡时必须按 rank 分别设置。|
+| `PTO_ROCE_IPS` | 仅 ST | 最终 fallback；按 MPI rank 排序、数量必须等于 rank 数的 IPv4 列表，各 rank 必须使用同一列表。|
+| `PTO_ROCE_BASE_PORT` | 仅 ST | 所有 rank 一致的 channel base port，默认 `60032`。|
+| `PTO_ROCE_VERBOSE` | 控制面/ST | 设为 `1`，打印 endpoint、MR、channel 和释放过程。|
+| `HCCL_RDMA_TC` | HCOMM/RoCE | traffic class，PTO 默认 `132`。|
+| `HCCL_RDMA_SL` | HCOMM/RoCE | service level，PTO 默认 `4`。|
+
+`PTO_ROCE_LOCAL_IP` 的优先级高于 `PTO_ROCE_IPS`；root-info 或 virtual topology 解析成功时，两者均被忽略。
+选出本地 IP 后，各 rank 仍会通过 MPI 交换该值，这两个变量都不替代 peer bootstrap。
+
+若默认 provider 路径无法发现 HNS1825 verbs provider，需要将 `IBV_EXTEND_DRIVERS` 指向驱动提供的
+`libhrn5-rdmav34.so`。这是 HCOMM/libibverbs 部署要求，不是 PTO 后端选择变量。
+
+使用 HNS1825 后端的 RDMA PUT 和 GET 均已在目标环境跑通。二者使用对等的独立 target，便于分别执行和
+定位 WRITE/READ 回归；`run_comm_test.sh -a` 也会包含这两个 target。
+
 ### 快速开始
 
 ```bash
@@ -141,6 +184,10 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async
 python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 ```
 
+`run_st.py -w/--without-build` 会跳过编译并运行已有二进制。它是
+`run_st.py` 的参数，不属于 `run_comm_test.sh`；此时
+`PTO_RDMA_BACKEND` 等配置阶段环境变量的变化不会影响旧产物。
+
 ### 参数说明
 
 | 参数 | 说明 | 默认值 |
@@ -148,7 +195,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | 可用 NPU 数量：2、4 或 8 | 8 |
 | `-v` | SoC 版本：`a3`（Ascend910B）或 `a5`（Ascend950） | a3 |
 | `-t` | 指定测试用例（可多次使用），如 `tput`、`treduce` | 全部 |
-| `-a` | 包含异步指令测试（`*_async`），需 CANN 9.0+ | 关闭 |
+| `-a` | 包含名称中含 `_async` 的异步测试，包括引擎专用测试 | 关闭 |
 | `-d` | 开启调试模式，打印详细初始化与同步日志 | 关闭 |
 
 ### 运行机制

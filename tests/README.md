@@ -110,6 +110,54 @@ Communication tests are split into **sync instructions** (e.g. `tput`, `tget`) a
 
 Async instructions depend on the SDMA opapi interface (e.g. `aclnnShmemSdmaStarsQuery`) introduced in CANN 9.0. They will fail on lower CANN versions due to missing symbols. Therefore, `run_comm_test.sh` **excludes async tests by default** — use the `-a` flag to enable them.
 
+Engine-specific test names containing `_async` follow the same default exclusion and are included by `-a`.
+
+### RDMA Async Tests (HNS1825 Backend, A5)
+
+The RDMA tests currently use the HNS1825 backend and require A5, its NIC and driver, HCOMM, and reachable RDMA NIC
+IPv4 addresses. Select the backend before the build is configured:
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
+```
+
+`PTO_RDMA_BACKEND` is read by CMake during configuration and translated into identical host/kernel compile
+definitions. It is not read by the generated test binary. Unset, empty, and unsupported values build without RDMA.
+`run_st.py` rebuilds from a fresh `build/` directory unless `-w/--without-build` is supplied; do not use `-w` after
+changing the backend.
+
+The test bootstrap resolves each rank's physical device id, RDMA NIC IPv4 address, and registered-buffer device
+address, then exchanges the values over MPI. It first reads `/etc/hccl_rootinfo.json`. If the file cannot be read or
+parsed, has no matching physical device, or lacks a usable RDMA IPv4 for that device, it asks HCOMM's topology
+component to parse `/var/run/ascend-topologyd/virtualTopology.xml`; explicit IP variables are the final fallback.
+PTO neither generates nor rewrites either topology input. Both topology paths are fixed, so PTO exposes no path
+override for them. Its variables are:
+
+| Variable | Scope | Description |
+|---|---|---|
+| `PTO_RDMA_BACKEND` | Configure time | Only `HNS_1825` is supported; other values disable RDMA for this build. |
+| `PTO_ROCE_PHYIDS` | ST only | Optional comma-separated physical device ids indexed by rank. |
+| `PTO_ROCE_LOCAL_IP` | ST only | Fallback IPv4 for the current MPI process. Set it per rank when ranks use different NICs. |
+| `PTO_ROCE_IPS` | ST only | Final fallback: exactly one comma-separated IPv4 per MPI rank, in rank order; use the same list on every rank. |
+| `PTO_ROCE_BASE_PORT` | ST only | Common channel base port; defaults to `60032`. |
+| `PTO_ROCE_VERBOSE` | Control plane/ST | Set to `1` for detailed endpoint, MR, channel, and cleanup progress. |
+| `HCCL_RDMA_TC` | HCOMM/RoCE | Traffic class; PTO defaults to `132`. |
+| `HCCL_RDMA_SL` | HCOMM/RoCE | Service level; PTO defaults to `4`. |
+
+`PTO_ROCE_LOCAL_IP` is checked before `PTO_ROCE_IPS`, and both are ignored when root-info or virtual-topology
+resolution succeeds. After selecting one local IP, every rank still exchanges that value through MPI; neither
+variable replaces the peer bootstrap.
+
+If the HNS1825 verbs provider is not discovered from a default provider path, set `IBV_EXTEND_DRIVERS` to the
+driver-provided `libhrn5-rdmav34.so`. This is a deployment requirement of the HCOMM/libibverbs stack, not a PTO backend
+selector.
+
+Both RDMA PUT and GET using the HNS1825 backend have passed in the target environment. They use separate test targets
+so WRITE and READ regressions can be run and diagnosed independently; both targets are also included by
+`run_comm_test.sh -a`.
+
 ### Quick Start
 
 ```bash
@@ -142,6 +190,10 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async
 python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 ```
 
+`run_st.py -w/--without-build` skips compilation and runs an existing binary. It is a
+`run_st.py` option, not a `run_comm_test.sh` option; configure-time environment
+changes such as `PTO_RDMA_BACKEND` do not affect a reused binary.
+
 ### Options
 
 | Flag | Description | Default |
@@ -149,7 +201,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | Number of available NPUs: 2, 4, or 8 | 8 |
 | `-v` | SoC version: `a3` (Ascend910B) or `a5` (Ascend950) | a3 |
 | `-t` | Run specific testcase(s) (repeatable), e.g. `tput`, `treduce` | all |
-| `-a` | Include async instruction tests (`*_async`), requires CANN 9.0+ | off |
+| `-a` | Include async instruction tests (names containing `_async`), including engine-specific variants | off |
 | `-d` | Enable debug mode with verbose init/sync logging | off |
 
 ### How It Works

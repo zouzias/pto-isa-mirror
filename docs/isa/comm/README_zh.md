@@ -77,12 +77,13 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 ### DmaEngine
 
-`TPUT_ASYNC` 和 `TGET_ASYNC` 的 DMA 后端选择：
+`TPUT_ASYNC` 和 `TGET_ASYNC` 的 DMA 引擎选择：
 
 | 值 | 说明 |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
 | `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
+| `DmaEngine::RDMA` | RDMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510）。当前网卡后端为 HNS1825，且必须在配置阶段使能。 |
 
 ### AsyncEvent
 
@@ -109,6 +110,71 @@ comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
 定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
+
+### RDMA 后端与 Host 控制面
+
+`DmaEngine::RDMA` 表示使用 RDMA 通信，`RdmaBackend` 表示编入二进制的具体网卡实现；一个二进制最多包含
+一个 RDMA 后端。当前唯一支持的值是 `RdmaBackend::HNS_1825`。
+
+Ascend950 / NPU_ARCH 3510 通信 ST 必须在首次 CMake 配置前选择后端：
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
+```
+
+`PTO_RDMA_BACKEND` 是配置阶段输入。CMake 将其转换成 Host 与 Device 一致的编译定义，生成的二进制不会在
+运行时读取该变量。未设置、空值或不支持的值都会生成不包含 RDMA 后端的产物。修改取值后必须重新配置构建
+目录。
+
+Host 代码包含 `pto/comm/async/rdma/rdma_workspace_manager.hpp`，并遵循以下生命周期：
+
+```cpp
+pto::comm::rdma::RdmaWorkspaceManager manager;
+if (manager.Preflight() != pto::comm::rdma::WorkspaceInitResult::READY) {
+    // RDMA 未使能，或所选后端不支持当前架构。
+}
+
+pto::comm::rdma::WorkspaceConfig config;
+// 填写 rankId/rankCount、本地及各 peer 的 RDMA 网卡信息，
+// 以及各 rank 注册通信缓冲区的地址。
+if (manager.Init(config) != pto::comm::rdma::WorkspaceInitResult::READY) {
+    // 初始化失败。
+}
+void *rdmaWorkspace = manager.GetWorkspaceAddr();
+
+// 启动使用 rdmaWorkspace 构建 DmaEngine::RDMA 会话的 Kernel。
+
+bool finalized = manager.Finalize();
+```
+
+应用必须在调用 `Init` 前，以一致方式在各 rank 间交换：
+
+- rank id 和 rank 总数；
+- 本地物理设备 id 与 RDMA 网卡 IPv4；
+- 每个 rank 的物理设备 id 与 RDMA 网卡 IPv4；
+- 每个 rank 注册通信缓冲区的 Device 虚拟地址；
+- 公共 base port。
+
+Manager 不负责 MPI/HCCL bootstrap。它负责创建 HCOMM endpoint、注册本地通信缓冲区、为每个 peer 创建一条
+RoCE channel、等待建链完成，并发布包含 HNS1825 队列与 MR 元数据的 RDMA Device workspace。必须在释放
+已注册缓冲区之前调用 `Finalize()`；该接口依次销毁 channel、注销内存、销毁 endpoint，并释放 Device
+workspace。
+
+当前 HNS1825 约束：
+
+- HNS1825 后端仅支持 Ascend950 / NPU_ARCH 3510；在不支持的目标上，`Preflight()` 返回 `ERROR`。
+- 本地和远端操作数的完整范围都必须位于 `Init` 时注册的通信缓冲区内。这里的“对称”表示各 rank 注册相同
+  的逻辑区域；由于 peer base address 会显式交换，不要求各 rank 的 Device 虚拟地址相同。
+- 单次传输最多 `0x7fffffff` 字节。
+- RDMA `scratchTile` 必须提供至少 64 字节 UB，`syncId` 必须在 `[0, 7]` 范围内。
+- 按当前端口映射，同一个 RDMA 网卡 IPv4 最多承载 16 个 rank。
+- Host 控制面依赖 HCOMM。若 HNS1825 verbs provider 不在默认 provider 路径，部署环境可能还需要通过
+  `IBV_EXTEND_DRIVERS` 指向 `libhrn5-rdmav34.so`。
+
+`HCCL_RDMA_TC`（默认 `132`）和 `HCCL_RDMA_SL`（默认 `4`）分别配置 RoCE traffic class 与 service level。
+`PTO_ROCE_VERBOSE=1` 可打开 Host 控制面过程日志。仓库 ST 使用的 root-info 与 MPI 便利变量见
+[tests/README_zh.md](../../../tests/README_zh.md)；它们不是 PTO 库的运行时后端选择输入。
 
 ### ParallelGroup
 
