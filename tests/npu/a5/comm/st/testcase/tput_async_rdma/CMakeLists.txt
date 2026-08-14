@@ -8,7 +8,4 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-pto_comm_st(tget_async_hns1825 ../tput_async_hns1825/tput_async_hns1825_kernel.cpp)
-
-# Enable the GET entry points in the shared HNS1825 test kernel.
-target_compile_definitions(tget_async_hns1825_kernel PRIVATE PTO_RDMA_GET_TEST)
+pto_comm_st(tput_async_rdma)

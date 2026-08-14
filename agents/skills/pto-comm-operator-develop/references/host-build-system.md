@@ -74,8 +74,8 @@ CMake 必须把该选择同时转换为 Host 与 Device 的
 
 集成自己的 CMake 工程时，还需要：
 
-- Host 和 Device 都配置 PTO 的公开 `include` 根目录；使能 RDMA 时还要配置 PR 1452 引入的内部
-  `pkg_inc` 根目录；
+- Host 和 Device 都配置 PTO 的公开 `include` 根目录；使能 RDMA 时还要配置 PTO 包的内部 `pkg_inc`
+  根目录；
 - Host 侧链接 `ascendcl`、`hcomm`、`dl`（并按工程现有方式链接 CANN Runtime）；Device 数据面不直接调用
   HCOMM API；
 - 若 HNS1825 verbs provider 不在默认路径，通过 `IBV_EXTEND_DRIVERS` 指向

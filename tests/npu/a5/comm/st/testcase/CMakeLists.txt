@@ -257,9 +257,9 @@ tget
 tget_async
 tput_async
 tput_async_urma
-tput_async_hns1825
+tput_async_rdma
 tget_async_urma
-tget_async_hns1825
+tget_async_rdma
 # Signal-Based Synchronization
 tnotify
 twait

@@ -29,7 +29,7 @@ template <DmaEngine engine = DmaEngine::SDMA,
 PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                const AsyncSession &session, WaitEvents &... events);
 
-// A5：为本次操作显式指定远端 rank。
+// A5：显式 peer 重载（URMA/RDMA 使用；SDMA 忽略）。
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
@@ -147,7 +147,7 @@ Host 必须在启动 Kernel 前完成 RDMA 控制面初始化和 peer 信息交�
 ## scratchTile的作用
 
 `scratchTile` **不是**用于传输数据负载的暂存缓冲区。
-它被转换为 `TmpBuffer`，用作临时UB工作区，用于：
+它被转换为公共的 `AsyncTmpBuffer` 描述，用作临时UB工作区，用于：
 
 - 写入/读取SDMA控制字（flag、sq_tail、channel_info）
 - 轮询事件完成标志
@@ -161,24 +161,22 @@ Host 必须在启动 Kernel 前完成 RDMA 控制面初始化和 peer 信息交�
 - 必须是UB/Vec tile（`ScratchTile::Loc == TileType::Vec`）
 - 可用字节数至少为 `sizeof(uint64_t)`（8字节）
 
-推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>`（256Byte）。
+推荐使用：`Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>`（256Byte）。
 
 对于 `DmaEngine::RDMA`，Tile 类型要求相同，但可用空间必须至少为 64 字节。该 scratch 用于 HNS1825
 WQE/CQE 控制数据，而不是传输 payload。
 
 ## 完成语义（Quiet语义）
 
-不同引擎的底层完成机制不同，但用户侧的quiet语义行为一致：
+`event.Wait(session)` 的完成范围由引擎和 event 共同确定：
 
-- **SDMA**：每次`TGET_ASYNC`都会提交数据传输SQE和用于标记本次操作完成的flag SQE。对其返回的Event调用`Wait`或`Test`时，通过轮询对应flag判断该次`TGET_ASYNC`是否完成；完成后也能保证同一Session中此前提交的所有SDMA操作均已完成。
-- **URMA**：`TGET_ASYNC` 立即提交RDMA READ WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
+- **SDMA**：每次`TGET_ASYNC`都会提交数据传输SQE和用于标记本次操作完成的flag SQE。对其返回的Event调用`Wait`或`Test`时，通过轮询对应flag判断是否完成；完成后也能保证同一Session在该 event 覆盖的队列上此前提交的所有SDMA操作均已完成。
+- **URMA**：`TGET_ASYNC` 立即提交RDMA READ WQE并敲门铃。`Wait` 消费该 peer/QP 的Completion Queue（CQ），直至 event 编码的 producer index。
 - **RDMA/HNS1825**：`TGET_ASYNC` 立即提交 RDMA READ WQE 并敲 SQ doorbell。`Wait` 消费至目标 producer
   index 的所有 CQE；`Test` 只读检查是否完成，不推进 CQ。
 
-- `event.Wait(session)` —— 阻塞，直到同一 peer/queue 上截至该 event 的操作全部完成
-
-同一 peer/queue 连续调用多次 `TGET_ASYNC` 时，只需等待最后一个 `AsyncEvent`；显式选择的不同
-peer/queue 必须分别完成。
+同一 session 连续提交 SDMA 操作时，只需等待最后一个 `AsyncEvent`。对于 URMA/RDMA，该规则只适用于同一
+peer/QP；不同 peer/QP 必须分别完成。
 
 SDMA 实现中，同一 Session 最多可有 64 个未完成操作，超过后提交可能产生背压；RDMA 队列容量来自所选
 后端的 HCOMM 队列上下文。
@@ -209,7 +207,7 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
     using ShapeDyn  = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT        = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     ShapeDyn shape(1, 1, 1, 1, 1024);
     StrideDyn stride(1024, 1024, 1024, 1024, 1);
@@ -239,7 +237,7 @@ __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
     using ShapeDyn  = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT        = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     ShapeDyn shape(1, 1, 1, 1, 1024);
     StrideDyn stride(1024, 1024, 1024, 1024, 1);
@@ -306,7 +304,7 @@ __global__ AICORE void SimpleGetRdma(__gm__ T *localDst, __gm__ uint8_t *rdmaWor
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     const uint64_t peerBase = comm::rdma::PeerMrBaseAddr(rdmaWorkspace, srcRankId);
     if (peerBase == 0) {

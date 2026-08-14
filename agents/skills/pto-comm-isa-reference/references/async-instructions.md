@@ -10,7 +10,7 @@ template <DmaEngine engine = DmaEngine::SDMA,
 AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, WaitEvents&... events);
 
-// A5 显式 peer 重载
+// A5 显式 peer 重载（URMA/RDMA 使用；SDMA 忽略）
 AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, uint32_t peer,
                       WaitEvents&... events);
@@ -26,7 +26,7 @@ template <DmaEngine engine = DmaEngine::SDMA,
 AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, WaitEvents&... events);
 
-// A5 显式 peer 重载
+// A5 显式 peer 重载（URMA/RDMA 使用；SDMA 忽略）
 AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src,
                       const AsyncSession &session, uint32_t peer,
                       WaitEvents&... events);
@@ -98,8 +98,9 @@ Host 必须按 `Preflight → Init → Kernel → Finalize` 管理生命周期�
 
 ## 完成语义（Quiet 语义）
 
-- `event.Wait(session)` 阻塞直到同一 peer/queue 上截至该 event 的操作全部完成
-- 同一 peer/queue 连续调用时，只需等待最后一个 `AsyncEvent`；不同 peer/queue 分别等待
+- `event.Wait(session)` 阻塞直到该 event 对应的提交范围完成
+- SDMA 同一 session 连续提交时，只需等待最后一个 event；URMA/RDMA 只覆盖同一 peer/QP，不同 peer/QP
+  必须分别等待
 - 类似 shmem 的 quiet 语义
 
 ---

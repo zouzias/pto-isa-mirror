@@ -40,7 +40,8 @@ comm/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA + RDMA)
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA + URMA + RDMA)
 │
-├── async/                       # Public engine APIs and host workspace managers
+├── async/                       # Public async components and host workspace managers
+│   ├── ccu/                     # CCU collective kernel helpers
 │   ├── sdma/                    # SDMA intrinsics, types, CMO, workspace manager
 │   ├── urma/                    # URMA intrinsics, types, HCCL/HCCP control plane
 │   └── rdma/
@@ -48,6 +49,7 @@ comm/
 │
 └── async_common/                # Common async API (shared by a2a3/a5)
     ├── async_types.hpp          # SDMA/URMA/RDMA session and context types
+    ├── async_scratch.hpp        # Engine-neutral UB scratch conversion
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test, BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # Common TPUT_ASYNC detail helpers + SDMA impl
     └── TGetAsyncCommonDetail.hpp # Common TGET_ASYNC detail helpers + SDMA impl

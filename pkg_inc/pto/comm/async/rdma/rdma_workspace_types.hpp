@@ -8,7 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// Host-safe RDMA workspace layout shared by the HCOMM control plane and the
+// Host-safe RDMA workspace layout shared by the Host control plane and the
 // device dispatch path. Device-only request types live in rdma_types.hpp.
 
 #ifndef PTO_COMM_ASYNC_RDMA_WORKSPACE_TYPES_HPP
@@ -56,8 +56,8 @@ struct RdmaMemInfo {
     uint32_t rkey;
 };
 
-// RDMA dispatch errors encoded in an AsyncEvent handle. HNS1825 CQE errors
-// retain their own status ranges.
+// RDMA dispatch errors encoded in an AsyncEvent handle. Backend completion
+// errors retain their own status ranges.
 constexpr uint32_t kRdmaBackendUnavailableError = 0x21000;
 constexpr uint32_t kRdmaInvalidWorkspaceError = 0x21001;
 constexpr uint32_t kRdmaBackendMismatchError = 0x21002;

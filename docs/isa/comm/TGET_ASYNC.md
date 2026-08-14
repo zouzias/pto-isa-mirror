@@ -29,7 +29,7 @@ template <DmaEngine engine = DmaEngine::SDMA,
 PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
                                const AsyncSession &session, WaitEvents &... events);
 
-// A5: select the remote rank for this operation.
+// A5: explicit peer overload (used by URMA/RDMA; ignored by SDMA).
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
@@ -153,7 +153,7 @@ If the 1D contiguous requirement is not met, current implementation returns an i
 ## scratchTile Role
 
 `scratchTile` is **not** used to hold transferred payload data.
-It is converted to `TmpBuffer` and used as temporary UB workspace for:
+It is converted to the common `AsyncTmpBuffer` descriptor and used as temporary UB workspace for:
 
 - writing/reading SDMA control words (flag, sq_tail, channel_info)
 - polling event completion flags
@@ -167,24 +167,23 @@ The real payload path remains remote GM -> DMA engine -> local GM; `scratchTile`
 - must be UB/Vec tile (`ScratchTile::Loc == TileType::Vec`)
 - available bytes must be at least `sizeof(uint64_t)` (8 bytes)
 
-Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>` (256Byte).
+Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>` (256Byte).
 
 For `DmaEngine::RDMA`, the same Tile requirements apply but the available size must be at least 64 bytes. The scratch
 is used for HNS1825 WQE/CQE control data, not payload data.
 
 ## Completion Semantics (Quiet Semantics)
 
-The completion mechanism differs by engine, but user-facing quiet semantics are identical:
+The completion scope of `event.Wait(session)` depends on the selected engine and returned event:
 
-- **SDMA**: Each `TGET_ASYNC` submits data-transfer SQEs and flag SQEs that mark completion of that operation. `Wait` or `Test` on its returned event polls the corresponding flags to determine whether that `TGET_ASYNC` has completed; completion also guarantees that all earlier SDMA operations in the same session have completed.
-- **URMA**: `TGET_ASYNC` submits an RDMA READ WQE and rings the doorbell immediately. `Wait` polls the Completion Queue (CQ) until all expected CQEs have been consumed.
+- **SDMA**: Each `TGET_ASYNC` submits data-transfer SQEs and flag SQEs that mark completion of that operation. `Wait` or `Test` on its returned event polls the corresponding flags; completion also guarantees that all earlier SDMA operations submitted by the same session on the queues covered by that event have completed.
+- **URMA**: `TGET_ASYNC` submits an RDMA READ WQE and rings the doorbell immediately. `Wait` consumes that peer/QP's Completion Queue (CQ) through the producer index encoded in the event.
 - **RDMA/HNS1825**: `TGET_ASYNC` posts an RDMA READ WQE and rings the SQ doorbell immediately. `Wait` consumes CQEs
   through the target producer index; `Test` performs a non-consuming readiness check.
 
-- `event.Wait(session)` — blocks until the event and all earlier operations on the same peer/queue are complete
-
-After multiple `TGET_ASYNC` calls on the same peer/queue, waiting on the last returned `AsyncEvent` is sufficient.
-Explicit peers/queues must be completed separately.
+For consecutive SDMA submissions in one session, waiting on the last returned `AsyncEvent` is sufficient. For
+URMA/RDMA, this is sufficient only for operations on the same peer/QP; different peers/QPs must be completed
+separately.
 
 The SDMA implementation allows up to 64 outstanding operations in one session before submission can apply
 backpressure. RDMA queue capacity comes from the selected backend's HCOMM queue contexts.
@@ -215,7 +214,7 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     ShapeDyn shape(1, 1, 1, 1, 1024);
     StrideDyn stride(1024, 1024, 1024, 1024, 1);
@@ -245,7 +244,7 @@ __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     ShapeDyn shape(1, 1, 1, 1, 1024);
     StrideDyn stride(1024, 1024, 1024, 1024, 1);
@@ -312,7 +311,7 @@ __global__ AICORE void SimpleGetRdma(__gm__ T *localDst, __gm__ uint8_t *rdmaWor
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, comm::kDefaultAsyncScratchBytes>;
 
     const uint64_t peerBase = comm::rdma::PeerMrBaseAddr(rdmaWorkspace, srcRankId);
     if (peerBase == 0) {

@@ -17,8 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Optional symbols are resolved with dlsym(RTLD_DEFAULT, ...); missing symbols degrade gracefully
 // so callers can fall back to environment overrides.
 
-#ifndef PTO_TESTS_NPU_A5_COMM_ST_HNS1825_BOOTSTRAP_HPP
-#define PTO_TESTS_NPU_A5_COMM_ST_HNS1825_BOOTSTRAP_HPP
+#ifndef PTO_TESTS_NPU_A5_COMM_ST_RDMA_BACKENDS_HNS_1825_BOOTSTRAP_HPP
+#define PTO_TESTS_NPU_A5_COMM_ST_RDMA_BACKENDS_HNS_1825_BOOTSTRAP_HPP
 
 #if defined(__CCE_KT_TEST__)
 #error "hns_1825_bootstrap.hpp is a host-only header and cannot be included in device code."
@@ -30,9 +30,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <climits>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
+
+#include "../../../comm_mpi.h"
 
 namespace pto {
 namespace comm {
@@ -233,10 +238,153 @@ inline bool ResolveLocalRdmaIpFromVirtualTopology(uint32_t phyId, std::string& i
     return resolved;
 }
 
+using RankAgreementFn = bool (*)(bool, int, const char*, bool*);
+
+// Out-of-band test bootstrap for HNS_1825.
+//
+// Per rank: phyId, RDMA NIC IPv4, and the registered-buffer base VA.
+//   phyId    : ResolvePhyId(), else PTO_ROCE_PHYIDS[rank], else ACL device id
+//   local IP : fixed rootinfo CLOS entry, then fixed virtualTopology.xml, then
+//              PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS test overrides
+//   sym addr : MPI_Allgather of each rank's local registered-buffer base VA
+// Missing local IP on any rank produces a collective skip rather than a false pass.
+struct BootstrapConfig {
+    bool skipped{false};
+    std::vector<std::string> peerIps;
+    std::vector<uint32_t> peerPhyIds;
+    std::vector<uint64_t> peerSymAddrs;
+    uint32_t phyId{0};
+    uint16_t basePort{60032};
+
+    static std::vector<std::string> SplitCsv(const char* env)
+    {
+        std::vector<std::string> out;
+        if (env == nullptr) {
+            return out;
+        }
+        std::stringstream ss(env);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+            size_t b = item.find_first_not_of(" \t");
+            size_t e = item.find_last_not_of(" \t");
+            if (b != std::string::npos) {
+                out.push_back(item.substr(b, e - b + 1));
+            }
+        }
+        return out;
+    }
+
+    // rankId/nRanks — global rank index space (0-based when first_rank_id == 0).
+    // deviceId      — this rank's ACL device id (phyId fallback).
+    // symAddr       — this rank's registered communication-buffer base VA.
+    bool Init(int rankId, int nRanks, int deviceId, void* symAddr, RankAgreementFn agree)
+    {
+        skipped = false;
+        if (agree == nullptr) {
+            std::cerr << "[ERROR] HNS_1825 bootstrap requires collective rank agreement" << std::endl;
+            return false;
+        }
+
+        std::vector<std::string> phyStrs = SplitCsv(std::getenv("PTO_ROCE_PHYIDS"));
+        if (static_cast<int>(phyStrs.size()) == nRanks) {
+            phyId = static_cast<uint32_t>(std::strtoul(phyStrs[rankId].c_str(), nullptr, 10));
+        } else if (!ResolvePhyId(phyId)) {
+            phyId = static_cast<uint32_t>(deviceId);
+            std::cerr << "[RDMA][HNS_1825] phyId resolution unavailable, falling back to device id " << deviceId
+                      << std::endl;
+        }
+
+        std::string localIp;
+        if (!ResolveLocalRdmaIp(phyId, localIp) && !ResolveLocalRdmaIpFromVirtualTopology(phyId, localIp)) {
+            const char* ipEnv = std::getenv("PTO_ROCE_LOCAL_IP");
+            if (ipEnv != nullptr && ipEnv[0] != '\0') {
+                localIp = ipEnv;
+            } else {
+                std::vector<std::string> ipList = SplitCsv(std::getenv("PTO_ROCE_IPS"));
+                if (static_cast<int>(ipList.size()) == nRanks) {
+                    localIp = ipList[rankId];
+                }
+            }
+        }
+        const bool localIpReady = !localIp.empty();
+        if (!localIpReady) {
+            std::cerr << "[SKIP] RDMA test using HNS_1825 could not resolve local IP for phyId " << phyId
+                      << " (no usable " << kDefaultRootInfoPath << " CLOS entry, no usable "
+                      << kDefaultVirtualTopologyPath << ", and no PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS)" << std::endl;
+        }
+        bool anyIpMissing = false;
+        if (!agree(localIpReady, nRanks, "local RDMA IP resolution", &anyIpMissing)) {
+            skipped = anyIpMissing;
+            return false;
+        }
+
+        const char* portEnv = std::getenv("PTO_ROCE_BASE_PORT");
+        bool portReady = true;
+        if (portEnv != nullptr) {
+            char* end = nullptr;
+            unsigned long parsed = std::strtoul(portEnv, &end, 10);
+            if (end == portEnv || *end != '\0' || parsed > UINT16_MAX) {
+                std::cerr << "[ERROR] invalid PTO_ROCE_BASE_PORT='" << portEnv << "'" << std::endl;
+                portReady = false;
+            } else {
+                basePort = static_cast<uint16_t>(parsed);
+            }
+        }
+        if (!agree(portReady, nRanks, "base-port parsing", nullptr)) {
+            return false;
+        }
+        std::vector<uint16_t> allPorts(static_cast<size_t>(nRanks), 0);
+        if (CommMpiAllgather(
+                &basePort, static_cast<int>(sizeof(basePort)), allPorts.data(), static_cast<int>(sizeof(basePort))) !=
+            0) {
+            std::cerr << "[ERROR] MPI_Allgather(basePort) failed" << std::endl;
+            return false;
+        }
+        for (int rank = 0; rank < nRanks; ++rank) {
+            if (allPorts[rank] != basePort) {
+                std::cerr << "[ERROR] inconsistent PTO_ROCE_BASE_PORT: rank " << rank << " uses " << allPorts[rank]
+                          << ", local rank uses " << basePort << std::endl;
+                return false;
+            }
+        }
+
+        constexpr int kIpBufLen = 64;
+        std::vector<char> localBuf(kIpBufLen, 0);
+        std::snprintf(localBuf.data(), kIpBufLen, "%s", localIp.c_str());
+        std::vector<char> allBuf(static_cast<size_t>(nRanks) * kIpBufLen, 0);
+        if (CommMpiAllgather(localBuf.data(), kIpBufLen, allBuf.data(), kIpBufLen) != 0) {
+            std::cerr << "[ERROR] MPI_Allgather(localIp) failed" << std::endl;
+            return false;
+        }
+        peerIps.assign(static_cast<size_t>(nRanks), std::string());
+        for (int rank = 0; rank < nRanks; ++rank) {
+            peerIps[rank] = std::string(allBuf.data() + static_cast<size_t>(rank) * kIpBufLen);
+        }
+
+        peerPhyIds.assign(static_cast<size_t>(nRanks), 0);
+        if (CommMpiAllgather(
+                &phyId, static_cast<int>(sizeof(phyId)), peerPhyIds.data(), static_cast<int>(sizeof(phyId))) != 0) {
+            std::cerr << "[ERROR] MPI_Allgather(phyId) failed" << std::endl;
+            return false;
+        }
+
+        peerSymAddrs.assign(static_cast<size_t>(nRanks), 0);
+        uint64_t localAddr = reinterpret_cast<uint64_t>(symAddr);
+        if (CommMpiAllgather(
+                &localAddr, static_cast<int>(sizeof(uint64_t)), peerSymAddrs.data(),
+                static_cast<int>(sizeof(uint64_t))) != 0) {
+            std::cerr << "[ERROR] MPI_Allgather(symAddr) failed" << std::endl;
+            return false;
+        }
+
+        return true;
+    }
+};
+
 } // namespace bootstrap
 } // namespace hns_1825
 } // namespace rdma
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_TESTS_NPU_A5_COMM_ST_HNS1825_BOOTSTRAP_HPP
+#endif // PTO_TESTS_NPU_A5_COMM_ST_RDMA_BACKENDS_HNS_1825_BOOTSTRAP_HPP

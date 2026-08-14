@@ -28,14 +28,14 @@ struct RdmaExecContext {
     uint32_t destRankId{0};
     uint32_t qpIdx{0};
     uint32_t myPe{0};
-    sdma::TmpBuffer tmpBuf{};
+    AsyncTmpBuffer tmpBuf{};
     uint32_t syncId{0};
 };
 
 struct RdmaEventContext {
     __gm__ uint8_t* contextGm{nullptr};
     RdmaBackend backend{RdmaBackend::NONE};
-    sdma::TmpBuffer tmpBuf{};
+    AsyncTmpBuffer tmpBuf{};
     uint32_t syncId{0};
 };
 

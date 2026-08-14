@@ -40,7 +40,8 @@ comm/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL（SDMA + MTE 回退 + URMA + RDMA）
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL（SDMA + URMA + RDMA）
 │
-├── async/                       # 对外引擎接口与 Host workspace manager
+├── async/                       # 对外异步组件与 Host workspace manager
+│   ├── ccu/                     # CCU 集合通信 Kernel 辅助实现
 │   ├── sdma/                    # SDMA intrinsic、类型、CMO 与 workspace manager
 │   ├── urma/                    # URMA intrinsic、类型与 HCCL/HCCP 控制面
 │   └── rdma/
@@ -48,6 +49,7 @@ comm/
 │
 └── async_common/                # 异步公共 API（a2a3/a5 共享）
     ├── async_types.hpp          # SDMA/URMA/RDMA 会话与上下文类型
+    ├── async_scratch.hpp        # 引擎无关的 UB scratch 转换
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test、BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # TPUT_ASYNC 公共辅助函数 + SDMA 实现
     └── TGetAsyncCommonDetail.hpp # TGET_ASYNC 公共辅助函数 + SDMA 实现

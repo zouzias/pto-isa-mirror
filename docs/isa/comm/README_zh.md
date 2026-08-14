@@ -120,7 +120,7 @@ Ascend950 / NPU_ARCH 3510 通信 ST 必须在首次 CMake 配置前选择后端�
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_hns1825 -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
 ```
 
 `PTO_RDMA_BACKEND` 是配置阶段输入。CMake 将其转换成 Host 与 Device 一致的编译定义，生成的二进制不会在

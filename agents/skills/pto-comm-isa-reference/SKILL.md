@@ -91,7 +91,7 @@ using namespace pto::comm;
 | `AtomicType` | 原子操作类型 | `AtomicNone`（默认）/ `AtomicAdd` |
 | `DmaEngine` | DMA 引擎选择 | `SDMA`（通用）/ `URMA`（仅 A5）/ `RDMA`（仅 A5） |
 | `RdmaBackend` | RDMA 具体网卡后端 | 当前为 `NONE` / `HNS_1825`，每个二进制最多一个有效后端 |
-| `AsyncEvent` | 异步事件句柄 | `Wait` 完成同一 peer/queue 上截至该 event 的操作 |
+| `AsyncEvent` | 异步事件句柄 | `Wait` 等待该 event 对应的提交范围完成 |
 | `AsyncSession` | 异步会话 | 通过 `BuildAsyncSession` 构建 |
 
 **详细说明**：[核心类型详解](references/core-types.md)

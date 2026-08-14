@@ -112,15 +112,15 @@ Async instructions depend on the SDMA opapi interface (e.g. `aclnnShmemSdmaStars
 
 Engine-specific test names containing `_async` follow the same default exclusion and are included by `-a`.
 
-### HNS1825 RDMA Async Tests (A5)
+### RDMA Async Tests (HNS1825 Backend, A5)
 
-The HNS1825 tests require A5, an HNS1825 RDMA NIC and driver, HCOMM, and reachable RDMA NIC IPv4
-addresses. Select the backend before the build is configured:
+The RDMA tests currently use the HNS1825 backend and require A5, its NIC and driver, HCOMM, and reachable RDMA NIC
+IPv4 addresses. Select the backend before the build is configured:
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_hns1825 -d -n 2
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 ```
 
 `PTO_RDMA_BACKEND` is read by CMake during configuration and translated into identical host/kernel compile
@@ -154,8 +154,9 @@ If the HNS1825 verbs provider is not discovered from a default provider path, se
 driver-provided `libhrn5-rdmav34.so`. This is a deployment requirement of the HCOMM/libibverbs stack, not a PTO backend
 selector.
 
-Both HNS1825 PUT and GET have passed in the target environment. They use separate test targets so WRITE and READ
-regressions can be run and diagnosed independently; both targets are also included by `run_comm_test.sh -a`.
+Both RDMA PUT and GET using the HNS1825 backend have passed in the target environment. They use separate test targets
+so WRITE and READ regressions can be run and diagnosed independently; both targets are also included by
+`run_comm_test.sh -a`.
 
 ### Quick Start
 

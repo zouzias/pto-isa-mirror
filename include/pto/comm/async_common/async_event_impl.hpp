@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_ASYNC_COMMON_ASYNC_EVENT_IMPL_HPP
 
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async_common/async_scratch.hpp"
 #include "pto/comm/async_common/async_types.hpp"
 #include "pto/comm/async/sdma/sdma_async_intrin.hpp"
 #ifdef PTO_URMA_SUPPORTED
@@ -76,8 +77,8 @@ PTO_INTERNAL bool BuildAsyncSession(
     ScratchTile& scratchTile, __gm__ uint8_t* workspace, uint32_t myPe, AsyncSession& session, uint32_t syncId = 0)
 {
     static_assert(engine == DmaEngine::RDMA, "This overload is for RDMA only");
-    sdma::TmpBuffer tmpBuf{};
-    if (!sdma::detail::MakeTmpBufferFromTile(scratchTile, tmpBuf)) {
+    AsyncTmpBuffer tmpBuf{};
+    if (!detail::MakeAsyncTmpBufferFromTile(scratchTile, tmpBuf)) {
         session = AsyncSession{};
         return false;
     }
@@ -92,8 +93,8 @@ PTO_INTERNAL bool BuildAsyncSession(
     uint32_t syncId = 0)
 {
     static_assert(engine == DmaEngine::RDMA, "This overload is for RDMA only");
-    sdma::TmpBuffer tmpBuf{};
-    if (!sdma::detail::MakeTmpBufferFromTile(scratchTile, tmpBuf)) {
+    AsyncTmpBuffer tmpBuf{};
+    if (!detail::MakeAsyncTmpBufferFromTile(scratchTile, tmpBuf)) {
         session = AsyncSession{};
         return false;
     }

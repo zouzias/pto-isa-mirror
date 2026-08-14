@@ -13,28 +13,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 
-enum class RoceHns1825TestResult {
+enum class RdmaTestResult {
     PASSED,
     FAILED,
     SKIPPED,
 };
 
-enum class RoceHns1825CompletionMode : uint32_t {
+enum class RdmaCompletionMode : uint32_t {
     STATUS_WAIT_EACH,
     STATUS_WAIT_LAST,
     PUBLIC_EVENT_WAIT_TEST,
 };
 
 template <typename T, size_t count>
-RoceHns1825TestResult RunPutAsyncHns1825RootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+RdmaTestResult RunPutAsyncRdmaRootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
 template <typename T, size_t count>
-RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
+RdmaTestResult RunPutAsyncRdmaRootPutPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completion_mode);
+    int operation_count, RdmaCompletionMode completion_mode);
 
-// Shared host entry point used by the HNS1825 GET test target.
+// Shared host entry point used by the RDMA GET test target.
 template <typename T, size_t count>
-RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
+RdmaTestResult RunGetAsyncRdmaRootGetPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completion_mode);
+    int operation_count, RdmaCompletionMode completion_mode);

@@ -121,7 +121,7 @@ For the Ascend950 / NPU_ARCH 3510 communication ST build, select the backend bef
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_hns1825 -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
 ```
 
 `PTO_RDMA_BACKEND` is a configure-time input. CMake translates it into the same host and device compile definitions;

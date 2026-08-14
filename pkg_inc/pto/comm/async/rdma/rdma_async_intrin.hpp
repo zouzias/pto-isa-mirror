@@ -25,7 +25,7 @@ namespace comm {
 namespace rdma {
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId, RdmaSession& session)
+    __gm__ uint8_t* workspace, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId, RdmaSession& session)
 {
     session = {};
     __gm__ RdmaInfo* info = reinterpret_cast<__gm__ RdmaInfo*>(workspace);
@@ -43,7 +43,7 @@ AICORE inline bool BuildSession(
 }
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId,
+    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId,
     RdmaSession& session)
 {
     session = {};
@@ -77,7 +77,7 @@ AICORE inline void StoreSession(const RdmaSession& rdmaSession, AsyncSession& se
 }
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId, AsyncSession& session)
+    __gm__ uint8_t* workspace, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId, AsyncSession& session)
 {
     RdmaSession rdmaSession{};
     const bool valid = BuildSession(workspace, myPe, tmpBuf, syncId, rdmaSession);
@@ -87,7 +87,7 @@ AICORE inline bool BuildSession(
 }
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId,
+    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId,
     AsyncSession& session)
 {
     RdmaSession rdmaSession{};

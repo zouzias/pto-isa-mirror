@@ -111,15 +111,15 @@ mpirun -n 2 echo "MPI OK"
 
 名称中含 `_async` 的引擎专用测试遵循同一默认排除规则，并由 `-a` 一并启用。
 
-### HNS1825 RDMA异步测试（A5）
+### RDMA异步测试（HNS1825 后端，A5）
 
-HNS1825 测试要求 A5、HNS1825 RDMA 网卡及驱动、HCOMM，以及可达的 RDMA 网卡 IPv4。
-必须在配置构建前选择后端：
+RDMA 测试当前使用 HNS1825 后端，要求 A5、对应网卡及驱动、HCOMM，以及可达的 RDMA 网卡 IPv4。必须在
+配置构建前选择后端：
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_hns1825 -d -n 2
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_hns1825 -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 ```
 
 `PTO_RDMA_BACKEND` 由 CMake 在配置阶段读取，并转换成 Host/Kernel 一致的编译定义；生成的测试二进制不会
@@ -149,8 +149,8 @@ RDMA IPv4 时，再调用 HCOMM topology 组件解析 `/var/run/ascend-topologyd
 若默认 provider 路径无法发现 HNS1825 verbs provider，需要将 `IBV_EXTEND_DRIVERS` 指向驱动提供的
 `libhrn5-rdmav34.so`。这是 HCOMM/libibverbs 部署要求，不是 PTO 后端选择变量。
 
-HNS1825 PUT 和 GET 均已在目标环境跑通。二者使用对等的独立 target，便于分别执行和定位 WRITE/READ
-回归；`run_comm_test.sh -a` 也会包含这两个 target。
+使用 HNS1825 后端的 RDMA PUT 和 GET 均已在目标环境跑通。二者使用对等的独立 target，便于分别执行和
+定位 WRITE/READ 回归；`run_comm_test.sh -a` 也会包含这两个 target。
 
 ### 快速开始
 

@@ -18,13 +18,23 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 namespace comm {
+
+// Common UB scratch descriptor shared by asynchronous DMA engines. The
+// scratch stores queue/control metadata only; payload data remains in GM.
+constexpr uint32_t kDefaultAsyncScratchBytes = 256U;
+
+struct AsyncTmpBuffer {
+    __ubuf__ uint8_t* addr;
+    uint32_t size;
+};
+
 namespace sdma {
 
 // ============================================================================
 // Public SDMA constants (used by kernel code for buffer sizing, etc.)
 // ============================================================================
 constexpr uint32_t kSdmaFlagLength = 128U;
-constexpr uint32_t kUbAlignSize = 256U;
+constexpr uint32_t kUbAlignSize = kDefaultAsyncScratchBytes;
 constexpr uint32_t kSdmaEventRecordBytes = 16U;
 constexpr uint32_t kSdmaEventSlotCount = kSdmaFlagLength / kSdmaEventRecordBytes;
 constexpr uint32_t SDMA_FLAG_LENGTH = kSdmaFlagLength;
@@ -45,10 +55,7 @@ using sdma_base_config_t = SdmaBaseConfig;
 // ============================================================================
 // Context types for SDMA async operations
 // ============================================================================
-struct TmpBuffer {
-    __ubuf__ uint8_t* addr;
-    uint32_t size;
-};
+using TmpBuffer = AsyncTmpBuffer;
 
 struct SdmaExecContext {
     __gm__ uint8_t* contextGm;

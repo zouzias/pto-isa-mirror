@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // HNS_1825 (Hi1825) RoCE RDMA device-side backend for A5.
 //
 // Posts RDMA WRITE / READ from AIV using the RdmaInfo table supplied via RdmaExecContext.
-// WQE/CQE staging uses a UB scratch (sdma::TmpBuffer); atomics are not supported.
+// WQE/CQE staging uses the common asynchronous UB scratch; atomics are not supported.
 
 #ifndef PTO_COMM_ASYNC_RDMA_BACKENDS_HNS_1825_BACKEND_HPP
 #define PTO_COMM_ASYNC_RDMA_BACKENDS_HNS_1825_BACKEND_HPP
@@ -417,7 +417,7 @@ AICORE inline uint32_t ValidateTransfer(
 // ============================================================================
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId, RdmaSession& session)
+    __gm__ uint8_t* workspace, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId, RdmaSession& session)
 {
     session = {};
     __gm__ RdmaInfo* info = reinterpret_cast<__gm__ RdmaInfo*>(workspace);
@@ -444,7 +444,7 @@ AICORE inline bool BuildSession(
 }
 
 AICORE inline bool BuildSession(
-    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const sdma::TmpBuffer& tmpBuf, uint32_t syncId,
+    __gm__ uint8_t* workspace, uint32_t destRankId, uint32_t myPe, const AsyncTmpBuffer& tmpBuf, uint32_t syncId,
     RdmaSession& session)
 {
     if (!BuildSession(workspace, myPe, tmpBuf, syncId, session)) {

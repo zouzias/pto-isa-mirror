@@ -43,7 +43,7 @@ tests/
 └── npu/a5/comm/st/testcase/    # NPU A5 测试
     ├── tput_async/ tget_async/ # SDMA
     ├── tput_async_urma/ tget_async_urma/
-    └── tput_async_hns1825/ tget_async_hns1825/ # 可独立选择的 RDMA PUT/GET
+    └── tput_async_rdma/ tget_async_rdma/ # 可独立选择的 RDMA PUT/GET
 ```
 
 ---

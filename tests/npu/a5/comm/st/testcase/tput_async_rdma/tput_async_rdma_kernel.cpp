@@ -24,24 +24,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #include "../common.hpp"
-#include "tput_async_hns1825_kernel.h"
+#include "tput_async_rdma_kernel.h"
 #include "pto/common/pto_tile.hpp"
 #ifdef PTO_RDMA_SUPPORTED
 #include "pto/comm/async/rdma/rdma_async_intrin.hpp"
 #include "pto/comm/async/rdma/rdma_workspace_manager.hpp"
-#include "hns1825_bootstrap.hpp"
+#include "backends/rdma_test_backend.hpp"
 #endif
 
 #ifdef PTO_RDMA_SUPPORTED
 template <typename... Args>
-static void RoceTrace(uint32_t caseId, int rankId, Args&&... args)
+static void RdmaTrace(uint32_t caseId, int rankId, Args&&... args)
 {
-    const char* verbose = std::getenv("PTO_ROCE_VERBOSE");
-    if (verbose == nullptr || verbose[0] != '1') {
+    if (!pto::comm::rdma::test::BackendVerboseEnabled()) {
         return;
     }
     std::ostringstream os;
-    os << "[RoCE][case " << caseId << "][rank " << rankId << "] ";
+    os << "[RDMA][" << pto::comm::rdma::RdmaWorkspaceManager::ConfiguredBackendName() << "][case " << caseId
+       << "][rank " << rankId << "] ";
     (os << ... << std::forward<Args>(args));
     os << '\n';
     const std::string line = os.str();
@@ -49,24 +49,24 @@ static void RoceTrace(uint32_t caseId, int rankId, Args&&... args)
     std::fflush(stderr);
 }
 
-static uint64_t RoceElapsedUs(const std::chrono::steady_clock::time_point& start)
+static uint64_t RdmaElapsedUs(const std::chrono::steady_clock::time_point& start)
 {
     return static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
 }
 
-static std::string RoceHex(uint64_t value)
+static std::string RdmaHex(uint64_t value)
 {
     std::ostringstream os;
     os << "0x" << std::hex << value;
     return os.str();
 }
 
-static uint32_t gRoceCaseSequence = 0;
+static uint32_t gRdmaCaseSequence = 0;
 #endif
 
 // ============================================================================
-// TPUT_ASYNC via RoCE RDMA (Hi1825 / HNS_1825) — device kernel.
+// TPUT_ASYNC via RDMA.
 //
 // Data plane is a true one-sided remote write posted from AIV: root rank writes
 // its send buffer into every peer's recv buffer. The symmetric communication
@@ -77,13 +77,13 @@ static uint32_t gRoceCaseSequence = 0;
 // ============================================================================
 
 #ifdef PTO_RDMA_SUPPORTED
-constexpr uint32_t kRocePublicEventWaitError = 0x30000;
-constexpr uint32_t kRocePublicEventTestError = 0x30001;
+constexpr uint32_t kRdmaPublicEventWaitError = 0x30000;
+constexpr uint32_t kRdmaPublicEventTestError = 0x30001;
 
-AICORE inline uint32_t CompleteRoceEvent(
-    pto::comm::AsyncEvent& event, pto::comm::AsyncSession& session, RoceHns1825CompletionMode completionMode)
+AICORE inline uint32_t CompleteRdmaEvent(
+    pto::comm::AsyncEvent& event, pto::comm::AsyncSession& session, RdmaCompletionMode completionMode)
 {
-    if (completionMode != RoceHns1825CompletionMode::PUBLIC_EVENT_WAIT_TEST) {
+    if (completionMode != RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST) {
         return pto::comm::rdma::WaitEventStatus(event.handle, session);
     }
 
@@ -91,22 +91,22 @@ AICORE inline uint32_t CompleteRoceEvent(
     // and Test must then observe the already-consumed target index as complete.
     (void)event.Test(session);
     if (!event.Wait(session)) {
-        return kRocePublicEventWaitError;
+        return kRdmaPublicEventWaitError;
     }
-    return event.Test(session) ? 0 : kRocePublicEventTestError;
+    return event.Test(session) ? 0 : kRdmaPublicEventTestError;
 }
 #endif
 
 template <typename T, size_t count>
-[[bisheng::core_ratio(0, 1)]] __global__ AICORE void TPutAsyncHns1825KernelImpl(
+[[bisheng::core_ratio(0, 1)]] __global__ AICORE void TPutAsyncRdmaKernelImpl(
     __gm__ T* localBuf, int nranks, int my_rank, int first_rank_id, int root_rank, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completionMode, __gm__ uint8_t* rdmaWorkspace, uint32_t syncId)
+    int operation_count, RdmaCompletionMode completionMode, __gm__ uint8_t* rdmaWorkspace, uint32_t syncId)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
-    // RoCE, like SDMA, needs a UB scratch tile for WQE staging / CQE polling.
-    using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
+    // RDMA uses a common asynchronous UB scratch for WQE staging and CQE polling.
+    using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::kDefaultAsyncScratchBytes>;
 
     // Device→host status word in the 64×int32 header (word0). Host always prints it.
     // A5: cce::printf unsupported; AscendC::printf usually needs ASCENDC_DUMP=1 to flush.
@@ -156,15 +156,15 @@ template <typename T, size_t count>
                     Global remoteRecvG(remoteRecvBuf, shape, stride);
                     lastEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::RDMA>(
                         remoteRecvG, sendG, session, static_cast<uint32_t>(target_peer));
-                    if (completionMode == RoceHns1825CompletionMode::STATUS_WAIT_EACH) {
-                        completionStatus = CompleteRoceEvent(lastEvent, session, completionMode);
+                    if (completionMode == RdmaCompletionMode::STATUS_WAIT_EACH) {
+                        completionStatus = CompleteRdmaEvent(lastEvent, session, completionMode);
                         if (completionStatus != 0) {
                             break;
                         }
                     }
                 }
-                if (completionStatus == 0 && completionMode != RoceHns1825CompletionMode::STATUS_WAIT_EACH) {
-                    completionStatus = CompleteRoceEvent(lastEvent, session, completionMode);
+                if (completionStatus == 0 && completionMode != RdmaCompletionMode::STATUS_WAIT_EACH) {
+                    completionStatus = CompleteRdmaEvent(lastEvent, session, completionMode);
                 }
                 *devStatus = completionStatus;
                 if (completionStatus != 0) {
@@ -183,17 +183,17 @@ template <typename T, size_t count>
 }
 
 #if defined(PTO_RDMA_SUPPORTED) && defined(PTO_RDMA_GET_TEST)
-// Build the GET entry points for the tget_async_hns1825 target.
+// Build the GET entry points for the tget_async_rdma target.
 template <typename T, size_t count>
-[[bisheng::core_ratio(0, 1)]] __global__ AICORE void TGetAsyncHns1825KernelImpl(
+[[bisheng::core_ratio(0, 1)]] __global__ AICORE void TGetAsyncRdmaKernelImpl(
     __gm__ T* localBuf, int nranks, int my_rank, int first_rank_id, int root_rank, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completionMode, __gm__ uint8_t* rdmaWorkspace, uint32_t syncId)
+    int operation_count, RdmaCompletionMode completionMode, __gm__ uint8_t* rdmaWorkspace, uint32_t syncId)
 {
     constexpr size_t kDataOffset = 64 * sizeof(int32_t);
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
-    using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
+    using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::kDefaultAsyncScratchBytes>;
 
     __gm__ uint32_t* devStatus = reinterpret_cast<__gm__ uint32_t*>(localBuf);
     *devStatus = 0;
@@ -240,15 +240,15 @@ template <typename T, size_t count>
                 Global remoteSendG(remoteSend, shape, stride);
                 lastEvent = pto::comm::TGET_ASYNC<pto::comm::DmaEngine::RDMA>(
                     localRecvG, remoteSendG, session, static_cast<uint32_t>(sourcePeer));
-                if (completionMode == RoceHns1825CompletionMode::STATUS_WAIT_EACH) {
-                    completionStatus = CompleteRoceEvent(lastEvent, session, completionMode);
+                if (completionMode == RdmaCompletionMode::STATUS_WAIT_EACH) {
+                    completionStatus = CompleteRdmaEvent(lastEvent, session, completionMode);
                     if (completionStatus != 0) {
                         break;
                     }
                 }
             }
-            if (completionStatus == 0 && completionMode != RoceHns1825CompletionMode::STATUS_WAIT_EACH) {
-                completionStatus = CompleteRoceEvent(lastEvent, session, completionMode);
+            if (completionStatus == 0 && completionMode != RdmaCompletionMode::STATUS_WAIT_EACH) {
+                completionStatus = CompleteRdmaEvent(lastEvent, session, completionMode);
             }
             *devStatus = completionStatus;
             if (completionStatus != 0) {
@@ -277,7 +277,7 @@ static bool AllRanksReady(bool localReady, int nRanks, const char* stage, bool* 
             if (anyRankNotReady != nullptr) {
                 *anyRankNotReady = true;
             }
-            std::cerr << "[RoCE] rank " << rank << " is not ready at stage: " << stage << std::endl;
+            std::cerr << "[RDMA] rank " << rank << " is not ready at stage: " << stage << std::endl;
         }
     }
     return anyRankNotReady == nullptr ? std::all_of(all.begin(), all.end(), [](uint8_t ready) { return ready != 0; }) :
@@ -320,157 +320,12 @@ static pto::comm::rdma::WorkspaceInitResult AgreeOnRdmaPreflight(int nRanks)
 }
 
 // ============================================================================
-// Out-of-band bootstrap for the current HNS_1825 backend.
+// RdmaTestContext: device, registered communication buffer, and RDMA workspace manager.
 //
-// Per rank: phyId, RDMA NIC IPv4, symmetric-buffer base VA.
-//   phyId    : ResolvePhyId(), else PTO_ROCE_PHYIDS[rank], else ACL device id
-//   local IP : fixed rootinfo CLOS entry, then HCOMM's fixed virtualTopology.xml, then the manual ST fallbacks
-//              PTO_ROCE_LOCAL_IP (per process) / PTO_ROCE_IPS (MPI-rank-ordered list)
-//   sym addr : MPI_Allgather of local symmetric buffer VA
-// Missing local IP on any rank -> collective skip (not a false pass).
-// Optional: PTO_ROCE_LOCAL_IP, PTO_ROCE_IPS, PTO_ROCE_BASE_PORT, PTO_ROCE_VERBOSE=1
+// Each case owns a complete backend-channel lifecycle. Reusing the same port
+// across the suite validates channel destruction followed by reconnection.
 // ============================================================================
-struct RoceBootstrap {
-    bool skipped{false};
-    std::vector<std::string> peerIps;
-    std::vector<uint32_t> peerPhyIds;
-    std::vector<uint64_t> peerSymAddrs;
-    uint32_t phyId{0};
-    uint16_t basePort{60032};
-
-    static std::vector<std::string> SplitCsv(const char* env)
-    {
-        std::vector<std::string> out;
-        if (env == nullptr) {
-            return out;
-        }
-        std::stringstream ss(env);
-        std::string item;
-        while (std::getline(ss, item, ',')) {
-            size_t b = item.find_first_not_of(" \t");
-            size_t e = item.find_last_not_of(" \t");
-            if (b != std::string::npos) {
-                out.push_back(item.substr(b, e - b + 1));
-            }
-        }
-        return out;
-    }
-
-    // rankId/nRanks — global rank index space (0-based when first_rank_id == 0).
-    // deviceId      — this rank's ACL device id (phyId fallback).
-    // symAddr       — this rank's symmetric buffer base VA.
-    bool Init(int rankId, int nRanks, int deviceId, void* symAddr)
-    {
-        skipped = false;
-        // ---- phyId: runtime resolution, env override, device-id fallback ----
-        std::vector<std::string> phyStrs = SplitCsv(std::getenv("PTO_ROCE_PHYIDS"));
-        if (static_cast<int>(phyStrs.size()) == nRanks) {
-            phyId = static_cast<uint32_t>(std::strtoul(phyStrs[rankId].c_str(), nullptr, 10));
-        } else if (!pto::comm::rdma::hns_1825::bootstrap::ResolvePhyId(phyId)) {
-            phyId = static_cast<uint32_t>(deviceId);
-            std::cerr << "[RoCE] phyId resolution unavailable, falling back to device id " << deviceId << std::endl;
-        }
-
-        // ---- local RDMA NIC IPv4: rootinfo, virtual topology, then IP env fallback ----
-        std::string localIp;
-        if (!pto::comm::rdma::hns_1825::bootstrap::ResolveLocalRdmaIp(phyId, localIp) &&
-            !pto::comm::rdma::hns_1825::bootstrap::ResolveLocalRdmaIpFromVirtualTopology(phyId, localIp)) {
-            const char* ipEnv = std::getenv("PTO_ROCE_LOCAL_IP");
-            if (ipEnv != nullptr && ipEnv[0] != '\0') {
-                localIp = ipEnv;
-            } else {
-                std::vector<std::string> ipList = SplitCsv(std::getenv("PTO_ROCE_IPS"));
-                if (static_cast<int>(ipList.size()) == nRanks) {
-                    localIp = ipList[rankId];
-                }
-            }
-        }
-        const bool localIpReady = !localIp.empty();
-        if (!localIpReady) {
-            std::cerr << "[SKIP] RoCE test could not resolve local RDMA IP for phyId " << phyId << " (no usable "
-                      << pto::comm::rdma::hns_1825::bootstrap::kDefaultRootInfoPath << " CLOS entry, no usable "
-                      << pto::comm::rdma::hns_1825::bootstrap::kDefaultVirtualTopologyPath
-                      << ", and no PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS)" << std::endl;
-        }
-        bool anyIpMissing = false;
-        if (!AllRanksReady(localIpReady, nRanks, "local RDMA IP resolution", &anyIpMissing)) {
-            skipped = anyIpMissing;
-            return false;
-        }
-
-        const char* portEnv = std::getenv("PTO_ROCE_BASE_PORT");
-        bool portReady = true;
-        if (portEnv != nullptr) {
-            char* end = nullptr;
-            unsigned long parsed = std::strtoul(portEnv, &end, 10);
-            if (end == portEnv || *end != '\0' || parsed > UINT16_MAX) {
-                std::cerr << "[ERROR] invalid PTO_ROCE_BASE_PORT='" << portEnv << "'" << std::endl;
-                portReady = false;
-            } else {
-                basePort = static_cast<uint16_t>(parsed);
-            }
-        }
-        if (!AllRanksReady(portReady, nRanks, "base-port parsing")) {
-            return false;
-        }
-        std::vector<uint16_t> allPorts(static_cast<size_t>(nRanks), 0);
-        if (CommMpiAllgather(
-                &basePort, static_cast<int>(sizeof(basePort)), allPorts.data(), static_cast<int>(sizeof(basePort))) !=
-            0) {
-            std::cerr << "[ERROR] MPI_Allgather(basePort) failed" << std::endl;
-            return false;
-        }
-        for (int rank = 0; rank < nRanks; ++rank) {
-            if (allPorts[rank] != basePort) {
-                std::cerr << "[ERROR] inconsistent PTO_ROCE_BASE_PORT: rank " << rank << " uses " << allPorts[rank]
-                          << ", local rank uses " << basePort << std::endl;
-                return false;
-            }
-        }
-
-        // ---- allgather each rank's local IP into peerIps (fixed-width buffers) ----
-        constexpr int kIpBufLen = 64;
-        std::vector<char> localBuf(kIpBufLen, 0);
-        std::snprintf(localBuf.data(), kIpBufLen, "%s", localIp.c_str());
-        std::vector<char> allBuf(static_cast<size_t>(nRanks) * kIpBufLen, 0);
-        if (CommMpiAllgather(localBuf.data(), kIpBufLen, allBuf.data(), kIpBufLen) != 0) {
-            std::cerr << "[ERROR] MPI_Allgather(localIp) failed" << std::endl;
-            return false;
-        }
-        peerIps.assign(static_cast<size_t>(nRanks), std::string());
-        for (int r = 0; r < nRanks; ++r) {
-            peerIps[r] = std::string(allBuf.data() + static_cast<size_t>(r) * kIpBufLen);
-        }
-
-        // ---- allgather physical device ids used by HCOMM's remote LinkData ----
-        peerPhyIds.assign(static_cast<size_t>(nRanks), 0);
-        if (CommMpiAllgather(
-                &phyId, static_cast<int>(sizeof(phyId)), peerPhyIds.data(), static_cast<int>(sizeof(phyId))) != 0) {
-            std::cerr << "[ERROR] MPI_Allgather(phyId) failed" << std::endl;
-            return false;
-        }
-
-        // ---- allgather symmetric-buffer base VAs ----
-        peerSymAddrs.assign(static_cast<size_t>(nRanks), 0);
-        uint64_t localAddr = reinterpret_cast<uint64_t>(symAddr);
-        if (CommMpiAllgather(
-                &localAddr, static_cast<int>(sizeof(uint64_t)), peerSymAddrs.data(),
-                static_cast<int>(sizeof(uint64_t))) != 0) {
-            std::cerr << "[ERROR] MPI_Allgather(symAddr) failed" << std::endl;
-            return false;
-        }
-
-        return true;
-    }
-};
-
-// ============================================================================
-// RoceTestContext: device + symmetric buffer + RoCE workspace manager.
-//
-// Each case owns a complete HCOMM lifecycle. Reusing the same port across the
-// suite intentionally validates ChannelDestroy -> ChannelCreate reconnect.
-// ============================================================================
-struct RoceTestContext {
+struct RdmaTestContext {
     int deviceId{-1};
     int rankId{-1};
     int nRanks{0};
@@ -478,7 +333,7 @@ struct RoceTestContext {
     void* devBuf{nullptr};
     size_t allocSize{0};
     pto::comm::rdma::RdmaWorkspaceManager rdmaMgr;
-    RoceBootstrap boot;
+    pto::comm::rdma::test::BackendBootstrap boot;
     uint32_t traceId{0};
 
     enum class SetupResult {
@@ -496,7 +351,7 @@ struct RoceTestContext {
         nRanks = n_ranks;
         deviceId = rank_id % n_devices + first_device_id;
         rdmaMgr.SetTraceId(traceId);
-        RoceTrace(traceId, rankId, "SETUP begin device=", deviceId, " commBytes=", commBytesNeeded);
+        RdmaTrace(traceId, rankId, "SETUP begin device=", deviceId, " commBytes=", commBytesNeeded);
 
         bool localReady = true;
         if (aclrtSetDevice(deviceId) != ACL_SUCCESS) {
@@ -521,11 +376,11 @@ struct RoceTestContext {
         if (!AllRanksReady(localReady, n_ranks, "local ACL resource setup")) {
             return SetupResult::FAILED;
         }
-        RoceTrace(
+        RdmaTrace(
             traceId, rankId, "SETUP local resources ready stream=", stream, " devBuf=", devBuf,
-            " allocSize=", allocSize, " elapsed_us=", RoceElapsedUs(setupStart));
+            " allocSize=", allocSize, " elapsed_us=", RdmaElapsedUs(setupStart));
 
-        if (!boot.Init(rank_id, n_ranks, deviceId, devBuf)) {
+        if (!boot.Init(rank_id, n_ranks, deviceId, devBuf, AllRanksReady)) {
             return boot.skipped ? SetupResult::SKIPPED : SetupResult::FAILED;
         }
         std::ostringstream peers;
@@ -534,9 +389,9 @@ struct RoceTestContext {
                 peers << ',';
             }
             peers << peer << ':' << boot.peerIps[peer] << "/phy" << boot.peerPhyIds[peer] << "/sym"
-                  << RoceHex(boot.peerSymAddrs[peer]);
+                  << RdmaHex(boot.peerSymAddrs[peer]);
         }
-        RoceTrace(traceId, rankId, "SETUP bootstrap ready basePort=", boot.basePort, " peers=[", peers.str(), ']');
+        RdmaTrace(traceId, rankId, "SETUP bootstrap ready basePort=", boot.basePort, " peers=[", peers.str(), ']');
 
         CommMpiBarrier();
         const auto connectStart = std::chrono::steady_clock::now();
@@ -556,19 +411,19 @@ struct RoceTestContext {
         if (!localConnected) {
             std::cerr << "[ERROR] RDMA workspace initialization failed" << std::endl;
         }
-        if (!AllRanksReady(localConnected, n_ranks, "HCOMM channel initialization")) {
+        if (!AllRanksReady(localConnected, n_ranks, "RDMA backend channel initialization")) {
             return SetupResult::FAILED;
         }
-        RoceTrace(
-            traceId, rankId, "SETUP HCOMM ready connect_us=", RoceElapsedUs(connectStart),
-            " total_us=", RoceElapsedUs(setupStart));
+        RdmaTrace(
+            traceId, rankId, "SETUP RDMA backend ready connect_us=", RdmaElapsedUs(connectStart),
+            " total_us=", RdmaElapsedUs(setupStart));
         return SetupResult::READY;
     }
 
     bool Cleanup()
     {
         const auto cleanupStart = std::chrono::steady_clock::now();
-        RoceTrace(traceId, rankId, "CLEANUP begin devBuf=", devBuf, " stream=", stream);
+        RdmaTrace(traceId, rankId, "CLEANUP begin devBuf=", devBuf, " stream=", stream);
         CommMpiBarrier();
         bool localOk = rdmaMgr.Finalize();
         if (devBuf != nullptr) {
@@ -590,16 +445,16 @@ struct RoceTestContext {
         }
         const bool allOk = AllRanksReady(localOk, nRanks, "RDMA test resource cleanup");
         CommMpiBarrier();
-        RoceTrace(
+        RdmaTrace(
             traceId, rankId, "CLEANUP end localOk=", localOk, " allOk=", allOk,
-            " elapsed_us=", RoceElapsedUs(cleanupStart));
+            " elapsed_us=", RdmaElapsedUs(cleanupStart));
         return allOk;
     }
 };
 #endif // PTO_RDMA_SUPPORTED
 
 template <typename T>
-static T RoceInputValue(size_t index, int rankId)
+static T RdmaInputValue(size_t index, int rankId)
 {
     if constexpr (sizeof(T) == sizeof(uint8_t)) {
         return static_cast<T>(((index * 131U) ^ (index >> 8U) ^ (static_cast<size_t>(rankId) * 17U)) & 0xffU);
@@ -608,7 +463,7 @@ static T RoceInputValue(size_t index, int rankId)
 }
 
 template <typename T>
-static T RoceSentinelValue(size_t index)
+static T RdmaSentinelValue(size_t index)
 {
     if constexpr (sizeof(T) == sizeof(uint8_t)) {
         return static_cast<T>((0xa5U ^ (index * 29U) ^ (index >> 8U)) & 0xffU);
@@ -616,14 +471,14 @@ static T RoceSentinelValue(size_t index)
     return static_cast<T>(-1);
 }
 
-static const char* RoceCompletionModeName(RoceHns1825CompletionMode mode)
+static const char* RdmaCompletionModeName(RdmaCompletionMode mode)
 {
     switch (mode) {
-        case RoceHns1825CompletionMode::STATUS_WAIT_EACH:
+        case RdmaCompletionMode::STATUS_WAIT_EACH:
             return "status-wait-each";
-        case RoceHns1825CompletionMode::STATUS_WAIT_LAST:
+        case RdmaCompletionMode::STATUS_WAIT_LAST:
             return "status-wait-last";
-        case RoceHns1825CompletionMode::PUBLIC_EVENT_WAIT_TEST:
+        case RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST:
             return "public-event-wait-test";
         default:
             return "unknown";
@@ -631,26 +486,20 @@ static const char* RoceCompletionModeName(RoceHns1825CompletionMode mode)
 }
 
 #ifdef PTO_RDMA_SUPPORTED
-static void PrintRoceDeviceStatus(const char* operation, int rankId, int deviceId, int syncRet, uint32_t devStatus)
+static void PrintRdmaDeviceStatus(const char* operation, int rankId, int deviceId, int syncRet, uint32_t devStatus)
 {
-    std::cerr << "[RoCE] " << operation << " Rank " << rankId << " Device " << deviceId << " SyncRet " << syncRet
-              << " DevStatus 0x" << std::hex << devStatus << std::dec;
-    if (devStatus == pto::comm::rdma::hns_1825::kHns1825PollCqTimeoutError) {
-        std::cerr << " (poll_cq_timeout)";
-    } else if (devStatus == pto::comm::rdma::kRdmaSessionBuildError) {
+    std::cerr << "[RDMA][" << pto::comm::rdma::RdmaWorkspaceManager::ConfiguredBackendName() << "] " << operation
+              << " Rank " << rankId << " Device " << deviceId << " SyncRet " << syncRet << " DevStatus 0x" << std::hex
+              << devStatus << std::dec;
+    if (devStatus == pto::comm::rdma::kRdmaSessionBuildError) {
         std::cerr << " (session_build_fail)";
-    } else if (devStatus == pto::comm::rdma::hns_1825::kHns1825InvalidArgumentError) {
-        std::cerr << " (invalid_transfer)";
-    } else if (devStatus == pto::comm::rdma::hns_1825::kHns1825InvalidContextError) {
-        std::cerr << " (invalid_context)";
-    } else if (devStatus == pto::comm::rdma::hns_1825::kHns1825CqeError) {
-        std::cerr << " (cqe_error_without_syndrome)";
-    } else if (devStatus == kRocePublicEventWaitError) {
+    } else if (devStatus == kRdmaPublicEventWaitError) {
         std::cerr << " (public_event_wait_failed)";
-    } else if (devStatus == kRocePublicEventTestError) {
+    } else if (devStatus == kRdmaPublicEventTestError) {
         std::cerr << " (public_event_test_after_wait_failed)";
     } else if (devStatus != 0) {
-        std::cerr << " (cqe_syndrome_or_error)";
+        const char* backendStatus = pto::comm::rdma::test::DescribeBackendCompletionStatus(devStatus);
+        std::cerr << " (" << (backendStatus == nullptr ? "cqe_syndrome_or_error" : backendStatus) << ')';
     }
     std::cerr << std::endl;
 }
@@ -660,9 +509,9 @@ static void PrintRoceDeviceStatus(const char* operation, int rankId, int deviceI
 // Host-side runner.
 // ============================================================================
 template <typename T, size_t count>
-RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
+RdmaTestResult RunPutAsyncRdmaRootPutKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int first_rank_id, int root_rank, uint32_t caseId,
-    int elemOffset, int elemCount, int operationCount, RoceHns1825CompletionMode completionMode)
+    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode)
 {
 #ifndef PTO_RDMA_SUPPORTED
     (void)rank_id;
@@ -677,34 +526,34 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
     (void)operationCount;
     (void)completionMode;
     std::cerr << "[SKIP] built without PTO_RDMA_SUPPORTED" << std::endl;
-    return RoceHns1825TestResult::SKIPPED;
+    return RdmaTestResult::SKIPPED;
 #else
     const auto caseStart = std::chrono::steady_clock::now();
     CommMpiBarrier();
-    RoceTrace(
+    RdmaTrace(
         caseId, rank_id, "CASE begin op=PUT elemSize=", sizeof(T), " count=", count, " bytes=", count * sizeof(T),
         " offset=", elemOffset, " elemsPerOp=", elemCount, " operations=", operationCount,
-        " completion=", RoceCompletionModeName(completionMode));
+        " completion=", RdmaCompletionModeName(completionMode));
     const bool localPlanValid = elemOffset >= 0 && elemCount > 0 && operationCount > 0 &&
                                 static_cast<int64_t>(elemOffset) + static_cast<int64_t>(elemCount) * operationCount <=
                                     static_cast<int64_t>(count);
     if (!AllRanksReady(localPlanValid, n_ranks, "PUT transfer plan validation")) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const size_t commBytesNeeded = 64 * sizeof(int32_t) + 2 * count * sizeof(T);
-    RoceTestContext ctx;
+    RdmaTestContext ctx;
     const auto setupStart = std::chrono::steady_clock::now();
-    RoceTestContext::SetupResult setup =
+    RdmaTestContext::SetupResult setup =
         ctx.Setup(caseId, rank_id - first_rank_id, n_ranks, n_devices, first_device_id, commBytesNeeded);
-    RoceTrace(
-        caseId, rank_id, "CASE setup result=", static_cast<int>(setup), " elapsed_us=", RoceElapsedUs(setupStart));
-    if (setup != RoceTestContext::SetupResult::READY) {
+    RdmaTrace(
+        caseId, rank_id, "CASE setup result=", static_cast<int>(setup), " elapsed_us=", RdmaElapsedUs(setupStart));
+    if (setup != RdmaTestContext::SetupResult::READY) {
         const bool cleanupOk = ctx.Cleanup();
-        if (!cleanupOk || setup == RoceTestContext::SetupResult::FAILED) {
-            return RoceHns1825TestResult::FAILED;
+        if (!cleanupOk || setup == RdmaTestContext::SetupResult::FAILED) {
+            return RdmaTestResult::FAILED;
         }
-        return RoceHns1825TestResult::SKIPPED;
+        return RdmaTestResult::SKIPPED;
     }
 
     uint8_t* input_host = nullptr;
@@ -725,12 +574,12 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
             (void)aclrtFreeHost(output_host);
         }
         (void)ctx.Cleanup();
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     for (size_t i = 0; i < count; ++i) {
-        reinterpret_cast<T*>(input_host)[i] = RoceInputValue<T>(i, rank_id);
-        reinterpret_cast<T*>(output_host)[i] = RoceSentinelValue<T>(i);
+        reinterpret_cast<T*>(input_host)[i] = RdmaInputValue<T>(i, rank_id);
+        reinterpret_cast<T*>(output_host)[i] = RdmaSentinelValue<T>(i);
     }
 
     constexpr size_t kDataOffset = 64 * sizeof(int32_t);
@@ -750,24 +599,24 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
         (void)aclrtFreeHost(input_host);
         (void)aclrtFreeHost(output_host);
         (void)ctx.Cleanup();
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     CommMpiBarrier();
 
     const auto kernelStart = std::chrono::steady_clock::now();
-    TPutAsyncHns1825KernelImpl<T, count><<<1, nullptr, ctx.stream> > >(
+    TPutAsyncRdmaKernelImpl<T, count><<<1, nullptr, ctx.stream> > >(
         reinterpret_cast<T*>(ctx.devBuf), n_ranks, rank_id, first_rank_id, root_rank, elemOffset, elemCount,
         operationCount, completionMode, reinterpret_cast<uint8_t*>(ctx.rdmaMgr.GetWorkspaceAddr()), 0);
     int syncRet = aclrtSynchronizeStream(ctx.stream);
 
     CommMpiBarrier();
-    RoceTrace(
-        caseId, rank_id, "CASE kernel synchronized syncRet=", syncRet, " elapsed_us=", RoceElapsedUs(kernelStart));
+    RdmaTrace(
+        caseId, rank_id, "CASE kernel synchronized syncRet=", syncRet, " elapsed_us=", RdmaElapsedUs(kernelStart));
     uint32_t devStatus = 0;
     localOk = aclrtMemcpy(&devStatus, sizeof(devStatus), ctx.devBuf, sizeof(devStatus), ACL_MEMCPY_DEVICE_TO_HOST) ==
               ACL_SUCCESS;
-    PrintRoceDeviceStatus("PUT", rank_id, ctx.deviceId, syncRet, devStatus);
+    PrintRdmaDeviceStatus("PUT", rank_id, ctx.deviceId, syncRet, devStatus);
 
     localOk = (aclrtMemcpy(output_host, count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST) ==
                ACL_SUCCESS) &&
@@ -778,7 +627,7 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
     const size_t writeEnd = writeBegin + static_cast<size_t>(elemCount) * static_cast<size_t>(operationCount);
     for (size_t i = 0; i < count && is_ok; ++i) {
         const bool shouldReceive = rank_id != root_rank && i >= writeBegin && i < writeEnd;
-        const T expected = shouldReceive ? RoceInputValue<T>(i, root_rank) : RoceSentinelValue<T>(i);
+        const T expected = shouldReceive ? RdmaInputValue<T>(i, root_rank) : RdmaSentinelValue<T>(i);
         const T value = reinterpret_cast<T*>(output_host)[i];
         if (value != expected) {
             std::cerr << "PUT Rank " << rank_id << " Device " << ctx.deviceId << " SyncRet " << syncRet << " Index "
@@ -795,18 +644,18 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutKernel(
     is_ok = is_ok && allHostFreed;
     const auto cleanupStart = std::chrono::steady_clock::now();
     const bool cleanupOk = ctx.Cleanup();
-    RoceTrace(
+    RdmaTrace(
         caseId, rank_id, "CASE end dataOk=", is_ok, " cleanupOk=", cleanupOk,
-        " cleanup_us=", RoceElapsedUs(cleanupStart), " total_us=", RoceElapsedUs(caseStart));
-    return (is_ok && cleanupOk) ? RoceHns1825TestResult::PASSED : RoceHns1825TestResult::FAILED;
+        " cleanup_us=", RdmaElapsedUs(cleanupStart), " total_us=", RdmaElapsedUs(caseStart));
+    return (is_ok && cleanupOk) ? RdmaTestResult::PASSED : RdmaTestResult::FAILED;
 #endif // PTO_RDMA_SUPPORTED
 }
 
 #ifdef PTO_RDMA_GET_TEST
 template <typename T, size_t count>
-RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
+RdmaTestResult RunGetAsyncRdmaRootGetKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int first_rank_id, int root_rank, uint32_t caseId,
-    int elemOffset, int elemCount, int operationCount, RoceHns1825CompletionMode completionMode)
+    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode)
 {
 #ifndef PTO_RDMA_SUPPORTED
     (void)rank_id;
@@ -821,35 +670,35 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
     (void)operationCount;
     (void)completionMode;
     std::cerr << "[SKIP] built without PTO_RDMA_SUPPORTED" << std::endl;
-    return RoceHns1825TestResult::SKIPPED;
+    return RdmaTestResult::SKIPPED;
 #else
     const auto caseStart = std::chrono::steady_clock::now();
     CommMpiBarrier();
-    RoceTrace(
+    RdmaTrace(
         caseId, rank_id, "CASE begin op=GET elemSize=", sizeof(T), " count=", count, " bytes=", count * sizeof(T),
         " offset=", elemOffset, " elemsPerOp=", elemCount, " operations=", operationCount,
-        " completion=", RoceCompletionModeName(completionMode));
+        " completion=", RdmaCompletionModeName(completionMode));
     const bool localPlanValid = elemOffset >= 0 && elemCount > 0 && operationCount > 0 &&
                                 static_cast<int64_t>(elemOffset) + static_cast<int64_t>(elemCount) * operationCount <=
                                     static_cast<int64_t>(count);
     if (!AllRanksReady(localPlanValid, n_ranks, "GET transfer plan validation")) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const size_t recvElems = static_cast<size_t>(n_ranks) * count;
     const size_t commBytesNeeded = 64 * sizeof(int32_t) + (static_cast<size_t>(n_ranks) + 1) * count * sizeof(T);
-    RoceTestContext ctx;
+    RdmaTestContext ctx;
     const auto setupStart = std::chrono::steady_clock::now();
-    RoceTestContext::SetupResult setup =
+    RdmaTestContext::SetupResult setup =
         ctx.Setup(caseId, rank_id - first_rank_id, n_ranks, n_devices, first_device_id, commBytesNeeded);
-    RoceTrace(
-        caseId, rank_id, "CASE setup result=", static_cast<int>(setup), " elapsed_us=", RoceElapsedUs(setupStart));
-    if (setup != RoceTestContext::SetupResult::READY) {
+    RdmaTrace(
+        caseId, rank_id, "CASE setup result=", static_cast<int>(setup), " elapsed_us=", RdmaElapsedUs(setupStart));
+    if (setup != RdmaTestContext::SetupResult::READY) {
         const bool cleanupOk = ctx.Cleanup();
-        if (!cleanupOk || setup == RoceTestContext::SetupResult::FAILED) {
-            return RoceHns1825TestResult::FAILED;
+        if (!cleanupOk || setup == RdmaTestContext::SetupResult::FAILED) {
+            return RdmaTestResult::FAILED;
         }
-        return RoceHns1825TestResult::SKIPPED;
+        return RdmaTestResult::SKIPPED;
     }
 
     T* inputHost = nullptr;
@@ -870,14 +719,14 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
             (void)aclrtFreeHost(outputHost);
         }
         (void)ctx.Cleanup();
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     for (size_t i = 0; i < count; ++i) {
-        inputHost[i] = RoceInputValue<T>(i, rank_id);
+        inputHost[i] = RdmaInputValue<T>(i, rank_id);
     }
     for (size_t i = 0; i < recvElems; ++i) {
-        outputHost[i] = RoceSentinelValue<T>(i % count);
+        outputHost[i] = RdmaSentinelValue<T>(i % count);
     }
 
     constexpr size_t kDataOffset = 64 * sizeof(int32_t);
@@ -897,23 +746,23 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
         (void)aclrtFreeHost(inputHost);
         (void)aclrtFreeHost(outputHost);
         (void)ctx.Cleanup();
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     CommMpiBarrier();
     const auto kernelStart = std::chrono::steady_clock::now();
-    TGetAsyncHns1825KernelImpl<T, count><<<1, nullptr, ctx.stream> > >(
+    TGetAsyncRdmaKernelImpl<T, count><<<1, nullptr, ctx.stream> > >(
         reinterpret_cast<T*>(ctx.devBuf), n_ranks, rank_id, first_rank_id, root_rank, elemOffset, elemCount,
         operationCount, completionMode, reinterpret_cast<uint8_t*>(ctx.rdmaMgr.GetWorkspaceAddr()), 0);
     const int syncRet = aclrtSynchronizeStream(ctx.stream);
 
     CommMpiBarrier();
-    RoceTrace(
-        caseId, rank_id, "CASE GET kernel synchronized syncRet=", syncRet, " elapsed_us=", RoceElapsedUs(kernelStart));
+    RdmaTrace(
+        caseId, rank_id, "CASE GET kernel synchronized syncRet=", syncRet, " elapsed_us=", RdmaElapsedUs(kernelStart));
     uint32_t devStatus = 0;
     localOk = aclrtMemcpy(&devStatus, sizeof(devStatus), ctx.devBuf, sizeof(devStatus), ACL_MEMCPY_DEVICE_TO_HOST) ==
               ACL_SUCCESS;
-    PrintRoceDeviceStatus("GET", rank_id, ctx.deviceId, syncRet, devStatus);
+    PrintRdmaDeviceStatus("GET", rank_id, ctx.deviceId, syncRet, devStatus);
     localOk =
         (aclrtMemcpy(outputHost, recvElems * sizeof(T), recvBuf, recvElems * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST) ==
          ACL_SUCCESS) &&
@@ -927,7 +776,7 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
         for (size_t i = 0; i < count; ++i) {
             const bool shouldReceive = rank_id == root_rank && sourcePeer != rootPeer && i >= readBegin && i < readEnd;
             const T expected =
-                shouldReceive ? RoceInputValue<T>(i, first_rank_id + sourcePeer) : RoceSentinelValue<T>(i);
+                shouldReceive ? RdmaInputValue<T>(i, first_rank_id + sourcePeer) : RdmaSentinelValue<T>(i);
             const T value = outputHost[static_cast<size_t>(sourcePeer) * count + i];
             if (value != expected) {
                 std::cerr << "GET Rank " << rank_id << " Device " << ctx.deviceId << " SourcePeer " << sourcePeer
@@ -946,10 +795,10 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
     isOk = isOk && allHostFreed;
     const auto cleanupStart = std::chrono::steady_clock::now();
     const bool cleanupOk = ctx.Cleanup();
-    RoceTrace(
+    RdmaTrace(
         caseId, rank_id, "CASE end op=GET dataOk=", isOk, " cleanupOk=", cleanupOk,
-        " cleanup_us=", RoceElapsedUs(cleanupStart), " total_us=", RoceElapsedUs(caseStart));
-    return (isOk && cleanupOk) ? RoceHns1825TestResult::PASSED : RoceHns1825TestResult::FAILED;
+        " cleanup_us=", RdmaElapsedUs(cleanupStart), " total_us=", RdmaElapsedUs(caseStart));
+    return (isOk && cleanupOk) ? RdmaTestResult::PASSED : RdmaTestResult::FAILED;
 #endif // PTO_RDMA_SUPPORTED
 }
 #endif // PTO_RDMA_GET_TEST
@@ -958,17 +807,17 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetKernel(
 // MPI-based multi-rank launch with explicit pass/fail/skip propagation.
 // ============================================================================
 template <typename T, size_t count>
-RoceHns1825TestResult RunPutAsyncHns1825RootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+RdmaTestResult RunPutAsyncRdmaRootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return RunPutAsyncHns1825RootPutPlan<T, count>(
+    return RunPutAsyncRdmaRootPutPlan<T, count>(
         n_ranks, n_devices, first_rank_id, first_device_id, 0, static_cast<int>(count), 1,
-        RoceHns1825CompletionMode::STATUS_WAIT_EACH);
+        RdmaCompletionMode::STATUS_WAIT_EACH);
 }
 
 template <typename T, size_t count>
-RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
+RdmaTestResult RunPutAsyncRdmaRootPutPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completion_mode)
+    int operation_count, RdmaCompletionMode completion_mode)
 {
     const int mpiRank = CommMpiRank();
     const int mpiSize = CommMpiSize();
@@ -977,7 +826,7 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
             std::cerr << "[ERROR] invalid launch configuration: mpiSize=" << mpiSize << " nRanks=" << n_ranks
                       << " nDevices=" << n_devices << std::endl;
         }
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
 #ifndef PTO_RDMA_SUPPORTED
@@ -990,14 +839,14 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
     if (mpiRank == 0) {
         std::cerr << "[SKIP] built without PTO_RDMA_SUPPORTED" << std::endl;
     }
-    return RoceHns1825TestResult::SKIPPED;
+    return RdmaTestResult::SKIPPED;
 #else
     const auto rdmaPreflight = AgreeOnRdmaPreflight(n_ranks);
     if (rdmaPreflight == pto::comm::rdma::WorkspaceInitResult::DISABLED) {
-        return RoceHns1825TestResult::SKIPPED;
+        return RdmaTestResult::SKIPPED;
     }
     if (rdmaPreflight != pto::comm::rdma::WorkspaceInitResult::READY) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const int deviceCount = GetAvailableDeviceCount();
@@ -1008,7 +857,7 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
             std::cerr << "[SKIP] Need " << (n_devices + first_device_id) << " NPU(s), have " << deviceCount
                       << std::endl;
         }
-        return anyDeviceMissing ? RoceHns1825TestResult::SKIPPED : RoceHns1825TestResult::FAILED;
+        return anyDeviceMissing ? RdmaTestResult::SKIPPED : RdmaTestResult::FAILED;
     }
 
     constexpr int kAclRepeatInit = 100002;
@@ -1018,13 +867,13 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
         std::cerr << "[ERROR] aclInit failed: " << static_cast<int>(aclRet) << std::endl;
     }
     if (!AllRanksReady(aclReady, n_ranks, "ACL initialization")) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const int rankId = first_rank_id + mpiRank;
     const int rootRank = first_rank_id;
-    const uint32_t caseId = ++gRoceCaseSequence;
-    return RunPutAsyncHns1825RootPutKernel<T, count>(
+    const uint32_t caseId = ++gRdmaCaseSequence;
+    return RunPutAsyncRdmaRootPutKernel<T, count>(
         rankId, n_ranks, n_devices, first_device_id, first_rank_id, rootRank, caseId, elem_offset, elem_count,
         operation_count, completion_mode);
 #endif
@@ -1032,9 +881,9 @@ RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan(
 
 #ifdef PTO_RDMA_GET_TEST
 template <typename T, size_t count>
-RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
+RdmaTestResult RunGetAsyncRdmaRootGetPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RoceHns1825CompletionMode completion_mode)
+    int operation_count, RdmaCompletionMode completion_mode)
 {
     const int mpiRank = CommMpiRank();
     const int mpiSize = CommMpiSize();
@@ -1043,7 +892,7 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
             std::cerr << "[ERROR] invalid GET launch configuration: mpiSize=" << mpiSize << " nRanks=" << n_ranks
                       << " nDevices=" << n_devices << std::endl;
         }
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
 #ifndef PTO_RDMA_SUPPORTED
@@ -1056,14 +905,14 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
     if (mpiRank == 0) {
         std::cerr << "[SKIP] built without PTO_RDMA_SUPPORTED" << std::endl;
     }
-    return RoceHns1825TestResult::SKIPPED;
+    return RdmaTestResult::SKIPPED;
 #else
     const auto rdmaPreflight = AgreeOnRdmaPreflight(n_ranks);
     if (rdmaPreflight == pto::comm::rdma::WorkspaceInitResult::DISABLED) {
-        return RoceHns1825TestResult::SKIPPED;
+        return RdmaTestResult::SKIPPED;
     }
     if (rdmaPreflight != pto::comm::rdma::WorkspaceInitResult::READY) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const int deviceCount = GetAvailableDeviceCount();
@@ -1074,7 +923,7 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
             std::cerr << "[SKIP] GET needs " << (n_devices + first_device_id) << " NPU(s), have " << deviceCount
                       << std::endl;
         }
-        return anyDeviceMissing ? RoceHns1825TestResult::SKIPPED : RoceHns1825TestResult::FAILED;
+        return anyDeviceMissing ? RdmaTestResult::SKIPPED : RdmaTestResult::FAILED;
     }
 
     constexpr int kAclRepeatInit = 100002;
@@ -1084,13 +933,13 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
         std::cerr << "[ERROR] aclInit failed before GET: " << static_cast<int>(aclRet) << std::endl;
     }
     if (!AllRanksReady(aclReady, n_ranks, "GET ACL initialization")) {
-        return RoceHns1825TestResult::FAILED;
+        return RdmaTestResult::FAILED;
     }
 
     const int rankId = first_rank_id + mpiRank;
     const int rootRank = first_rank_id;
-    const uint32_t caseId = ++gRoceCaseSequence;
-    return RunGetAsyncHns1825RootGetKernel<T, count>(
+    const uint32_t caseId = ++gRdmaCaseSequence;
+    return RunGetAsyncRdmaRootGetKernel<T, count>(
         rankId, n_ranks, n_devices, first_device_id, first_rank_id, rootRank, caseId, elem_offset, elem_count,
         operation_count, completion_mode);
 #endif
@@ -1098,37 +947,29 @@ RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan(
 #endif // PTO_RDMA_GET_TEST
 
 // Explicit instantiations
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<float, 256>(int, int, int, int);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<int32_t, 4096>(int, int, int, int);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<uint8_t, 512>(int, int, int, int);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<uint8_t, 64>(int, int, int, int);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<float, 64>(int, int, int, int);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPut<float, 524288>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<float, 256>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<int32_t, 4096>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<uint8_t, 512>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<uint8_t, 64>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<float, 64>(int, int, int, int);
+template RdmaTestResult RunPutAsyncRdmaRootPut<float, 524288>(int, int, int, int);
 
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<float, 256>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<int32_t, 4096>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<uint8_t, 512>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<uint8_t, 64>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<float, 64>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunPutAsyncHns1825RootPutPlan<float, 524288>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 256>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<int32_t, 4096>(
+    int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 512>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 524288>(
+    int, int, int, int, int, int, int, RdmaCompletionMode);
 
 #ifdef PTO_RDMA_GET_TEST
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<float, 256>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<int32_t, 4096>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<uint8_t, 512>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<uint8_t, 64>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<float, 64>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
-template RoceHns1825TestResult RunGetAsyncHns1825RootGetPlan<float, 524288>(
-    int, int, int, int, int, int, int, RoceHns1825CompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<float, 256>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<int32_t, 4096>(
+    int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<uint8_t, 512>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<uint8_t, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<float, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunGetAsyncRdmaRootGetPlan<float, 524288>(
+    int, int, int, int, int, int, int, RdmaCompletionMode);
 #endif // PTO_RDMA_GET_TEST

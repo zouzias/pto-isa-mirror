@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/comm/async/sdma/sdma_types.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async_common/async_scratch.hpp"
 #include "pto/comm/async_common/async_types.hpp"
 #include "pto/pto-inst.hpp"
 #include <cstddef>
@@ -77,17 +78,13 @@ PTO_INTERNAL bool MakeSdmaTmpLocal(__ubuf__ uint8_t* addr, uint32_t size, UbTmpB
 
 PTO_INTERNAL bool IsValidTmpBuffer(const UbTmpBuf& tmpBuf)
 {
-    return tmpBuf.addr != nullptr && tmpBuf.size >= sizeof(uint64_t);
+    return ::pto::comm::detail::IsValidAsyncTmpBuffer(tmpBuf);
 }
 
 template <typename ScratchTile>
 PTO_INTERNAL bool MakeTmpBufferFromTile(ScratchTile& scratchTile, UbTmpBuf& tmpBuf)
 {
-    static_assert(is_tile_data_v<ScratchTile>, "scratchTile must be a pto::Tile type");
-    static_assert(ScratchTile::Loc == TileType::Vec, "scratchTile must be in Vec(UB) memory");
-    tmpBuf.addr = reinterpret_cast<__ubuf__ uint8_t*>(scratchTile.data());
-    tmpBuf.size = static_cast<uint32_t>(ScratchTile::Numel * sizeof(typename ScratchTile::DType));
-    return IsValidTmpBuffer(tmpBuf);
+    return ::pto::comm::detail::MakeAsyncTmpBufferFromTile(scratchTile, tmpBuf);
 }
 
 template <typename T>
