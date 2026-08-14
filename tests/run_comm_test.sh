@@ -22,9 +22,8 @@ Options:
   -v VERSION     SoC version: a3 (Ascend910B, default) or a5 (Ascend910_9599).
   -t TESTCASE    Run only the specified testcase (e.g. tput, treduce).
                  Can be specified multiple times. Default: run all.
-  -a             Include async testcases (e.g. tput_async, tget_async).
-                 Async tests are excluded by default as they require a
-                 newer CANN version with SDMA opapi support.
+  -a             Include async testcases (including engine-specific
+                 variants). Async tests are excluded by default.
   -d             Enable debug mode (extra logging at each sync point).
   -h             Show this help message.
 
@@ -106,7 +105,7 @@ if [[ ! -d "${ST_DIR}" ]]; then
   exit 1
 fi
 
-is_async_test() { [[ "$1" == *_async ]]; }
+is_async_test() { [[ "$1" == *"_async"* ]]; }
 
 declare -a tests=()
 if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then

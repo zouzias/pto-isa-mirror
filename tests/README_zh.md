@@ -109,6 +109,8 @@ mpirun -n 2 echo "MPI OK"
 
 异步指令依赖 CANN 9.0 引入的 SDMA opapi 接口（如 `aclnnShmemSdmaStarsQuery`），在低版本 CANN 上会因符号缺失而运行失败。因此 `run_comm_test.sh` **默认不包含异步指令测试**，需通过 `-a` 参数显式启用。
 
+名称中含 `_async` 的引擎专用测试遵循同一默认排除规则，并由 `-a` 一并启用。
+
 ### 快速开始
 
 ```bash
@@ -148,7 +150,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | 可用 NPU 数量：2、4 或 8 | 8 |
 | `-v` | SoC 版本：`a3`（Ascend910B）或 `a5`（Ascend950） | a3 |
 | `-t` | 指定测试用例（可多次使用），如 `tput`、`treduce` | 全部 |
-| `-a` | 包含异步指令测试（`*_async`），需 CANN 9.0+ | 关闭 |
+| `-a` | 包含名称中含 `_async` 的异步测试，包括引擎专用测试 | 关闭 |
 | `-d` | 开启调试模式，打印详细初始化与同步日志 | 关闭 |
 
 ### 运行机制

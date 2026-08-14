@@ -110,6 +110,8 @@ Communication tests are split into **sync instructions** (e.g. `tput`, `tget`) a
 
 Async instructions depend on the SDMA opapi interface (e.g. `aclnnShmemSdmaStarsQuery`) introduced in CANN 9.0. They will fail on lower CANN versions due to missing symbols. Therefore, `run_comm_test.sh` **excludes async tests by default** — use the `-a` flag to enable them.
 
+Engine-specific test names containing `_async` follow the same default exclusion and are included by `-a`.
+
 ### Quick Start
 
 ```bash
@@ -149,7 +151,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | Number of available NPUs: 2, 4, or 8 | 8 |
 | `-v` | SoC version: `a3` (Ascend910B) or `a5` (Ascend950) | a3 |
 | `-t` | Run specific testcase(s) (repeatable), e.g. `tput`, `treduce` | all |
-| `-a` | Include async instruction tests (`*_async`), requires CANN 9.0+ | off |
+| `-a` | Include async instruction tests (names containing `_async`), including engine-specific variants | off |
 | `-d` | Enable debug mode with verbose init/sync logging | off |
 
 ### How It Works
