@@ -19,7 +19,8 @@ using namespace pto;
 template <typename T, int N, int D, int C1, int H, int W, int C0>
 __global__ AICORE void runTStoreConv_NDC1HWC0(__gm__ T __out__* out, __gm__ T __in__* src)
 {
-    static_assert(C0 == 32 / sizeof(T));
+    constexpr size_t kC0 = std::is_same_v<T, int32_t> ? 16 : 32 / sizeof(T);
+    static_assert(C0 == kC0);
 
     // Define the dimensions for readability
     constexpr int64_t W_dim = W;

@@ -206,6 +206,100 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(
     out = dstGlobal.data();
 }
 
+template <
+    int atomicType, typename accDataType, typename dstDataType, typename srcDataType, int dstN, int dstD, int dstC1,
+    int dstH, int dstW, int validM, int validN, int validK, int reluMode = 0>
+__global__ AICORE void TStoreAcc2gmScalarNz2NDC1HWC0(
+    __gm__ dstDataType* out, __gm__ srcDataType* src0, __gm__ srcDataType* src1, float scalarQuant)
+{
+    constexpr int dstC0 = std::is_same_v<dstDataType, int32_t> ? 16 : (C0_SIZE_BYTE / sizeof(dstDataType));
+    constexpr int gStride[5] = {
+        dstD * dstC1 * dstH * dstW * dstC0, dstC1 * dstH * dstW * dstC0, dstH * dstW * dstC0, dstW * dstC0, dstC0};
+    constexpr int M = (validM + BLOCK_CUBE_M_N - 1) / BLOCK_CUBE_M_N * BLOCK_CUBE_M_N;
+    constexpr int N = (validN + BLOCK_CUBE_M_N - 1) / BLOCK_CUBE_M_N * BLOCK_CUBE_M_N;
+    constexpr int K = (validK + BLOCK_CUBE_M_N - 1) / BLOCK_CUBE_M_N * BLOCK_CUBE_M_N;
+    constexpr int Rows = M;
+    constexpr int Cols = N;
+
+    constexpr int validRow = dstN * dstH * dstW;
+    constexpr int validCol = dstD * dstC1 * dstC0;
+    static_assert(validM == validRow, "NDC1HWC0 requires validM == N * H * W.");
+    static_assert(validN == validCol, "NDC1HWC0 requires validN == D * C1 * C0.");
+
+    using GlobalDataSrc0 = GlobalTensor<
+        srcDataType, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<
+        srcDataType, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+
+    using DynShapeDim5 = pto::Shape<dstN, dstD, dstC1, dstH, dstW>;
+    using DynStridDim5 = pto::Stride<gStride[0], gStride[1], gStride[2], gStride[3], gStride[4]>;
+    using GlobalDataOut = GlobalTensor<dstDataType, DynShapeDim5, DynStridDim5, Layout::NDC1HWC0>;
+
+    GlobalDataSrc0 src0Global(src0);
+    GlobalDataSrc1 src1Global(src1);
+    GlobalDataOut dstGlobal(out);
+
+    using TileMatAData =
+        Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData =
+        Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<srcDataType, M, K, validM, validK>;
+    using RightTile = TileRight<srcDataType, K, N, validK, validN>;
+    using AccTile = TileAcc<accDataType, Rows, Cols, -1, -1>;
+
+    uint32_t aMatSize = M * K * sizeof(srcDataType);
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, aMatSize);
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile(validRow, validCol);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
+
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+    TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
+    uint64_t preQuantScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t*>(&scalarQuant));
+    if (sizeof(dstDataType) == 1) {
+        constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
+        preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
+    }
+    constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    if constexpr (reluMode == 0) {
+        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar);
+    } else if constexpr (reluMode == 1) {
+        constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
+        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, preQuantScalar);
+    }
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
+    out = dstGlobal.data();
+}
+
 template <int tilingKey>
 void LaunchTStoreAcc2gmNz2nd(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
 {
@@ -275,6 +369,20 @@ void LaunchTStoreAcc2gmScalarNz2nd(uint8_t* out, uint8_t* src0, uint8_t* src1, v
     }
 }
 
+template <int tilingKey>
+void LaunchTStoreAcc2gmScalarNz2NDC1HWC0(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream, float scalarQuant)
+{
+    if constexpr (tilingKey == 1) {
+        TStoreAcc2gmScalarNz2NDC1HWC0<0, float, float, float, 1, 2, 4, 16, 8, 128, 64, 31>(
+            reinterpret_cast<float*>(out), reinterpret_cast<float*>(src0), reinterpret_cast<float*>(src1),
+            scalarQuant);
+    } else if constexpr (tilingKey == 2) {
+        TStoreAcc2gmScalarNz2NDC1HWC0<0, int32_t, int32_t, int8_t, 1, 2, 4, 16, 8, 128, 128, 31>(
+            reinterpret_cast<int32_t*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
+            scalarQuant);
+    }
+}
+
 template void LaunchTStoreAcc2gmNz2nd<0>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTStoreAcc2gmNz2nd<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTStoreAcc2gmNz2nd<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
@@ -329,3 +437,8 @@ template void LaunchTStoreAcc2gmNz2nd<51>(uint8_t* out, uint8_t* src0, uint8_t* 
 template void LaunchTStoreAcc2gmNz2nd<52>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTStoreAcc2gmNz2nd<53>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTStoreAcc2gmNz2nd<54>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+
+template void LaunchTStoreAcc2gmScalarNz2NDC1HWC0<1>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream, float scalarQuant);
+template void LaunchTStoreAcc2gmScalarNz2NDC1HWC0<2>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream, float scalarQuant);
