@@ -116,33 +116,32 @@ The two-destination `TEXTRACT` overload extracts two independent ND sub-windows 
     - A5 supports plain NZ (default) and the NZ+1 bank-conflict optimization (`CompactMode::RowPlusOne`).
     - A2A3 supports plain NZ only.
     
-- Index alignment:
-    - A5 handles a `c0`-unaligned `indexCol` (sub-`c0` column origin) via 
-    an element-exact unaligned load/store path; `c0`-aligned windows take 
+- Index alignment (a window's source base is `srcStart = src + indexRow*rowStride + indexCol`):
+    - A5 (SIMD) handles a `c0`-unaligned `indexCol` (sub-`c0` column origin)
+    via an element-exact unaligned load/store path; `c0`-aligned windows take
     the faster block path.
-    - A2A3 handles a `c0`-unaligned `indexCol` with the same `vcopy` 
-    (16-bit-reinterpret) path: the source window is contiguous, so blocks 
-    are read from `srcStart + cb*c0` for any `indexCol`. Only `1×1` windows 
-    use a scalar single-element copy.
-- A2A3 note: `vcopy` reinterprets data at 16-bit granularity (its smallest 
-element width. there is no 8-bit `vcopy`, and `vlds`/`vsts` are not 
-available on `dav-c220-vec`). For 2-/4-byte types every window maps 
-directly. For 1-byte `int8`, windows whose byte offset and byte count are 
-already 2-byte aligned (even `indexCol` **and** even `validCol`) use 
-`vcopy`; windows with an **odd** `indexCol` or **odd** `validCol` are 
-handled by a fully vector widen path — `vconv_s82f16` (int8→half, 
-byte-granular read) into a scratch, the ND→NZ reshape in `half`, then 
-`vconv_f162s8` (half→int8, byte-granular write) into the NZ destination. 
-This is for `int8` (all values round-trip through `half`) and uses no 
-scalar fallback
+    - A2A3 (vec-core) vector engines require the operand base to be 32-byte
+    aligned, and `dav-c220-vec` has no unaligned vector load (`vlds`/`vsts`
+    are unavailable). A window therefore takes the vector path only when its
+    source base is 32-byte aligned, i.e. `indexCol * sizeof(T)` is a multiple
+    of 32. Windows whose `indexCol` does not satisfy this (and `1×1` windows)
+    use an element-wise scalar copy, which has no alignment constraint.
+- A2A3 vector paths (32-byte-aligned source base): `vcopy` reinterprets data
+at 16-bit granularity (its smallest element width; there is no 8-bit
+`vcopy`). 2-/4-byte types and `int8` with an even `validCol` map directly
+through `vcopy`. `int8` with an **odd** `validCol` (odd byte count) uses a
+fully vector widen path — `vconv_s82f16` (int8→half) into a scratch, the
+ND→NZ reshape in `half`, then `vconv_f162s8` (half→int8) into the NZ
+destination (all `int8` values round-trip losslessly through `half`).
 
 | Arch | Mode | Implementation |
 |------|------|----------------|
 | A5 / A2A3 | `1×1` | scalar copy |
 | A5 (SIMD) | `c0`-aligned `indexCol` | `vlds` + `vsstb` |
 | A5 (SIMD) | `c0`-unaligned `indexCol` | `vldas` + `vldus` + `vsts` |
-| A2A3 (vec-core) | 2-byte-aligned offset and width | `vcopy` with 16-bit reinterpretation |
-| A2A3 (vec-core) | odd `int8` offset or width | `vconv_s82f16` + `vconv_f162s8` widen path |
+| A2A3 (vec-core) | unaligned source base not 32-byte aligned (`indexCol*sizeof(T) % 32 != 0`) | scalar copy |
+| A2A3 (vec-core) | aligned base, 2-/4-byte or even-`validCol` `int8` | `vcopy` with 16-bit reinterpretation |
+| A2A3 (vec-core) | aligned base, odd-`validCol` `int8` | `vconv_s82f16` + `vconv_f162s8` widen path |
 
 ## Examples
 
