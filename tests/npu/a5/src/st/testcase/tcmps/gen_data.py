@@ -12,7 +12,10 @@
 
 import os
 import numpy as np
-from ml_dtypes import bfloat16
+try:
+    from ml_dtypes import bfloat16
+except ModuleNotFoundError:
+    bfloat16 = np.float16
 np.random.seed(19)
 
 
@@ -125,6 +128,8 @@ if __name__ == "__main__":
         TcmpsParams(bfloat16, 77, 80, 32, 32, "LE"),
         *[TcmpsParams(dtype, 4, 64, 4, 64, mode)
           for dtype in (np.int64, np.uint64) for mode in ("EQ", "NE", "LT", "GT", "GE", "LE")],
+        TcmpsParams(np.int64, 1, 16364, 1, 16364, "EQ"),
+        TcmpsParams(np.uint64, 1, 16364, 1, 16364, "EQ"),
     ]
 
     for i, param in enumerate(case_params_list):
