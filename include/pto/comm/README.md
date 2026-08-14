@@ -35,11 +35,11 @@ comm/
 ├── a5/                          # A5 (Ascend 950) architecture implementations
 │   ├── T*.hpp                   # Sync instructions (include a2a3/ counterparts)
 │   └── async/
-│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA)
-│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA + URMA)
+│       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA + RDMA)
+│       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA + URMA + RDMA)
 │
 └── async_common/                # Common async implementations (shared by a2a3/a5)
-    ├── async_types.hpp          # SDMA/URMA session and context types
+    ├── async_types.hpp          # SDMA/URMA/RDMA session and context types
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test, BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # Common TPUT_ASYNC detail helpers + SDMA impl
     └── TGetAsyncCommonDetail.hpp # Common TGET_ASYNC detail helpers + SDMA impl
@@ -66,7 +66,7 @@ comm/
 | Category | Instructions | Description |
 |---|---|---|
 | Point-to-Point (sync) | `TPUT`, `TGET` | Remote write / read through UB staging tile. Supports single-buffer and ping-pong double-buffering modes. |
-| Point-to-Point (async) | `TPUT_ASYNC`, `TGET_ASYNC` | GM-to-GM DMA via SDMA or URMA engine. Returns `AsyncEvent` for later Wait/Test. |
+| Point-to-Point (async) | `TPUT_ASYNC`, `TGET_ASYNC` | GM-to-GM DMA via SDMA, URMA, or RDMA engine. Returns `AsyncEvent` for later Wait/Test. |
 | Signal Synchronization | `TNOTIFY`, `TWAIT`, `TTEST` | Flag-based cross-NPU synchronization. Signals are `int32_t` scalars or 2D grids. |
 | Collective | `TGATHER`, `TSCATTER`, `TBROADCAST`, `TREDUCE` | Multi-rank operations via `ParallelGroup`. Root-initiated; support chunked 2D sliding and ping-pong. |
 

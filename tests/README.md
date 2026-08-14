@@ -149,7 +149,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | Number of available NPUs: 2, 4, or 8 | 8 |
 | `-v` | SoC version: `a3` (Ascend910B) or `a5` (Ascend950) | a3 |
 | `-t` | Run specific testcase(s) (repeatable), e.g. `tput`, `treduce` | all |
-| `-a` | Include async instruction tests (`*_async`), requires CANN 9.0+ | off |
+| `-a` | Include async instruction tests (names containing `_async`), requires CANN 9.0+ | off |
 | `-d` | Enable debug mode with verbose init/sync logging | off |
 
 ### How It Works

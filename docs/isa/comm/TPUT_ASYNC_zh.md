@@ -13,6 +13,7 @@
 - `engine`：
     - `DmaEngine::SDMA`（默认）
     - `DmaEngine::URMA`（Ascend 950PR/Ascend 950DT，仅NPU_ARCH 3510）
+    - `DmaEngine::RDMA`（Ascend 950PR/Ascend 950DT，仅NPU_ARCH 3510；当前网卡平台仅支持 HNS1825）
 
 > **注意（SDMA路径）**
 > `TPUT_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维tensor**。
@@ -79,6 +80,39 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 
 URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作。
 
+### RDMA构建（仅NPU_ARCH 3510）
+
+RDMA面向经典跨机场景组网，当前网卡平台仅支持 HNS1825。
+
+```cpp
+#ifdef PTO_RDMA_SUPPORTED
+template <DmaEngine engine, typename ScratchTile>
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
+                                    __gm__ uint8_t *workspace,
+                                    uint32_t myPe,
+                                    AsyncSession &session,
+                                    uint32_t syncId = 0);
+#endif
+```
+
+| 参数 | 说明 |
+|---|---|
+| `scratchTile` | 用于 WQE/CQE 控制数据的 UB/Vec tile，至少 64 字节。|
+| `workspace` | Host侧 RDMA 初始化流程返回的 GM 指针。|
+| `myPe` | 本地 rank id，用于选择已注册的本地内存区域。|
+| `session` | 输出的 `AsyncSession` 对象。|
+| `syncId` | MTE/Scalar 同步事件 ID，取值范围为 0-7。|
+
+构建一次不绑定 peer 的Session，再通过显式 `peer` 参数选择目标rank：
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, myPe, session, syncId)) {
+    auto event = comm::TPUT_ASYNC<comm::DmaEngine::RDMA>(dstG, srcG, session, peer);
+    (void)event.Wait(session);
+}
+```
+
 ## 约束
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
@@ -90,6 +124,9 @@ URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直�
 - URMA仅在NPU_ARCH 3510（Ascend 950PR/Ascend 950DT）上可用
 - URMA要求CANN Toolkit **>= 9.1.0**
 - 传给 `UrmaWorkspaceManager::Init()` 的对称数据缓冲区必须由大页内存支撑（使用 `ACL_MEM_MALLOC_HUGE_ONLY` 分配）。底层MR注册要求大页背景；`ACL_MEM_MALLOC_HUGE_FIRST` 在小尺寸分配时可能静默回退到4KB小页，导致注册失败
+- RDMA仅在Ascend 950PR/Ascend 950DT（NPU_ARCH 3510）上可用，当前网卡平台仅支持 HNS1825
+- RDMA源、目的tensor必须是扁平连续的逻辑一维，且本地和远端完整传输范围必须位于Host初始化阶段注册的内存区域内
+- 单次RDMA传输不能超过 `0x7fffffff` 字节
 
 若不满足一维连续要求，当前实现返回无效async event（`handle == 0`）。
 
@@ -118,10 +155,13 @@ URMA不需要 `scratchTile`——轮询通过 `ld_dev`/`st_dev` 硬件原语直�
 
 - **SDMA**：每次`TPUT_ASYNC`都会提交数据传输SQE和用于标记本次操作完成的flag SQE。对其返回的Event调用`Wait`或`Test`时，通过轮询对应flag判断该次`TPUT_ASYNC`是否完成；完成后也能保证同一Session中此前提交的所有SDMA操作均已完成。
 - **URMA**：`TPUT_ASYNC` 立即提交RDMA WRITE WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
+- **RDMA**：`TPUT_ASYNC` 向 `peer` 选择的队列提交RDMA WRITE WQE；不同peer/queue分别跟踪完成状态。
 
 - `event.Wait(session)` —阻塞，直到**自上次Wait以来所有已发出的异步操作**全部完成
 
 这意味着多次 `TPUT_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有pending操作完成（类似shmem的quiet语义）。
+
+RDMA操作涉及不同peer时，必须分别等待每个peer的最后一个Event。
 
 同一Session最多可有64个未完成操作，超过后提交可能产生背压。
 

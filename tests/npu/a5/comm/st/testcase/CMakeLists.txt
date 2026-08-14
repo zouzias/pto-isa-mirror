@@ -9,7 +9,11 @@
 # --------------------------------------------------------------------------------
 
 function(pto_comm_st NAME)
-    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    set(_PTO_COMM_KERNEL_SOURCE "${NAME}_kernel.cpp")
+    if(ARGC GREATER 1)
+        set(_PTO_COMM_KERNEL_SOURCE "${ARGV1}")
+    endif()
+    add_library(${NAME}_kernel SHARED ${_PTO_COMM_KERNEL_SOURCE})
 
     # Align comm ST kernels with the A5 vec ST configuration by default.
     # Allow external override when a different arch or memory model is needed.
@@ -253,7 +257,9 @@ tget
 tget_async
 tput_async
 tput_async_urma
+tput_async_rdma
 tget_async_urma
+tget_async_rdma
 # Signal-Based Synchronization
 tnotify
 twait
