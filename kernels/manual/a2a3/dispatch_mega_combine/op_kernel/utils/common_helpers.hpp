@@ -62,7 +62,7 @@ AICORE inline void V5DcciGmRangeNoFence(__gm__ void* ptr, uint64_t bytes)
     const uint64_t end = (reinterpret_cast<uint64_t>(ptr) + bytes + cacheLineBytes - 1U) & ~(cacheLineBytes - 1U);
     for (uint64_t addr = start; addr < end; addr += cacheLineBytes) {
         __asm__ __volatile__("");
-        dcci(reinterpret_cast<__gm__ void*>(addr), cache_line_t::SINGLE_CACHE_LINE);
+        dcci(reinterpret_cast<__gm__ void*>(addr), SINGLE_CACHE_LINE);
         __asm__ __volatile__("");
     }
 }
@@ -76,23 +76,6 @@ AICORE inline void V5DcciGmRange(__gm__ void* ptr, uint64_t bytes)
 AICORE inline uint32_t MegaMoeActiveCopyCores(uint32_t rankSize, uint32_t coreNum)
 {
     return rankSize < coreNum ? rankSize : coreNum;
-}
-
-AICORE inline uint16_t MegaMoeD2CHardFlagId(uint32_t logicalGroupEventIdx)
-{
-    return static_cast<uint16_t>(MEGA_MOE_D2C_HARD_FLAG_BASE + logicalGroupEventIdx / CROSS_CORE_FLAG_MAX_SET_COUNT);
-}
-
-AICORE inline uint16_t MegaMoeC2VHardFlagId(uint32_t segmentIdx)
-{
-    (void)segmentIdx;
-    return MEGA_MOE_C2V_HARD_FLAG_BASE;
-}
-
-AICORE inline uint16_t MegaMoeV2CHardFlagId(uint32_t segmentIdx)
-{
-    (void)segmentIdx;
-    return MEGA_MOE_V2C_HARD_FLAG_BASE;
 }
 
 #endif // COMMON_HELPERS_HPP

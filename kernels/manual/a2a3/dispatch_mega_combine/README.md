@@ -48,14 +48,10 @@ kernels/manual/a2a3/dispatch_mega_combine/
 │   ├── combine.h                   # Remote writeback of GMM2 output to offsetD
 │   ├── unpermute.h                 # TopK weighted reduction and original token order restoration
 │   └── utils/                      # PTO vector, sync, HCCL window, and GMM pipeline helpers
-├── overview.md                     # Design overview, performance comparison, and stage pseudocode
-├── front_reorder.md                # Front reorder / sort / count-as-flag details
-├── dispatch.md                     # Dispatch contract and data movement strategy
-├── gmm1.md / gmm2.md               # GMM tile scheduling, swizzle, sync, and pipeline details
-├── swiglu.md                       # SwiGLU segmentation and quantization strategy
-├── combine.md                      # Combine large/small paths and remote writeback protocol
-├── unpermute.md                    # Unpermute restoration and accumulation strategy
-└── glden.md                        # Python batch golden rewrite design
+├── overview.md                     # Design overview and performance comparison
+├── overview_v1.md                  # Fixed-group scheduling and overlap design
+├── pseudocode.md                   # Current seven-stage data flow and pseudocode
+└── README_zh.md                    # Chinese README
 ```
 
 ## Operator Description
@@ -97,12 +93,12 @@ for each rank, token:
 
 ## Optimization Notes
 
-- **Expert-level overlap**: AIC-side GMM1/GMM2 and AIV-side Dispatch/SwiGLU/Combine progress by local expert group, connected by hard flags.
+- **Expert-level overlap**: AIC-side GMM1/GMM2 and AIV-side Dispatch/SwiGLU/Combine progress by local expert, connected by per-expert arrival/ready notifications.
 - **Three front reorder paths**: FullLoad, OneCore, and MultiCore are selected by UB working-set size. Small-route cases keep sort/count/inverse/quant work in UB as much as possible.
 - **Count-as-flag**: FrontReorder publishes count rows with a marker value so peer ranks can wait on data arrival directly instead of adding a full count-exchange barrier.
 - **PTO tile GMM optimization**: GMM1/GMM2 use output-tile swizzle, L1-to-L0 multi-level reuse, double buffering, and fixpipe quant/cast.
-- **Segmented SwiGLU overlap**: SwiGLU is split into segments so the first segment can finish before GMM2 starts.
-- **Dual combine paths**: large-token cases use full-row writeback, while small-token cases split GMM2 tiles into subtiles to improve AIV occupancy.
+- **Dynamic AIC grouping**: GMM1 starts with all 24 AICs and then releases 8; GMM2 starts with 8 AICs and expands to 24 after GMM1 completes.
+- **Two-stage Unpermute**: 32 AIVs first process tokens whose routes are ready, then all 48 AIVs process the remaining tokens after Combine completes.
 
 ## Tiling Parameters
 
@@ -115,11 +111,11 @@ for each rank, token:
 | `expertPerRank` | Number of local experts per rank |
 | `worldSize` | MPI/HCCL rank count |
 | `maxOutputSize` | Per-rank routed-row workspace limit; typical performance cases pass a fixed workspace limit explicitly |
-| `aicNum` | Logical AIC count; default script value is 24 |
-| `aivNum` | Logical AIV count; default script value is 48 |
+| `aicNum` | Fixed physical AIC count for the production path: 24 |
+| `aivNum` | Fixed physical AIV count for the production path: 48 |
 | `GMM baseM/baseN` | Main output tile shape is `128 x 256` |
 | `Front FullLoad` | Selected by `routeElems`, `K`, `expertNum`, and the 192 KiB UB budget |
-| `Combine small path` | Preferred when `problemM * topK <= 4096` |
+| Fixed groups | GMM1/GMM2 use `16 + 8` AICs; Dispatch/SwiGLU/Combine have `16/16/8` AIV slots, with SwiGLU activating 8 or 16 by M |
 
 ## Supported Cases
 
@@ -152,19 +148,19 @@ aivNum=48
 │ FrontReorder (AIV)                                                          │
 │   sort expertId routes -> offsetA + count/prefix metadata                   │
 └──────────────────────────────┬───────────────────────────────────────────────┘
-                               │ D2C ready / count-as-flag
+                               │ count metadata ready / count-as-flag
 ┌──────────────────────────────▼───────────────────────────────────────────────┐
 │ Expert-level overlapped pipeline                                             │
 │                                                                              │
-│ AIV: Dispatch(group i) -> SwiGLU(segment/group i) -> Combine(group i)         │
-│ AIC:                    GMM1(group i)      -> GMM2(group i)                  │
+│ AIV: Dispatch(expert i) -> SwiGLU(expert i) -> Combine(expert i)             │
+│ AIC: GMM1 starts 24 -> 16; released AICs join GMM2, which grows 8 -> 24      │
 │                                                                              │
-│ Stages communicate through hard flags: D2C, C2V, V2C, G2C/Combine ready       │
+│ Stages communicate through per-expert GM arrival/ready progress               │
 └──────────────────────────────┬───────────────────────────────────────────────┘
-                               │ final boundary
+                               │ per-rank expert progress / DataReady
 ┌──────────────────────────────▼───────────────────────────────────────────────┐
-│ Unpermute (AIV)                                                              │
-│   offsetD + probs + expandedRowIdx -> TopK weighted reduce -> out[M, K]       │
+│ Two-stage Unpermute (AIV)                                                    │
+│   32 AIVs process ready tokens -> 48 AIVs process remaining tokens -> out    │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -211,7 +207,7 @@ srcRowBase = preSumBeforeRank[srcRank, localExpert]
 dstRowBase = groupBase + (srcRank == 0 ? 0 : cumsumMM[srcRank - 1, localExpert])
 ```
 
-After each local expert group is gathered, Dispatch sets the GMM1-ready flag for that group.
+After each local expert is gathered, Dispatch coordinates its active workers and publishes GMM1 ready progress.
 
 ## GMM1 / SwiGLU / GMM2 Stages
 
@@ -226,7 +222,7 @@ gmA[int8] x weight1[int8]
   -> gmC[half]
 ```
 
-Each local expert is split into `128 x 256` output tiles. Linear tile ids are mapped to `(blockM, blockN)` with swizzle to improve L1 reuse of the B-side weights.
+Each local expert is split into `128 x 256` output tiles. Linear tile ids are mapped to `(blockM, blockN)` with swizzle to improve L1 reuse of the B-side weights. The first two experts use all 24 AICs; subsequent experts use the 16-AIC GMM1 group.
 
 ### SwiGLU
 
@@ -239,7 +235,7 @@ gmC * perTokenScale1
   -> gmPermutedToken[int8] + perTokenScale2[float]
 ```
 
-SwiGLU is split into segments. Core0 writes segment metadata and the other AIVs split rows from that metadata.
+SwiGLU advances one expert at a time and splits its rows across the active fixed group. After all active AIVs finish an expert, its coordinator publishes GMM2 ready progress. M=16 uses 8 AIVs; the other listed cases use 16.
 
 ### GMM2
 
@@ -252,7 +248,7 @@ gmPermutedToken[int8] x weight2[int8]
   -> gmm2Output[half]
 ```
 
-After GMM2 finishes a local expert group, it sets the combine-ready flag for that group.
+GMM2 starts on the 8-AIC group. Once GMM1 is done, its released 16 AICs join GMM2 at an expert boundary; each completed expert publishes arrival progress for Combine.
 
 ## Combine / Unpermute Stages
 
@@ -266,16 +262,14 @@ gmm2Output[srcRow, 0:K] half
   -> srcRank.remoteWindow.offsetD[dstRow, 0:K]
 ```
 
-Path selection:
-
-- **DirectLarge**: full-row writeback for large-token cases.
-- **DirectSmall**: subtile writeback for small-token cases to improve AIV occupancy.
+The 8-AIV Combine group assigns full-row writeback by source rank. It publishes per-rank expert progress while running and publishes final DataReady after all experts are visible.
 
 Unpermute restores the source-rank token order:
 
 ```text
 offsetD + probs + expandedRowIdx
-  -> TopK weighted accumulation
+  -> phase 1: 32 AIVs reduce tokens whose routes are ready
+  -> phase 2: 48 AIVs reduce the remaining tokens
   -> out[M, K]
 ```
 
@@ -288,6 +282,7 @@ The HCCL remote window carries cross-rank visible data:
 | `offsetA` | HCCL window | FrontReorder writes packed int8 token rows; Dispatch pulls from peer ranks |
 | `offsetD` | HCCL window | Combine writes back to source ranks; Unpermute consumes locally |
 | `tokenPerExpert` | HCCL window | count-as-flag cross-rank count rows |
+| `ExpertProgress / DataReady` | HCCL window | Per-rank Combine progress and launch-scoped completion notification |
 | `gmA` | workspace GM | GMM1 input generated by Dispatch |
 | `gmC` | workspace GM | GMM1 output and SwiGLU input |
 | `gmPermutedToken` | workspace GM | SwiGLU dynamic-quant output and GMM2 input |
@@ -321,7 +316,7 @@ Small route counts should prefer FullLoad, which reduces GM intermediate traffic
 
 ### 2. Keep Expert-Level Stage Boundaries Clear
 
-Dispatch, GMM1, SwiGLU, GMM2, and Combine depend on hard flags. Before removing any synchronization, verify the exact per-group set/wait relationship.
+Dispatch, GMM1, SwiGLU, GMM2, and Combine use producer arrival and consumer ready slots. Before changing synchronization, verify the producer count, consumer range, and expected expert progress at each boundary.
 
 ### 3. Prioritize GMM Tile Efficiency
 
@@ -332,9 +327,9 @@ GMM1/GMM2 dominate runtime. Check:
 - whether small `currentM` causes AIC imbalance;
 - whether AIV communication/writeback competes with GMM HBM traffic.
 
-### 4. Use Subtile Combine for Small Token Counts
+### 4. Balance Combine Against GMM2
 
-For small M, the direct row path may underuse AIVs. DirectSmall splits GMM2 tiles into subtiles, but requires the GMM2 tiling column width to align with the small-path subtile width.
+Combine uses 8 AIVs and a shape-specific delayed start to avoid competing with GMM2 for HBM bandwidth. When tuning small M, check the GMM2 join point, Combine start expert, and SwiGLU active-worker count together.
 
 ### 5. Use Batch Golden Generation
 
@@ -345,9 +340,7 @@ Large synthetic cases use the `python-batch` golden backend by default. Use `pyt
 Configure the Ascend CANN environment:
 
 ```bash
-export ASCEND_CANN_PATH=/usr/local/Ascend/cann/set_env.sh
-export ASCEND_HOME_PATH=/usr/local/Ascend/cann/cann
-source /usr/local/Ascend/cann/cann/set_env.sh
+source <cann-install>/set_env.sh
 ```
 
 Run the default 2048 case:
@@ -369,13 +362,13 @@ bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max
 
 | Environment Variable | Purpose | Default Behavior |
 | --- | --- | --- |
-| `ASCEND_HOME_PATH` | CANN installation path | Must be set before running |
-| `CMAKE_COMPILER` | Compiler used by CMake | `bisheng` |
+| `ASCEND_HOME_PATH` | Active CANN installation path | Set by the CANN `set_env.sh` |
 | `MPI_ENV_BIN` | MPI/conda `bin` path | `/home/ntlab/miniconda3/envs/ltr_pto/bin` |
 | `MPI_ENV_LIB` | MPI/conda `lib` path | `/home/ntlab/miniconda3/envs/ltr_pto/lib` |
 | `MPI_LIB_PATH` | Absolute path to `libmpi.so` | `${MPI_ENV_LIB}/libmpi.so` |
 | `MPI_RUNNER` | MPI launch command | `mpirun` |
 | `HCCL_BUFFSIZE` | HCCL RDMA window size | Raised automatically by `run.sh` when needed |
+| `DISPATCH_MEGA_COMBINE_START_SYNC_DEBUG` | Synchronize kernel entry for cross-core timing comparison | Disabled |
 
 ## Changing Case Parameters
 
@@ -400,7 +393,7 @@ Common constraints:
 | HCCL window too small | The manually set `HCCL_BUFFSIZE` is below the case requirement; unset it or increase it |
 | MPI launch fails | Check that `MPI_ENV_BIN`, `MPI_ENV_LIB`, and `MPI_LIB_PATH` point to the same conda/MPI environment |
 | Golden generation is slow | Use the default `python-batch` backend; use `python-naive` only for debug comparison |
-| Small-M performance is unstable | Check whether FullLoad is selected, whether Combine uses DirectSmall, and whether AIV concurrency is hurting GMM |
+| Small-M performance is unstable | Check whether FullLoad is selected and whether the configured SwiGLU workers, GMM2 join point, and Combine start point increase HBM contention |
 | Result diff is abnormal | Check whether old generated data was reused; do not reuse stale `out/` after changing expert distribution or key case parameters |
 
 ## Build System

@@ -15,19 +15,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 constexpr static uint64_t MB_SIZE = 1024 * 1024UL;
 constexpr static int32_t UB_ALIGN = 32;
-constexpr uint16_t CROSS_CORE_FLAG_MAX_SET_COUNT = 15;
-constexpr uint16_t MEGA_MOE_MAX_BUSINESS_HARD_FLAG_ID = 10;
-constexpr uint16_t MEGA_MOE_D2C_HARD_FLAG_BASE = 0;
-constexpr uint16_t MEGA_MOE_D2C_HARD_FLAG_COUNT = 9;
-constexpr uint16_t MEGA_MOE_D2C_HARD_FLAG_LAST = MEGA_MOE_D2C_HARD_FLAG_BASE + MEGA_MOE_D2C_HARD_FLAG_COUNT - 1;
-constexpr uint16_t MEGA_MOE_C2V_HARD_FLAG_BASE = 9;
-constexpr uint16_t MEGA_MOE_V2C_HARD_FLAG_BASE = 10;
-constexpr uint16_t MEGA_MOE_GMM2_TO_COMBINE_HARD_FLAG_BASE = 0;
-constexpr uint32_t MEGA_MOE_D2C_MAX_LOGICAL_GROUP_EVENTS = MEGA_MOE_D2C_HARD_FLAG_COUNT * CROSS_CORE_FLAG_MAX_SET_COUNT;
-constexpr uint32_t MEGA_MOE_GMM2_TO_COMBINE_MAX_LOGICAL_GROUP_EVENTS =
-    MEGA_MOE_D2C_HARD_FLAG_COUNT * CROSS_CORE_FLAG_MAX_SET_COUNT;
-static_assert(MEGA_MOE_D2C_HARD_FLAG_LAST < MEGA_MOE_C2V_HARD_FLAG_BASE);
-static_assert(MEGA_MOE_V2C_HARD_FLAG_BASE <= MEGA_MOE_MAX_BUSINESS_HARD_FLAG_ID);
 
 struct AtlasA2 {
     static constexpr uint32_t BIAS_SIZE = 1024;
@@ -38,7 +25,5 @@ struct AtlasA2 {
     static constexpr uint32_t L0B_SIZE = 64 * 1024;
     static constexpr uint32_t L0C_SIZE = 128 * 1024;
 };
-
-#include "moe_swiglu_segment.hpp"
 
 #endif // CONST_ARGS_HPP

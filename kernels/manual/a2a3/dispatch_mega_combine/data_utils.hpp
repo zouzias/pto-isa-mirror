@@ -25,7 +25,6 @@ struct RankFileSet {
     std::string scale1;
     std::string scale2;
     std::string probs;
-    std::string x_active_mask;
     std::string expected_out;
 };
 

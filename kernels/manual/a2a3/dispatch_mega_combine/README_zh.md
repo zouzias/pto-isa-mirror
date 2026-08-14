@@ -10,7 +10,7 @@
 - Ascend910B / Ascend910C
 - Ascend910_93 / Ascend910_9391 / Ascend910_9381 / Ascend910_9372 / Ascend910_9392 / Ascend910_9382 / Ascend910_9362
 
-> 当前目录位于 `a2a3` 手写 kernel 下，性能和运行验证主要面向 A2/A3 形态。`CMakeLists.txt` 中也保留了 `Ascend910_9599` 的 `dav-c310` 编译分支，但使用前需要按目标环境重新验证。
+当前目录位于 `a2a3` 手写 kernel 下。典型性能 case 使用脚本默认的 A2/A3 配置，命令中无需显式指定 SoC。
 
 ## 目录结构
 
@@ -40,14 +40,10 @@ kernels/manual/a2a3/dispatch_mega_combine/
 │   ├── combine.h                   # GMM2 输出远端写回 offsetD
 │   ├── unpermute.h                 # topK weighted reduce 和原 token 顺序还原
 │   └── utils/                      # PTO vector、sync、HCCL window、GMM pipeline helper
-├── overview.md                     # 总体设计、性能对比和阶段伪码
-├── front_reorder.md                # front reorder / sort / count-as-flag 细节
-├── dispatch.md                     # dispatch 阶段契约和搬运策略
-├── gmm1.md / gmm2.md               # GMM tile 调度、swizzle、同步和 pipeline
-├── swiglu.md                       # SwiGLU 分段和量化策略
-├── combine.md                      # combine large/small path 和远端写回协议
-├── unpermute.md                    # unpermute 还原与累加策略
-└── glden.md                        # Python golden batch rewrite 设计
+├── overview.md                     # 总体设计和性能对比
+├── overview_v1.md                  # 固定分组调度和 overlap 设计
+├── pseudocode.md                   # 当前七阶段数据流和伪码
+└── README.md                       # 英文 README
 ```
 
 ## 算子说明
@@ -89,12 +85,12 @@ for each rank, token:
 
 ## 优化说明
 
-- **expert 级流水重叠**：AIC 侧 GMM1/GMM2 和 AIV 侧 dispatch/SwiGLU/combine 按 local expert group 轮转推进，通过 hard flag 串接阶段边界。
+- **expert 级流水重叠**：AIC 侧 GMM1/GMM2 和 AIV 侧 Dispatch/SwiGLU/Combine 按 local expert 推进，通过逐 expert 的 arrival/ready 通知串接阶段边界。
 - **front reorder 三路径**：按 UB 工作集大小选择 FullLoad、OneCore、MultiCore。小 route 尽量留在 UB 内完成排序、count、反排和 quant，避免不必要的 GM 中间态。
 - **count-as-flag**：front 发布 `tokenPerExpert` 时给 count row 加 marker，peer 通过数据值等待到达，减少 AlltoAll count 后的整机同步。
 - **GMM PTO tile 优化**：GMM1/GMM2 使用 PTO tile 编程，包含 output tile swizzle、L1 -> L0 多级复用、双缓冲和 fixpipe quant/cast。
-- **SwiGLU 分段 overlap**：SwiGLU 按 segment 切分，第一段尽量压到 GMM2 启动前完成，降低 GMM1 -> GMM2 中间等待。
-- **combine 双路径**：large token path 按完整 row 写回，small token path 按 GMM2 tile 拆 subtile，提高小 M 场景 AIV 利用率。
+- **AIC 动态分组**：GMM1 先使用全部 24 个 AIC，随后释放 8 个；GMM2 从 8 个 AIC 起步，在 GMM1 完成后扩展到 24 个。
+- **两阶段 Unpermute**：前 32 个 AIV 先处理 route 已就绪的 token，Combine 全部完成后由 48 个 AIV 处理剩余 token。
 
 ## Tiling 参数
 
@@ -107,11 +103,11 @@ for each rank, token:
 | `expertPerRank` | 每 rank 本地 expert 数 |
 | `worldSize` | MPI/HCCL rank 数 |
 | `maxOutputSize` | 每 rank routed row workspace 上限；典型性能 case 显式使用固定 workspace 上限 |
-| `aicNum` | AIC 逻辑核数，默认脚本为 24 |
-| `aivNum` | AIV 逻辑核数，默认脚本为 48 |
+| `aicNum` | 生产路径固定物理 AIC 数：24 |
+| `aivNum` | 生产路径固定物理 AIV 数：48 |
 | `GMM baseM/baseN` | 主要 tile 口径为 `128 x 256` output tile |
 | `Front FullLoad` | 由 `routeElems`、`K`、`expertNum` 和 UB 192 KiB 预算共同决定 |
-| `Combine small path` | `problemM * topK <= 4096` 时倾向使用 subtile path |
+| 固定分组 | GMM1/GMM2 使用 `16 + 8` 个 AIC；Dispatch/SwiGLU/Combine 预留 `16/16/8` 个 AIV slot，SwiGLU 按 M 激活 8 或 16 个 |
 
 ## 支持 Case
 
@@ -146,23 +142,23 @@ aivNum=48
 │ FrontReorder (AIV)                                                          │
 │   sort expertId route -> offsetA + count/prefix metadata                    │
 └──────────────────────────────┬───────────────────────────────────────────────┘
-                               │ D2C ready / count-as-flag
+                               │ count metadata ready / count-as-flag
 ┌──────────────────────────────▼───────────────────────────────────────────────┐
-│ Expert-level overlapped pipeline                                             │
+│ Expert 级重叠流水                                                            │
 │                                                                              │
-│ AIV: Dispatch(group i) -> SwiGLU(segment/group i) -> Combine(group i)         │
-│ AIC:                    GMM1(group i)      -> GMM2(group i)                  │
+│ AIV: Dispatch(expert i) -> SwiGLU(expert i) -> Combine(expert i)             │
+│ AIC: GMM1 从 24 缩为 16；释放的 AIC 加入 GMM2，使其从 8 扩为 24             │
 │                                                                              │
-│ Stages communicate with hard flags: D2C, C2V, V2C, G2C/Combine ready          │
+│ 各阶段通过逐 expert 的 GM arrival/ready 进度衔接                             │
 └──────────────────────────────┬───────────────────────────────────────────────┘
-                               │ final boundary
+                               │ 各 rank expert 进度 / DataReady
 ┌──────────────────────────────▼───────────────────────────────────────────────┐
-│ Unpermute (AIV)                                                              │
-│   offsetD + probs + expandedRowIdx -> topK weighted reduce -> out[M, K]       │
+│ 两阶段 Unpermute (AIV)                                                       │
+│   32 个 AIV 处理已就绪 token -> 48 个 AIV 处理剩余 token -> out             │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-完整执行顺序在 `MegaMoe::Process()` 中串联，阶段顺序为：
+`MegaMoe::Process()` 先完成 FrontReorder，再由固定分组按以下依赖关系并发推进：
 
 ```text
 FrontReorder -> Dispatch -> GMM1 -> SwiGLU -> GMM2 -> Combine -> Unpermute
@@ -211,7 +207,7 @@ srcRowBase = preSumBeforeRank[srcRank, localExpert]
 dstRowBase = groupBase + (srcRank == 0 ? 0 : cumsumMM[srcRank - 1, localExpert])
 ```
 
-每个 local expert group 搬运完成后，dispatch 设置 GMM1 ready flag，允许 AIC 开始消费该 group。
+每个 local expert 搬运完成后，Dispatch 汇聚活跃 worker 的到达状态并发布 GMM1 ready 进度。
 
 ## GMM1 / SwiGLU / GMM2 阶段
 
@@ -226,7 +222,7 @@ gmA[int8] x weight1[int8]
   -> gmC[half]
 ```
 
-每个 local expert 的输出 tile 网格按 `128 x 256` output tile 切分。线性 tile id 会通过 swizzle 映射到 `(blockM, blockN)`，让相邻 tile 更容易复用 L1 中的 B 侧权重。
+每个 local expert 的输出 tile 网格按 `128 x 256` output tile 切分。线性 tile id 会通过 swizzle 映射到 `(blockM, blockN)`，让相邻 tile 更容易复用 L1 中的 B 侧权重。前两个 expert 使用全部 24 个 AIC，后续 expert 使用 16-AIC GMM1 组。
 
 ### SwiGLU
 
@@ -239,7 +235,7 @@ gmC * perTokenScale1
   -> gmPermutedToken[int8] + perTokenScale2[float]
 ```
 
-SwiGLU 按 segment 切分；core0 写 segment metadata，其它 AIV 读取后按 row 分担计算。
+SwiGLU 按 expert 推进，并在固定活跃组内按 row 分工。全部活跃 AIV 完成当前 expert 后，由 coordinator 发布 GMM2 ready 进度；M=16 使用 8 个 AIV，其余表中 case 使用 16 个。
 
 ### GMM2
 
@@ -252,7 +248,7 @@ gmPermutedToken[int8] x weight2[int8]
   -> gmm2Output[half]
 ```
 
-GMM2 完成每个 local expert group 后设置 combine ready flag，AIV combine 才能写回该 group。
+GMM2 从 8-AIC 组开始执行。GMM1 完成后，其释放的 16 个 AIC 在 expert 边界加入 GMM2；每个 expert 完成后发布 arrival 进度供 Combine 消费。
 
 ## Combine / Unpermute 阶段
 
@@ -266,17 +262,14 @@ gmm2Output[srcRow, 0:K] half
   -> srcRank.remoteWindow.offsetD[dstRow, 0:K]
 ```
 
-路径选择：
-
-- **DirectLarge**：大 token 量场景，按完整 row 写回。
-- **DirectSmall**：小 token 量场景，按 subtile 拆分，提升 AIV 并行度。
-
+8-AIV Combine 组按 source rank 分配完整 row 写回。执行过程中发布各 rank 的 expert 进度，全部 expert 可见后发布最终 DataReady。
 
 Unpermute 是最后的源 rank 还原阶段：
 
 ```text
 offsetD + probs + expandedRowIdx
-  -> 按原 token/topK 加权累加
+  -> 第一阶段：32 个 AIV 处理 route 已就绪的 token
+  -> 第二阶段：48 个 AIV 处理剩余 token
   -> out[M, K]
 ```
 
@@ -289,6 +282,7 @@ HCCL remote window 主要承载跨 rank 可见的数据：
 | `offsetA` | HCCL window | FrontReorder 写入 packed int8 token row，Dispatch 从 peer 拉取 |
 | `offsetD` | HCCL window | Combine 写回源 rank，Unpermute 在源 rank 消费 |
 | `tokenPerExpert` | HCCL window | count-as-flag 的跨 rank count row |
+| `ExpertProgress / DataReady` | HCCL window | 各 rank 的 Combine 进度和当前 launch 完成通知 |
 | `gmA` | workspace GM | Dispatch 生成的 GMM1 输入 |
 | `gmC` | workspace GM | GMM1 输出，SwiGLU 输入 |
 | `gmPermutedToken` | workspace GM | SwiGLU dynamic quant 后的 GMM2 输入 |
@@ -322,7 +316,7 @@ overview.md
 
 ### 2. 保持 expert 级阶段边界清晰
 
-Dispatch、GMM1、SwiGLU、GMM2、Combine 之间依赖 hard flag。优化时优先确认每个 group 的 set/wait 是否一一匹配，避免为了减少 `SYNCALL` 破坏跨 AIC/AIV 的真实数据依赖。
+Dispatch、GMM1、SwiGLU、GMM2、Combine 之间使用 producer arrival 和 consumer ready slot。修改同步前需要确认每个边界的 producer 数、consumer 范围和期望 expert 进度。
 
 ### 3. 优先优化 GMM tile 效率
 
@@ -333,9 +327,9 @@ GMM1/GMM2 是主耗时阶段。重点关注：
 - `currentM` 较小时 AIC 是否负载不均；
 - AIV 通信/写回是否与 GMM HBM 访问冲突。
 
-### 4. 小 token 场景使用 subtile combine
+### 4. 平衡 Combine 与 GMM2
 
-小 M 下 direct row path 容易让 AIV 并行度不足。DirectSmall 通过 subtile 切分提高核利用率，但需要保持 `gmm2Tiling.l1TileN` 与 small path subtile 列宽对齐。
+Combine 固定使用 8 个 AIV，并按 shape 延后启动，避免与 GMM2 竞争 HBM 带宽。调优小 M 时需要一起检查 GMM2 扩组点、Combine 启动 expert 和 SwiGLU 活跃 worker 数。
 
 ### 5. Golden 生成使用 batch backend
 
@@ -346,9 +340,7 @@ large synthetic case 默认使用 `python-batch` golden backend，避免逐 toke
 配置 Ascend CANN 环境：
 
 ```bash
-export ASCEND_CANN_PATH=/usr/local/Ascend/cann/set_env.sh
-export ASCEND_HOME_PATH=/usr/local/Ascend/cann/cann
-source /usr/local/Ascend/cann/cann/set_env.sh
+source <cann-install>/set_env.sh
 ```
 
 运行默认 2048 case：
@@ -370,13 +362,13 @@ bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max
 
 | 环境变量 | 用途 | 默认行为 |
 | --- | --- | --- |
-| `ASCEND_HOME_PATH` | CANN 安装目录 | 必须提前设置 |
-| `CMAKE_COMPILER` | CMake 使用的编译器 | `bisheng` |
+| `ASCEND_HOME_PATH` | 当前 CANN 安装目录 | 由 CANN `set_env.sh` 设置 |
 | `MPI_ENV_BIN` | MPI/conda bin 路径 | `/home/ntlab/miniconda3/envs/ltr_pto/bin` |
 | `MPI_ENV_LIB` | MPI/conda lib 路径 | `/home/ntlab/miniconda3/envs/ltr_pto/lib` |
 | `MPI_LIB_PATH` | `libmpi.so` 绝对路径 | `${MPI_ENV_LIB}/libmpi.so` |
 | `MPI_RUNNER` | MPI 启动命令 | `mpirun` |
 | `HCCL_BUFFSIZE` | HCCL RDMA window 大小 | `run.sh` 按 case 自动抬高到安全值 |
+| `DISPATCH_MEGA_COMBINE_START_SYNC_DEBUG` | 同步 kernel 入口，用于比较跨核计时 | 默认关闭 |
 
 ## 修改 Case 参数
 
@@ -401,7 +393,7 @@ bash run.sh --world-size 8 --m 512 --k 7168 --n 4096 --topk 8 --experts 16 --max
 | HCCL window too small | 手动设置的 `HCCL_BUFFSIZE` 低于 case 需求；取消覆盖或调大该变量 |
 | MPI 启动失败 | 检查 `MPI_ENV_BIN`、`MPI_ENV_LIB`、`MPI_LIB_PATH` 是否指向同一个 conda/MPI 环境 |
 | golden 生成很慢 | 使用默认 `python-batch`，必要时调大 `--golden-chunk-rows`；只有调试对照才使用 `python-naive` |
-| 小 M 性能不稳定 | 优先检查 FullLoad case 是否命中、combine 是否走 DirectSmall、AIV 并发是否过高影响 GMM |
+| 小 M 性能不稳定 | 检查 FullLoad 是否命中，以及 SwiGLU worker 数、GMM2 扩组点和 Combine 启动点是否加重 HBM 竞争 |
 | 结果 diff 异常 | 先检查 data cache 是否复用旧分布；改变 expert 分布或 case 关键参数后不要使用旧 `out/` |
 
 ## 构建系统

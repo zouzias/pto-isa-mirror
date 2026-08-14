@@ -131,14 +131,20 @@ CaseConfig LoadCaseConfig(const std::string& case_json_path)
     cfg.aiv_num = ParseJsonUInt(text, "aiv_num");
     cfg.compare_atol = ParseJsonDouble(text, "compare_atol", 1e-3);
     cfg.compare_rtol = ParseJsonDouble(text, "compare_rtol", 1e-3);
-    cfg.input_tokens_all_ranks =
-        ParseJsonDouble(text, "input_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.world_size);
-    cfg.routed_tokens_all_ranks =
-        ParseJsonDouble(text, "routed_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.topk * cfg.world_size);
-    cfg.remote_routed_tokens_all_ranks = ParseJsonDouble(text, "remote_routed_tokens_all_ranks", 0.0);
-    cfg.compute_flops_all_ranks =
-        ParseJsonDouble(text, "compute_flops_all_ranks", cfg.routed_tokens_all_ranks * 3.0 * cfg.k * cfg.n);
-    cfg.comm_bytes_all_ranks = ParseJsonDouble(text, "comm_bytes_all_ranks", 0.0);
+    const double defaultInputTokens = static_cast<double>(cfg.m) * cfg.world_size;
+    cfg.input_tokens_all_ranks = ParseJsonDouble(text, "input_tokens_all_ranks", defaultInputTokens);
+    const double defaultRoutedTokens = cfg.input_tokens_all_ranks * cfg.topk;
+    cfg.routed_tokens_all_ranks = ParseJsonDouble(text, "routed_tokens_all_ranks", defaultRoutedTokens);
+    const double defaultRemoteRoutedTokens =
+        cfg.world_size == 0U ? 0.0 :
+                               cfg.routed_tokens_all_ranks * static_cast<double>(cfg.world_size - 1U) / cfg.world_size;
+    cfg.remote_routed_tokens_all_ranks =
+        ParseJsonDouble(text, "remote_routed_tokens_all_ranks", defaultRemoteRoutedTokens);
+    const double defaultComputeFlops = cfg.routed_tokens_all_ranks * 3.0 * cfg.k * cfg.n;
+    cfg.compute_flops_all_ranks = ParseJsonDouble(text, "compute_flops_all_ranks", defaultComputeFlops);
+    const double bytesPerRemoteRoute = static_cast<double>(cfg.k) * 3.0 + sizeof(float);
+    cfg.comm_bytes_all_ranks =
+        ParseJsonDouble(text, "comm_bytes_all_ranks", cfg.remote_routed_tokens_all_ranks * bytesPerRemoteRoute);
     return cfg;
 }
 
@@ -146,9 +152,8 @@ RankFileSet BuildRankFileSet(const std::string& case_dir, int rank)
 {
     const std::string prefix = case_dir + "/rank" + std::to_string(rank) + "_";
     return RankFileSet{
-        prefix + "x.bin",          prefix + "weight1.bin",       prefix + "weight2.bin",
-        prefix + "expert_idx.bin", prefix + "scale1.bin",        prefix + "scale2.bin",
-        prefix + "probs.bin",      prefix + "x_active_mask.bin", prefix + "expected_out.bin",
+        prefix + "x.bin",      prefix + "weight1.bin", prefix + "weight2.bin", prefix + "expert_idx.bin",
+        prefix + "scale1.bin", prefix + "scale2.bin",  prefix + "probs.bin",   prefix + "expected_out.bin",
     };
 }
 
