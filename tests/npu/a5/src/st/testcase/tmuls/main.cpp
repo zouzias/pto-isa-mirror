@@ -146,3 +146,15 @@ TEST_F(TMULSTest, case7)
 TEST_F(TMULSTest, case_int64_4x16) { EXPECT_TRUE((TMulSTestFramework<8, int64_t, 4, 16, 4, 4, 16, 16>())); }
 
 TEST_F(TMULSTest, case_uint64_4x16) { EXPECT_TRUE((TMulSTestFramework<9, uint64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TMULSTest, case_int64_1x16364)
+{
+    bool ret = TMulSTestFramework<10, int64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TMULSTest, case_uint64_1x16364)
+{
+    bool ret = TMulSTestFramework<11, uint64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}

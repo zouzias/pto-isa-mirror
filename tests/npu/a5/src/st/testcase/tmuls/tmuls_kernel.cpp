@@ -76,6 +76,43 @@ extern "C" __global__ AICORE void launchTMULSCase9(__gm__ uint64_t* out, __gm__ 
     runTMuls<uint64_t, 4, 16, 4, 4, 16, 16>(out, src, scalar);
 }
 
+template <typename T>
+PTO_INTERNAL void runTMulsWideInt64(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    constexpr int cols = 16364;
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData srcTile(tileRows, validCols);
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        Event<Op::TLOAD, Op::TMULS> event0 = TLOAD(srcTile, srcGlobal);
+        Event<Op::TMULS, Op::TSTORE_VEC> event1 = TMULS(dstTile, srcTile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+extern "C" __global__ AICORE void launchTMULSCase10(__gm__ int64_t* out, __gm__ int64_t* src, int64_t scalar)
+{
+    runTMulsWideInt64<int64_t>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTMULSCase11(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
+{
+    runTMulsWideInt64<uint64_t>(out, src, scalar);
+}
+
 template <uint32_t caseId, typename T>
 void launchTMULSTestCase(void* out, void* src, T scalar, aclrtStream stream)
 {
@@ -116,6 +153,14 @@ void launchTMULSTestCase(void* out, void* src, T scalar, aclrtStream stream)
             launchTMULSCase9<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
             break;
         }
+        case 10: {
+            launchTMULSCase10<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src, (int64_t)scalar);
+            break;
+        }
+        case 11: {
+            launchTMULSCase11<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
+            break;
+        }
         default: {
         }
     }
@@ -136,6 +181,8 @@ template void launchTMULSTestCase<6, float>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<7, float>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<8, int64_t>(void*, void*, int64_t, aclrtStream);
 template void launchTMULSTestCase<9, uint64_t>(void*, void*, uint64_t, aclrtStream);
+template void launchTMULSTestCase<10, int64_t>(void*, void*, int64_t, aclrtStream);
+template void launchTMULSTestCase<11, uint64_t>(void*, void*, uint64_t, aclrtStream);
 template void launchTMULSTestCase<1>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<2>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<3>(void*, void*, float, aclrtStream);
