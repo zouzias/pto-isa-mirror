@@ -10,23 +10,43 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
+#include "op_kernel/utils/const_args.hpp"
+
+struct MegaMoeKernelTimingEntry {
+    uint64_t start;
+    uint64_t end;
+};
+
+constexpr size_t kMegaMoeKernelTimingEntryBytes = 64U;
+static_assert(kMegaMoeKernelTimingEntryBytes >= sizeof(MegaMoeKernelTimingEntry));
+constexpr size_t kMegaMoeKernelTimingEntriesPerBlock = 1U + kMegaMoeFixedAivSubblocksPerPhysicalBlock;
+constexpr size_t kMegaMoeKernelTimingBytesPerBlock =
+    kMegaMoeKernelTimingEntryBytes * kMegaMoeKernelTimingEntriesPerBlock;
+
+constexpr size_t MegaMoeKernelTimingBytes(uint32_t blockDim)
+{
+    return static_cast<size_t>(blockDim) * kMegaMoeKernelTimingBytesPerBlock;
+}
+
 struct MegaMoeLaunchArgs {
-    void* ffts = nullptr;
-    void* x = nullptr;
-    void* weight1 = nullptr;
-    void* weight2 = nullptr;
-    void* expert_idx = nullptr;
-    void* scale1 = nullptr;
-    void* scale2 = nullptr;
-    void* probs = nullptr;
-    void* out = nullptr;
-    void* expert_token_nums = nullptr;
-    void* workspace = nullptr;
-    void* tiling = nullptr;
+    void *ffts = nullptr;
+    void *x = nullptr;
+    void *weight1 = nullptr;
+    void *weight2 = nullptr;
+    void *expert_idx = nullptr;
+    void *scale1 = nullptr;
+    void *scale2 = nullptr;
+    void *probs = nullptr;
+    void *out = nullptr;
+    void *expert_token_nums = nullptr;
+    void *workspace = nullptr;
+    void *tiling = nullptr;
+    void *kernel_timing = nullptr;
     uint32_t block_dim = 1;
     uint32_t start_sync = 0;
 };
 
-void launchMegaMoe(const MegaMoeLaunchArgs& args, void* stream);
+void launchMegaMoe(const MegaMoeLaunchArgs &args, void *stream);

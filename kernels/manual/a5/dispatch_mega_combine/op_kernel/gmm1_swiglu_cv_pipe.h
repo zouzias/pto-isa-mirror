@@ -1,0 +1,98 @@
+/**
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef DISPATCH_MEGA_COMBINE_GMM1_SWIGLU_CV_PIPE_H
+#define DISPATCH_MEGA_COMBINE_GMM1_SWIGLU_CV_PIPE_H
+
+#include <pto/pto-inst.hpp>
+
+#include "utils/const_args.hpp"
+
+constexpr uint16_t kGmm1SwigluCvReadyFlag = 7U;
+constexpr uint16_t kGmm1SwigluCvFreeFlag = 9U;
+constexpr uint32_t kGmm1SwigluCvTileRows = 128U;
+constexpr uint32_t kGmm1SwigluCvOutputCols = 256U;
+constexpr uint32_t kGmm1SwigluCvTileCols = 2U * kGmm1SwigluCvOutputCols;
+constexpr uint32_t kGmm1SwigluCvFifoDepth = 1U;
+constexpr uint32_t kGmm1SwigluCvHalfSlotBytes =
+    kGmm1SwigluCvTileRows * kGmm1SwigluCvOutputCols * sizeof(bfloat16_t);
+constexpr uint32_t kGmm1SwigluCvXOffset = 0U;
+constexpr uint32_t kGmm1SwigluCvGateOffset = kGmm1SwigluCvHalfSlotBytes;
+constexpr uint32_t kGmm1SwigluCvSlotBytes =
+    kGmm1SwigluCvTileRows * kGmm1SwigluCvTileCols * sizeof(bfloat16_t);
+constexpr uint32_t kGmm1SwigluCvBufferOffset = 0U;
+constexpr uint32_t kGmm1SwigluCvBufferBytes = kGmm1SwigluCvFifoDepth * kGmm1SwigluCvSlotBytes;
+
+struct Gmm1SwigluCvPipe {
+    struct Endpoint {
+        uint32_t tileIndex = 0U;
+    };
+
+    AICORE inline Gmm1SwigluCvPipe(__gm__ void *gmSlotBuffer, uint32_t c2vConsumerBuffer,
+                                   uint32_t v2cConsumerBuffer)
+    {
+        (void)gmSlotBuffer;
+        (void)c2vConsumerBuffer;
+        (void)v2cConsumerBuffer;
+    }
+
+    Endpoint prod;
+    Endpoint cons;
+};
+
+using Gmm1SwigluCvTile =
+    pto::Tile<pto::TileType::Vec, bfloat16_t, kGmm1SwigluCvTileRows, kGmm1SwigluCvTileCols,
+              pto::BLayout::RowMajor, pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::NoneBox>;
+using Gmm1SwigluCvHalfTile =
+    pto::Tile<pto::TileType::Vec, bfloat16_t, kGmm1SwigluCvTileRows, kGmm1SwigluCvOutputCols,
+              pto::BLayout::RowMajor, pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::NoneBox>;
+
+static_assert(2U * kGmm1SwigluCvHalfSlotBytes == kGmm1SwigluCvSlotBytes);
+static_assert(kGmm1SwigluCvSlotBytes == 128U * 1024U);
+static_assert(kGmm1SwigluCvFreeFlag + kMegaMoeFixedSecondAivSubblockFlagOffset < 32U);
+
+AICORE inline uint16_t Gmm1SwigluAiv1Flag(uint16_t logicalFlag)
+{
+    return static_cast<uint16_t>(logicalFlag + kMegaMoeFixedSecondAivSubblockFlagOffset);
+}
+
+AICORE inline void Gmm1SwigluProducerAllocate(Gmm1SwigluCvPipe &pipe)
+{
+    if (pipe.prod.tileIndex >= kGmm1SwigluCvFifoDepth) {
+        wait_intra_block(PIPE_FIX, Gmm1SwigluAiv1Flag(kGmm1SwigluCvFreeFlag));
+    }
+}
+
+AICORE inline void Gmm1SwigluProducerRecord(Gmm1SwigluCvPipe &pipe)
+{
+    set_intra_block(PIPE_FIX, Gmm1SwigluAiv1Flag(kGmm1SwigluCvReadyFlag));
+    ++pipe.prod.tileIndex;
+}
+
+AICORE inline void Gmm1SwigluProducerDrain(Gmm1SwigluCvPipe &pipe)
+{
+    if (pipe.prod.tileIndex != 0U) {
+        wait_intra_block(PIPE_FIX, Gmm1SwigluAiv1Flag(kGmm1SwigluCvFreeFlag));
+    }
+    pipe.prod.tileIndex = 0U;
+}
+
+AICORE inline void Gmm1SwigluConsumerWait(Gmm1SwigluCvPipe &pipe)
+{
+    wait_intra_block(PIPE_V, kGmm1SwigluCvReadyFlag);
+}
+
+AICORE inline void Gmm1SwigluConsumerRelease(Gmm1SwigluCvPipe &pipe)
+{
+    set_intra_block(PIPE_V, kGmm1SwigluCvFreeFlag);
+    ++pipe.cons.tileIndex;
+}
+
+#endif // DISPATCH_MEGA_COMBINE_GMM1_SWIGLU_CV_PIPE_H

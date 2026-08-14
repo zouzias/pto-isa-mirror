@@ -12,8 +12,7 @@
 #define DISPATCH_MEGA_COMBINE_PTO_SYNC_SUBSTRATE_HPP
 
 #include "kernel_operator.h"
-
-constexpr uint16_t kA5VecSubblockFlagOffset = 16;
+#include "const_args.hpp"
 
 template <uint8_t ModeId, pipe_t Pipe>
 __aicore__ inline void CrossCoreSetFlag(uint16_t flagId)
@@ -30,7 +29,7 @@ __aicore__ inline void CrossCoreSetFlag(uint16_t flagId)
     if constexpr (Pipe == PIPE_FIX) {
         if ASCEND_IS_AIC {
             set_intra_block(Pipe, flagId);
-            set_intra_block(Pipe, static_cast<uint16_t>(flagId + kA5VecSubblockFlagOffset));
+            set_intra_block(Pipe, static_cast<uint16_t>(flagId + kMegaMoeFixedSecondAivSubblockFlagOffset));
         }
     }
 }
@@ -45,7 +44,7 @@ __aicore__ inline void CrossCoreWaitFlag(uint16_t flagId)
     }
     if ASCEND_IS_AIC {
         wait_intra_block(PIPE_MTE2, flagId);
-        wait_intra_block(PIPE_MTE2, static_cast<uint16_t>(flagId + kA5VecSubblockFlagOffset));
+        wait_intra_block(PIPE_MTE2, static_cast<uint16_t>(flagId + kMegaMoeFixedSecondAivSubblockFlagOffset));
     }
 }
 
