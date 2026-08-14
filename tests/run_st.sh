@@ -544,6 +544,21 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
     fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int32
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_idx
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_oddvalid
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_1x1
+    fi
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
@@ -811,6 +826,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladd
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladdrelu
@@ -1050,6 +1066,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e2m1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec -g TExtractVecTest.case_nz_scalar_fp4_e1m2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half_aligned
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_float_unaligned
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_hif8_aligned
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_fp8e5m2_aligned
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half_1x1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int32_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave -g TINTERLEAVETest.case_int16_64x64_64x64
@@ -1207,6 +1228,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t mscatter
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_vec
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_ndto2xnz
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinterleave
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdeinterleave
   fi
