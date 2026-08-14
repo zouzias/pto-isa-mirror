@@ -14,6 +14,7 @@ Data flow:
 - `engine`:
     - `DmaEngine::SDMA` (default)
     - `DmaEngine::URMA` (Ascend950, NPU_ARCH 3510 only)
+    - `DmaEngine::RDMA` (Ascend950, NPU_ARCH 3510 only; currently supports only the HNS1825 NIC platform)
 
 > **Important (SDMA path)**
 > `TPUT_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.
@@ -84,6 +85,39 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 
 URMA does not require `scratchTile` — polling uses `ld_dev`/`st_dev` hardware intrinsics directly.
 
+### RDMA Construction (NPU_ARCH 3510 only)
+
+RDMA is intended for standard cross-node networking and currently supports only the HNS1825 NIC platform.
+
+```cpp
+#ifdef PTO_RDMA_SUPPORTED
+template <DmaEngine engine, typename ScratchTile>
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
+                                    __gm__ uint8_t *workspace,
+                                    uint32_t myPe,
+                                    AsyncSession &session,
+                                    uint32_t syncId = 0);
+#endif
+```
+
+| Parameter | Description |
+|---|---|
+| `scratchTile` | UB/Vec tile used for WQE/CQE control data; at least 64 bytes. |
+| `workspace` | GM pointer returned by the host-side RDMA initialization flow. |
+| `myPe` | Local rank id used to select the registered local memory region. |
+| `session` | Output `AsyncSession` object. |
+| `syncId` | MTE/scalar synchronization event id in the range 0-7. |
+
+Build one peer-independent session, then select the destination rank with the explicit `peer` argument:
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, myPe, session, syncId)) {
+    auto event = comm::TPUT_ASYNC<comm::DmaEngine::RDMA>(dstG, srcG, session, peer);
+    (void)event.Wait(session);
+}
+```
+
 ## Constraints
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
@@ -95,6 +129,9 @@ URMA does not require `scratchTile` — polling uses `ld_dev`/`st_dev` hardware 
 - URMA is only available on NPU_ARCH 3510 (Ascend950)
 - URMA requires CANN Toolkit **>= 9.1.0**
 - The symmetric data buffer passed to `UrmaWorkspaceManager::Init()` must be backed by huge-page memory (allocate with `ACL_MEM_MALLOC_HUGE_ONLY`). The underlying MR registration requires huge-page backing; `ACL_MEM_MALLOC_HUGE_FIRST` may silently fall back to 4KB pages for small allocations, causing registration to fail
+- RDMA is available only on Ascend950 / NPU_ARCH 3510 and currently supports only the HNS1825 NIC platform
+- RDMA source and destination tensors must be flat contiguous logical 1D, and the complete local and remote ranges must lie within memory regions registered during host initialization
+- One RDMA transfer must not exceed `0x7fffffff` bytes
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
 
@@ -123,10 +160,13 @@ The completion mechanism differs by engine, but user-facing quiet semantics are 
 
 - **SDMA**: Each `TPUT_ASYNC` submits data-transfer SQEs and flag SQEs that mark completion of that operation. `Wait` or `Test` on its returned event polls the corresponding flags to determine whether that `TPUT_ASYNC` has completed; completion also guarantees that all earlier SDMA operations in the same session have completed.
 - **URMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE and rings the doorbell immediately. `Wait` polls the Completion Queue (CQ) until all expected CQEs have been consumed.
+- **RDMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE to the queue selected by `peer`. Completion is tracked independently for each peer/queue.
 
 - `event.Wait(session)` — blocks until **all async operations issued since the last Wait** are complete
 
 This means after multiple `TPUT_ASYNC` calls, a single `Wait` on the last returned `AsyncEvent` drains all pending operations (similar to shmem's quiet semantics).
+
+For RDMA operations targeting different peers, wait for the last event of each peer separately.
 
 Up to 64 operations may be outstanding in one session before submission can apply backpressure.
 
