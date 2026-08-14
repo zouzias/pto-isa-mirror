@@ -179,3 +179,15 @@ TEST_F(TADDSTest, case_uint64_4x16)
     bool ret = TAddSTestFramework<13, uint64_t, 4, 16, 4, 4, 16, 16>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TADDSTest, case_int64_1x16364)
+{
+    bool ret = TAddSTestFramework<14, int64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case_uint64_1x16364)
+{
+    bool ret = TAddSTestFramework<15, uint64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}

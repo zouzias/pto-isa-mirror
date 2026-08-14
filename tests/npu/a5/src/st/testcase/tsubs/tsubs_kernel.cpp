@@ -92,6 +92,43 @@ extern "C" __global__ AICORE void launchTSUBSCase13(__gm__ uint64_t* out, __gm__
     runTSubS<uint64_t, 4, 16, 4, 4, 16, 16>(out, src, scalar);
 }
 
+template <typename T>
+PTO_INTERNAL void runTSubSWideInt64(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    constexpr int cols = 16364;
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData srcTile(tileRows, validCols);
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        Event<Op::TLOAD, Op::TSUBS> event0 = TLOAD(srcTile, srcGlobal);
+        Event<Op::TSUBS, Op::TSTORE_VEC> event1 = TSUBS(dstTile, srcTile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+extern "C" __global__ AICORE void launchTSUBSCase14(__gm__ int64_t* out, __gm__ int64_t* src, int64_t scalar)
+{
+    runTSubSWideInt64<int64_t>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTSUBSCase15(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
+{
+    runTSubSWideInt64<uint64_t>(out, src, scalar);
+}
+
 template <uint32_t caseId, typename T>
 void launchTSUBSTestCase(void* out, void* src, T scalar, aclrtStream stream)
 {
@@ -148,6 +185,14 @@ void launchTSUBSTestCase(void* out, void* src, T scalar, aclrtStream stream)
             launchTSUBSCase13<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
             break;
         }
+        case 14: {
+            launchTSUBSCase14<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src, (int64_t)scalar);
+            break;
+        }
+        case 15: {
+            launchTSUBSCase15<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
+            break;
+        }
         default: {
         }
     }
@@ -172,6 +217,8 @@ template void launchTSUBSTestCase<10, uint8_t>(void*, void*, uint8_t, aclrtStrea
 template void launchTSUBSTestCase<11, uint8_t>(void*, void*, uint8_t, aclrtStream);
 template void launchTSUBSTestCase<12, int64_t>(void*, void*, int64_t, aclrtStream);
 template void launchTSUBSTestCase<13, uint64_t>(void*, void*, uint64_t, aclrtStream);
+template void launchTSUBSTestCase<14, int64_t>(void*, void*, int64_t, aclrtStream);
+template void launchTSUBSTestCase<15, uint64_t>(void*, void*, uint64_t, aclrtStream);
 template void launchTSUBSTestCase<1>(void*, void*, float, aclrtStream);
 template void launchTSUBSTestCase<2>(void*, void*, float, aclrtStream);
 template void launchTSUBSTestCase<3>(void*, void*, float, aclrtStream);

@@ -123,5 +123,7 @@ TEST_F(TCMPSTest, case_bfloat16_77x80_32x32) { test_tcmps<int16_t, 77, 80, 32, 3
     TCMPS_INT64_CASE(Type, TypeName, LE)
 TCMPS_INT64_MODES(int64_t, int64)
 TCMPS_INT64_MODES(uint64_t, uint64)
+TEST_F(TCMPSTest, case_int64_1x16364_1x16364_EQ) { test_tcmps<int64_t, 1, 16364, 1, 16364, CmpMode::EQ>(); }
+TEST_F(TCMPSTest, case_uint64_1x16364_1x16364_EQ) { test_tcmps<uint64_t, 1, 16364, 1, 16364, CmpMode::EQ>(); }
 #undef TCMPS_INT64_MODES
 #undef TCMPS_INT64_CASE
