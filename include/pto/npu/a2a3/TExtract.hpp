@@ -385,12 +385,12 @@ template <typename T, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void DispatchNdToNz(
     DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, uint16_t validRow, uint16_t validCol)
 {
-    if (validRow == 1 && validCol == 1) {
+    bool colAligned = ((static_cast<uint32_t>(indexCol) * sizeof(T)) % BLOCK_BYTE_SIZE) == 0;
+    if ((validRow == 1 && validCol == 1) || !colAligned) {
         TExtractNdToNzScalar<T, DstTileData, SrcTileData>(
             dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
     } else if constexpr (sizeof(T) == 1) {
-        if (((static_cast<uint32_t>(indexCol) * sizeof(T)) % sizeof(uint16_t) == 0) &&
-            ((static_cast<uint32_t>(validCol) * sizeof(T)) % sizeof(uint16_t) == 0)) {
+        if ((static_cast<uint32_t>(validCol) * sizeof(T)) % sizeof(uint16_t) == 0) {
             TExtractNdToNz<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
         } else {
             TExtractNdToNzWiden<T, DstTileData, SrcTileData>(
