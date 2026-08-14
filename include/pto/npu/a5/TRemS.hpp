@@ -15,9 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
-#include "TBinSOp.hpp"
+#include "pto/npu/a5/TBinSOp.hpp"
 #include "custom/TFmodRemHp.hpp"
-#include "Int64Div.hpp"
+#include "TRem.hpp"
 
 namespace pto {
 

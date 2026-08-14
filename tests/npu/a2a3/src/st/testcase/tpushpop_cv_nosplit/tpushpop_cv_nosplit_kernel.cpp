@@ -42,7 +42,9 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
  * AIV0 pops the received tile, loads the corresponding bias row, and writes
  * out (accTile + bias) with TADD.  AIV1 is idle throughout the FIFO loop.
  */
-template <typename InT, typename OutT, int TOTAL_M, int CASE_TILE_M, int K, int N>
+template <
+    typename InT, typename OutT, int TOTAL_M, int CASE_TILE_M, int K, int N, uint32_t FifoDepth = 2,
+    uint32_t LocalFifoDepth = 2, bool IsNoSplitPipe = false>
 __global__ AICORE void runTPushPopMatmulAddNoSplit(
     __gm__ uint64_t* ffts_addr, __gm__ OutT* out, __gm__ InT* srcA, __gm__ InT* srcB, __gm__ OutT* bias,
     __gm__ OutT* fifoMem)
@@ -57,8 +59,7 @@ __global__ AICORE void runTPushPopMatmulAddNoSplit(
     constexpr uint32_t NUM_M_TILES = TOTAL_M / CASE_TILE_M;
 
     constexpr uint16_t FLAG_ID = 0;
-    constexpr uint8_t FIFO_DEPTH = 2;
-    // Local UB base address for the Vec-side FIFO double-buffer.
+    // Local UB base address for the Vec-side FIFO ring.
     constexpr uint32_t localFiFoBase = 0x0;
 
     // Accumulator tile produced by Cube (full CASE_TILE_M x TILE_N).
@@ -74,8 +75,12 @@ __global__ AICORE void runTPushPopMatmulAddNoSplit(
 
     // a2a3 uses a GM-backed FIFO: TPUSH writes the AccTile to fifoMem via
     // TSTORE, and TPOP reads it back via TLOAD.  fifoMem must be a valid
-    // device memory region of at least FIFO_DEPTH * SlotSize bytes.
-    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * CASE_TILE_M * TILE_N, FIFO_DEPTH>;
+    // device memory region of at least FifoDepth * SlotSize bytes.
+    using MatPipe = TPipe<
+        FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * CASE_TILE_M * TILE_N, FifoDepth, LocalFifoDepth, IsNoSplitPipe>;
+    static_assert(
+        FifoDepth != 8 || NUM_M_TILES != 40 || MatPipe::countPendingFreeCredits(NUM_M_TILES) == 2,
+        "A depth-8 TPipe with 40 transfers must drain exactly two pending free credits.");
     MatPipe mPipe((__gm__ void*)(uint64_t)fifoMem, 0x0, localFiFoBase);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
@@ -226,6 +231,10 @@ void LaunchTPushPopMatmulAddNoSplit(
         runTPushPopMatmulAddNoSplit<float, float, 16, 16, 32, 32><<<1, nullptr, stream>>>(
             reinterpret_cast<uint64_t*>(ffts), reinterpret_cast<float*>(out), reinterpret_cast<float*>(srcA),
             reinterpret_cast<float*>(srcB), reinterpret_cast<float*>(bias), reinterpret_cast<float*>(fifoMem));
+    } else if constexpr (tilingKey == 4) {
+        runTPushPopMatmulAddNoSplit<half, float, 640, 16, 32, 64, 8, 8, true><<<1, nullptr, stream>>>(
+            reinterpret_cast<uint64_t*>(ffts), reinterpret_cast<float*>(out), reinterpret_cast<half*>(srcA),
+            reinterpret_cast<half*>(srcB), reinterpret_cast<float*>(bias), reinterpret_cast<float*>(fifoMem));
     }
 }
 
@@ -234,4 +243,6 @@ template void LaunchTPushPopMatmulAddNoSplit<1>(
 template void LaunchTPushPopMatmulAddNoSplit<2>(
     uint8_t* ffts, uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, uint8_t* fifoMem, void* stream);
 template void LaunchTPushPopMatmulAddNoSplit<3>(
+    uint8_t* ffts, uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, uint8_t* fifoMem, void* stream);
+template void LaunchTPushPopMatmulAddNoSplit<4>(
     uint8_t* ffts, uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, uint8_t* fifoMem, void* stream);
