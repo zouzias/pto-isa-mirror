@@ -55,8 +55,69 @@ CATEGORY_ZH = {
     "Matrix Multiply": "矩阵乘",
     "Data Movement / Layout": "数据搬运 / 布局",
     "Complex": "复杂指令",
+    "Cross-core Communication": "核间通信",
 }
 
+
+REMOVED_INTERFACES_EN = [
+    "`TADDC`",
+    "`TAddDeqRelu`",
+    "`TADDReluConv`",
+    "`TADDSC`",
+    "`TFUSEDMULADDRELU`",
+    "`TGET_SCALE_ADDR`",
+    "`TPairReduceSum`",
+    "`TSUBC`",
+    "`TSUBRELU`",
+    "`TSUBRELUCONV`",
+    "`TSUBSC`",
+    "`TSUBVIEW`",
+    "`TSYNC`",
+]
+
+REMOVED_INTERFACES_ZH = [
+    "`TADDC`",
+    "`TAddDeqRelu`",
+    "`TADDReluConv`",
+    "`TADDSC`",
+    "`TFUSEDMULADDRELU`",
+    "`TGET_SCALE_ADDR`",
+    "`TPairReduceSum`",
+    "`TSUBC`",
+    "`TSUBRELU`",
+    "`TSUBRELUCONV`",
+    "`TSUBSC`",
+    "`TSUBVIEW`",
+    "`TSYNC`",
+]
+
+COMMUNICATION_ENTRIES_EN = [
+    ("TPUT", "Remote write: transfer local data to remote NPU memory (GM → UB → GM)."),
+    ("TGET", "Remote read: read remote NPU data to local memory (GM → UB → GM)."),
+    ("TPUT_ASYNC", "Asynchronous remote write (local GM → DMA engine → remote GM)."),
+    ("TGET_ASYNC", "Asynchronous remote read (remote GM → DMA engine → local GM)."),
+    ("TNOTIFY", "Send flag notification to remote NPU."),
+    ("TWAIT", "Blocking wait until signal(s) meet comparison condition."),
+    ("TTEST", "Non-blocking test if signal(s) meet comparison condition."),
+    ("TGATHER", "Gather data from all ranks and concatenate along DIM_3."),
+    ("TSCATTER", "Scatter data to all ranks by splitting along DIM_3."),
+    ("TREDUCE", "Gather and reduce data from all ranks element-wise to local."),
+    ("TBROADCAST", "Broadcast data from current NPU to all ranks."),
+]
+
+COMMUNICATION_ENTRIES_ZH = [
+    ("TPUT", "远程写：将本地数据传输到远端 NPU 内存（GM → UB → GM）。"),
+    ("TGET", "远程读：将远端 NPU 数据读取到本地内存（GM → UB → GM）。"),
+    ("TPUT_ASYNC", "异步远程写（本地 GM → DMA 引擎 → 远端 GM）。"),
+    ("TGET_ASYNC", "异步远程读（远端 GM → DMA 引擎 → 本地 GM）。"),
+    ("TNOTIFY", "向远端 NPU 发送标志通知。"),
+    ("TWAIT", "阻塞等待，直到信号满足比较条件。"),
+    ("TTEST", "非阻塞检测信号是否满足比较条件。"),
+    ("TGATHER", "从所有 rank 收集数据并沿 DIM_3 拼接。"),
+    ("TSCATTER", "将数据沿 DIM_3 拆分并分发到所有 rank。"),
+    ("TREDUCE", "从所有 rank 收集数据并逐元素归约到本地。"),
+    ("TBROADCAST", "将当前 NPU 的数据广播到所有 rank。"),
+]
 
 def load_manifest(path: Path) -> List[Dict[str, object]]:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -101,6 +162,26 @@ def render_isa_readme(entries: List[Dict[str, object]]) -> str:
     lines.append("- Source of truth (C++ intrinsics): `include/pto/common/pto_instr.hpp`")
     lines.append("- Common conventions (operands, events, modifiers): `docs/isa/conventions.md`")
     lines.append("")
+    lines.append("## Removed interfaces and migration notes")
+    lines.append("")
+    lines.append("The current ISA reference no longer exposes the following legacy instruction interfaces:")
+    lines.append("")
+    for item in REMOVED_INTERFACES_EN:
+        lines.append(f"- {item}")
+    lines.append("")
+    lines.append("Migration guidance:")
+    lines.append("")
+    lines.append(
+        "- Replace ternary/scalar fused arithmetic forms with the corresponding primitive arithmetic sequence, such as `TADD`, `TSUB`, `TADDS`, `TSUBS`, `TMUL`, `TFUSEDMULADD`, and `TRELU`."
+    )
+    lines.append(
+        "- Replace fused add/ReLU/convert or add/dequant/ReLU forms with explicit arithmetic, conversion/dequantization, and `TRELU` steps."
+    )
+    lines.append("- Replace `TPairReduceSum` with the supported row/column reduction primitives that match the target layout.")
+    lines.append(
+        "- Do not call `TGET_SCALE_ADDR`; for AUTO-mode MX tests, bind the scale tile address from the data tile in test code before invoking the MX matmul primitive."
+    )
+    lines.append("")
     for cat, cat_entries in grouped.items():
         lines.append(f"## {cat}")
         for e in cat_entries:
@@ -126,6 +207,22 @@ def render_isa_readme_zh(entries: List[Dict[str, object]]) -> str:
     lines.append("- 权威来源：`include/pto/common/pto_instr.hpp`")
     lines.append("- 通用约定（操作数、事件、修饰符）：`docs/isa/conventions_zh.md`")
     lines.append("")
+    lines.append("## 删除接口与迁移说明")
+    lines.append("")
+    lines.append("当前 ISA 参考不再公开以下历史指令接口：")
+    lines.append("")
+    for item in REMOVED_INTERFACES_ZH:
+        lines.append(f"- {item}")
+    lines.append("")
+    lines.append("迁移建议：")
+    lines.append("")
+    lines.append(
+        "- 将三元/标量融合算术形式替换为对应基础算术序列，例如 `TADD`、`TSUB`、`TADDS`、`TSUBS`、`TMUL`、`TFUSEDMULADD` 和 `TRELU`。"
+    )
+    lines.append("- 将融合 add/ReLU/convert 或 add/dequant/ReLU 形式拆分为显式算术、转换/反量化和 `TRELU` 步骤。")
+    lines.append("- 将 `TPairReduceSum` 替换为与目标 layout 匹配的现有行/列归约原语。")
+    lines.append("- 不再调用 `TGET_SCALE_ADDR`；AUTO 模式 MX 测试可在调用 MX matmul 原语前，在测试代码中根据数据 Tile 绑定 scale Tile 地址。")
+    lines.append("")
     for cat, cat_entries in grouped.items():
         lines.append(f"## {CATEGORY_ZH.get(cat, cat)}")
         for e in cat_entries:
@@ -141,7 +238,9 @@ def render_ptoisa(entries: List[Dict[str, object]]) -> str:
     lines: List[str] = []
     lines.append("# PTO ISA Overview")
     lines.append("")
-    lines.append("This page is the source-synchronized ISA index generated from `docs/isa/manifest.yaml`.")
+    lines.append(
+        "This page is the source-synchronized ISA index generated from `docs/isa/manifest.yaml` and the communication ISA reference."
+    )
     lines.append("")
     lines.append("## Docs Contents")
     lines.append("")
@@ -156,8 +255,12 @@ def render_ptoisa(entries: List[Dict[str, object]]) -> str:
         "| ISA reference | [`docs/isa/conventions.md`](isa/conventions.md) | Shared notation, operands, events, and modifiers. |"
     )
     lines.append(
+        "| Communication ISA | [`docs/isa/comm/README.md`](isa/comm/README.md) | Per-instruction communication ISA reference. |"
+    )
+    lines.append(
         "| Source of truth | [`include/pto/common/pto_instr.hpp`](reference/pto-intrinsics-header.md) | C++ intrinsic API (authoritative). |"
     )
+    lines.append("| PTO Auto Mode | [`docs/auto_mode/README.md`](README.md) | PTO auto mode guide entry point. |")
     lines.append("")
     lines.append("## Instruction Index (All PTO Instructions)")
     lines.append("")
@@ -168,6 +271,8 @@ def render_ptoisa(entries: List[Dict[str, object]]) -> str:
         instr = str(e["instruction"])
         summary = str(e.get("summary_en", "")).strip()
         lines.append(f"| {cat} | [`{instr}`](isa/{instr}.md) | {summary} |")
+    for instr, summary in COMMUNICATION_ENTRIES_EN:
+        lines.append(f"| Communication | [`{instr}`](isa/comm/{instr}.md) | {summary} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -176,7 +281,7 @@ def render_ptoisa_zh(entries: List[Dict[str, object]]) -> str:
     lines: List[str] = []
     lines.append("# PTO ISA 概述")
     lines.append("")
-    lines.append("本文档为根据 `docs/isa/manifest.yaml` 自动生成的 ISA 索引。")
+    lines.append("本文档为根据 `docs/isa/manifest.yaml` 和通信 ISA 参考自动生成的 ISA 索引。")
     lines.append("")
     lines.append("## 文档目录")
     lines.append("")
@@ -188,9 +293,11 @@ def render_ptoisa_zh(entries: List[Dict[str, object]]) -> str:
     lines.append(
         "| ISA 参考 | [`docs/isa/conventions_zh.md`](isa/conventions_zh.md) | 通用符号、操作数、事件与修饰符。 |"
     )
+    lines.append("| 通信 ISA | [`docs/isa/comm/README_zh.md`](isa/comm/README_zh.md) | 每条通信 ISA 指令参考。 |")
     lines.append(
         "| 权威源 | [`include/pto/common/pto_instr.hpp`](reference/pto-intrinsics-header_zh.md) | C++ intrinsic API（权威来源）。 |"
     )
+    lines.append("| PTO auto 模式 | [`docs/auto_mode/README_zh.md`](README_zh.md) | PTO auto模式文档入口 |")
     lines.append("")
     lines.append("## 指令索引（全部 PTO 指令）")
     lines.append("")
@@ -201,6 +308,8 @@ def render_ptoisa_zh(entries: List[Dict[str, object]]) -> str:
         instr = str(e["instruction"])
         summary = str(e.get("summary_zh", "")).strip()
         lines.append(f"| {cat} | [`{instr}`](isa/{instr}_zh.md) | {summary} |")
+    for instr, summary in COMMUNICATION_ENTRIES_ZH:
+        lines.append(f"| 通信 | [`{instr}`](isa/comm/{instr}_zh.md) | {summary} |")
     lines.append("")
     return "\n".join(lines)
 

@@ -74,8 +74,6 @@ nav:
       - Overview: docs/isa/README.md
       - ISA Conventions: docs/isa/conventions.md
       - PTO ISA Table: docs/PTOISA.md
-      - Synchronization:
-          - TSYNC: docs/isa/TSYNC.md
       - Manual / Resource Binding:
           - TASSIGN: docs/isa/TASSIGN.md
           - SETFMATRIX: docs/isa/SETFMATRIX.md
@@ -98,8 +96,8 @@ nav:
           - TLOG: docs/isa/TLOG.md
           - TRECIP: docs/isa/TRECIP.md
           - TPRELU: docs/isa/TPRELU.md
-          - TADDC: docs/isa/TADDC.md
-          - TSUBC: docs/isa/TSUBC.md
+          - TMULADDDST: docs/isa/TMULADDDST.md
+          - TFUSEDMULADD: docs/isa/TFUSEDMULADD.md
           - TCVT: docs/isa/TCVT.md
           - TSEL: docs/isa/TSEL.md
           - TRSQRT: docs/isa/TRSQRT.md
@@ -129,8 +127,6 @@ nav:
           - TSHRS: docs/isa/TSHRS.md
           - TXORS: docs/isa/TXORS.md
           - TLRELU: docs/isa/TLRELU.md
-          - TADDSC: docs/isa/TADDSC.md
-          - TSUBSC: docs/isa/TSUBSC.md
       - Axis Reduce / Expand:
           - TROWSUM: docs/isa/TROWSUM.md
           - TROWPROD: docs/isa/TROWPROD.md
@@ -185,8 +181,6 @@ nav:
           - TRESHAPE: docs/isa/TRESHAPE.md
           - TTRANS: docs/isa/TTRANS.md
           - TIMG2COL: docs/isa/TIMG2COL.md
-          - TSUBVIEW: docs/isa/TSUBVIEW.md
-          - TGET_SCALE_ADDR: docs/isa/TGET_SCALE_ADDR.md
       - Complex Instructions:
           - TGATHER: docs/isa/TGATHER.md
           - TGATHERB: docs/isa/TGATHERB.md

@@ -37,9 +37,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`MSCATTER`](../docs/isa/MSCATTER_zh.md) | 是 | TODO | TODO | TODO | 是 | TODO |
 | [`TABS`](../docs/isa/TABS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TADD`](../docs/isa/TADD_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TADDC`](../docs/isa/TADDC_zh.md) | 是 | TODO | TODO | TODO | TODO | TODO |
 | [`TADDS`](../docs/isa/TADDS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TADDSC`](../docs/isa/TADDSC_zh.md) | 是 | TODO | TODO | TODO | TODO | TODO |
 | [`TAND`](../docs/isa/TAND_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TANDS`](../docs/isa/TANDS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TASSIGN`](../docs/isa/TASSIGN_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
@@ -84,7 +82,6 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TGEMV_MX`](../docs/isa/TGEMV_MX_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TGET`](../docs/isa/comm/TGET_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
-| [`TGET_SCALE_ADDR`](../docs/isa/TGET_SCALE_ADDR_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`THISTOGRAM`](../docs/isa/THISTOGRAM_zh.md) | 是 | TODO | 否 | 否 | 是 | 是 |
 | [`TIMG2COL`](../docs/isa/TIMG2COL_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TINSERT`](../docs/isa/TINSERT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
@@ -161,11 +158,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TSTORE`](../docs/isa/TSTORE_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
 | [`TSTORE_FP`](../docs/isa/TSTORE_FP_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TSUB`](../docs/isa/TSUB_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TSUBC`](../docs/isa/TSUBC_zh.md) | 是 | TODO | TODO | TODO | TODO | TODO |
 | [`TSUBS`](../docs/isa/TSUBS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TSUBSC`](../docs/isa/TSUBSC_zh.md) | 是 | TODO | TODO | TODO | TODO | TODO |
-| [`TSUBVIEW`](../docs/isa/TSUBVIEW_zh.md) | TODO | TODO | 是 | 是 | TODO | TODO |
-| [`TSYNC`](../docs/isa/TSYNC_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TTEST`](../docs/isa/comm/TTEST_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TTRANS`](../docs/isa/TTRANS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TTRI`](../docs/isa/TTRI_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
@@ -174,8 +167,6 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TXORS`](../docs/isa/TXORS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TMULADDDST`](../docs/isa/TMULADDDST_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TFUSEDMULADD`](../docs/isa/TFUSEDMULADD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TSUBRELU`](../docs/isa/TSUBRELU_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TFUSEDMULADDRELU`](../docs/isa/TFUSEDMULADDRELU_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 
 说明：
 
