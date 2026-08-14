@@ -36,6 +36,13 @@
         <file value="a2a3" install_mod="550" entity="true"/>
         <file value="a5" install_mod="550" entity="true"/>
     </file_info>
+    <file_info copy_type="source" src_path="pkg_inc/" dst_path="$(TARGET_ENV)/pkg_inc/pto" install_path="$(TARGET_ENV)/pkg_inc/pto" install_type="all">
+        <file value="comm" install_mod="550" entity="true"/>
+        <file value="common" install_mod="550" entity="true"/>
+        <file value="costmodel" install_mod="550" entity="true"/>
+        <file value="cpu" install_mod="550" entity="true"/>
+        <file value="npu" install_mod="550" entity="true"/>
+    </file_info>
     <block_info dependtree="false" dst_path="" block_conf_path="ascend">
         <block name="EngineeringCommon"/>
     </block_info>
@@ -51,5 +58,12 @@
         <path value="$(TARGET_ENV)/include/pto/npu/a2a3"/>
         <path value="$(TARGET_ENV)/include/pto/npu/a5"/>
         <path value="$(TARGET_ENV)/include/pto/cpu"/>
+        <path value="$(TARGET_ENV)/pkg_inc"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto/comm"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto/common"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto/costmodel"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto/cpu"/>
+        <path value="$(TARGET_ENV)/pkg_inc/pto/npu"/>
     </dir_info>
 </config>

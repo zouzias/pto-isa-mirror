@@ -97,6 +97,8 @@ def gen_golden_data(case_name, param):
 
     dst_type = param.ctype
     bias_type = param.bias_type
+    scale_a_format = param.scale_a_format
+    scale_b_format = param.scale_b_format
 
     m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
 
@@ -144,8 +146,28 @@ def gen_golden_data(case_name, param):
     x1 = x1_full[:, :original_k]
     x2 = x2_full[:original_k, :]
 
-    x1_mx_gm.tofile("./x1_mx_gm.bin")
-    x2_mx_gm.tofile("./x2_mx_gm.bin")
+    if scale_a_format == 'zz':
+        # x1_scale_gm, convert to zZ format
+        x1_scale_gm = convert_x1_scale_format(x1_mx_gm, 16, 2)
+    elif scale_a_format == 'dn':
+        # x1_scale_gm, convert to dn format
+        x1_scale_gm = x1_mx_gm.reshape(
+            (x1_mx_gm.shape[0], x1_mx_gm.shape[1] // 2, 2)).transpose(1, 0, 2)
+    else:
+        x1_scale_gm = x1_mx_gm
+
+    if scale_b_format == 'nn':
+        # x2_scale_gm, convert to nN format
+        x2_scale_gm = convert_x2_scale_format(x2_mx_gm, 16, 2)
+    elif scale_b_format == 'dn':
+        x2_scale_gm = x2_mx_gm.transpose()
+    else:
+        # x2_scale_gm, convert to nd format
+        x2_scale_gm = x2_mx_gm.reshape(
+            (x2_mx_gm.shape[0] // 2, 2, x2_mx_gm.shape[1])).transpose(0, 2, 1)
+
+    x1_scale_gm.tofile("./x1_mx_gm.bin")
+    x2_scale_gm.tofile("./x2_mx_gm.bin")
     if is_bias:
         bias_gm = np.random.randint(1, 10, [n, ]).astype(bias_type)
         bias_gm.tofile("./bias_gm.bin")
@@ -160,7 +182,7 @@ def gen_golden_data(case_name, param):
 
 class TmatmulmxParams:
 
-    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type=None):
+    def __init__(self, atype, btype, ctype, m, k, n, is_bias, scale_a_format='zz', scale_b_format='nn', bias_type=None):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
@@ -168,6 +190,8 @@ class TmatmulmxParams:
         self.k = k
         self.n = n
         self.is_bias = is_bias
+        self.scale_a_format = scale_a_format
+        self.scale_b_format = scale_b_format
         if (bias_type):
             self.bias_type = bias_type
         else:
@@ -216,8 +240,10 @@ if __name__ == "__main__":
         TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 16, 32, 16, False),
         TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 10, 50, 54, False),
         TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 4, 30, 8, False),
-        TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 1, 128, 62, False),
-        TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 1, 256, 20, False),
+        TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32,
+                        1, 128, 62, False, 'nd', 'nd'),
+        TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32,
+                        1, 256, 20, False, 'nd', 'nd'),
         # bias test
         TmatmulmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 115, 64, 30, True),
         TmatmulmxParams(fp8_e4m3fn, fp8_e4m3fn,
@@ -228,7 +254,8 @@ if __name__ == "__main__":
         TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 64, 192, 64, True),
         # TMatmul, gemv mode is disable.
         TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 1, 64, 62, True),
-        TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 1, 2048, 64, True),
+        TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32,
+                        1, 2048, 64, True, 'nd', 'nn'),
     ]
 
     for i, case_name in enumerate(case_name_list):

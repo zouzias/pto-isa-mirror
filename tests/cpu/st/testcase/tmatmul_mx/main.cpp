@@ -58,6 +58,7 @@ const T CeilAlign(T num_1, T num_2)
 template <typename T, typename U, typename S, bool isBias, bool isFp4, int32_t key>
 void TmatmulMXTest(uint32_t M, uint32_t K, uint32_t N, uint32_t validM, uint32_t validK, uint32_t validN)
 {
+    pto::NPUMemoryModel::Instance().Initialize(pto::NPUArch::A5);
     uint32_t kAlign = CeilAlign<uint32_t>(validK, 64);
     size_t aFileSize = isFp4 ? CeilDiv<uint32_t>(validM * validK, 2) : validM * validK * sizeof(U);
     size_t bFileSize = isFp4 ? CeilDiv<uint32_t>(validK * validN, 2) : validK * validN * sizeof(S);

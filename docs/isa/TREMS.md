@@ -64,7 +64,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
       - Data type must match `TileDataDst::DType`.
 - **Implementation Checks (A5)**:
     - `dst` and `src` must use the same element type.
-    - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
+    - Supported element types: `float`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `int16_t`, and `uint16_t`.
     - `dst` and `src` must be vector tiles.
     - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
     - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.

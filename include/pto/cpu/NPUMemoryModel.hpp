@@ -41,12 +41,14 @@ enum class NPUArch { A2A3, A5 };
 class NPUMemoryModel {
 private:
     enum MemoryRegion {
-        REG, // Registers - simulates NPU registers
-        UB,  // Unified Buffer - for Vec tiles
-        L1,  // L1 Buffer - for Mat tiles
-        L0A, // L0A Buffer - for Left tiles
-        L0B, // L0B Buffer - for Right tiles
-        L0C, // L0C Buffer - for Acc tiles
+        REG,    // Registers - simulates NPU registers
+        UB,     // Unified Buffer - for Vec tiles
+        L1,     // L1 Buffer - for Mat tiles
+        L0A,    // L0A Buffer - for Left tiles
+        L0B,    // L0B Buffer - for Right tiles
+        L0C,    // L0C Buffer - for Acc tiles
+        L0A_MX, // L0A Scale Buffer - for Left MX scale tiles
+        L0B_MX, // L0B Scale Buffer - for Right MX scale tiles
         _MAX_REGIONS
     };
 
@@ -64,7 +66,9 @@ private:
         512 * 1024, // L1:  512 KB
         64 * 1024,  // L0A: 64 KB
         64 * 1024,  // L0B: 64 KB
-        128 * 1024  // L0C: 128 KB
+        128 * 1024, // L0C: 128 KB
+        4 * 1024,   // L0A_MX: 4 KB
+        4 * 1024,   // L0B: 4 KB
     };
 
     static inline constexpr ArchMemorySizes kA5MemorySizes = {
@@ -73,7 +77,9 @@ private:
         512 * 1024, // L1:  512 KB
         64 * 1024,  // L0A: 64 KB (placeholder - verify actual A5 spec)
         64 * 1024,  // L0B: 64 KB
-        256 * 1024  // L0C: 256 KB
+        256 * 1024, // L0C: 256 KB
+        4 * 1024,   // L0A_MX: 4 KB
+        4 * 1024,   // L0B: 4 KB
     };
 
 public:
@@ -121,6 +127,20 @@ public:
         }
     }
 
+    template <typename T>
+    std::size_t GetNPUAddr(T* ptr)
+    {
+        const auto addr = reinterpret_cast<std::uintptr_t>(ptr);
+        for (int region = 0; region < MemoryRegion::_MAX_REGIONS; ++region) {
+            const auto start = reinterpret_cast<std::uintptr_t>(buffers_[region].data());
+            const auto end = start + buffers_[region].size();
+            if (addr >= start && addr < end) {
+                return addr - start;
+            }
+        }
+        throw std::invalid_argument("Cannot get proper NPU addr out of pointer");
+    }
+
     // Get pointer to memory at offset within a region
     template <typename TileDef>
     TileDef::DType* GetPointer(std::size_t byteOffset)
@@ -140,6 +160,10 @@ public:
             return GetPointer<typename TileDef::DType, MemoryRegion::L0B>(byteOffset, numElem);
         } else if constexpr (TileDef::Loc == TileType::Acc) {
             return GetPointer<typename TileDef::DType, MemoryRegion::L0C>(byteOffset, numElem);
+        } else if constexpr (TileDef::Loc == TileType::ScaleLeft) {
+            return GetPointer<typename TileDef::DType, MemoryRegion::L0A_MX>(byteOffset, numElem);
+        } else if constexpr (TileDef::Loc == TileType::ScaleRight) {
+            return GetPointer<typename TileDef::DType, MemoryRegion::L0B_MX>(byteOffset, numElem);
         } else {
             return GetPointer<typename TileDef::DType, MemoryRegion::UB>(
                 byteOffset,
@@ -256,6 +280,14 @@ private:
     NPUArch arch_ = NPUArch::A2A3;
     bool initialized_ = false;
 };
+
+constexpr uint32_t SHIFT_MX_ADDR = 4;
+template <typename T>
+uint64_t GetScaleAddr(T* dst)
+{
+    uintptr_t addr = NPUMemoryModel::Instance().GetNPUAddr(dst);
+    return addr >> SHIFT_MX_ADDR;
+}
 
 } // namespace pto
 
