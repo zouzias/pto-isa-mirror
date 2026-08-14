@@ -69,6 +69,7 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData& dst, GlobalSrcData& src, TileData& pi
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, const AsyncSession& session)
 {
+    static_assert(engine != DmaEngine::ROCE, "TGET_ASYNC: RoCE path is reserved but not implemented yet");
     Copy_Data(dst, src);
     return AsyncEvent(0, engine);
 }
