@@ -148,7 +148,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | 可用 NPU 数量：2、4 或 8 | 8 |
 | `-v` | SoC 版本：`a3`（Ascend910B）或 `a5`（Ascend950） | a3 |
 | `-t` | 指定测试用例（可多次使用），如 `tput`、`treduce` | 全部 |
-| `-a` | 包含异步指令测试（`*_async`），需 CANN 9.0+ | 关闭 |
+| `-a` | 包含名称中含 `_async` 的异步测试，需 CANN 9.0+ | 关闭 |
 | `-d` | 开启调试模式，打印详细初始化与同步日志 | 关闭 |
 
 ### 运行机制

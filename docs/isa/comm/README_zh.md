@@ -83,6 +83,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
 | `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
+| `DmaEngine::RDMA` | RDMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；当前网卡平台仅支持 HNS1825）|
 
 ### AsyncEvent
 

@@ -352,7 +352,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 /**
  * @brief Asynchronous remote write with explicit peer (A5 / CPU stub).
  *
- * For URMA: @p peer selects SQ/CQ/MR in UrmaInfo (session need not bind peer).
+ * For URMA and RDMA: @p peer selects the per-peer queue and memory metadata (session need not bind peer).
  * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
  * For CPU: @p peer is ignored; use default implementation
  */
@@ -383,7 +383,7 @@ PTO_INST AsyncEvent TGET_ASYNC(
 /**
  * @brief Asynchronous remote read with explicit peer (A5 / CPU stub).
  *
- * For URMA: @p peer selects SQ/CQ/MR in UrmaInfo (session need not bind peer).
+ * For URMA and RDMA: @p peer selects the per-peer queue and memory metadata (session need not bind peer).
  * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
  * For CPU: @p peer is ignored; use default implementation
  */

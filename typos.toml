@@ -13,6 +13,7 @@
 [default.extend-words]
 nd = "nd"            # ND layout (N-dimensional), e.g. tnd / ND tensor format
 cann = "cann"        # Huawei CANN toolkit
+clos = "clos"        # CLOS network topology level used by HCCL rootinfo
 subtile = "subtile"  # PTO sub-tile concept
 subtiles = "subtiles"
 fo = "fo"            # FiFo
