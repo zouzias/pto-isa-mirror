@@ -83,6 +83,19 @@ struct ParallelGroup {
 |----|------|
 | `DmaEngine::SDMA` | SDMA 引擎，支持二维传输 |
 | `DmaEngine::URMA` | URMA 引擎，支持一维传输（仅 Ascend950 / NPU_ARCH 3510） |
+| `DmaEngine::RDMA` | RDMA 引擎，当前网卡后端为 HNS1825（仅 Ascend950 / NPU_ARCH 3510） |
+
+## RdmaBackend — RDMA 网卡后端
+
+`DmaEngine::RDMA` 与具体网卡实现分层。当前 `RdmaBackend` 取值为：
+
+| 值 | 说明 |
+|----|------|
+| `RdmaBackend::NONE` | 当前构建/会话未启用 RDMA 后端 |
+| `RdmaBackend::HNS_1825` | HNS1825 网卡后端（仅 Ascend950 / NPU_ARCH 3510） |
+
+一个二进制最多包含一个 RDMA 后端。`PTO_RDMA_BACKEND=HNS_1825` 在 CMake 配置阶段转换为 Host/Device
+一致的编译定义，生成的二进制不在运行时读取该变量。
 
 ## AsyncEvent — 异步事件句柄
 
@@ -104,8 +117,20 @@ struct AsyncEvent {
 ```cpp
 struct AsyncSession {
     DmaEngine engine;
-    sdma::SdmaSession sdmaSession;
-    urma::UrmaSession urmaSession;
     bool valid;
+
+    __gm__ uint8_t *contextGm;
+    __ubuf__ uint8_t *tmpBufAddr;
+    uint32_t tmpBufSize;
+    uint32_t syncId;
+    // SDMA 配置和运行态字段省略
+    uint32_t destRankId;
+    uint32_t qpIdx;
+    RdmaBackend rdmaBackend;
+    uint32_t myPe;
 };
 ```
+
+`AsyncSession` 由各引擎复用统一字段，不再嵌套引擎专用 session。RDMA 使用 `contextGm`、scratch、
+`syncId`、`qpIdx`、`rdmaBackend` 和 `myPe`；peer-bound 调用使用 `destRankId`，显式 peer 调用以本次参数
+覆盖它。具体 HNS1825 布局不会暴露到公共调用方式中。
