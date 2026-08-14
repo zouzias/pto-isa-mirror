@@ -893,6 +893,18 @@ PTO_INST RecordEvent TEXTRACT(
 }
 
 template <
+    typename Dst0TileData, typename Dst1TileData, typename SrcTileData, typename... WaitEvents,
+    std::enable_if_t<is_tile_data_v<SrcTileData> && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TEXTRACT(
+    Dst0TileData& dst0, Dst1TileData& dst1, SrcTileData& src, uint16_t indexRow0 = 0, uint16_t indexCol0 = 0,
+    uint16_t indexRow1 = 0, uint16_t indexCol1 = 0, WaitEvents&... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TEXTRACT_ND2XNZ, dst0, dst1, src, indexRow0, indexCol0, indexRow1, indexCol1);
+    return {};
+}
+
+template <
     typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
     typename... WaitEvents>
 PTO_INST RecordEvent

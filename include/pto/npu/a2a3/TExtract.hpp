@@ -267,6 +267,200 @@ PTO_INTERNAL void TExtractVecToVecNZDispatch(DstTileData& dst, SrcTileData& src,
     }
 }
 
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractNdToNzScalar(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t validRow, uint16_t validCol)
+{
+    __ubuf__ T* dstAddr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcAddr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    constexpr uint32_t typeSize = sizeof(T);
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / typeSize;
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+    constexpr uint32_t dstRows = DstTileData::Rows;
+    set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    for (uint16_t r = 0; r < validRow; ++r) {
+        for (uint16_t c = 0; c < validCol; ++c) {
+            uint32_t cb = static_cast<uint32_t>(c) / c0Size;
+            uint32_t cc = static_cast<uint32_t>(c) % c0Size;
+            uint32_t dstOff = cb * dstRows * c0Size + static_cast<uint32_t>(r) * c0Size + cc;
+            uint32_t srcOff =
+                (static_cast<uint32_t>(indexRow) + r) * srcRowStride + static_cast<uint32_t>(indexCol) + c;
+            dstAddr[dstOff] = srcAddr[srcOff];
+        }
+    }
+    set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractNdToNz(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t validRow, uint16_t validCol)
+{
+    __ubuf__ T* dstAddr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcAddr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    constexpr uint32_t typeSize = sizeof(T);
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / typeSize;
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+    constexpr uint32_t dstRows = DstTileData::Rows;
+    __ubuf__ T* srcStart = srcAddr + static_cast<uint32_t>(indexRow) * srcRowStride + static_cast<uint32_t>(indexCol);
+    uint16_t numColBlocks = static_cast<uint16_t>(CeilDivision(static_cast<uint32_t>(validCol), c0Size));
+    constexpr uint16_t srcRepeatStride = static_cast<uint16_t>(srcRowStride * typeSize / BLOCK_BYTE_SIZE);
+    constexpr uint16_t dstRepeatStride = static_cast<uint16_t>(c0Size * typeSize / BLOCK_BYTE_SIZE);
+    constexpr uint32_t srcStrideU16 = srcRowStride * typeSize / sizeof(uint16_t);
+    constexpr uint32_t dstStrideU16 = c0Size * typeSize / sizeof(uint16_t);
+
+    set_mask_count();
+    for (uint16_t cb = 0; cb < numColBlocks; ++cb) {
+        uint32_t colCount = static_cast<uint32_t>(validCol) - static_cast<uint32_t>(cb) * c0Size;
+        if (colCount > c0Size) {
+            colCount = c0Size;
+        }
+        uint64_t maskU16 = static_cast<uint64_t>(colCount) * typeSize / sizeof(uint16_t);
+        __ubuf__ uint16_t* srcCb = (__ubuf__ uint16_t*)(srcStart + static_cast<uint32_t>(cb) * c0Size);
+        __ubuf__ uint16_t* dstCb = (__ubuf__ uint16_t*)(dstAddr + static_cast<uint32_t>(cb) * dstRows * c0Size);
+        set_vector_mask(0, maskU16);
+        uint16_t remainRows = validRow;
+        uint32_t done = 0;
+        while (remainRows > 0) {
+            uint8_t chunk =
+                remainRows > REPEAT_MAX ? static_cast<uint8_t>(REPEAT_MAX) : static_cast<uint8_t>(remainRows);
+            vcopy(
+                dstCb + done * dstStrideU16, srcCb + done * srcStrideU16, chunk, 1, 1, dstRepeatStride,
+                srcRepeatStride);
+            remainRows -= chunk;
+            done += chunk;
+        }
+    }
+    set_mask_norm();
+    set_vector_mask(-1, -1);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractNdToNzWiden(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t validRow, uint16_t validCol)
+{
+    __ubuf__ T* dstAddr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcAddr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    __ubuf__ half* tmpHalf = (__ubuf__ half*)(TMP_UB_OFFSET);
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+    constexpr uint32_t dstRows = DstTileData::Rows;
+    __ubuf__ T* srcStart = srcAddr + static_cast<uint32_t>(indexRow) * srcRowStride + static_cast<uint32_t>(indexCol);
+    uint16_t numColBlocks = static_cast<uint16_t>(CeilDivision(static_cast<uint32_t>(validCol), c0Size));
+    constexpr uint16_t srcRepeatStride = static_cast<uint16_t>(srcRowStride * sizeof(T) / BLOCK_BYTE_SIZE);
+    constexpr uint16_t tmpRepeatStride = static_cast<uint16_t>(c0Size * sizeof(half) / BLOCK_BYTE_SIZE);
+    constexpr uint16_t dstRepeatStride = static_cast<uint16_t>(c0Size * sizeof(T) / BLOCK_BYTE_SIZE);
+    constexpr uint16_t maxChunkRows = static_cast<uint16_t>(TMP_UB_SIZE / (c0Size * sizeof(half)));
+
+    set_mask_norm();
+    for (uint16_t cb = 0; cb < numColBlocks; ++cb) {
+        uint32_t colCount = static_cast<uint32_t>(validCol) - static_cast<uint32_t>(cb) * c0Size;
+        if (colCount > c0Size) {
+            colCount = c0Size;
+        }
+        __ubuf__ T* srcCb = srcStart + static_cast<uint32_t>(cb) * c0Size;
+        __ubuf__ T* dstCb = dstAddr + static_cast<uint32_t>(cb) * dstRows * c0Size;
+        SetContinuousMask(colCount);
+        uint16_t remainRows = validRow;
+        uint32_t done = 0;
+        while (remainRows > 0) {
+            uint8_t chunk =
+                remainRows > maxChunkRows ? static_cast<uint8_t>(maxChunkRows) : static_cast<uint8_t>(remainRows);
+            vconv_s82f16(tmpHalf, srcCb + done * srcRowStride, chunk, 1, 1, tmpRepeatStride, srcRepeatStride);
+            pipe_barrier(PIPE_V);
+            vconv_f162s8z(dstCb + done * c0Size, tmpHalf, chunk, 1, 1, dstRepeatStride, tmpRepeatStride);
+            pipe_barrier(PIPE_V);
+            remainRows -= chunk;
+            done += chunk;
+        }
+    }
+    set_vector_mask(-1, -1);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void DispatchNdToNz(
+    DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, uint16_t validRow, uint16_t validCol)
+{
+    bool colAligned = ((static_cast<uint32_t>(indexCol) * sizeof(T)) % BLOCK_BYTE_SIZE) == 0;
+    if ((validRow == 1 && validCol == 1) || !colAligned) {
+        TExtractNdToNzScalar<T, DstTileData, SrcTileData>(
+            dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
+    } else if constexpr (sizeof(T) == 1) {
+        if ((static_cast<uint32_t>(validCol) * sizeof(T)) % sizeof(uint16_t) == 0) {
+            TExtractNdToNz<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
+        } else {
+            TExtractNdToNzWiden<T, DstTileData, SrcTileData>(
+                dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
+        }
+    } else {
+        TExtractNdToNz<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol, validRow, validCol);
+    }
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void CheckTExtractNdToNz()
+{
+    static_assert(
+        SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec,
+        "TEXTRACT A2A3 ND->2xNZ : Source and destinations must be Vec (UB) tiles.");
+    static_assert(
+        SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox),
+        "TEXTRACT A2A3 ND->2xNZ : Source must be ND (RowMajor, NoneBox).");
+    static_assert(
+        !DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
+        "TEXTRACT A2A3 ND->2xNZ : Destination must be NZ (ColMajor, RowMajor fractal).");
+    static_assert(
+        DstTileData::Compact != CompactMode::RowPlusOne,
+        "TEXTRACT A2A3ND->2xNZ : A2A3 supports plain NZ output only (no NZ+1).");
+    static_assert(
+        std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
+        "TEXTRACT A2A3 ND->2xNZ : Source and destination data types must match.");
+    static_assert(
+        std::is_same<T, int8_t>::value || std::is_same<T, half>::value || std::is_same<T, bfloat16_t>::value ||
+            std::is_same<T, float>::value || std::is_same<T, int32_t>::value,
+        "TEXTRACT A2A3 ND->2xNZ : Unsupported data type.");
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(T);
+    static_assert(DstTileData::Cols % c0Size == 0, "TEXTRACT ND->2xNZ : Destination cols must be c0-aligned.");
+    static_assert(
+        (SrcTileData::RowStride * sizeof(T)) % BLOCK_BYTE_SIZE == 0,
+        "TEXTRACT A2A3 ND->2xNZ : Source row stride must be 32-byte aligned.");
+}
+
+template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_ND2XNZ_IMPL(
+    Dst0TileData& dst0, Dst1TileData& dst1, SrcTileData& src, uint16_t indexRow0, uint16_t indexCol0,
+    uint16_t indexRow1, uint16_t indexCol1)
+{
+    using T = typename SrcTileData::DType;
+    CheckTExtractNdToNz<T, Dst0TileData, SrcTileData>();
+    CheckTExtractNdToNz<T, Dst1TileData, SrcTileData>();
+
+    uint16_t validRow1 = static_cast<uint16_t>(dst1.GetValidRow());
+    uint16_t validCol1 = static_cast<uint16_t>(dst1.GetValidCol());
+    uint16_t validRow0 = static_cast<uint16_t>(dst0.GetValidRow());
+    uint16_t validCol0 = static_cast<uint16_t>(dst0.GetValidCol());
+
+    PTO_ASSERT(
+        indexRow0 + validRow0 <= SrcTileData::Rows,
+        "TEXTRACT A2A3 ND->2xNZ : window0 indexRow + validRow exceeds srcRows!");
+    PTO_ASSERT(
+        indexCol0 + validCol0 <= SrcTileData::Cols,
+        "TEXTRACT A2A3 ND->2xNZ : window0 indexCol + validCol exceeds srcCols!");
+    PTO_ASSERT(
+        indexRow1 + validRow1 <= SrcTileData::Rows,
+        "TEXTRACT A2A3 ND->2xNZ : window1 indexRow + validRow exceeds srcRows!");
+    PTO_ASSERT(
+        indexCol1 + validCol1 <= SrcTileData::Cols,
+        "TEXTRACT A2A3 ND->2xNZ : window1 indexCol + validCol exceeds srcCols!");
+
+    DispatchNdToNz<T, Dst0TileData, SrcTileData>(dst0, src, indexRow0, indexCol0, validRow0, validCol0);
+    DispatchNdToNz<T, Dst1TileData, SrcTileData>(dst1, src, indexRow1, indexCol1, validRow1, validCol1);
+}
+
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
