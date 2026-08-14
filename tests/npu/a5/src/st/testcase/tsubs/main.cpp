@@ -171,3 +171,15 @@ TEST_F(TSUBSTest, case11)
 TEST_F(TSUBSTest, case_int64_4x16) { EXPECT_TRUE((TSubSTestFramework<12, int64_t, 4, 16, 4, 4, 16, 16>())); }
 
 TEST_F(TSUBSTest, case_uint64_4x16) { EXPECT_TRUE((TSubSTestFramework<13, uint64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TSUBSTest, case_int64_1x16364)
+{
+    bool ret = TSubSTestFramework<14, int64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TSUBSTest, case_uint64_1x16364)
+{
+    bool ret = TSubSTestFramework<15, uint64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}

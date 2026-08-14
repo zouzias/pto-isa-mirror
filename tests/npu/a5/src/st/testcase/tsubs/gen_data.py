@@ -74,6 +74,8 @@ if __name__ == "__main__":
         TsubsParams("TSUBSTest.case11", np.uint8, 1, 64, 1, 32),
         TsubsParams("TSUBSTest.case_int64_4x16", np.int64, 4, 16, 4, 16),
         TsubsParams("TSUBSTest.case_uint64_4x16", np.uint64, 4, 16, 4, 16),
+        TsubsParams("TSUBSTest.case_int64_1x16364", np.int64, 1, 16364, 1, 16364),
+        TsubsParams("TSUBSTest.case_uint64_1x16364", np.uint64, 1, 16364, 1, 16364),
     ]
 
     for _, case in enumerate(case_params_list):
