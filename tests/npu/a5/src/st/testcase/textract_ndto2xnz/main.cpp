@@ -95,6 +95,7 @@ static void test_ndto2xnz(int key, int esize, uint16_t ir0, uint16_t ic0, uint16
 static void test_ndto2xnz_1x1(int key, int esize, uint16_t ir0, uint16_t ic0, uint16_t ir1, uint16_t ic1)
 {
     constexpr int SR = 64, SC = 128, N0 = 16;
+    ASSERT_GT(esize, 0);
     int c0 = 32 / esize;
     size_t srcSize = static_cast<size_t>(SR) * SC * esize;
     size_t outSize = static_cast<size_t>(N0) * c0 * esize;

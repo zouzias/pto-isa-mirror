@@ -1054,28 +1054,28 @@ PTO_INTERNAL void CheckTExtractNdToNz()
 {
     static_assert(
         SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec,
-        "TEXTRACT ND->2xNZ : Source and destinations must be Vec (UB) tiles.");
+        "TEXTRACT A5 ND->2xNZ : Source and destinations must be Vec (UB) tiles.");
     static_assert(
         SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox),
-        "TEXTRACT ND->2xNZ : Source must be ND (RowMajor, NoneBox).");
+        "TEXTRACT A5 ND->2xNZ : Source must be ND (RowMajor, NoneBox).");
     static_assert(
         !DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
-        "TEXTRACT ND->2xNZ : Destination must be NZ (ColMajor, RowMajor fractal).");
+        "TEXTRACT A5 ND->2xNZ : Destination must be NZ (ColMajor, RowMajor fractal).");
     static_assert(
         std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
-        "TEXTRACT ND->2xNZ : Source and destination data types must match.");
+        "TEXTRACT A5 ND->2xNZ : Source and destination data types must match.");
     static_assert(
         (std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) || (std::is_same<T, float>::value) ||
             (std::is_same<T, int32_t>::value) || (std::is_same<T, int8_t>::value) ||
             (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, float8_e4m3_t>::value) ||
             (std::is_same<T, float8_e5m2_t>::value) || (std::is_same<T, float8_e8m0_t>::value) ||
             (std::is_same<T, float4_e2m1x2_t>::value) || (std::is_same<T, float4_e1m2x2_t>::value),
-        "TEXTRACT ND->2xNZ : Unsupported data type.");
+        "TEXTRACT A5 ND->2xNZ : Unsupported data type.");
     constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(T);
     static_assert(DstTileData::Cols % c0Size == 0, "TEXTRACT ND->2xNZ : Destination cols must be c0-aligned.");
     static_assert(
         (SrcTileData::RowStride * sizeof(T)) % BLOCK_BYTE_SIZE == 0,
-        "TEXTRACT ND->2xNZ : Source row stride must be 32-byte aligned.");
+        "TEXTRACT A5 ND->2xNZ : Source row stride must be 32-byte aligned.");
 }
 
 template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData>
