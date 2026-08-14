@@ -89,6 +89,13 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src,
                                 WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             FpTileData &fp,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
           AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -105,6 +112,8 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
 #endif
 ```
 
+`TINSERT_FP(...)` 为源码兼容保留，并转发到无 `mode` 的 `TINSERT(..., fp, indexRow, indexCol, ...)` 重载。
+
 ## 约束
 
 ### 通用约束 / 检查
@@ -114,7 +123,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - relu形式：`TINSERT<..., reluMode>(dst, src, indexRow, indexCol)`
     - 累加器到向量形式：`TINSERT<..., mode, reluMode>(dst, src, indexRow, indexCol)`
     - 标量量化形式：`TINSERT<..., reluMode>(dst, src, preQuantScalar, indexRow, indexCol)` 和 `TINSERT<..., mode, reluMode>(dst, src, preQuantScalar, indexRow, indexCol)`
-    - 向量量化形式：`TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)` 和 `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)`
+    - 向量量化形式：`TINSERT<..., FpTileData, reluMode>(dst, src, fp, indexRow, indexCol)`、`TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)` 和 `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)`
     - NZ split形式 *(仅Ascend 950PR/Ascend 950DT/kirin9030/kirinX90)*：`TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` 或 `TINSERT<TInsertMode::SPLIT4>(...)`
 - `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
 - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
@@ -131,7 +140,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
 - **标量量化** 支持的dtype对：
     - `float` Acc → `int8_t`
     - `int32_t` Acc → `int8_t`、`uint8_t`、`half`、`int16_t`
-- **向量量化**（`TINSERT_FP`）支持的dtype对：
+- **向量量化**（`TINSERT` 含 `FpTileData`；`TINSERT_FP` 转发别名）支持的dtype对：
     - `float` Acc → `int8_t`
     - `int32_t` Acc → `int8_t`、`uint8_t`、`half`、`int16_t`
 - 向量量化要求提供 `FpTileData` 缩放操作数（`TileType::Scaling`）。
@@ -149,7 +158,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - **标量量化** 目标类型：
         - `float` Acc → `int8_t`、`uint8_t`、`hifloat8_t`、`half`、`bfloat16_t`、`float8_e4m3_t`
         - `int32_t` Acc → `int8_t`、`uint8_t`、`half`、`bfloat16_t`
-    - **向量量化**（`TINSERT_FP`）目标类型：与标量量化相同。
+    - **向量量化**（`TINSERT` 含 `FpTileData`；`TINSERT_FP` 转发别名）目标类型：与标量量化相同。
 
 - **Acc → Vec**（`TileType::Acc → TileType::Vec`）：
     - 源Acc类型必须是 `float` 或 `int32_t`；源布局必须为 `(BFractal: ColMajor, SFractal: RowMajor)`。
@@ -159,7 +168,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - **标量量化** 目标类型：
         - `float` Acc → `int8_t`、`uint8_t`、`hifloat8_t`、`half`、`bfloat16_t`、`float8_e4m3_t`
         - `int32_t` Acc → `int8_t`、`uint8_t`、`half`、`bfloat16_t`
-    - **向量量化**（`TINSERT_FP` / `TINSERT` 含 `FpTileData`）目标类型：与标量量化相同。
+    - **向量量化**（`TINSERT` 含 `FpTileData`；`TINSERT_FP` 转发别名）目标类型：与标量量化相同。
     - 目标布局必须为以下之一：NZ-to-NZ（`!isRowMajor, SFractal: RowMajor`）、NZ-to-ND（`isRowMajor, SFractal: NoneBox`）或NZ-to-DN（`!isRowMajor, SFractal: NoneBox`）。
     - `AccToVecMode` 选择 `SingleModeVec0`、`SingleModeVec1`、`DualModeSplitM` 或 `DualModeSplitN`。
     - 双目标模式（`DualModeSplitM`、`DualModeSplitN`）要求 `QuantMode_t::NoQuant` 且不支持NZ-to-DN路径。
