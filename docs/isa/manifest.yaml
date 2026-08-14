@@ -1,46 +1,10 @@
 {
   "instructions": [
     {
-      "instruction": "TSYNC",
-      "category": "Synchronization",
-      "summary_en": "Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).",
-      "summary_zh": "同步 PTO 执行（等待事件或插入每操作流水线屏障）。",
-      "diagram_template": "sync",
-      "operands": [
-        "producer",
-        "consumer"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TASSIGN",
       "category": "Manual / Resource Binding",
       "summary_en": "Bind a Tile object to an implementation-defined on-chip address (manual placement).",
       "summary_zh": "将 Tile 对象绑定到实现定义的片上地址（手动放置）。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSETHF32MODE",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Configure HF32 transform mode (implementation-defined).",
-      "summary_zh": "设置 HF32 变换模式（实现定义）。",
-      "diagram_template": "config",
-      "operands": [
-        "config",
-        "state"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSETTF32MODE",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Configure TF32 transform mode (implementation-defined).",
-      "summary_zh": "设置 TF32 变换模式（实现定义）。",
       "diagram_template": "config",
       "operands": [
         "config",
@@ -293,32 +257,6 @@
       "notes": []
     },
     {
-      "instruction": "TADDC",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary add: `src0 + src1 + src2`.",
-      "summary_zh": "三元逐元素加法：`src0 + src1 + src2`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBC",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `src0 - src1 + src2`.",
-      "summary_zh": "三元逐元素运算：`src0 - src1 + src2`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TCVT",
       "category": "Elementwise (Tile-Tile)",
       "summary_en": "Elementwise type conversion with a specified rounding mode.",
@@ -466,32 +404,6 @@
       "category": "Elementwise (Tile-Tile)",
       "summary_en": "Elementwise ternary op: `src0 * dst + src1`.",
       "summary_zh": "三元逐元素运算：`src0 * dst + src1`。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBRELU",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise subtract then ReLU of two tiles.",
-      "summary_zh": "src0和src1逐元素相减后ReLU。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TFUSEDMULADDRELU",
-      "category": "Elementwise (Tile-Tile)",
-      "summary_en": "Elementwise ternary op: `ReLU(src0 * dst + src1)`.",
-      "summary_zh": "三元逐元素运算：`ReLU(src0 * dst + src1)`。",
       "diagram_template": "elementwise",
       "operands": [
         "dst",
@@ -726,32 +638,6 @@
       "category": "Tile-Scalar / Tile-Immediate",
       "summary_en": "Leaky ReLU with a scalar slope.",
       "summary_zh": "带标量斜率的 Leaky ReLU。",
-      "diagram_template": "scalar",
-      "operands": [
-        "dst",
-        "src",
-        "scalar"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TADDSC",
-      "category": "Tile-Scalar / Tile-Immediate",
-      "summary_en": "Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`.",
-      "summary_zh": "与标量和第二个 Tile 的融合逐元素加法：`src0 + scalar + src1`。",
-      "diagram_template": "scalar",
-      "operands": [
-        "dst",
-        "src",
-        "scalar"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TSUBSC",
-      "category": "Tile-Scalar / Tile-Immediate",
-      "summary_en": "Elementwise fused op: `src0 - scalar + src1`.",
-      "summary_zh": "融合逐元素运算：`src0 - scalar + src1`。",
       "diagram_template": "scalar",
       "operands": [
         "dst",
@@ -1393,32 +1279,6 @@
       "notes": []
     },
     {
-      "instruction": "TSUBVIEW",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Reinterpret a tile as a subtile of another tile.",
-      "summary_zh": "表达一个tile是另一个tile的subview。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src",
-        "rowOffset",
-        "colOffset"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TGET_SCALE_ADDR",
-      "category": "Manual / Resource Binding",
-      "summary_en": "Bind the on-chip address of output tile to a scaled factor of that of input tile.",
-      "summary_zh": "将输出tile的片上内存值绑定为扩展后的输入tile内存的值。",
-      "diagram_template": "reshape_move",
-      "operands": [
-        "dst",
-        "src"
-      ],
-      "notes": []
-    },
-    {
       "instruction": "TPRINT",
       "category": "Complex",
       "summary_en": "Debug/print elements from a tile (implementation-defined).",
@@ -1615,33 +1475,6 @@
       "notes": [
         "Available on A5 / Kirin9030 / CPU-sim only (PTO_NPU_ARCH_A5 || PTO_NPU_ARCH_KIRIN9030 || __CPU_SIM)."
       ]
-    },
-    {
-      "instruction": "TADDReluConv",
-      "category": "Complex",
-      "summary_en": "Fused elementwise add, ReLU clamp, and type conversion: dst = convert(max(0, src0 + src1)).",
-      "summary_zh": "融合逐元素加法、ReLU 限幅和类型转换：dst = convert(max(0, src0 + src1))。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1"
-      ],
-      "notes": []
-    },
-    {
-      "instruction": "TAddDeqRelu",
-      "category": "Complex",
-      "summary_en": "Fused elementwise add, dequantization scale, and ReLU clamp: dst = half(max(0, (src0 + src1) * deqScale)).",
-      "summary_zh": "融合逐元素加法、反量化缩放和 ReLU 限幅：dst = half(max(0, (src0 + src1) * deqScale))。",
-      "diagram_template": "elementwise",
-      "operands": [
-        "dst",
-        "src0",
-        "src1",
-        "tmp"
-      ],
-      "notes": []
     }
   ]
 }

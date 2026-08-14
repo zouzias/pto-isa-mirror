@@ -11,14 +11,11 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | ISA reference | [`docs/isa/README.md`](isa/README.md) | Per-instruction reference directory index. |
 | ISA reference | [`docs/isa/conventions.md`](isa/conventions.md) | Shared notation, operands, events, and modifiers. |
 | Source of truth | [`include/pto/common/pto_instr.hpp`](reference/pto-intrinsics-header.md) | C++ intrinsic API (authoritative). |
-| PTO Auto Mode | [`docs/auto_mode/README.md`](README.md) | PTO auto mode guide entry point. |
 
 ## Instruction Index (All PTO Instructions)
 
 | Category | Instruction | Description |
 |---|---|---|
-| Synchronization | [`TSYNC`](isa/TSYNC.md) | Synchronize PTO execution (wait on events or insert a per-op pipeline barrier). |
-| Synchronization | [`SYNCALL`](isa/SYNCALL.md) | Cross-core synchronization barrier (hardware FFTS or software GM polling). |
 | Manual / Resource Binding | [`TASSIGN`](isa/TASSIGN.md) | Bind a Tile object to an implementation-defined on-chip address (manual placement). |
 | Manual / Resource Binding | [`SETFMATRIX`](isa/SETFMATRIX.md) | Set FMATRIX register(s) for IMG2COL-like ops. |
 | Manual / Resource Binding | [`SET_IMG2COL_RPT`](isa/SET_IMG2COL_RPT.md) | Set IMG2COL repeat metadata from an IMG2COL configuration tile. |
@@ -39,8 +36,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Elementwise (Tile-Tile) | [`TLOG`](isa/TLOG.md) | Elementwise natural logarithm of a tile. |
 | Elementwise (Tile-Tile) | [`TRECIP`](isa/TRECIP.md) | Elementwise reciprocal of a tile. |
 | Elementwise (Tile-Tile) | [`TPRELU`](isa/TPRELU.md) | Elementwise PReLU (parametric ReLU) with a per-element slope tile. |
-| Elementwise (Tile-Tile) | [`TADDC`](isa/TADDC.md) | Elementwise ternary add: `src0 + src1 + src2`. |
-| Elementwise (Tile-Tile) | [`TSUBC`](isa/TSUBC.md) | Elementwise ternary op: `src0 - src1 + src2`. |
 | Elementwise (Tile-Tile) | [`TCVT`](isa/TCVT.md) | Elementwise type conversion with a specified rounding mode. |
 | Elementwise (Tile-Tile) | [`TSEL`](isa/TSEL.md) | Select between two tiles using a mask tile (per-element selection). |
 | Elementwise (Tile-Tile) | [`TRSQRT`](isa/TRSQRT.md) | Elementwise reciprocal square root. |
@@ -51,10 +46,11 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Elementwise (Tile-Tile) | [`TNEG`](isa/TNEG.md) | Elementwise negation of a tile. |
 | Elementwise (Tile-Tile) | [`TREM`](isa/TREM.md) | Elementwise remainder of two tiles. |
 | Elementwise (Tile-Tile) | [`TFMOD`](isa/TFMOD.md) | Elementwise fmod of two tiles. |
-| Elementwise (Tile-Tile) | [`TPOW`](isa/TPOW.md) | Elementwise power of two tiles. |
+| Elementwise (Tile-Tile) | [`TMULADDDST`](isa/TMULADDDST.md) | Elementwise ternary op: `src0 * src1 + dst`. |
+| Elementwise (Tile-Tile) | [`TFUSEDMULADD`](isa/TFUSEDMULADD.md) | Elementwise ternary op: `src0 * dst + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TEXPANDS`](isa/TEXPANDS.md) | Broadcast a scalar into a destination tile. |
 | Tile-Scalar / Tile-Immediate | [`TCMPS`](isa/TCMPS.md) | Compare a tile against a scalar and write per-element comparison results. |
-| Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select between source tile and scalar using a mask tile (per-element selection for source tile). |
+| Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select one of two source tiles using a scalar `selectMode` (global select). |
 | Tile-Scalar / Tile-Immediate | [`TMINS`](isa/TMINS.md) | Elementwise minimum of a tile and a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TADDS`](isa/TADDS.md) | Elementwise add a scalar to a tile. |
 | Tile-Scalar / Tile-Immediate | [`TSUBS`](isa/TSUBS.md) | Elementwise subtract a scalar from a tile. |
@@ -70,11 +66,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Tile-Scalar / Tile-Immediate | [`TSHRS`](isa/TSHRS.md) | Elementwise shift-right a tile by a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TXORS`](isa/TXORS.md) | Elementwise bitwise XOR of a tile and a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TLRELU`](isa/TLRELU.md) | Leaky ReLU with a scalar slope. |
-| Tile-Scalar / Tile-Immediate | [`TADDSC`](isa/TADDSC.md) | Elementwise fused add with scalar and a second tile: `src0 + scalar + src1`. |
-| Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
-| Tile-Scalar / Tile-Immediate | [`TPOWS`](isa/TPOWS.md) | Elementwise power of a tile by a scalar. |
 | Axis Reduce / Expand | [`TROWSUM`](isa/TROWSUM.md) | Reduce each row by summing across columns. |
-| Axis Reduce / Expand | [`TROWPROD`](isa/TROWPROD.md) | Reduce each row by multiplying across columns. |
 | Axis Reduce / Expand | [`TCOLSUM`](isa/TCOLSUM.md) | Reduce each column by summing across rows. |
 | Axis Reduce / Expand | [`TCOLPROD`](isa/TCOLPROD.md) | Reduce each column by multiplying across rows. |
 | Axis Reduce / Expand | [`TCOLMAX`](isa/TCOLMAX.md) | Reduce each column by taking the maximum across rows. |
@@ -82,8 +74,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Axis Reduce / Expand | [`TROWMIN`](isa/TROWMIN.md) | Reduce each row by taking the minimum across columns. |
 | Axis Reduce / Expand | [`TROWARGMAX`](isa/TROWARGMAX.md) | Get the column index of the maximum element for each row. |
 | Axis Reduce / Expand | [`TROWARGMIN`](isa/TROWARGMIN.md) | Get the column index of the minimum element for each row. |
-| Axis Reduce / Expand | [`TCOLARGMAX`](isa/TCOLARGMAX.md) | Get the row index of the maximum element for each column/Get the row value and index of the maximum element for each column|
-| Axis Reduce / Expand | [`TCOLARGMIN`](isa/TCOLARGMIN.md) | Get the row index of the minimum element for each column/Get the row value and index of the minimum element for each column|
 | Axis Reduce / Expand | [`TROWEXPAND`](isa/TROWEXPAND.md) | Broadcast the first element of each source row across the destination row. |
 | Axis Reduce / Expand | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV.md) | Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`. |
 | Axis Reduce / Expand | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL.md) | Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`. |
@@ -103,6 +93,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Axis Reduce / Expand | [`TCOLEXPANDEXPDIF`](isa/TCOLEXPANDEXPDIF.md) | Column-wise exp-diff: compute exp(src0 - src1) with per-column scalars. |
 | Memory (GM <-> Tile) | [`TLOAD`](isa/TLOAD.md) | Load data from a GlobalTensor (GM) into a Tile. |
 | Memory (GM <-> Tile) | [`TPREFETCH`](isa/TPREFETCH.md) | Prefetch data from global memory into a tile-local cache/buffer (hint). |
+| Memory (GM <-> Tile) | [`TPREFETCH_ASYNC`](isa/TPREFETCH_ASYNC.md) | Asynchronously prefetch a GlobalTensor region from GM into L2 cache via SDMA CMO. |
 | Memory (GM <-> Tile) | [`TSTORE`](isa/TSTORE.md) | Store data from a Tile into a GlobalTensor (GM), optionally using atomic write or quantization parameters. |
 | Memory (GM <-> Tile) | [`TSTORE_FP`](isa/TSTORE_FP.md) | Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters. |
 | Memory (GM <-> Tile) | [`MGATHER`](isa/MGATHER.md) | Gather-load elements from global memory into a tile using per-element indices. |
@@ -127,35 +118,18 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TMOV_FP`](isa/TMOV_FP.md) | Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters. |
 | Data Movement / Layout | [`TRESHAPE`](isa/TRESHAPE.md) | Reinterpret a tile as another tile type/shape while preserving the underlying bytes. |
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
-| Data Movement / Layout | [`TSUBVIEW`](isa/TSUBVIEW.md) | Reinterpret a tile as a subtile of another tile. |
-| Data Movement / Layout | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR.md) | Bind the on-chip address of output tile to a scaled factor of that of input tile. |
-| Data Movement / Layout | [`TCONCAT`](isa/TCONCAT.md) | Concatenate two tiles horizontally along the column dimension. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |
-| Complex | [`TSORT32`](isa/TSORT32.md) | Sort 32-element blocks of `src` with accompanying `idx` entries and output sorted value-index pairs. |
+| Complex | [`TSORT32`](isa/TSORT32.md) | Sort a fixed-size 32-element block and produce an index mapping. |
 | Complex | [`TGATHER`](isa/TGATHER.md) | Gather/select elements using either an index tile or a compile-time mask pattern. |
 | Complex | [`TCI`](isa/TCI.md) | Generate a contiguous integer sequence into a destination tile. |
 | Complex | [`TTRI`](isa/TTRI.md) | Generate a triangular (lower/upper) mask tile. |
-| Complex | [`TRANDOM`](isa/TRANDOM.md) | Generates random numbers in the destination tile using a counter-based cipher algorithm. |
 | Complex | [`TPARTADD`](isa/TPARTADD.md) | Partial elementwise add with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMUL`](isa/TPARTMUL.md) | Partial elementwise multiply with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMAX`](isa/TPARTMAX.md) | Partial elementwise max with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TPARTMIN`](isa/TPARTMIN.md) | Partial elementwise min with implementation-defined handling of mismatched valid regions. |
-| Complex | [`TPARTARGMAX`](isa/TPARTARGMAX.md) | Partial elementwise max selection returning corresponding index (argmax), with implementation-defined handling of mismatched valid regions. |
-| Complex | [`TPARTARGMIN`](isa/TPARTARGMIN.md) | Partial elementwise min selection returning corresponding index (argmin), with implementation-defined handling of mismatched valid regions. |
 | Complex | [`TGATHERB`](isa/TGATHERB.md) | Gather elements using byte offsets. |
 | Complex | [`TSCATTER`](isa/TSCATTER.md) | Scatter rows of a source tile into a destination tile using per-element row indices. |
 | Complex | [`TQUANT`](isa/TQUANT.md) | Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs. |
 | Complex | [`TDEQUANT`](isa/TDEQUANT.md) | Affine dequantization of a quantized tile (S8/S16 -> FP32): dst = (src - offset) * scale. |
 | Complex | [`THISTOGRAM`](isa/THISTOGRAM.md) | Per-byte histogram (256 bins) over a selected byte of each source element, with optional cascaded upper-byte filtering; the radix-sort bucket-count primitive. |
-| Communication | [`TPUT`](isa/comm/TPUT.md) | Remote write: transfer local data to remote NPU memory (GM → UB → GM). |
-| Communication | [`TGET`](isa/comm/TGET.md) | Remote read: read remote NPU data to local memory (GM → UB → GM). |
-| Communication | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC.md) | Asynchronous remote write (local GM → DMA engine → remote GM). |
-| Communication | [`TGET_ASYNC`](isa/comm/TGET_ASYNC.md) | Asynchronous remote read (remote GM → DMA engine → local GM). |
-| Communication | [`TNOTIFY`](isa/comm/TNOTIFY.md) | Send flag notification to remote NPU. |
-| Communication | [`TWAIT`](isa/comm/TWAIT.md) | Blocking wait until signal(s) meet comparison condition. |
-| Communication | [`TTEST`](isa/comm/TTEST.md) | Non-blocking test if signal(s) meet comparison condition. |
-| Communication | [`TGATHER`](isa/comm/TGATHER.md) | Gather data from all ranks and concatenate along DIM_3. |
-| Communication | [`TSCATTER`](isa/comm/TSCATTER.md) | Scatter data to all ranks by splitting along DIM_3. |
-| Communication | [`TREDUCE`](isa/comm/TREDUCE.md) | Gather and reduce data from all ranks element-wise to local. |
-| Communication | [`TBROADCAST`](isa/comm/TBROADCAST.md) | Broadcast data from current NPU to all ranks. |

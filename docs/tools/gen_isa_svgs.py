@@ -496,8 +496,7 @@ def _elementwise_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         "TREM": "remainder(src0, src1)",
         "TFMOD": "fmod(src0, src1)",
     }
-    ternary = {"TADDC": "src0 + src1 + src2", "TSUBC": "src0 - src1 + src2"}
-
+    ternary = {"TMULADDDST": "src0 * src1 + dst", "TFUSEDMULADD": "src0 * dst + src1"}
     if instr in unary:
         expr = f"dst[r,c] = {unary[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -505,7 +504,7 @@ def _elementwise_spec(instr: str) -> Tuple[List[str], str, List[str]]:
     if instr in ternary:
         expr = f"dst[r,c] = {ternary[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1", "src2"], expr, proc)
+        return (["src0", "src1"], expr, proc)
     if instr == "TSEL":
         expr = "dst[r,c] = (mask[r,c] != 0) ? src0[r,c] : src1[r,c]"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -561,15 +560,6 @@ def _scalar_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         expr = "dst[r,c] = (x>0) ? x : slope*x"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", "    x = src[r,c]", f"    {expr}"]
         return (["src(tile)"], expr, proc)
-    if instr == "TADDSC":
-        expr = "dst[r,c] = src0[r,c] + s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-    if instr == "TSUBSC":
-        expr = "dst[r,c] = src0[r,c] - s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-
     if instr in tile_scalar:
         expr = f"dst[r,c] = {tile_scalar[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -667,7 +657,7 @@ def _render_scalar(instr: str, summary: str, accent: str, bg: str) -> str:
     y_src = SRC_Y
     y_dst = DST_Y
 
-    src_labels = ["src0", "src1"] if instr in {"TADDSC", "TSUBSC", "TSELS"} else ["src"]
+    src_labels = ["src0", "src1"] if instr == "TSELS" else ["src"]
     src_prefixes = ["a", "b"] if len(src_labels) == 2 else ["a"]
 
     xs = _layout_row_lefts(CANVAS_W // 2, [tile_w] * len(src_labels), gap)
@@ -1222,41 +1212,6 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
         _draw_procedure(out, lines=proc, accent=accent)
         return _end_svg(out)
 
-    if instr.startswith("TSUBVIEW"):
-        expr = "dst = subview(src, rI, cI)"
-        proc = ["for r,c in valid(dst):", "  dst[r,c] = src[r + rI, c + cI]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
-        x_src = (CANVAS_W - tile_w) // 2
-        x_dst = (CANVAS_W - tile_w) // 2
-        _draw_tile_grid(
-            out,
-            x=x_src,
-            y=y_src,
-            label="src (rI = 0 and cI = 0)",
-            prefix="a",
-            valid_box=(5, 5),
-            highlight_cells=[(0, 0)],
-            accent=accent,
-        )
-        _draw_tile_grid(
-            out,
-            x=x_dst,
-            y=y_dst,
-            label="dst (subtile)",
-            valid_box=(3, 3),
-            prefix="d",
-            highlight_cells=[(0, 0)],
-            accent=accent,
-        )
-        sx, sy = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=0)
-        dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=0)
-        via_y = int((sy + dy) / 2)
-        _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
-        _draw_procedure(out, lines=proc, accent=accent)
-        return _end_svg(out)
-
     # Default: movement/reshape
     expr = "dst = move/reshape(src)"
     proc = ["for r,c in valid(dst):", "  dst[r,c] = transform(src[r,c])   (layout/location dependent)"]
@@ -1629,7 +1584,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
 
 def _render_sync(instr: str, summary: str, accent: str, bg: str) -> str:
     out = _begin_svg(instr, summary, "sync", accent, bg)
-    expr = "TSYNC establishes ordering: producer -> consumer"
+    expr = "synchronization establishes ordering: producer -> consumer"
     out.append(
         f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
     )
@@ -1652,7 +1607,7 @@ def _render_sync(instr: str, summary: str, accent: str, bg: str) -> str:
         )
 
     stage_box(y_prod, "Producer stage", "ops tagged as producer_class")
-    stage_box(y_cons, "Consumer stage", "ops tagged as consumer_class (after TSYNC)")
+    stage_box(y_cons, "Consumer stage", "ops tagged as consumer_class after synchronization")
 
     src_x, src_y = (box_x + box_w // 2, y_prod + box_h)
     dst_x, dst_y = (box_x + box_w // 2, y_cons)
@@ -1660,11 +1615,11 @@ def _render_sync(instr: str, summary: str, accent: str, bg: str) -> str:
     _draw_ortho_arrow(out, x1=src_x, y1=src_y, x2=dst_x, y2=dst_y, via_x=via_x, accent=accent)
 
     proc = [
-        "TSYNC(producer_class, consumer_class)",
+        "synchronize(producer_class, consumer_class)",
         "1) Let P be all earlier ops issued with class=producer_class.",
-        "2) TSYNC waits until P are complete (or until their events are satisfied).",
+        "2) Wait until P are complete or until their events are satisfied.",
         "3) For all later ops with class=consumer_class: observe results of P.",
-        "Ordering: P happens-before consumer_class ops after TSYNC.",
+        "Ordering: P happens-before consumer_class ops after synchronization.",
     ]
     _draw_procedure(out, lines=proc, accent=accent)
     return _end_svg(out)

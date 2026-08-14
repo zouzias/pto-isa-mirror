@@ -58,6 +58,39 @@ CATEGORY_ZH = {
 }
 
 
+REMOVED_INTERFACES_EN = [
+    "`TADDC`",
+    "`TAddDeqRelu`",
+    "`TADDReluConv`",
+    "`TADDSC`",
+    "`TFUSEDMULADDRELU`",
+    "`TGET_SCALE_ADDR`",
+    "`TPairReduceSum`",
+    "`TSUBC`",
+    "`TSUBRELU`",
+    "`TSUBRELUCONV`",
+    "`TSUBSC`",
+    "`TSUBVIEW`",
+    "`TSYNC`",
+]
+
+REMOVED_INTERFACES_ZH = [
+    "`TADDC`",
+    "`TAddDeqRelu`",
+    "`TADDReluConv`",
+    "`TADDSC`",
+    "`TFUSEDMULADDRELU`",
+    "`TGET_SCALE_ADDR`",
+    "`TPairReduceSum`",
+    "`TSUBC`",
+    "`TSUBRELU`",
+    "`TSUBRELUCONV`",
+    "`TSUBSC`",
+    "`TSUBVIEW`",
+    "`TSYNC`",
+]
+
+
 def load_manifest(path: Path) -> List[Dict[str, object]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     instructions = data.get("instructions", [])
@@ -101,6 +134,26 @@ def render_isa_readme(entries: List[Dict[str, object]]) -> str:
     lines.append("- Source of truth (C++ intrinsics): `include/pto/common/pto_instr.hpp`")
     lines.append("- Common conventions (operands, events, modifiers): `docs/isa/conventions.md`")
     lines.append("")
+    lines.append("## Removed interfaces and migration notes")
+    lines.append("")
+    lines.append("The current ISA reference no longer exposes the following legacy instruction interfaces:")
+    lines.append("")
+    for item in REMOVED_INTERFACES_EN:
+        lines.append(f"- {item}")
+    lines.append("")
+    lines.append("Migration guidance:")
+    lines.append("")
+    lines.append(
+        "- Replace ternary/scalar fused arithmetic forms with the corresponding primitive arithmetic sequence, such as `TADD`, `TSUB`, `TADDS`, `TSUBS`, `TMUL`, `TFUSEDMULADD`, and `TRELU`."
+    )
+    lines.append(
+        "- Replace fused add/ReLU/convert or add/dequant/ReLU forms with explicit arithmetic, conversion/dequantization, and `TRELU` steps."
+    )
+    lines.append("- Replace `TPairReduceSum` with the supported row/column reduction primitives that match the target layout.")
+    lines.append(
+        "- Do not call `TGET_SCALE_ADDR`; for AUTO-mode MX tests, bind the scale tile address from the data tile in test code before invoking the MX matmul primitive."
+    )
+    lines.append("")
     for cat, cat_entries in grouped.items():
         lines.append(f"## {cat}")
         for e in cat_entries:
@@ -125,6 +178,22 @@ def render_isa_readme_zh(entries: List[Dict[str, object]]) -> str:
     lines.append("")
     lines.append("- 权威来源：`include/pto/common/pto_instr.hpp`")
     lines.append("- 通用约定（操作数、事件、修饰符）：`docs/isa/conventions_zh.md`")
+    lines.append("")
+    lines.append("## 删除接口与迁移说明")
+    lines.append("")
+    lines.append("当前 ISA 参考不再公开以下历史指令接口：")
+    lines.append("")
+    for item in REMOVED_INTERFACES_ZH:
+        lines.append(f"- {item}")
+    lines.append("")
+    lines.append("迁移建议：")
+    lines.append("")
+    lines.append(
+        "- 将三元/标量融合算术形式替换为对应基础算术序列，例如 `TADD`、`TSUB`、`TADDS`、`TSUBS`、`TMUL`、`TFUSEDMULADD` 和 `TRELU`。"
+    )
+    lines.append("- 将融合 add/ReLU/convert 或 add/dequant/ReLU 形式拆分为显式算术、转换/反量化和 `TRELU` 步骤。")
+    lines.append("- 将 `TPairReduceSum` 替换为与目标 layout 匹配的现有行/列归约原语。")
+    lines.append("- 不再调用 `TGET_SCALE_ADDR`；AUTO 模式 MX 测试可在调用 MX matmul 原语前，在测试代码中根据数据 Tile 绑定 scale Tile 地址。")
     lines.append("")
     for cat, cat_entries in grouped.items():
         lines.append(f"## {CATEGORY_ZH.get(cat, cat)}")
