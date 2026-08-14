@@ -544,6 +544,21 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
     fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int32
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_idx
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_oddvalid
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_int8_1x1
+    fi
 
     if [ "$IS_AUTO_MODE" = "false" ]; then
       # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
