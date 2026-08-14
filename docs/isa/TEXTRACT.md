@@ -115,7 +115,7 @@ The two-destination `TEXTRACT` overload extracts two independent ND sub-windows 
 - Output compact mode:
     - A5 supports plain NZ (default) and the NZ+1 bank-conflict optimization (`CompactMode::RowPlusOne`).
     - A2A3 supports plain NZ only.
-    
+
 - Index alignment (a window's source base is `srcStart = src + indexRow*rowStride + indexCol`):
     - A5 (SIMD) handles a `c0`-unaligned `indexCol` (sub-`c0` column origin)
     via an element-exact unaligned load/store path; `c0`-aligned windows take
