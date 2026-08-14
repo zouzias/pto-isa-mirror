@@ -74,6 +74,26 @@ struct TPipe {
         }
     }
 
+    // Count TFREE notifications not consumed by steady-state TPUSH waits. Draining a fixed
+    // SyncPeriod leaves stale flags or waits for notifications that will never arrive when
+    // pipes are repeatedly constructed and destroyed.
+    PTO_INTERNAL static constexpr uint32_t countPendingFreeCredits(uint32_t tileCount)
+    {
+        const uint32_t notifiedFreeCount = tileCount / SyncPeriod;
+        uint32_t waitedFreeCount = 0;
+        if constexpr (SlotNum == 1) {
+            waitedFreeCount = (tileCount > 0) ? tileCount - 1 : 0;
+        } else if (tileCount > SlotNum) {
+            constexpr uint32_t firstWaitIndex =
+                (SlotNum % SyncPeriod == 0) ? SlotNum : ((SlotNum / SyncPeriod) + 1) * SyncPeriod;
+            const uint32_t lastWaitIndex = ((tileCount - 1) / SyncPeriod) * SyncPeriod;
+            if (lastWaitIndex >= firstWaitIndex) {
+                waitedFreeCount = (lastWaitIndex - firstWaitIndex) / SyncPeriod + 1;
+            }
+        }
+        return (notifiedFreeCount > waitedFreeCount) ? (notifiedFreeCount - waitedFreeCount) : 0;
+    }
+
     struct Producer {
         uint32_t tileIndex = 0;
         uint32_t subTileIndex = 0;
@@ -492,21 +512,7 @@ struct TPipe {
     // Initial TPUSH calls skip allocate() via shouldWaitFree (tileIndex < SlotNum, or 0 for depth 1).
     PTO_INTERNAL ~TPipe()
     {
-        const uint32_t numPopFree = prod.tileIndex / SyncPeriod;
-        uint32_t numPushWait = 0;
-        if constexpr (SlotNum == 1) {
-            numPushWait = (prod.tileIndex > 0) ? prod.tileIndex - 1 : 0;
-        } else {
-            if (prod.tileIndex > SlotNum) {
-                constexpr uint32_t firstAligned =
-                    (SlotNum % SyncPeriod == 0) ? SlotNum : ((SlotNum / SyncPeriod) + 1) * SyncPeriod;
-                const uint32_t lastAligned = ((prod.tileIndex - 1) / SyncPeriod) * SyncPeriod;
-                if (lastAligned >= firstAligned) {
-                    numPushWait = (lastAligned - firstAligned) / SyncPeriod + 1;
-                }
-            }
-        }
-        const uint32_t drainCount = (numPopFree > numPushWait) ? (numPopFree - numPushWait) : 0;
+        const uint32_t drainCount = countPendingFreeCredits(prod.tileIndex);
         for (uint32_t i = 0; i < drainCount; ++i) {
             prod.allocate();
         }
