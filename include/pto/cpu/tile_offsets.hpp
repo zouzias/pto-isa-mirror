@@ -16,6 +16,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+template <typename T>
+constexpr size_t GetC0ElemCount()
+{
+    return std::is_same_v<T, int32_t> ? static_cast<size_t>(ACC_C0_SIZE)
+                                      : static_cast<size_t>(C0_SIZE_BYTE) / sizeof(T);
+}
+
 template <typename T, typename = void>
 struct HasSFractal : std::false_type {};
 template <typename T>
@@ -83,7 +90,8 @@ size_t inline GetConvTileElementOffset(size_t r, size_t c, const std::vector<int
     const size_t shape3 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_3]);
     size_t shape4 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_4]);
 
-    constexpr size_t C0 = C0_SIZE_BYTE / sizeof(typename ConvTile::DType);
+    constexpr size_t C0 = GetC0ElemCount<typename ConvTile::DType>();
+    static_assert(C0 != 0, "Divider cannot be equal to zero");
 
     int64_t i0 = 0, i1 = 0, i2 = 0, i3 = 0, i4 = 0, c0 = 0;
     if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
@@ -144,7 +152,7 @@ PTO_INTERNAL int64_t CalculateValidRowFromTile(ConvTile& tile)
 template <typename ConvTile>
 PTO_INTERNAL int64_t CalculateValidColFromTile(ConvTile& tile)
 {
-    constexpr size_t C0 = C0_SIZE_BYTE / sizeof(typename ConvTile::DType);
+    constexpr size_t C0 = GetC0ElemCount<typename ConvTile::DType>();
     if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
         return tile.GetShape(1) * C0;
     } else if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
@@ -175,7 +183,8 @@ size_t inline MapTileIndicesToGlobalOffset(
     const size_t shape3 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_3]);
     const size_t shape4 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_4]);
 
-    constexpr size_t C0 = C0_SIZE_BYTE / sizeof(typename GlobalData::DType);
+    constexpr size_t C0 = GetC0ElemCount<typename GlobalData::DType>();
+    static_assert(C0 != 0, "Divider cannot be equal to zero");
 
     int64_t i0, i1, i2, i3, i4, c0 = 0;
     if constexpr (GlobalData::layout == pto::Layout::ND) {
