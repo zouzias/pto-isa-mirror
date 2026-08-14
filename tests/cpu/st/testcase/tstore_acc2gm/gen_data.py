@@ -84,7 +84,7 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
         temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor[i]))[0]
         if dst_data_type == np.int8:
             temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
-    
+
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
     quant_tensor = quant_tensor.astype(quant_type)
     quant_tensor.tofile("./quant_vector_gm.bin")
@@ -101,7 +101,7 @@ def get_quant_golden(dst_data_type, m, n, quant_type, golden):
                 quant_golden[i, j] = golden[i, j] * quant_tensor[j]
     return quant_golden
 
-   
+
 def gen_x1_x2_golden(g_info):
     src_data_type = g_info.src_data_type
     dst_data_type = g_info.dst_data_type
@@ -117,6 +117,31 @@ def gen_x1_x2_golden(g_info):
         x2_gm = np.random.randint(-5, 5, [k, n]).astype(src_data_type)
     golden = np.matmul(x1_gm.astype(dst_data_type), x2_gm.astype(dst_data_type)).astype(dst_data_type)
     return x1_gm, x2_gm, golden
+
+
+def get_c0_size(data_type):
+    """Calculates C0 dimension size based on hardware alignment."""
+    elem_size = np.dtype(data_type).itemsize
+    if np.dtype(data_type).kind == "i" and elem_size == 4:
+        return 16
+    return 32 // elem_size
+
+
+def nz_matrix_to_ndc1hwc0(golden, g_info):
+    n_dim, d_dim, c1_dim, h_dim, w_dim, c0_dim = g_info.ndc1hwc0_shape
+    c0_size = get_c0_size(g_info.dst_data_type)
+    if c0_dim != c0_size:
+        raise ValueError(f"NDC1HWC0 C0 dim {c0_dim} does not match c0_size {c0_size}.")
+    if g_info.m != n_dim * h_dim * w_dim:
+        raise ValueError("NDC1HWC0 requires m == N * H * W.")
+    if g_info.n != d_dim * c1_dim * c0_dim:
+        raise ValueError("NDC1HWC0 requires n == D * C1 * C0.")
+
+    return (
+        golden.reshape(n_dim, h_dim, w_dim, d_dim, c1_dim, c0_dim)
+        .transpose(0, 3, 4, 1, 2, 5)
+        .astype(g_info.dst_data_type)
+    )
 
 
 def gen_golden_data(case_name, g_info):
@@ -162,15 +187,15 @@ def gen_golden_data(case_name, g_info):
     elif dst_format == 3:
         c0_size = 8
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
-    elif dst_format == 4: 
+    elif dst_format == 4:
         # NHWC
         shape = g_info.shape
         golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).astype(dst_data_type)
-    elif dst_format == 5: 
+    elif dst_format == 5:
         # NCHW
         shape = g_info.shape
         golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).transpose(0, 3, 1, 2).astype(dst_data_type)
-    elif dst_format == 6: 
+    elif dst_format == 6:
         # NCDHW:
         shape_ncdhw = g_info.ncdhw_shape
         golden_ncdhw = np.zeros(shape_ncdhw, dtype=dst_data_type)
@@ -180,9 +205,12 @@ def gen_golden_data(case_name, g_info):
         ).transpose(0, 3, 1, 2).astype(dst_data_type)
         golden_ncdhw[:, :, 0, :, :] = golden_nchw
         golden = golden_ncdhw
+    elif dst_format == 7:
+        # NDC1HWC0
+        golden = nz_matrix_to_ndc1hwc0(golden, g_info)
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
-    
+
     golden = golden.astype(dst_data_type)
 
     x1_gm.tofile("./x1_gm.bin")
@@ -192,7 +220,7 @@ def gen_golden_data(case_name, g_info):
 
 class TStoreAcc2gmParams:
     def __init__(self, dst_data_type, src_data_type, dst_format, m, n, k, quant_mode=0, scalar=1, relu_mode=0,
-        shape=(0, 0, 0, 0), ncdhw_shape=(0, 0, 0, 0, 0)):
+        shape=(0, 0, 0, 0), ncdhw_shape=(0, 0, 0, 0, 0), ndc1hwc0_shape=(0, 0, 0, 0, 0, 0)):
         self.src_data_type = src_data_type
         self.dst_data_type = dst_data_type
         self.dst_format = dst_format
@@ -204,6 +232,7 @@ class TStoreAcc2gmParams:
         self.relu_mode = relu_mode
         self.shape = shape
         self.ncdhw_shape = ncdhw_shape
+        self.ndc1hwc0_shape = ndc1hwc0_shape
 
 if __name__ == "__main__":
     case_name_list = [
@@ -224,6 +253,8 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case27",
         "TStoreAcc2gmTest.case_relu_1",
         "TStoreAcc2gmTest.case_relu_21",
+        "TStoreAcc2gmTest.case_ndc1hwc0_scalar_1",
+        "TStoreAcc2gmTest.case_ndc1hwc0_scalar_2",
     ]
 
     case_params_list = [
@@ -244,6 +275,12 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(bfloat16, np.float16, 1, 160, 79, 51, 1, 3),
         TStoreAcc2gmParams(np.float32, np.float32, 1, 117, 97, 71, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 77, 34, 81, quant_mode=1, scalar=2, relu_mode=1),
+        TStoreAcc2gmParams(
+            np.float32, np.float32, 7, 128, 64, 31, ndc1hwc0_shape=(1, 2, 4, 16, 8, 8)
+        ),
+        TStoreAcc2gmParams(
+            np.int32, np.int8, 7, 128, 128, 31, ndc1hwc0_shape=(1, 2, 4, 16, 8, 16)
+        ),
     ]
 
     for i, case_name  in enumerate(case_name_list):
