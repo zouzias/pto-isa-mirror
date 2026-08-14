@@ -45,9 +45,16 @@ __global__ AICORE void runTExtractNd2xNz(
     SrcTile srcTile(SrcRows, SrcCols);
     Dst0Tile dst0Tile;
     Dst1Tile dst1Tile;
+    constexpr uint32_t kAlign = 0x100;
+    constexpr uint32_t srcBytes = static_cast<uint32_t>(SrcRows) * SrcCols * sizeof(T);
+    constexpr uint32_t dst0Bytes = static_cast<uint32_t>(W0Rows) * W0Cols * sizeof(T);
+    constexpr uint32_t dst1Bytes = static_cast<uint32_t>(W1Rows) * W1Cols * sizeof(T);
+    constexpr uint32_t dst0Addr = ((srcBytes + kAlign - 1) / kAlign) * kAlign;
+    constexpr uint32_t dst1Addr = dst0Addr + ((dst0Bytes + kAlign - 1) / kAlign) * kAlign;
+    static_assert(dst1Addr + dst1Bytes <= TMP_UB_OFFSET);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dst0Tile, 0x20000);
-    TASSIGN(dst1Tile, 0x30000);
+    TASSIGN(dst0Tile, dst0Addr);
+    TASSIGN(dst1Tile, dst1Addr);
 
     SrcGlobal srcGlobal(src);
     Dst0Global dst0Global(out0);
@@ -58,13 +65,15 @@ __global__ AICORE void runTExtractNd2xNz(
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
 #endif
 
     if constexpr (ZeroDst) {
-        __ubuf__ uint16_t* z0 = (__ubuf__ uint16_t*)(uintptr_t)0x20000;
-        __ubuf__ uint16_t* z1 = (__ubuf__ uint16_t*)(uintptr_t)0x30000;
-        constexpr uint32_t n0 = static_cast<uint32_t>(W0Rows) * W0Cols * sizeof(T) / sizeof(uint16_t);
-        constexpr uint32_t n1 = static_cast<uint32_t>(W1Rows) * W1Cols * sizeof(T) / sizeof(uint16_t);
+        __ubuf__ uint16_t* z0 = (__ubuf__ uint16_t*)(uintptr_t)dst0Addr;
+        __ubuf__ uint16_t* z1 = (__ubuf__ uint16_t*)(uintptr_t)dst1Addr;
+        constexpr uint32_t n0 = dst0Bytes / sizeof(uint16_t);
+        constexpr uint32_t n1 = dst1Bytes / sizeof(uint16_t);
         set_mask_count();
         set_vector_mask(0, n0);
         vector_dup(z0, (uint16_t)0, 0, 1, 1, 8, 8);
@@ -78,6 +87,9 @@ __global__ AICORE void runTExtractNd2xNz(
     TEXTRACT(dst0Tile, dst1Tile, srcTile, ir0, ic0, ir1, ic1);
 
 #ifndef __PTO_AUTO__
+    pipe_barrier(PIPE_V);
+    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
