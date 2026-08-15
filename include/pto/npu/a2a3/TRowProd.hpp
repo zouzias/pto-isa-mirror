@@ -29,51 +29,58 @@ __tf__ PTO_INTERNAL void TRowProd(
     constexpr unsigned dstRowStride = TileDataOut::RowStride;
     constexpr unsigned srcRowStride = TileDataIn::RowStride;
 
-    constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
-    unsigned blocksPerRow = validCol / elemsPerBlock;
+    constexpr unsigned elemsPerRepeat = REPEAT_BYTE / sizeof(T);
+    unsigned repeatsNum = validCol / elemsPerRepeat;
+    unsigned repeatRemain = validCol % elemsPerRepeat;
+    unsigned tmpRepeatsNum = TileDataTmp::RowStride / elemsPerRepeat;
 
     set_mask_count();
 
     for (unsigned row = 0; row < validRow; ++row, dstPtr += dstRowStride, srcPtr += srcRowStride) {
-        set_vector_mask(0, elemsPerBlock);
-
-        vector_dup(tmpPtr, (T)1.0f, 1, 1, 1, 0, 0);
-        pipe_barrier(PIPE_V);
-
-        for (unsigned block = 0; block < blocksPerRow; ++block) {
-            vmul(tmpPtr, tmpPtr, srcPtr + block * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
+        for (unsigned i = 0; i < tmpRepeatsNum; i++) {
+            vector_dup(tmpPtr + i * elemsPerRepeat, (T)1.0f, 1, 1, 1, 0, 0);
             pipe_barrier(PIPE_V);
         }
-
-        unsigned elemsLessThanBlock = validCol % elemsPerBlock;
-        if (elemsLessThanBlock > 0) {
-            set_vector_mask(0, elemsLessThanBlock);
-            vmul(tmpPtr, tmpPtr, srcPtr + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
+        for (unsigned i = 0; i < repeatsNum / 2; i++) {
+            vmul(tmpPtr + i * elemsPerRepeat, srcPtr + row * srcRowStride + 2 * i * elemsPerRepeat,
+                 srcPtr + row * srcRowStride + (2 * i + 1) * elemsPerRepeat, 1, 1, 1, 1, 8, 8, 8);
             pipe_barrier(PIPE_V);
+        }
+        unsigned tmpRepeatTime = repeatsNum / 2;
+        unsigned j = 0;
+        while (tmpRepeatTime > 0) {
+            vmul(tmpPtr + j * elemsPerRepeat, tmpPtr + 2 * j * elemsPerRepeat, tmpPtr + (2 * j + 1) * elemsPerRepeat,
+                 1, 1, 1, 1, 8, 8, 8);
+            pipe_barrier(PIPE_V);
+            tmpRepeatTime /= 2;
+            j++;
+        }
+        if (repeatsNum % 2 != 0) {
+            vmul(tmpPtr, tmpPtr, srcPtr + row * srcRowStride + (repeatsNum - 1) * elemsPerRepeat, 1, 1, 1, 1, 8, 8, 8);
+            pipe_barrier(PIPE_V);
+        }
+        if (repeatRemain > 0) {
+            set_vector_mask(0, repeatRemain);
+            vmul(tmpPtr, tmpPtr, srcPtr + row * srcRowStride + repeatsNum * elemsPerRepeat, 1, 1, 1, 1, 8, 8, 8);
+            pipe_barrier(PIPE_V);
+            set_vector_mask(-1, -1);
+        }
+        unsigned tmpElement = validCol / elemsPerRepeat > 0 ? elemsPerRepeat : validCol;
+        while (tmpElement > 0) {
+            set_vector_mask(0, tmpElement / 2);
+            vmul(tmpPtr, tmpPtr, tmpPtr + tmpElement / 2, 1, 1, 1, 1, 8, 8, 8);
+            pipe_barrier(PIPE_V);
+            tmpElement /= 2;
+            set_vector_mask(-1, -1);
         }
 
         PtoSetWaitFlag<PIPE_V, PIPE_S>();
-        if constexpr (std::is_same_v<T, float>) {
-            dstPtr[0] = tmpPtr[0] * tmpPtr[1] * tmpPtr[2] * tmpPtr[3] * tmpPtr[4] * tmpPtr[5] * tmpPtr[6] * tmpPtr[7];
-        } else if constexpr (std::is_same_v<T, half>) {
-            dstPtr[0] = (half)((float)tmpPtr[0] * (float)tmpPtr[1] * (float)tmpPtr[2] * (float)tmpPtr[3] *
-                               (float)tmpPtr[4] * (float)tmpPtr[5] * (float)tmpPtr[6] * (float)tmpPtr[7] *
-                               (float)tmpPtr[8] * (float)tmpPtr[9] * (float)tmpPtr[10] * (float)tmpPtr[11] *
-                               (float)tmpPtr[12] * (float)tmpPtr[13] * (float)tmpPtr[14] * (float)tmpPtr[15]);
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            dstPtr[0] = tmpPtr[0] * tmpPtr[1] * tmpPtr[2] * tmpPtr[3] * tmpPtr[4] * tmpPtr[5] * tmpPtr[6] * tmpPtr[7];
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            dstPtr[0] = tmpPtr[0] * tmpPtr[1] * tmpPtr[2] * tmpPtr[3] * tmpPtr[4] * tmpPtr[5] * tmpPtr[6] * tmpPtr[7] *
-                        tmpPtr[8] * tmpPtr[9] * tmpPtr[10] * tmpPtr[11] * tmpPtr[12] * tmpPtr[13] * tmpPtr[14] *
-                        tmpPtr[15];
-        } else {
-            static_assert(sizeof(T) == 0, "T must be float, half, int32, or int16");
-        }
+        dstPtr[0] = tmpPtr[0];
         PtoSetWaitFlag<PIPE_S, PIPE_V>();
+        set_vector_mask(-1, -1);
     }
 
     set_mask_norm();
-    set_vector_mask(-1, -1);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
