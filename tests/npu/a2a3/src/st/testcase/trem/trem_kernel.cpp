@@ -33,11 +33,11 @@ __global__ AICORE void runTRem(
     using TileDataSrc0 = Tile<TileType::Vec, T, src0TileH, src0TileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc1 = Tile<TileType::Vec, T, src1TileH, src1TileW, BLayout::RowMajor, -1, -1>;
     // tmp buffer only needs 1 row since it's reused for each row iteration
-    using TileDataTmp = Tile<TileType::Vec, T, 1, dstTileW, BLayout::RowMajor, -1, -1>;
+    using TileDataTmp = Tile<TileType::Vec, T, 1, 2 * dstTileW, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataSrc0 src0Tile(vRows, vCols);
     TileDataSrc1 src1Tile(vRows, vCols);
-    TileDataTmp tmpTile(1, vCols);
+    TileDataTmp tmpTile(1, 2 * dstTileW);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, src0TileH * src0TileW * sizeof(T));
     TASSIGN(dstTile, src0TileH * src0TileW * sizeof(T) + src1TileH * src1TileW * sizeof(T));
