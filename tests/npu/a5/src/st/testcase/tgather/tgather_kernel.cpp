@@ -18,6 +18,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+constexpr uint32_t TGATHER_VEC_UB_SIZE = 0x40000;
+constexpr uint32_t TGATHER_B64_INDEX_CHUNK_COLS = 4096;
+
 template <
     typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_, int kTCols_>
 __global__ AICORE void runTGather(__gm__ Tsrc0 __out__* out, __gm__ Tsrc0 __in__* src0, __gm__ Tsrc1 __in__* src1)
@@ -73,6 +76,32 @@ __global__ AICORE void runTGather(__gm__ Tsrc0 __out__* out, __gm__ Tsrc0 __in__
 }
 
 template <
+    typename src0T, typename src1T, uint32_t SRCROW, uint32_t SRCCOL, uint32_t DSTROW, uint32_t DSTCOL, uint32_t ROW,
+    uint32_t COL, uint32_t CHUNKCOL>
+void launchTGATHERB64U32Chunked(src0T* src0, src1T* src1, src0T* out, void* stream)
+{
+    if constexpr (ROW < DSTROW) {
+        constexpr uint32_t remainCol = DSTCOL - COL;
+        constexpr uint32_t thisCol = remainCol > CHUNKCOL ? CHUNKCOL : remainCol;
+        runTGather<src0T, src1T, SRCROW, SRCCOL, 1, thisCol, SRCROW, thisCol>
+            <<<1, nullptr, stream>>>(out + ROW * DSTCOL + COL, src0, src1 + ROW * DSTCOL + COL);
+        if constexpr (COL + thisCol < DSTCOL) {
+            launchTGATHERB64U32Chunked<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, ROW, COL + thisCol, CHUNKCOL>(
+                src0, src1, out, stream);
+        } else {
+            launchTGATHERB64U32Chunked<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, ROW + 1, 0, CHUNKCOL>(
+                src0, src1, out, stream);
+        }
+    }
+}
+
+template <typename src0T, typename src1T>
+constexpr bool IsB64U32Gather()
+{
+    return (std::is_same_v<src0T, int64_t> || std::is_same_v<src0T, uint64_t>) && std::is_same_v<src1T, uint32_t>;
+}
+
+template <
     typename src0T, typename src1T, typename dstT, uint32_t SRCROW, uint32_t SRCCOL, uint32_t DSTROW, uint32_t DSTCOL,
     bool isF8E4M3 = false, bool isF8E5M2 = false>
 void launchTGATHER_demo(src0T* src0, src1T* src1, dstT* out, void* stream)
@@ -87,6 +116,22 @@ void launchTGATHER_demo(src0T* src0, src1T* src1, dstT* out, void* stream)
     } else if constexpr (std::is_same_v<src0T, int8_t> || std::is_same_v<src0T, uint8_t>) {
         runTGather<float8_e4m3_t, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
             <<<1, nullptr, stream>>>((float8_e4m3_t*)(out), (float8_e4m3_t*)(src0), src1);
+    } else if constexpr (IsB64U32Gather<src0T, src1T>()) {
+        static_assert(std::is_same_v<src0T, dstT>, "TGATHER b64 index ST expects same src0 and dst type.");
+        constexpr uint32_t src0Bytes = SRCROW * SRCCOL * sizeof(src0T);
+        constexpr uint32_t fullBytes = src0Bytes + DSTROW * DSTCOL * (sizeof(src1T) + sizeof(src0T));
+        if constexpr (fullBytes <= TGATHER_VEC_UB_SIZE) {
+            runTGather<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
+                <<<1, nullptr, stream>>>(out, src0, src1);
+        } else {
+            static_assert(src0Bytes < TGATHER_VEC_UB_SIZE, "TGATHER ST chunking requires src0 tile to fit in UB.");
+            constexpr uint32_t maxChunkColByUb = (TGATHER_VEC_UB_SIZE - src0Bytes) / (sizeof(src1T) + sizeof(src0T));
+            constexpr uint32_t chunkCol =
+                maxChunkColByUb > TGATHER_B64_INDEX_CHUNK_COLS ? TGATHER_B64_INDEX_CHUNK_COLS : maxChunkColByUb;
+            static_assert(chunkCol > 0, "TGATHER ST chunk column must be greater than 0.");
+            launchTGATHERB64U32Chunked<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, 0, 0, chunkCol>(
+                src0, src1, out, stream);
+        }
     } else {
         runTGather<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
             <<<1, nullptr, stream>>>(out, src0, src1);
@@ -114,6 +159,8 @@ template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 16, 4, 16>(
     int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
 template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>(
     uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
+template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 1, 16368, 1, 16368>(
+    int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
 __global__ AICORE void runTGATHER(__gm__ dstT __out__* out, __gm__ srcT __in__* src)
