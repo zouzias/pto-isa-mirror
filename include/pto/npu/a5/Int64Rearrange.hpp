@@ -73,19 +73,26 @@ PTO_INTERNAL void Int64Gather(
     __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols)
 {
     static_assert(sizeof(I) == sizeof(uint32_t), "Int64Gather requires b32 indices");
+    constexpr uint16_t elementsPerRepeat = CCE_VL / sizeof(uint32_t);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
         vector_u32 idx, wordIdx, highIdx, low, high;
-        uint32_t count = validCols;
-        MaskReg mask = plt_b32(count, POST_UPDATE);
         uint16_t rows = validRows;
         for (uint16_t row = 0; row < rows; ++row) {
-            vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols, 0, NORM);
-            vadd(wordIdx, idx, idx, mask, MODE_ZEROING);
-            vadds(highIdx, wordIdx, 1u, mask, MODE_ZEROING);
-            vgather2(low, (__ubuf__ uint32_t*)src, wordIdx, mask);
-            vgather2(high, (__ubuf__ uint32_t*)src, highIdx, mask);
-            vsts((vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, mask);
+            uint32_t count = validCols;
+            for (uint16_t repeat = 0; repeat < repeatTimes; ++repeat) {
+                uint32_t colOffset = repeat * elementsPerRepeat;
+                MaskReg mask = plt_b32(count, POST_UPDATE);
+                vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+                vadd(wordIdx, idx, idx, mask, MODE_ZEROING);
+                vadds(highIdx, wordIdx, 1u, mask, MODE_ZEROING);
+                vgather2(low, (__ubuf__ uint32_t*)src, wordIdx, mask);
+                vgather2(high, (__ubuf__ uint32_t*)src, highIdx, mask);
+                vsts(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + row * DstCols * 2 + colOffset * 2,
+                    0, INTLV_B32, mask);
+            }
         }
     }
 }
