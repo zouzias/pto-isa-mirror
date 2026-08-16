@@ -39,6 +39,39 @@ PTO_INTERNAL void runTMuls(__gm__ T* out, __gm__ T* src, T scalar)
     out = dstGlobal.data();
 }
 
+template <
+    typename T, int srcGmRow, int srcGmCol, int dstGmRow, int dstGmCol, int tileRow, int tileCol, int validRow,
+    int validCol>
+PTO_INTERNAL void runTMulsByColTile(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
+    using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
+    using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
+    using SrcTileData = Tile<TileType::Vec, T, tileRow, tileCol, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, tileRow, tileCol, BLayout::RowMajor, -1, -1>;
+
+    for (int colOffset = 0; colOffset < validCol; colOffset += tileCol) {
+        int curCol = (validCol - colOffset) < tileCol ? (validCol - colOffset) : tileCol;
+        GlobalData srcGlobal(src + colOffset, DynDim2Shape(validRow, curCol), DynDim2Stride(srcGmRow, srcGmCol));
+        GlobalData dstGlobal(out + colOffset, DynDim2Shape(validRow, curCol), DynDim2Stride(dstGmRow, dstGmCol));
+        SrcTileData srcTile(validRow, curCol);
+        DstTileData dstTile(validRow, curCol);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x26000);
+
+        Event<Op::TLOAD, Op::TMULS> event0;
+        Event<Op::TMULS, Op::TSTORE_VEC> event1;
+        event0 = TLOAD(srcTile, srcGlobal);
+        event1 = TMULS(dstTile, srcTile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+        pipe_barrier(PIPE_ALL);
+#endif
+    }
+}
+
 extern "C" __global__ AICORE void launchTMULSCase1(__gm__ float* out, __gm__ float* src, float scalar)
 {
     runTMuls<float, 32, 128, 32, 32, 64, 64>(out, src, scalar);
@@ -74,6 +107,10 @@ extern "C" __global__ AICORE void launchTMULSCase8(__gm__ int64_t* out, __gm__ i
 extern "C" __global__ AICORE void launchTMULSCase9(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
 {
     runTMuls<uint64_t, 4, 16, 4, 4, 16, 16>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTMULSCase10(__gm__ int64_t* out, __gm__ int64_t* src, int64_t scalar)
+{
+    runTMulsByColTile<int64_t, 96, 32768, 32, 1024, 32, 128, 32, 1024>(out, src, scalar);
 }
 
 template <uint32_t caseId, typename T>
@@ -116,6 +153,10 @@ void launchTMULSTestCase(void* out, void* src, T scalar, aclrtStream stream)
             launchTMULSCase9<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
             break;
         }
+        case 10: {
+            launchTMULSCase10<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src, (int64_t)scalar);
+            break;
+        }
         default: {
         }
     }
@@ -136,6 +177,7 @@ template void launchTMULSTestCase<6, float>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<7, float>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<8, int64_t>(void*, void*, int64_t, aclrtStream);
 template void launchTMULSTestCase<9, uint64_t>(void*, void*, uint64_t, aclrtStream);
+template void launchTMULSTestCase<10, int64_t>(void*, void*, int64_t, aclrtStream);
 template void launchTMULSTestCase<1>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<2>(void*, void*, float, aclrtStream);
 template void launchTMULSTestCase<3>(void*, void*, float, aclrtStream);
