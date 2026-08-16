@@ -88,7 +88,12 @@ def gen_golden_data(param: TGatherParamsBase):
         src1_row = param.src1_row
         src1_col = param.src1_col
 
-        src_data = np.random.randint(-20, 20, (src0_row * src0_col)).astype(src0_type)
+        if src0_type == np.int64:
+            src_data = (np.arange(src0_row * src0_col, dtype=np.int64) * 0x100000003 - 0x4000000000).astype(src0_type)
+        elif src0_type == np.uint64:
+            src_data = (np.arange(src0_row * src0_col, dtype=np.uint64) * np.uint64(0x100000003)).astype(src0_type)
+        else:
+            src_data = np.random.randint(-20, 20, (src0_row * src0_col)).astype(src0_type)
         indices = np.random.randint(0, src0_row * src0_col, (src1_row * src1_col)).astype(src1_type)
         golden = gather(src_data, indices)
 
@@ -212,6 +217,7 @@ if __name__ == "__main__":
         TGatherParamsNorm("TGATHERTest.case8_u8_u16_16x128_16x64", np.uint8, np.uint16, 16, 128, 16, 64),
         TGatherParamsNorm("TGATHERTest.case9_int64_u32_4x16_4x16", np.int64, np.uint32, 4, 16, 4, 16),
         TGatherParamsNorm("TGATHERTest.case10_uint64_u32_4x16_4x16", np.uint64, np.uint32, 4, 16, 4, 16),
+        TGatherParamsNorm("TGATHERTest.case11_int64_u32_1x16368_1x16368", np.int64, np.uint32, 1, 16368, 1, 16368),
         ParamMasked("TGATHERTest.case1_float_P0101", np.float32, np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_float_P1010", np.float32, np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_float_P0001", np.float32, np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001),
