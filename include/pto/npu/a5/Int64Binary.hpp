@@ -277,6 +277,8 @@ PTO_INTERNAL void Int64Binary(
 template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
 {
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
         vector_s32 dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh;
@@ -285,33 +287,40 @@ PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsign
         int32_t high = static_cast<int32_t>(scalarBits >> 32);
         vbr(scalarLow, low);
         vbr(scalarHigh, high);
-        uint32_t maskCount = validCols;
-        MaskReg mask = plt_b32(maskCount, POST_UPDATE);
         uint16_t rowCount = validRows;
         for (uint16_t row = 0; row < rowCount; ++row) {
-            vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src + row * SrcCols * 2, 0, DINTLV_B32);
-            MaskReg carry;
-            MaskReg carryOut;
-            if constexpr (Op == Int64Op::Add) {
-                vaddc(carry, dstLow, srcLow, scalarLow, mask);
-                vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
-            } else if constexpr (Op == Int64Op::Sub) {
-                vsubc(carry, dstLow, srcLow, scalarLow, mask);
-                vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
-            } else if constexpr (Op == Int64Op::Mul) {
-                vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
-                vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
-                vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
-            } else if constexpr (Op == Int64Op::Shl) {
-                vbr(scalarLow, static_cast<int32_t>(scalarBits));
-                Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
-            } else if constexpr (Op == Int64Op::Shr) {
-                vbr(scalarLow, static_cast<int32_t>(scalarBits));
-                Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
-            } else {
-                Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+            uint32_t remainingCols = validCols;
+            for (uint16_t colRepeat = 0; colRepeat < repeatTimes; ++colRepeat) {
+                uint32_t cols = remainingCols > elementsPerRepeat ? elementsPerRepeat : remainingCols;
+                MaskReg mask = plt_b32(cols, POST_UPDATE);
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
+                uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+                vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+                MaskReg carry;
+                MaskReg carryOut;
+                if constexpr (Op == Int64Op::Add) {
+                    vaddc(carry, dstLow, srcLow, scalarLow, mask);
+                    vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Sub) {
+                    vsubc(carry, dstLow, srcLow, scalarLow, mask);
+                    vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Mul) {
+                    vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
+                    vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
+                    vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Shl) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else if constexpr (Op == Int64Op::Shr) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else {
+                    Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+                }
+                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+                remainingCols -= cols;
             }
-            vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, mask);
         }
     }
 }
