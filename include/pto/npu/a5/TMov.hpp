@@ -157,7 +157,7 @@ __tf__ AICORE void TMovCcToCb(
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
+    uint32_t srcStride = CeilDivision(SrcTileData::Rows, BLOCK_LEN) * BLOCK_LEN;
     __cbuf__ dstType* dstAddr = (__cbuf__ dstType*)__cce_get_tile_ptr(dst);
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src);
 
@@ -215,7 +215,7 @@ __tf__ AICORE void TMovCcToUb(
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
+    uint32_t srcStride = CeilDivision(SrcTileData::Rows, BLOCK_LEN) * BLOCK_LEN;
     __ubuf__ dstType* dstAddr = (__ubuf__ dstType*)__cce_get_tile_ptr(dst);
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src);
     pto_copy_matrix_cc_to_ub(
