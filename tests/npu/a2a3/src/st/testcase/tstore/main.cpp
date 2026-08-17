@@ -20,6 +20,14 @@ template <
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 void LaunchTStore(T* out, T* src, void* stream);
 
+void LaunchScalarStoreCachelineOverlap(float* out, float* src, void* stream);
+
+void LaunchColMajorToNdStridedColumns(float* out, float* src, void* stream);
+
+void LaunchColMajorFloat8x2ToNdStridedColumns(float* out, float* src, void* stream);
+
+void LaunchColMajorInt16x2ToNdStridedColumns(int16_t* out, int16_t* src, void* stream);
+
 class TStoreTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -59,6 +67,7 @@ void test_tstore()
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
 
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStore<
         format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
@@ -83,6 +92,107 @@ void test_tstore()
     std::vector<DataType> devFinal(dataSize);
     ReadFile(GetGoldenDir() + "/golden.bin", dataSize, golden.data(), dataSize);
     ReadFile(GetGoldenDir() + "/output.bin", dataSize, devFinal.data(), dataSize);
+
+    bool ret = ResultCmp<DataType>(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+void test_scalar_store_cacheline_overlap()
+{
+    size_t dataSize = 16 * sizeof(float);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    float *dstHost, *srcHost;
+    float *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void**)(&dstHost), dataSize);
+    aclrtMallocHost((void**)(&srcHost), dataSize);
+
+    aclrtMalloc((void**)&dstDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
+
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
+    aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchScalarStoreCachelineOverlap(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dataSize, dstDevice, dataSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dataSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<float> golden(dataSize);
+    std::vector<float> devFinal(dataSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", dataSize, golden.data(), dataSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dataSize, devFinal.data(), dataSize);
+
+    bool ret = ResultCmp<float>(golden, devFinal, 0.001f);
+    EXPECT_FALSE(ret);
+}
+
+template <typename DataType>
+void test_colmajor_to_nd_strided_columns(
+    size_t srcElemCount, size_t dstElemCount, void (*launch)(DataType*, DataType*, void*))
+{
+    size_t srcDataSize = srcElemCount * sizeof(DataType);
+    size_t dstDataSize = dstElemCount * sizeof(DataType);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    DataType *dstHost, *srcHost;
+    DataType *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void**)(&dstHost), dstDataSize);
+    aclrtMallocHost((void**)(&srcHost), srcDataSize);
+
+    aclrtMalloc((void**)&dstDevice, dstDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcDataSize, srcHost, srcDataSize);
+
+    aclrtMemset(dstDevice, dstDataSize, 0, dstDataSize);
+    aclrtMemcpy(srcDevice, srcDataSize, srcHost, srcDataSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    launch(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstDataSize, dstDevice, dstDataSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstDataSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<DataType> golden(dstElemCount);
+    std::vector<DataType> devFinal(dstElemCount);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstDataSize, golden.data(), dstDataSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstDataSize, devFinal.data(), dstDataSize);
 
     bool ret = ResultCmp<DataType>(golden, devFinal, 0.001f);
     EXPECT_TRUE(ret);
@@ -121,4 +231,21 @@ TEST_F(TStoreTest, DN_int64_1_1_1_4_21_1_1_1_8_32) { test_tstore<1, int64_t, 1, 
 TEST_F(TStoreTest, DN_uint64_t_3_1_1_1_124_5_1_1_2_128)
 {
     test_tstore<1, uint64_t, 3, 1, 1, 1, 124, 5, 1, 1, 2, 128>();
+}
+
+TEST_F(TStoreTest, ScalarStoreCachelineOverlap_float_2core) { test_scalar_store_cacheline_overlap(); }
+
+TEST_F(TStoreTest, ColMajor_float_8x1_to_ND_strided_columns)
+{
+    test_colmajor_to_nd_strided_columns<float>(16, 16, LaunchColMajorToNdStridedColumns);
+}
+
+TEST_F(TStoreTest, ColMajor_float_8x2_to_ND_strided_columns)
+{
+    test_colmajor_to_nd_strided_columns<float>(16, 32, LaunchColMajorFloat8x2ToNdStridedColumns);
+}
+
+TEST_F(TStoreTest, ColMajor_int16_t_16x2_to_ND_strided_columns)
+{
+    test_colmajor_to_nd_strided_columns<int16_t>(32, 64, LaunchColMajorInt16x2ToNdStridedColumns);
 }

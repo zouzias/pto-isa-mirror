@@ -236,6 +236,63 @@ PTO_INTERNAL void CheckAcc2gm(GlobalData& dst, TileData& src)
         "The shape of src and dst must be greater than 0!");
 }
 
+template <typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone>
+PTO_INTERNAL void TStoreVecNarrowNonRowMajor2Nd(GlobalData& dst, TileData& src)
+{
+    using DType = typename TileData::DType;
+    constexpr int paddedCols = BLOCK_BYTE_SIZE / sizeof(DType);
+    using RowMajorTile =
+        Tile<TileType::Vec, DType, TileData::Rows, paddedCols, BLayout::RowMajor, TileData::ValidRow, TileData::ValidCol>;
+
+    RowMajorTile rowMajorTile;
+#ifndef __PTO_AUTO__
+    constexpr uint64_t srcBytes =
+        ((static_cast<uint64_t>(TileData::Numel) * sizeof(DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE) *
+        BLOCK_BYTE_SIZE;
+    TASSIGN_IMPL(rowMajorTile, (uint64_t)src.data() + srcBytes);
+#endif
+    const uint32_t validRow = src.GetValidRow();
+    const uint32_t validCol = src.GetValidCol();
+#ifndef __PTO_AUTO__
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+#endif
+    for (uint32_t row = 0; row < validRow; row++) {
+        for (uint32_t col = 0; col < validCol; col++) {
+            const uint32_t srcOffset = row * TileData::RowStride + col * TileData::ColStride;
+            const uint32_t dstOffset = row * RowMajorTile::RowStride + col;
+            rowMajorTile.SetValue(dstOffset, src.GetValue(srcOffset));
+        }
+    }
+#ifndef __PTO_AUTO__
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+#endif
+    TStore<GlobalData, RowMajorTile, currentAtomicType>(
+        dst.data(), rowMajorTile.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
+        dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
+        dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),
+        dst.GetStride(GlobalTensorDim::DIM_1), dst.GetStride(GlobalTensorDim::DIM_2),
+        dst.GetStride(GlobalTensorDim::DIM_3), dst.GetStride(GlobalTensorDim::DIM_4), validRow, validCol);
+}
+
+template <typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone>
+PTO_INTERNAL void TStoreVec2Gm(GlobalData& dst, TileData& src)
+{
+    CheckStaticForVecAndMat<TileData, GlobalData>();
+    if constexpr (
+        (GlobalData::layout == Layout::ND) && (TileData::SFractal == SLayout::NoneBox) && !TileData::isRowMajor &&
+        (TileData::Cols * sizeof(typename TileData::DType) < BLOCK_BYTE_SIZE)) {
+        TStoreVecNarrowNonRowMajor2Nd<TileData, GlobalData, currentAtomicType>(dst, src);
+    } else {
+        TStore<GlobalData, TileData, currentAtomicType>(
+            dst.data(), src.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
+            dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
+            dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),
+            dst.GetStride(GlobalTensorDim::DIM_1), dst.GetStride(GlobalTensorDim::DIM_2),
+            dst.GetStride(GlobalTensorDim::DIM_3), dst.GetStride(GlobalTensorDim::DIM_4), src.GetValidRow(),
+            src.GetValidCol());
+    }
+}
+
 template <
     typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone,
     STPhase Phase = STPhase::Unspecified>
@@ -253,14 +310,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
         SetAtomicAdd<typename GlobalData::DType>();
     }
     if constexpr (TileData::Loc == TileType::Vec) {
-        CheckStaticForVecAndMat<TileData, GlobalData>();
-        TStore<GlobalData, TileData>(
-            dst.data(), src.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
-            dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
-            dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),
-            dst.GetStride(GlobalTensorDim::DIM_1), dst.GetStride(GlobalTensorDim::DIM_2),
-            dst.GetStride(GlobalTensorDim::DIM_3), dst.GetStride(GlobalTensorDim::DIM_4), src.GetValidRow(),
-            src.GetValidCol());
+        TStoreVec2Gm<TileData, GlobalData, currentAtomicType>(dst, src);
     } else if constexpr (TileData::Loc == TileType::Acc) {
         CheckAcc2gm<TileData, GlobalData, false>(dst, src);
         constexpr QuantMode_t quantMode = GetCastPreQuantMode<typename TileData::DType, typename GlobalData::DType>();

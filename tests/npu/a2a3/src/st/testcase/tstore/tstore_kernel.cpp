@@ -145,6 +145,41 @@ __global__ AICORE void TStoreKernel(__gm__ T* out, __gm__ T* src)
     }
 }
 
+__global__ AICORE void ScalarStoreCachelineOverlapKernel(__gm__ float* out, __gm__ float* src)
+{
+    int blockIdx = static_cast<int>(get_block_idx());
+    for (int row = 0; row < 8; row++) {
+        out[row * 2 + blockIdx] = src[blockIdx * 8 + row];
+    }
+}
+
+__global__ AICORE void ColMajorToNdStridedColumnsKernel(__gm__ float* out, __gm__ float* src)
+{
+    using SrcShape = Shape<1, 1, 1, 8, 1>;
+    using SrcStride = pto::Stride<8, 8, 8, 1, 8>;
+    using SrcGlobalData = GlobalTensor<float, SrcShape, SrcStride, Layout::DN>;
+
+    using DstColumnShape = Shape<1, 1, 1, 8, 1>;
+    using DstColumnStride = pto::Stride<16, 16, 16, 2, 1>;
+    using DstColumnGlobalData = GlobalTensor<float, DstColumnShape, DstColumnStride, Layout::ND>;
+
+    using SrcColTile = Tile<TileType::Vec, float, 8, 1, BLayout::ColMajor, 8, 1>;
+
+    SrcColTile srcColTile;
+
+    TASSIGN(srcColTile, 0x0);
+
+    SrcGlobalData srcGlobal(src);
+    DstColumnGlobalData dstColumnGlobal(out + 1);
+
+    TLOAD(srcColTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstColumnGlobal, srcColTile);
+}
+
 template <
     int format, typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
     int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
@@ -163,6 +198,78 @@ void LaunchTStore(T* out, T* src, void* stream)
             T, pto::Layout::NZ, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
             gWholeShape3, gWholeShape4><<<1, nullptr, stream>>>(out, src);
     }
+}
+
+void LaunchScalarStoreCachelineOverlap(float* out, float* src, void* stream)
+{
+    ScalarStoreCachelineOverlapKernel<<<2, nullptr, stream>>>(out, src);
+}
+
+void LaunchColMajorToNdStridedColumns(float* out, float* src, void* stream)
+{
+    ColMajorToNdStridedColumnsKernel<<<1, nullptr, stream>>>(out, src);
+}
+
+__global__ AICORE void ColMajorFloat8x2ToNdStridedColumnsKernel(__gm__ float* out, __gm__ float* src)
+{
+    using SrcShape = Shape<1, 1, 1, 8, 2>;
+    using SrcStride = pto::Stride<16, 16, 16, 1, 8>;
+    using SrcGlobalData = GlobalTensor<float, SrcShape, SrcStride, Layout::DN>;
+
+    using DstColumnShape = Shape<1, 1, 1, 8, 2>;
+    using DstColumnStride = pto::Stride<32, 32, 32, 4, 1>;
+    using DstColumnGlobalData = GlobalTensor<float, DstColumnShape, DstColumnStride, Layout::ND>;
+
+    using SrcColTile = Tile<TileType::Vec, float, 8, 2, BLayout::ColMajor, 8, 2>;
+
+    SrcColTile srcColTile;
+    TASSIGN(srcColTile, 0x0);
+
+    SrcGlobalData srcGlobal(src);
+    DstColumnGlobalData dstColumnGlobal(out + 1);
+
+    TLOAD(srcColTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstColumnGlobal, srcColTile);
+}
+
+__global__ AICORE void ColMajorInt16x2ToNdStridedColumnsKernel(__gm__ int16_t* out, __gm__ int16_t* src)
+{
+    using SrcShape = Shape<1, 1, 1, 16, 2>;
+    using SrcStride = pto::Stride<32, 32, 32, 1, 16>;
+    using SrcGlobalData = GlobalTensor<int16_t, SrcShape, SrcStride, Layout::DN>;
+
+    using DstColumnShape = Shape<1, 1, 1, 16, 2>;
+    using DstColumnStride = pto::Stride<64, 64, 64, 4, 1>;
+    using DstColumnGlobalData = GlobalTensor<int16_t, DstColumnShape, DstColumnStride, Layout::ND>;
+
+    using SrcColTile = Tile<TileType::Vec, int16_t, 16, 2, BLayout::ColMajor, 16, 2>;
+
+    SrcColTile srcColTile;
+    TASSIGN(srcColTile, 0x0);
+
+    SrcGlobalData srcGlobal(src);
+    DstColumnGlobalData dstColumnGlobal(out + 1);
+
+    TLOAD(srcColTile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstColumnGlobal, srcColTile);
+}
+
+void LaunchColMajorFloat8x2ToNdStridedColumns(float* out, float* src, void* stream)
+{
+    ColMajorFloat8x2ToNdStridedColumnsKernel<<<1, nullptr, stream>>>(out, src);
+}
+
+void LaunchColMajorInt16x2ToNdStridedColumns(int16_t* out, int16_t* src, void* stream)
+{
+    ColMajorInt16x2ToNdStridedColumnsKernel<<<1, nullptr, stream>>>(out, src);
 }
 
 template void LaunchTStore<0, float, 1, 1, 1, 2, 128, 1, 1, 1, 2, 128>(float* out, float* src, void* stream);
