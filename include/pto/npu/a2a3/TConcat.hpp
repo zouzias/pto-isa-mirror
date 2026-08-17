@@ -147,8 +147,9 @@ __tf__ PTO_INTERNAL void TConcatIdx(
         unsigned src1Num = idx1Num < src1Col ? idx1Num : src1Col;
         unsigned src0RepeatTime = CeilDivision(src0Num, elementsPerRepeat);
         unsigned src1RepeatTime = CeilDivision(src1Num, elementsPerRepeat);
-        unsigned src0MaskNum = src0Num % elementsPerRepeat;
-        unsigned src1MaskNum = src1Num % elementsPerRepeat;
+        constexpr unsigned copyTypeElemSize = (sizeof(dataType) == sizeof(int32_t)) ? sizeof(int32_t) : sizeof(int16_t);
+        unsigned src0MaskNum = CeilDivision(src0Num * sizeof(dataType), copyTypeElemSize);
+        unsigned src1MaskNum = CeilDivision(src1Num * sizeof(dataType), copyTypeElemSize);
         bool isAligned = (src0Num % elementsPerBlock) == 0;
 
         SetWaitFlag<PIPE_S, PIPE_V>();

@@ -146,3 +146,8 @@ TEST_F(TCONCATTest, case_int16_32x256_32x128_32x128_32x128_32x128)
 {
     test_tconcat<int16_t, int16_t, 32, 256, 32, 128, 32, 128, 32, 128, 128>();
 }
+
+TEST_F(TCONCATTest, case_int8_16x64_16x32_16x32_16x32_16x32)
+{
+    test_tconcat<int8_t, int16_t, 16, 64, 16, 32, 16, 32, 16, 32, 32>();
+}
