@@ -83,7 +83,10 @@ def generate_dyn_case_name(param):
     type_str = 'upper' if param.upper_or_lower == 1 else 'lower'
     sign_diag = '' if param.diagonal >= 0 else 'n'
     diag_str = sign_diag + str(abs(param.diagonal))
-    return f"TTRITest.case_{dtype_str}_s{param.static_rows}x{param.static_cols}_v{param.valid_rows}x{param.valid_cols}_{type_str}_diag_{diag_str}"
+    return (
+        f"TTRITest.case_{dtype_str}_s{param.static_rows}x{param.static_cols}_"
+        f"v{param.valid_rows}x{param.valid_cols}_{type_str}_diag_{diag_str}"
+    )
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -113,6 +116,8 @@ if __name__ == "__main__":
         TTRIParams(np.float32, 763,   32, 1, -41),
         TTRIParams(np.int64, 4, 15, 1, 0),
         TTRIParams(np.uint64, 4, 15, 0, -1),
+        TTRIParams(np.int64, 4, 64, 1, 0),
+        TTRIParams(np.uint64, 4, 64, 0, -1),
     ]
 
     for param in case_params_list:
