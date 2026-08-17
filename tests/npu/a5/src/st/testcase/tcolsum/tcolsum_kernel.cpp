@@ -155,6 +155,44 @@ extern "C" __global__ AICORE void launchTCOLSUMCase42(__gm__ uint64_t* out, __gm
     PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
     TSTORE(dstGlobal, dstTile);
 }
+extern "C" __global__ AICORE void launchTCOLSUMCase43(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    using ShapeType = Shape<1, 1, 1, 4, 64>;
+    using StrideType = pto::Stride<256, 256, 256, 64, 1>;
+    using GlobalData = GlobalTensor<int64_t, ShapeType, StrideType>;
+    using SrcTile = Tile<TileType::Vec, int64_t, 4, 64, BLayout::RowMajor, 4, 64>;
+    using DstTile = Tile<TileType::Vec, int64_t, 1, 64, BLayout::RowMajor, 1, 64>;
+    SrcTile srcTile;
+    DstTile dstTile;
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x1000);
+    GlobalData srcGlobal(src);
+    GlobalTensor<int64_t, Shape<1, 1, 1, 1, 64>, pto::Stride<64, 64, 64, 64, 1>> dstGlobal(out);
+    TLOAD(srcTile, srcGlobal);
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
+    TCOLSUM(dstTile, srcTile);
+    PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
+    TSTORE(dstGlobal, dstTile);
+}
+extern "C" __global__ AICORE void launchTCOLSUMCase44(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    using ShapeType = Shape<1, 1, 1, 4, 64>;
+    using StrideType = pto::Stride<256, 256, 256, 64, 1>;
+    using GlobalData = GlobalTensor<uint64_t, ShapeType, StrideType>;
+    using SrcTile = Tile<TileType::Vec, uint64_t, 4, 64, BLayout::RowMajor, 4, 64>;
+    using DstTile = Tile<TileType::Vec, uint64_t, 1, 64, BLayout::RowMajor, 1, 64>;
+    SrcTile srcTile;
+    DstTile dstTile;
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x1000);
+    GlobalData srcGlobal(src);
+    GlobalTensor<uint64_t, Shape<1, 1, 1, 1, 64>, pto::Stride<64, 64, 64, 64, 1>> dstGlobal(out);
+    TLOAD(srcTile, srcGlobal);
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
+    TCOLSUM(dstTile, srcTile);
+    PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
+    TSTORE(dstGlobal, dstTile);
+}
 
 template <uint32_t caseId>
 void launchTCOLSUMTestCase(void* out, void* src, aclrtStream stream)
@@ -232,6 +270,14 @@ void launchTCOLSUMTestCase(void* out, void* src, aclrtStream stream)
             launchTCOLSUMCase42<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
             break;
         }
+        case 43: {
+            launchTCOLSUMCase43<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 44: {
+            launchTCOLSUMCase44<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -255,3 +301,5 @@ template void launchTCOLSUMTestCase<25>(void* out, void* src, aclrtStream stream
 template void launchTCOLSUMTestCase<31>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<41>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<42>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<43>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<44>(void* out, void* src, aclrtStream stream);

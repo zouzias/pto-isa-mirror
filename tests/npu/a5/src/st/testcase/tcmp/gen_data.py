@@ -12,21 +12,29 @@
 
 import os
 import numpy as np
-from ml_dtypes import bfloat16
+try:
+    import ml_dtypes
+
+    bfloat16 = ml_dtypes.bfloat16
+    BFLOAT16_STORAGE_DTYPE = bfloat16
+except ModuleNotFoundError:
+    bfloat16 = object()
+    BFLOAT16_STORAGE_DTYPE = np.float16
 np.random.seed(19)
 
 
 def gen_golden_data_tcmp(param):
     dtype = param.dtype
+    storage_dtype = BFLOAT16_STORAGE_DTYPE if dtype == bfloat16 else dtype
 
     # Valid row/cols always larger than tile row/cols
     row, col = [param.row, param.col]
     valid_row, valid_col = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    if np.issubdtype(dtype, np.integer):
-        input1 = np.random.randint(-10, 10, size=[row, col]).astype(dtype)
-        input2 = np.random.randint(-10, 10, size=[row, col]).astype(dtype)
+    if np.issubdtype(storage_dtype, np.integer):
+        input1 = np.random.randint(-10, 10, size=[row, col]).astype(storage_dtype)
+        input2 = np.random.randint(-10, 10, size=[row, col]).astype(storage_dtype)
         if dtype == np.int64:
             input1.flat[:5] = [np.iinfo(dtype).min, -1, 0, 1, np.iinfo(dtype).max]
             input2.flat[:5] = [np.iinfo(dtype).max, -1, 0, -1, np.iinfo(dtype).min]
@@ -34,15 +42,15 @@ def gen_golden_data_tcmp(param):
             input1.flat[:5] = [0, 1, 1 << 63, np.iinfo(dtype).max, np.iinfo(dtype).max]
             input2.flat[:5] = [np.iinfo(dtype).max, 1, 1 << 63, 0, np.iinfo(dtype).max]
     else:
-        input1 = np.random.uniform(-10, 10, size=[row, col]).astype(dtype)
-        input2 = np.random.uniform(-10, 10, size=[row, col]).astype(dtype)
+        input1 = np.random.uniform(-10, 10, size=[row, col]).astype(storage_dtype)
+        input2 = np.random.uniform(-10, 10, size=[row, col]).astype(storage_dtype)
 
     if getattr(param, "is_nan", False):
         input1[:] = np.nan
         input2[:] = np.nan
 
     if param.mode == "EQ":
-        if np.issubdtype(dtype, np.integer):
+        if np.issubdtype(storage_dtype, np.integer):
             bool_result = input1 == input2
         elif param.dtype == bfloat16:
             input1_f32 = input1.astype(np.float32)
@@ -51,7 +59,7 @@ def gen_golden_data_tcmp(param):
         else:
             bool_result = np.isclose(input1, input2, rtol=0, atol=1e-9)
     elif param.mode == "NE":
-        if np.issubdtype(dtype, np.integer):
+        if np.issubdtype(storage_dtype, np.integer):
             bool_result = input1 != input2
         elif param.dtype == bfloat16:
             input1_f32 = input1.astype(np.float32)
@@ -102,7 +110,10 @@ def generate_case_name(param):
     }[param.dtype]
     nan_suffix = "_nan" if getattr(param, "is_nan", False) else ""
     mode_suffix = f"_{param.mode}" if param.dtype in (np.int64, np.uint64) else ""
-    return f"TCMPTest.case_{dtype_str}_{param.row}x{param.col}_{param.valid_row}x{param.valid_col}{mode_suffix}{nan_suffix}"
+    return (
+        f"TCMPTest.case_{dtype_str}_{param.row}x{param.col}_"
+        f"{param.valid_row}x{param.valid_col}{mode_suffix}{nan_suffix}"
+    )
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -129,6 +140,8 @@ if __name__ == "__main__":
         TcmpParams(bfloat16, 77, 80, 32, 32, "LE"),
         TcmpParams(np.float32, 32, 32, 32, 32, "NE", is_nan=True),
         *[TcmpParams(dtype, 4, 16, 4, 15, mode)
+          for dtype in (np.int64, np.uint64) for mode in ("EQ", "NE", "LT", "GT", "GE", "LE")],
+        *[TcmpParams(dtype, 4, 64, 4, 64, mode)
           for dtype in (np.int64, np.uint64) for mode in ("EQ", "NE", "LT", "GT", "GE", "LE")],
     ]
 
