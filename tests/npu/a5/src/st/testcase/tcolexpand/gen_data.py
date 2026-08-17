@@ -64,6 +64,16 @@ if __name__ == "__main__":
         TColExpandParam(np.float32, 1, 54, 64, 63),
         TColExpandParam(np.int64, 1, 4, 16, 16),
         TColExpandParam(np.uint64, 1, 4, 16, 16),
+        TColExpandParam(np.int64, 1, 4, 4096, 4096),
+        TColExpandParam(np.uint64, 1, 4, 4096, 4096),
+        TColExpandParam(np.int64, 1, 4, 128, 128),
+        TColExpandParam(np.uint64, 1, 4, 128, 128),
+        TColExpandParam(np.int64, 1, 4, 32, 32),
+        TColExpandParam(np.uint64, 1, 4, 32, 32),
+        TColExpandParam(np.int64, 1, 4, 64, 40),
+        TColExpandParam(np.uint64, 1, 4, 64, 40),
+        TColExpandParam(np.int64, 1, 4, 128, 65),
+        TColExpandParam(np.uint64, 1, 4, 128, 65),
     ]
 
     for i, param in enumerate(case_params_list):

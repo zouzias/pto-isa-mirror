@@ -74,4 +74,14 @@ template void launchTCOLEXPAND<int8_t, 2, 17, 256, 44>(int8_t* out, int8_t* src,
 template void launchTCOLEXPAND<float, 1, 54, 64, 63>(float* out, float* src, void* stream);
 template void launchTCOLEXPAND<int64_t, 1, 4, 16, 16>(int64_t* out, int64_t* src, void* stream);
 template void launchTCOLEXPAND<uint64_t, 1, 4, 16, 16>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 4096, 4096>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 4096, 4096>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 128, 128>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 128, 128>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 32, 32>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 32, 32>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 64, 40>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 64, 40>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 128, 65>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 128, 65>(uint64_t* out, uint64_t* src, void* stream);
 } // namespace TColExpandTest

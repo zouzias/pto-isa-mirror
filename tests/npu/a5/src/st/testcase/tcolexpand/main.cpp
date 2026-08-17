@@ -96,4 +96,14 @@ TEST_F(TCOLEXPANDTest, case_int8_2_17_256_44) { test_tcolexpand<int8_t, 2, 17, 2
 TEST_F(TCOLEXPANDTest, case_float_1_54_64_63) { test_tcolexpand<float, 1, 54, 64, 63>(); }
 TEST_F(TCOLEXPANDTest, case_int64_1_4_16_16) { test_tcolexpand<int64_t, 1, 4, 16, 16>(); }
 TEST_F(TCOLEXPANDTest, case_uint64_1_4_16_16) { test_tcolexpand<uint64_t, 1, 4, 16, 16>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_4096_4096) { test_tcolexpand<int64_t, 1, 4, 4096, 4096>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_4096_4096) { test_tcolexpand<uint64_t, 1, 4, 4096, 4096>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_128_128) { test_tcolexpand<int64_t, 1, 4, 128, 128>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_128_128) { test_tcolexpand<uint64_t, 1, 4, 128, 128>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_32_32) { test_tcolexpand<int64_t, 1, 4, 32, 32>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_32_32) { test_tcolexpand<uint64_t, 1, 4, 32, 32>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_64_40) { test_tcolexpand<int64_t, 1, 4, 64, 40>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_64_40) { test_tcolexpand<uint64_t, 1, 4, 64, 40>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_128_65) { test_tcolexpand<int64_t, 1, 4, 128, 65>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_128_65) { test_tcolexpand<uint64_t, 1, 4, 128, 65>(); }
 } // namespace TColExpandTest

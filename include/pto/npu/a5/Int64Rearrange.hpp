@@ -162,18 +162,26 @@ PTO_INTERNAL void Int64ScatterPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned
 template <typename T, unsigned DstCols, unsigned SrcRowStride>
 PTO_INTERNAL void Int64RowExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
 {
+    constexpr unsigned wordsPerVlds = CCE_VL / sizeof(uint32_t);
+    uint16_t repeatTimes = CeilDivision(validCols * 2, wordsPerVlds);
     __VEC_SCOPE__
     {
-        vector_s32 lowReg, highReg, srcLow, srcHigh;
-        uint32_t count = validCols;
-        MaskReg mask = plt_b32(count, POST_UPDATE);
+        vector_s32 srcLow, srcHigh, lowReg, highReg, vreg, dummy;
         MaskReg allMask = pset_b32(PAT_ALL);
-        uint16_t rows = validRows;
-        for (uint16_t row = 0; row < rows; ++row) {
+        __ubuf__ int32_t* dstOffset;
+        uint32_t sreg;
+        MaskReg mask;
+        for (uint16_t row = 0; row < validRows; ++row) {
             vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src + row * SrcRowStride * 2, 0, DINTLV_B32);
             vdup(lowReg, srcLow, allMask, POS_LOWEST, MODE_ZEROING);
             vdup(highReg, srcHigh, allMask, POS_LOWEST, MODE_ZEROING);
-            vsts(lowReg, highReg, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, mask);
+            vintlv(vreg, dummy, lowReg, highReg);
+            dstOffset = (__ubuf__ int32_t*)dst + row * DstCols * 2;
+            sreg = validCols * 2;
+            for (uint16_t colRepeat = 0; colRepeat < repeatTimes; ++colRepeat) {
+                mask = plt_b32(sreg, POST_UPDATE);
+                vsts(vreg, dstOffset, wordsPerVlds, NORM_B32, mask, POST_UPDATE);
+            }
         }
     }
 }
@@ -181,15 +189,24 @@ PTO_INTERNAL void Int64RowExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
 template <typename T, unsigned DstCols>
 PTO_INTERNAL void Int64ColExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
 {
+    constexpr unsigned wordsPerVlds = CCE_VL / sizeof(uint32_t);
+    constexpr unsigned dstRowStride = DstCols * 2;
+    uint16_t repeatTimes = CeilDivision(validCols * 2, wordsPerVlds);
+    int32_t dstAdjust = static_cast<int32_t>(dstRowStride) * validRows - static_cast<int32_t>(wordsPerVlds);
+    __ubuf__ int32_t* srcPtr = (__ubuf__ int32_t*)src;
+    __ubuf__ int32_t* dstPtr = (__ubuf__ int32_t*)dst;
+    uint32_t sreg = validCols * 2;
     __VEC_SCOPE__
     {
-        vector_s32 lowReg, highReg;
-        vlds(lowReg, highReg, (__ubuf__ int32_t*)src, 0, DINTLV_B32);
-        uint32_t count = validCols;
-        MaskReg mask = plt_b32(count, POST_UPDATE);
-        uint16_t rows = validRows;
-        for (uint16_t row = 0; row < rows; ++row) {
-            vsts(lowReg, highReg, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, mask);
+        vector_s32 vreg;
+        MaskReg preg;
+        for (uint16_t colRepeat = 0; colRepeat < repeatTimes; ++colRepeat) {
+            preg = plt_b32(sreg, POST_UPDATE);
+            vlds(vreg, srcPtr, wordsPerVlds, NORM, POST_UPDATE);
+            for (uint16_t row = 0; row < validRows; ++row) {
+                vsts(vreg, dstPtr, dstRowStride, NORM_B32, preg, POST_UPDATE);
+            }
+            dstPtr -= dstAdjust;
         }
     }
 }
