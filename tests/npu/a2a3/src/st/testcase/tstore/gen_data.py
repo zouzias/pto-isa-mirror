@@ -11,11 +11,10 @@
 # --------------------------------------------------------------------------------
 
 import os
-import struct
-import ctypes
 import numpy as np
 
 np.random.seed(19)
+
 
 def gen_golden_data(case_name, gInfo):
     data_type = gInfo.datatype
@@ -31,26 +30,86 @@ def gen_golden_data(case_name, gInfo):
     gWholeShape4 = gInfo.gWholeShape4
 
     if gInfo.format == "ND" or gInfo.format == "NZ":
-        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
-        output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type)
-        output_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape3, 0: gShape4] \
-                    = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape3, 0: gShape4]
+        input_arr = np.random.randint(
+            -5, 5, size=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4)
+        ).astype(data_type)
+        output_arr = np.zeros(
+            shape=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type
+        )
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4] = input_arr[
+            0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4
+        ]
     elif gInfo.format == "DN":
-        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
-        output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type)
-        output_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape4, 0: gShape3] \
-                    = input_arr[0:gShape0, 0: gShape1, 0: gShape2, 0: gShape4, 0: gShape3]
+        input_arr = np.random.randint(
+            -5, 5, size=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape4, gWholeShape3)
+        ).astype(data_type)
+        output_arr = np.zeros(
+            shape=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type
+        )
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3] = input_arr[
+            0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3
+        ]
 
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
+
+def gen_multicore_colmajor_to_nd_strided_columns(datatype):
+    input_arr = np.zeros(shape=(8, 2), dtype=datatype)
+    output_arr = np.zeros(shape=(8, 2), dtype=datatype)
+
+    values_col0 = np.arange(100, 108, dtype=datatype)
+    values_col1 = np.arange(200, 208, dtype=datatype)
+    input_arr.reshape(-1)[:8] = values_col0
+    input_arr.reshape(-1)[8:16] = values_col1
+    output_arr[:, 0] = values_col0
+    output_arr[:, 1] = values_col1
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
+
+def gen_colmajor_to_nd_strided_column(datatype):
+    input_arr = np.zeros(shape=(8, 2), dtype=datatype)
+    output_arr = np.zeros(shape=(8, 2), dtype=datatype)
+
+    values = np.arange(100, 108, dtype=datatype)
+    input_arr.reshape(-1)[:8] = values
+    output_arr[:, 1] = values
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
+
+def gen_colmajor_to_nd_strided_columns(datatype, rows, cols, whole_cols):
+    input_arr = np.zeros(shape=(rows, cols), dtype=datatype)
+    output_arr = np.zeros(shape=(rows, whole_cols), dtype=datatype)
+
+    for col in range(cols):
+        values = np.arange((col + 1) * 100, (col + 1) * 100 + rows, dtype=datatype)
+        input_arr.reshape(-1)[col * rows:(col + 1) * rows] = values
+        output_arr[:, col + 1] = values
+
+    input_arr.tofile("./input.bin")
+    output_arr.tofile("./golden.bin")
+
+
 class GlobalTensorInfo:
-    def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
-                gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
+    def __init__(
+        self,
+        datatype,
+        format,
+        gShape0,
+        gShape1,
+        gShape2,
+        gShape3,
+        gShape4,
+        gWholeShape0,
+        gWholeShape1,
+        gWholeShape2,
+        gWholeShape3,
+        gWholeShape4,
+    ):
         self.datatype = datatype
         self.format = format
         self.gShape0 = gShape0
@@ -63,6 +122,7 @@ class GlobalTensorInfo:
         self.gWholeShape2 = gWholeShape2
         self.gWholeShape3 = gWholeShape3
         self.gWholeShape4 = gWholeShape4
+
 
 if __name__ == "__main__":
     # 用例名称
@@ -80,6 +140,10 @@ if __name__ == "__main__":
         "TStoreTest.ND_uint64_t_1_2_1_23_121_3_2_2_35_125",
         "TStoreTest.DN_int64_1_1_1_4_21_1_1_1_8_32",
         "TStoreTest.DN_uint64_t_3_1_1_1_124_5_1_1_2_128",
+        "TStoreTest.ScalarStoreCachelineOverlap_float_2core",
+        "TStoreTest.ColMajor_float_8x1_to_ND_strided_columns",
+        "TStoreTest.ColMajor_float_8x2_to_ND_strided_columns",
+        "TStoreTest.ColMajor_int16_t_16x2_to_ND_strided_columns",
     ]
 
     case_params_list = [
@@ -96,12 +160,28 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.uint64, "ND", 1, 2, 1, 23, 121, 3, 2, 2, 35, 125),
         GlobalTensorInfo(np.int64, "DN", 1, 1, 1, 4, 21, 1, 1, 1, 8, 32),
         GlobalTensorInfo(np.uint64, "DN", 3, 1, 1, 1, 124, 5, 1, 1, 2, 128),
+        GlobalTensorInfo(np.float32, "SCALAR_OVERLAP", 1, 1, 1, 8, 1, 1, 1, 1, 8, 2),
+        GlobalTensorInfo(np.float32, "COLMAJOR_STRIDED_COLUMN", 1, 1, 1, 8, 1, 1, 1, 1, 8, 2),
+        GlobalTensorInfo(np.float32, "COLMAJOR_STRIDED_COLUMNS", 1, 1, 1, 8, 2, 1, 1, 1, 8, 4),
+        GlobalTensorInfo(np.int16, "COLMAJOR_STRIDED_COLUMNS", 1, 1, 1, 16, 2, 1, 1, 1, 16, 4),
     ]
 
-    for i, case_name  in enumerate(case_name_list):
+    for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_name, case_params_list[i])
+        if case_params_list[i].format == "SCALAR_OVERLAP":
+            gen_multicore_colmajor_to_nd_strided_columns(case_params_list[i].datatype)
+        elif case_params_list[i].format == "COLMAJOR_STRIDED_COLUMN":
+            gen_colmajor_to_nd_strided_column(case_params_list[i].datatype)
+        elif case_params_list[i].format == "COLMAJOR_STRIDED_COLUMNS":
+            gen_colmajor_to_nd_strided_columns(
+                case_params_list[i].datatype,
+                case_params_list[i].gShape3,
+                case_params_list[i].gShape4,
+                case_params_list[i].gWholeShape4,
+            )
+        else:
+            gen_golden_data(case_name, case_params_list[i])
         os.chdir(original_dir)

@@ -340,6 +340,8 @@ PTO_INTERNAL void CheckStaticForVecAndMat()
         ((GlobalData::layout == Layout::ND) && (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
             ((GlobalData::layout == Layout::DN) &&
              (!TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
+            ((GlobalData::layout == Layout::ND) && !TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox) &&
+             (TileData::Cols * sizeof(typename TileData::DType) < BLOCK_BYTE_SIZE)) ||
             ((GlobalData::layout == Layout::NZ) &&
              (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) ||
             (TileData::Rows == 1) || (TileData::Cols == 1),
@@ -398,18 +400,25 @@ __tf__ PTO_INTERNAL void TStore(
     __ubuf__ typename TileData::DType* srcAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(src);
     typename GlobalData::DType* dstAddr = dst;
 
-    if constexpr (TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
+    if constexpr (
+        (GlobalData::layout == Layout::ND) && (TileData::SFractal == SLayout::NoneBox) &&
+        (TileData::isRowMajor || TileData::Rows == 1 || TileData::Cols == 1)) {
         TStoreUb2gmNd2nd<GlobalData, TileData>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
-    } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
+    } else if constexpr (
+        (GlobalData::layout == Layout::DN) && (TileData::SFractal == SLayout::NoneBox) &&
+        (!TileData::isRowMajor || TileData::Rows == 1 || TileData::Cols == 1)) {
         TStoreUb2gmDn2dn<GlobalData, TileData>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
-    } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
+    } else if constexpr (
+        (GlobalData::layout == Layout::NZ) && (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor))) {
         TStoreUb2gmNz2nz<GlobalData, TileData>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
+    } else {
+        static_assert(sizeof(GlobalData) == 0, "TSTORE: Unsupported GlobalTensor and VecTile layout combination.");
     }
 }
 
