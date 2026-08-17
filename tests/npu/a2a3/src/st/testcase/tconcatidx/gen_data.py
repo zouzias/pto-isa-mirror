@@ -110,6 +110,7 @@ if __name__ == "__main__":
         TConcatParams(np.float16, np.int32, 16, 256, 16, 128, 16, 128, 16, 128, 128),
         TConcatParams(np.float32, np.int16, 16, 64, 16, 32, 16, 32, 16, 32, 32),
         TConcatParams(np.int16, np.int16, 32, 256, 32, 128, 32, 128, 32, 128, 128),
+        TConcatParams(np.int8, np.int16, 16, 64, 16, 32, 16, 32, 16, 32, 32),
     ]
 
     for param in case_params_list:
