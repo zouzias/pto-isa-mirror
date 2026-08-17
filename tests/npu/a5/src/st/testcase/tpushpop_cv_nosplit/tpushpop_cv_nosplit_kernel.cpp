@@ -209,6 +209,96 @@ __global__ AICORE void runTPushPopMatmulAddNoSplit(
     }
 }
 
+template <typename InT, typename OutT, int M, int H, int K, int N>
+__global__ AICORE void runTPushPopAccValidShapeStripNoSplit(__gm__ OutT* out, __gm__ InT* srcA, __gm__ InT* srcB)
+{
+    constexpr uint16_t FLAG_ID = 0;
+    constexpr uint8_t FIFO_DEPTH = 2;
+    constexpr uint32_t STRIP_COUNT = M / H;
+    using AccTile = TileAcc<OutT, M, N, M, N>;
+    using AccStripTile = TileAcc<OutT, M, N, H, N>;
+    using VecStripTile = Tile<TileType::Vec, OutT, H, N, BLayout::RowMajor, H, N>;
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * H * N, FIFO_DEPTH, 2, true>;
+    MatPipe mPipe((__gm__ void*)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
+
+    constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
+    constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(M, 16);
+    constexpr uint32_t ALIGNED_K = CeilAlign<uint32_t>(K, blockAlign);
+    constexpr uint32_t ALIGNED_N = CeilAlign<uint32_t>(N, blockAlign);
+
+    using GlobalA = GlobalTensor<InT, pto::Shape<1, 1, 1, M, K>, pto::Stride<M * K, M * K, M * K, K, 1>>;
+    using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, K, N>, pto::Stride<K * N, K * N, K * N, N, 1>>;
+    using GlobalOutStrip =
+        GlobalTensor<OutT, pto::Shape<1, 1, 1, H, N>, pto::Stride<M * N, M * N, H * N, N, 1>>;
+
+    using TileMatA =
+        Tile<TileType::Mat, InT, ALIGNED_M, ALIGNED_K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
+    using TileMatB =
+        Tile<TileType::Mat, InT, ALIGNED_K, ALIGNED_N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<InT, ALIGNED_M, ALIGNED_K, M, K>;
+    using RightTile = TileRight<InT, ALIGNED_K, ALIGNED_N, K, N>;
+
+    if constexpr (DAV_CUBE) {
+        TileMatA aMatTile;
+        TileMatB bMatTile;
+        LeftTile aTile;
+        RightTile bTile;
+        AccTile accTile;
+        TASSIGN(aMatTile, 0x0);
+        TASSIGN(bMatTile, 0x20000);
+        TASSIGN(aTile, 0x0);
+        TASSIGN(bTile, 0x0);
+        TASSIGN(accTile, 0x0);
+
+        GlobalA globalA(srcA);
+        GlobalB globalB(srcB);
+        TLOAD(aMatTile, globalA);
+        TLOAD(bMatTile, globalB);
+
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
+
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+        TMATMUL(accTile, aTile, bTile);
+
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+        for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+            AccStripTile accStrip;
+            TASSIGN(accStrip, strip * H * 64);
+            TPUSH<MatPipe, AccStripTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, accStrip);
+        }
+
+        pipe_barrier(PIPE_ALL);
+    }
+
+    if constexpr (DAV_VEC) {
+        if (get_subblockid() == 0) {
+            VecStripTile vecStripTile;
+            TASSIGN(vecStripTile, 0x10000);
+
+            for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+                TPOP<MatPipe, VecStripTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, vecStripTile);
+                TFREE<MatPipe, TileSplitAxis::TILE_NO_SPLIT>(mPipe);
+
+                GlobalOutStrip globalOut(out + strip * H * N);
+
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                TSTORE(globalOut, vecStripTile);
+            }
+        }
+
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <int32_t tilingKey>
 void LaunchTPushPopMatmulAddNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream)
 {
@@ -227,9 +317,20 @@ void LaunchTPushPopMatmulAddNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, 
     }
 }
 
+template <int32_t tilingKey>
+void LaunchTPushPopAccValidShapeStripNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream)
+{
+    if constexpr (tilingKey == 4) {
+        runTPushPopAccValidShapeStripNoSplit<float, float, 32, 16, 32, 128><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<float*>(srcA), reinterpret_cast<float*>(srcB));
+    }
+}
+
 template void LaunchTPushPopMatmulAddNoSplit<1>(
     uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
 template void LaunchTPushPopMatmulAddNoSplit<2>(
     uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
 template void LaunchTPushPopMatmulAddNoSplit<3>(
     uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
+template void LaunchTPushPopAccValidShapeStripNoSplit<4>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream);
