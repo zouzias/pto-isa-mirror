@@ -82,6 +82,10 @@ if __name__ == "__main__":
         TestParams("TREMSTest.case_int64_4x16", np.int64, 4, 16, 4, 16, 4, 16),
         TestParams("TREMSTest.case_uint64_4x16", np.uint64, 4, 16, 4, 16, 4, 16),
         TestParams("TREMSTest.case_uint64_zero_divisor_4x16", np.uint64, 4, 16, 4, 16, 4, 16, True),
+        TestParams("TREMSTest.case_int64_4x64", np.int64, 4, 64, 4, 64, 4, 64),
+        TestParams("TREMSTest.case_uint64_4x64", np.uint64, 4, 64, 4, 64, 4, 64),
+        TestParams("TREMSTest.case_int64_1x10912", np.int64, 1, 10912, 1, 10912, 1, 10912),
+        TestParams("TREMSTest.case_uint64_1x10912", np.uint64, 1, 10912, 1, 10912, 1, 10912),
     ]
 
     for case in case_params_list:

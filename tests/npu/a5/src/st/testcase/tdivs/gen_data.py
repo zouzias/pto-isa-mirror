@@ -67,6 +67,12 @@ if __name__ == "__main__":
         TDivsParams("TDIVSTest.caseHP2", np.float16, 2, 32, 2, 32),
         TDivsParams("TDIVSTest.case_int64_4x16", np.int64, 4, 16, 4, 16),
         TDivsParams("TDIVSTest.case_uint64_4x16", np.uint64, 4, 16, 4, 16),
+        TDivsParams("TDIVSTest.case_int64_4x64", np.int64, 4, 64, 4, 64),
+        TDivsParams("TDIVSTest.case_uint64_4x64", np.uint64, 4, 64, 4, 64),
+        TDivsParams("TDIVSTest.case_int64_1x16364", np.int64, 1, 16364, 1, 16364),
+        TDivsParams("TDIVSTest.case_uint64_1x16364", np.uint64, 1, 16364, 1, 16364),
+        TDivsParams("TDIVSTest.case_int64_4091x4", np.int64, 4091, 4, 4091, 4),
+        TDivsParams("TDIVSTest.case_uint64_4091x4", np.uint64, 4091, 4, 4091, 4),
     ]
 
     for _, case in enumerate(case_params_list):

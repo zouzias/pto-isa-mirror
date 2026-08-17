@@ -126,6 +126,10 @@ if __name__ == "__main__":
         TPartMaxParams(np.float32, 8, 8, 8, 8, 0, 8),
         TPartMaxParams(np.int64, 4, 16, 2, 16, 4, 16),
         TPartMaxParams(np.uint64, 4, 16, 2, 16, 4, 16),
+        TPartMaxParams(np.int64, 4, 64, 4, 64, 4, 64),
+        TPartMaxParams(np.uint64, 4, 64, 4, 64, 4, 64),
+        TPartMaxParams(np.int64, 1, 10912, 1, 10912, 1, 10908),
+        TPartMaxParams(np.uint64, 1, 10912, 1, 10912, 1, 10908),
     ]
 
     for param in case_params_list:

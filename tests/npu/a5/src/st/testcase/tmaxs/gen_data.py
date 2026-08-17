@@ -99,6 +99,10 @@ if __name__ == "__main__":
         TestParams(np.uint8, 32, 128, 32, 128, 32, 128),
         TestParams(np.int64, 4, 16, 4, 16, 4, 16),
         TestParams(np.uint64, 4, 16, 4, 16, 4, 16),
+        TestParams(np.int64, 1, 16364, 1, 16364, 1, 16364),
+        TestParams(np.uint64, 1, 16364, 1, 16364, 1, 16364),
+        TestParams(np.int64, 1, 16368, 1, 16368, 1, 16368),
+        TestParams(np.uint64, 1, 16368, 1, 16368, 1, 16368),
     ]
 
     for _, param in enumerate(case_params_list):
