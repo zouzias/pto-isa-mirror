@@ -64,18 +64,18 @@ __tf__ PTO_INTERNAL void TExtractToAVector(
 {
     using DataType = typename SrcTile::DType;
     constexpr int typeSize = sizeof(DataType);
+    constexpr int32_t blockSize = BLOCK_BYTE_SIZE / typeSize;
     constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / typeSize;
     int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
 
-    static_assert((SrcTile::Cols % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
+    static_assert((SrcTile::Cols % blockSize) == 0, "srcCol * sizeof(DataType) must be aligned to 32B");
     static_assert((DstTile::Cols % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
-    PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol * sizeof(DataType) must be aligned to 512B");
+    PTO_ASSERT((indexCol % blockSize) == 0, "indexCol * sizeof(DataType) must be aligned to 32B");
 
-    __cbuf__ DataType* srcAddr = (__cbuf__ DataType*)__cce_get_tile_ptr(src);
+    __cbuf__ DataType* srcAddr = ((__cbuf__ DataType*)__cce_get_tile_ptr(src)) + indexCol;
     __ca__ DataType* dstAddr = (__ca__ DataType*)__cce_get_tile_ptr(dst);
-    uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_FRACTAL_BYTE;
     uint8_t kStep = kAlign / fractalSize;
-    load_cbuf_to_ca(dstAddr, srcAddr, 0, kStartPosition, 1, kStep, 1, 1, 0);
+    load_cbuf_to_ca(dstAddr, srcAddr, 0, 0, 1, kStep, 1, 1, 0);
 }
 
 template <typename DstTile, typename SrcTile>
