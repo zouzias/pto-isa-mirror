@@ -106,3 +106,5 @@ TEST_F(TPARTADDTest, case_int32_64x64_8x64_64x64) { test_tpartadd<int32_t, 64, 6
 TEST_F(TPARTADDTest, case_int64_4x16_2x16_4x16) { test_tpartadd<int64_t, 4, 16, 2, 16, 4, 16>(); }
 TEST_F(TPARTADDTest, case_uint64_4x16_2x16_4x16) { test_tpartadd<uint64_t, 4, 16, 2, 16, 4, 16>(); }
 TEST_F(TPARTADDTest, case_int64_4x16_4x8_4x16) { test_tpartadd<int64_t, 4, 16, 4, 8, 4, 16>(); }
+TEST_F(TPARTADDTest, case_int64_4x64_4x64_4x64) { test_tpartadd<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TPARTADDTest, case_uint64_4x64_4x64_4x64) { test_tpartadd<uint64_t, 4, 64, 4, 64, 4, 64>(); }

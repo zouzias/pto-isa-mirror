@@ -43,6 +43,44 @@ PTO_INTERNAL void runTAddS(__gm__ T* out, __gm__ T* src, T scalar)
     out = dstGlobal.data();
 }
 
+template <
+    typename T, int srcGmRow, int srcGmCol, int dstGmRow, int dstGmCol, int tileRow, int tileCol, int validRow,
+    int validCol>
+PTO_INTERNAL void runTAddSByColTile(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
+    using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
+    using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
+    using SrcTileData = Tile<TileType::Vec, T, tileRow, tileCol, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, tileRow, tileCol, BLayout::RowMajor, -1, -1>;
+
+    for (int colOffset = 0; colOffset < validCol; colOffset += tileCol) {
+        int curCol = (validCol - colOffset) < tileCol ? (validCol - colOffset) : tileCol;
+        GlobalData srcGlobal(src + colOffset, DynDim2Shape(validRow, curCol), DynDim2Stride(srcGmRow, srcGmCol));
+        GlobalData dstGlobal(out + colOffset, DynDim2Shape(validRow, curCol), DynDim2Stride(dstGmRow, dstGmCol));
+        SrcTileData srcTile(validRow, curCol);
+        DstTileData dstTile(validRow, curCol);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x28000);
+        TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        TADDS(dstTile, srcTile, scalar);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, dstTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+        pipe_barrier(PIPE_ALL);
+#endif
+    }
+}
+
 extern "C" __global__ AICORE void launchTADDSCase1(__gm__ float* out, __gm__ float* src, float scalar)
 {
     runTAddS<float, 32, 128, 32, 32, 64, 64>(out, src, scalar);
@@ -94,6 +132,46 @@ extern "C" __global__ AICORE void launchTADDSCase12(__gm__ int64_t* out, __gm__ 
 extern "C" __global__ AICORE void launchTADDSCase13(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
 {
     runTAddS<uint64_t, 4, 16, 4, 4, 16, 16>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTADDSCase14(__gm__ int64_t* out, __gm__ int64_t* src, int64_t scalar)
+{
+    runTAddSByColTile<int64_t, 96, 32768, 32, 1024, 32, 128, 32, 1024>(out, src, scalar);
+}
+
+template <typename T, int cols>
+PTO_INTERNAL void runTAddSWideInt64(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData srcTile(tileRows, validCols);
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        Event<Op::TLOAD, Op::TADDS> event0 = TLOAD(srcTile, srcGlobal);
+        Event<Op::TADDS, Op::TSTORE_VEC> event1 = TADDS(dstTile, srcTile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+extern "C" __global__ AICORE void launchTADDSCase15(__gm__ int64_t* out, __gm__ int64_t* src, int64_t scalar)
+{
+    runTAddSWideInt64<int64_t, 16364>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTADDSCase16(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
+{
+    runTAddSWideInt64<uint64_t, 16364>(out, src, scalar);
 }
 
 template <uint32_t caseId, typename T>
@@ -152,6 +230,18 @@ void launchTADDSTestCase(void* out, void* src, T scalar, aclrtStream stream)
             launchTADDSCase13<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
             break;
         }
+        case 14: {
+            launchTADDSCase14<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src, (int64_t)scalar);
+            break;
+        }
+        case 15: {
+            launchTADDSCase15<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src, (int64_t)scalar);
+            break;
+        }
+        case 16: {
+            launchTADDSCase16<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
+            break;
+        }
         default: {
         }
     }
@@ -176,6 +266,9 @@ template void launchTADDSTestCase<10, uint8_t>(void* out, void* src, uint8_t sca
 template void launchTADDSTestCase<11, uint8_t>(void* out, void* src, uint8_t scalar, aclrtStream stream);
 template void launchTADDSTestCase<12, int64_t>(void* out, void* src, int64_t scalar, aclrtStream stream);
 template void launchTADDSTestCase<13, uint64_t>(void* out, void* src, uint64_t scalar, aclrtStream stream);
+template void launchTADDSTestCase<14, int64_t>(void* out, void* src, int64_t scalar, aclrtStream stream);
+template void launchTADDSTestCase<15, int64_t>(void* out, void* src, int64_t scalar, aclrtStream stream);
+template void launchTADDSTestCase<16, uint64_t>(void* out, void* src, uint64_t scalar, aclrtStream stream);
 template void launchTADDSTestCase<1>(void*, void*, float, aclrtStream);
 template void launchTADDSTestCase<2>(void*, void*, float, aclrtStream);
 template void launchTADDSTestCase<3>(void*, void*, float, aclrtStream);

@@ -209,6 +209,22 @@ extern "C" __global__ AICORE void launchTROWMINCase30(__gm__ uint64_t* out, __gm
 {
     runTRowMin<uint64_t, 4, 4, 16, 15, 1>(out, src);
 }
+extern "C" __global__ AICORE void launchTROWMINCase31(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowMin<int64_t, 4, 4, 64, 64, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWMINCase32(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTRowMin<uint64_t, 4, 4, 64, 64, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWMINCase33(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowMin<int64_t, 32, 32, 32, 32, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWMINCase34(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowMin<int64_t, 1, 1, 10912, 10912, 1>(out, src);
+}
 
 template <uint32_t caseId>
 void launchTROWMINTestCase(void* out, void* src, aclrtStream stream)
@@ -334,6 +350,22 @@ void launchTROWMINTestCase(void* out, void* src, aclrtStream stream)
             launchTROWMINCase30<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
             break;
         }
+        case 31: {
+            launchTROWMINCase31<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 32: {
+            launchTROWMINCase32<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
+        case 33: {
+            launchTROWMINCase33<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 34: {
+            launchTROWMINCase34<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -369,3 +401,7 @@ template void launchTROWMINTestCase<27>(void* out, void* src, aclrtStream stream
 template void launchTROWMINTestCase<28>(void* out, void* src, aclrtStream stream);
 template void launchTROWMINTestCase<29>(void* out, void* src, aclrtStream stream);
 template void launchTROWMINTestCase<30>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<31>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<32>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<33>(void* out, void* src, aclrtStream stream);
+template void launchTROWMINTestCase<34>(void* out, void* src, aclrtStream stream);

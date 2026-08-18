@@ -71,3 +71,6 @@ template void LaunchTPartAdd<int64_t, 4, 16, 2, 16, 4, 16>(int64_t* out, int64_t
 template void LaunchTPartAdd<uint64_t, 4, 16, 2, 16, 4, 16>(
     uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
 template void LaunchTPartAdd<int64_t, 4, 16, 4, 8, 4, 16>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTPartAdd<int64_t, 4, 64, 4, 64, 4, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTPartAdd<uint64_t, 4, 64, 4, 64, 4, 64>(
+    uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
