@@ -21,6 +21,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <type_traits>
 
+#include <vector>
+#include <algorithm>
+
 namespace pto {
 constexpr double CAST_ODD_THRESHOLD = 0.5;
 
@@ -155,6 +158,110 @@ inline T from_double_value(double val)
     }
 }
 
+inline bool is_close(float a, float b, float atol = 1e-8f) { return std::abs(a - b) <= atol; }
+
+/**
+ * Return the 4-bit nibble code for a scalar float value.
+ * Nibble layout: bit3 = sign, bits[2:0] = magnitude code (index into pos_grid).
+ */
+template <bool is_e1m2 = true>
+inline uint8_t quantize_to_fp4_nibble(float val, RoundMode rmode = RoundMode::CAST_RINT)
+{
+    constexpr std::array<float, 8> pos_grid = []() {
+        if constexpr (is_e1m2) {
+            return std::array<float, 8>{0.0f, 0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f};
+        } else {
+            return std::array<float, 8>{0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f};
+        }
+    }();
+
+    uint8_t sign = 0;
+    if (val < 0.0f) {
+        sign = 1;
+        val = -val;
+    }
+
+    if (pos_grid.empty()) {
+        return sign << 3;
+    }
+
+    int max_code = static_cast<int>(pos_grid.size()) - 1;
+    if (val >= pos_grid[max_code]) {
+        return (sign << 3) | static_cast<uint8_t>(max_code);
+    }
+
+    // Find the two bracketing grid values: lower_idx <= val <= upper_idx
+    auto it = std::upper_bound(pos_grid.begin(), pos_grid.end(), val);
+    int upper_idx = static_cast<int>(std::distance(pos_grid.begin(), it));
+
+    if (upper_idx == 0) {
+        return sign << 3; // underflow to zero
+    }
+    int lower_idx = upper_idx - 1;
+
+    // Check exact match with lower bound
+    if (is_close(val, pos_grid[lower_idx])) {
+        return (sign << 3) | static_cast<uint8_t>(lower_idx);
+    }
+
+    if (upper_idx >= static_cast<int>(pos_grid.size())) {
+        return (sign << 3) | static_cast<uint8_t>(max_code);
+    }
+
+    // Check exact match with upper bound
+    if (is_close(val, pos_grid[upper_idx])) {
+        return (sign << 3) | static_cast<uint8_t>(upper_idx);
+    }
+
+    float lower_val = pos_grid[lower_idx];
+    float upper_val = pos_grid[upper_idx];
+    float midpoint = (lower_val + upper_val) / 2.0f;
+    bool is_tie = is_close(val, midpoint);
+
+    int mag_code = lower_idx;
+
+    switch (rmode) {
+        case RoundMode::CAST_FLOOR:
+            mag_code = (sign == 0) ? lower_idx : upper_idx;
+            break;
+        case RoundMode::CAST_CEIL:
+            mag_code = (sign == 0) ? upper_idx : lower_idx;
+            break;
+        case RoundMode::CAST_TRUNC:
+            mag_code = lower_idx;
+            break;
+        case RoundMode::CAST_ODD:
+            if (is_tie) {
+                if (lower_idx % 2 == 1)
+                    mag_code = lower_idx;
+                else if (upper_idx % 2 == 1)
+                    mag_code = upper_idx;
+                else
+                    mag_code = lower_idx;
+            } else {
+                mag_code = (val < midpoint) ? lower_idx : upper_idx;
+            }
+            break;
+        case RoundMode::CAST_RINT:
+        case RoundMode::CAST_ROUND:
+        case RoundMode::CAST_NONE:
+        default:
+            if (is_tie) {
+                if (lower_idx % 2 == 0)
+                    mag_code = lower_idx;
+                else if (upper_idx % 2 == 0)
+                    mag_code = upper_idx;
+                else
+                    mag_code = lower_idx;
+            } else {
+                mag_code = (val < midpoint) ? lower_idx : upper_idx;
+            }
+            break;
+    }
+
+    return (sign << 3) | static_cast<uint8_t>(mag_code);
+}
+
 template <typename D, typename S>
 inline D convert_value(S val, RoundMode mode)
 {
@@ -175,11 +282,16 @@ inline D convert_value(S val, RoundMode mode)
     } else if constexpr (
         (is_fp4_v<S> && is_float_like_v<D>) || (is_float_like_v<S> && is_fp4_v<D>) ||
         (is_float_like_v<S> && std::is_integral_v<D>)) {
-        const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
-        if constexpr (std::is_same_v<D, uint8_t>) {
-            return static_cast<D>(static_cast<int64_t>(dval));
+        if constexpr (is_fp4_v<D>) {
+            uint8_t fp4_nibble = quantize_to_fp4_nibble<std::is_same_v<D, float4_e1m2x2_t>>(val, mode);
+            return D::FromRaw(fp4_nibble);
+        } else {
+            const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
+            if constexpr (std::is_same_v<D, uint8_t>) {
+                return static_cast<D>(static_cast<int64_t>(dval));
+            }
+            return static_cast<D>(dval);
         }
-        return static_cast<D>(dval);
     } else if constexpr (std::is_integral_v<S> && is_float_like_v<D>) {
         return static_cast<D>(static_cast<double>(val));
     } else {
