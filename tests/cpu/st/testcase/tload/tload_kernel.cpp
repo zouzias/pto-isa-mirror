@@ -313,6 +313,53 @@ extern "C" __global__ AICORE void launchTLOAD_13(
         (__gm__ uint8_t*)out, (__gm__ uint8_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+extern "C" __global__ AICORE void launchTLOAD_14(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e2m1x2_t, 1, 1, 1, 128, 128, 128, 128, 1, PadValue::Null>(
+        (__gm__ float4_e2m1x2_t*)out, (__gm__ float4_e2m1x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+extern "C" __global__ AICORE void launchTLOAD_15(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e2m1x2_t, 2, 2, 2, 256, 64, 256, 64, 1, PadValue::Null>(
+        (__gm__ float4_e2m1x2_t*)out, (__gm__ float4_e2m1x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+extern "C" __global__ AICORE void launchTLOAD_16(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e2m1x2_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max>(
+        (__gm__ float4_e2m1x2_t*)out, (__gm__ float4_e2m1x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+extern "C" __global__ AICORE void launchTLOAD_17(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e1m2x2_t, 1, 1, 1, 128, 128, 128, 128, 1, PadValue::Null>(
+        (__gm__ float4_e1m2x2_t*)out, (__gm__ float4_e1m2x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+extern "C" __global__ AICORE void launchTLOAD_18(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e1m2x2_t, 2, 2, 2, 256, 64, 256, 64, 1, PadValue::Null>(
+        (__gm__ float4_e1m2x2_t*)out, (__gm__ float4_e1m2x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+extern "C" __global__ AICORE void launchTLOAD_19(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTLOADND<float4_e1m2x2_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max>(
+        (__gm__ float4_e1m2x2_t*)out, (__gm__ float4_e1m2x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTLOAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
 {
@@ -342,6 +389,18 @@ void launchTLOAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
         launchTLOAD_12(out, src, 2, 2, 2, 16, 16, gLog);
     } else if constexpr (testKey == 13) {
         launchTLOAD_13(out, src, 1, 2, 1, 16, 32, gLog);
+    } else if constexpr (testKey == 14) {
+        launchTLOAD_14(out, src, 1, 1, 1, 128, 128, gLog);
+    } else if constexpr (testKey == 15) {
+        launchTLOAD_15(out, src, 2, 2, 2, 256, 64, gLog);
+    } else if constexpr (testKey == 16) {
+        launchTLOAD_16(out, src, 1, 1, 1, 128, 127, gLog);
+    } else if constexpr (testKey == 17) {
+        launchTLOAD_17(out, src, 1, 1, 1, 128, 128, gLog);
+    } else if constexpr (testKey == 18) {
+        launchTLOAD_18(out, src, 2, 2, 2, 256, 64, gLog);
+    } else if constexpr (testKey == 19) {
+        launchTLOAD_19(out, src, 1, 1, 1, 128, 127, gLog);
     }
 }
 
@@ -353,36 +412,44 @@ int get_input_golden_case(uint8_t* input, uint8_t* golden)
     constexpr int shape4_aligned = align_to_32B(Shape4, T);
     static_assert((Shape3 % (Shape0 * Shape1 * Shape2)) == 0);
     constexpr int sh3 = Shape3 / (Shape0 * Shape1 * Shape2);
-    int in_byteSize = Shape0 * Shape1 * Shape2 * sh3 * Shape4 * sizeof(T);
-    int out_byteSize = Shape0 * Shape1 * Shape2 * sh3 * shape4_aligned * sizeof(T);
+    constexpr int delimiter = IsTwinType<T>() ? 2 : 1;
+    const int in_byteSize = Shape0 * Shape1 * Shape2 * sh3 * Shape4 * sizeof(T) / delimiter;
+    const int out_byteSize = Shape0 * Shape1 * Shape2 * sh3 * shape4_aligned * sizeof(T) / delimiter;
 
-    T in_arr[Shape0][Shape1][Shape2][sh3][Shape4] = {};
-    T gold_arr[Shape0][Shape1][Shape2][sh3][shape4_aligned] = {};
+    T in_arr[in_byteSize] = {};
+    T gold_arr[out_byteSize] = {};
 
     for (int x0 = 0; x0 < Shape0; x0++)
         for (int x1 = 0; x1 < Shape1; x1++)
             for (int x2 = 0; x2 < Shape2; x2++)
                 for (int i = 0; i < sh3; i++) {
                     for (int j = 0; j < shape4_aligned; j++) {
+                        auto golden_offset = x0 * Shape1 * Shape2 * sh3 * shape4_aligned +
+                                             x1 * Shape2 * sh3 * shape4_aligned + x2 * sh3 * shape4_aligned +
+                                             i * shape4_aligned + j;
+
                         if (j < Shape4) {
-                            in_arr[x0][x1][x2][i][j] = x0 * Shape1 * Shape2 * sh3 * Shape4 +
-                                                       x1 * Shape2 * sh3 * Shape4 + x2 * sh3 * Shape4 + i * Shape4 + j;
-                            gold_arr[x0][x1][x2][i][j] = in_arr[x0][x1][x2][i][j];
+                            auto in_offset = x0 * Shape1 * Shape2 * sh3 * Shape4 + x1 * Shape2 * sh3 * Shape4 +
+                                             x2 * sh3 * Shape4 + i * Shape4 + j;
+
+                            SetProperDataPart(in_arr, in_offset, static_cast<T>(in_offset));
+                            SetProperDataPart(gold_arr, golden_offset, static_cast<T>(in_offset));
                         } else {
                             if (std::numeric_limits<T>::has_infinity) {
                                 if (PadVal_ == PadValue::Max)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::infinity();
+                                    SetProperDataPart(gold_arr, golden_offset, std::numeric_limits<T>::infinity());
                                 else if (PadVal_ == PadValue::Min)
-                                    gold_arr[x0][x1][x2][i][j] = -std::numeric_limits<T>::infinity();
+                                    SetProperDataPart(
+                                        gold_arr, golden_offset, static_cast<T>(-std::numeric_limits<T>::infinity()));
                                 else
-                                    gold_arr[x0][x1][x2][i][j] = 0;
+                                    SetProperDataPart(gold_arr, golden_offset, static_cast<T>(0));
                             } else {
                                 if (PadVal_ == PadValue::Max)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::max();
+                                    SetProperDataPart(gold_arr, golden_offset, std::numeric_limits<T>::max());
                                 else if (PadVal_ == PadValue::Min)
-                                    gold_arr[x0][x1][x2][i][j] = std::numeric_limits<T>::min();
+                                    SetProperDataPart(gold_arr, golden_offset, std::numeric_limits<T>::min());
                                 else
-                                    gold_arr[x0][x1][x2][i][j] = 0;
+                                    SetProperDataPart(gold_arr, golden_offset, static_cast<T>(0));
                             }
                         }
                     } // j
@@ -471,7 +538,20 @@ int get_input_golden(uint8_t* input, uint8_t* golden)
         return get_input_golden_case<int16_t, 2, 2, 2, 16, 16, 16, 16, PadValue::Null>(input, golden);
     } else if constexpr (testKey == 13) {
         return get_input_golden_case<uint8_t, 1, 2, 1, 16, 32, 16, 32, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 14) {
+        return get_input_golden_case<float4_e2m1x2_t, 1, 1, 1, 128, 128, 128, 128, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 15) {
+        return get_input_golden_case<float4_e2m1x2_t, 2, 2, 2, 256, 64, 256, 64, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 16) {
+        return get_input_golden_case<float4_e2m1x2_t, 1, 1, 1, 128, 127, 128, 128, PadValue::Max>(input, golden);
+    } else if constexpr (testKey == 17) {
+        return get_input_golden_case<float4_e1m2x2_t, 1, 1, 1, 128, 128, 128, 128, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 18) {
+        return get_input_golden_case<float4_e1m2x2_t, 2, 2, 2, 256, 64, 256, 64, PadValue::Null>(input, golden);
+    } else if constexpr (testKey == 19) {
+        return get_input_golden_case<float4_e1m2x2_t, 1, 1, 1, 128, 127, 128, 128, PadValue::Max>(input, golden);
     }
+
     return 0;
 }
 
@@ -488,6 +568,12 @@ template void launchTLOAD<10>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* 
 template void launchTLOAD<11>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
 template void launchTLOAD<12>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
 template void launchTLOAD<13>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<14>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<15>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<16>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<17>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<18>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTLOAD<19>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
 
 template int get_input_golden<1>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<2>(uint8_t* input, uint8_t* golden);
@@ -502,3 +588,9 @@ template int get_input_golden<10>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<11>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<12>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<13>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<14>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<15>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<16>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<17>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<18>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<19>(uint8_t* input, uint8_t* golden);

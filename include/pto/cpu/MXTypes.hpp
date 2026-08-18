@@ -203,4 +203,57 @@ inline void SetProperDataPart(T* buf, size_t offset, T val)
         buf[offset] = val;
     }
 }
+
+namespace std {
+template <>
+class numeric_limits<float4_e1m2x2_t> {
+public:
+    static constexpr bool is_specialized = true;
+    static constexpr bool is_signed = true;
+    static constexpr bool is_integer = false;
+    static constexpr int radix = 2;
+    static constexpr int digits = 3; // 2 бита мантиссы + 1 неявный бит
+
+    static constexpr bool has_infinity = false;
+    static constexpr bool has_quiet_NaN = false;
+    static constexpr bool has_signaling_NaN = false;
+
+    // Инициализация объектов через нотацию Type(value)
+    static float4_e1m2x2_t min() noexcept { return float4_e1m2x2_t::FromRaw(0x1); }
+    static float4_e1m2x2_t max() noexcept { return float4_e1m2x2_t::FromRaw(0x7); }
+    static float4_e1m2x2_t lowest() noexcept { return float4_e1m2x2_t::FromRaw(0xF); }
+
+    static float4_e1m2x2_t infinity() noexcept { return float4_e1m2x2_t(); }
+    static float4_e1m2x2_t quiet_NaN() noexcept { return float4_e1m2x2_t(); }
+    static float4_e1m2x2_t signaling_NaN() noexcept { return float4_e1m2x2_t(); }
+};
+
+// ============================================================================
+// 2. Специализация для float4_e2m1x2_t согласно OCP MX Spec (1 Sign, 2 Exp, 1 Mantissa)
+// ============================================================================
+template <>
+class numeric_limits<float4_e2m1x2_t> {
+public:
+    static constexpr bool is_specialized = true;
+    static constexpr bool is_signed = true;
+    static constexpr bool is_integer = false;
+    static constexpr int radix = 2;
+    static constexpr int digits = 2; // 1 бит мантиссы + 1 неявный бит
+
+    static constexpr bool has_infinity = false;
+    static constexpr bool has_quiet_NaN = false;
+    static constexpr bool has_signaling_NaN = false;
+
+    // Инициализация объектов через нотацию Type(value)
+    static float4_e2m1x2_t min() noexcept { return float4_e2m1x2_t::FromRaw(0x1); }
+    static float4_e2m1x2_t max() noexcept { return float4_e2m1x2_t::FromRaw(0x7); }
+    static float4_e2m1x2_t lowest() noexcept { return float4_e2m1x2_t::FromRaw(0xF); }
+
+    static float4_e2m1x2_t infinity() noexcept { return float4_e2m1x2_t(); }
+    static float4_e2m1x2_t quiet_NaN() noexcept { return float4_e2m1x2_t(); }
+    static float4_e2m1x2_t signaling_NaN() noexcept { return float4_e2m1x2_t(); } 
+};
+
+} // namespace std
+
 #endif
