@@ -548,6 +548,6 @@ pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 
 ## 相关指令
 
-- [`TSTORE`](TSTORE_zh.md)：连续块传输Tile → GM。
-- [`MGATHER`](MGATHER_zh.md)：索引收集GM → Tile（逆操作）。
-- [`TSCATTER`](TSCATTER_zh.md)：基于索引的Tile内部散射。
+- [`TSTORE`](TSTORE.md)：连续块传输Tile → GM。
+- [`MGATHER`](MGATHER.md)：索引收集GM → Tile（逆操作）。
+- [`TSCATTER`](TSCATTER.md)：基于索引的Tile内部散射。

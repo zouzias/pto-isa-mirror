@@ -24,7 +24,7 @@ $$ \left(x \cdot 2^{-17}\right) \cdot \mathrm{deqScale} \cdot 2^{17} $$
 
 ## 汇编语法
 
-PTO-AS 形式: 详见 [PTO-AS 规范](../assembly/PTO-AS_zh.md).
+PTO-AS 形式: 详见 [PTO-AS 规范](../assembly/PTO-AS.md).
 
 同步形式:
 

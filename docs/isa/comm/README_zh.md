@@ -6,24 +6,24 @@
 - 类型定义：`include/pto/comm/comm_types.hpp`
 
 ## 点对点通信（同步）
-- [**TPUT**](TPUT_zh.md)：远程写（GM → UB → GM）
-- [**TGET**](TGET_zh.md)：远程读（GM → UB → GM）
+- [**TPUT**](TPUT.md)：远程写（GM → UB → GM）
+- [**TGET**](TGET.md)：远程读（GM → UB → GM）
 
 ## 点对点通信（异步）
-- [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：异步远程写（GM → DMA 引擎 → GM）
-- [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
+- [**TPUT_ASYNC**](TPUT_ASYNC.md)：异步远程写（GM → DMA 引擎 → GM）
+- [**TGET_ASYNC**](TGET_ASYNC.md)：异步远程读（GM → DMA 引擎 → GM）
 
 ## 基于信号的同步
-- [**TNOTIFY**](TNOTIFY_zh.md)：向远端 NPU 发送通知
-- [**TWAIT**](TWAIT_zh.md)：阻塞等待信号条件满足
-- [**TTEST**](TTEST_zh.md)：非阻塞检测信号条件
+- [**TNOTIFY**](TNOTIFY.md)：向远端 NPU 发送通知
+- [**TWAIT**](TWAIT.md)：阻塞等待信号条件满足
+- [**TTEST**](TTEST.md)：非阻塞检测信号条件
 
 ## 集合通信
 
-- [**TGATHER**](TGATHER_zh.md)：从所有 rank 收集数据
-- [**TSCATTER**](TSCATTER_zh.md)：向所有 rank 分发数据
-- [**TREDUCE**](TREDUCE_zh.md)：从所有 rank 归约数据到本地
-- [**TBROADCAST**](TBROADCAST_zh.md)：从当前 NPU 广播数据到所有 rank
+- [**TGATHER**](TGATHER.md)：从所有 rank 收集数据
+- [**TSCATTER**](TSCATTER.md)：向所有 rank 分发数据
+- [**TREDUCE**](TREDUCE.md)：从所有 rank 归约数据到本地
+- [**TBROADCAST**](TBROADCAST.md)：从当前 NPU 广播数据到所有 rank
 
 ## 类型定义
 
@@ -109,7 +109,7 @@ comm::AsyncSession session;
 comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
-定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC_zh.md)。
+定义于 `include/pto/comm/async_common/async_types.hpp`。构建参数详见 [TPUT_ASYNC](TPUT_ASYNC.md)。
 
 ### ParallelGroup
 

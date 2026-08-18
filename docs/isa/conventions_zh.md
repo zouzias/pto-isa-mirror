@@ -10,9 +10,9 @@
 
 关于这些对象的 C++ 编程模型（类型、布局、枚举、约束等），可参考：
 
-- Tile：`docs/coding/Tile_zh.md`
-- GlobalTensor：`docs/coding/GlobalTensor_zh.md`
-- 标量与枚举：`docs/coding/Scalar_zh.md`
+- Tile：`docs/coding/Tile.md`
+- GlobalTensor：`docs/coding/GlobalTensor.md`
+- 标量与枚举：`docs/coding/Scalar.md`
 
 ## 形状与布局
 
@@ -39,4 +39,4 @@
 - 某些指令序列需要建立内存与向量流水线之间的顺序关系。示例中出现的事件（例如 `set_flag(...)` / `wait_flag(...)`）用于表达后端需要满足的顺序约束。
 - 在需要显式同步的场景，使用 `TSYNC` 建立阶段间的顺序关系。
 
-事件模型可参考：`docs/coding/Event_zh.md`。
+事件模型可参考：`docs/coding/Event.md`。

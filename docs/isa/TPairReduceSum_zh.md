@@ -20,7 +20,7 @@ $$ \mathrm{dst}_{i,k} = \mathrm{src0}_{i, 2k} + \mathrm{src0}_{i, 2k+1}, \quad 0
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS.md)。
 
 同步形式：
 
@@ -129,5 +129,5 @@ pto.tpairreducesum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>
 
 ## 相关指令
 
-- [TDeInterleave](TDEINTERLEAVE_zh.md) - 反交织将偶/奇位置拆分；TPAIRREDUCESUM 将相邻对求和。
-- [TInterleave](TINTERLEAVE_zh.md) - 交织将两个源的元素交替组合为统一流。
+- [TDeInterleave](TDEINTERLEAVE.md) - 反交织将偶/奇位置拆分；TPAIRREDUCESUM 将相邻对求和。
+- [TInterleave](TINTERLEAVE.md) - 交织将两个源的元素交替组合为统一流。

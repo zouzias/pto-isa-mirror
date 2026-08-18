@@ -176,6 +176,6 @@ void example_indexed() {
 
 ## 相关指令
 
-- [TINSERT](TINSERT_zh.md) - 在指定偏移处将子Tile插入到目标Tile中
-- [TEXTRACT](TEXTRACT_zh.md) - 从源Tile中提取子Tile
-- [TRESHAPE](TRESHAPE_zh.md) - 将Tile重新解释为另一种Tile类型/形状
+- [TINSERT](TINSERT.md) - 在指定偏移处将子Tile插入到目标Tile中
+- [TEXTRACT](TEXTRACT.md) - 从源Tile中提取子Tile
+- [TRESHAPE](TRESHAPE.md) - 将Tile重新解释为另一种Tile类型/形状

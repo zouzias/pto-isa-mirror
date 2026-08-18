@@ -230,4 +230,4 @@ pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_b
 
 ## 相关指令
 
-- [TInterleave](TINTERLEAVE_zh.md) - 将两个Tile交织为交替的偶/奇流（TDeInterleave的逆操作）。
+- [TInterleave](TINTERLEAVE.md) - 将两个Tile交织为交替的偶/奇流（TDeInterleave的逆操作）。

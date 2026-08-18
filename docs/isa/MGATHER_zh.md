@@ -597,6 +597,6 @@ AICORE void example_gm2l1_elem_simt(__gm__ T* tablePtr, __gm__ int32_t* idxPtr, 
 
 ## 相关指令
 
-- [`TLOAD`](TLOAD_zh.md)：连续块传输GM → Tile。
-- [`MSCATTER`](MSCATTER_zh.md)：索引散射Tile → GM（逆操作）。
-- [`TGATHER`](TGATHER_zh.md)：基于索引的Tile内部gather（同vec-core上的UB-to-UB）。
+- [`TLOAD`](TLOAD.md)：连续块传输GM → Tile。
+- [`MSCATTER`](MSCATTER.md)：索引散射Tile → GM（逆操作）。
+- [`TGATHER`](TGATHER.md)：基于索引的Tile内部gather（同vec-core上的UB-to-UB）。
