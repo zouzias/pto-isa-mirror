@@ -170,6 +170,58 @@ PTO_INTERNAL void RingDoorbell(
 #endif
 }
 
+// Internal integration helper for Simpler runtime initialization. This is not a
+// PTO instruction or a public user API.
+template <typename = void>
+PTO_INTERNAL bool WarmupSdmaControlPathForAiv(__gm__ uint8_t* workspace, uint32_t aivIdx, uint32_t syncId = 0U)
+{
+    if (workspace == nullptr || aivIdx >= kSdmaMaxChannel || syncId > 7U) {
+        return false;
+    }
+
+    using ScratchTile = Tile<TileType::Vec, uint8_t, 1, UB_ALIGN_SIZE>;
+    ScratchTile scratchTile;
+    TASSIGN_IMPL(scratchTile, 0x0);
+    UbTmpBuf tmpBuf;
+    if (!MakeTmpBufferFromTile(scratchTile, tmpBuf)) {
+        return false;
+    }
+
+    __gm__ BatchWriteChannelInfo* channelBase =
+        reinterpret_cast<__gm__ BatchWriteChannelInfo*>(workspace + sizeof(BatchWriteFlagInfo));
+    __gm__ BatchWriteChannelInfo* channel = channelBase + aivIdx;
+    __asm__ __volatile__("");
+    dcci((__gm__ void*)channel, cache_line_t::SINGLE_CACHE_LINE);
+    __asm__ __volatile__("");
+    dsb(DSB_DDR);
+
+    if (channel->sq_base == 0ULL || channel->sq_reg_base == 0ULL || channel->sq_depth == 0U) {
+        return false;
+    }
+    const uint64_t packedHeadTail = GetValue<uint64_t>((__gm__ uint8_t*)channel, tmpBuf);
+    const uint32_t sqHead = static_cast<uint32_t>(packedHeadTail);
+    const uint32_t sqTail = static_cast<uint32_t>(packedHeadTail >> 32U);
+    if (sqHead >= channel->sq_depth || sqTail >= channel->sq_depth || sqHead != sqTail) {
+        return false;
+    }
+
+    __gm__ BatchWriteItem* sqe = reinterpret_cast<__gm__ BatchWriteItem*>(channel->sq_base) + sqTail;
+    volatile __gm__ uint64_t* sqeWords = reinterpret_cast<volatile __gm__ uint64_t*>(sqe);
+    for (uint32_t index = 0U; index < sizeof(BatchWriteItem) / sizeof(uint64_t); ++index) {
+        const uint64_t original = sqeWords[index];
+        sqeWords[index] = original;
+    }
+    pipe_barrier(PIPE_ALL);
+    __asm__ __volatile__("");
+    dcci((__gm__ void*)sqe, cache_line_t::SINGLE_CACHE_LINE);
+    __asm__ __volatile__("");
+    dsb(DSB_DDR);
+
+    RingDoorbell(channel, sqTail, tmpBuf, syncId);
+    pipe_barrier(PIPE_ALL);
+    return true;
+}
+
 PTO_INTERNAL void PublishDataTransferSqes(
     __gm__ BatchWriteChannelInfo* channels, uint32_t dataQueueCount, const uint32_t* sqTail, UbTmpBuf& tmpBuf,
     uint32_t syncId)
