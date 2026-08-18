@@ -11,6 +11,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ## Point-to-Point Communication (Asynchronous)
 - [**TPUT_ASYNC**](TPUT_ASYNC.md): Asynchronous remote write (GM → DMA engine → GM)
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY.md): Asynchronous remote write followed by a remote signal update
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
 ## Signal-Based Synchronization
@@ -29,7 +30,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ### NotifyOp
 
-Operation type for `TNOTIFY`:
+Operation type for `TNOTIFY` and `TPUT_ASYNC_NOTIFY`:
 
 | Value | Description |
 |-------|-------------|
@@ -77,7 +78,7 @@ Atomic operation type for `TPUT` (defined in `include/pto/common/constants.hpp`)
 
 ### DmaEngine
 
-DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
+DMA backend selection for `TPUT_ASYNC`, `TPUT_ASYNC_NOTIFY`, and `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
@@ -87,7 +88,7 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 
 ### AsyncEvent
 
-Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
+Returned by `TPUT_ASYNC` / `TPUT_ASYNC_NOTIFY` / `TGET_ASYNC`. Use to synchronize completion:
 
 ```cpp
 struct AsyncEvent {

@@ -11,6 +11,7 @@
 
 ## 点对点通信（异步）
 - [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：异步远程写（GM → DMA 引擎 → GM）
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY_zh.md)：异步远程写，并在 payload 到达后更新远端 signal
 - [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
 
 ## 基于信号的同步
@@ -29,7 +30,7 @@
 
 ### NotifyOp
 
-`TNOTIFY` 的操作类型：
+`TNOTIFY` 和 `TPUT_ASYNC_NOTIFY` 的操作类型：
 
 | 值 | 说明 |
 |-------|-------------|
@@ -77,7 +78,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 ### DmaEngine
 
-`TPUT_ASYNC` 和 `TGET_ASYNC` 的 DMA 后端选择：
+`TPUT_ASYNC`、`TPUT_ASYNC_NOTIFY` 和 `TGET_ASYNC` 的 DMA 后端选择：
 
 | 值 | 说明 |
 |-------|-------------|
@@ -87,7 +88,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 
 ### AsyncEvent
 
-由 `TPUT_ASYNC` / `TGET_ASYNC` 返回，用于同步传输完成状态：
+由 `TPUT_ASYNC` / `TPUT_ASYNC_NOTIFY` / `TGET_ASYNC` 返回，用于同步传输完成状态：
 
 ```cpp
 struct AsyncEvent {

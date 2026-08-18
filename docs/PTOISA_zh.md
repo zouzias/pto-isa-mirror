@@ -151,6 +151,7 @@
 | 通信 | [`TPUT`](isa/comm/TPUT_zh.md) | 远程写：将本地数据传输到远端 NPU 内存（GM → UB → GM）。 |
 | 通信 | [`TGET`](isa/comm/TGET_zh.md) | 远程读：将远端 NPU 数据读取到本地内存（GM → UB → GM）。 |
 | 通信 | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC_zh.md) | 异步远程写（本地 GM → DMA 引擎 → 远端 GM）。 |
+| 通信 | [`TPUT_ASYNC_NOTIFY`](isa/comm/TPUT_ASYNC_NOTIFY_zh.md) | 异步远程写，并在 payload 到达后更新远端 signal。 |
 | 通信 | [`TGET_ASYNC`](isa/comm/TGET_ASYNC_zh.md) | 异步远程读（远端 GM → DMA 引擎 → 本地 GM）。 |
 | 通信 | [`TNOTIFY`](isa/comm/TNOTIFY_zh.md) | 向远端 NPU 发送标志通知。 |
 | 通信 | [`TWAIT`](isa/comm/TWAIT_zh.md) | 阻塞等待，直到信号满足比较条件。 |

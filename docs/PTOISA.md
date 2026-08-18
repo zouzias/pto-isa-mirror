@@ -151,6 +151,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Communication | [`TPUT`](isa/comm/TPUT.md) | Remote write: transfer local data to remote NPU memory (GM → UB → GM). |
 | Communication | [`TGET`](isa/comm/TGET.md) | Remote read: read remote NPU data to local memory (GM → UB → GM). |
 | Communication | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC.md) | Asynchronous remote write (local GM → DMA engine → remote GM). |
+| Communication | [`TPUT_ASYNC_NOTIFY`](isa/comm/TPUT_ASYNC_NOTIFY.md) | Asynchronous remote write followed by a remote signal update. |
 | Communication | [`TGET_ASYNC`](isa/comm/TGET_ASYNC.md) | Asynchronous remote read (remote GM → DMA engine → local GM). |
 | Communication | [`TNOTIFY`](isa/comm/TNOTIFY.md) | Send flag notification to remote NPU. |
 | Communication | [`TWAIT`](isa/comm/TWAIT.md) | Blocking wait until signal(s) meet comparison condition. |
