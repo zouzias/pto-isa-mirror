@@ -151,6 +151,22 @@ extern "C" __global__ AICORE void launchTCOLMINCase82(__gm__ uint64_t* out, __gm
 {
     runTColMin<uint64_t, 4, 4, 1, 16, 16>(out, src, false);
 }
+extern "C" __global__ AICORE void launchTCOLMINCase83(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTColMin<int64_t, 4, 4, 1, 64, 64>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLMINCase84(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTColMin<uint64_t, 4, 4, 1, 64, 64>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLMINCase85(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTColMin<int64_t, 1, 1, 1, 4092, 4092>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLMINCase86(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTColMin<uint64_t, 1, 1, 1, 4092, 4092>(out, src, false);
+}
 
 template <uint32_t caseId>
 void launchTCOLMINTestCase(void* out, void* src, aclrtStream stream)
@@ -260,6 +276,22 @@ void launchTCOLMINTestCase(void* out, void* src, aclrtStream stream)
             launchTCOLMINCase82<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
             break;
         }
+        case 83: {
+            launchTCOLMINCase83<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 84: {
+            launchTCOLMINCase84<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
+        case 85: {
+            launchTCOLMINCase85<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 86: {
+            launchTCOLMINCase86<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -291,3 +323,7 @@ template void launchTCOLMINTestCase<72>(void* out, void* src, aclrtStream stream
 template void launchTCOLMINTestCase<73>(void* out, void* src, aclrtStream stream);
 template void launchTCOLMINTestCase<81>(void* out, void* src, aclrtStream stream);
 template void launchTCOLMINTestCase<82>(void* out, void* src, aclrtStream stream);
+template void launchTCOLMINTestCase<83>(void* out, void* src, aclrtStream stream);
+template void launchTCOLMINTestCase<84>(void* out, void* src, aclrtStream stream);
+template void launchTCOLMINTestCase<85>(void* out, void* src, aclrtStream stream);
+template void launchTCOLMINTestCase<86>(void* out, void* src, aclrtStream stream);
