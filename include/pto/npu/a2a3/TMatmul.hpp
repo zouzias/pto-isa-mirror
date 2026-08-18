@@ -15,6 +15,31 @@ namespace pto {
 
 inline namespace TMatmulInternal {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
+// mad has no destination-stride operand: only Acc shapes whose compact write
+// stride (ceil16(m) row fractals per block column) equals the parent's Rows
+// are representable.
+template <typename TileRes>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
+{
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (TileRes::ValidRow == DYNAMIC) {
+        return true;
+    } else {
+        return (TileRes::ValidRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
+}
+
+PTO_INTERNAL void CheckAccStrideCompatible(uint16_t m, uint16_t accRows)
+{
+    PTO_ASSERT(
+        (m + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == accRows,
+        "ERROR: mad's compact write stride (ceil16(validM) row fractals per block column) does not match the "
+        "parent's Rows. Use a full-Rows Acc tile per row window or window the columns instead.");
+}
 } // namespace TMatmulInternal
 
 template <typename TileLeft, typename TileRight>
@@ -94,6 +119,11 @@ PTO_INTERNAL void CheckStaticMad()
     static_assert(TileLeft::Loc == TileType::Left, "TileLeft TileType must be set to TileType::Left.");
     static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");
     static_assert(TileRes::Loc == TileType::Acc, "TileRes TileType must be set to TileType::Acc.");
+    static_assert(
+        MadAccStrideCompatible<TileRes>(),
+        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column, "
+        "which mad's compact write stride cannot represent. Use a full-Rows Acc tile per row window, "
+        "or window the columns instead.");
 }
 
 PTO_INTERNAL void CheckDynamicMad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
@@ -162,6 +192,10 @@ PTO_INTERNAL void TMATMUL_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& b
     uint16_t n = bMatrix.GetValidCol();
     bool kDirectionAlign = GetKDirectionAlign(aMatrix, bMatrix);
     CheckDynamicMad(m, k, n);
+    if constexpr (
+        TileRes::Compact == CompactMode::Null && TileRes::ValidRow == DYNAMIC && TileRes::Cols > FRACTAL_NZ_ROW) {
+        CheckAccStrideCompatible(m, TileRes::Rows);
+    }
     TMatmul<Phase, TileRes, TileLeft, TileRight, false, true, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n, kDirectionAlign);
 }
@@ -175,6 +209,10 @@ PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, Tile
     uint16_t n = bMatrix.GetValidCol();
     bool kDirectionAlign = GetKDirectionAlign(aMatrix, bMatrix);
     CheckDynamicMad(m, k, n);
+    if constexpr (
+        TileRes::Compact == CompactMode::Null && TileRes::ValidRow == DYNAMIC && TileRes::Cols > FRACTAL_NZ_ROW) {
+        CheckAccStrideCompatible(m, TileRes::Rows);
+    }
     TMatmul<Phase, TileRes, TileLeft, TileRight, false, false, false>(
         cOutMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n, kDirectionAlign);
 }
@@ -198,6 +236,10 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRig
     uint16_t n = bMatrix.GetValidCol();
     bool kDirectionAlign = GetKDirectionAlign(aMatrix, bMatrix);
     CheckDynamicMad(m, k, n);
+    if constexpr (
+        TileRes::Compact == CompactMode::Null && TileRes::ValidRow == DYNAMIC && TileRes::Cols > FRACTAL_NZ_ROW) {
+        CheckAccStrideCompatible(m, TileRes::Rows);
+    }
 
     TMatmulBias<Phase, TileRes, TileLeft, TileRight, TileBias, true, false, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), m, k, n, kDirectionAlign);
