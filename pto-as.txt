@@ -1,0 +1,4 @@
+template_tquant_mxfp8 TQuant_MXFP8_F32
+template_tquant_mxfp8_b16 TQuant_MXFP8_B16<T>
+template_tquant_mxfp8_b16_2d TQuant_MXFP8_B16_2D<T>
+template_tquant_mxfp8_f32_2d TQuant_MXFP8_F32_2D

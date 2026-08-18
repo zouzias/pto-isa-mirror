@@ -54,6 +54,11 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQu
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(Dst0TileData &dst0, Dst1TileData &dst1, SrcTileData &src,
+                              uint16_t indexRow0 = 0, uint16_t indexCol0 = 0,
+                              uint16_t indexRow1 = 0, uint16_t indexCol1 = 0, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -93,6 +98,50 @@ In addition to the `Mat/Acc -> ...` paths above, `TEXTRACT` supports a `TileType
 - `DstTileData::DType` must equal `SrcTileData::DType`.
 - Supported element types (both A2A3 and A5): `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float` (any 1-/2-/4-byte standard type). This set differs from the primary tile path: it adds `uint8_t`/`int16_t`/`uint16_t`/`int32_t`/`uint32_t`, and on A5 it does **not** include the fp8/fp4 types.
 - ND path: source/destination row strides must be 32-byte aligned; `Dst` rows/cols must not exceed `Src`.
+
+### ND → 2×NZ extraction path
+
+The two-destination `TEXTRACT` overload extracts two independent ND sub-windows from a single ND source and writes each as a separate NZ destination in one call. It is implemented entirely with vector-frontend intrinsics (no MTE copy).
+
+- Source must be a `TileType::Vec` ND tile (`BLayout::RowMajor`, `SLayout::NoneBox`); both destinations must be `TileType::Vec` NZ tiles (`BLayout::ColMajor`, `SLayout::RowMajor`).
+- `DstTileData::DType` must equal `SrcTileData::DType`.
+- Each window is placed by its own `(indexRow, indexCol)`. Runtime bounds checks per window `k`:
+    - `indexRow_k + dst_k.GetValidRow() <= SrcTileData::Rows`
+    - `indexCol_k + dst_k.GetValidCol() <= SrcTileData::Cols`
+- Structural constraints (same as the Vec → Vec paths): destination `Cols` must be `c0`-aligned (NZ fractal width), and source row-stride bytes must be 32-byte aligned.
+- Supported element types:
+    - A5: `int8_t`, `half`, `bfloat16_t`, `float`, `int32_t`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`.
+    - A2A3: `int8_t`, `half`, `bfloat16_t`, `float`, `int32_t`.
+- Output compact mode:
+    - A5 supports plain NZ (default) and the NZ+1 bank-conflict optimization (`CompactMode::RowPlusOne`).
+    - A2A3 supports plain NZ only.
+
+- Index alignment (a window's source base is `srcStart = src + indexRow*rowStride + indexCol`):
+    - A5 (SIMD) handles a `c0`-unaligned `indexCol` (sub-`c0` column origin)
+    via an element-exact unaligned load/store path; `c0`-aligned windows take
+    the faster block path.
+    - A2A3 (vec-core) vector engines require the operand base to be 32-byte
+    aligned, and `dav-c220-vec` has no unaligned vector load (`vlds`/`vsts`
+    are unavailable). A window therefore takes the vector path only when its
+    source base is 32-byte aligned, i.e. `indexCol * sizeof(T)` is a multiple
+    of 32. Windows whose `indexCol` does not satisfy this (and `1×1` windows)
+    use an element-wise scalar copy, which has no alignment constraint.
+- A2A3 vector paths (32-byte-aligned source base): `vcopy` reinterprets data
+at 16-bit granularity (its smallest element width; there is no 8-bit
+`vcopy`). 2-/4-byte types and `int8` with an even `validCol` map directly
+through `vcopy`. `int8` with an **odd** `validCol` (odd byte count) uses a
+fully vector widen path — `vconv_s82f16` (int8→half) into a scratch, the
+ND→NZ reshape in `half`, then `vconv_f162s8` (half→int8) into the NZ
+destination (all `int8` values round-trip losslessly through `half`).
+
+| Arch | Mode | Implementation |
+|------|------|----------------|
+| A5 / A2A3 | `1×1` | scalar copy |
+| A5 (SIMD) | `c0`-aligned `indexCol` | `vlds` + `vsstb` |
+| A5 (SIMD) | `c0`-unaligned `indexCol` | `vldas` + `vldus` + `vsts` |
+| A2A3 (vec-core) | unaligned source base not 32-byte aligned (`indexCol*sizeof(T) % 32 != 0`) | scalar copy |
+| A2A3 (vec-core) | aligned base, 2-/4-byte or even-`validCol` `int8` | `vcopy` with 16-bit reinterpretation |
+| A2A3 (vec-core) | aligned base, odd-`validCol` `int8` | `vconv_s82f16` + `vconv_f162s8` widen path |
 
 ## Examples
 

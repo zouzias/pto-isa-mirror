@@ -18,6 +18,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+template <MaskPattern maskPattern>
+constexpr int GetHostTimesByMask()
+{
+    if constexpr (maskPattern == MaskPattern::P1111) {
+        return 1;
+    } else if constexpr (maskPattern == MaskPattern::P1010 || maskPattern == MaskPattern::P0101) {
+        return 2;
+    } else {
+        return 4;
+    }
+}
+
 template <
     typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_, int kTCols_>
 __global__ AICORE void runTGather(__gm__ Tsrc0 __out__* out, __gm__ Tsrc0 __in__* src0, __gm__ Tsrc1 __in__* src1)
@@ -114,6 +126,10 @@ template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 16, 4, 16>(
     int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
 template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>(
     uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
+template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 72, 4, 72>(
+    int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
+template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 72, 4, 72>(
+    uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
 __global__ AICORE void runTGATHER(__gm__ dstT __out__* out, __gm__ srcT __in__* src)
@@ -146,12 +162,60 @@ __global__ AICORE void runTGATHER(__gm__ dstT __out__* out, __gm__ srcT __in__* 
     out = dstGlobal.data();
 }
 
+template <typename T, int cols, MaskPattern maskPattern>
+__global__ AICORE void runTGATHERWideInt64(__gm__ T __out__* out, __gm__ T __in__* src)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    constexpr int dstTileCols = tileCols / GetTimesByMask<maskPattern>();
+    constexpr int dstCols = cols / GetTimesByMask<maskPattern>();
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using SrcGlobal = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using DstGlobal = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using SrcTile = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, T, tileRows, dstTileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        int validDstCols = validCols / GetTimesByMask<maskPattern>();
+        SrcGlobal srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        DstGlobal dstGlobal(
+            out + col / GetTimesByMask<maskPattern>(), DynShapeDim5(tileRows, validDstCols), DynStrideDim5(dstCols, 1));
+        SrcTile srcTile(tileRows, validCols);
+        DstTile dstTile(tileRows, validDstCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x4000);
+
+        TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        TGATHER<DstTile, SrcTile, maskPattern>(dstTile, srcTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
 void LaunchTGATHER(dstT* out, srcT* src, void* stream)
 {
+    constexpr int wideTileCols = 64;
+    constexpr int maskTimes = GetHostTimesByMask<maskPattern>();
+    constexpr int safeMaskTimes = (maskTimes == 0) ? 1 : maskTimes;
     if constexpr (std::is_same_v<srcT, uint16_t>) {
         runTGATHER<half, half, kGRows_, kGCols_, kTRows_, kTCols_, maskPattern>
             <<<1, nullptr, stream>>>(reinterpret_cast<half*>(out), reinterpret_cast<half*>(src));
+    } else if constexpr (
+        (std::is_same_v<srcT, int64_t> || std::is_same_v<srcT, uint64_t>) && kGRows_ == 1 && kTRows_ == 1 &&
+        kGCols_ == kTCols_ && kGCols_ > wideTileCols && maskTimes > 0 && kGCols_ % safeMaskTimes == 0) {
+        runTGATHERWideInt64<srcT, kGCols_, maskPattern><<<1, nullptr, stream>>>(out, src);
     } else {
         runTGATHER<srcT, dstT, kGRows_, kGCols_, kTRows_, kTCols_, maskPattern><<<1, nullptr, stream>>>(out, src);
     }
@@ -250,6 +314,14 @@ LaunchTGATHER<int32_t, int32_t, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111_RO
 template void LaunchTGATHER<int64_t, int64_t, 4, 16, 4, 16, MaskPattern::P1010>(
     int64_t* out, int64_t* src, void* stream);
 template void LaunchTGATHER<uint64_t, uint64_t, 4, 16, 4, 16, MaskPattern::P0001>(
+    uint64_t* out, uint64_t* src, void* stream);
+template void LaunchTGATHER<int64_t, int64_t, 4, 72, 4, 72, MaskPattern::P1010>(
+    int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHER<uint64_t, uint64_t, 4, 144, 4, 144, MaskPattern::P0001>(
+    uint64_t* out, uint64_t* src, void* stream);
+template void LaunchTGATHER<int64_t, int64_t, 1, 16368, 1, 16368, MaskPattern::P1010>(
+    int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHER<uint64_t, uint64_t, 1, 16368, 1, 16368, MaskPattern::P1010>(
     uint64_t* out, uint64_t* src, void* stream);
 template void LaunchTGATHERDynamic<int64_t, 4, 24, 3, 15, MaskPattern::P1010>(int64_t* out, int64_t* src, void* stream);
 template void LaunchTGATHERDynamic<uint64_t, 4, 24, 3, 15, MaskPattern::P1010>(
