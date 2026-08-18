@@ -186,6 +186,7 @@ void test_insert()
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/quant.bin", quantFileSize, quantHost, quantFileSize));
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, quantFileSize, quantHost, quantFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
