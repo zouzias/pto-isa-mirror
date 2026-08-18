@@ -155,7 +155,8 @@ PTO_INTERNAL bool InitPrefetchAsyncSession(Context& ctx, comm::AsyncSession& ses
     }
 
     constexpr uint32_t syncId = 0U;
-    constexpr comm::sdma::SdmaBaseConfig baseConfig{comm::sdma::kDefaultSdmaBlockBytes, 0, 1};
+    constexpr uint64_t kSingleSqeBlockBytes = 64ULL * 1024ULL * 1024ULL;
+    constexpr comm::sdma::SdmaBaseConfig baseConfig{kSingleSqeBlockBytes, 0, 1};
     session.engine = comm::DmaEngine::SDMA;
     session.valid = comm::sdma::BuildSdmaSession(
         ctx.scratchTile, ctx.workspace, session, syncId, baseConfig, comm::sdma::kAutoChannelGroupIdx);
