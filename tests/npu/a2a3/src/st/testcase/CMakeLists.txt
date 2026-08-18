@@ -217,6 +217,7 @@ tconcatdstidx
 tconcatidx
 tconcat
 textract_vec
+textract_ndto2xnz
 tinsert_vec
 mgather
 mgather_gm2l1

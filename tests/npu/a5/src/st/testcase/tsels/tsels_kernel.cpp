@@ -8,6 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include "acl/acl.h"
@@ -63,13 +64,60 @@ __global__ AICORE void runTSELS(__gm__ T __out__* out, __gm__ TMask* mask, __gm_
     out = dstGlobal.data();
 }
 
+template <typename T, int cols>
+__global__ AICORE void runTSELSWideInt64(__gm__ T __out__* out, __gm__ uint8_t* mask, __gm__ T __in__* src, T scalar)
+{
+    constexpr int maskCols = (cols + 7) / 8;
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 32;
+    constexpr int maskTileCols = 32;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using GlobalDataMask = GlobalTensor<uint8_t, DynShapeDim5, DynStrideDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using TileDataMask = Tile<TileType::Vec, uint8_t, tileRows, maskTileCols, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        int validMaskCols = (validCols + 7) / 8;
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        GlobalData srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        GlobalDataMask maskGlobal(mask + col / 8, DynShapeDim5(tileRows, validMaskCols), DynStrideDim5(maskCols, 1));
+        TileData dstTile(tileRows, validCols);
+        TileData srcTile(tileRows, validCols);
+        TileDataMask maskTile(tileRows, validMaskCols);
+        TmpTile tmpTile(1, 32);
+        TASSIGN(dstTile, 0x0);
+        TASSIGN(srcTile, 0x2000);
+        TASSIGN(maskTile, 0x4000);
+        TASSIGN(tmpTile, 0x6000);
+
+        TLOAD(maskTile, maskGlobal);
+        Event<Op::TLOAD, Op::TSELS> event0 = TLOAD(srcTile, srcGlobal);
+        Event<Op::TSELS, Op::TSTORE_VEC> event1 = TSELS(dstTile, maskTile, srcTile, tmpTile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <
     typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW,
     int vRows, int vCols>
 void LaunchTSels(T* out, TMask* mask, T* src, T scalar, void* stream)
 {
-    runTSELS<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>
-        <<<1, nullptr, stream>>>(out, mask, src, scalar);
+    constexpr int wideTileCols = 32;
+    if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && std::is_same_v<TMask, uint8_t> &&
+        dstTileH == 1 && srcTileH == 1 && maskTileH == 1 && dstTileW == srcTileW && dstTileW == vCols &&
+        maskTileW == (vCols + 7) / 8 && vRows == 1 && vCols > wideTileCols) {
+        runTSELSWideInt64<T, vCols><<<1, nullptr, stream>>>(out, mask, src, scalar);
+    } else {
+        runTSELS<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>
+            <<<1, nullptr, stream>>>(out, mask, src, scalar);
+    }
 }
 
 template <
@@ -135,4 +183,12 @@ template void LaunchTSels<float, uint8_t, 1, 8192, 1, 4096, 1, 8192, 1, 8192>(
 template void LaunchTSels<int64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>(
     int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);
 template void LaunchTSels<uint64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>(
+    uint64_t* out, uint8_t* mask, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTSels<int64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>(
+    int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTSels<uint64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>(
+    uint64_t* out, uint8_t* mask, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTSels<int64_t, uint8_t, 1, 16368, 1, 2046, 1, 16368, 1, 16368>(
+    int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTSels<uint64_t, uint8_t, 1, 16368, 1, 2046, 1, 16368, 1, 16368>(
     uint64_t* out, uint8_t* mask, uint64_t* src, uint64_t scalar, void* stream);

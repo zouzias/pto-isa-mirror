@@ -36,15 +36,16 @@ std::string GetGoldenDir()
 }
 
 template <typename InT, typename OutT, int32_t key>
-void TPushPopMatmulAddNoSplitTestFunc(uint32_t M, uint32_t K, uint32_t N)
+void TPushPopMatmulAddNoSplitTestFunc(
+    uint32_t M, uint32_t K, uint32_t N, uint32_t fifoDepth = 2, uint32_t dispatchCount = 1)
 {
     size_t aFileSize = M * K * sizeof(InT);
     size_t bFileSize = K * N * sizeof(InT);
     size_t biasFileSize = M * N * sizeof(OutT);
     size_t cFileSize = M * N * sizeof(OutT);
-    // FIFO_DEPTH=2 slots, each slot holds one full CASE_TILE_M x N OutT tile.
+    // Each FIFO slot holds one full CASE_TILE_M x N OutT tile.
     // CASE_TILE_M=16 for all instantiations; use N and OutT from the call site.
-    size_t fifoFileSize = 2 * 16 * N * sizeof(OutT);
+    size_t fifoFileSize = fifoDepth * 16 * N * sizeof(OutT);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -77,8 +78,10 @@ void TPushPopMatmulAddNoSplitTestFunc(uint32_t M, uint32_t K, uint32_t N)
     uint32_t fftsLen{0};
     rtGetC2cCtrlAddr(&ffts, &fftsLen);
 
-    LaunchTPushPopMatmulAddNoSplit<key>(
-        (uint8_t*)ffts, dstDevice, srcADevice, srcBDevice, biasDevice, fifoMemDevice, stream);
+    for (uint32_t dispatch = 0; dispatch < dispatchCount; ++dispatch) {
+        LaunchTPushPopMatmulAddNoSplit<key>(
+            (uint8_t*)ffts, dstDevice, srcADevice, srcBDevice, biasDevice, fifoMemDevice, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -125,4 +128,12 @@ TEST_F(TPushPopCVNoSplitTest, case2_half_two_tiles)
 TEST_F(TPushPopCVNoSplitTest, case3_float_single_tile)
 {
     TPushPopMatmulAddNoSplitTestFunc<float, float, 3>(16, 32, 32);
+}
+
+// Regression for GitCode !1165 / GitHub #248: each depth-8 pipe performs 40
+// transfers and leaves two free credits for its destructor. Repeated dispatch
+// catches stale-credit accumulation from draining a fixed SyncPeriod instead.
+TEST_F(TPushPopCVNoSplitTest, case4_depth8_40_tiles_repeated_dispatch)
+{
+    TPushPopMatmulAddNoSplitTestFunc<aclFloat16, float, 4>(640, 32, 64, 8, 80);
 }
