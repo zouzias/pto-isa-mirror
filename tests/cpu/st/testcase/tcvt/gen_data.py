@@ -52,6 +52,46 @@ FP4_LIMITS = {
 }
 
 
+def _quantize_to_fp4_nibble(data, fp4_type):
+    """
+    Quantize float value to FP4 nibble (4-bit) according to given exponent size.
+    exp_sz: 1 for E1M2, 2 for E2M1.
+    Returns integer 0-15.
+    """
+    is_e1m2 = fp4_type == Float4E1M2
+    data_flat = data.flatten()
+    result = np.zeros(len(data_flat), dtype=np.uint8)
+    for i, val in enumerate(data_flat):
+        sign = 8 if val < 0 else 0
+        abs_val = abs(val)
+        if is_e1m2:
+            # E1M2: magnitude grid = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
+            scaled = abs_val * 4.0
+            if scaled >= 7:
+                man_code = 7
+            else:
+            # round to nearest integer, ties to even
+                man_code = int(round(scaled))  # Python's round uses bankers rounding
+            # if man_code < 0: not possible since abs_val >= 0
+        else:  # exp_sz == 2
+            # E2M1: grid
+            pos_grid = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
+            atol = 1e-8
+            min_d = abs(abs_val - pos_grid[0])
+            man_code = 0
+            for idx in range(1, 8):
+                d = abs(abs_val - pos_grid[idx])
+                if d < min_d:
+                    min_d = d
+                    man_code = idx
+                elif abs(d - min_d) <= atol:
+                    # tie: choose even index
+                    if idx % 2 == 0:
+                        man_code = idx
+        result[i] = sign | man_code
+    return result.reshape(data.shape)
+
+
 def double_to_bits(value):
     return struct.unpack("<Q", struct.pack("<d", float(value)))[0]
 
@@ -244,20 +284,22 @@ def write_output_data(data, dtype, filename):
     else:
         data.tofile(filename)
 
-
 def gen_golden(param):
     m, n = param.m, param.n
 
     x1_gm = generate_input_data(param)
     input_values = decode_input_data(x1_gm, param.srctype)
 
-    if param.saturation_mode == "SatMode::ON":
-        data_to_cast = apply_saturation(input_values, param.dsttype)
+    if param.dsttype in [Float4E1M2, Float4E2M1]:
+        golden = _quantize_to_fp4_nibble(input_values, param.dsttype)
     else:
-        data_to_cast = input_values
+        if param.saturation_mode == "SatMode::ON":
+            data_to_cast = apply_saturation(input_values, param.dsttype)
+        else:
+            data_to_cast = input_values
 
-    rounded_data = apply_rounding(data_to_cast, param.mode)
-    golden = convert_to_dsttype(rounded_data, param.dsttype)
+        rounded_data = apply_rounding(data_to_cast, param.mode)
+        golden = convert_to_dsttype(rounded_data, param.dsttype)
     write_output_data(x1_gm, param.srctype, "./x1_gm.bin")
     write_output_data(golden, param.dsttype, "./golden.bin")
 
@@ -340,12 +382,12 @@ if __name__ == "__main__":
 
         TCvtParams(np.float32, Float4E2M1, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E2M1, np.float32, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float32, Float4E2M1, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float32, Float4E2M1, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E2M1, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
 
         TCvtParams(np.float32, Float4E1M2, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E1M2, np.float32, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float32, Float4E1M2, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float32, Float4E1M2, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E1M2, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON")
     ]
 

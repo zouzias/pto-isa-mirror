@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define MXTYPES_HPP
 #include <cstring>
 #include <ostream>
+#include <cmath>
 
 constexpr unsigned int MAN_DBL = 52;
 constexpr unsigned int EXP_DBL = 11;
@@ -71,6 +72,38 @@ public:
         data = static_cast<uint8_t>(
             (dblSign << (MAN_SZ + EXP_SZ)) | ((outExponent & ((1ULL << EXP_SZ) - 1)) << MAN_SZ) |
             (outMantissa & ((1ULL << MAN_SZ) - 1)));
+    }
+
+    template <typename = void>
+        requires(EXP_SZ + MAN_SZ == 3)
+    MXType(double val, pto::RoundMode mode) : data(0)
+    {
+        uint8_t s = (val < 0.0f) ? 8 : 0;
+        val = std::abs(val);
+        uint8_t man_code = 0;
+        if constexpr (EXP_SZ == 1) {
+            val = val * 4;
+            if (val >= 7.0)
+                man_code = 7;
+            else
+                man_code = static_cast<uint8_t>(std::rint(val));
+        } else {
+            constexpr float pos_grid[8] = {0.f, 0.5f, 1.f, 1.5f, 2.f, 3.f, 4.f, 6.f};
+            float atol = 1e-8f;
+            float min_d = std::abs(val - pos_grid[0]);
+            for (int i = 1; i < 8; ++i) {
+                float d = std::abs(val - pos_grid[i]);
+                if (d < min_d) {
+                    min_d = d;
+                    man_code = i;
+                } else if (std::abs(d - min_d) <= atol) {
+                    // Tie-to-even rule
+                    if (i % 2 == 0)
+                        man_code = i;
+                }
+            }
+        }
+        data = s | man_code;
     }
 
     operator double() const
