@@ -83,6 +83,9 @@ if __name__ == "__main__":
         TRowSumParams("TROWSUMTest.case20", np.int16, 8, 8, 448, 448),
         TRowSumParams("TROWSUMTest.case_int64_4x16", np.int64, 4, 4, 16, 15),
         TRowSumParams("TROWSUMTest.case_uint64_4x16", np.uint64, 4, 4, 16, 15),
+        TRowSumParams("TROWSUMTest.case_int64_4x64", np.int64, 4, 4, 64, 64),
+        TRowSumParams("TROWSUMTest.case_uint64_4x64", np.uint64, 4, 4, 64, 64),
+        TRowSumParams("TROWSUMTest.case_int64_32x32", np.int64, 32, 32, 32, 32),
     ]
 
     for _, case in enumerate(case_params_list):

@@ -101,14 +101,24 @@ template void LaunchTCmp<float, 32, 32, 32, 32, CmpMode::NE, false>(
 #define INSTANTIATE_TCMP_INT64(Type, Mode)                              \
     template void LaunchTCmp<Type, 4, 16, 4, 15, CmpMode::Mode, false>( \
         uint8_t * out, Type * src0, Type * src1, void* stream);
+#define INSTANTIATE_TCMP_INT64_WIDE(Type, Mode)                         \
+    template void LaunchTCmp<Type, 4, 64, 4, 64, CmpMode::Mode, false>( \
+        uint8_t * out, Type * src0, Type * src1, void* stream);
 #define INSTANTIATE_TCMP_INT64_MODES(Type) \
     INSTANTIATE_TCMP_INT64(Type, EQ)       \
     INSTANTIATE_TCMP_INT64(Type, NE)       \
     INSTANTIATE_TCMP_INT64(Type, LT)       \
     INSTANTIATE_TCMP_INT64(Type, GT)       \
     INSTANTIATE_TCMP_INT64(Type, GE)       \
-    INSTANTIATE_TCMP_INT64(Type, LE)
+    INSTANTIATE_TCMP_INT64(Type, LE)       \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, EQ)  \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, NE)  \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, LT)  \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, GT)  \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, GE)  \
+    INSTANTIATE_TCMP_INT64_WIDE(Type, LE)
 INSTANTIATE_TCMP_INT64_MODES(int64_t)
 INSTANTIATE_TCMP_INT64_MODES(uint64_t)
 #undef INSTANTIATE_TCMP_INT64_MODES
+#undef INSTANTIATE_TCMP_INT64_WIDE
 #undef INSTANTIATE_TCMP_INT64

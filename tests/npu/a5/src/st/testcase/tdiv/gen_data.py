@@ -126,6 +126,8 @@ if __name__ == "__main__":
         TDivParams(np.float16, 2, 32, 2, 32, 2, 32, 2, 32, True),
         TDivParams(np.int64, 4, 16, 4, 16, 4, 16, 4, 16),
         TDivParams(np.uint64, 4, 16, 4, 16, 4, 16, 4, 16),
+        TDivParams(np.int64, 4, 64, 4, 64, 4, 64, 4, 64),
+        TDivParams(np.uint64, 4, 64, 4, 64, 4, 64, 4, 64),
     ]
 
     for param in case_params_list:
