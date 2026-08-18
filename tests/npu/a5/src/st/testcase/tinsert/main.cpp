@@ -146,6 +146,7 @@ void testSingleSrc(size_t srcByteSize, size_t dstByteSize, LaunchFn2 launch)
     aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", srcByteSize, srcHost, srcByteSize);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     launch(dstDevice, srcDevice, stream);
@@ -195,6 +196,7 @@ void testTInsertND(int32_t rows, int32_t cols)
     aclrtMalloc((void**)&srcDevice, byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", byteSize, srcHost, byteSize);
+    aclrtMemset(dstDevice, byteSize, 0, byteSize);
     aclrtMemcpy(srcDevice, byteSize, srcHost, byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     launchTInsertND<testKey>(dstDevice, srcDevice, stream);
@@ -315,6 +317,7 @@ void testTwoSrc(size_t src1Bytes, size_t src2Bytes, size_t dstBytes, LaunchFn3 l
 
     ReadFile(GetGoldenDir() + "/src1_input.bin", src1Bytes, src1Host, src1Bytes);
     ReadFile(GetGoldenDir() + "/src2_input.bin", src2Bytes, src2Host, src2Bytes);
+    aclrtMemset(dstDevice, dstBytes, 0, dstBytes);
     aclrtMemcpy(src1Device, src1Bytes, src1Host, src1Bytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src2Device, src2Bytes, src2Host, src2Bytes, ACL_MEMCPY_HOST_TO_DEVICE);
 
