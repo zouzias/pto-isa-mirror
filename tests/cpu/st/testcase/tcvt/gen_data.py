@@ -17,6 +17,10 @@ import numpy as np
 np.random.seed(19)
 
 
+_FP4_E1M2_POS = np.array([0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75], dtype=np.float32)
+_FP4_E2M1_POS = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=np.float32)
+
+
 class Int4:
     pass
 
@@ -50,6 +54,125 @@ FP4_LIMITS = {
     Float4E2M1: (-6.0, 6.0),
     Float4E1M2: (-4.0, 3.5)
 }
+
+
+def _quantize_to_fp4_nibble(val: float, pos_grid: np.ndarray, rmode: str = "RoundMode::CAST_RINT") -> int:
+    """Return the 4-bit nibble code for a scalar float value.
+
+    Nibble layout: bit3 = sign, bits[2:0] = magnitude code (index into pos_grid).
+    Saturation ON: values beyond max are clamped to max.
+    rmode controls rounding mode:
+        - CAST_RINT / CAST_ROUND: round-to-nearest-even (RNE)
+        - CAST_FLOOR: round toward -inf
+        - CAST_CEIL: round toward +inf
+        - CAST_TRUNC: round toward zero
+        - CAST_ODD: round-to-nearest-odd (pick odd magnitude code for ties)
+        - CAST_NONE: same as RNE (no rounding needed for exact quantization)
+
+    For directional rounding (FLOOR/CEIL/TRUNC), the rounding direction applies
+    to ALL non-exact values, not just midpoint ties. For example:
+        FLOOR(0.9) → 0.75 (not 1.0, even though 1.0 is closer)
+        FLOOR(-0.1) → -0.25 (more negative, not -0.0 even though -0.0 is closer)
+    """
+    sign = 0
+    if val < 0:
+        sign = 1
+        val = -val
+    # Saturate values beyond the representable range.
+    max_code = len(pos_grid) - 1
+    if val >= float(pos_grid[max_code]):
+        mag_code = max_code
+        return (sign << 3) | mag_code
+
+    # Find the two bracketing grid values: lower_idx <= val <= upper_idx
+    # pos_grid is sorted ascending (e.g., [0.0, 0.25, 0.5, ..., 1.75])
+    upper_idx = int(np.searchsorted(pos_grid, val, side='right'))
+    if upper_idx == 0:
+        # val < pos_grid[0] — underflow to zero
+        mag_code = 0
+        return (sign << 3) | mag_code
+    lower_idx = upper_idx - 1
+
+    # Check for exact match with lower bound
+    if np.isclose(val, float(pos_grid[lower_idx]), rtol=0, atol=1e-8):
+        mag_code = lower_idx
+        return (sign << 3) | mag_code
+
+    # If beyond last grid value (should be caught by saturation, but be safe)
+    if upper_idx >= len(pos_grid):
+        mag_code = max_code
+        return (sign << 3) | mag_code
+
+    # Check for exact match with upper bound
+    if np.isclose(val, float(pos_grid[upper_idx]), rtol=0, atol=1e-8):
+        mag_code = upper_idx
+        return (sign << 3) | mag_code
+
+    # val is strictly between pos_grid[lower_idx] and pos_grid[upper_idx]
+    lower_val = float(pos_grid[lower_idx])
+    upper_val = float(pos_grid[upper_idx])
+    midpoint = (lower_val + upper_val) / 2.0
+    is_tie = np.isclose(val, midpoint, rtol=0, atol=1e-8)
+
+    # Apply rounding mode based on the actual mathematical direction
+    if rmode in ("RoundMode::CAST_FLOOR",):
+        # FLOOR: round toward -inf
+        # positive (sign=0): pick lower (smaller value → toward -inf)
+        # negative (sign=1): abs picks upper (larger magnitude → more negative → toward -inf)
+        if sign == 0:
+            mag_code = lower_idx
+        else:
+            mag_code = upper_idx
+    elif rmode in ("RoundMode::CAST_CEIL",):
+        # CEIL: round toward +inf
+        # positive (sign=0): pick upper (larger value → toward +inf)
+        # negative (sign=1): abs picks lower (smaller magnitude → less negative → toward +inf)
+        if sign == 0:
+            mag_code = upper_idx
+        else:
+            mag_code = lower_idx
+    elif rmode in ("RoundMode::CAST_TRUNC",):
+        # TRUNC: round toward zero
+        # Both positive and negative: abs picks lower (smaller magnitude → toward zero)
+        mag_code = lower_idx
+    elif rmode in ("RoundMode::CAST_RINT", "RoundMode::CAST_ROUND"):
+        # RNE: round to nearest, ties to even
+        if is_tie:
+            even_candidates = [i for i in [lower_idx, upper_idx] if i % 2 == 0]
+            mag_code = even_candidates[0] if even_candidates else lower_idx
+        elif val < midpoint:
+            mag_code = lower_idx
+        else:
+            mag_code = upper_idx
+    elif rmode in ("RoundMode::CAST_ODD",):
+        # Round-to-nearest-odd: ties to odd
+        if is_tie:
+            odd_candidates = [i for i in [lower_idx, upper_idx] if i % 2 == 1]
+            mag_code = odd_candidates[0] if odd_candidates else lower_idx
+        elif val < midpoint:
+            mag_code = lower_idx
+        else:
+            mag_code = upper_idx
+    elif rmode in ("RoundMode::CAST_NONE",):
+        # CAST_NONE: round to nearest, ties to even (same as RNE)
+        if is_tie:
+            even_candidates = [i for i in [lower_idx, upper_idx] if i % 2 == 0]
+            mag_code = even_candidates[0] if even_candidates else lower_idx
+        elif val < midpoint:
+            mag_code = lower_idx
+        else:
+            mag_code = upper_idx
+    else:
+        # Default: RNE
+        if is_tie:
+            even_candidates = [i for i in [lower_idx, upper_idx] if i % 2 == 0]
+            mag_code = even_candidates[0] if even_candidates else lower_idx
+        elif val < midpoint:
+            mag_code = lower_idx
+        else:
+            mag_code = upper_idx
+
+    return (sign << 3) | mag_code
 
 
 def double_to_bits(value):
@@ -134,9 +257,10 @@ def get_limits(t):
 
 def quantize_to_fp4(data, fp4_type):
     data_flat = data.flatten()
+    pos_grid = _FP4_E1M2_POS if fp4_type == Float4E1M2 else _FP4_E2M1_POS
     result = np.zeros(len(data_flat), dtype=np.uint8)
     for i, val in enumerate(data_flat):
-        result[i] = fp4_type.quantize(val)
+        result[i] = _quantize_to_fp4_nibble(val, pos_grid)
     return result.reshape(data.shape)
 
 
