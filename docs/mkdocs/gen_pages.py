@@ -90,8 +90,6 @@ def _should_skip(rel_posix: str) -> bool:
         return True
     if rel_posix.endswith("/mkdocs.yml"):
         return True
-    if rel_posix == "docs/menu_ops_development.md":
-        return True
     if rel_posix == "README.md":
         # The repo-root README maps to the site root URL and collides with the
         # curated homepage index.md (mkdocs drops it with a warning). Skip it
