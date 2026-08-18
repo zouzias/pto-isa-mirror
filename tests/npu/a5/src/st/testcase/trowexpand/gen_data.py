@@ -66,6 +66,10 @@ if __name__ == "__main__":
         TRowExpandParam(np.float32, 16, 8, 128, 127),
         TRowExpandParam(np.int64, 4, 16, 16, 16),
         TRowExpandParam(np.uint64, 4, 16, 16, 16),
+        TRowExpandParam(np.int64, 4, 16, 64, 64),
+        TRowExpandParam(np.uint64, 4, 16, 64, 64),
+        TRowExpandParam(np.int64, 1, 1, 16368, 16368),
+        TRowExpandParam(np.uint64, 1, 1, 16368, 16368),
     ]
 
     for i, param in enumerate(case_params_list):

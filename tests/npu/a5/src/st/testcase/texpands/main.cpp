@@ -144,3 +144,19 @@ TEST_F(TEXPANDSTest, case_uint64_5x16_5x16_5x16_PAD_VALUE_NULL)
 {
     test_texpands<uint64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL>();
 }
+TEST_F(TEXPANDSTest, case_int64_5x64_5x64_5x64_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_5x64_5x64_5x64_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL>();
+}
