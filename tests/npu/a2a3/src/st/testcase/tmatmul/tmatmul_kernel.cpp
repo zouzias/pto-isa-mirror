@@ -674,3 +674,168 @@ template void LaunchTMATMULBIAS<5>(uint8_t* out, uint8_t* src0, uint8_t* src1, u
 template void LaunchTMATMULBIAS<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 template void LaunchTMATMULBIAS<7>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 template void LaunchTMATMULBIAS<8>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+
+constexpr int kFractal = 16; // L0C row fractal
+constexpr int kK = 32;
+
+template <typename T, typename U, int WINDOWS, int N>
+__global__ AICORE void RunAccRowWindow(__gm__ T* out, __gm__ U* src0, __gm__ U* src1)
+{
+    constexpr int kTileM = kFractal;
+
+    using GlobalA =
+        GlobalTensor<U, pto::Shape<1, 1, 1, kTileM, kK>, pto::Stride<kTileM * kK, kTileM * kK, kTileM * kK, kK, 1>>;
+    using GlobalB = GlobalTensor<U, pto::Shape<1, 1, 1, kK, N>, pto::Stride<kK * N, kK * N, kK * N, N, 1>>;
+    using GlobalOut =
+        GlobalTensor<T, pto::Shape<1, 1, 1, WINDOWS * kTileM, N>,
+                     pto::Stride<WINDOWS * kTileM * N, WINDOWS * kTileM * N, WINDOWS * kTileM * N, N, 1>>;
+    GlobalB src1Global(src1);
+    GlobalOut dstGlobal(out);
+
+    using TileMatA = Tile<TileType::Mat, U, kTileM, kK, BLayout::ColMajor, kTileM, kK, SLayout::RowMajor, 512>;
+    using TileMatB = Tile<TileType::Mat, U, kK, N, BLayout::ColMajor, kK, N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<U, kTileM, kK, kTileM, kK>;
+    using RightTile = TileRight<U, kK, N, kK, N>;
+    using AccTile = TileAcc<T, kTileM, N, kTileM, N>;
+
+    TileMatA aMatTile;
+    TileMatB bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x20000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+
+    TLOAD(bMatTile, src1Global);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+
+    for (int t = 0; t < WINDOWS; ++t) {
+        GlobalA src0Global(src0 + t * kTileM * kK);
+        TLOAD(aMatTile, src0Global);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+        TMOV(aTile, aMatTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+
+        AccTile cTile;
+        TASSIGN(cTile, 0x0);
+        TMATMUL(cTile, aTile, bTile);
+
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
+
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
+        GlobalOut dstWindowGlobal(out + t * kFractal * N);
+        TSTORE(dstWindowGlobal, cTile);
+    }
+}
+
+template <typename T, typename U, int WINDOWS, int N>
+__global__ AICORE void RunAccColumnWindow(__gm__ T* out, __gm__ U* src0, __gm__ U* src1)
+{
+    constexpr int kTileM = kFractal;
+
+    using GlobalA =
+        GlobalTensor<U, pto::Shape<1, 1, 1, kTileM, kK>, pto::Stride<kTileM * kK, kTileM * kK, kTileM * kK, kK, 1>>;
+    using GlobalB = GlobalTensor<U, pto::Shape<1, 1, 1, kK, N>, pto::Stride<kK * N, kK * N, kK * N, N, 1>>;
+    using GlobalOut =
+        GlobalTensor<T, pto::Shape<1, 1, 1, kTileM, WINDOWS * N>,
+                     pto::Stride<kTileM * WINDOWS * N, kTileM * WINDOWS * N, kTileM * WINDOWS * N, WINDOWS * N, 1>>;
+    GlobalA src0Global(src0);
+    GlobalOut dstGlobal(out);
+
+    using TileMatA = Tile<TileType::Mat, U, kTileM, kK, BLayout::ColMajor, kTileM, kK, SLayout::RowMajor, 512>;
+    using TileMatB = Tile<TileType::Mat, U, kK, N, BLayout::ColMajor, kK, N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<U, kTileM, kK, kTileM, kK>;
+    using RightTile = TileRight<U, kK, N, kK, N>;
+    using AccWindow = TileAcc<T, kTileM, WINDOWS * N, kTileM, N>;
+    using AccFull = TileAcc<T, kTileM, WINDOWS * N, kTileM, WINDOWS * N>;
+
+    TileMatA aMatTile;
+    TileMatB bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x20000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+
+    TLOAD(aMatTile, src0Global);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    TMOV(aTile, aMatTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+
+    for (int t = 0; t < WINDOWS; ++t) {
+        GlobalB src1Global(src1 + t * kK * N);
+        TLOAD(bMatTile, src1Global);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+#endif
+        TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
+#endif
+
+        AccWindow cWindow;
+        TASSIGN(cWindow, static_cast<size_t>(t) * N * kTileM * sizeof(T));
+        TMATMUL(cWindow, aTile, bTile);
+
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
+    }
+
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
+    AccFull cFull;
+    TASSIGN(cFull, 0x0);
+    TSTORE(dstGlobal, cFull);
+    out = dstGlobal.data();
+}
+
+template <int32_t tilingKey>
+void LaunchTMATMULWINDOW(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
+{
+    if constexpr (tilingKey == 9) {
+        RunAccRowWindow<float, half, 2, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+    } else if constexpr (tilingKey == 10) {
+        RunAccColumnWindow<float, half, 2, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+    }
+}
+
+template void LaunchTMATMULWINDOW<9>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTMATMULWINDOW<10>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
