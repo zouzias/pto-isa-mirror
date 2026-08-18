@@ -69,6 +69,7 @@ void textract_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint16_t
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -135,6 +136,7 @@ void textract_mx_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint1
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/x1_mx_gm.bin", amxFileSize, srcMx0Host, amxFileSize);
     ReadFile(GetGoldenDir() + "/x2_mx_gm.bin", bmxFileSize, srcMx1Host, bmxFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -253,6 +255,7 @@ void tmov_test(uint32_t M, uint32_t K, uint32_t N, uint32_t targetM = 0, uint32_
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -317,6 +320,7 @@ void tmov_mx_test(uint32_t M, uint32_t K, uint32_t N)
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/x1_mx_gm.bin", amxFileSize, srcMx0Host, amxFileSize);
     ReadFile(GetGoldenDir() + "/x2_mx_gm.bin", bmxFileSize, srcMx1Host, bmxFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);

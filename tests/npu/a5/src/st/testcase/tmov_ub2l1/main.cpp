@@ -51,6 +51,7 @@ void testTMovUb2L1(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t ds
     aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", srcByteSize, srcHost, srcByteSize);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     launchTmovUb2l1<testKey>(dstDevice, srcDevice, stream);
