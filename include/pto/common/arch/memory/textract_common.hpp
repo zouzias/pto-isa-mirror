@@ -102,21 +102,21 @@ __tf__ AICORE void TExtractToAVector(
     uint16_t indexCol, uint16_t dstValidCol)
 {
     using DataType = typename SrcTileData::DType;
-    __cbuf__ DataType* srcAddr = (__cbuf__ DataType*)__cce_get_tile_ptr(src);
+    constexpr int32_t blockSize = BLOCK_BYTE_SIZE / sizeof(DataType);
+    __cbuf__ DataType* srcAddr = ((__cbuf__ DataType*)__cce_get_tile_ptr(src)) + indexCol;
     __ca__ DataType* dstAddr = (__ca__ DataType*)__cce_get_tile_ptr(dst);
 
     constexpr int32_t srcCol = SrcTileData::Cols;
     constexpr int32_t dstCol = DstTileData::Cols;
     constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / sizeof(DataType);
 
-    static_assert((srcCol % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
+    static_assert((srcCol % blockSize) == 0, "srcCol * sizeof(DataType) must be aligned to 32B");
     static_assert((dstCol % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
-    PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol * sizeof(DataType) must be aligned to 512B");
+    PTO_ASSERT((indexCol % blockSize) == 0, "indexCol * sizeof(DataType) must be aligned to 32B");
 
     int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
-    uint16_t baseIdx = indexCol * sizeof(DataType) >> SHIFT_FRACTAL_BYTE;
     uint8_t repeatTimes = kAlign / fractalSize;
-    pto_load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, 1, 0);
+    pto_load_cbuf_to_ca(dstAddr, srcAddr, 0, repeatTimes, 1, 0);
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
