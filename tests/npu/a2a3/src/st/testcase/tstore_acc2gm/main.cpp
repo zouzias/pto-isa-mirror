@@ -265,6 +265,7 @@ void test_tstore_acc2gm_scalar_nz2ndc1hwc0(float scalarQuant)
     aclrtMallocHost((void**)(&src1Host), bFileSize);
 
     aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
     aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
@@ -323,6 +324,7 @@ void test_tstore_acc2gm_scalar_nz2nd(float scalarQuant)
     aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);

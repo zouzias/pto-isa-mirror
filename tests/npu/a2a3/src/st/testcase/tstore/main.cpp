@@ -55,6 +55,7 @@ void test_tstore()
     aclrtMallocHost((void**)(&srcHost), dataSize);
 
     aclrtMalloc((void**)&dstDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
