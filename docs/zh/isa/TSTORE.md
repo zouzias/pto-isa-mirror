@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSTORE tile operation](../figures/isa/TSTORE.svg)
+![TSTORE tile operation](../../figures/isa/TSTORE.svg)
 
 ## 简介
 

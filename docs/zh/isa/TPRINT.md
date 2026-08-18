@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPRINT tile operation](../figures/isa/TPRINT.svg)
+![TPRINT tile operation](../../figures/isa/TPRINT.svg)
 
 ## 简介
 

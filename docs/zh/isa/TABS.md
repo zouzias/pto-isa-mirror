@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TABS tile operation](../figures/isa/TABS.svg)
+![TABS tile operation](../../figures/isa/TABS.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMINS tile operation](../figures/isa/TMINS.svg)
+![TMINS tile operation](../../figures/isa/TMINS.svg)
 
 ## 简介
 

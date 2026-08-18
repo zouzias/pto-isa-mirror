@@ -4,11 +4,11 @@
 
 ### 模式1—每行标量（ColMajor src1）
 
-![TROWEXPANDSUB模式1 tile operation](../figures/isa/TROWEXPANDSUB.svg)
+![TROWEXPANDSUB模式1 tile operation](../../figures/isa/TROWEXPANDSUB.svg)
 
 ### 模式2—每行32字节块（RowMajor src1）
 
-![TROWEXPANDSUB模式2 tile operation](../figures/isa/TROWEXPANDSUB_mode2.svg)
+![TROWEXPANDSUB模式2 tile operation](../../figures/isa/TROWEXPANDSUB_mode2.svg)
 
 ## 简介
 

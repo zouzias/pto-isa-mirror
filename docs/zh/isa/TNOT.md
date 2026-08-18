@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TNOT tile operation](../figures/isa/TNOT.svg)
+![TNOT tile operation](../../figures/isa/TNOT.svg)
 
 ## 简介
 

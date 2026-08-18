@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGEMV_BIAS tile operation](../figures/isa/TGEMV_BIAS.svg)
+![TGEMV_BIAS tile operation](../../figures/isa/TGEMV_BIAS.svg)
 
 ## 简介
 

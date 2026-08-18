@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TEXTRACT tile operation](../figures/isa/TEXTRACT.svg)
+![TEXTRACT tile operation](../../figures/isa/TEXTRACT.svg)
 
 ## 简介
 

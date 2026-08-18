@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCI tile operation](../figures/isa/TCI.svg)
+![TCI tile operation](../../figures/isa/TCI.svg)
 
 ## 简介
 

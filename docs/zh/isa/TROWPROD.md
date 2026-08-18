@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWPROD tile operation](../figures/isa/TROWPROD.svg)
+![TROWPROD tile operation](../../figures/isa/TROWPROD.svg)
 
 ## 简介
 

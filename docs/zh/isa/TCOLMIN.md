@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLMIN tile operation](../figures/isa/TCOLMIN.svg)
+![TCOLMIN tile operation](../../figures/isa/TCOLMIN.svg)
 
 ## 简介
 

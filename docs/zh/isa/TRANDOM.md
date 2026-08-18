@@ -2,7 +2,7 @@
 
 ## Tile Operation Diagram
 
-![TRANDOM tile operation](../figures/isa/TRANDOM.svg)
+![TRANDOM tile operation](../../figures/isa/TRANDOM.svg)
 
 ## 简介
 

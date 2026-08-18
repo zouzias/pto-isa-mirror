@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWMAX tile operation](../figures/isa/TROWMAX.svg)
+![TROWMAX tile operation](../../figures/isa/TROWMAX.svg)
 
 ## 简介
 

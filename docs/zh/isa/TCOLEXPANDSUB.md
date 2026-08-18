@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDSUB tile operation](../figures/isa/TCOLEXPANDSUB.svg)
+![TCOLEXPANDSUB tile operation](../../figures/isa/TCOLEXPANDSUB.svg)
 
 ## 简介
 

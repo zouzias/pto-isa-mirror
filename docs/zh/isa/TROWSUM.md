@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWSUM tile operation](../figures/isa/TROWSUM.svg)
+![TROWSUM tile operation](../../figures/isa/TROWSUM.svg)
 
 ## 简介
 

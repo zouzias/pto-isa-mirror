@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSELS tile operation](../figures/isa/TSELS.svg)
+![TSELS tile operation](../../figures/isa/TSELS.svg)
 
 ## 简介
 

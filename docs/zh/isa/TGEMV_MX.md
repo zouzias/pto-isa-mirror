@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGEMV_MX tile operation](../figures/isa/TGEMV_MX.svg)
+![TGEMV_MX tile operation](../../figures/isa/TGEMV_MX.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPARTMIN tile operation](../figures/isa/TPARTMIN.svg)
+![TPARTMIN tile operation](../../figures/isa/TPARTMIN.svg)
 
 ## 简介
 

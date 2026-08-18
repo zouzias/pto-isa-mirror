@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLARGMIN tile operation](../figures/isa/TCOLARGMIN.svg)
+![TCOLARGMIN tile operation](../../figures/isa/TCOLARGMIN.svg)
 
 ## 简介
 

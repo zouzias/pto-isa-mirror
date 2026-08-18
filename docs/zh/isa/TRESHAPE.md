@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TRESHAPE tile operation](../figures/isa/TRESHAPE.svg)
+![TRESHAPE tile operation](../../figures/isa/TRESHAPE.svg)
 
 ## 简介
 

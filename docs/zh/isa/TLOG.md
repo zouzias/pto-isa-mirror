@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TLOG tile operation](../figures/isa/TLOG.svg)
+![TLOG tile operation](../../figures/isa/TLOG.svg)
 
 ## 简介
 

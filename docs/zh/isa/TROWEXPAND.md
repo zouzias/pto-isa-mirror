@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWEXPAND tile operation](../figures/isa/TROWEXPAND.svg)
+![TROWEXPAND tile operation](../../figures/isa/TROWEXPAND.svg)
 
 ## 简介
 

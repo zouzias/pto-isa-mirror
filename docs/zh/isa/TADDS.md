@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TADDS tile operation](../figures/isa/TADDS.svg)
+![TADDS tile operation](../../figures/isa/TADDS.svg)
 
 ## 简介
 

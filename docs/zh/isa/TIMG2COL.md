@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TIMG2COL tile operation](../figures/isa/TIMG2COL.svg)
+![TIMG2COL tile operation](../../figures/isa/TIMG2COL.svg)
 
 ## 简介
 

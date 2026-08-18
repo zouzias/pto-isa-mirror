@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TREMS tile operation](../figures/isa/TREMS.svg)
+![TREMS tile operation](../../figures/isa/TREMS.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TXOR tile operation](../figures/isa/TXOR.svg)
+![TXOR tile operation](../../figures/isa/TXOR.svg)
 
 ## 简介
 

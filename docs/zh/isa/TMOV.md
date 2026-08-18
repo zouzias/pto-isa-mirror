@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMOV tile operation](../figures/isa/TMOV.svg)
+![TMOV tile operation](../../figures/isa/TMOV.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TINTERLEAVE](../figures/isa/TINTERLEAVE.svg)
+![TINTERLEAVE](../../figures/isa/TINTERLEAVE.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDMAX tile operation](../figures/isa/TCOLEXPANDMAX.svg)
+![TCOLEXPANDMAX tile operation](../../figures/isa/TCOLEXPANDMAX.svg)
 
 ## 简介
 

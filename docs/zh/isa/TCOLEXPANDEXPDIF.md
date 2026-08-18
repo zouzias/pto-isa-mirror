@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDEXPDIF tile operation](../figures/isa/TCOLEXPANDEXPDIF.svg)
+![TCOLEXPANDEXPDIF tile operation](../../figures/isa/TCOLEXPANDEXPDIF.svg)
 
 ## 简介
 

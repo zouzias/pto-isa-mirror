@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGEMV_ACC tile operation](../figures/isa/TGEMV_ACC.svg)
+![TGEMV_ACC tile operation](../../figures/isa/TGEMV_ACC.svg)
 
 ## 简介
 

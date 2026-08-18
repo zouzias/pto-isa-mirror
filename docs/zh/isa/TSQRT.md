@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSQRT tile operation](../figures/isa/TSQRT.svg)
+![TSQRT tile operation](../../figures/isa/TSQRT.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPARTMUL tile operation](../figures/isa/TPARTMUL.svg)
+![TPARTMUL tile operation](../../figures/isa/TPARTMUL.svg)
 
 ## 简介
 

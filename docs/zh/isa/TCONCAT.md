@@ -4,11 +4,11 @@
 
 ### 基本形式（3参数）
 
-![TCONCAT基本形式](../figures/isa/TCONCAT.svg)
+![TCONCAT基本形式](../../figures/isa/TCONCAT.svg)
 
 ### 索引形式（5-6参数）
 
-![TCONCAT索引形式](../figures/isa/TCONCAT_idx.svg)
+![TCONCAT索引形式](../../figures/isa/TCONCAT_idx.svg)
 
 ## 简介
 

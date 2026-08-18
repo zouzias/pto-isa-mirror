@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGATHERB tile operation](../figures/isa/TGATHERB.svg)
+![TGATHERB tile operation](../../figures/isa/TGATHERB.svg)
 
 ## 简介
 

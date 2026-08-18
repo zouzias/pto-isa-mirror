@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLMAX tile operation](../figures/isa/TCOLMAX.svg)
+![TCOLMAX tile operation](../../figures/isa/TCOLMAX.svg)
 
 ## 简介
 

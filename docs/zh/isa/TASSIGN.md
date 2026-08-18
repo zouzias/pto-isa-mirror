@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TASSIGN tile operation](../figures/isa/TASSIGN.svg)
+![TASSIGN tile operation](../../figures/isa/TASSIGN.svg)
 
 ## 简介
 

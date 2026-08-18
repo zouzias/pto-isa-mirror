@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLPROD tile operation](../figures/isa/TCOLPROD.svg)
+![TCOLPROD tile operation](../../figures/isa/TCOLPROD.svg)
 
 ## 简介
 

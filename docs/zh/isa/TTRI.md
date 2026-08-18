@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TTRI tile operation](../figures/isa/TTRI.svg)
+![TTRI tile operation](../../figures/isa/TTRI.svg)
 
 ## 简介
 

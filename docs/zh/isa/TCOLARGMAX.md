@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLARGMAX tile operation](../figures/isa/TCOLARGMAX.svg)
+![TCOLARGMAX tile operation](../../figures/isa/TCOLARGMAX.svg)
 
 ## 简介
 

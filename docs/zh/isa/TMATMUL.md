@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMATMUL tile operation](../figures/isa/TMATMUL.svg)
+![TMATMUL tile operation](../../figures/isa/TMATMUL.svg)
 
 ## 简介
 

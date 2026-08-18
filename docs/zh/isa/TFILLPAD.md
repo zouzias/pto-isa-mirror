@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TFILLPAD tile operation](../figures/isa/TFILLPAD.svg)
+![TFILLPAD tile operation](../../figures/isa/TFILLPAD.svg)
 
 ## 简介
 

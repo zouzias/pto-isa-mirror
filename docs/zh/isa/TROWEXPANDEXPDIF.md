@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWEXPANDEXPDIF tile operation](../figures/isa/TROWEXPANDEXPDIF.svg)
+![TROWEXPANDEXPDIF tile operation](../../figures/isa/TROWEXPANDEXPDIF.svg)
 
 ## 简介
 

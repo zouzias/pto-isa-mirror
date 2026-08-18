@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![MSCATTER tile operation](../figures/isa/MSCATTER.svg)
+![MSCATTER tile operation](../../figures/isa/MSCATTER.svg)
 
 ## 简介
 

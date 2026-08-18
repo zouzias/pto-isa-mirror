@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMATMUL_BIAS tile operation](../figures/isa/TMATMUL_BIAS.svg)
+![TMATMUL_BIAS tile operation](../../figures/isa/TMATMUL_BIAS.svg)
 
 ## 简介
 

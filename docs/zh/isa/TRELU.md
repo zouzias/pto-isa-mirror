@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TRELU tile operation](../figures/isa/TRELU.svg)
+![TRELU tile operation](../../figures/isa/TRELU.svg)
 
 ## 简介
 

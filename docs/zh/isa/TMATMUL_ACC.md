@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMATMUL_ACC tile operation](../figures/isa/TMATMUL_ACC.svg)
+![TMATMUL_ACC tile operation](../../figures/isa/TMATMUL_ACC.svg)
 
 ## 简介
 

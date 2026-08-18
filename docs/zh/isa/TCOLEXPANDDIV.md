@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDDIV tile operation](../figures/isa/TCOLEXPANDDIV.svg)
+![TCOLEXPANDDIV tile operation](../../figures/isa/TCOLEXPANDDIV.svg)
 
 ## 简介
 

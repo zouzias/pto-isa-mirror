@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPARTADD tile operation](../figures/isa/TPARTADD.svg)
+![TPARTADD tile operation](../../figures/isa/TPARTADD.svg)
 
 ## 简介
 

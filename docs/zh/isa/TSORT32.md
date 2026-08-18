@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSort32 tile operation](../figures/isa/TSORT32.svg)
+![TSort32 tile operation](../../figures/isa/TSORT32.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGATHER tile operation](../figures/isa/TGATHER.svg)
+![TGATHER tile operation](../../figures/isa/TGATHER.svg)
 
 ## 简介
 

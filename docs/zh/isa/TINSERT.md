@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TINSERT tile operation](../figures/isa/TINSERT.svg)
+![TINSERT tile operation](../../figures/isa/TINSERT.svg)
 
 ## 简介
 

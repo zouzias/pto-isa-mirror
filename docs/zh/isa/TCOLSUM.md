@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLSUM tile operation](../figures/isa/TCOLSUM.svg)
+![TCOLSUM tile operation](../../figures/isa/TCOLSUM.svg)
 
 ## 简介
 

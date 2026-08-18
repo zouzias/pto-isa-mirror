@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TADD tile operation](../figures/isa/TADD.svg)
+![TADD tile operation](../../figures/isa/TADD.svg)
 
 ## 简介
 

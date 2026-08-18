@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TORS tile operation](../figures/isa/TORS.svg)
+![TORS tile operation](../../figures/isa/TORS.svg)
 
 ## 简介
 

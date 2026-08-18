@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TEXPANDS tile operation](../figures/isa/TEXPANDS.svg)
+![TEXPANDS tile operation](../../figures/isa/TEXPANDS.svg)
 
 ## 简介
 

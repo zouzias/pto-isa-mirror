@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![MGATHER tile operation](../figures/isa/MGATHER.svg)
+![MGATHER tile operation](../../figures/isa/MGATHER.svg)
 
 ## 简介
 

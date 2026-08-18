@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TLOAD tile operation](../figures/isa/TLOAD.svg)
+![TLOAD tile operation](../../figures/isa/TLOAD.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMRGSORT tile operation](../figures/isa/TMRGSORT.svg)
+![TMRGSORT tile operation](../../figures/isa/TMRGSORT.svg)
 
 ## 简介
 

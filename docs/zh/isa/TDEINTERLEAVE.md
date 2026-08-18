@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TDEINTERLEAVE](../figures/isa/TDEINTERLEAVE.svg)
+![TDEINTERLEAVE](../../figures/isa/TDEINTERLEAVE.svg)
 
 ## 简介
 

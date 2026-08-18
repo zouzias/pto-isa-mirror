@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TTRANS tile operation](../figures/isa/TTRANS.svg)
+![TTRANS tile operation](../../figures/isa/TTRANS.svg)
 
 ## 简介
 

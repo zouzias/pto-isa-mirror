@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDMIN tile operation](../figures/isa/TCOLEXPANDMIN.svg)
+![TCOLEXPANDMIN tile operation](../../figures/isa/TCOLEXPANDMIN.svg)
 
 ## 简介
 

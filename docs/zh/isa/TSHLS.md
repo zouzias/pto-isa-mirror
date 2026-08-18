@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSHLS tile operation](../figures/isa/TSHLS.svg)
+![TSHLS tile operation](../../figures/isa/TSHLS.svg)
 
 ## 简介
 

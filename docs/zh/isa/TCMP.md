@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCMP tile operation](../figures/isa/TCMP.svg)
+![TCMP tile operation](../../figures/isa/TCMP.svg)
 
 ## 简介
 

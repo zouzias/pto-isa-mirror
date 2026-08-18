@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TRECIP tile operation](../figures/isa/TRECIP.svg)
+![TRECIP tile operation](../../figures/isa/TRECIP.svg)
 
 ## 简介
 

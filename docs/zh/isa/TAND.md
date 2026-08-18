@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TAND tile operation](../figures/isa/TAND.svg)
+![TAND tile operation](../../figures/isa/TAND.svg)
 
 ## 简介
 

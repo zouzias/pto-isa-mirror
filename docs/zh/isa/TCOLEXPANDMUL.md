@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCOLEXPANDMUL tile operation](../figures/isa/TCOLEXPANDMUL.svg)
+![TCOLEXPANDMUL tile operation](../../figures/isa/TCOLEXPANDMUL.svg)
 
 ## 简介
 

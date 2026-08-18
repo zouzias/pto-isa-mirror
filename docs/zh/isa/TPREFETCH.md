@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPREFETCH tile operation](../figures/isa/TPREFETCH.svg)
+![TPREFETCH tile operation](../../figures/isa/TPREFETCH.svg)
 
 ## 简介
 

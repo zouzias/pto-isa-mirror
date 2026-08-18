@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TCVT tile operation](../figures/isa/TCVT.svg)
+![TCVT tile operation](../../figures/isa/TCVT.svg)
 
 ## 简介
 

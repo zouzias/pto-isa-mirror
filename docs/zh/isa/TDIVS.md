@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TDIVS tile operation](../figures/isa/TDIVS.svg)
+![TDIVS tile operation](../../figures/isa/TDIVS.svg)
 
 ## 简介
 

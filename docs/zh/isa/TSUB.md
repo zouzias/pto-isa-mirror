@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSUB tile operation](../figures/isa/TSUB.svg)
+![TSUB tile operation](../../figures/isa/TSUB.svg)
 
 ## 简介
 

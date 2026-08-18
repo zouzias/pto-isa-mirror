@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TQUANT tile operation](../figures/isa/TQUANT.svg)
+![TQUANT tile operation](../../figures/isa/TQUANT.svg)
 
 ## 简介
 

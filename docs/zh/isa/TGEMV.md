@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TGEMV tile operation](../figures/isa/TGEMV.svg)
+![TGEMV tile operation](../../figures/isa/TGEMV.svg)
 
 ## 简介
 

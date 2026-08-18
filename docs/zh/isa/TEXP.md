@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TEXP tile operation](../figures/isa/TEXP.svg)
+![TEXP tile operation](../../figures/isa/TEXP.svg)
 
 ## 简介
 

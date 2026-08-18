@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TMAX tile operation](../figures/isa/TMAX.svg)
+![TMAX tile operation](../../figures/isa/TMAX.svg)
 
 ## 简介
 

@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TSCATTER tile operation](../figures/isa/TSCATTER.svg)
+![TSCATTER tile operation](../../figures/isa/TSCATTER.svg)
 
 ## 简介
 

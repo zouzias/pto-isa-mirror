@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TNEG tile operation](../figures/isa/TNEG.svg)
+![TNEG tile operation](../../figures/isa/TNEG.svg)
 
 ## 简介
 
