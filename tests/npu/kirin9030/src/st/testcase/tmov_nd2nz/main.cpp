@@ -52,6 +52,7 @@ void test_tmov_nd2nz()
     aclrtMalloc((void**)(&srcDevice), inputSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", inputSize, srcHost, inputSize);
+    aclrtMemset(dstDevice, outputSize, 0, outputSize);
 
     aclrtMemcpy(srcDevice, inputSize, srcHost, inputSize, ACL_MEMCPY_HOST_TO_DEVICE);
     launchTMOV_nd2nz<int8_t, kRows, kCols>(dstDevice, srcDevice, stream);

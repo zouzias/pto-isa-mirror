@@ -71,6 +71,7 @@ void test_tstore_quant()
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", srcDataSize, srcHost, srcDataSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/quant.bin", vectorSize, quantHost, vectorSize));
+    aclrtMemset(dstDevice, dstDataSize, 0, dstDataSize);
 
     aclrtMemcpy(srcDevice, srcDataSize, srcHost, srcDataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, vectorSize, quantHost, vectorSize, ACL_MEMCPY_HOST_TO_DEVICE);

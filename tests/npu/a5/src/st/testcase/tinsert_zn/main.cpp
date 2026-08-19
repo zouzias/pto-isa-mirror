@@ -53,6 +53,7 @@ void testTInsertZN(size_t srcByteSize, size_t dstByteSize, LaunchFn launch)
     aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", srcByteSize, srcHost, srcByteSize);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     launch(dstDevice, srcDevice, stream);

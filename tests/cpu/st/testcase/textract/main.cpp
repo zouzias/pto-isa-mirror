@@ -105,6 +105,7 @@ void textract_test()
 
     size_t inputSize = 0;
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", inputSize, srcHost, srcFileSize));
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     runTEXTRACT<ST, DT, rows, cols, validRows, validCols, idxRow, idxCol, srcLayout, dstLayout>(

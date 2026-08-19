@@ -61,6 +61,7 @@ void test_tstore()
     std::fill(dstDevice, dstDevice + (dataSize / sizeof(DataType)), 0);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize));
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStore<
