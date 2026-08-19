@@ -239,6 +239,7 @@ void TMrgsortTopk()
     aclrtMallocHost((void**)(&src0Host), inputFileSize);
 
     aclrtMalloc((void**)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, outputFileSize, 0, outputFileSize);
     aclrtMalloc((void**)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input0.bin", inputFileSize, src0Host, inputFileSize);
