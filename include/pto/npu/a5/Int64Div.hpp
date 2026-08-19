@@ -187,7 +187,8 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh;
+        vector_s32 dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, half0, half1;
+        MaskReg lowMask, highMask;
         uint16_t rows = validRows;
         for (uint16_t row = 0; row < rows; ++row) {
             uint32_t remainingCols = validCols;
@@ -202,7 +203,12 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
                     Int64DivSignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
                 else
                     Int64DivUnsignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
-                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, dstLow, dstHigh);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
@@ -242,7 +248,14 @@ template <typename T, unsigned DstCols>
 PTO_INTERNAL void Int64StoreRegs(
     vector_s32& low, vector_s32& high, __ubuf__ T* dst, unsigned row, unsigned colOffset, MaskReg& mask)
 {
-    vsts(low, high, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+    MaskReg lowMask, highMask;
+    vector_s32 half0, half1;
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(half0, half1, low, high);
+    vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+    vsts(
+        half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0, NORM_B32,
+        highMask);
 }
 
 template <bool ScalarFirst, typename T, unsigned DstCols, unsigned SrcCols>
@@ -299,7 +312,8 @@ PTO_INTERNAL void Int64Rem(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dl, dh, al, ah, bl, bh;
+        vector_s32 dl, dh, al, ah, bl, bh, half0, half1;
+        MaskReg lowMask, highMask;
         uint16_t rows = validRows;
         for (uint16_t row = 0; row < rows; ++row) {
             uint32_t remainingCols = validCols;
@@ -311,7 +325,12 @@ PTO_INTERNAL void Int64Rem(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
                 vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
                 vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
                 Int64RemRegs<T>(dl, dh, al, ah, bl, bh, mask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, dl, dh);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
@@ -325,7 +344,8 @@ PTO_INTERNAL void Int64Zero(__ubuf__ T* dst, unsigned validRows, unsigned validC
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 zero;
+        vector_s32 zero, half0, half1;
+        MaskReg lowMask, highMask;
         vbr(zero, 0);
         uint16_t rows = validRows;
         for (uint16_t row = 0; row < rows; ++row) {
@@ -335,7 +355,12 @@ PTO_INTERNAL void Int64Zero(__ubuf__ T* dst, unsigned validRows, unsigned validC
                 uint32_t maskCols = cols;
                 MaskReg mask = plt_b32(maskCols, POST_UPDATE);
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vsts(zero, zero, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, zero, zero);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
@@ -355,7 +380,8 @@ PTO_INTERNAL void Int64RemScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, uns
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dl, dh, al, ah, bl, bh;
+        vector_s32 dl, dh, al, ah, bl, bh, half0, half1;
+        MaskReg lowMask, highMask;
         uint64_t bits = static_cast<uint64_t>(scalar);
         Int64DuplicateRegs(bl, bh, static_cast<uint32_t>(bits), static_cast<uint32_t>(bits >> 32));
         uint16_t rows = validRows;
@@ -368,7 +394,12 @@ PTO_INTERNAL void Int64RemScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, uns
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
                 vlds(al, ah, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
                 Int64RemRegs<T>(dl, dh, al, ah, bl, bh, mask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, dl, dh);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
