@@ -90,6 +90,7 @@ void TmatmulMXTest(uint32_t M, uint32_t K, uint32_t N, uint32_t validM, uint32_t
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/x1_mx_gm.bin", aScaleFileSize, src2Host, aScaleFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/x2_mx_gm.bin", bScaleFileSize, src3Host, bScaleFileSize));
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
