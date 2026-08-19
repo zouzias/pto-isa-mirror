@@ -9,7 +9,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include "test_common.h"
+#include <cstring>
 #include <gtest/gtest.h>
+#include <new>
 #include <pto/pto-inst.hpp>
 
 using namespace std;
@@ -72,3 +74,62 @@ void test_setgetval()
 }
 
 TEST_F(SETGETVALTest, case1) { test_setgetval<float, 32, 32, 32, 32>(); }
+
+template <typename TileData>
+void VerifyKAlignedDefaultFalse()
+{
+    alignas(TileData) unsigned char zeroStorage[sizeof(TileData)] = {};
+    TileData* zeroTile = new (zeroStorage) TileData;
+    unsigned char beforeSet[sizeof(TileData)];
+    std::memcpy(beforeSet, zeroStorage, sizeof(TileData));
+    zeroTile->SetKAligned(true);
+
+    int kAlignedOffset = -1;
+    for (size_t i = 0; i < sizeof(TileData); ++i) {
+        if (beforeSet[i] == 0 && zeroStorage[i] == 1) {
+            kAlignedOffset = static_cast<int>(i);
+            break;
+        }
+    }
+    zeroTile->~TileData();
+    ASSERT_GE(kAlignedOffset, 0);
+
+    alignas(TileData) unsigned char filledStorage[sizeof(TileData)];
+    std::memset(filledStorage, 0xff, sizeof(filledStorage));
+    TileData* filledTile = new (filledStorage) TileData;
+    EXPECT_EQ(filledStorage[kAlignedOffset], 0);
+    filledTile->SetKAligned(true);
+    EXPECT_EQ(static_cast<int>(filledTile->GetKAligned()), 1);
+    filledTile->~TileData();
+}
+
+TEST_F(SETGETVALTest, k_aligned_default_false)
+{
+    using StaticTile = pto::TileLeft<float, 1, 128, 1, 128>;
+    VerifyKAlignedDefaultFalse<StaticTile>();
+
+    using DynamicTile = pto::Tile<pto::TileType::Vec, float, 32, 32, pto::BLayout::RowMajor, -1, -1>;
+    alignas(DynamicTile) unsigned char zeroStorage[sizeof(DynamicTile)] = {};
+    DynamicTile* zeroTile = new (zeroStorage) DynamicTile(16, 16);
+    unsigned char beforeSet[sizeof(DynamicTile)];
+    std::memcpy(beforeSet, zeroStorage, sizeof(DynamicTile));
+    zeroTile->SetKAligned(true);
+
+    int kAlignedOffset = -1;
+    for (size_t i = 0; i < sizeof(DynamicTile); ++i) {
+        if (beforeSet[i] == 0 && zeroStorage[i] == 1) {
+            kAlignedOffset = static_cast<int>(i);
+            break;
+        }
+    }
+    zeroTile->~DynamicTile();
+    ASSERT_GE(kAlignedOffset, 0);
+
+    alignas(DynamicTile) unsigned char filledStorage[sizeof(DynamicTile)];
+    std::memset(filledStorage, 0xff, sizeof(filledStorage));
+    DynamicTile* filledTile = new (filledStorage) DynamicTile(16, 16);
+    EXPECT_EQ(filledStorage[kAlignedOffset], 0);
+    filledTile->SetKAligned(true);
+    EXPECT_EQ(static_cast<int>(filledTile->GetKAligned()), 1);
+    filledTile->~DynamicTile();
+}
