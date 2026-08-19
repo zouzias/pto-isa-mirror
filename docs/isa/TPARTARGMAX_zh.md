@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TPARTARGMAX tile operation](../figures/isa/TPARTARGMAX.svg)
+![TPARTARGMAX tile operation](../figures/isa/TPARTMAX.svg)
 
 ## 简介
 
