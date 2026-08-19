@@ -47,13 +47,49 @@ __global__ AICORE void runTRemS(__gm__ T* out, __gm__ T* src, T scalar)
     out = dstGlobal.data();
 }
 
+template <typename T, int rows, int cols>
+__global__ AICORE void runTRemSWideInt64(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
+    using DynDim2Stride = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; col += tileCols) {
+            int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+            int offset = row * cols + col;
+            GlobalData srcGlobal(src + offset, DynDim2Shape(tileRows, validCols), DynDim2Stride(cols, 1));
+            GlobalData dstGlobal(out + offset, DynDim2Shape(tileRows, validCols), DynDim2Stride(cols, 1));
+            TileData srcTile(tileRows, validCols);
+            TileData dstTile(tileRows, validCols);
+            TileData tmpTile(tileRows, validCols);
+            TASSIGN(srcTile, 0x0);
+            TASSIGN(dstTile, 0x2000);
+            TASSIGN(tmpTile, 0x4000);
+            Event<Op::TLOAD, Op::TREMS> event0 = TLOAD(srcTile, srcGlobal);
+            Event<Op::TREMS, Op::TSTORE_VEC> event1 = TREMS(dstTile, srcTile, scalar, tmpTile, event0);
+            TSTORE(dstGlobal, dstTile, event1);
+            pipe_barrier(PIPE_ALL);
+        }
+    }
+}
+
 template <
     typename T, int dstTileRow, int dstTileCol, int srcTileRow, int srcTileCol, int validRow, int validCol,
     bool highPrecision = false>
 void LaunchTRemS(T* out, T* src, T scalar, void* stream)
 {
-    runTRemS<T, dstTileRow, dstTileCol, srcTileRow, srcTileCol, validRow, validCol, highPrecision>
-        <<<1, nullptr, stream>>>(out, src, scalar);
+    if constexpr ((std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && dstTileRow == srcTileRow &&
+                  dstTileCol == srcTileCol && dstTileRow == validRow && dstTileCol == validCol &&
+                  (validCol > 64 || validRow > 64)) {
+        runTRemSWideInt64<T, validRow, validCol><<<1, nullptr, stream>>>(out, src, scalar);
+    } else {
+        runTRemS<T, dstTileRow, dstTileCol, srcTileRow, srcTileCol, validRow, validCol, highPrecision>
+            <<<1, nullptr, stream>>>(out, src, scalar);
+    }
 }
 
 template <
@@ -76,3 +112,88 @@ template void LaunchTRemS<float, 64, 64, 64, 64, 64, 64, true>(float* out, float
 template void LaunchTRemS<float, 64, 64, 64, 64, 64, 61, true>(float* out, float* src, float scalar, void* stream);
 template void LaunchTRemS<int64_t, 4, 16, 4, 16, 4, 16>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
 template void LaunchTRemS<uint64_t, 4, 16, 4, 16, 4, 16>(uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTRemS<int64_t, 4, 64, 4, 64, 4, 64>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTRemS<uint64_t, 4, 64, 4, 64, 4, 64>(uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTRemS<int64_t, 1, 10912, 1, 10912, 1, 10912>(
+    int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTRemS<uint64_t, 1, 10912, 1, 10912, 1, 10912>(
+    uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);
+
+template <typename T, int rows, int stride, int validCols>
+__global__ AICORE void runTRemSInplaceWideInt64(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
+    using DynDim2Stride = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < validCols; col += tileCols) {
+            int curValidCols = (col + tileCols <= validCols) ? tileCols : (validCols - col);
+            int offset = row * stride + col;
+            GlobalData srcGlobal(src + offset, DynDim2Shape(tileRows, curValidCols), DynDim2Stride(stride, 1));
+            GlobalData dstGlobal(out + offset, DynDim2Shape(tileRows, curValidCols), DynDim2Stride(stride, 1));
+            TileData src0Tile(tileRows, curValidCols);
+            TileData dstTile(tileRows, curValidCols);
+            TmpTileData tmpTile(tileRows, curValidCols);
+            constexpr unsigned tileBytes = tileRows * tileCols * sizeof(T);
+            TASSIGN(src0Tile, 0x0);
+            TASSIGN(dstTile, 0x0);
+            TASSIGN(tmpTile, tileBytes * 2);
+            Event<Op::TLOAD, Op::TREMS> event0 = TLOAD(src0Tile, srcGlobal);
+            Event<Op::TREMS, Op::TSTORE_VEC> event1 = TREMS(dstTile, src0Tile, scalar, tmpTile, event0);
+            TSTORE(dstGlobal, dstTile, event1);
+            pipe_barrier(PIPE_ALL);
+        }
+    }
+}
+
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+__global__ AICORE void runTRemSInplace(__gm__ T* out, __gm__ T* src, T scalar)
+{
+    using DynShapeDim5 = Shape<1, 1, 1, vRows, vCols>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, tileW, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileH, tileW, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, T, 1, tileW, BLayout::RowMajor, -1, -1>;
+    TileData src0Tile(vRows, vCols);
+    TileData dstTile(vRows, vCols);
+    TmpTileData tmpTile(1, vCols);
+    constexpr unsigned tileBytes = tileH * tileW * sizeof(T);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(dstTile, 0x0);
+    TASSIGN(tmpTile, tileBytes * 2);
+    GlobalData dstGlobal(out);
+    GlobalData srcGlobal(src);
+    TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    TREMS<RemSAlgorithm::DEFAULT>(dstTile, src0Tile, scalar, tmpTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void LaunchTRemSInplace(T* out, T* src, T scalar, void* stream)
+{
+    if constexpr ((std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && tileW > 32) {
+        runTRemSInplaceWideInt64<T, vRows, tileW, vCols><<<1, nullptr, stream>>>(out, src, scalar);
+    } else {
+        runTRemSInplace<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>(out, src, scalar);
+    }
+}
+
+template void LaunchTRemSInplace<int64_t, 4, 32, 4, 32>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTRemSInplace<uint64_t, 4, 32, 4, 32>(uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTRemSInplace<int64_t, 1, 1024, 1, 1024>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTRemSInplace<int64_t, 4, 64, 4, 40>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTRemSInplace<int64_t, 1, 2048, 1, 2045>(int64_t* out, int64_t* src, int64_t scalar, void* stream);

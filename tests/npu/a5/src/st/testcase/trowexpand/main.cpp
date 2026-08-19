@@ -95,4 +95,8 @@ TEST_F(TROWEXPANDTest, case4_int8_16_32_16_255) { test_trowexpand<int8_t, 16, 32
 TEST_F(TROWEXPANDTest, case5_float_16_8_16_127) { test_trowexpand<float, 16, 8, 127, 128>(); }
 TEST_F(TROWEXPANDTest, case6_int64_4_16_4_16) { test_trowexpand<int64_t, 4, 16, 16, 16>(); }
 TEST_F(TROWEXPANDTest, case7_uint64_4_16_4_16) { test_trowexpand<uint64_t, 4, 16, 16, 16>(); }
+TEST_F(TROWEXPANDTest, case8_int64_4_16_4_64) { test_trowexpand<int64_t, 4, 16, 64, 64>(); }
+TEST_F(TROWEXPANDTest, case9_uint64_4_16_4_64) { test_trowexpand<uint64_t, 4, 16, 64, 64>(); }
+TEST_F(TROWEXPANDTest, case10_int64_1_1_1_16368) { test_trowexpand<int64_t, 1, 1, 16368, 16368>(); }
+TEST_F(TROWEXPANDTest, case11_uint64_1_1_1_16368) { test_trowexpand<uint64_t, 1, 1, 16368, 16368>(); }
 } // namespace TRowExpandTest
