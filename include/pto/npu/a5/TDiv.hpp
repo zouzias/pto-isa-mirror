@@ -233,7 +233,8 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh;
+        vector_s32 dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, half0, half1;
+        MaskReg lowMask, highMask;
         uint16_t rows = validRows;
         uint16_t fullRepeats = validCols / elementsPerRepeat;
         uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
@@ -249,7 +250,12 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
                     Int64DivSignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, allMask);
                 else
                     Int64DivUnsignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, allMask);
-                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, allMask);
+                pintlv_b32(lowMask, highMask, allMask, allMask);
+                vintlv(half0, half1, dstLow, dstHigh);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
             }
             if (tailCols != 0) {
                 uint32_t colOffset = fullRepeats * elementsPerRepeat;
@@ -259,7 +265,12 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
                     Int64DivSignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, tailMask);
                 else
                     Int64DivUnsignedRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, tailMask);
-                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, tailMask);
+                pintlv_b32(lowMask, highMask, tailMask, tailMask);
+                vintlv(half0, half1, dstLow, dstHigh);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
             }
         }
     }
@@ -298,7 +309,14 @@ template <typename T, unsigned DstCols>
 PTO_INTERNAL void Int64StoreRegs(
     vector_s32& low, vector_s32& high, __ubuf__ T* dst, unsigned row, unsigned colOffset, MaskReg& mask)
 {
-    vsts(low, high, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+    MaskReg lowMask, highMask;
+    vector_s32 half0, half1;
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(half0, half1, low, high);
+    vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+    vsts(
+        half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0, NORM_B32,
+        highMask);
 }
 
 template <bool ScalarFirst, typename T, unsigned DstCols, unsigned SrcCols>
