@@ -131,8 +131,8 @@ void runTEXTRACT_Vector(typename Conf::DT* dst, typename Conf::ST* src, uint64_t
             1 * Conf::dstValidRows * Conf::dstValidCols, 1 * Conf::dstValidRows * Conf::dstValidCols,
             Conf::dstValidRows * Conf::dstValidCols, Conf::dstValidCols, 1>>;
     using GlobalDataFp = GlobalTensor<
-        uint64_t, pto::Shape<1, 1, 1, 1, Conf::dstValidCols>,
-        pto::Stride<1 * Conf::dstValidCols, Conf::dstValidCols, Conf::dstValidCols, Conf::dstValidCols, 1>>;
+        uint64_t, pto::Shape<1, 1, 1, 1, Conf::srcValidCols>,
+        pto::Stride<1 * Conf::srcValidCols, Conf::srcValidCols, Conf::srcValidCols, Conf::srcValidCols, 1>>;
 
     GlobalDataSrc srcGlobal(src);
     GlobalDataDst dstGlobal(dst);
@@ -145,7 +145,7 @@ void runTEXTRACT_Vector(typename Conf::DT* dst, typename Conf::ST* src, uint64_t
         TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows, Conf::dstValidCols,
         SLayout::RowMajor, 512>;
     using FbTile = Tile<
-        TileType::Mat, uint64_t, 1, Conf::dstValidCols, BLayout::RowMajor, 1, Conf::dstValidCols, SLayout::NoneBox,
+        TileType::Mat, uint64_t, 1, Conf::srcValidCols, BLayout::RowMajor, 1, Conf::srcValidCols, SLayout::NoneBox,
         512>;
     SrcTile srcTile;
     DstTile dstTile;
@@ -179,7 +179,7 @@ void test_textract()
 
     size_t srcFileSize = Conf::srcValidRows * Conf::srcValidCols * sizeof(ST);
     size_t dstFileSize = Conf::dstValidRows * Conf::dstValidCols * sizeof(DT);
-    size_t quantFileSize = Conf::isVQuant ? Conf::dstValidCols * sizeof(uint64_t) : sizeof(uint64_t);
+    size_t quantFileSize = Conf::isVQuant ? Conf::srcValidCols * sizeof(uint64_t) : sizeof(uint64_t);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -452,4 +452,13 @@ TEST_F(TEXTRACTTest, case_49_int32_t_int16_t)
 TEST_F(TEXTRACTTest, case_50_int32_t_int16_t)
 {
     test_textract<Params<int32_t, int16_t, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, false, false>>();
+}
+
+TEST_F(TEXTRACTTest, case_51_int32_t_uint8_t)
+{
+    test_textract<Params<int32_t, uint8_t, 128, 128, 128, 128, 96, 96, 96, 96, 16, 8, true, false, true>>();
+}
+TEST_F(TEXTRACTTest, case_52_int32_t_uint8_t)
+{
+    test_textract<Params<int32_t, uint8_t, 256, 64, 256, 64, 128, 32, 128, 32, 16, 8, true, true, true>>();
 }

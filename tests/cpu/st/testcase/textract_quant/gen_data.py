@@ -136,7 +136,7 @@ def apply_quant_element(src_val, quant_gm, mode, is_vector, dst_dtype, use_relu=
     return NumExt.astype(np.array([res]), dst_dtype)[0]
 
 
-def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_relu, saturate_inf):
+def process_quant(data_array, quant_array, src_dtype, dst_dtype, idx_col, is_vector, use_relu, saturate_inf):
     mode = get_quant_mode(src_dtype, dst_dtype)
     rows, cols = data_array.shape
     if NumExt.is_bf16(dst_dtype):
@@ -145,7 +145,7 @@ def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_
         out = np.zeros_like(data_array, dtype=dst_dtype)
 
     for j in range(cols):
-        q_param = quant_array[j] if is_vector else quant_array[0]
+        q_param = quant_array[idx_col + j] if is_vector else quant_array[0]
         for i in range(rows):
             out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, is_vector, dst_dtype, use_relu, saturate_inf)
     
@@ -168,11 +168,11 @@ def gen_golden_data(case_name, param: TExtractParams):
     tile = raw_data[idx_row:(idx_row + dst_shape[0]), idx_col:(idx_col + dst_shape[1])]
 
     if param.is_v_quant:
-        quant_gm = get_quant_vector(param.dst_dtype, param.dst_valid_cols)
+        quant_gm = get_quant_vector(param.dst_dtype, param.src_valid_cols)
     else:
         quant_gm = get_quant_vector(param.dst_dtype, 1)
 
-    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, param.is_v_quant, param.use_relu, param.saturate_inf)
+    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, idx_col, param.is_v_quant, param.use_relu, param.saturate_inf)
     NumExt.write_array("./input.bin", raw_data, param.src_dtype)
     NumExt.write_array("./golden.bin", golden, param.dst_dtype)
     quant_gm.tofile("./quant.bin")
@@ -284,6 +284,9 @@ if __name__ == "__main__":
 
         TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
         TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
+
+        TExtractParams(np.int32, np.uint8, 128, 128, 96, 96, 16, 8, True, True, False),
+        TExtractParams(np.int32, np.uint8, 256, 64, 128, 32, 16, 8, True, True, True),
     ]
 
     for idx, case_param in enumerate(case_params_list):

@@ -68,8 +68,7 @@ template <
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
 {
     (void)Phase;
-    (void)fp;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT_FP<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, 0, 0);
 }
 
 template <
@@ -79,8 +78,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
 {
     (void)Phase;
     (void)mode;
-    (void)fp;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT_FP<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, 0, 0);
 }
 
 template <

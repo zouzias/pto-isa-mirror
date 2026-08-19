@@ -26,18 +26,16 @@ PTO_INTERNAL void TInsert_Impl(
 
     for (size_t c = 0; c < src.GetValidCol(); c++) {
         for (size_t r = 0; r < src.GetValidRow(); r++) {
-            size_t srcTileIdx = GetTileElementOffset<SrcTileData>(r, c);
-            size_t dstTileIdx = GetTileElementOffset<DstTileData>(r + idxRow, c + idxCol);
-            size_t scalarIndex = SrcTileData::isRowMajor ? c : r;
             if constexpr (quantMode != QuantMode_t::NoQuant) {
-                dst.data()[dstTileIdx] =
-                    quantize_element<D, S, quantMode, applyRelu>(src.data()[srcTileIdx], scalars[scalarIndex]);
+                dst.SetElement(
+                    r + idxRow, c + idxCol,
+                    quantize_element<D, S, quantMode, applyRelu>(src.GetElement(r, c), scalars[c]));
             } else {
-                S val = src.data()[srcTileIdx];
+                S val = src.GetElement(r, c);
                 if constexpr (applyRelu) {
                     val = ReLU(val);
                 }
-                dst.data()[dstTileIdx] = val;
+                dst.SetElement(r + idxRow, c + idxCol, val);
             }
         }
     }
