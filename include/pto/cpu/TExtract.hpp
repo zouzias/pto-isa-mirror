@@ -30,11 +30,10 @@ PTO_INTERNAL void TExtract_Impl(
     for (size_t c = 0; c < dst.GetValidCol(); c++) {
         for (size_t r = 0; r < dst.GetValidRow(); r++) {
             if constexpr (quantMode != QuantMode_t::NoQuant) {
-                size_t scalarIndex = SrcTileData::isRowMajor ? c : r;
                 dst.SetElement(
                     r, c,
                     quantize_element<D, S, quantMode, applyRelu>(
-                        src.GetElement(r + idxRow, c + idxCol), scalars[scalarIndex]));
+                        src.GetElement(r + idxRow, c + idxCol), scalars[c + idxCol]));
             } else {
                 S val = src.GetElement(r + idxRow, c + idxCol);
                 if constexpr (applyRelu) {
@@ -176,8 +175,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& 
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
 
-    std::vector<uint64_t> scalars(dst.GetValidCol(), 0);
-    for (size_t i = 0; i < dst.GetValidCol(); i++) {
+    std::vector<uint64_t> scalars(fp.GetValidCol(), 0);
+    for (size_t i = 0; i < fp.GetValidCol(); i++) {
         const size_t quantTileIdx = GetTileElementOffset<FpTileData>(0, i);
         scalars[i] = fp.data()[quantTileIdx];
     }
@@ -191,8 +190,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& 
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
 
-    std::vector<uint64_t> scalars(dst.GetValidCol(), 0);
-    for (size_t i = 0; i < dst.GetValidCol(); i++) {
+    std::vector<uint64_t> scalars(fp.GetValidCol(), 0);
+    for (size_t i = 0; i < fp.GetValidCol(); i++) {
         const size_t quantTileIdx = GetTileElementOffset<FpTileData>(0, i);
         scalars[i] = fp.data()[quantTileIdx];
     }
