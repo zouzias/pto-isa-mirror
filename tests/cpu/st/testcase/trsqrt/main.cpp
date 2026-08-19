@@ -51,6 +51,7 @@ void test_trsqrt()
 
     aclrtMalloc((void**)&dstDevice, fileDstSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSrcSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileDstSize, 0, fileDstSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSrcSize, srcHost, fileSrcSize);
 

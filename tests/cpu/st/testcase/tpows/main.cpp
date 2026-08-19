@@ -68,6 +68,7 @@ bool TPowSTestFramework()
 
     aclrtMalloc((void**)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
     InitDstDevice<T, oRow, oCol>(dstDevice);
     ReadFile(GetGoldenDir() + "/input.bin", readSize, srcHost, srcByteSize);
