@@ -33,14 +33,11 @@ payload 不会回滚。
 ```cpp
 auto putEvent = comm::TPUT_ASYNC<engine>(dst, src, session, peer);
 putEvent.Wait(session);
-comm::TNOTIFY(signal, value, op, peer);
+comm::TNOTIFY(signal, value, op);
 ```
 
 URMA/RDMA 需要等待 CQ，SDMA 需要等待完成标志。若省略中间等待，`TNOTIFY` 与异步 DMA 不一定处于
 同一个引擎和有序队列，signal 可能先于 payload 对接收端可见。
-
-即使 `TNOTIFY` 提供显式 `peer` 重载，它也只负责本次独立 signal 更新，不能替用户排序另一个 Session
-或队列中尚未完成的 `TPUT_ASYNC`。
 
 因此，用户虽然能通过“等待后再通知”实现相同最终结果，却无法用现有接口表达“无需中间等待、同时保证
 payload-before-signal”的操作。

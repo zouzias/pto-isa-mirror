@@ -9,8 +9,8 @@
 
 `srcGlobalData（本地 GM）` → DMA引擎 → `dstGlobalData（远端 GM）` → 更新 `dstSignalData（远端 GM）`
 
-`dstGlobalData` 和 `dstSignalData` 均由调用方传入远端地址。仅更新signal、不传输payload时，应使用显式
-peer的 `TNOTIFY(dstSignalData, value, op, peer)`。
+`dstGlobalData` 和 `dstSignalData` 均由调用方传入远端地址。仅更新signal、不传输payload时，应使用
+`TNOTIFY`。
 
 ## 模板参数
 
@@ -202,7 +202,7 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
 - `GlobalSrcData::layout` 必须等于 `GlobalDstData::layout`。
 - 源和目的payload tensor必须是扁平、连续的逻辑一维tensor。
 - 目的tensor的元素容量不得小于源tensor的元素数。
-- payload大小必须大于0；仅更新signal时应使用显式peer的 `TNOTIFY`。
+- payload大小必须大于0；仅更新signal时应使用 `TNOTIFY`。
 - `dstSignalData` 必须表示远端GM中的一个 `int32_t`，地址非空且按4字节对齐。调用方负责分配和初始化。
 - payload目的地址范围不得与 `dstSignalData` 重叠。
 - 对于URMA和RDMA，payload目的地址与signal必须属于同一个目标peer；本地payload、远端payload和远端
