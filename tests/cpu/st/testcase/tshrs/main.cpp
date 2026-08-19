@@ -59,6 +59,7 @@ void test_tshrs()
     aclrtMalloc((void**)&dstDevice, fileSizeDst, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSizeSrc, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&scalarDevice, scalarSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSizeDst, 0, fileSizeDst);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSizeSrc, srcHost, fileSizeSrc));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/scalar.bin", scalarSize, scalarHost, scalarSize));

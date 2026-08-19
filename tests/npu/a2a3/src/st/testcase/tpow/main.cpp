@@ -53,6 +53,7 @@ void test_tpow()
     aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&baseDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&expDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     ReadFile(GetGoldenDir() + "/base.bin", fileSize, baseHost, fileSize);
     ReadFile(GetGoldenDir() + "/exp.bin", fileSize, expHost, fileSize);

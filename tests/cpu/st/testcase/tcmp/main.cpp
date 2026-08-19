@@ -60,6 +60,7 @@ void test_tcmp(pto::CmpMode mode)
     aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input1.bin", srcFileSize, src0Host, srcFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input2.bin", srcFileSize, src1Host, srcFileSize));

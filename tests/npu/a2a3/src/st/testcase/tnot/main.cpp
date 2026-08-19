@@ -50,6 +50,7 @@ void test_tnot()
     aclrtMallocHost((void**)(&srcHost), fileSize);
     aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize);
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
