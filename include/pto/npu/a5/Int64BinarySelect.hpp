@@ -14,7 +14,12 @@ PTO_INTERNAL void Int64SelectStore(
     vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
     vsel(dstLow, src0Low, src1Low, selectMask);
     vsel(dstHigh, src0High, src1High, selectMask);
-    vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, validMask);
+    MaskReg lowMask, highMask;
+    vector_s32 half0, half1;
+    pintlv_b32(lowMask, highMask, validMask, validMask);
+    vintlv(half0, half1, dstLow, dstHigh);
+    vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+    vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
 }
 
 template <typename T, unsigned DstCols, unsigned SrcCols>
@@ -28,7 +33,12 @@ PTO_INTERNAL void Int64SelectScalarStore(
     vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
     vsel(dstLow, srcLow, scalarLow, selectMask);
     vsel(dstHigh, srcHigh, scalarHigh, selectMask);
-    vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, validMask);
+    MaskReg lowMask, highMask;
+    vector_s32 half0, half1;
+    pintlv_b32(lowMask, highMask, validMask, validMask);
+    vintlv(half0, half1, dstLow, dstHigh);
+    vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+    vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
 }
 
 template <unsigned ElementsPerRepeat, unsigned MaskRowBytes>

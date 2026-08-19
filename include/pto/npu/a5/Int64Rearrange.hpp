@@ -23,7 +23,8 @@ PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsig
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 lowReg, highReg;
+        vector_s32 lowReg, highReg, half0, half1;
+        MaskReg lowMask, highMask;
         uint64_t bits = static_cast<uint64_t>(scalar);
         vbr(lowReg, static_cast<int32_t>(bits));
         vbr(highReg, static_cast<int32_t>(bits >> 32));
@@ -35,7 +36,12 @@ PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsig
                 uint32_t maskCols = cols;
                 MaskReg mask = plt_b32(maskCols, POST_UPDATE);
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vsts(lowReg, highReg, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+                pintlv_b32(lowMask, highMask, mask, mask);
+                vintlv(half0, half1, lowReg, highReg);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
                 remainingCols -= cols;
             }
         }
