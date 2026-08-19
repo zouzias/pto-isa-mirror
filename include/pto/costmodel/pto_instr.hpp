@@ -127,21 +127,48 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     // For TSTORE(dst=GlobalData, src=TileData), this skips GlobalData and uses TileData.
     ExtractFirstTileInfo(r.rows, r.cols, r.dtype, first_tile, rest_tiles...);
 
-    const uint64_t measured_cycles = GetLastPtoInstrCycles();
-    const uint64_t estimated_cycles =
-        perf_sim::EstimateInstrCycles(opcode, r.rows, r.cols, r.dtype.empty() ? "unknown" : r.dtype.c_str());
-    uint64_t cycles = measured_cycles;
-    const bool useEstimatedCycles = cycles == 0 ||
-                                    (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles) ||
-                                    (std::string_view(opcode) == "TDIVS" && (r.dtype == "int16" || r.dtype == "int32"));
+    const uint64_t measuredCycles = GetLastPtoInstrCycles();
+    uint64_t cycles = measuredCycles;
+    uint64_t estimatedCycles = 0;
+    bool useEstimatedCycles = (cycles == 0);
+
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
+    const bool compareWithEstimate =
+        std::string_view(opcode) == "TROWEXPAND" ||
+        (std::string_view(opcode) == "TDIVS" && (r.dtype == "int16" || r.dtype == "int32"));
+#else
+    const bool compareWithEstimate = false;
+#endif
+
+    if (useEstimatedCycles || compareWithEstimate) {
+        estimatedCycles =
+            perf_sim::EstimateInstrCycles(opcode, r.rows, r.cols, r.dtype.empty() ? "unknown" : r.dtype.c_str());
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
+        useEstimatedCycles = useEstimatedCycles ||
+                             (std::string_view(opcode) == "TROWEXPAND" && estimatedCycles > cycles) ||
+                             (std::string_view(opcode) == "TDIVS" && (r.dtype == "int16" || r.dtype == "int32"));
+#endif
+    }
     if (useEstimatedCycles) {
-        cycles = estimated_cycles;
+        cycles = estimatedCycles;
         auto& trace = ::pto::mocker::GetMutableTrace();
         if (!trace.executed_pto.empty()) {
             trace.executed_pto.back().total_cycles = cycles;
         }
     }
     r.estimated_cycles = cycles;
+
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+    const auto& trace = ::pto::mocker::GetTrace();
+    if (!trace.executed_pto.empty()) {
+        const auto& prediction = trace.executed_pto.back().vfPrediction;
+        r.predictionStatus = ::pto::mocker::vf::toString(prediction.status);
+        r.vfSimHitCount = prediction.vfSimHitCount;
+        r.fallbackCount = prediction.fallbackCount;
+        r.ignoredInstructionCount = prediction.ignoredInstructionCount;
+        r.predictionDiagnostics = prediction.diagnostics;
+    }
+#endif
 
     perf_sim::CvSyncRecorder::ApplyPending(opcode, r);
     perf_sim::PtoRecorder::Record(std::move(r));
@@ -303,6 +330,30 @@ template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents&... events)
 {
     WaitAllEvents(events...);
+}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
+PTO_INST void SYNCALL()
+{
+    SYNCALL_IMPL<CoreType>();
+}
+
+template <
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
+    std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INST void SYNCALL(GlobalData& gmWorkspace, int32_t usedCores = 0)
+{
+    if constexpr (Mode == SyncAllMode::Hard) {
+        (void)gmWorkspace;
+        (void)usedCores;
+        SYNCALL_IMPL<CoreType>();
+    } else if constexpr (CoreType == SyncCoreType::AIVOnly) {
+        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), usedCores);
+    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
+        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), usedCores);
+    } else {
+        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), usedCores);
+    }
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>

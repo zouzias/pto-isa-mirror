@@ -92,6 +92,11 @@ struct InstrRecord {
     uint32_t subblock_id = 0; // VecCore index (0 or 1)
     CvSyncKind cv_kind = CvSyncKind::None;
     uint64_t cv_key = 0; // logical FIFO identity for TPUSH/TPOP token matching
+    std::string predictionStatus;
+    uint32_t vfSimHitCount = 0;
+    uint32_t fallbackCount = 0;
+    uint32_t ignoredInstructionCount = 0;
+    std::vector<std::string> predictionDiagnostics;
 };
 
 enum class SyncKind : uint8_t { Signal, Wait, Barrier };

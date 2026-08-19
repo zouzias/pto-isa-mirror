@@ -12,9 +12,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <source_location>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -37,7 +41,21 @@ struct vector_s32 {};
 struct vector_u32 {};
 struct vector_s64 {};
 struct vector_u64 {};
-struct vector_bool {};
+
+inline uintptr_t PtoPredicateCallsiteKey(const std::source_location& location)
+{
+    uintptr_t key = std::hash<std::string_view>{}(location.file_name());
+    key ^= static_cast<uintptr_t>(location.line()) << 16;
+    key ^= static_cast<uintptr_t>(location.column());
+    return key == 0 ? 1 : key;
+}
+
+struct vector_bool {
+    vector_bool() : traceKey(reinterpret_cast<uintptr_t>(this)) {}
+    explicit vector_bool(uintptr_t key) : traceKey(key) {}
+
+    uintptr_t traceKey;
+};
 struct vector_address {};
 struct vector_align {};
 
@@ -145,6 +163,30 @@ struct ScopeSentinel {
 #ifndef PAT_ALL
 #define PAT_ALL 0
 #endif
+#ifndef ROUND_R
+#define ROUND_R 0
+#endif
+#ifndef ROUND_Z
+#define ROUND_Z 1
+#endif
+#ifndef RS_DISABLE
+#define RS_DISABLE 0
+#endif
+#ifndef PART_EVEN
+#define PART_EVEN 0
+#endif
+#ifndef DINTLV_B32
+#define DINTLV_B32 0
+#endif
+#ifndef INTLV_B32
+#define INTLV_B32 0
+#endif
+#ifndef LOWER
+#define LOWER 0
+#endif
+#ifndef US
+#define US 0
+#endif
 #ifndef CCE_VL
 #define CCE_VL 256
 #endif
@@ -161,8 +203,10 @@ namespace pto::mocker::vf::capture {
 struct Ctx {
     std::vector<std::string> seq;
     std::unordered_map<uintptr_t, std::string> registers;
+    std::unordered_map<uintptr_t, std::string> predicates;
     std::unordered_map<uintptr_t, std::string> ubAddresses;
     uint64_t nextRegister = 0;
+    uint64_t nextPredicate = 0;
     uint64_t nextUbAddress = 0;
     bool on = false;
 };
@@ -175,8 +219,10 @@ inline void ResetOperands()
 {
     Ctx& c = cur();
     c.registers.clear();
+    c.predicates.clear();
     c.ubAddresses.clear();
     c.nextRegister = 0;
+    c.nextPredicate = 0;
     c.nextUbAddress = 0;
 }
 
@@ -257,6 +303,10 @@ inline std::optional<MemInfo> Operand(T&& value)
         using DType = std::remove_cv_t<std::remove_pointer_t<U>>;
         const auto key = reinterpret_cast<uintptr_t>(value);
         return MemInfo{NameFor(c.ubAddresses, key, c.nextUbAddress, "ub"), MemLocation::UB, DTypeName<DType>()};
+    } else if constexpr (std::is_same_v<U, vector_bool>) {
+        return MemInfo{
+            NameFor(c.predicates, value.traceKey, c.nextPredicate, "predicate"), MemLocation::PredicateRegister,
+            DTypeName<U>()};
     } else if constexpr (
         std::is_same_v<U, vector_f32> || std::is_same_v<U, vector_f16> || std::is_same_v<U, vector_s8> ||
         std::is_same_v<U, vector_u8> || std::is_same_v<U, vector_s16> || std::is_same_v<U, vector_u16> ||
@@ -265,6 +315,47 @@ inline std::optional<MemInfo> Operand(T&& value)
         return MemInfo{NameFor(c.registers, key, c.nextRegister, "reg"), MemLocation::PhyRegister, DTypeName<U>()};
     }
     return std::nullopt;
+}
+
+template <typename T>
+inline void AppendOperand(std::vector<MemInfo>& operands, T&& value)
+{
+    if (auto operand = Operand(std::forward<T>(value)))
+        operands.push_back(std::move(*operand));
+}
+
+template <typename Tuple, std::size_t... DstIndices, std::size_t... SrcIndices>
+inline VfInst MakeInstruction(
+    const char* name, Tuple& operands, std::index_sequence<DstIndices...>, std::index_sequence<SrcIndices...>)
+{
+    VfInst inst{std::string{name}, {}, {}, {}};
+    (AppendOperand(inst.dst, std::get<DstIndices>(operands)), ...);
+    (AppendOperand(inst.src, std::get<SrcIndices>(operands)), ...);
+    return inst;
+}
+
+template <typename T>
+inline std::string ArgumentValue(T&& value)
+{
+    using U = std::remove_cv_t<std::remove_reference_t<T>>;
+    if constexpr (requires { U::value; }) {
+        return ArgumentValue(U::value);
+    } else if constexpr (std::is_enum_v<U>) {
+        return std::to_string(static_cast<std::underlying_type_t<U>>(value));
+    } else if constexpr (std::is_integral_v<U>) {
+        return std::to_string(value);
+    } else if constexpr (std::is_floating_point_v<U>) {
+        std::ostringstream output;
+        output << value;
+        return output.str();
+    }
+    return "<opaque>";
+}
+
+template <typename T>
+inline void AddArgument(VfInst& inst, uint32_t argumentIndex, VfArgKind kind, const char* name, T&& value)
+{
+    inst.arguments.push_back(VfArgInfo{argumentIndex, kind, name, ArgumentValue(std::forward<T>(value))});
 }
 
 template <typename... A>
@@ -326,12 +417,18 @@ inline void RecordStore(const char* name, A&&... args)
     {                                                                               \
         ::pto::mocker::vf::capture::RecordCompute(#NAME, std::forward<A>(args)...); \
     }
-#define PTO_VF_RECORD_MASK(NAME)                \
-    template <class... A>                       \
-    inline ::vector_bool NAME(A&&...)           \
-    {                                           \
-        ::pto::mocker::vf::capture::rec(#NAME); \
-        return ::vector_bool{};                 \
+#define PTO_VF_RECORD_MASK(NAME)                                                                                    \
+    template <class Pattern>                                                                                        \
+    inline ::vector_bool NAME(                                                                                      \
+        Pattern&& pattern, const std::source_location& location = std::source_location::current())                  \
+    {                                                                                                               \
+        ::vector_bool result(PtoPredicateCallsiteKey(location));                                                    \
+        auto operands = std::forward_as_tuple(result);                                                              \
+        auto inst = ::pto::mocker::vf::capture::MakeInstruction(                                                    \
+            #NAME, operands, std::index_sequence<0>{}, std::index_sequence<>{});                                    \
+        ::pto::mocker::vf::capture::AddArgument(inst, 0, ::pto::mocker::vf::VfArgKind::Config, "pattern", pattern); \
+        ::pto::mocker::vf::capture::rec(std::move(inst));                                                           \
+        return result;                                                                                              \
     }
 
 template <class... A>
@@ -388,44 +485,177 @@ PTO_VF_RECORD_VOID(vcmps_ne)
 PTO_VF_RECORD_VOID(pand)
 PTO_VF_RECORD_VOID(por)
 PTO_VF_RECORD_VOID(pnot)
-template <class... A>
-inline ::vector_bool plt_b8(A&&...)
+
+template <class Dst, class Src0, class Src1, class Mask>
+inline void pxor(Dst&& dst, Src0&& src0, Src1&& src1, Mask&& mask)
 {
-    return ::vector_bool{};
+    auto operands = std::forward_as_tuple(dst, src0, src1, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "pxor", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
 }
-template <class... A>
-inline ::vector_bool plt_b16(A&&...)
+
+template <class Dst, class Src0, class Src1, class Src2>
+inline void psel(Dst&& dst, Src0&& src0, Src1&& src1, Src2&& src2)
 {
-    return ::vector_bool{};
+    auto operands = std::forward_as_tuple(dst, src0, src1, src2);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "psel", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
 }
-template <class... A>
-inline ::vector_bool plt_b32(A&&...)
+
+template <class Dst, class Src, class Offset, class Mode>
+inline void plds(Dst&& dst, Src&& src, Offset&& offset, Mode&& mode)
 {
-    return ::vector_bool{};
+    auto operands = std::forward_as_tuple(dst, src);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "plds", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Immediate, "offset", offset);
+    ::pto::mocker::vf::capture::AddArgument(inst, 3, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Dst, class Src, class Part>
+inline void ppack(Dst&& dst, Src&& src, Part&& part)
+{
+    auto operands = std::forward_as_tuple(dst, src);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "ppack", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Config, "part", part);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Src, class Dst, class Offset, class Mode>
+inline void psts(Src&& src, Dst&& dst, Offset&& offset, Mode&& mode)
+{
+    auto operands = std::forward_as_tuple(src, dst);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "psts", operands, std::index_sequence<1>{}, std::index_sequence<0>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Immediate, "offset", offset);
+    ::pto::mocker::vf::capture::AddArgument(inst, 3, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Dst, class Src, class Part>
+inline void punpack(Dst&& dst, Src&& src, Part&& part)
+{
+    auto operands = std::forward_as_tuple(dst, src);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "punpack", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Config, "part", part);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class CarryOut, class Dst, class Src0, class Src1, class Mask>
+inline void vaddc(CarryOut&& carryOut, Dst&& dst, Src0&& src0, Src1&& src1, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(carryOut, dst, src0, src1, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vaddc", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3, 4>{}));
+}
+
+template <class CarryOut, class Dst, class Src0, class Src1, class CarryIn, class Mask>
+inline void vaddcs(CarryOut&& carryOut, Dst&& dst, Src0&& src0, Src1&& src1, CarryIn&& carryIn, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(carryOut, dst, src0, src1, carryIn, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vaddcs", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3, 4, 5>{}));
+}
+
+template <class CarryOut, class Dst, class Src0, class Src1, class Mask>
+inline void vsubc(CarryOut&& carryOut, Dst&& dst, Src0&& src0, Src1&& src1, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(carryOut, dst, src0, src1, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vsubc", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3, 4>{}));
+}
+
+template <class CarryOut, class Dst, class Src0, class Src1, class CarryIn, class Mask>
+inline void vsubcs(CarryOut&& carryOut, Dst&& dst, Src0&& src0, Src1&& src1, CarryIn&& carryIn, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(carryOut, dst, src0, src1, carryIn, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vsubcs", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3, 4, 5>{}));
+}
+
+template <class Dst0, class Dst1, class Src0, class Src1, class Mask>
+inline void vmull(Dst0&& dst0, Dst1&& dst1, Src0&& src0, Src1&& src1, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(dst0, dst1, src0, src1, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vmull", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3, 4>{}));
+}
+
+template <class Dst, class Src0, class Src1, class Mask>
+inline void vcmp_ge(Dst&& dst, Src0&& src0, Src1&& src1, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(dst, src0, src1, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vcmp_ge", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
+}
+
+template <class Dst, class Immediate>
+inline void vbr(Dst&& dst, Immediate&& immediate)
+{
+    auto operands = std::forward_as_tuple(dst);
+    auto inst =
+        ::pto::mocker::vf::capture::MakeInstruction("vbr", operands, std::index_sequence<0>{}, std::index_sequence<>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 1, ::pto::mocker::vf::VfArgKind::Immediate, "value", immediate);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Dst0, class Dst1, class Src0, class Src1>
+inline void vintlv(Dst0&& dst0, Dst1&& dst1, Src0&& src0, Src1&& src1)
+{
+    auto operands = std::forward_as_tuple(dst0, dst1, src0, src1);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vintlv", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3>{}));
+}
+
+template <class Dst0, class Dst1, class Src0, class Src1>
+inline void vdintlv(Dst0&& dst0, Dst1&& dst1, Src0&& src0, Src1&& src1)
+{
+    auto operands = std::forward_as_tuple(dst0, dst1, src0, src1);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vdintlv", operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3>{}));
+}
+
+template <class Count, class Mode>
+inline ::vector_bool RecordPlt(const char* name, Count&& count, Mode&& mode, const std::source_location& location)
+{
+    ::vector_bool result(PtoPredicateCallsiteKey(location));
+    auto operands = std::forward_as_tuple(result);
+    auto inst =
+        ::pto::mocker::vf::capture::MakeInstruction(name, operands, std::index_sequence<0>{}, std::index_sequence<>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 0, ::pto::mocker::vf::VfArgKind::Immediate, "count", count);
+    ::pto::mocker::vf::capture::AddArgument(inst, 1, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+    return result;
+}
+
+template <class Count, class Mode>
+inline ::vector_bool plt_b8(
+    Count&& count, Mode&& mode, const std::source_location& location = std::source_location::current())
+{
+    return RecordPlt("plt_b8", std::forward<Count>(count), std::forward<Mode>(mode), location);
+}
+template <class Count, class Mode>
+inline ::vector_bool plt_b16(
+    Count&& count, Mode&& mode, const std::source_location& location = std::source_location::current())
+{
+    return RecordPlt("plt_b16", std::forward<Count>(count), std::forward<Mode>(mode), location);
+}
+template <class Count, class Mode>
+inline ::vector_bool plt_b32(
+    Count&& count, Mode&& mode, const std::source_location& location = std::source_location::current())
+{
+    return RecordPlt("plt_b32", std::forward<Count>(count), std::forward<Mode>(mode), location);
 }
 PTO_VF_RECORD_MASK(pset_b8)
 PTO_VF_RECORD_MASK(pset_b16)
 PTO_VF_RECORD_MASK(pset_b32)
-template <class... A>
-inline void pipe_barrier(A&&...)
-{
-    ::pto::mocker::vf::capture::cur().on ? (void)::pto::mocker::vf::capture::cur().seq.emplace_back("pipe_barrier") :
-                                           (void)0;
-    ::pto::mocker::vf::trace::RecordMemBar("pipe_barrier");
-}
 
 #undef PTO_VF_RECORD_VOID
 #undef PTO_VF_RECORD_MASK
 
-template <class... A>
-inline void set_flag(A&&...)
-{}
-template <class... A>
-inline void wait_flag(A&&...)
-{}
-template <class... A>
-inline void dsb(A&&...)
-{}
 template <class... A>
 inline void copy_ubuf_to_ubuf(A&&...)
 {}
@@ -438,15 +668,6 @@ inline void set_pad_val_outtol1(A&&...)
 template <class... A>
 inline void set_pad_val_outtoub(A&&...)
 {}
-template <class... A>
-inline void set_intra_block(A&&...)
-{}
-template <class... A>
-inline void wait_intra_block(A&&...)
-{}
-
-struct hifloat8_t {};
-
 namespace pto {
 enum class QuantMode_t {
     NoQuant,

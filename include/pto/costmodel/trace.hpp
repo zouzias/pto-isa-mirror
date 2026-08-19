@@ -51,6 +51,7 @@ struct PtoInstrRecord {
     uint64_t total_cycles = 0;
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
     std::vector<vf::VfInfo> vf_infos;
+    vf::VfPredictionResult vfPrediction;
 #endif
 };
 
@@ -221,7 +222,8 @@ inline void EndPtoInstr()
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
             auto& pto = g_trace_state.executed_pto[stack.back()];
             if (!pto.vf_infos.empty()) {
-                pto.total_cycles += vf::PredictVfCycles(pto.vf_infos);
+                pto.vfPrediction = vf::predictVfCyclesDetailed(pto.vf_infos, vf::GetVfPredictionOptions());
+                pto.total_cycles += pto.vfPrediction.cycles;
             }
 #endif
         }

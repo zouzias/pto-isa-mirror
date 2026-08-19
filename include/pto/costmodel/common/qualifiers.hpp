@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/cpu_stub.hpp>
 
 using aclrtContext = void*;
+using aclError = int;
 using event_t = int;
 using CceEventIdType = event_t;
 using pad_t = int;
@@ -29,6 +30,7 @@ using addr_cal_mode_t = ::addr_cal_mode_t;
 #endif
 
 inline constexpr int ACL_MEM_MALLOC_HUGE_FIRST = 0;
+inline constexpr aclError ACL_SUCCESS = 0;
 inline constexpr int ACL_MEMCPY_HOST_TO_DEVICE = 0;
 inline constexpr int ACL_MEMCPY_DEVICE_TO_HOST = 1;
 inline constexpr int ACL_MEMCPY_DEVICE_TO_DEVICE = 2;
@@ -51,6 +53,10 @@ using aclrtStreamAttrValue = int;
 #endif
 #ifdef wait_flag
 #undef wait_flag
+#endif
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+#define set_flag(...) pto_costmodel_set_flag(__VA_ARGS__)
+#define wait_flag(...) pto_costmodel_wait_flag(__VA_ARGS__)
 #endif
 #ifdef set_mask_norm
 #undef set_mask_norm
