@@ -48,17 +48,12 @@ inline uint16_t FloatToBf16BitsTrunc(float value) { return static_cast<uint16_t>
 
 inline uint16_t FloatToBf16BitsRound(float value)
 {
-    constexpr uint32_t bitsShift = 16;
     const uint32_t bits = FloatToBits(value);
-    const uint32_t lsb = (bits >> bitsShift) & 1u;
-    return static_cast<uint16_t>((bits + 0x7FFFu + lsb) >> bitsShift);
+    const uint32_t lsb = (bits >> 16) & 1u;
+    return static_cast<uint16_t>((bits + 0x7FFFu + lsb) >> 16);
 }
 
-inline float Bf16BitsToFloat(uint16_t bits)
-{
-    constexpr uint32_t bitsShift = 16;
-    return BitsToFloat(static_cast<uint32_t>(bits) << bitsShift);
-}
+inline float Bf16BitsToFloat(uint16_t bits) { return BitsToFloat(static_cast<uint32_t>(bits) << 16); }
 
 inline uint16_t AbsBf16BitsFromFloat(float value)
 {

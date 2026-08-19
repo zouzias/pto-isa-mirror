@@ -375,6 +375,8 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
 
     HalfUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x6400; // 2^10
+    HalfUnion normalizeScaleReduce;
+    normalizeScaleReduce.i = 0x1400;  // 2^-10
 
     RegTensor<half> maxSubnormal;
     RegTensor<uint16_t> tmp0;

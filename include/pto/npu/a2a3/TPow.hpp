@@ -11,12 +11,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TPOW_HPP
 #define TPOW_HPP
 
-#include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
-#include <pto/common/type.hpp>
-#include "pto/npu/a2a3/TBinOp.hpp"
-#include "pto/npu/a2a3/TBinSOp.hpp"
-
 namespace pto {
 PTO_INTERNAL bool IsInteger(float f) noexcept
 {

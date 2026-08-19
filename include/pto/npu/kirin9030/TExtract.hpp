@@ -293,6 +293,8 @@ __tf__ PTO_INTERNAL void TExtractAccToVec(
     using dstType = typename DstTile::DType;
     using srcType = typename SrcTile::DType;
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
+    constexpr bool subBlockId = (mode == AccToVecMode::SingleModeVec1);
+    constexpr uint8_t dualDstCtl = GetDualDstCtl<DstTile, SrcTile, mode, quantPre>();
     constexpr uint32_t dstStride = DstTile::Cols;
     static_assert(
         ((dstStride * sizeof(dstType) % C0_SIZE_BYTE == 0) && ((dstStride) > 0)),
