@@ -10,11 +10,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_A5_TREDUCE_HPP
 #define PTO_COMM_A5_TREDUCE_HPP
 
-// Suppress the a2a3-side deferred-fail TREDUCE_CCU_IMPL stub when we are
-// building for A5 — the real overload lives below. Without this guard the
-// `Args&&...` stub competes with our typed signature in the overload set and
-// can win under partial ordering on some compilers (observed on bisheng).
-// Mirrors a5/TBroadCast.hpp / a5/TScatter.hpp / a5/TGather.hpp.
+// Suppress the A2/A3 deferred-fail CCU stub: A5 provides the real
+// implementation below.  Without this guard the stub would join the real
+// overload set in `pto::comm` and the generic `Args&&...` pack would
+// out-rank the real `T&` parameters under partial ordering on some
+// compilers.
 #define PTO_COMM_A5_TREDUCE_PROVIDED 1
 
 // AIV path - shared with a2a3, forwarded to avoid code duplication.

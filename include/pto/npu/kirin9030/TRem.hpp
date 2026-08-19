@@ -111,11 +111,49 @@ struct RemOp {
     PTO_INTERNAL static void BinInstr(RegTensor<T>& dst, RegTensor<T>& src0, RegTensor<T>& src1, MaskReg& preg)
     {
         if constexpr (std::is_same_v<T, float>) {
-            RemFloat(dst, src0, src1, preg);
+            MaskReg sign_diff_mask;
+            RegTensor<T> reg_tmp;
+            vdiv(dstReg, reg_src0, reg_src1, preg, MODE_ZEROING);
+            vtrc(dstReg, dstReg, ROUND_F, preg);
+            vmul(dstReg, dstReg, reg_src1, preg, MODE_ZEROING);
+            vsub(dstReg, reg_src0, dstReg, preg, MODE_ZEROING);
+
+            vmul(reg_tmp, reg_src1, dstReg, preg, MODE_ZEROING);
+            vcmps_lt(sign_diff_mask, reg_tmp, 0.0f, preg);
+            vadd(reg_tmp, dstReg, reg_src1, sign_diff_mask, MODE_ZEROING);
+            vsel(dstReg, reg_tmp, dstReg, sign_diff_mask);
         } else if constexpr (std::is_same_v<T, half>) {
-            RemHalf(dst, src0, src1, preg);
+            RegTensor<float> reg_even0, reg_even1, reg_even2, reg_odd0, reg_odd1, reg_odd2;
+            RegTensor<T> reg_dst_even, reg_dst_odd, reg_tmp;
+            MaskReg sign_diff_mask;
+            vcvt(reg_even0, reg_src0, preg, PART_EVEN);
+            vcvt(reg_even1, reg_src1, preg, PART_EVEN);
+            vcvt(reg_odd0, reg_src0, preg, PART_ODD);
+            vcvt(reg_odd1, reg_src1, preg, PART_ODD);
+
+            vdiv(reg_even2, reg_even0, reg_even1, preg, MODE_ZEROING);
+            vdiv(reg_odd2, reg_odd0, reg_odd1, preg, MODE_ZEROING);
+
+            vtrc(reg_even2, reg_even2, ROUND_F, preg);
+            vtrc(reg_odd2, reg_odd2, ROUND_F, preg);
+
+            vmul(reg_even2, reg_even2, reg_even1, preg, MODE_ZEROING);
+            vmul(reg_odd2, reg_odd2, reg_odd1, preg, MODE_ZEROING);
+
+            vsub(reg_even2, reg_even0, reg_even2, preg, MODE_ZEROING);
+            vsub(reg_odd2, reg_odd0, reg_odd2, preg, MODE_ZEROING);
+
+            vcvt(reg_dst_even, reg_even2, preg, ROUND_Z, RS_ENABLE, PART_EVEN);
+            vcvt(reg_dst_odd, reg_odd2, preg, ROUND_Z, RS_ENABLE, PART_ODD);
+
+            vor(dstReg, reg_dst_even, reg_dst_odd, preg);
+
+            vmul(reg_tmp, reg_src1, dstReg, preg, MODE_ZEROING);
+            vcmps_lt(sign_diff_mask, reg_tmp, 0.0f, preg);
+            vadd(reg_tmp, dstReg, reg_src1, sign_diff_mask, MODE_ZEROING);
+            vsel(dstReg, reg_tmp, dstReg, sign_diff_mask);
         } else {
-            RemInt(dst, src0, src1, preg);
+            // using cce intrinsic implement
         }
     }
 };

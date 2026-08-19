@@ -33,7 +33,14 @@ def gen_golden_data(case_name, param):
     src_type = param.src_type
     dst_type = param.dst_type
 
-    rows, cols, valid_rows, valid_cols, idx_row, idx_col = param.rows, param.cols, param.valid_rows, param.valid_cols, param.idx_row, param.idx_col
+    rows, cols, valid_rows, valid_cols, idx_row, idx_col = (
+        param.rows,
+        param.cols,
+        param.valid_rows,
+        param.valid_cols,
+        param.idx_row,
+        param.idx_col,
+    )
 
     gm = NumExt.astype(np.arange(1, valid_rows * valid_cols + 1).reshape([valid_rows, valid_cols]), src_type)
 
@@ -89,6 +96,14 @@ if __name__ == "__main__":
         textractParams(NumExt.bf16, np.float32, 32, 32, 32, 32, 8, 16, 0, 0),
         textractParams(NumExt.bf16, NumExt.bf16, 32, 32, 31, 31, 8, 16, 0, 0),
     ]
+    if ENABLE_BF16:
+        case_params_list.extend(
+            [
+                textractParams(BF16_DTYPE, BF16_DTYPE, "Mat", "Mat", 32, 32, 32, 32, 0, 0, 0, 0),
+                textractParams(BF16_DTYPE, np.float32, "Mat", "Mat", 32, 32, 32, 32, 8, 16, 0, 0),
+                textractParams(BF16_DTYPE, BF16_DTYPE, "Mat", "Mat", 32, 32, 31, 31, 8, 16, 0, 0),
+            ]
+        )
 
     for case_param in case_params_list:
         case_name = gen_case_name(case_param)
