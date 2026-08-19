@@ -114,3 +114,7 @@ TEST_F(TSELTest, case9) { test_tsel<int8_t, 2, 160, 2, 160>(); }
 TEST_F(TSELTest, case10) { test_tsel<float, 2, 512, 2, 512>(); }
 TEST_F(TSELTest, case_int64_4x16) { test_tsel<int64_t, 4, 16, 4, 16>(); }
 TEST_F(TSELTest, case_uint64_4x16) { test_tsel<uint64_t, 4, 16, 4, 16>(); }
+TEST_F(TSELTest, case_int64_1x16364) { test_tsel<int64_t, 1, 16364, 1, 16364>(); }
+TEST_F(TSELTest, case_uint64_1x16364) { test_tsel<uint64_t, 1, 16364, 1, 16364>(); }
+TEST_F(TSELTest, case_int64_1x16368) { test_tsel<int64_t, 1, 16368, 1, 16368>(); }
+TEST_F(TSELTest, case_uint64_1x16368) { test_tsel<uint64_t, 1, 16368, 1, 16368>(); }

@@ -12,12 +12,20 @@
 
 import os
 import numpy as np
-from ml_dtypes import bfloat16
+try:
+    import ml_dtypes
+
+    bfloat16 = ml_dtypes.bfloat16
+    BFLOAT16_STORAGE_DTYPE = bfloat16
+except ModuleNotFoundError:
+    bfloat16 = object()
+    BFLOAT16_STORAGE_DTYPE = np.float16
 np.random.seed(19)
 
 
 def gen_golden_data_tcmps(param):
     dtype = param.dtype
+    storage_dtype = BFLOAT16_STORAGE_DTYPE if dtype == bfloat16 else dtype
 
     # Valid row/cols always larger than tile row/cols
     row, col = [param.row, param.col]
@@ -36,11 +44,11 @@ def gen_golden_data_tcmps(param):
         input1 = np.random.randint(-10, 10, size=[row, col]).astype(dtype)
         input2 = np.random.randint(-10, 10, size=[1]).astype(dtype)
     else:
-        input1 = np.random.uniform(-10, 10, size=[row, col]).astype(dtype)
-        input2 = np.random.uniform(-10, 10, size=[1]).astype(dtype)
+        input1 = np.random.uniform(-10, 10, size=[row, col]).astype(storage_dtype)
+        input2 = np.random.uniform(-10, 10, size=[1]).astype(storage_dtype)
 
     if param.mode == "EQ":
-        if np.issubdtype(dtype, np.integer):
+        if np.issubdtype(storage_dtype, np.integer):
             bool_result = input1 == input2[0]
         elif param.dtype == bfloat16:
             input1_f32 = input1.astype(np.float32)
@@ -49,7 +57,7 @@ def gen_golden_data_tcmps(param):
         else:
             bool_result = np.isclose(input1, input2[0], rtol=0, atol=1e-9)
     elif param.mode == "NE":
-        if np.issubdtype(dtype, np.integer):
+        if np.issubdtype(storage_dtype, np.integer):
             bool_result = input1 != input2[0]
         elif param.dtype == bfloat16:
             input1_f32 = input1.astype(np.float32)
@@ -125,6 +133,8 @@ if __name__ == "__main__":
         TcmpsParams(bfloat16, 77, 80, 32, 32, "LE"),
         *[TcmpsParams(dtype, 4, 64, 4, 64, mode)
           for dtype in (np.int64, np.uint64) for mode in ("EQ", "NE", "LT", "GT", "GE", "LE")],
+        *[TcmpsParams(dtype, 1, 16368, 1, 16368, mode)
+          for dtype in (np.int64, np.uint64) for mode in ("LT", "GT")],
     ]
 
     for i, param in enumerate(case_params_list):

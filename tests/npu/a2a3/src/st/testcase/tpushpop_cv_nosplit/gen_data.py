@@ -67,6 +67,7 @@ if __name__ == "__main__":
         "TPushPopCVNoSplitTest.case1_half_single_tile",
         "TPushPopCVNoSplitTest.case2_half_two_tiles",
         "TPushPopCVNoSplitTest.case3_float_single_tile",
+        "TPushPopCVNoSplitTest.case4_depth8_40_tiles_repeated_dispatch",
     ]
 
 #Parameters mirror the LaunchTPushPopMatmulAddNoSplit instantiations in
@@ -74,10 +75,12 @@ if __name__ == "__main__":
 #key = 1 : half->float, TOTAL_M = 16, K = 32, N = 32
 #key = 2 : half->float, TOTAL_M = 32, K = 32, N = 32
 #key = 3 : float->float, TOTAL_M = 16, K = 32, N = 32
+#key = 4 : half->float, TOTAL_M = 640, K = 32, N = 64, FIFO_DEPTH = 8
     case_params_list = [
         CaseParams(np.float16, m=16, k=32, n=32),
         CaseParams(np.float16, m=32, k=32, n=32),
         CaseParams(np.float32, m=16, k=32, n=32),
+        CaseParams(np.float16, m=640, k=32, n=64),
     ]
 
     for case_name, params in zip(case_name_list, case_params_list):
