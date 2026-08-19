@@ -1,10 +1,10 @@
-﻿# TPUT
+# pto.tput
 
 ## Introduction
 
 Remote write operation: write local data to remote NPU's memory. Data is transferred via a UB tile as intermediate staging buffer.
 
-When the GlobalTensor exceeds the UB tile capacity, TPUT automatically performs **2D sliding** — chunking rows (DIM_3) and columns (DIM_4) to fit each chunk into the tile, iterating over all outer dimensions (DIM_0, DIM_1, DIM_2).
+When the GlobalTensor exceeds the UB tile capacity, `pto.tput` automatically performs **2D sliding** — chunking rows (DIM_3) and columns (DIM_4) to fit each chunk into the tile, iterating over all outer dimensions (DIM_0, DIM_1, DIM_2).
 
 ## Math Interpretation
 
@@ -32,8 +32,8 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
           typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &stagingTileData, WaitEvents&... events);
+PTO_INST RecordEvent PUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                        TileData &stagingTileData, WaitEvents&... events);
 ```
 
 ### Ping-pong double buffering
@@ -43,16 +43,16 @@ Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks, hiding o
 ```cpp
 template <AtomicType atomicType = AtomicType::AtomicNone,
           typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+PTO_INST RecordEvent PUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                        TileData &pingTile, TileData &pongTile, WaitEvents&... events);
 ```
 
 ### Runtime atomic type
 
 ```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events);
+PTO_INST RecordEvent PUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                        TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -84,7 +84,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 using namespace pto;
 
 template <typename T>
-void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
+void example_put(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT = Tile<TileType::Vec, T, 16, 16>;
     using GShape = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
@@ -101,10 +101,10 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     TASSIGN(stagingTile, 0);
 
     // Basic remote write
-    comm::TPUT(dstG, srcG, stagingTile);
+    comm::PUT(dstG, srcG, stagingTile);
 
     // Remote write with atomic add
-    comm::TPUT<AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
+    comm::PUT<AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
 }
 ```
 
@@ -118,12 +118,12 @@ TASSIGN(pingTile, 0);
 TASSIGN(pongTile, tileUBBytes);  // Non-overlapping UB region
 
 // Overlaps TLOAD[i+1] with TSTORE[i] for better pipeline utilization
-comm::TPUT(dstG, srcG, pingTile, pongTile);
+comm::PUT(dstG, srcG, pingTile, pongTile);
 ```
 
 ### Runtime Atomic Type
 
 ```cpp
 // Select atomic type at runtime instead of compile-time template parameter
-comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
+comm::PUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```

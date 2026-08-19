@@ -17,7 +17,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
 
-using namespace pto;
+using pto::BLayout;
+using pto::QuantScaleAlg;
+using pto::QuantType;
+using pto::Tile;
+using pto::TileType;
+using pto::VecStoreMode;
+namespace cpu_quant = pto::cpu_quant;
 
 namespace {
 float BitsToFloat(uint32_t bits) { return std::bit_cast<float>(bits); }
@@ -234,56 +240,7 @@ TEST(TQuantCpuSimTest, Int8AsymMatchesExactReference)
 template <typename SrcType>
 void TestFP8ExactMatch()
 {
-    using SrcTile = Tile<TileType::Vec, SrcType, 16, 32>;
-    using ScaleTile = Tile<TileType::Vec, float, 16, 32>;
-    using DstTile = Tile<TileType::Vec, int8_t, 16, 32>;
-    using ExpTile = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, 16, 1>;
-    using MaxTile = Tile<TileType::Vec, float, 16, 32, BLayout::RowMajor, 16, 1>;
-    SrcTile src;
-    ScaleTile scaling;
-    DstTile dst;
-    ExpTile expTile;
-    MaxTile max;
-    size_t addr = 0;
-    TASSIGN(src, addr);
-    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
-    TASSIGN(scaling, addr);
-    addr += ScaleTile::Numel * sizeof(typename ScaleTile::DType);
-    TASSIGN(dst, addr);
-    addr += DstTile::Numel * sizeof(typename DstTile::DType);
-    TASSIGN(expTile, addr);
-    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
-    TASSIGN(max, addr);
-
-    for (int r = 0; r < src.GetValidRow(); ++r) {
-        for (int c = 0; c < src.GetValidCol(); ++c) {
-            double fraction = pow(static_cast<double>(r * SrcTile::Cols + c) / SrcTile::Numel, 10);
-            double base =
-                fraction * ((r + c) % 2 ? std::numeric_limits<SrcType>::max() : std::numeric_limits<SrcType>::lowest());
-            src.data()[GetTileElementOffset<SrcTile>(r, c)] = static_cast<SrcType>(base);
-        }
-    }
-
-    TQUANT<QuantType::MXFP8>(dst, src, &expTile, &max, &scaling);
-
-    for (int row = 0; row < 16; ++row) {
-        float maxAbs = 0.0f;
-        for (int col = 0; col < 32; ++col) {
-            maxAbs =
-                std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
-        }
-        const uint8_t expectedExp = cpu_quant::ComputeMxSharedExponent<QuantType::MXFP8, QuantScaleAlg::OCP>(maxAbs);
-        const float expectedScaling =
-            cpu_quant::ComputeMxGroupScaling<QuantType::MXFP8, QuantScaleAlg::OCP>(maxAbs, expectedExp);
-        EXPECT_EQ(expTile.data()[GetTileElementOffset<ExpTile>(row, 0)], expectedExp);
-        EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
-        EXPECT_FLOAT_EQ(scaling.data()[row], expectedScaling);
-        for (int col = 0; col < 32; ++col) {
-            const uint8_t expectedByte =
-                EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * expectedScaling);
-            EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
-        }
-    }
+#include "oversize_bodies/test_fp8_exact_match_body.inl"
 }
 
 TEST(TQuantCpuSimTest, MxFp8NdMatchesExactBytes) { TestFP8ExactMatch<float>(); }
@@ -583,21 +540,13 @@ void FillMxFp4Source(SrcTile& src, MxFp4Case caseId)
 template <QuantScaleAlg scaleAlg, typename SrcTile>
 float ComputeMxFp4Max(SrcTile& src, int row, int group)
 {
-    float maxAbsValue = 0.0f;
     uint16_t maxAbsBf16Bits = 0;
     for (int inner = 0; inner < 32; ++inner) {
         const int col = group * 32 + inner;
         const float value = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
-        if constexpr (scaleAlg == QuantScaleAlg::NV) {
-            maxAbsValue = std::max(maxAbsValue, std::fabs(value));
-        } else {
-            maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
-        }
+        maxAbsBf16Bits = std::max(maxAbsBf16Bits, cpu_quant::AbsBf16BitsFromFloat(value));
     }
-    if constexpr (scaleAlg == QuantScaleAlg::OCP) {
-        maxAbsValue = cpu_quant::Bf16BitsToFloat(maxAbsBf16Bits);
-    }
-    return maxAbsValue;
+    return maxAbsBf16Bits;
 }
 
 template <typename SrcTile, typename DstTile>
@@ -610,7 +559,7 @@ void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int row, int group, floa
         const uint8_t expected = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
             src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
         const uint8_t actual = dst.GetElement(row, col0).RawData();
-        EXPECT_EQ(actual, actual);
+        EXPECT_EQ(actual, expected);
     }
 }
 
@@ -742,7 +691,8 @@ void TestFp8NzReordersExponentsExactly()
     }
     for (int row = 0; row < 16; ++row) {
         for (int col = 0; col < 64; ++col) {
-            const float scale = scaling.data()[row];
+            const int group = col / 32;
+            const float scale = scaling.data()[row * (SrcTile::Cols / 32) + group];
             const uint8_t expectedByte = EncodeE4M3Fn(src.data()[GetTileElementOffset<SrcTile>(row, col)] * scale);
             EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
         }

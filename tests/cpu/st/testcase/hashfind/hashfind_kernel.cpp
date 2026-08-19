@@ -103,8 +103,8 @@ AICORE void runHashFind(
         TADDS(idxTile, idxTile, static_cast<uint32_t>(probe));
         TANDS(idxTile, idxTile, mask);
 
-        MGATHER(keyTile, keysGlobal, idxTile);
-        MGATHER(valTile, valsGlobal, idxTile);
+        MGATHER<Coalesce::Elem>(keyTile, keysGlobal, idxTile);
+        MGATHER<Coalesce::Elem>(valTile, valsGlobal, idxTile);
 
         // match = (key == query), empty = (key == empty_key)
         TCMP(shouldWrite, keyTile, qTile, CmpMode::EQ);
