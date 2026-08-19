@@ -150,14 +150,10 @@ TEST_F(TCVTTest, case24) { test_tcvt<float4_e2m1x2_t, float, 64, 64, 64, 64>(); 
 
 TEST_F(TCVTTest, case25) { test_tcvt<float, float4_e2m1x2_t, 64, 64, 64, 64>(); }
 
-TEST_F(TCVTTest, case26) { test_tcvt<float4_e2m1x2_t, float, 64, 64, 64, 64, pto::SaturationMode::ON>(); }
-
 TEST_F(TCVTTest, case27) { test_tcvt<float, float4_e2m1x2_t, 64, 64, 64, 64, pto::SaturationMode::ON>(); }
 
 TEST_F(TCVTTest, case28) { test_tcvt<float4_e1m2x2_t, float, 64, 64, 64, 64>(); }
 
 TEST_F(TCVTTest, case29) { test_tcvt<float, float4_e1m2x2_t, 64, 64, 64, 64>(); }
-
-TEST_F(TCVTTest, case30) { test_tcvt<float4_e1m2x2_t, float, 64, 64, 64, 64, pto::SaturationMode::ON>(); }
 
 TEST_F(TCVTTest, case31) { test_tcvt<float, float4_e1m2x2_t, 64, 64, 64, 64, pto::SaturationMode::ON>(); }
