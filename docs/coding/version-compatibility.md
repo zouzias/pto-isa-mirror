@@ -114,7 +114,7 @@ For example:
 
 - `TASSIGN` defines manual address binding
 - `TLOAD` / `TSTORE` define GM-to-tile and tile-to-GM movement
-- `TSYNC` and event-related APIs define explicit ordering
+- event-related APIs define explicit ordering
 
 ### 5.2 Event compatibility is backend-sensitive
 

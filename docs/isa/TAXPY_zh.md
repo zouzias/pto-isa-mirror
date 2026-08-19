@@ -36,7 +36,7 @@ PTO_INST RecordEvent TAXPY(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 | `dst` | 输入/输出 | 累加基与结果Tile（$y$），读-修改-写，`Vec` |
 | `src0` | 输入 | 缩放源Tile（$x$），只读，`Vec`，有效形状与 `dst` 相同 |
 | `scalar` | 输入 | 标量缩放系数（$a$），类型为 `TileDataSrc::DType` |
-| `events...` | 输入 | 等待事件（`WaitEvents`），指令前隐式 `TSYNC` |
+| `events...` | 输入 | 等待事件（`WaitEvents`），指令前隐式 event synchronization |
 
 ## Tile尺寸与数据类型
 
