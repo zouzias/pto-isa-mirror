@@ -479,6 +479,33 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(
 //
 // NOTE: src must NOT be reused as scratch — the saturation test kernel invokes TCVT three times
 // on the same srcTile (ON/OFF/default), so clobbering src would corrupt later invocations.
+template <typename TileDataS>
+PTO_INTERNAL void GenCastFp16ToInt32TorchStep(
+    __ubuf__ int32_t* tempInt32Buf, __ubuf__ typename TileDataS::DType* chunkSrc, RoundMode mode,
+    uint16_t srcBlockStride)
+{
+    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+    switch (static_cast<RoundMode>(mode)) {
+        case RoundMode::CAST_RINT:
+            vconv_f162s32r(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+            break;
+        case RoundMode::CAST_ROUND:
+            vconv_f162s32a(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+            break;
+        case RoundMode::CAST_FLOOR:
+            vconv_f162s32f(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+            break;
+        case RoundMode::CAST_CEIL:
+            vconv_f162s32c(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+            break;
+        case RoundMode::CAST_TRUNC:
+        default:
+            vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+            break;
+    }
+    pipe_barrier(PIPE_V);
+}
+
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(
     __ubuf__ typename TileDataD::DType* dst, __ubuf__ typename TileDataS::DType* src, uint8_t repeatNum, RoundMode mode,
@@ -513,9 +540,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(
             SetContinuousMask(chunkMask);
 
             // Step 1: fp16 -> int32 with saturation (clamps inf/overflow into int32 range).
-            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-            GenCastCallFp16ToInt32ByRoundMode(tempInt32Buf, chunkSrc, 1, mode, srcBlockStride, srcBlockStride, 8, 8);
-            pipe_barrier(PIPE_V);
+            GenCastFp16ToInt32TorchStep<TileDataS>(tempInt32Buf, chunkSrc, mode, srcBlockStride);
 
             // Switch to non-saturating (wrap-around) mode for the remaining narrowing stages —
             // this is what produces PyTorch's low-8-bit behaviour on overflow.

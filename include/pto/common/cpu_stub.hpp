@@ -17,6 +17,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <cstdio>
 #include <algorithm>
+#include <chrono>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <sstream>
+#include <thread>
+#include <vector>
 #include <type_traits>
 #include <dlfcn.h>
 #include <string>
@@ -37,6 +45,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __cb__
 #define __cc__
 #define __fbuf__
+#define __biasbuf__
 #define __tf__
 
 typedef void* aclrtStream;
@@ -52,11 +61,7 @@ const pipe_t PIPE_ALL = 6;
 const pipe_t PIPE_FIX = 7;
 inline void pipe_barrier(pipe_t pipe) { (void)pipe; }
 
-#define aclFloat16ToFloat(x) (float)(x)
-#define aclInit(x)
-#define aclrtSetDevice(x)
-
-#define aclrtCreateStream(x)
+#define aclFloat16ToFloat(x) ((float)(x))
 
 #if !defined(__COSTMODEL)
 enum {
@@ -148,6 +153,10 @@ inline uint64_t sbitset0(uint64_t value, int bit) { return value & ~(1ULL << bit
 #define set_mask_norm(...)
 #define set_vector_mask(...)
 
+inline uint32_t get_block_idx();
+
+#include <pto/cpu/trace.hpp>
+
 /* <Hccl> */
 #define HcclHostBarrier(x, y)
 #define CommMpiInit(x, y) (true)
@@ -183,156 +192,6 @@ struct CommDeviceContext {
 
 #define F16_MAX 65504.0f
 
-namespace pto::cpu_sim {
-using SetExecutionContextHookFn = void (*)(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim);
-using GetExecutionContextHookFn = void (*)(uint32_t* block_idx, uint32_t* subblock_id, uint32_t* subblock_dim);
-using GetSharedStorageHookFn = void* (*)(std::string key, size_t size);
-using GetTaskCookieHookFn = uint64_t (*)();
-
-inline SetExecutionContextHookFn ResolveSetExecutionContextHook()
-{
-    static auto hook =
-        reinterpret_cast<SetExecutionContextHookFn>(dlsym(RTLD_DEFAULT, "pto_cpu_sim_set_execution_context"));
-    return hook;
-}
-
-inline GetExecutionContextHookFn ResolveExecutionContextHook()
-{
-    static auto hook =
-        reinterpret_cast<GetExecutionContextHookFn>(dlsym(RTLD_DEFAULT, "pto_cpu_sim_get_execution_context"));
-    return hook;
-}
-
-inline GetSharedStorageHookFn ResolveSharedStorageHook()
-{
-    static auto hook = reinterpret_cast<GetSharedStorageHookFn>(dlsym(RTLD_DEFAULT, "pto_cpu_sim_get_shared_storage"));
-    return hook;
-}
-
-inline GetTaskCookieHookFn ResolveTaskCookieHook()
-{
-    static auto hook = reinterpret_cast<GetTaskCookieHookFn>(dlsym(RTLD_DEFAULT, "pto_cpu_sim_get_task_cookie"));
-    return hook;
-}
-
-struct ExecutionContext {
-    uint32_t block_idx = 0;
-    uint32_t subblock_id = 0;
-    uint32_t subblock_dim = 1;
-    uint64_t task_cookie = 0;
-};
-
-inline thread_local ExecutionContext execution_context{};
-
-inline void set_execution_context(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim = 1)
-{
-    execution_context.block_idx = block_idx;
-    execution_context.subblock_id = subblock_id;
-    execution_context.subblock_dim = (subblock_dim == 0) ? 1 : subblock_dim;
-    if (auto hook = ResolveSetExecutionContextHook(); hook != nullptr) {
-        hook(execution_context.block_idx, execution_context.subblock_id, execution_context.subblock_dim);
-    }
-}
-
-inline void reset_execution_context() { execution_context = {}; }
-
-inline void set_task_cookie(uint64_t task_cookie) { execution_context.task_cookie = task_cookie; }
-
-class ScopedExecutionContext {
-public:
-    ScopedExecutionContext(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim = 1)
-        : saved_(execution_context)
-    {
-        set_execution_context(block_idx, subblock_id, subblock_dim);
-    }
-
-    ~ScopedExecutionContext() { execution_context = saved_; }
-
-private:
-    ExecutionContext saved_{};
-};
-} // namespace pto::cpu_sim
-
-inline uint32_t get_block_idx()
-{
-    if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
-        uint32_t block_idx = 0;
-        uint32_t subblock_id = 0;
-        uint32_t subblock_dim = 1;
-        hook(&block_idx, &subblock_id, &subblock_dim);
-        return block_idx;
-    }
-    return pto::cpu_sim::execution_context.block_idx;
-}
-
-inline uint32_t get_subblockid()
-{
-    if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
-        uint32_t block_idx = 0;
-        uint32_t subblock_id = 0;
-        uint32_t subblock_dim = 1;
-        hook(&block_idx, &subblock_id, &subblock_dim);
-        return subblock_id;
-    }
-    return pto::cpu_sim::execution_context.subblock_id;
-}
-
-inline uint32_t get_subblockdim()
-{
-    if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
-        uint32_t block_idx = 0;
-        uint32_t subblock_id = 0;
-        uint32_t subblock_dim = 1;
-        hook(&block_idx, &subblock_id, &subblock_dim);
-        return subblock_dim;
-    }
-    return pto::cpu_sim::execution_context.subblock_dim;
-}
-
-inline uint64_t get_task_cookie()
-{
-    if (auto hook = pto::cpu_sim::ResolveTaskCookieHook(); hook != nullptr) {
-        return hook();
-    }
-    return pto::cpu_sim::execution_context.task_cookie;
-}
-
-template <typename T>
-struct is_event : std::false_type {};
-
-template <typename... Ts>
-inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
-
-#if defined(__CPU_SIM)
-namespace pto {
-template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-inline void SYNCALL_IMPL()
-{
-    (void)CoreType;
-}
-
-template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-inline void SYNCALL_SOFT_IMPL(int32_t* gmWorkspace, int32_t usedCores)
-{
-    (void)CoreType;
-    (void)gmWorkspace;
-    (void)usedCores;
-}
-
-inline void SYNCALL_SOFT_AIC_IMPL(int32_t* gmWorkspace, int32_t usedCores)
-{
-    (void)gmWorkspace;
-    (void)usedCores;
-}
-
-template <SyncCoreType CoreType = SyncCoreType::Mix>
-inline void SYNCALL_SOFT_MIX_IMPL(int32_t* gmWorkspace, int32_t usedCores)
-{
-    (void)CoreType;
-    (void)gmWorkspace;
-    (void)usedCores;
-}
-} // namespace pto
-#endif // __CPU_SIM
+#include <pto/common/cpu_stub_runtime_inl.hpp>
 
 #endif

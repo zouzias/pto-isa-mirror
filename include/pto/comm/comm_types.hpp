@@ -160,9 +160,6 @@ enum class CcuInputSource : uint8_t {
 // ============================================================================
 // CcuTriggerContext: Opaque context passed from host to AIV kernel for CCU path.
 // Host fills it from ccu::TryGet() + rtGetDevResAddress() before kernel launch.
-//
-// `selfIdx` and `inputSource` are only consulted by the CCU IMPL when
-// `inputSource == AivStored`; HostManaged callers may leave them at default.
 // ============================================================================
 
 struct CcuTriggerContext {

@@ -309,7 +309,7 @@ if __name__ == "__main__":
         "TCVTTest.case30",
         "TCVTTest.case31"
     ]
-   
+
     case_params_list = [
         TCvtParams(np.float32, np.int32, 128, 128, "RoundMode::CAST_RINT"),
         TCvtParams(np.int32, np.float32, 256, 64, "RoundMode::CAST_RINT"),
