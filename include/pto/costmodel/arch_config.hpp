@@ -11,10 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_MOCKER_ARCH_CONFIG_HPP
 #define PTO_MOCKER_ARCH_CONFIG_HPP
 
-#include <array>
 #include <cstdint>
-#include <cstdlib>
-#include <limits>
 #include <string_view>
 
 namespace pto::mocker::evaluator {
@@ -22,7 +19,6 @@ namespace pto::mocker::evaluator {
 inline constexpr uint64_t kBlockBytes = 32;
 inline constexpr long double kBytesPerGb = 1024.0L * 1024.0L * 1024.0L;
 inline constexpr long double kMainFrequencyHz = 1.85e9L;
-inline constexpr long double kMicrosPerSecond = 1.0e6L;
 
 enum class PipeKey {
     VECTOR,

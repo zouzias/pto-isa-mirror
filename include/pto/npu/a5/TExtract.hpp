@@ -21,8 +21,8 @@ constexpr const int SHIFT_M_STEP_B8 = 1;   // 2^1 = 2
 constexpr const int M_STEP_MIN_VAL_B4 = 4; // m_step per loop for fp4
 constexpr const int SHIFT_M_STEP_B4 = 2;   // 2^2 = 4
 
-constexpr const int SHIFT_MX_COL = 1; // 2^1 = 2
-constexpr const int SHIFT_MX_ROW = 4; // 2^4 = 16
+constexpr const int SHIFT_MX_COL = 1;      // 2^1 = 2
+constexpr const int SHIFT_MX_ROW = 4;      // 2^4 = 16
 constexpr const int CO_SIZE_SCALE = 2;
 constexpr const int SCALE_CUBE_BLOCK_SIZE = 32;
 
@@ -429,9 +429,9 @@ __tf__ PTO_INTERNAL void TExtractAccToMat(
 {
     using dstType = typename DstTileData::DType;
     using srcType = typename SrcTileData::DType;
-    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-                                        (std::is_same_v<dstType, float>) &&
-                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable =
+        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
