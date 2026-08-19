@@ -333,6 +333,12 @@ PTO_INTERNAL constexpr bool IsFloatingPoint()
 }
 
 template <typename T>
+PTO_INTERNAL constexpr bool IsInteger()
+{
+    return IsInt8<T>() || IsInt16<T>() || IsInt32<T>() || IsInt64<T>() || IsInt4<T>();
+}
+
+template <typename T>
 PTO_INTERNAL constexpr bool IsSInteger()
 {
     return IsSInt8<T>() || IsSInt16<T>() || IsSInt32<T>() || IsSInt64<T>();
@@ -342,12 +348,6 @@ template <typename T>
 PTO_INTERNAL constexpr bool IsUInteger()
 {
     return IsUInt8<T>() || IsUInt16<T>() || IsUInt32<T>() || IsUInt64<T>();
-}
-
-template <typename T>
-PTO_INTERNAL constexpr bool IsInteger()
-{
-    return IsSInteger<T>() || IsUInteger<T>();
 }
 
 template <typename T>
