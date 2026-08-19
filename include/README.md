@@ -123,6 +123,7 @@ This table tracks per-instruction backend availability:
 | [`TPOW`](../docs/isa/TPOW.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TPUT`](../docs/isa/comm/TPUT.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC.md) | Yes | TODO | Yes | Yes | Yes | TODO |
+| [`TPUT_ASYNC_NOTIFY`](../docs/isa/comm/TPUT_ASYNC_NOTIFY.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TPOWS`](../docs/isa/TPOWS.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TQUANT`](../docs/isa/TQUANT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TRANDOM`](../docs/isa/TRANDOM.md) | No | TODO | TODO | TODO | Yes | TODO |

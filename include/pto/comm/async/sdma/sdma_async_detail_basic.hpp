@@ -29,13 +29,17 @@ using UbTmpBuf = TmpBuffer;
 constexpr uint32_t kPostIdFlagBytes = sizeof(uint64_t);
 constexpr uint32_t kPostDoneStrideBytes = 64U;
 constexpr uint32_t kFlagPayloadSlotBytes = kPostIdFlagBytes;
+constexpr uint32_t kSignalValueSlotBytes = sizeof(int32_t);
 constexpr uint32_t kPostMaxQueues = kPostStateMaxQueues;
 constexpr uint32_t kFlagPayloadBytes = kFlagPayloadDepth * kFlagPayloadSlotBytes;
+constexpr uint32_t kSignalValueBytes = kFlagPayloadDepth * kSignalValueSlotBytes;
+constexpr uint64_t kSdmaInt32AtomicAddOpcode = 0x21ULL;
 constexpr uint32_t kPostPollLimit = 100000U;
 constexpr uint32_t kSdmaHandleQueueBits = 6U;
 constexpr uint32_t kSdmaHandlePostIdBits = 64U - kSdmaHandleQueueBits;
 constexpr uint64_t kSdmaHandlePostIdMask = (1ULL << kSdmaHandlePostIdBits) - 1ULL;
 static_assert(kFlagPayloadBytes == kSdmaFlagPayloadBytesPerGroup);
+static_assert(kSignalValueBytes == kSdmaSignalValueBytesPerGroup);
 static_assert(kPostMaxQueues == kSdmaMaxChannelGroups);
 
 PTO_INTERNAL uint64_t QueueCountToMask(uint32_t queueCount)
@@ -223,10 +227,22 @@ PTO_INTERNAL __gm__ uint8_t* GetFlagPayloadAddr(__gm__ uint8_t* flagPayloadBase,
     return flagPayloadBase + (postId % kFlagPayloadDepth) * kFlagPayloadSlotBytes;
 }
 
+PTO_INTERNAL __gm__ uint8_t* GetSignalValueAddr(__gm__ uint8_t* signalValueBase, uint64_t postId)
+{
+    return signalValueBase + (postId % kFlagPayloadDepth) * kSignalValueSlotBytes;
+}
+
 PTO_INTERNAL __gm__ uint8_t* ResolveFlagPayloadBase(const SdmaExecContext& execCtx)
 {
     return execCtx.contextGm + kSdmaContextWorkspaceBytes +
            static_cast<uint64_t>(execCtx.channelGroupIdx) * kSdmaFlagPayloadBytesPerGroup;
+}
+
+PTO_INTERNAL __gm__ uint8_t* ResolveSignalValueBase(const SdmaExecContext& execCtx)
+{
+    return execCtx.contextGm + kSdmaContextWorkspaceBytes +
+           static_cast<uint64_t>(kSdmaMaxChannelGroups) * kSdmaFlagPayloadBytesPerGroup +
+           static_cast<uint64_t>(execCtx.channelGroupIdx) * kSdmaSignalValueBytesPerGroup;
 }
 
 PTO_INTERNAL __gm__ uint8_t* ResolvePostDoneBase(const SdmaExecContext& execCtx)

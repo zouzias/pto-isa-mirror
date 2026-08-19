@@ -123,7 +123,7 @@ struct UrmaSession {
 // ============================================================================
 // AsyncSession: engine-agnostic session for async DMA operations.
 // Users build via comm::BuildAsyncSession<engine>() and pass to
-// TPUT_ASYNC / TGET_ASYNC / event.Wait() without knowing engine internals.
+// TPUT_ASYNC / TPUT_ASYNC_NOTIFY / TGET_ASYNC / event.Wait() without knowing engine internals.
 // ============================================================================
 struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};

@@ -12,7 +12,7 @@ PTO communication instruction set for inter-NPU data transfer, signal synchroniz
 comm/
 ├── pto_comm_inst.hpp            # Public API: TPUT, TGET, TNOTIFY, TWAIT, TTEST,
 │                                #   TGATHER, TSCATTER, TBROADCAST, TREDUCE,
-│                                #   TPUT_ASYNC, TGET_ASYNC
+│                                #   TPUT_ASYNC, TPUT_ASYNC_NOTIFY, TGET_ASYNC
 ├── pto_comm_instr_impl.hpp      # Backend dispatcher — includes NPU or CPU impl
 │                                #   based on __CCE_AICORE__ / __CPU_SIM / PTO_NPU_ARCH_A5
 ├── comm_types.hpp               # Shared types: ParallelGroup, Signal, Signal2D,
@@ -30,18 +30,21 @@ comm/
 │   ├── TReduce.hpp              # TREDUCE_IMPL — root gathers and reduces (Sum/Max/Min)
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA only)
+│       ├── TPutAsyncNotify.hpp  # TPUT_ASYNC_NOTIFY_IMPL (SDMA only)
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA only)
 │
 ├── a5/                          # A5 (Ascend 950) architecture implementations
 │   ├── T*.hpp                   # Sync instructions (include a2a3/ counterparts)
 │   └── async/
 │       ├── TPutAsync.hpp        # TPUT_ASYNC_IMPL (SDMA with MTE fallback + URMA + RDMA)
+│       ├── TPutAsyncNotify.hpp  # TPUT_ASYNC_NOTIFY_IMPL (SDMA + URMA + RDMA)
 │       └── TGetAsync.hpp        # TGET_ASYNC_IMPL (SDMA + URMA + RDMA)
 │
 └── async_common/                # Common async implementations (shared by a2a3/a5)
     ├── async_types.hpp          # SDMA/URMA/RDMA session and context types
     ├── async_event_impl.hpp     # AsyncEvent::Wait/Test, BuildAsyncSession
     ├── TPutAsyncCommonDetail.hpp # Common TPUT_ASYNC detail helpers + SDMA impl
+    ├── TPutAsyncNotifyCommonDetail.hpp # Common TPUT_ASYNC_NOTIFY validation + SDMA impl
     └── TGetAsyncCommonDetail.hpp # Common TGET_ASYNC detail helpers + SDMA impl
 ```
 
@@ -66,7 +69,7 @@ comm/
 | Category | Instructions | Description |
 |---|---|---|
 | Point-to-Point (sync) | `TPUT`, `TGET` | Remote write / read through UB staging tile. Supports single-buffer and ping-pong double-buffering modes. |
-| Point-to-Point (async) | `TPUT_ASYNC`, `TGET_ASYNC` | GM-to-GM DMA via SDMA, URMA, or RDMA engine. Returns `AsyncEvent` for later Wait/Test. |
+| Point-to-Point (async) | `TPUT_ASYNC`, `TPUT_ASYNC_NOTIFY`, `TGET_ASYNC` | GM-to-GM DMA via SDMA, URMA, or RDMA engine. The notify variant updates a remote signal after its payload. Returns `AsyncEvent` for later Wait/Test. |
 | Signal Synchronization | `TNOTIFY`, `TWAIT`, `TTEST` | Flag-based cross-NPU synchronization. Signals are `int32_t` scalars or 2D grids. |
 | Collective | `TGATHER`, `TSCATTER`, `TBROADCAST`, `TREDUCE` | Multi-rank operations via `ParallelGroup`. Root-initiated; support chunked 2D sliding and ping-pong. |
 

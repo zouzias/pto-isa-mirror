@@ -257,6 +257,7 @@ tget
 tget_async
 tput_async
 tput_async_urma
+tput_async_notify_urma
 tput_async_rdma
 tget_async_urma
 tget_async_rdma

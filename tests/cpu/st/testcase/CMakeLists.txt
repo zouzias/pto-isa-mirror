@@ -125,6 +125,7 @@ tpushpop
 tpushpop_fixpipe
 tput
 tput_async
+tput_async_notify
 tquant
 tquant_dn
 trandom

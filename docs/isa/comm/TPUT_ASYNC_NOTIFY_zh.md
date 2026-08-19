@@ -203,7 +203,7 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
 - 源和目的payload tensor必须是扁平、连续的逻辑一维tensor。
 - 目的tensor的元素容量不得小于源tensor的元素数。
 - payload大小必须大于0；仅更新signal时应使用 `TNOTIFY`。
-- `dstSignalData` 必须表示远端GM中的一个 `int32_t`，地址非空且按4字节对齐。调用方负责分配和初始化。
+- `dstSignalData` 必须恰好包含远端GM中的一个 `int32_t`，地址非空且按4字节对齐。调用方负责分配和初始化。
 - payload目的地址范围不得与 `dstSignalData` 重叠。
 - 对于URMA和RDMA，payload目的地址与signal必须属于同一个目标peer；本地payload、远端payload和远端
   signal的完整地址范围都必须位于Host初始化阶段注册的内存区域内。
@@ -211,8 +211,8 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
 - RDMA仅支持 `NotifyOp::Set`，不得使用 `NotifyOp::AtomicAdd`。
 - SDMA workspace必须由Host侧 `SdmaWorkspaceManager` 初始化；URMA workspace必须由Host侧
   `UrmaWorkspaceManager` 初始化。
-- 传给 `UrmaWorkspaceManager::Init()` 的对称数据buffer必须使用大页内存，并通过
-  `ACL_MEM_MALLOC_HUGE_ONLY` 分配。
+- 传给 `UrmaWorkspaceManager::Init()` 的对称数据buffer必须是可由HCCL注册的设备内存；分配方式遵循
+  当前CANN/HCCL运行时对注册内存的要求。
 - Session、workspace和scratch tile的生命周期必须覆盖相关Event的完成阶段。
 
 ## 完成语义
@@ -229,12 +229,14 @@ Event，也会覆盖此前尚未完成的操作。URMA或RDMA访问不同peer时
 接收端观察到signal更新时，对应payload已经传输到远端GM，但该接口不保证接收端已有的payload缓存副本
 同步更新。读取payload前，调用方负责按照目标平台和运行时的内存一致性规则保证payload可见性。
 
-## SDMA并发与Session所有权
+## 并发与Session所有权
 
 - 同一个Session不能被多个执行流并发使用。
-- 共用同一Channel Group的操作必须共用同一个Session。
-- 并发kernel或kernel内多个独立Session必须使用隔离的Channel Group。
-- 重新构建Session或复用Channel Group前，必须先完成此前全部Event。
+- 对SDMA，共用同一Channel Group的操作必须共用同一个Session。并发kernel或kernel内多个独立Session
+  必须使用隔离的Channel Group。
+- 对URMA和RDMA，即使调用方基于同一workspace构建了不同Session，对同一peer/QP的提交也必须串行；
+  不同peer使用独立队列。
+- 重新构建Session或复用后端队列前，必须先完成此前全部Event。
 
 ## 示例
 

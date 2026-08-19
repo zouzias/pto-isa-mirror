@@ -209,8 +209,8 @@ be a `pto::Tile` in UB/Vec memory and remain valid until the associated events h
 - Source and destination payload tensors must be flat, contiguous logical 1D tensors.
 - The destination element capacity must be at least the source element count.
 - The payload size must be greater than zero. Use `TNOTIFY` for a signal-only operation.
-- `dstSignalData` must represent one `int32_t` in remote GM. Its address must be non-null and 4-byte aligned. The
-  caller is responsible for allocation and initialization.
+- `dstSignalData` must contain exactly one `int32_t` in remote GM. Its address must be non-null and 4-byte aligned.
+  The caller is responsible for allocation and initialization.
 - The payload destination range must not overlap `dstSignalData`.
 - For URMA and RDMA, the payload destination and signal must belong to the same target peer. The complete local
   payload, remote payload, and remote signal ranges must lie in memory regions registered during host initialization.
@@ -218,8 +218,8 @@ be a `pto::Tile` in UB/Vec memory and remain valid until the associated events h
 - RDMA supports only `NotifyOp::Set`; do not use `NotifyOp::AtomicAdd`.
 - The SDMA workspace must be initialized by the host-side `SdmaWorkspaceManager`. The URMA workspace must be
   initialized by the host-side `UrmaWorkspaceManager`.
-- The symmetric data buffer passed to `UrmaWorkspaceManager::Init()` must use huge-page backing allocated with
-  `ACL_MEM_MALLOC_HUGE_ONLY`.
+- The symmetric data buffer passed to `UrmaWorkspaceManager::Init()` must be device memory that HCCL can register;
+  its allocation method must satisfy the requirements of the active CANN/HCCL runtime.
 - Keep the session, workspace, and scratch tile alive until all associated events have completed.
 
 ## Completion Semantics
@@ -238,12 +238,14 @@ When the receiver observes the signal update, the corresponding payload has been
 intrinsic does not guarantee that an existing receiver-side payload cache entry has been updated. Before reading the
 payload, the caller must ensure visibility according to the target platform and runtime memory-consistency rules.
 
-## SDMA Concurrency and Session Ownership
+## Concurrency and Session Ownership
 
 - Do not use one session concurrently from multiple execution flows.
-- Operations that share a channel group must also share the same session.
-- Concurrent kernels, or multiple independent sessions in one kernel, must use isolated channel groups.
-- Complete all earlier events before rebuilding a session or reusing its channel group.
+- For SDMA, operations that share a channel group must also share the same session. Concurrent kernels, or multiple
+  independent sessions in one kernel, must use isolated channel groups.
+- For URMA and RDMA, submissions to the same peer/QP must be serialized even when callers constructed separate
+  sessions over the same workspace. Different peers use independent queues.
+- Complete all earlier events before rebuilding a session or reusing its backend queue.
 
 ## Examples
 

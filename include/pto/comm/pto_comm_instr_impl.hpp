@@ -22,6 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Point-to-Point Communication (Asynchronous)
 #include "pto/comm/a2a3/async/TPutAsync.hpp"
 #include "pto/comm/a2a3/async/TGetAsync.hpp"
+#include "pto/comm/a2a3/async/TPutAsyncNotify.hpp"
 // Signal-Based Synchronization
 #include "pto/comm/a2a3/TNotify.hpp"
 #include "pto/comm/a2a3/TWait.hpp"
@@ -40,6 +41,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Point-to-Point Communication (Asynchronous)
 #include "pto/comm/a5/async/TPutAsync.hpp"
 #include "pto/comm/a5/async/TGetAsync.hpp"
+#include "pto/comm/a5/async/TPutAsyncNotify.hpp"
 // Signal-Based Synchronization
 #include "pto/comm/a5/TNotify.hpp"
 #include "pto/comm/a5/TWait.hpp"

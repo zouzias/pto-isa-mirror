@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TPUT_HPP
 
 #include <pto/cpu/comm/TGet.hpp>
+#include <pto/cpu/comm/TNotify.hpp>
 
 namespace pto {
 namespace comm {
@@ -35,10 +36,24 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, 
 }
 
 template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, const AsyncSession& session,
-                                        uint32_t peer)
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, const AsyncSession& session, uint32_t peer)
 {
     return TPUT_ASYNC_IMPL<engine>(dst, src, session);
+}
+
+template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_IMPL(
+    GlobalDstData& dst, GlobalSrcData& src, GlobalSignalData& signal, int32_t signalValue, NotifyOp notifyOp,
+    const AsyncSession& session, uint32_t peer)
+{
+    (void)session;
+    (void)peer;
+    static_assert(
+        std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TPUT_ASYNC_NOTIFY: signal type must be int32_t");
+    Copy_Data(dst, src);
+    TNOTIFY_IMPL(signal, signalValue, notifyOp);
+    return AsyncEvent(0, engine);
 }
 
 } // namespace comm

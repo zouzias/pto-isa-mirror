@@ -35,6 +35,30 @@ constexpr uint32_t kUrmaSqeRmtEidLOffset = 16;
 constexpr uint32_t kUrmaSqeRmtEidHOffset = 24;
 constexpr uint32_t kUrmaSqeRmtAddrLOffset = 40;
 constexpr uint32_t kUrmaSqeRmtAddrHOffset = 44;
+constexpr uint32_t kUrmaNotifyResultSlotCount = 64U;
+constexpr uint32_t kUrmaWqeFlagCqe = 0x20U;
+constexpr uint32_t kUrmaWqeFlagExtended = 0x02U;
+constexpr uint32_t kUrmaWqeFlagInline = 0x40U;
+
+struct UrmaCompletionRecord {
+    uint32_t cqeSequence;
+    uint32_t bbSequence;
+};
+
+// Per-QP accounting keeps WQEBB and CQE sequences separate. Most operations
+// consume one of each, while a 32-bit FAA consumes two WQEBBs and one CQE.
+struct UrmaQueueRuntime {
+    uint32_t submittedBb;
+    uint32_t completedBb;
+    uint32_t submittedCqe;
+    uint32_t completedCqe;
+    uint32_t firstError;
+    uint32_t firstErrorCqe;
+    uint32_t nextNotifySlot;
+    uint32_t completionDepth;
+    uint64_t completionRecords;
+    uint32_t notifyReusableCqe[kUrmaNotifyResultSlotCount];
+};
 
 // ============================================================================
 // UrmaOpcode — URMA operation codes (binary-compatible with hcomm UB ABI)
@@ -61,7 +85,14 @@ enum class UrmaOpcode : uint32_t {
 struct UrmaInfo {
     uint32_t qpNum;
     uint32_t localTokenId;
+    uint32_t notifyTokenId;
     uint32_t rankCount;
+    uint32_t localRankId;
+    uint32_t reserved;
+    uint64_t localMemAddr;
+    uint64_t localMemSize;
+    uint64_t notifyResultPtr;
+    uint64_t runtimePtr;
     uint64_t sqPtr;
     uint64_t rqPtr;
     uint64_t scqPtr;

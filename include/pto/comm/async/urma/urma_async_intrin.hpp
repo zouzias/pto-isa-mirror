@@ -26,8 +26,11 @@ namespace urma {
 // ============================================================================
 AICORE inline void DcciCachelines(__gm__ uint8_t* addr, uint64_t length)
 {
+    if (length == 0U) {
+        return;
+    }
     __gm__ uint8_t* start = (__gm__ uint8_t*)((uint64_t)addr / kCacheLineSize * kCacheLineSize);
-    __gm__ uint8_t* end = (__gm__ uint8_t*)(((uint64_t)addr + length) / kCacheLineSize * kCacheLineSize);
+    __gm__ uint8_t* end = (__gm__ uint8_t*)(((uint64_t)addr + length - 1U) / kCacheLineSize * kCacheLineSize);
     for (uint64_t i = 0; i <= static_cast<uint64_t>(end - start); i += kCacheLineSize) {
         __asm__ __volatile__("");
         dcci((__gm__ void*)(start + i), cache_line_t::SINGLE_CACHE_LINE);
@@ -36,6 +39,8 @@ AICORE inline void DcciCachelines(__gm__ uint8_t* addr, uint64_t length)
 }
 
 namespace detail {
+
+AICORE inline uint64_t EncodeHandle(uint32_t destRankId, uint32_t sequence);
 
 // ============================================================================
 // UrmaPollCqUpdateInfo — update CQ/WQ tail and ring CQ doorbell after polling (URMA)
@@ -122,7 +127,7 @@ AICORE inline void FillSqeCtx(
 {
     sqeCtx->sqeBbIdx = static_cast<uint16_t>(curHead % depth);
     sqeCtx->opcode = static_cast<uint32_t>(opcode);
-    sqeCtx->flag = 0x20;
+    sqeCtx->flag = kUrmaWqeFlagCqe;
     sqeCtx->rsv0 = 0;
     sqeCtx->nf = 0;
     sqeCtx->tokenEn = remoteMemInfo->tokenValueValid ? 1U : 0U;
@@ -198,6 +203,326 @@ AICORE inline uint32_t UrmaPostSend(
     return curHead;
 }
 
+struct UrmaRetireResult {
+    bool completed;
+    bool success;
+};
+
+AICORE inline bool SequenceReached(uint32_t current, uint32_t target)
+{
+    return static_cast<int32_t>(current - target) >= 0;
+}
+
+AICORE inline bool IsRangeInside(uint64_t address, uint64_t length, uint64_t base, uint64_t size)
+{
+    return length != 0U && address >= base && length <= size && address - base <= size - length;
+}
+
+AICORE inline __gm__ UrmaWQCtx* GetTrackedWq(__gm__ UrmaInfo* info, uint32_t peer, uint32_t qpIdx)
+{
+    return reinterpret_cast<__gm__ UrmaWQCtx*>(
+        info->sqPtr + (static_cast<uint64_t>(peer) * info->qpNum + qpIdx) * sizeof(UrmaWQCtx));
+}
+
+AICORE inline __gm__ UrmaCqCtx* GetTrackedCq(__gm__ UrmaInfo* info, uint32_t peer, uint32_t qpIdx)
+{
+    return reinterpret_cast<__gm__ UrmaCqCtx*>(
+        info->scqPtr + (static_cast<uint64_t>(peer) * info->qpNum + qpIdx) * sizeof(UrmaCqCtx));
+}
+
+AICORE inline __gm__ UrmaQueueRuntime* GetTrackedRuntime(__gm__ UrmaInfo* info, uint32_t peer, uint32_t qpIdx)
+{
+    return reinterpret_cast<__gm__ UrmaQueueRuntime*>(
+        info->runtimePtr + (static_cast<uint64_t>(peer) * info->qpNum + qpIdx) * sizeof(UrmaQueueRuntime));
+}
+
+AICORE inline bool ValidateTrackedSession(const AsyncSession& session, uint32_t peer)
+{
+    if (!session.valid || session.engine != DmaEngine::URMA || session.contextGm == nullptr) {
+        return false;
+    }
+    __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
+    return info->runtimePtr != 0U && peer < info->rankCount && peer != info->localRankId && session.qpIdx < info->qpNum;
+}
+
+AICORE inline void PublishTrackedTails(
+    __gm__ UrmaCqCtx* cq, __gm__ UrmaWQCtx* wq, uint32_t completedCqe, uint32_t completedBb)
+{
+    st_dev(completedCqe, reinterpret_cast<__gm__ uint32_t*>(cq->tailAddr), 0);
+    st_dev(completedCqe & 0xFFFFFFU, reinterpret_cast<__gm__ uint32_t*>(cq->dbAddr), 0);
+    st_dev(completedBb, reinterpret_cast<__gm__ uint32_t*>(wq->tailAddr), 0);
+}
+
+AICORE inline __gm__ UrmaCompletionRecord* GetCompletionRecord(__gm__ UrmaQueueRuntime* runtime, uint32_t cqeSequence)
+{
+    return reinterpret_cast<__gm__ UrmaCompletionRecord*>(runtime->completionRecords) +
+           (cqeSequence & (runtime->completionDepth - 1U));
+}
+
+AICORE inline void RegisterCompletion(__gm__ UrmaQueueRuntime* runtime, uint32_t cqeSequence, uint32_t bbSequence)
+{
+    __gm__ UrmaCompletionRecord* record = GetCompletionRecord(runtime, cqeSequence);
+    record->cqeSequence = cqeSequence;
+    record->bbSequence = bbSequence;
+}
+
+AICORE inline bool IsCqeReady(__gm__ UrmaCqCtx* cq, uint32_t sequence)
+{
+    const uint32_t cqeSize = 1U << cq->cqeShiftSize;
+    __gm__ UrmaJfcCqeCtx* cqe = reinterpret_cast<__gm__ UrmaJfcCqeCtx*>(
+        cq->bufAddr + static_cast<uint64_t>(cqeSize) * (sequence & (cq->depth - 1U)));
+    const bool expectedOwner = (sequence / cq->depth) & 1U;
+    DcciCachelines(reinterpret_cast<__gm__ uint8_t*>(cqe), sizeof(UrmaJfcCqeCtx));
+    return (expectedOwner ^ cqe->owner) != 0U;
+}
+
+AICORE inline UrmaRetireResult RetireTrackedCompletions(
+    const AsyncSession& session, uint32_t peer, uint32_t targetCqe, bool blocking)
+{
+    if (!ValidateTrackedSession(session, peer)) {
+        return {false, false};
+    }
+    __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
+    __gm__ UrmaWQCtx* wq = GetTrackedWq(info, peer, session.qpIdx);
+    __gm__ UrmaCqCtx* cq = GetTrackedCq(info, peer, session.qpIdx);
+    __gm__ UrmaQueueRuntime* runtime = GetTrackedRuntime(info, peer, session.qpIdx);
+    if (!SequenceReached(runtime->submittedCqe, targetCqe)) {
+        return {false, false};
+    }
+    if (SequenceReached(runtime->completedCqe, targetCqe)) {
+        const bool success = runtime->firstError == 0U || !SequenceReached(targetCqe, runtime->firstErrorCqe);
+        return {true, success};
+    }
+
+    if (!blocking) {
+        for (uint32_t sequence = runtime->completedCqe; sequence != targetCqe; ++sequence) {
+            if (!IsCqeReady(cq, sequence)) {
+                return {false, true};
+            }
+        }
+    }
+
+    uint32_t completedCqe = runtime->completedCqe;
+    uint32_t completedBb = runtime->completedBb;
+    while (completedCqe != targetCqe) {
+        const uint32_t sequence = completedCqe;
+        uint32_t polls = 0U;
+        while (!IsCqeReady(cq, sequence)) {
+            if (!blocking || ++polls >= kUrmaMaxPollTimes) {
+                PublishTrackedTails(cq, wq, completedCqe, completedBb);
+                return {false, !blocking};
+            }
+        }
+
+        const uint32_t cqeSize = 1U << cq->cqeShiftSize;
+        __gm__ UrmaJfcCqeCtx* cqe = reinterpret_cast<__gm__ UrmaJfcCqeCtx*>(
+            cq->bufAddr + static_cast<uint64_t>(cqeSize) * (sequence & (cq->depth - 1U)));
+        const uint32_t error = (static_cast<uint32_t>(cqe->status) << 8U) | cqe->substatus;
+        ++completedCqe;
+
+        __gm__ UrmaCompletionRecord* record = GetCompletionRecord(runtime, completedCqe);
+        DcciCachelines(reinterpret_cast<__gm__ uint8_t*>(record), sizeof(UrmaCompletionRecord));
+        if (record->cqeSequence != completedCqe) {
+            return {false, false};
+        }
+        completedBb = record->bbSequence;
+        runtime->completedCqe = completedCqe;
+        runtime->completedBb = completedBb;
+        if (error != 0U && runtime->firstError == 0U) {
+            runtime->firstError = error;
+            runtime->firstErrorCqe = completedCqe;
+        }
+    }
+
+    PublishTrackedTails(cq, wq, completedCqe, completedBb);
+    return {true, runtime->firstError == 0U || !SequenceReached(targetCqe, runtime->firstErrorCqe)};
+}
+
+AICORE inline bool EnsureTrackedCapacity(
+    const AsyncSession& session, uint32_t peer, uint32_t requiredBb, uint32_t requiredCqe)
+{
+    __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
+    __gm__ UrmaWQCtx* wq = GetTrackedWq(info, peer, session.qpIdx);
+    __gm__ UrmaCqCtx* cq = GetTrackedCq(info, peer, session.qpIdx);
+    __gm__ UrmaQueueRuntime* runtime = GetTrackedRuntime(info, peer, session.qpIdx);
+    if (runtime->firstError != 0U || requiredBb >= wq->depth || requiredCqe >= cq->depth) {
+        return false;
+    }
+    if (runtime->submittedBb - runtime->completedBb + requiredBb >= wq->depth ||
+        runtime->submittedCqe - runtime->completedCqe + requiredCqe >= cq->depth) {
+        if (runtime->submittedCqe == runtime->completedCqe) {
+            return false;
+        }
+        const UrmaRetireResult result = RetireTrackedCompletions(session, peer, runtime->submittedCqe, true);
+        if (!result.completed || !result.success) {
+            return false;
+        }
+    }
+    return true;
+}
+
+AICORE inline void FillTransferWqe(
+    __gm__ uint8_t* wqe, __gm__ UrmaMemInfo* remoteMem, __gm__ uint8_t* remoteAddr, __gm__ uint8_t* localAddr,
+    uint64_t messageLen, UrmaOpcode opcode, uint32_t bbSequence, uint32_t depth, uint32_t localTokenId)
+{
+    FillSqeCtx(reinterpret_cast<__gm__ UrmaSqeCtx*>(wqe), remoteMem, remoteAddr, opcode, bbSequence, depth);
+    __gm__ UrmaSgeCtx* sge = reinterpret_cast<__gm__ UrmaSgeCtx*>(wqe + kUrmaSqeSizeBytes);
+    sge->len = static_cast<uint32_t>(messageLen);
+    sge->tokenId = localTokenId;
+    sge->va = reinterpret_cast<uint64_t>(localAddr);
+}
+
+AICORE inline void FillInlineSetWqe(
+    __gm__ uint8_t* wqe, __gm__ UrmaMemInfo* remoteMem, __gm__ int32_t* remoteSignal, int32_t signalValue,
+    uint32_t bbSequence, uint32_t depth)
+{
+    __gm__ UrmaSqeCtx* sqe = reinterpret_cast<__gm__ UrmaSqeCtx*>(wqe);
+    FillSqeCtx(sqe, remoteMem, reinterpret_cast<__gm__ uint8_t*>(remoteSignal), UrmaOpcode::WRITE, bbSequence, depth);
+    sqe->flag = kUrmaWqeFlagCqe | kUrmaWqeFlagInline;
+    sqe->inlineMsgLen = sizeof(int32_t);
+    sqe->sgeNum = 0U;
+    *reinterpret_cast<__gm__ int32_t*>(wqe + kUrmaSqeSizeBytes) = signalValue;
+}
+
+AICORE inline void FillFaaWqe(
+    __gm__ uint8_t* firstBb, __gm__ uint8_t* secondBb, __gm__ UrmaMemInfo* remoteMem, __gm__ int32_t* remoteSignal,
+    __gm__ int32_t* result, int32_t signalValue, uint32_t bbSequence, uint32_t depth, uint32_t resultTokenId)
+{
+    __gm__ UrmaSqeCtx* sqe = reinterpret_cast<__gm__ UrmaSqeCtx*>(firstBb);
+    FillSqeCtx(sqe, remoteMem, reinterpret_cast<__gm__ uint8_t*>(remoteSignal), UrmaOpcode::FAA, bbSequence, depth);
+    sqe->flag = kUrmaWqeFlagCqe | kUrmaWqeFlagExtended;
+    __gm__ UrmaSgeCtx* sge = reinterpret_cast<__gm__ UrmaSgeCtx*>(firstBb + kUrmaSqeSizeBytes);
+    sge->len = sizeof(int32_t);
+    sge->tokenId = resultTokenId;
+    sge->va = reinterpret_cast<uint64_t>(result);
+    *reinterpret_cast<__gm__ int32_t*>(secondBb) = signalValue;
+}
+
+AICORE inline uint64_t UrmaPostTrackedTransfer(
+    __gm__ uint8_t* remoteAddr, __gm__ uint8_t* localAddr, uint64_t messageLen, UrmaOpcode opcode,
+    const AsyncSession& session, uint32_t peer)
+{
+    if (!ValidateTrackedSession(session, peer) || messageLen == 0U || messageLen > kUrmaMaxWqeTransferBytes ||
+        (opcode != UrmaOpcode::WRITE && opcode != UrmaOpcode::READ)) {
+        return 0U;
+    }
+    __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
+    __gm__ UrmaMemInfo* remoteMem = reinterpret_cast<__gm__ UrmaMemInfo*>(info->memPtr) + peer;
+    if (!IsRangeInside(reinterpret_cast<uint64_t>(remoteAddr), messageLen, remoteMem->addr, remoteMem->len) ||
+        !IsRangeInside(reinterpret_cast<uint64_t>(localAddr), messageLen, info->localMemAddr, info->localMemSize) ||
+        !EnsureTrackedCapacity(session, peer, 1U, 1U)) {
+        return 0U;
+    }
+
+    __gm__ UrmaWQCtx* wq = GetTrackedWq(info, peer, session.qpIdx);
+    __gm__ UrmaQueueRuntime* runtime = GetTrackedRuntime(info, peer, session.qpIdx);
+    const uint32_t bbSize = 1U << wq->wqeShiftSize;
+    const uint32_t startBb = runtime->submittedBb;
+    __gm__ uint8_t* wqe =
+        reinterpret_cast<__gm__ uint8_t*>(wq->bufAddr + static_cast<uint64_t>(bbSize) * (startBb & (wq->depth - 1U)));
+    FillTransferWqe(wqe, remoteMem, remoteAddr, localAddr, messageLen, opcode, startBb, wq->depth, info->localTokenId);
+
+    const uint32_t targetBb = startBb + 1U;
+    const uint32_t targetCqe = runtime->submittedCqe + 1U;
+    RegisterCompletion(runtime, targetCqe, targetBb);
+    runtime->submittedBb = targetBb;
+    runtime->submittedCqe = targetCqe;
+    pipe_barrier(PIPE_ALL);
+    DcciCachelines(wqe, kUrmaSqeSizeBytes + kUrmaSgeSizeBytes);
+    DcciCachelines(
+        reinterpret_cast<__gm__ uint8_t*>(GetCompletionRecord(runtime, targetCqe)), sizeof(UrmaCompletionRecord));
+    pipe_barrier(PIPE_ALL);
+    UrmaPostSendUpdateInfo(targetBb, wq);
+    return EncodeHandle(peer, targetCqe);
+}
+
+AICORE inline uint64_t UrmaPostTrackedNotify(
+    __gm__ uint8_t* remotePayload, __gm__ uint8_t* localPayload, uint64_t messageLen, __gm__ int32_t* remoteSignal,
+    int32_t signalValue, NotifyOp notifyOp, const AsyncSession& session, uint32_t peer)
+{
+    if (!ValidateTrackedSession(session, peer) || messageLen == 0U || messageLen > kUrmaMaxWqeTransferBytes ||
+        (notifyOp != NotifyOp::Set && notifyOp != NotifyOp::AtomicAdd)) {
+        return 0U;
+    }
+    __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
+    __gm__ UrmaMemInfo* remoteMem = reinterpret_cast<__gm__ UrmaMemInfo*>(info->memPtr) + peer;
+    if (!IsRangeInside(reinterpret_cast<uint64_t>(remotePayload), messageLen, remoteMem->addr, remoteMem->len) ||
+        !IsRangeInside(reinterpret_cast<uint64_t>(localPayload), messageLen, info->localMemAddr, info->localMemSize) ||
+        !IsRangeInside(reinterpret_cast<uint64_t>(remoteSignal), sizeof(int32_t), remoteMem->addr, remoteMem->len) ||
+        (reinterpret_cast<uint64_t>(remoteSignal) & (alignof(int32_t) - 1U)) != 0U) {
+        return 0U;
+    }
+
+    const bool isAdd = notifyOp == NotifyOp::AtomicAdd;
+    const uint32_t requiredBb = isAdd ? 3U : 2U;
+    constexpr uint32_t requiredCqe = 2U;
+    __gm__ UrmaQueueRuntime* runtime = GetTrackedRuntime(info, peer, session.qpIdx);
+    uint32_t notifySlot = 0U;
+    if (isAdd) {
+        notifySlot = runtime->nextNotifySlot % kUrmaNotifyResultSlotCount;
+        const uint32_t reusableCqe = runtime->notifyReusableCqe[notifySlot];
+        if (!SequenceReached(runtime->completedCqe, reusableCqe)) {
+            const UrmaRetireResult result = RetireTrackedCompletions(session, peer, reusableCqe, true);
+            if (!result.completed || !result.success) {
+                return 0U;
+            }
+        }
+    }
+    if (!EnsureTrackedCapacity(session, peer, requiredBb, requiredCqe)) {
+        return 0U;
+    }
+
+    __gm__ UrmaWQCtx* wq = GetTrackedWq(info, peer, session.qpIdx);
+    const uint32_t bbSize = 1U << wq->wqeShiftSize;
+    const uint32_t startBb = runtime->submittedBb;
+    const uint32_t signalBb = startBb + 1U;
+    __gm__ uint8_t* payloadWqe =
+        reinterpret_cast<__gm__ uint8_t*>(wq->bufAddr + static_cast<uint64_t>(bbSize) * (startBb & (wq->depth - 1U)));
+    __gm__ uint8_t* signalFirstBb =
+        reinterpret_cast<__gm__ uint8_t*>(wq->bufAddr + static_cast<uint64_t>(bbSize) * (signalBb & (wq->depth - 1U)));
+    __gm__ uint8_t* signalSecondBb = reinterpret_cast<__gm__ uint8_t*>(
+        wq->bufAddr + static_cast<uint64_t>(bbSize) * ((signalBb + 1U) & (wq->depth - 1U)));
+
+    FillTransferWqe(
+        payloadWqe, remoteMem, remotePayload, localPayload, messageLen, UrmaOpcode::WRITE, startBb, wq->depth,
+        info->localTokenId);
+    if (isAdd) {
+        __gm__ int32_t* result = reinterpret_cast<__gm__ int32_t*>(info->notifyResultPtr) +
+                                 static_cast<uint64_t>(peer) * kUrmaNotifyResultSlotCount + notifySlot;
+        FillFaaWqe(
+            signalFirstBb, signalSecondBb, remoteMem, remoteSignal, result, signalValue, signalBb, wq->depth,
+            info->notifyTokenId);
+    } else {
+        FillInlineSetWqe(signalFirstBb, remoteMem, remoteSignal, signalValue, signalBb, wq->depth);
+    }
+
+    const uint32_t payloadCqe = runtime->submittedCqe + 1U;
+    const uint32_t targetCqe = payloadCqe + 1U;
+    const uint32_t targetBb = startBb + requiredBb;
+    RegisterCompletion(runtime, payloadCqe, startBb + 1U);
+    RegisterCompletion(runtime, targetCqe, targetBb);
+    runtime->submittedBb = targetBb;
+    runtime->submittedCqe = targetCqe;
+    if (isAdd) {
+        runtime->notifyReusableCqe[notifySlot] = targetCqe;
+        runtime->nextNotifySlot++;
+    }
+
+    pipe_barrier(PIPE_ALL);
+    DcciCachelines(payloadWqe, kUrmaSqeSizeBytes + kUrmaSgeSizeBytes);
+    DcciCachelines(signalFirstBb, kUrmaSqeSizeBytes + kUrmaSgeSizeBytes);
+    if (isAdd) {
+        DcciCachelines(signalSecondBb, sizeof(int32_t));
+    }
+    DcciCachelines(
+        reinterpret_cast<__gm__ uint8_t*>(GetCompletionRecord(runtime, payloadCqe)), sizeof(UrmaCompletionRecord));
+    DcciCachelines(
+        reinterpret_cast<__gm__ uint8_t*>(GetCompletionRecord(runtime, targetCqe)), sizeof(UrmaCompletionRecord));
+    pipe_barrier(PIPE_ALL);
+    UrmaPostSendUpdateInfo(targetBb, wq);
+    return EncodeHandle(peer, targetCqe);
+}
+
 // ============================================================================
 // Handle encoding/decoding for AsyncEvent
 // ============================================================================
@@ -229,10 +554,10 @@ AICORE inline bool UrmaWaitEvent(uint64_t eventHandle, const UrmaEventContext& e
 AICORE inline bool UrmaWaitEvent(uint64_t eventHandle, const AsyncSession& session)
 {
     uint32_t destRankId = 0;
-    uint32_t curHead = 0;
-    DecodeHandle(eventHandle, destRankId, curHead);
-    uint32_t ret = UrmaPollCq(session.contextGm, destRankId, session.qpIdx, curHead);
-    return ret == 0;
+    uint32_t targetCqe = 0;
+    DecodeHandle(eventHandle, destRankId, targetCqe);
+    const UrmaRetireResult result = RetireTrackedCompletions(session, destRankId, targetCqe, true);
+    return result.completed && result.success;
 }
 
 // ============================================================================
@@ -268,29 +593,10 @@ AICORE inline bool UrmaTestEvent(uint64_t eventHandle, const UrmaEventContext& e
 AICORE inline bool UrmaTestEvent(uint64_t eventHandle, const AsyncSession& session)
 {
     uint32_t destRankId = 0;
-    uint32_t curHead = 0;
-    DecodeHandle(eventHandle, destRankId, curHead);
-
-    __gm__ UrmaInfo* urmaInfo = (__gm__ UrmaInfo*)session.contextGm;
-    uint32_t qpNum = urmaInfo->qpNum;
-    __gm__ UrmaCqCtx* cqCtxEntry =
-        (__gm__ UrmaCqCtx*)(urmaInfo->scqPtr + (destRankId * qpNum + session.qpIdx) * sizeof(UrmaCqCtx));
-    uint32_t curTail = ld_dev((__gm__ uint32_t*)cqCtxEntry->tailAddr, 0);
-    if (static_cast<int32_t>(curTail - curHead) >= 0) {
-        return true;
-    }
-
-    uint64_t cqBaseAddr = cqCtxEntry->bufAddr;
-    uint32_t depth = cqCtxEntry->depth;
-    uint32_t cqeSize = 1U << cqCtxEntry->cqeShiftSize;
-
-    uint32_t lastIdx = curHead - 1;
-    __gm__ UrmaJfcCqeCtx* lastCqe = (__gm__ UrmaJfcCqeCtx*)(cqBaseAddr + cqeSize * (lastIdx & (depth - 1)));
-    bool validOwner = (lastIdx / depth) & 1;
-
-    DcciCachelines((__gm__ uint8_t*)lastCqe, sizeof(UrmaJfcCqeCtx));
-
-    return (validOwner ^ lastCqe->owner) != 0;
+    uint32_t targetCqe = 0;
+    DecodeHandle(eventHandle, destRankId, targetCqe);
+    const UrmaRetireResult result = RetireTrackedCompletions(session, destRankId, targetCqe, false);
+    return result.completed && result.success;
 }
 
 } // namespace detail
@@ -311,9 +617,7 @@ AICORE inline uint64_t __urma_put_async(
 AICORE inline uint64_t __urma_put_async(
     __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const AsyncSession& session, uint32_t peer)
 {
-    uint32_t curHead =
-        detail::UrmaPostSend(session.contextGm, dst, src, peer, session.qpIdx, UrmaOpcode::WRITE, transferSize);
-    return detail::EncodeHandle(peer, curHead);
+    return detail::UrmaPostTrackedTransfer(dst, src, transferSize, UrmaOpcode::WRITE, session, peer);
 }
 
 AICORE inline uint64_t __urma_get_async(
@@ -329,9 +633,14 @@ AICORE inline uint64_t __urma_get_async(
     __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, const AsyncSession& session, uint32_t peer)
 {
     // RDMA READ: remote addr = src (SQE remote field), local addr = dst (SGE.va)
-    uint32_t curHead =
-        detail::UrmaPostSend(session.contextGm, src, dst, peer, session.qpIdx, UrmaOpcode::READ, transferSize);
-    return detail::EncodeHandle(peer, curHead);
+    return detail::UrmaPostTrackedTransfer(src, dst, transferSize, UrmaOpcode::READ, session, peer);
+}
+
+AICORE inline uint64_t __urma_put_async_notify(
+    __gm__ uint8_t* dst, __gm__ uint8_t* src, uint64_t transferSize, __gm__ int32_t* signal, int32_t signalValue,
+    NotifyOp notifyOp, const AsyncSession& session, uint32_t peer)
+{
+    return detail::UrmaPostTrackedNotify(dst, src, transferSize, signal, signalValue, notifyOp, session, peer);
 }
 
 AICORE inline uint64_t __urma_put_async(

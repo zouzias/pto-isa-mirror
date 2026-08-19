@@ -84,7 +84,7 @@ struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
 };
 
 // ============================================================================
-// NotifyOp: Notification operation type for TNOTIFY
+// NotifyOp: Notification operation type for TNOTIFY and TPUT_ASYNC_NOTIFY
 // ============================================================================
 
 enum class NotifyOp : uint8_t {
@@ -173,7 +173,7 @@ struct CcuTriggerContext {
 };
 
 // ============================================================================
-// AsyncEvent: Returned by TPUT_ASYNC / TGET_ASYNC for asynchronous DMA
+// AsyncEvent: Returned by TPUT_ASYNC / TPUT_ASYNC_NOTIFY / TGET_ASYNC for asynchronous DMA
 // ============================================================================
 
 struct AsyncSession;
