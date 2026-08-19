@@ -163,7 +163,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Communication | [TPUT_ASYNC](../../../../docs/isa/comm/TPUT_ASYNC.md) | `comm` | `dst, src, session` | `docs/isa/comm/TPUT_ASYNC.md` |
 | Communication | [TPUT_ASYNC_NOTIFY](../../../../docs/isa/comm/TPUT_ASYNC_NOTIFY.md) | `comm` | `dst, src, signal, value, op, session, peer` | `docs/isa/comm/TPUT_ASYNC_NOTIFY.md` |
 | Communication | [TGET_ASYNC](../../../../docs/isa/comm/TGET_ASYNC.md) | `comm` | `dst, src, session` | `docs/isa/comm/TGET_ASYNC.md` |
-| Communication | [TNOTIFY](../../../../docs/isa/comm/TNOTIFY.md) | `comm` | `signal, value, op` | `docs/isa/comm/TNOTIFY.md` |
+| Communication | [TNOTIFY](../../../../docs/isa/comm/TNOTIFY.md) | `comm` | `signal, value, op, peer` | `docs/isa/comm/TNOTIFY.md` |
 | Communication | [TWAIT](../../../../docs/isa/comm/TWAIT.md) | `comm` | `signal, value, cmp` | `docs/isa/comm/TWAIT.md` |
 | Communication | [TTEST](../../../../docs/isa/comm/TTEST.md) | `comm` | `signal, value, cmp` | `docs/isa/comm/TTEST.md` |
 | Communication | [TGATHER](../../../../docs/isa/comm/TGATHER.md) | `comm` | `group, dst, staging` | `docs/isa/comm/TGATHER.md` |

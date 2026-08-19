@@ -10,8 +10,8 @@ Data flow:
 
 `srcGlobalData (local GM)` → DMA engine → `dstGlobalData (remote GM)` → update `dstSignalData (remote GM)`
 
-The caller supplies remote addresses for both `dstGlobalData` and `dstSignalData`. Use `TNOTIFY` when only a signal
-update is required and no payload is transferred.
+The caller supplies remote addresses for both `dstGlobalData` and `dstSignalData`. When only a signal update is required
+and no payload is transferred, use the explicit-peer `TNOTIFY(dstSignalData, value, op, peer)` overload.
 
 ## Template Parameter
 
@@ -208,7 +208,7 @@ be a `pto::Tile` in UB/Vec memory and remain valid until the associated events h
 - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
 - Source and destination payload tensors must be flat, contiguous logical 1D tensors.
 - The destination element capacity must be at least the source element count.
-- The payload size must be greater than zero. Use `TNOTIFY` for a signal-only operation.
+- The payload size must be greater than zero. Use the explicit-peer `TNOTIFY` for a signal-only operation.
 - `dstSignalData` must represent one `int32_t` in remote GM. Its address must be non-null and 4-byte aligned. The
   caller is responsible for allocation and initialization.
 - The payload destination range must not overlap `dstSignalData`.
