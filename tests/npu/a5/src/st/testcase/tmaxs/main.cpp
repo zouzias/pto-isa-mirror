@@ -60,6 +60,7 @@ void test_tmaxs()
     aclrtMalloc((void**)&dstDevice, dstfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, srcfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, scalarFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstfileSize, 0, dstfileSize);
 
     aclrtMemset(dstDevice, dstfileSize, 0, dstfileSize);
     aclrtMemcpy(src0Device, srcfileSize, src0Host.data(), srcfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
