@@ -63,6 +63,7 @@ void test_tcolmax()
 
     aclrtMalloc((void**)(&srcDevice), inputSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)(&dstDevice), outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, outputSize, 0, outputSize);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", inputSize, srcHost, inputSize));
     init_dst<T, kGCols_>(dstHost);

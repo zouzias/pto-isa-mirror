@@ -62,6 +62,7 @@ void test_trowprod()
 
     aclrtMalloc((void**)(&dstDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)(&srcDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize));
     init_dst<T, kGRows_ * kGCols_>(dstHost);
