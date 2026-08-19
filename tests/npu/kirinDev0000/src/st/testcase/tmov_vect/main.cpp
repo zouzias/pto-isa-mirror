@@ -56,6 +56,7 @@ void test_tmov()
     aclrtMalloc((void**)(&srcDevice), dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input_arr.bin", dataSize, srcHost, dataSize);
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
     aclrtMemset(dstHost, dataSize, 0, dataSize);
 
     aclrtMemcpy(dstDevice, dataSize, dstHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);

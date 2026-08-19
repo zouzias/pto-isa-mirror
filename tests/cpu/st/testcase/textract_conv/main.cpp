@@ -100,6 +100,7 @@ void textract_test_4d()
 
     size_t inputSize = 0;
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", inputSize, srcHost, srcFileSize));
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     runTEXTRACT_4D<T, c1hw, n1, n0, c0, dst_row, dst_col, idxR, idxC>((T*)dstDevice, (T*)srcDevice);

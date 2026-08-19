@@ -58,6 +58,7 @@ void test_tprefetch()
     aclrtMalloc((void**)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize));
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTPrefetch<T, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);

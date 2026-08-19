@@ -69,6 +69,7 @@ void textract_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint16_t
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -135,6 +136,7 @@ void textract_mx_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint1
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/x1_mx_gm.bin", amxFileSize, srcMx0Host, amxFileSize);
     ReadFile(GetGoldenDir() + "/x2_mx_gm.bin", bmxFileSize, srcMx1Host, bmxFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -218,17 +220,36 @@ protected:
     void TearDown() override {}
 };
 
+static bool SetTmovTargetShape(
+    uint32_t M, uint32_t K, uint32_t N, uint32_t& targetM, uint32_t& targetK, uint32_t& targetN)
+{
+    targetM = targetM == 0 ? M : targetM;
+    targetN = targetN == 0 ? N : targetN;
+    targetK = targetK == 0 ? K : targetK;
+    if (targetM >= M && targetN >= N && targetK >= K) {
+        return true;
+    }
+    printf("Error: targetM targetN targetK should large than M N K");
+    return false;
+}
+
+template <typename T>
+void CheckTmovResult(size_t cFileSize)
+{
+    std::vector<T> golden(cFileSize);
+    std::vector<T> devFinal(cFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
 template <int32_t key, typename T, typename U, typename S>
 void tmov_test(uint32_t M, uint32_t K, uint32_t N, uint32_t targetM = 0, uint32_t targetK = 0, uint32_t targetN = 0)
 {
-    if (targetM == 0)
-        targetM = M;
-    if (targetN == 0)
-        targetN = N;
-    if (targetK == 0)
-        targetK = K;
-    if (targetM < M || targetN < N || targetK < K) {
-        printf("Error: targetM targetN targetK should large than M N K");
+    if (!SetTmovTargetShape(M, K, N, targetM, targetK, targetN)) {
         return;
     }
     size_t aFileSize = targetM * targetK * sizeof(U);
@@ -253,6 +274,7 @@ void tmov_test(uint32_t M, uint32_t K, uint32_t N, uint32_t targetM = 0, uint32_
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -274,14 +296,7 @@ void tmov_test(uint32_t M, uint32_t K, uint32_t N, uint32_t targetM = 0, uint32_
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(cFileSize);
-    std::vector<T> devFinal(cFileSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
-    ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
-
-    bool ret = ResultCmp(golden, devFinal, 0.001f);
-
-    EXPECT_TRUE(ret);
+    CheckTmovResult<T>(cFileSize);
 }
 
 template <int32_t key, typename T, typename U, typename S>
@@ -317,6 +332,7 @@ void tmov_mx_test(uint32_t M, uint32_t K, uint32_t N)
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/x1_mx_gm.bin", amxFileSize, srcMx0Host, amxFileSize);
     ReadFile(GetGoldenDir() + "/x2_mx_gm.bin", bmxFileSize, srcMx1Host, bmxFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
