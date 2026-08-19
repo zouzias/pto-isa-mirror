@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include <atomic>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <pto/common/fifo.hpp>
@@ -16,9 +17,93 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include "test_common.h"
 
-using namespace std;
-using namespace pto;
-using namespace PtoTestCommon;
+using pto::BLayout;
+using pto::Direction;
+using pto::GetTileElementOffset;
+using pto::Tile;
+using pto::TileAcc;
+using pto::TileSplitAxis;
+using pto::TileType;
+using pto::TPipe;
+using PtoTestCommon::ResultCmp;
+namespace cpu_sim = pto::cpu_sim;
+
+namespace {
+using HookTestPipe = TPipe<6, Direction::DIR_C2V, sizeof(float) * 16 * 16, 1>;
+using HookedV2CPipe = TPipe<9, Direction::DIR_V2C, sizeof(float) * 16 * 16, 2>;
+
+std::atomic<uint32_t> g_injected_subblock_id{0};
+std::atomic<uint32_t> g_pipe_hook_call_count{0};
+void* g_pipe_hook_storage = nullptr;
+size_t g_pipe_hook_size = 0;
+uint64_t g_pipe_hook_last_key = 0;
+
+uint32_t MockSubblockIdHook() { return g_injected_subblock_id.load(std::memory_order_relaxed); }
+
+void* MockPipeSharedStateHook(uint64_t pipeKey, size_t size)
+{
+    g_pipe_hook_last_key = pipeKey;
+    g_pipe_hook_size = size;
+    g_pipe_hook_call_count.fetch_add(1, std::memory_order_relaxed);
+    return g_pipe_hook_storage;
+}
+
+struct ScopedCpuStubHooks {
+    ScopedCpuStubHooks(void* subblockHook, void* pipeSharedStateHook)
+    {
+        pto::cpu_sim::register_hooks(subblockHook, pipeSharedStateHook);
+    }
+
+    ~ScopedCpuStubHooks()
+    {
+        pto::cpu_sim::register_hooks(nullptr, nullptr);
+        cpu_sim::reset_execution_context();
+        g_pipe_hook_storage = nullptr;
+        g_pipe_hook_size = 0;
+        g_pipe_hook_last_key = 0;
+    }
+};
+
+template <TileSplitAxis SplitAxis>
+using DirBothVecTile = Tile<
+    TileType::Vec, float, (SplitAxis == TileSplitAxis::TILE_UP_DOWN) ? 8 : 16,
+    (SplitAxis == TileSplitAxis::TILE_LEFT_RIGHT) ? 8 : 16, BLayout::RowMajor,
+    (SplitAxis == TileSplitAxis::TILE_UP_DOWN) ? 8 : 16, (SplitAxis == TileSplitAxis::TILE_LEFT_RIGHT) ? 8 : 16>;
+
+template <typename TileData>
+void fillTileSequence(TileData& tile, float start)
+{
+    for (int i = 0; i < tile.Numel; ++i) {
+        tile.data()[i] = start + static_cast<float>(i);
+    }
+}
+
+template <TileSplitAxis SplitAxis>
+void expectVecMatchesAccSplit(const auto& vec, const auto& acc, uint32_t laneId)
+{
+    for (int r = 0; r < vec.GetValidRow(); ++r) {
+        for (int c = 0; c < vec.GetValidCol(); ++c) {
+            uint32_t srcRow = r;
+            uint32_t srcCol = c;
+            if constexpr (SplitAxis == TileSplitAxis::TILE_UP_DOWN) {
+                srcRow += laneId * vec.GetValidRow();
+            } else {
+                srcCol += laneId * vec.GetValidCol();
+            }
+            EXPECT_FLOAT_EQ(
+                vec.data()[GetTileElementOffset<std::remove_cvref_t<decltype(vec)>>(r, c)],
+                acc.data()[GetTileElementOffset<std::remove_cvref_t<decltype(acc)>>(
+                    static_cast<int>(srcRow), static_cast<int>(srcCol))]);
+        }
+    }
+}
+
+template <TileSplitAxis SplitAxis, uint8_t FlagId>
+void testDirBothConsumerWaitsForMatchingDirection()
+{
+#include "oversize_bodies/test_dir_both_consumer_body.inl"
+}
+} // namespace
 
 template <typename T, int rows, int cols, TileType srcLoc>
 void fillTile(auto& tile, int iter)
@@ -289,34 +374,43 @@ TEST_F(TPushPopTest, a5_style_c2v_dual_subblock_split_push_pop)
     run_iteration(1);
 }
 
-TEST_F(TPushPopTest, a5_style_v2c_local_split_push_pop)
+TEST_F(TPushPopTest, cpu_stub_prefers_injected_hooks_for_subblock_and_pipe_state)
 {
-    using VecTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
-    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16>;
-    using Pipe = TPipe<3, Direction::DIR_V2C, sizeof(float) * MatTile::Numel, 2>;
+    HookTestPipe::SharedStateStorage storage{};
+    g_injected_subblock_id.store(7, std::memory_order_relaxed);
+    g_pipe_hook_call_count.store(0, std::memory_order_relaxed);
+    g_pipe_hook_storage = &storage;
+    g_pipe_hook_size = 0;
+    g_pipe_hook_last_key = 0;
 
-    Pipe::reset_for_cpu_sim();
-    Pipe pipe((__gm__ void*)nullptr, 0x0, 0x10000);
+    ScopedCpuStubHooks hooks(
+        reinterpret_cast<void*>(MockSubblockIdHook), reinterpret_cast<void*>(MockPipeSharedStateHook));
+    cpu_sim::set_execution_context(0, 1, 2);
 
-    VecTile src;
-    MatTile dst;
-    TASSIGN(src, 0);
-    TASSIGN(dst, VecTile::Rows * VecTile::Cols * sizeof(VecTile::DType));
+    EXPECT_EQ(get_subblockid(), 7u);
 
-    fillTile<float, 8, 16, TileType::Vec>(src, 0);
-    std::fill(dst.data(), dst.data() + dst.Numel, 0.0f);
+    auto& state = HookTestPipe::GetSharedState();
+    state.next_producer_slot = 3;
+    auto& stateAgain = HookTestPipe::GetSharedState();
 
-    TPUSH<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, src);
-    TPOP<Pipe, MatTile, TileSplitAxis::TILE_UP_DOWN>(pipe, dst);
-    TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(pipe);
+    EXPECT_EQ(&state, &stateAgain);
+    EXPECT_EQ(stateAgain.next_producer_slot, 3);
+    EXPECT_GT(g_pipe_hook_call_count.load(std::memory_order_relaxed), 0u);
+    EXPECT_EQ(g_pipe_hook_size, sizeof(HookTestPipe::SharedStateStorage));
+    EXPECT_NE(g_pipe_hook_last_key, 0u);
+}
 
-    for (int c = 0; c < dst.GetValidCol(); ++c) {
-        EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(0, c)], src.data()[GetTileElementOffset<VecTile>(0, c)]);
-        for (int r = 0; r < src.GetValidRow(); ++r) {
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)], src.data()[GetTileElementOffset<VecTile>(r, c)]);
-        }
-        for (int r = src.GetValidRow(); r < dst.GetValidRow(); ++r) {
-            EXPECT_EQ(dst.data()[GetTileElementOffset<MatTile>(r, c)], 0.0f);
-        }
-    }
+TEST_F(TPushPopTest, v2c_split_with_injected_pipe_hook_waits_for_both_lanes_before_publish)
+{
+#include "oversize_bodies/v2c_split_hook_body.inl"
+}
+
+TEST_F(TPushPopTest, a5_style_dir_both_updown_waits_for_matching_direction)
+{
+    testDirBothConsumerWaitsForMatchingDirection<TileSplitAxis::TILE_UP_DOWN, 7>();
+}
+
+TEST_F(TPushPopTest, a5_style_dir_both_leftright_waits_for_matching_direction)
+{
+    testDirBothConsumerWaitsForMatchingDirection<TileSplitAxis::TILE_LEFT_RIGHT, 8>();
 }

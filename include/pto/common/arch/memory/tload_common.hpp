@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TLOAD_COMMON_MEMORY
 #define TLOAD_COMMON_MEMORY
-
 #include <pto/common/utils.hpp>
 
 template <typename TileData, typename GlobalData>
@@ -45,7 +44,7 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol)
 {
-    PTO_STATIC_ASSERT(TileData::Rows < 4096, "Fix: TLOAD Rows>=4096 not supported");
+    static_assert(TileData::Rows < 4096, "Fix: TLOAD Rows>=4096 not supported in A2/A3");
     PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
     PTO_ASSERT(
         validRow == gShape0 * gShape1 * gShape2 * gShape3,

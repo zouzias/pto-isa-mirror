@@ -34,6 +34,7 @@ constexpr float LOG2_LO = -1.90465421e-9f;
 constexpr float EXP_OVFL_UNFL_F = -104.0f;
 constexpr float EXP_MIN_F = 88.7228390f;
 constexpr int32_t INF = 0x7F800000;
+constexpr int32_t NEG_INF = 0xff800000;
 constexpr int32_t F32_NAN = 0x7fc00000;
 constexpr int32_t R10_COEFF = 0x7F800000;
 constexpr int32_t R12_COEFF = 0x7FFFFFFF;
@@ -108,7 +109,6 @@ PTO_INTERNAL void ProcessFloatSpecialCase(
     // 若base < 0 且 exp不为整数 则返回NaN
     // 若base < 0 且 exp为奇数 则符号取反
     pxor(curMask, cmpMask1, curMask, mask);
-    pand(cmpMask2, cmpMask2, curMask, mask);
     vneg(tmpFloatReg, dstReg, curMask);
     vsel(tmpFloatReg, tmpFloatReg, dstReg, cmpMask2);
     RFloor(tmpFloatReg2, expReg, curMask);
@@ -469,6 +469,7 @@ PTO_INTERNAL void ProcessSpecialCaseForPowI(T& dstReg, T& baseReg, T& expReg, Ma
     vcmps_eq(cmpMask1, expReg, 0, mask);
     vcmps_eq(cmpMask2, baseReg, 1, mask);
     por(condMask, cmpMask1, cmpMask2, mask);
+
     vsel(dstReg, tmpReg, dstReg, condMask);
     pxor(mask, mask, condMask, mask);
 
@@ -575,12 +576,6 @@ __tf__ PTO_INTERNAL void TPowImpl(
     __ubuf__ T* base = (__ubuf__ T*)__cce_get_tile_ptr(baseData);
     __ubuf__ T* exp = (__ubuf__ T*)__cce_get_tile_ptr(expData);
 
-    if (((validCol == DstTile::Cols) && (validCol == BaseTile::Cols) && (validCol == ExpTile::Cols)) ||
-        ((DstTile::Rows == 1) && (BaseTile::Rows == 1) && (ExpTile::Rows == 1))) {
-        validCol = validRow * validCol;
-        validRow = 1;
-    }
-
     if constexpr (IsFloatNum<T>) {
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
         if constexpr (algo == PowAlgorithm::DEFAULT) {
@@ -664,12 +659,6 @@ __tf__ PTO_INTERNAL void TPowSImpl(
     using T = typename DstTile::DType;
     __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
     __ubuf__ T* base = (__ubuf__ T*)__cce_get_tile_ptr(baseData);
-
-    if (((validCol == DstTile::Cols) && (validCol == BaseTile::Cols)) ||
-        ((DstTile::Rows == 1) && (BaseTile::Rows == 1))) {
-        validCol = validRow * validCol;
-        validRow = 1;
-    }
 
     if constexpr (IsFloatNum<T>) {
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)

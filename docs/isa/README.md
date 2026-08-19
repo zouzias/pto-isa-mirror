@@ -2,12 +2,11 @@
   <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
-# PTO ISA Reference
+# PTO ISA Manual And Reference
 
-This directory contains the per-instruction reference for the PTO Tile Lib ISA.
+This directory is the canonical PTO ISA tree. It combines the architecture manual, the instruction set guides, the instruction set contracts, and the exact instruction-reference groupings in one place.
 
-- Source of truth (C++ intrinsics): `include/pto/common/pto_instr.hpp`
-- [Common conventions (operands, events, modifiers)](conventions.md)
+## Textual Assembly Inside PTO ISA
 
 ## Synchronization
 - [TSYNC](TSYNC.md) - Synchronize PTO execution (wait on events or insert a per-op pipeline barrier).
@@ -118,15 +117,12 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [MGATHER](MGATHER.md) - Gather-load elements from global memory into a tile using per-element indices.
 - [MSCATTER](MSCATTER.md) - Scatter-store elements from a tile into global memory using per-element indices.
 
-## Matrix Multiply
-- [TGEMV_MX](TGEMV_MX.md) - GEMV with additional scaling tiles for mixed-precision / quantized matrix-vector compute.
-- [TMATMUL_MX](TMATMUL_MX.md) - Matrix multiply (GEMM) with additional scaling tiles for mixed-precision / quantized matmul on supported targets.
-- [TMATMUL](TMATMUL.md) - Matrix multiply (GEMM) producing an accumulator/output tile.
-- [TMATMUL_ACC](TMATMUL_ACC.md) - Matrix multiply with accumulator input (fused accumulate).
-- [TMATMUL_BIAS](TMATMUL_BIAS.md) - Matrix multiply with bias add.
-- [TGEMV](TGEMV.md) - General Matrix-Vector multiplication producing an accumulator/output tile.
-- [TGEMV_ACC](TGEMV_ACC.md) - GEMV with explicit accumulator input/output tiles.
-- [TGEMV_BIAS](TGEMV_BIAS.md) - GEMV with bias add.
+- [Programming model](programming-model/tiles-and-valid-regions.md)
+- [Machine model](machine-model/execution-agents.md)
+- [Syntax and operands](syntax-and-operands/assembly-model.md)
+- [Type system](state-and-types/type-system.md)
+- [Location intent and legality](state-and-types/location-intent-and-legality.md)
+- [Memory model](memory-model/consistency-baseline.md)
 
 ## Data Movement / Layout
 - [TEXTRACT](TEXTRACT.md) - Extract a sub-tile from a source tile.
@@ -176,4 +172,17 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Communication
 
-See [comm/README.md](comm/README.md) for the full per-instruction communication ISA reference (point-to-point, async, synchronization, and collective operations).
+## Cross-Core Communication
+
+- [TALLOC](TALLOC.md) - Allocate a TPipe FIFO slot as a GlobalTensor view.
+- [TPUSH](TPUSH.md) - Push a producer tile into a TPipe FIFO for Cube-Vector communication.
+- [TPOP](TPOP.md) - Pop a consumer tile from a TPipe FIFO for Cube-Vector communication.
+- [TFREE](TFREE.md) - Release FIFO space for a TPipe entry; no-op for TileData TPOP flow.
+
+The grouped instruction set trees under `tile/`, `vector/`, `scalar/`, `comm/`, and `system/` are the canonical PTO ISA paths.
+
+- `docs/isa/tile/ops/`
+- `docs/isa/vector/ops/`
+- `docs/isa/scalar/ops/`
+- `docs/isa/comm/`
+- `docs/isa/system/ops/`
