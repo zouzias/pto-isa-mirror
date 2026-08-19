@@ -161,7 +161,7 @@
 | 通信 | [TPUT](../../../../docs/isa/comm/TPUT_zh.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TPUT_zh.md` |
 | 通信 | [TGET](../../../../docs/isa/comm/TGET_zh.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TGET_zh.md` |
 | 通信 | [TPUT_ASYNC](../../../../docs/isa/comm/TPUT_ASYNC_zh.md) | `comm` | `dst, src, session` | `docs/isa/comm/TPUT_ASYNC_zh.md` |
-| 通信 | [TPUT_ASYNC_NOTIFY](../../../../docs/isa/comm/TPUT_ASYNC_NOTIFY_zh.md) | `comm` | `dst, src, signal, value, op, session` | `docs/isa/comm/TPUT_ASYNC_NOTIFY_zh.md` |
+| 通信 | [TPUT_ASYNC_NOTIFY](../../../../docs/isa/comm/TPUT_ASYNC_NOTIFY_zh.md) | `comm` | `dst, src, signal, value, op, session, peer` | `docs/isa/comm/TPUT_ASYNC_NOTIFY_zh.md` |
 | 通信 | [TGET_ASYNC](../../../../docs/isa/comm/TGET_ASYNC_zh.md) | `comm` | `dst, src, session` | `docs/isa/comm/TGET_ASYNC_zh.md` |
 | 通信 | [TNOTIFY](../../../../docs/isa/comm/TNOTIFY_zh.md) | `comm` | `signal, value, op` | `docs/isa/comm/TNOTIFY_zh.md` |
 | 通信 | [TWAIT](../../../../docs/isa/comm/TWAIT_zh.md) | `comm` | `signal, value, cmp` | `docs/isa/comm/TWAIT_zh.md` |

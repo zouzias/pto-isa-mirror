@@ -39,30 +39,13 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(GlobalDstData &dstGlobalData,
                                       int32_t signalValue,
                                       NotifyOp notifyOp,
                                       const AsyncSession &session,
-                                      WaitEvents &... events);
-```
-
-A5 also provides an overload with an explicit destination peer:
-
-```cpp
-template <DmaEngine engine = DmaEngine::SDMA,
-          typename GlobalDstData,
-          typename GlobalSrcData,
-          typename GlobalSignalData,
-          typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(GlobalDstData &dstGlobalData,
-                                      GlobalSrcData &srcGlobalData,
-                                      GlobalSignalData &dstSignalData,
-                                      int32_t signalValue,
-                                      NotifyOp notifyOp,
-                                      const AsyncSession &session,
                                       uint32_t peer,
                                       WaitEvents &... events);
 ```
 
-For URMA and RDMA, the explicit `peer` selects the communication queue and remote-memory information for the target
-rank. Both `dstGlobalData` and `dstSignalData` must belong to that peer. For SDMA, the remote addresses come from the
-global tensors, and `peer` does not participate in address selection.
+For URMA and RDMA, `peer` selects the communication queue and remote-memory information for the target rank. Both
+`dstGlobalData` and `dstSignalData` must belong to that peer. SDMA does not use `peer`; its remote addresses come from
+the global tensors.
 
 `events` is a possibly empty parameter pack. Every event must provide a zero-argument `Wait()` method; the intrinsic
 waits for the events before starting the payload transfer. `AsyncEvent` provides `Wait(session)` instead of a
@@ -78,7 +61,7 @@ zero-argument `Wait()`, so it cannot be passed as an `events` argument and must 
 | `signalValue` | Value assigned by `Set`, or increment used by `AtomicAdd`. |
 | `notifyOp` | Signal update operation: `NotifyOp::Set` or `NotifyOp::AtomicAdd`. |
 | `session` | `AsyncSession` built for the `engine` template parameter. |
-| `peer` | Destination rank of the A5 explicit-peer overload. |
+| `peer` | Destination rank for URMA and RDMA; unused by SDMA. |
 | `events` | Zero or more prerequisite PTO pipeline events. |
 
 The return value is an `AsyncEvent`. Its completion covers both the payload transfer and the following signal update.
@@ -132,8 +115,8 @@ one invocation and does not define ordering between different sessions or indepe
 ## AsyncSession Construction
 
 Use `BuildAsyncSession` from `include/pto/comm/async_common/async_event_impl.hpp`. It provides an engine-specific
-overload for each backend. The function returns `false` when construction fails; only a successfully built session
-can be used for asynchronous intrinsics and event waits.
+construction interface for each backend. The function returns `false` when construction fails; only a successfully
+built session can be used for asynchronous intrinsics and event waits.
 
 ### SDMA Construction (default)
 
@@ -164,7 +147,6 @@ PTO_INTERNAL bool BuildAsyncSession(
 #ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
-                                    uint32_t destRankId,
                                     AsyncSession &session);
 #endif
 ```
@@ -172,10 +154,10 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 | Parameter | Description |
 |---|---|
 | `workspace` | GM pointer allocated by the host-side `UrmaWorkspaceManager`. |
-| `destRankId` | Destination rank with which the session communicates. |
 | `session` | Output `AsyncSession`. |
 
-URMA does not require `scratchTile` and requires CANN Toolkit >= 9.1.0.
+URMA does not require `scratchTile` and requires CANN Toolkit >= 9.1.0. The session does not bind a destination rank;
+the intrinsic selects it through `peer`.
 
 ### RDMA Construction (NPU_ARCH 3510 only)
 
@@ -198,7 +180,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `session` | Output `AsyncSession`. |
 | `syncId` | MTE/scalar synchronization event ID in the range 0-7. |
 
-An RDMA session does not bind a destination peer. Select the target rank with the explicit-`peer` intrinsic overload:
+An RDMA session does not bind a destination peer. Select the target rank with the intrinsic's `peer` parameter:
 
 ```cpp
 comm::AsyncSession session;
@@ -280,7 +262,8 @@ template <typename T>
 __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
                                        __gm__ T *localSrc,
                                        __gm__ int32_t *remoteSignalPtr,
-                                       __gm__ uint8_t *sdmaWorkspace)
+                                       __gm__ uint8_t *sdmaWorkspace,
+                                       uint32_t peer)
 {
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
@@ -305,30 +288,59 @@ __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
 
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
-        comm::NotifyOp::Set, session);
+        comm::NotifyOp::Set, session, peer);
+    (void)event.Wait(session);
+}
+```
+
+### SDMA AtomicAdd
+
+The SDMA `AtomicAdd` example uses the same session and tensor construction as the preceding example:
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::SDMA>(
+        scratchTile, sdmaWorkspace, session)) {
+    auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
+        dstGlobalData, srcGlobalData, remoteSignal, 1,
+        comm::NotifyOp::AtomicAdd, session, peer);
+    (void)event.Wait(session);
+}
+```
+
+### URMA Set
+
+The URMA session does not bind a destination rank. The intrinsic selects the target through `peer`:
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
+        urmaWorkspace, session)) {
+    auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
+        dstGlobalData, srcGlobalData, remoteSignal, 1,
+        comm::NotifyOp::Set, session, peer);
     (void)event.Wait(session);
 }
 ```
 
 ### URMA AtomicAdd
 
-This construction binds the destination rank to the URMA session, so the example uses the intrinsic overload without
-an explicit peer:
+URMA `AtomicAdd` uses the same session construction:
 
 ```cpp
 comm::AsyncSession session;
 if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
-        urmaWorkspace, destRankId, session)) {
+        urmaWorkspace, session)) {
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
-        comm::NotifyOp::AtomicAdd, session);
+        comm::NotifyOp::AtomicAdd, session, peer);
     (void)event.Wait(session);
 }
 ```
 
 ### RDMA Set
 
-RDMA supports only `Set` and uses an explicit `peer` to select the target rank:
+RDMA supports only `Set` and uses `peer` to select the target rank:
 
 ```cpp
 comm::AsyncSession session;

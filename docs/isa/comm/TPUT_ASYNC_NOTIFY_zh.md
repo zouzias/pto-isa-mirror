@@ -38,30 +38,12 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(GlobalDstData &dstGlobalData,
                                       int32_t signalValue,
                                       NotifyOp notifyOp,
                                       const AsyncSession &session,
-                                      WaitEvents &... events);
-```
-
-A5还提供带显式目标peer的重载：
-
-```cpp
-template <DmaEngine engine = DmaEngine::SDMA,
-          typename GlobalDstData,
-          typename GlobalSrcData,
-          typename GlobalSignalData,
-          typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(GlobalDstData &dstGlobalData,
-                                      GlobalSrcData &srcGlobalData,
-                                      GlobalSignalData &dstSignalData,
-                                      int32_t signalValue,
-                                      NotifyOp notifyOp,
-                                      const AsyncSession &session,
                                       uint32_t peer,
                                       WaitEvents &... events);
 ```
 
-对于URMA和RDMA，显式 `peer` 用于选择目标rank对应的通信队列和远端内存信息；
-`dstGlobalData` 与 `dstSignalData` 必须属于该peer。对于SDMA，远端地址由GlobalTensor提供，`peer` 不参与
-地址选择。
+对于URMA和RDMA，`peer` 用于选择目标rank对应的通信队列和远端内存信息，`dstGlobalData` 与
+`dstSignalData` 必须属于该peer。SDMA不使用 `peer`，远端地址由GlobalTensor确定。
 
 `events` 是可为空的变参列表。每个事件必须提供无参 `Wait()`；接口在发起payload传输前依次等待这些事件。
 `AsyncEvent` 的等待接口为 `Wait(session)`，因此不能作为 `events` 参数传入，应在调用前使用对应Session
@@ -77,7 +59,7 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(GlobalDstData &dstGlobalData,
 | `signalValue` | `Set` 写入的值，或 `AtomicAdd` 使用的增量。 |
 | `notifyOp` | signal更新操作：`NotifyOp::Set` 或 `NotifyOp::AtomicAdd`。 |
 | `session` | 为模板参数 `engine` 构建的 `AsyncSession`。 |
-| `peer` | A5显式peer重载的目标rank。 |
+| `peer` | URMA和RDMA的目标rank；SDMA不使用该参数。 |
 | `events` | 零个或多个前置PTO流水事件。 |
 
 返回值为 `AsyncEvent`。该Event的完成范围同时覆盖payload传输和后续signal更新。
@@ -128,7 +110,7 @@ $$
 ## AsyncSession构建
 
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。该函数按引擎提供不同的
-重载。构建失败时返回 `false`；只有构建成功的Session才能用于异步指令和Event等待。
+构建接口。构建失败时返回 `false`；只有构建成功的Session才能用于异步指令和Event等待。
 
 ### SDMA构建（默认）
 
@@ -159,7 +141,6 @@ PTO_INTERNAL bool BuildAsyncSession(
 #ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
-                                    uint32_t destRankId,
                                     AsyncSession &session);
 #endif
 ```
@@ -167,10 +148,10 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 | 参数 | 说明 |
 |---|---|
 | `workspace` | 由Host侧 `UrmaWorkspaceManager` 分配的GM指针。 |
-| `destRankId` | Session通信的目标rank。 |
 | `session` | 输出的 `AsyncSession`。 |
 
-URMA不需要 `scratchTile`，要求CANN Toolkit >= 9.1.0。
+URMA不需要 `scratchTile`，要求CANN Toolkit >= 9.1.0。Session不绑定目标rank，目标由指令的 `peer` 参数
+指定。
 
 ### RDMA构建（仅NPU_ARCH 3510）
 
@@ -193,7 +174,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `session` | 输出的 `AsyncSession`。 |
 | `syncId` | MTE/Scalar同步事件ID，取值范围为0-7。 |
 
-RDMA Session不绑定目标peer。调用带显式 `peer` 的指令重载选择目标rank：
+RDMA Session不绑定目标peer。调用指令时通过 `peer` 选择目标rank：
 
 ```cpp
 comm::AsyncSession session;
@@ -271,7 +252,8 @@ template <typename T>
 __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
                                        __gm__ T *localSrc,
                                        __gm__ int32_t *remoteSignalPtr,
-                                       __gm__ uint8_t *sdmaWorkspace)
+                                       __gm__ uint8_t *sdmaWorkspace,
+                                       uint32_t peer)
 {
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
@@ -296,29 +278,59 @@ __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
 
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
-        comm::NotifyOp::Set, session);
+        comm::NotifyOp::Set, session, peer);
+    (void)event.Wait(session);
+}
+```
+
+### SDMA AtomicAdd
+
+SDMA `AtomicAdd` 的Session和tensor构建方式与上一示例相同：
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::SDMA>(
+        scratchTile, sdmaWorkspace, session)) {
+    auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
+        dstGlobalData, srcGlobalData, remoteSignal, 1,
+        comm::NotifyOp::AtomicAdd, session, peer);
+    (void)event.Wait(session);
+}
+```
+
+### URMA Set
+
+URMA Session不绑定目标rank，调用指令时通过 `peer` 指定目标：
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
+        urmaWorkspace, session)) {
+    auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
+        dstGlobalData, srcGlobalData, remoteSignal, 1,
+        comm::NotifyOp::Set, session, peer);
     (void)event.Wait(session);
 }
 ```
 
 ### URMA AtomicAdd
 
-以下构建方式将目标rank绑定到URMA Session，因此使用不带显式peer的指令重载：
+URMA `AtomicAdd` 使用相同的Session构建方式：
 
 ```cpp
 comm::AsyncSession session;
 if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
-        urmaWorkspace, destRankId, session)) {
+        urmaWorkspace, session)) {
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
-        comm::NotifyOp::AtomicAdd, session);
+        comm::NotifyOp::AtomicAdd, session, peer);
     (void)event.Wait(session);
 }
 ```
 
 ### RDMA Set
 
-RDMA仅支持 `Set`，并使用显式 `peer` 选择目标rank：
+RDMA仅支持 `Set`，并通过 `peer` 选择目标rank：
 
 ```cpp
 comm::AsyncSession session;

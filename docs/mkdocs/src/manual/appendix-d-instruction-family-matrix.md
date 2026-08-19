@@ -161,7 +161,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Communication | [TPUT](../../../../docs/isa/comm/TPUT.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TPUT.md` |
 | Communication | [TGET](../../../../docs/isa/comm/TGET.md) | `comm` | `dst, src, staging` | `docs/isa/comm/TGET.md` |
 | Communication | [TPUT_ASYNC](../../../../docs/isa/comm/TPUT_ASYNC.md) | `comm` | `dst, src, session` | `docs/isa/comm/TPUT_ASYNC.md` |
-| Communication | [TPUT_ASYNC_NOTIFY](../../../../docs/isa/comm/TPUT_ASYNC_NOTIFY.md) | `comm` | `dst, src, signal, value, op, session` | `docs/isa/comm/TPUT_ASYNC_NOTIFY.md` |
+| Communication | [TPUT_ASYNC_NOTIFY](../../../../docs/isa/comm/TPUT_ASYNC_NOTIFY.md) | `comm` | `dst, src, signal, value, op, session, peer` | `docs/isa/comm/TPUT_ASYNC_NOTIFY.md` |
 | Communication | [TGET_ASYNC](../../../../docs/isa/comm/TGET_ASYNC.md) | `comm` | `dst, src, session` | `docs/isa/comm/TGET_ASYNC.md` |
 | Communication | [TNOTIFY](../../../../docs/isa/comm/TNOTIFY.md) | `comm` | `signal, value, op` | `docs/isa/comm/TNOTIFY.md` |
 | Communication | [TWAIT](../../../../docs/isa/comm/TWAIT.md) | `comm` | `signal, value, cmp` | `docs/isa/comm/TWAIT.md` |
