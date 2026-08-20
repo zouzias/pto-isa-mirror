@@ -120,6 +120,16 @@ PTO_INTERNAL constexpr uint32_t GetTmovAccDstStride()
     return DstTileData::Rows * c0Size;
 }
 
+template <typename SrcTileData>
+PTO_INTERNAL uint32_t GetTmovAccSrcStride(uint16_t validRow)
+{
+    if constexpr (SrcTileData::ValidRow > 0 && SrcTileData::ValidRow < SrcTileData::Rows) {
+        return CeilDivision(SrcTileData::Rows, BLOCK_LEN) * BLOCK_LEN;
+    } else {
+        return CeilDivision(static_cast<uint32_t>(validRow), static_cast<uint32_t>(BLOCK_LEN)) * BLOCK_LEN;
+    }
+}
+
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
 __tf__ AICORE void TMovCcToCb(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
@@ -157,7 +167,7 @@ __tf__ AICORE void TMovCcToCb(
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-    uint32_t srcStride = CeilDivision(SrcTileData::Rows, BLOCK_LEN) * BLOCK_LEN;
+    uint32_t srcStride = GetTmovAccSrcStride<SrcTileData>(validRow);
     __cbuf__ dstType* dstAddr = (__cbuf__ dstType*)__cce_get_tile_ptr(dst);
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src);
 
@@ -215,7 +225,7 @@ __tf__ AICORE void TMovCcToUb(
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-    uint32_t srcStride = CeilDivision(SrcTileData::Rows, BLOCK_LEN) * BLOCK_LEN;
+    uint32_t srcStride = GetTmovAccSrcStride<SrcTileData>(validRow);
     __ubuf__ dstType* dstAddr = (__ubuf__ dstType*)__cce_get_tile_ptr(dst);
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src);
     pto_copy_matrix_cc_to_ub(
