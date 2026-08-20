@@ -551,15 +551,6 @@ GM → L1 (TLOAD) → L0A/L0B (TMOV) → L0C (TMATMUL) → GM (TSTORE)
 4. TSTORE: 将AccTile结果存储到GM
 ```
 
-### 三元运算指令
-
-| 指令 | 功能 | 表达式 |
-|------|------|--------|
-| TADDC | 三元加法 | dst = src0 + src1 + src2 |
-| TSUBC | 三元减法 | dst = src0 - src1 + src2 |
-| TADDSC | Tile+标量+Tile加法 | dst = src0 + scalar + src1 |
-| TSUBSC | Tile-标量+Tile运算 | dst = src0 - scalar + src1 |
-
 ## 数据流分析框架
 
 ### 基本数据流模式
@@ -1276,7 +1267,6 @@ template void launchMatMul<half, half, half, 16, 16, 16>(half *out, half *src0, 
 - TMATMUL_ACC (融合累加矩阵乘) - Cube计算
 - TMATMUL_BIAS (融合加偏置矩阵乘) - Cube计算
 - TROWEXPANDADD (融合广播加法) - Vector计算
-- TADDC/TSUBC (融合三元运算) - Vector计算
 
 **选择合适的数据流**: 根据算子特性选择最优数据流路径。
 - **Vector计算**: 使用GM → UB → V → UB → GM数据流，适用于逐元素操作
