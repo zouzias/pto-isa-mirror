@@ -55,6 +55,7 @@ void test_tmins()
     aclrtMalloc((void**)&dstDevice, dstfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, srcfileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, scalarFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstfileSize, 0, dstfileSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", srcfileSize, src0Host, srcfileSize);
     ReadFile(GetGoldenDir() + "/input_scalar.bin", scalarFileSize, src1Host, scalarFileSize);

@@ -68,6 +68,7 @@ bool TAxpyTestFramework()
 
     aclrtMalloc((void**)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
     ReadFile(GetGoldenDir() + "/input_dst.bin", dstByteSize, dstHost, dstByteSize);
     ReadFile(GetGoldenDir() + "/input_src.bin", srcByteSize, srcHost, srcByteSize);

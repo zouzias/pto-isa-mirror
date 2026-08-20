@@ -56,6 +56,7 @@ void test_taxpy()
 
     aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", dstFileSize, dstHost, dstFileSize);
     ReadFile(GetGoldenDir() + "/input2.bin", srcFileSize, src0Host, srcFileSize);
