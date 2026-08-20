@@ -175,7 +175,12 @@ void TPushPopAccValidShapeStripNoSplitTestFunc(uint32_t M, uint32_t K, uint32_t 
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TPushPopCVNoSplitTest, case4_float_acc_valid_shape_strip)
+TEST_F(TPushPopCVNoSplitTest, case4_float_static_acc_valid_shape_strip)
 {
     TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 4>(32, 32, 128);
+}
+
+TEST_F(TPushPopCVNoSplitTest, case5_float_dynamic_acc_valid_shape_strip)
+{
+    TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 5>(32, 32, 128);
 }
