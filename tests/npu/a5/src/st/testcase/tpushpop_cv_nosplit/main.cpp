@@ -179,3 +179,8 @@ TEST_F(TPushPopCVNoSplitTest, case4_float_acc_valid_shape_strip)
 {
     TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 4>(32, 32, 128);
 }
+
+TEST_F(TPushPopCVNoSplitTest, case5_float_dynamic_acc_valid_shape_strip)
+{
+    TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 5>(32, 32, 128);
+}
