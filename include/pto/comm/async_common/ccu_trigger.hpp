@@ -14,20 +14,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // PTO-native CKE trigger.
 //
 // The PTO CCU dispatch chain (TREDUCE<CollEngine::CCU>, TSCATTER<...>, ...)
-// terminates here.  AIV writes the CKE MMIO register via scalar store
-// wrapped with explicit dcci + dsb to ensure cache coherence and DDR
-// visibility — required because the compiler flag
-// -mllvm -cce-aicore-dcci-insert-for-scalar=false disables automatic
-// dcci insertion for scalar stores.
+// terminates here.  The implementation is a single scalar store into the
+// CCU gate slot, which is mapped as device memory on this architecture so
+// the write is globally visible without explicit cache maintenance.
+//
+// Self-contained: this header pulls in only <cstdint>.  No AscendC, no
+// kernel_operator.h, no TPipe / DataCopy.  CCU test kernel translation
+// units therefore do not need to drag the AscendC runtime into their
+// compile graph, and HcclCcuKernelRegister still succeeds against the
+// resulting .so (verified end-to-end on all four collective ST tests).
 
 #include <cstdint>
 
 namespace pto {
 namespace comm {
 
-// CKE gate slot encoding: bit 63 marks the entry as valid; the low 16
-// bits carry the participating-rank mask.  CCU hardware reads bytes 0-1
-// for the mask and clears the slot after the trigger fires.
+// CKE gate slot encoding: the most-significant bit marks the entry as
+// valid; the low bits carry the rank mask.  Producer (this) writes the
+// bit set; CCU hardware clears it after the trigger fires.
 static constexpr uint64_t kCkeValidBit = 1ULL << 63;
 
 namespace detail {
@@ -51,6 +55,10 @@ PTO_INTERNAL void CkeTrigger(uint64_t ckeSlotVA, uint32_t mask, __ubuf__ uint8_t
     pipe_barrier(PIPE_ALL);
 }
 
+// Convenience wrapper used by the T{REDUCE,SCATTER,BROADCAST,GATHER}_CCU_IMPL
+// fan-outs in a5/T*.hpp.  Resolves the UB scratch pointer from a tile then
+// forwards to CkeTrigger; collapses two lines (reinterpret_cast + trigger)
+// at every call site into one.
 template <typename TileData>
 PTO_INTERNAL void CkeTriggerFromTile(uint64_t ckeSlotVA, uint32_t mask, TileData& tile)
 {

@@ -61,7 +61,6 @@ void test_tstore()
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
-    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStore<
@@ -139,7 +138,6 @@ void TestTstoreB4()
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
-    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStoreB4<

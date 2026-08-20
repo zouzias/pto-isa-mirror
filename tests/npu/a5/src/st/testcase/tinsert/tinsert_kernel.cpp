@@ -415,7 +415,7 @@ AICORE void runTInsertNZLargeTile(__gm__ T* out, __gm__ T* src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstUbAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1332,7 +1332,7 @@ AICORE void runTInsertNZVecToVec(__gm__ T* out, __gm__ T* src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1401,7 +1401,7 @@ AICORE void runTInsertNZPlusOneVecToVec(__gm__ T* out, __gm__ T* src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1487,6 +1487,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T* out, __gm__ T* src)
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, tmpOffset);
+    TASSIGN(dstTile, 0x0);
     TASSIGN(matTile, 0x0);
 
     SrcGlobalData srcGlobal(src);
@@ -1506,7 +1507,6 @@ AICORE void runTInsertNZSplitCustom(__gm__ T* out, __gm__ T* src)
     __ubuf__ T* dstUbAddr = dstTile.data();
 
 #if defined(__DAV_VEC__)
-    // Start TLOAD (MTE2) to overlap with V-pipe zero-fill
     TLOAD(srcTile, srcGlobal);
 
     // Fill tmpTile UB with non-zero constant so rows beyond ValidRow carry a known value
@@ -1534,12 +1534,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T* out, __gm__ T* src)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    // Barrier: ensure both TLOAD (MTE2) and zero-fill (V pipe vsts) are fully committed
-    pipe_barrier(PIPE_ALL);
-
-    // Convert ND source to NZ format in tmpTile (writes only ValidRow rows, rest stays zero)
     pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), ValidRow, Cols, ValidRow);
-
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 

@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/event.hpp"
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#include "pto/common/pto_instr_shared_overloads.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
 #include "pto/costmodel/perf_sim/recorder.hpp"
@@ -46,7 +47,7 @@ inline uint64_t GetCurrentPtoInstrCycles()
     }
 
     if (trace.active_pto_stack.size() == 1) {
-        FlushAllPendingTailsExceptVector();
+        FlushAllPendingTails();
     }
 
     if (trace.active_pto_stack.empty()) {
@@ -438,80 +439,7 @@ PTO_INST RecordEvent TCONCAT(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1&
     return {};
 }
 
-template <typename TileData, typename GlobalData, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, AtomicType::AtomicNone), dst, src);
-    return {};
-}
-
-// UF-aware overload: allow selecting unit-flag phase while keeping the TSTORE name.
-template <STPhase Phase, typename TileData, typename GlobalData, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, AtomicType::AtomicNone, Phase), dst, src);
-    return {};
-}
-
-template <typename TileData, typename GlobalData, AtomicType atomicType, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType), dst, src);
-    return {};
-}
-
-template <STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, Phase), dst, src);
-    return {};
-}
-
-template <
-    typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone, ReluPreMode reluPreMode,
-    typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, reluPreMode), dst, src);
-    return {};
-}
-
-template <
-    STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, reluPreMode, Phase), dst, src);
-    return {};
-}
-
-template <
-    typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(
-        TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, reluPreMode), dst, src, preQuantScalar);
-    return {};
-}
-
-template <
-    STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(
-        TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, reluPreMode, Phase), dst, src, preQuantScalar);
-    return {};
-}
+PTO_DEFINE_TSTORE_OVERLOADS()
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
@@ -837,24 +765,10 @@ PTO_INST RecordEvent TEXTRACT_FP(
     return {};
 }
 
-template <
-    typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
-    typename... WaitEvents>
-PTO_INST RecordEvent
-TIMG2COL(TileData& dst, ConvTileData& src, uint16_t posM = 0, uint16_t posK = 0, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(TIMG2COL, PTO_TEMPLATE_ARGS(TileData, ConvTileData, FmatrixMode), dst, src, posM, posK);
-    return {};
-}
-
-template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
-PTO_INST RecordEvent SETFMATRIX(ConvTileData& src, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL_T(SETFMATRIX, PTO_TEMPLATE_ARGS(ConvTileData, FmatrixMode), src);
-    return {};
-}
+#define PTO_SETFMATRIX_IMPL_BODY(ConvTileData, FmatrixMode, src) \
+    MAP_INSTR_IMPL_T(SETFMATRIX, PTO_TEMPLATE_ARGS(ConvTileData, FmatrixMode), src)
+PTO_DEFINE_TIMG2COL_AND_SETFMATRIX_OVERLOADS()
+#undef PTO_SETFMATRIX_IMPL_BODY
 
 #ifdef PTO_NPU_ARCH_A2A3
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
@@ -972,14 +886,7 @@ PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& id
     return {};
 }
 
-template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent
-TGATHER(TileDataD& dst, TileDataS0& src0, TileDataS1& src1, TileDataTmp& tmp, WaitEvents&... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TGATHER, dst, src0, src1, tmp);
-    return {};
-}
+PTO_DEFINE_SIMPLE_TGATHER_OVERLOAD()
 
 template <
     typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, int offset,

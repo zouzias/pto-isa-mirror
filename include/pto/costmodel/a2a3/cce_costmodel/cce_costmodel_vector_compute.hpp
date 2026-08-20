@@ -86,10 +86,7 @@ inline void vaxpy(
 }
 inline void vbitsort(auto dst, auto src, auto idx, auto repeat)
 {
-    // 910B3 标定 (fp32, TSORT32 single-row, dav-2201): bitonic sort of 32 elems/repeat.
-    // Measured = 16·repeat + 21 (incl. trailing pipe_barrier=1) -> slope=16, head=20.
-    // Was the bare placeholder (slope=2, head=6) -> 8x underestimate.
-    const uint64_t cycles = EstimateLinearCycles(repeat, /*head=*/20, /*slope=*/16);
+    const uint64_t cycles = EstimateLinearCycles(repeat);
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vbitsort", cycles, dst, src, idx, repeat);
 }
 inline void vbrcb(auto dst, auto src, auto dstBlockStride, auto dstRepeatStride, auto repeat)
