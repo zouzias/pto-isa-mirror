@@ -177,6 +177,18 @@ extern "C" __global__ AICORE void launchTROWSUMCase22(__gm__ uint64_t* out, __gm
 {
     runTRowSum<uint64_t, 4, 4, 16, 15, 1>(out, src);
 }
+extern "C" __global__ AICORE void launchTROWSUMCase23(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowSum<int64_t, 4, 4, 64, 64, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWSUMCase24(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTRowSum<uint64_t, 4, 4, 64, 64, 1>(out, src);
+}
+extern "C" __global__ AICORE void launchTROWSUMCase25(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTRowSum<int64_t, 32, 32, 32, 32, 1>(out, src);
+}
 
 template <uint32_t caseId>
 void launchTROWSUMTestCase(void* out, void* src, aclrtStream stream)
@@ -270,6 +282,18 @@ void launchTROWSUMTestCase(void* out, void* src, aclrtStream stream)
             launchTROWSUMCase22<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
             break;
         }
+        case 23: {
+            launchTROWSUMCase23<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
+        case 24: {
+            launchTROWSUMCase24<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+            break;
+        }
+        case 25: {
+            launchTROWSUMCase25<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+            break;
+        }
         default: {
         }
     }
@@ -297,3 +321,6 @@ template void launchTROWSUMTestCase<19>(void* out, void* src, aclrtStream stream
 template void launchTROWSUMTestCase<20>(void* out, void* src, aclrtStream stream);
 template void launchTROWSUMTestCase<21>(void* out, void* src, aclrtStream stream);
 template void launchTROWSUMTestCase<22>(void* out, void* src, aclrtStream stream);
+template void launchTROWSUMTestCase<23>(void* out, void* src, aclrtStream stream);
+template void launchTROWSUMTestCase<24>(void* out, void* src, aclrtStream stream);
+template void launchTROWSUMTestCase<25>(void* out, void* src, aclrtStream stream);
