@@ -35,18 +35,25 @@ set(VFSIM_NATIVE_CORE_SOURCES
   SimulatorRunner.cpp
 )
 
-add_library(vfsim_native_core STATIC
+add_library(vfsim_native_core_objects OBJECT
   ${VFSIM_NATIVE_CORE_SOURCES}
 )
 
-add_library(vfsim::native_core ALIAS vfsim_native_core)
+add_library(vfsim::native_core_objects ALIAS vfsim_native_core_objects)
 
-target_include_directories(vfsim_native_core PUBLIC
+target_include_directories(vfsim_native_core_objects PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
-target_compile_features(vfsim_native_core PUBLIC cxx_std_17)
+target_compile_features(vfsim_native_core_objects PUBLIC cxx_std_17)
+
+# Keep the standalone native archive available to native-only consumers. PTO's
+# A5 adapter embeds the same object files directly so its users only link one
+# static archive.
+add_library(vfsim_native_core STATIC)
+add_library(vfsim::native_core ALIAS vfsim_native_core)
+target_link_libraries(vfsim_native_core PUBLIC vfsim::native_core_objects)
 
 if(VFSIM_ENABLE_MLIR_PLANNER)
   if(NOT TARGET MLIRIR)

@@ -59,7 +59,7 @@ cmake --build /path/to/build/st_a5 -j4
 ctest --test-dir /path/to/build/st_a5 --output-on-failure
 ```
 
-If `PTO_A5_LLVM_CONFIG` is not specified, the CMake script searches for LLVM 19 `llvm-config` and `clang++`. Other LLVM/Clang major versions are rejected because the current loop-capture ABI is supported only with version 19.
+LLVM/Clang 19 is recommended. If `PTO_A5_LLVM_CONFIG` is not specified, the CMake script searches for `llvm-config` and the matching-major `clang++`. Other LLVM/Clang major versions are not rejected, but Clang and the LLVM used to build the pass plugin must have the same major version.
 
 Run a single group of tests, for example `tadd`:
 
@@ -123,7 +123,7 @@ A5 VfSim requires loop information inside `__VEC_SCOPE__`.
 
 Micro-ops are captured by CCE mock stubs, but loop structure is captured by LLVM pass instrumentation. Therefore, for cases that need real VfSim prediction, compile the test with `clang++` and the A5 loop pass.
 
-The currently validated loop-capture support boundary is **regular `for` loops compiled with Clang 19, `-O0`, and `-g`**. Clang and the LLVM used to build the pass plugin must both use major version 19. The current pass relies on loop `DebugLoc` and a preheader; a loop missing either may be skipped. Complex control flow, other optimization levels, other Clang/LLVM versions, and loop ownership beyond the `__VEC_SCOPE__` destructor boundary are not currently claimed as supported scenarios.
+**Clang/LLVM 19 is recommended.** The currently validated loop-capture boundary is regular `for` loops compiled with `-O0` and `-g`. Other matching-major Clang/LLVM toolchains may be used, but their compatibility should be covered by the integrator's regression tests. The current pass relies on loop `DebugLoc` and a preheader; a loop missing either may be skipped. Complex control flow, other optimization levels, and loop ownership beyond the `__VEC_SCOPE__` destructor boundary are not currently claimed as supported scenarios.
 
 Directly using `g++` is not recommended because:
 
@@ -137,6 +137,8 @@ Directly using `g++` is not recommended because:
 Historically, most PTO-ISA features can be used in a header-only style: user code includes `pto/pto-inst.hpp`, and compile macros select the costmodel path.
 
 The A5 VfSim costmodel is not fully header-only. The real VfSim prediction backend contains native C++ implementation files. PTO-ISA must build the `pto_a5_vfsim` library first, and the user test target or costmodel case must link against that library.
+
+The `pto_a5_vfsim` static archive contains both the PTO adapter and all VfSim native-core object files. A consumer only needs to link `libpto_a5_vfsim.a`; `libvfsim_native_core.a` is not an additional link dependency.
 
 A complete setup therefore requires all of the following:
 

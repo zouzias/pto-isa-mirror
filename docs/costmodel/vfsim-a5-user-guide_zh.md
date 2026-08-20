@@ -57,7 +57,7 @@ cmake --build /path/to/build/st_a5 -j4
 ctest --test-dir /path/to/build/st_a5 --output-on-failure
 ```
 
-如果不显式传 `-DPTO_A5_LLVM_CONFIG=...`，构建脚本会查找 LLVM 19 的 `llvm-config` 和 `clang++`。其他 LLVM/Clang 主版本会直接报错，因为当前 loop capture ABI 只支持版本 19。
+推荐使用 LLVM/Clang 19。如果不显式传 `-DPTO_A5_LLVM_CONFIG=...`，构建脚本会自动查找 `llvm-config` 及其对应主版本的 `clang++`。其他 LLVM/Clang 主版本不会被直接拒绝，但 Clang 与用于构建 pass plugin 的 LLVM 必须具有相同主版本。
 
 只运行一个用例示例：
 
@@ -117,7 +117,7 @@ A5 VfSim costmodel 至少需要：
 
 A5 VfSim 需要捕获 `__VEC_SCOPE__` 内的 loop 结构。micro-op 可以由 CCE mock 拦截，但 loop 需要 LLVM pass 插桩，因此推荐通过 CMake helper 构建，不建议直接用 `g++` 编译。
 
-当前经过验证的 loop 捕获支持边界是 **Clang 19 + `-O0` + `-g` 下的规则 `for` 循环**。Clang 与用于构建 pass plugin 的 LLVM 必须同为 19 主版本。当前 pass 依赖 loop `DebugLoc` 和 preheader；缺少任一信息的 loop 可能被跳过。复杂控制流、其他优化级别、其他 Clang/LLVM 版本以及 `__VEC_SCOPE__` 析构边界外的 loop 归属尚未作为已支持场景。
+推荐使用 **Clang/LLVM 19**；当前经过验证的 loop 捕获边界是 `-O0` + `-g` 下的规则 `for` 循环。也可以使用其他主版本匹配的 Clang/LLVM 工具链，但应自行完成兼容性回归。当前 pass 依赖 loop `DebugLoc` 和 preheader；缺少任一信息的 loop 可能被跳过。复杂控制流、其他优化级别以及 `__VEC_SCOPE__` 析构边界外的 loop 归属尚未作为已支持场景。
 
 普通 `g++` 编译可能出现以下问题：
 
@@ -131,6 +131,8 @@ A5 VfSim 需要捕获 `__VEC_SCOPE__` 内的 loop 结构。micro-op 可以由 CC
 历史上的 PTO-ISA 大部分能力可以按 header-only 方式使用：用户只 include `pto/pto-inst.hpp`，再通过编译宏选择 costmodel 路径即可。
 
 A5 VfSim costmodel 不完全是 header-only。真实 VfSim 预测后端包含 native C++ 实现，需要先在 PTO-ISA 构建过程中编译出 `pto_a5_vfsim`，然后将用户测试目标或 costmodel 用例链接到该库。
+
+`pto_a5_vfsim` 静态库已经包含 PTO adapter 和 VfSim native core 的全部目标文件。用户最终只需要链接 `libpto_a5_vfsim.a`，不需要再单独链接 `libvfsim_native_core.a`。
 
 因此，完整接入需要同时满足：
 

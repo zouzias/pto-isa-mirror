@@ -96,7 +96,7 @@ function(_pto_a5_build_vfsim)
         "${_pto_a5_include_dir}"
         "${_pto_a5_pkg_inc_dir}"
         "${_pto_a5_vfsim_dir}")
-    target_link_libraries(pto_a5_vfsim PRIVATE vfsim::native_core)
+    target_link_libraries(pto_a5_vfsim PRIVATE vfsim::native_core_objects)
     target_compile_features(pto_a5_vfsim PUBLIC cxx_std_20)
     add_dependencies(pto_a5_vfsim pto_a5_vfsim_configs)
 endfunction()
@@ -109,23 +109,38 @@ macro(_pto_a5_find_llvm)
             file(GLOB _pto_a5_bindirs /usr/lib/llvm-*/bin
                  /usr/local/opt/llvm@*/bin /usr/local/opt/llvm/bin)
             find_program(PTO_A5_LLVM_CONFIG
-                NAMES llvm-config-19 llvm-config
+                NAMES llvm-config
                 PATHS ${_pto_a5_bindirs} /usr/local/bin /usr/bin)
+            if(NOT PTO_A5_LLVM_CONFIG)
+                file(GLOB _pto_a5_versioned_llvm_configs
+                    /usr/local/bin/llvm-config-* /usr/bin/llvm-config-*)
+                set(_pto_a5_best_llvm_version "0")
+                foreach(_pto_a5_llvm_config_candidate IN LISTS _pto_a5_versioned_llvm_configs)
+                    execute_process(COMMAND ${_pto_a5_llvm_config_candidate} --version
+                        OUTPUT_VARIABLE _pto_a5_llvm_config_candidate_version
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                        RESULT_VARIABLE _pto_a5_llvm_config_candidate_result)
+                    if(_pto_a5_llvm_config_candidate_result EQUAL 0 AND
+                       _pto_a5_llvm_config_candidate_version VERSION_GREATER _pto_a5_best_llvm_version)
+                        set(_pto_a5_best_llvm_version "${_pto_a5_llvm_config_candidate_version}")
+                        set(PTO_A5_LLVM_CONFIG "${_pto_a5_llvm_config_candidate}")
+                    endif()
+                endforeach()
+            endif()
         endif()
     endif()
     if(NOT PTO_A5_LLVM_CONFIG)
-        message(FATAL_ERROR "a5_vf_mock: LLVM 19 llvm-config was not found. "
-            "Install Clang/LLVM 19 or set LLVM_CONFIG to llvm-config-19.")
+        message(FATAL_ERROR "a5_vf_mock: llvm-config was not found. "
+            "Install Clang/LLVM or set PTO_A5_LLVM_CONFIG or LLVM_CONFIG.")
     endif()
     execute_process(COMMAND ${PTO_A5_LLVM_CONFIG} --version
         OUTPUT_VARIABLE PTO_A5_LLVM_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
     execute_process(COMMAND ${PTO_A5_LLVM_CONFIG} --bindir
         OUTPUT_VARIABLE PTO_A5_LLVM_BINDIR OUTPUT_STRIP_TRAILING_WHITESPACE)
     string(REGEX MATCH "^([0-9]+)" PTO_A5_LLVM_MAJOR "${PTO_A5_LLVM_VERSION}")
-    if(NOT PTO_A5_LLVM_MAJOR STREQUAL "19")
-        message(FATAL_ERROR
-            "a5_vf_mock: only LLVM 19 is currently supported; found ${PTO_A5_LLVM_VERSION} "
-            "from ${PTO_A5_LLVM_CONFIG}")
+    if(NOT PTO_A5_LLVM_MAJOR)
+        message(FATAL_ERROR "a5_vf_mock: unable to determine the LLVM major version from "
+            "'${PTO_A5_LLVM_VERSION}' (${PTO_A5_LLVM_CONFIG})")
     endif()
     if(NOT PTO_A5_CLANGXX OR NOT EXISTS "${PTO_A5_CLANGXX}")
         unset(PTO_A5_CLANGXX CACHE)
@@ -141,10 +156,17 @@ macro(_pto_a5_find_llvm)
     execute_process(COMMAND ${PTO_A5_CLANGXX} --version
         OUTPUT_VARIABLE PTO_A5_CLANGXX_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
     string(REGEX MATCH "clang version ([0-9]+)" _pto_a5_clang_version_match "${PTO_A5_CLANGXX_VERSION}")
-    if(NOT CMAKE_MATCH_1 STREQUAL "19")
+    set(PTO_A5_CLANGXX_MAJOR "${CMAKE_MATCH_1}")
+    if(NOT PTO_A5_CLANGXX_MAJOR)
         message(FATAL_ERROR
-            "a5_vf_mock: clang++ must use major version 19; found '${PTO_A5_CLANGXX_VERSION}' "
+            "a5_vf_mock: unable to determine the clang++ major version from '${PTO_A5_CLANGXX_VERSION}' "
             "at ${PTO_A5_CLANGXX}")
+    endif()
+    if(NOT PTO_A5_CLANGXX_MAJOR STREQUAL PTO_A5_LLVM_MAJOR)
+        message(FATAL_ERROR
+            "a5_vf_mock: clang++ and LLVM must use the same major version; found clang++ "
+            "${PTO_A5_CLANGXX_MAJOR} at ${PTO_A5_CLANGXX}, but ${PTO_A5_LLVM_CONFIG} provides LLVM "
+            "${PTO_A5_LLVM_VERSION}")
     endif()
     execute_process(COMMAND ${PTO_A5_LLVM_CONFIG} --cxxflags
         OUTPUT_VARIABLE PTO_A5_LLVM_CXXFLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -185,15 +207,20 @@ function(target_enable_a5_vf_mock target)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "a5_vf_mock: target '${target}' does not exist")
     endif()
-    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
-       NOT CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19 OR
-       NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 20)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR
-            "a5_vf_mock: target '${target}' must be compiled with Clang 19; found "
+            "a5_vf_mock: target '${target}' must be compiled with Clang; found "
             "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} "
             "(${CMAKE_CXX_COMPILER})")
     endif()
     _pto_a5_build_pass()
+    string(REGEX MATCH "^([0-9]+)" _pto_a5_target_clang_version "${CMAKE_CXX_COMPILER_VERSION}")
+    set(_pto_a5_target_clang_major "${CMAKE_MATCH_1}")
+    if(NOT _pto_a5_target_clang_major STREQUAL PTO_A5_LLVM_MAJOR)
+        message(FATAL_ERROR
+            "a5_vf_mock: target '${target}' uses Clang ${CMAKE_CXX_COMPILER_VERSION}, but the pass "
+            "plugin uses LLVM ${PTO_A5_LLVM_VERSION}; their major versions must match")
+    endif()
     _pto_a5_build_vfsim()
     add_dependencies(${target} PtoLoopTracePass)
     target_include_directories(${target} PRIVATE
