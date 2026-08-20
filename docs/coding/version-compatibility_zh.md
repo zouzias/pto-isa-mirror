@@ -114,7 +114,7 @@ python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64
 
 - `TASSIGN` 用于手动地址绑定
 - `TLOAD` / `TSTORE` 用于 GM 与 Tile 之间的数据移动
-- `TSYNC` 与事件相关接口用于显式顺序控制
+- 事件相关接口用于显式顺序控制
 
 ### 5.2 Event 兼容性与后端相关
 
