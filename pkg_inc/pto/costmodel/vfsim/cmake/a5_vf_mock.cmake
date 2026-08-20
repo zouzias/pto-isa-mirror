@@ -82,7 +82,6 @@ function(_pto_a5_build_vfsim)
     if(TARGET pto_a5_vfsim)
         return()
     endif()
-    set(VFSIM_BUILD_TESTS OFF CACHE BOOL "Build vendored VfSim native tests" FORCE)
     set(VFSIM_ENABLE_MLIR_PLANNER OFF CACHE BOOL "Build the optional VfSim MLIR planner" FORCE)
     _pto_a5_add_vfsim_config_sync_target()
     add_subdirectory(

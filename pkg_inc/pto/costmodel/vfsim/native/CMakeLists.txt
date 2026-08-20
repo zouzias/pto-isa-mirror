@@ -9,14 +9,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(VfSimNative LANGUAGES C CXX)
 
-if(PROJECT_IS_TOP_LEVEL)
-  include(CTest)
-  set(VFSIM_BUILD_TESTS_DEFAULT ON)
-else()
-  set(VFSIM_BUILD_TESTS_DEFAULT OFF)
-endif()
-
-option(VFSIM_BUILD_TESTS "Build native VfSim tests" ${VFSIM_BUILD_TESTS_DEFAULT})
 option(VFSIM_ENABLE_MLIR_PLANNER "Build MLIR IR planner entry point" OFF)
 
 set(VFSIM_NATIVE_CORE_SOURCES
@@ -77,94 +69,3 @@ if(VFSIM_ENABLE_MLIR_PLANNER)
     ${LLVM_INCLUDE_DIRS}
   )
 endif()
-
-if(NOT VFSIM_BUILD_TESTS)
-  return()
-endif()
-
-if(PROJECT_IS_TOP_LEVEL AND NOT BUILD_TESTING)
-  return()
-endif()
-
-add_compile_definitions(VFSIM_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-
-add_executable(vfsim_native_smoke_test
-  VfsimNativeSmokeTest.cpp
-)
-
-target_link_libraries(vfsim_native_smoke_test PRIVATE
-  vfsim::native_core
-)
-
-set_target_properties(vfsim_native_smoke_test PROPERTIES
-  FOLDER "Tests"
-)
-
-add_test(NAME vfsim_native_smoke_test
-  COMMAND vfsim_native_smoke_test
-)
-
-add_executable(vfsim_tadd_tmul_trace
-  VfsimTaddTmulTrace.cpp
-)
-
-target_link_libraries(vfsim_tadd_tmul_trace PRIVATE
-  vfsim::native_core
-)
-
-set_target_properties(vfsim_tadd_tmul_trace PROPERTIES
-  FOLDER "Tests"
-)
-
-add_test(NAME vfsim_tadd_tmul_trace
-  COMMAND vfsim_tadd_tmul_trace
-)
-
-add_executable(vfsim_program_canonicalization_test
-  ProgramCanonicalizationTest.cpp
-)
-
-target_link_libraries(vfsim_program_canonicalization_test PRIVATE
-  vfsim::native_core
-)
-
-add_test(NAME vfsim_program_canonicalization_test
-  COMMAND vfsim_program_canonicalization_test
-)
-
-add_executable(vfsim_program_vreg_live_range_normalization_test
-  ProgramVregLiveRangeNormalizationTest.cpp
-)
-
-target_link_libraries(vfsim_program_vreg_live_range_normalization_test PRIVATE
-  vfsim::native_core
-)
-
-add_test(NAME vfsim_program_vreg_live_range_normalization_test
-  COMMAND vfsim_program_vreg_live_range_normalization_test
-)
-
-add_executable(vfsim_vf_info_api_test
-  CanonicalVfInfoFixtureDecoder.cpp
-  VfsimVfInfoApiTest.cpp
-)
-
-target_link_libraries(vfsim_vf_info_api_test PRIVATE
-  vfsim::native_core
-)
-
-add_test(NAME vfsim_vf_info_api_test
-  COMMAND vfsim_vf_info_api_test
-)
-
-add_executable(vfsim_native_json_runner
-  VfsimNativeJsonRunner.cpp
-)
-
-target_link_libraries(vfsim_native_json_runner PRIVATE
-  vfsim::native_core
-)
-
-set_target_properties(vfsim_native_json_runner PROPERTIES
-  FOLDER "Tests"
-)

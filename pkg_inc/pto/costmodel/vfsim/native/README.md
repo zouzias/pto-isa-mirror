@@ -35,7 +35,3 @@
 
 - `runCanonicalVfInfo()`：canonical 直接入口，跳过 legacy value lowering、vreg
   live-range normalization 和 single-super-iteration rewriting。
-
-旧 JSON runner 和回归测试如需使用 `VfInfo`，必须在调用点显式执行
-`adaptLegacyVfInfoToCanonical()`，再调用 `runCanonicalVfInfo()`；`SimulatorRunner.h`
-不再公开 legacy overload，也不存在第二套 Core 执行路径。
