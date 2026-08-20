@@ -45,7 +45,7 @@ endif()
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
-    -O2
+    -O2 -std=c++17
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )
@@ -71,6 +71,8 @@ set(CMAKE_CCE_COMPILE_OPTIONS
 )
 
 set(CCE_AICORE_ARCH "dav-c310" CACHE STRING "CCE AI Core architecture for this A5 kernel")
+set(PTO_TARGET_NPU_ARCH PTO_NPU_ARCH_A5)
+
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"
@@ -88,7 +90,6 @@ else()
         "Cannot find Ascend kernel include root under ${ASCEND_HOME_PATH}/x86_64-linux or aarch64-linux")
 endif()
 
-# Host extra include dirs for hccl_tiling (path differs across CANN packages).
 set(HOST_EXTRA_INCLUDE_DIRS)
 if(EXISTS ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/adv_api/hccl/hccl_tiling.h)
     list(APPEND HOST_EXTRA_INCLUDE_DIRS ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/adv_api)
@@ -103,49 +104,61 @@ include_directories(
     ${ASCEND_HOME_PATH}/include/experiment/runtime
 )
 
-add_library(dispatch_mega_combine_kernel SHARED kernel_launch.cpp)
-target_compile_options(dispatch_mega_combine_kernel PRIVATE
-    ${CMAKE_CCE_COMPILE_OPTIONS}
-    --cce-aicore-arch=${CCE_AICORE_ARCH}
-)
-target_include_directories(dispatch_mega_combine_kernel BEFORE PRIVATE
-    ${PROJECT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/op_kernel
-    ${PROJECT_SOURCE_DIR}/op_kernel/utils
-    ${ASCEND_HOME_PATH}/include/hccl
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/pkg_inc/runtime/runtime
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/basic_api
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/interface
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/utils
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/impl/basic_api
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api
-    ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api/impl
-)
-target_link_options(dispatch_mega_combine_kernel PRIVATE --cce-fatobj-link)
+function(pto_example_mixed NAME)
+    add_library(${NAME}_kernel SHARED kernel_launch.cpp)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -std=c++17)
+    target_compile_definitions(${NAME}_kernel PRIVATE
+        ${PTO_TARGET_NPU_ARCH}
+    )
+    target_include_directories(${NAME}_kernel BEFORE PRIVATE
+        ${PTO_REPO_INCLUDE_DIR}
+        ${PROJECT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/op_kernel
+        ${PROJECT_SOURCE_DIR}/op_kernel/utils
+        ${PROJECT_BINARY_DIR}
+        ${ASCEND_HOME_PATH}/include/hccl
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/pkg_inc/runtime/runtime
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/include/ascendc/basic_api
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/basic_api
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/interface
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/include/utils
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/asc/impl/basic_api
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api
+        ${ASCEND_KERNEL_PLATFORM_ROOT}/ascendc/include/basic_api/impl
+    )
+    target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
-add_executable(dispatch_mega_combine
-    main.cpp
-    runtime_context.cpp
-    tiling_builder.cpp
-    data_utils.cpp
-)
-target_compile_options(dispatch_mega_combine PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-target_include_directories(dispatch_mega_combine BEFORE PRIVATE
-    ${PROJECT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/op_kernel
-    ${PROJECT_SOURCE_DIR}/op_kernel/utils
-    ${ASCEND_HOME_PATH}/include/hccl
-    ${HOST_EXTRA_INCLUDE_DIRS}
-)
+    add_executable(${NAME}
+        main.cpp
+        runtime_context.cpp
+        tiling_builder.cpp
+        data_utils.cpp
+    )
+    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+    target_compile_definitions(${NAME} PRIVATE
+        ${PTO_TARGET_NPU_ARCH}
+    )
+    target_include_directories(${NAME} BEFORE PRIVATE
+        ${PTO_REPO_INCLUDE_DIR}
+        ${PROJECT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/op_kernel
+        ${PROJECT_SOURCE_DIR}/op_kernel/utils
+        ${PROJECT_SOURCE_DIR}/../../../../tests/common
+        ${ASCEND_HOME_PATH}/include/hccl
+        ${HOST_EXTRA_INCLUDE_DIRS}
+        ${PROJECT_BINARY_DIR}
+    )
 
-target_link_directories(dispatch_mega_combine PUBLIC
-    ${ASCEND_HOME_PATH}/lib64
-)
+    target_link_directories(${NAME} PUBLIC
+        ${ASCEND_HOME_PATH}/lib64
+    )
 
-target_link_libraries(dispatch_mega_combine PRIVATE
-    dispatch_mega_combine_kernel
-    stdc++ ascendcl hcomm runtime m tiling_api register platform c_sec dl nnopbase pthread
-)
+    target_link_libraries(${NAME} PRIVATE
+        ${NAME}_kernel
+        stdc++ ascendcl hcomm runtime m tiling_api register platform c_sec dl nnopbase pthread
+    )
+endfunction()
+
+pto_example_mixed(dispatch_mega_combine)
