@@ -17,7 +17,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 enum QuantMode_t {
-    NoQuant = 0,        // 不使能量化功能
+    NoQuant = 0,
+    Default = 1000,
+    VDefault = 2000,
     F322F16 = 1,        // float量化成half, scalar量化
     F322BF16 = 16,      // float量化成bfloat16_t, scalar量化
     DEQF16 = 5,         // int32_t量化成half, scalar量化
@@ -35,13 +37,13 @@ enum QuantMode_t {
 };
 
 template <QuantMode_t Mode>
-inline constexpr bool is_vector_quant_v =
-    Mode == QuantMode_t::VQF322B8_PRE || Mode == QuantMode_t::VREQ8 || Mode == QuantMode_t::VDEQF16;
+inline constexpr bool is_vector_quant_v = Mode == QuantMode_t::VQF322B8_PRE || Mode == QuantMode_t::VREQ8 ||
+                                          Mode == QuantMode_t::VDEQF16 || Mode == QuantMode_t::VDefault;
 
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
-    QuantMode_t quantPre = QuantMode_t::NoQuant;
+    QuantMode_t quantPre = QuantMode_t::Default;
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr (std::is_same<DstType, half>::value) {
             quantPre = QuantMode_t::F322F16;
@@ -55,7 +57,7 @@ PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
 {
-    QuantMode_t quantPre = QuantMode_t::NoQuant;
+    QuantMode_t quantPre = QuantMode_t::Default;
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::QF322B8_PRE;
@@ -79,7 +81,7 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantMode()
 {
-    QuantMode_t quantPre = QuantMode_t::NoQuant;
+    QuantMode_t quantPre = QuantMode_t::VDefault;
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::VQF322B8_PRE;
@@ -181,30 +183,6 @@ PTO_INLINE D ConvertStoreValue(S value, uint64_t scalar)
             value = ReLU(value);
         }
         return static_cast<D>(value);
-    }
-}
-
-template <
-    typename D, typename S, typename TileData, QuantMode_t quantMode, bool applyRelu,
-    AtomicType atomicType = AtomicType::AtomicNone>
-PTO_INLINE void StoreElement(D* dst, size_t dstIdx, S value, size_t r, size_t c, const std::vector<uint64_t>& scalars)
-{
-    size_t scalarIndex = TileData::isRowMajor ? c : r;
-    uint64_t scalar = 0;
-    if constexpr (quantMode != QuantMode_t::NoQuant) {
-        scalar = scalars[scalarIndex];
-    }
-    const D converted = ConvertStoreValue<D, S, quantMode, applyRelu>(value, scalar);
-    if constexpr (atomicType == AtomicType::AtomicAdd) {
-        std::lock_guard<std::mutex> lock(cpu::AtomicAddMutex());
-        if constexpr (IsTwinType<D>()) {
-            const auto val = GetProperDataPart(dst, dstIdx);
-            SetProperDataPart(dst, dstIdx, val + converted);
-        } else {
-            dst[dstIdx] += converted;
-        }
-    } else {
-        dst[dstIdx] = converted;
     }
 }
 

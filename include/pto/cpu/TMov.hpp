@@ -87,8 +87,7 @@ template <
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar)
 {
     (void)Phase;
-    (void)preQuantScalar;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, 0, 0);
 }
 
 template <
@@ -98,8 +97,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuan
 {
     (void)Phase;
     (void)mode;
-    (void)preQuantScalar;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, 0, 0);
 }
 } // namespace pto
 #endif // TMOV_HPP
