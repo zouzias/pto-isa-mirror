@@ -71,12 +71,44 @@ __global__ AICORE void runTMAXS(__gm__ T __out__* out, __gm__ T __in__* src0, __
     out = dstGlobal.data();
 }
 
+template <typename T, int cols>
+__global__ AICORE void runTMAXSWideInt64(__gm__ T __out__* out, __gm__ T __in__* src0, __gm__ T __in__* scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData src0Global(src0 + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData src0Tile(tileRows, validCols);
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(src0Tile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        Event<Op::TLOAD, Op::TMAXS> event0 = TLOAD(src0Tile, src0Global);
+        Event<Op::TMAXS, Op::TSTORE_VEC> event1 = TMAXS(dstTile, src0Tile, scalar[0], event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>
 void LaunchTMaxs(T* out, T* src0, T* scalar, void* stream)
 {
+    constexpr int wideTileCols = 64;
     if constexpr (std::is_same_v<T, aclFloat16> && kPadValue_ == PAD_VALUE_MAX) {
         runTMAXS<half, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, kPadValue_>
             <<<1, nullptr, stream>>>((half*)(out), (half*)(src0), (half*)(scalar));
+    } else if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && dstRow == 1 && srcRow == 1 && dstCol == srcCol &&
+        dstCol == kVCols_ && kVRows_ == 1 && kVCols_ > wideTileCols && kPadValue_ == PAD_VALUE_NULL) {
+        runTMAXSWideInt64<T, kVCols_><<<1, nullptr, stream>>>(out, src0, scalar);
     } else {
         runTMAXS<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, kPadValue_>
             <<<1, nullptr, stream>>>(out, src0, scalar);
@@ -115,4 +147,12 @@ template void LaunchTMaxs<uint8_t, 32, 128, 32, 128, 32, 128, PAD_VALUE_NULL>(
 template void LaunchTMaxs<int64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(
     int64_t* out, int64_t* src0, int64_t* scalar, void* stream);
 template void LaunchTMaxs<uint64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(
+    uint64_t* out, uint64_t* src0, uint64_t* scalar, void* stream);
+template void LaunchTMaxs<int64_t, 1, 16364, 1, 16364, 1, 16364, PAD_VALUE_NULL>(
+    int64_t* out, int64_t* src0, int64_t* scalar, void* stream);
+template void LaunchTMaxs<uint64_t, 1, 16364, 1, 16364, 1, 16364, PAD_VALUE_NULL>(
+    uint64_t* out, uint64_t* src0, uint64_t* scalar, void* stream);
+template void LaunchTMaxs<int64_t, 1, 16368, 1, 16368, 1, 16368, PAD_VALUE_NULL>(
+    int64_t* out, int64_t* src0, int64_t* scalar, void* stream);
+template void LaunchTMaxs<uint64_t, 1, 16368, 1, 16368, 1, 16368, PAD_VALUE_NULL>(
     uint64_t* out, uint64_t* src0, uint64_t* scalar, void* stream);

@@ -88,6 +88,8 @@ if __name__ == "__main__":
         TMinParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
         TMinParams(np.int64, 4, 16, 4, 16, 4, 16, 4, 16),
         TMinParams(np.uint64, 4, 16, 4, 16, 4, 16, 4, 16),
+        TMinParams(np.int64, 1, 16364, 1, 16364, 1, 16364, 1, 16364),
+        TMinParams(np.uint64, 1, 16364, 1, 16364, 1, 16364, 1, 16364),
     ]
 
     for param in case_params_list:
