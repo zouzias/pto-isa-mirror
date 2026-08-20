@@ -31,16 +31,42 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "vf_trace.hpp"
 #include "pto/costmodel/trace.hpp"
 
-struct vector_f32 {};
-struct vector_f16 {};
-struct vector_u8 {};
-struct vector_u16 {};
-struct vector_s8 {};
-struct vector_s16 {};
-struct vector_s32 {};
-struct vector_u32 {};
-struct vector_s64 {};
-struct vector_u64 {};
+struct vector_stub {
+    vector_stub() = default;
+    template <class T>
+    vector_stub(const T&)
+    {}
+};
+struct vector_f32 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_f16 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_u8 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_u16 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_s8 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_s16 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_s32 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_u32 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_s64 : vector_stub {
+    using vector_stub::vector_stub;
+};
+struct vector_u64 : vector_stub {
+    using vector_stub::vector_stub;
+};
 
 inline uintptr_t PtoPredicateCallsiteKey(const std::source_location& location)
 {
@@ -58,6 +84,7 @@ struct vector_bool {
 };
 struct vector_address {};
 struct vector_align {};
+enum class Spr : uint8_t { AR = 74 };
 
 namespace pto {
 template <typename T>
@@ -169,11 +196,80 @@ struct ScopeSentinel {
 #ifndef ROUND_Z
 #define ROUND_Z 1
 #endif
+#ifndef ROUND_F
+#define ROUND_F 2
+#endif
 #ifndef RS_DISABLE
 #define RS_DISABLE 0
 #endif
+#ifndef RS_ENABLE
+#define RS_ENABLE 1
+#endif
 #ifndef PART_EVEN
 #define PART_EVEN 0
+#endif
+#ifndef PART_ODD
+#define PART_ODD 1
+#endif
+#ifndef NORM_B32
+#define NORM_B32 0
+#endif
+#ifndef NORM_B16
+#define NORM_B16 1
+#endif
+#ifndef PK_B32
+#define PK_B32 2
+#endif
+#ifndef PK_B16
+#define PK_B16 3
+#endif
+#ifndef UNPK_B16
+#define UNPK_B16 4
+#endif
+#ifndef UNPK_B32
+#define UNPK_B32 5
+#endif
+#ifndef INC_ORDER
+#define INC_ORDER 0
+#endif
+#ifndef POS_LOWEST
+#define POS_LOWEST 1
+#endif
+#ifndef PAT_ALLF
+#define PAT_ALLF 1
+#endif
+#ifndef MODE_STORED
+#define MODE_STORED 2
+#endif
+#ifndef MODE_MERGING
+#define MODE_MERGING 3
+#endif
+#ifndef PAT_H
+#define PAT_H 2
+#endif
+#ifndef UNPK_B8
+#define UNPK_B8 6
+#endif
+#ifndef PART_P0
+#define PART_P0 2
+#endif
+#ifndef ROUND_A
+#define ROUND_A 3
+#endif
+#ifndef BRC_B16
+#define BRC_B16 10
+#endif
+#ifndef BRC_B8
+#define BRC_B8 14
+#endif
+#ifndef BRC_B32
+#define BRC_B32 11
+#endif
+#ifndef BLK
+#define BLK 15
+#endif
+#ifndef SPR_AR
+#define SPR_AR Spr::AR
 #endif
 #ifndef DINTLV_B32
 #define DINTLV_B32 0
@@ -197,6 +293,10 @@ inline constexpr uint32_t CeilDivision(T a, U b)
 {
     return (b == 0) ? 0 : static_cast<uint32_t>((static_cast<uint64_t>(a) + static_cast<uint64_t>(b) - 1) / b);
 }
+
+template <auto... Pipes>
+inline void PtoSetWaitFlag()
+{}
 } // namespace pto
 
 namespace pto::mocker::vf::capture {
@@ -441,11 +541,108 @@ inline void vsts(A&&... args)
 {
     ::pto::mocker::vf::capture::RecordStore("vsts", std::forward<A>(args)...);
 }
+
+template <class Dst, class Src, class Index, class Mask>
+inline void vgather2(Dst&& dst, Src&& src, Index&& index, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(dst, src, index, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vgather2", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
+}
+
+template <class Src, class Dst, class Index, class Mask>
+inline void vscatter(Src&& src, Dst&& dst, Index&& index, Mask&& mask)
+{
+    auto operands = std::forward_as_tuple(src, dst, index, mask);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vscatter", operands, std::index_sequence<1>{}, std::index_sequence<0, 2, 3>{}));
+}
+
+template <class Dst, class Scalar, class Order>
+inline void vci(Dst&& dst, Scalar&& scalar, Order&& order)
+{
+    auto operands = std::forward_as_tuple(dst);
+    auto inst =
+        ::pto::mocker::vf::capture::MakeInstruction("vci", operands, std::index_sequence<0>{}, std::index_sequence<>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 1, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", scalar);
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Config, "order", order);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Dst, class Src, class Mask, class Mode>
+inline void vsqz(Dst&& dst, Src&& src, Mask&& mask, Mode&& mode)
+{
+    auto operands = std::forward_as_tuple(dst, src, mask);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "vsqz", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 3, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class... A>
+inline void sprclr(A&&...)
+{}
+
+template <class Align, class Src, class Dst, class Update>
+inline void vstur(Align&& align, Src&& src, Dst&& dst, Update&& update)
+{
+    auto operands = std::forward_as_tuple(align, src, dst);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "vstur", operands, std::index_sequence<2>{}, std::index_sequence<0, 1>{});
+    ::pto::mocker::vf::capture::AddArgument(inst, 3, ::pto::mocker::vf::VfArgKind::Config, "update", update);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Align, class Dst>
+inline void vstar(Align&& align, Dst&& dst)
+{
+    auto operands = std::forward_as_tuple(align, dst);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        "vstar", operands, std::index_sequence<1>{}, std::index_sequence<0>{}));
+}
+
+template <class SpecialRegister, class Dst, class Offset>
+inline void sprsts(SpecialRegister&& specialRegister, Dst&& dst, Offset&& offset)
+{
+    auto operands = std::forward_as_tuple(specialRegister, dst);
+    auto inst = ::pto::mocker::vf::capture::MakeInstruction(
+        "sprsts", operands, std::index_sequence<1>{}, std::index_sequence<>{});
+    ::pto::mocker::vf::capture::AddArgument(
+        inst, 0, ::pto::mocker::vf::VfArgKind::Config, "special_register", specialRegister);
+    ::pto::mocker::vf::capture::AddArgument(inst, 2, ::pto::mocker::vf::VfArgKind::Immediate, "offset", offset);
+    ::pto::mocker::vf::capture::rec(std::move(inst));
+}
+
+template <class Dst0, class Dst1, class Src0, class Src1>
+inline void RecordPredicateInterleave(const char* name, Dst0&& dst0, Dst1&& dst1, Src0&& src0, Src1&& src1)
+{
+    auto operands = std::forward_as_tuple(dst0, dst1, src0, src1);
+    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+        name, operands, std::index_sequence<0, 1>{}, std::index_sequence<2, 3>{}));
+}
+
+template <class... A>
+inline void pintlv_b8(A&&... args)
+{
+    RecordPredicateInterleave("pintlv_b8", std::forward<A>(args)...);
+}
+template <class... A>
+inline void pintlv_b16(A&&... args)
+{
+    RecordPredicateInterleave("pintlv_b16", std::forward<A>(args)...);
+}
+template <class... A>
+inline void pintlv_b32(A&&... args)
+{
+    RecordPredicateInterleave("pintlv_b32", std::forward<A>(args)...);
+}
 PTO_VF_RECORD_VOID(vdup)
 PTO_VF_RECORD_VOID(vadd)
 PTO_VF_RECORD_VOID(vsub)
 PTO_VF_RECORD_VOID(vmul)
 PTO_VF_RECORD_VOID(vdiv)
+PTO_VF_RECORD_VOID(vpack)
+PTO_VF_RECORD_VOID(vaxpy)
 PTO_VF_RECORD_VOID(vmax)
 PTO_VF_RECORD_VOID(vmin)
 PTO_VF_RECORD_VOID(vcvt)
@@ -479,6 +676,7 @@ PTO_VF_RECORD_VOID(vcmp_lt)
 PTO_VF_RECORD_VOID(vcmp_ne)
 PTO_VF_RECORD_VOID(vcmps_eq)
 PTO_VF_RECORD_VOID(vcmps_ge)
+PTO_VF_RECORD_VOID(vcmps_gt)
 PTO_VF_RECORD_VOID(vcmps_le)
 PTO_VF_RECORD_VOID(vcmps_lt)
 PTO_VF_RECORD_VOID(vcmps_ne)
@@ -713,17 +911,203 @@ using HalfUnion = FloatIntUnion<half>;
 #include <pto/npu/a5/common.hpp>
 #include <pto/npu/a5/utils.hpp>
 using DistVST = ::pto::DistVST;
+
+namespace pto {
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TMOV_IMPL(DstTile& dst, SrcTile& src)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data());
+        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+            "tmov", operands, std::index_sequence<0>{}, std::index_sequence<1>{}));
+    }
+}
+
+template <typename DstTile, typename SrcTile, typename IndexTile>
+PTO_INTERNAL void TSCATTER_IMPL(DstTile& dst, SrcTile& src, IndexTile& index)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data(), index.data());
+        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+            "tscatter", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{}));
+    }
+}
+
+template <MaskPattern mask, auto scatterType = ScatterAxis::SCATTER_ROW, typename DstTile, typename SrcTile>
+PTO_INTERNAL void TSCATTER_IMPL(DstTile& dst, SrcTile& src)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data());
+        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
+            "tscatter", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+        ::pto::mocker::vf::capture::AddArgument(instruction, 2, ::pto::mocker::vf::VfArgKind::Config, "mask", mask);
+        ::pto::mocker::vf::capture::AddArgument(
+            instruction, 3, ::pto::mocker::vf::VfArgKind::Config, "axis", scatterType);
+        ::pto::mocker::vf::capture::rec(std::move(instruction));
+    }
+}
+} // namespace pto
+
 #include <pto/npu/a5/TBinOp.hpp>
 #include <pto/npu/a5/TAdd.hpp>
 #include <pto/npu/a5/TAddS.hpp>
 #include <pto/npu/a5/TAnd.hpp>
+#include <pto/npu/a5/TColExpandDiv.hpp>
 #include <pto/npu/a5/TDiv.hpp>
+#include <pto/npu/a5/TFMod.hpp>
+#include <pto/npu/a5/TFModS.hpp>
+#include <pto/npu/a5/TGather.hpp>
 #include <pto/npu/a5/TMax.hpp>
 #include <pto/npu/a5/TMin.hpp>
 #include <pto/npu/a5/TMins.hpp>
 #include <pto/npu/a5/TMul.hpp>
 #include <pto/npu/a5/TMulS.hpp>
+#include <pto/npu/a5/TPow.hpp>
+#include <pto/npu/a5/TRem.hpp>
+#include <pto/npu/a5/TRemS.hpp>
+#include <pto/npu/a5/TRowExpandDiv.hpp>
 #include <pto/npu/a5/TShlS.hpp>
 #include <pto/npu/a5/TShrS.hpp>
 #include <pto/npu/a5/TSub.hpp>
 #include <pto/npu/a5/TSubS.hpp>
+#include <pto/npu/a5/TUnaryOp.hpp>
+
+namespace pto {
+
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TDIVS_IMPL(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data());
+        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
+            "vdivs", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+        ::pto::mocker::vf::capture::AddArgument(
+            instruction, 2, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", scalar);
+        ::pto::mocker::vf::capture::rec(std::move(instruction));
+    }
+}
+
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TDIVS_IMPL(TileDataDst& dst, typename TileDataSrc::DType scalar, TileDataSrc& src)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data());
+        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
+            "vsdiv", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
+        ::pto::mocker::vf::capture::AddArgument(
+            instruction, 1, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", scalar);
+        ::pto::mocker::vf::capture::rec(std::move(instruction));
+    }
+}
+
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
+PTO_INTERNAL void TRSQRT_IMPL(DstTile& dst, SrcTile& src)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data());
+        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+            "trsqrt", operands, std::index_sequence<0>{}, std::index_sequence<1>{}));
+    }
+}
+
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile, typename TmpTile>
+PTO_INTERNAL void TRSQRT_IMPL(DstTile& dst, SrcTile& src, [[maybe_unused]] TmpTile& tmp)
+{
+    TRSQRT_IMPL<PrecisionType>(dst, src);
+}
+
+template <typename DstTile, typename SrcTile, typename ExpTile, typename MaxTile, typename ScalingTile>
+PTO_INTERNAL void RecordUnsupportedMxQuant(DstTile& dst, SrcTile& src, ExpTile* exp, MaxTile* max, ScalingTile* scaling)
+{
+    __VEC_SCOPE__
+    {
+        auto operands = std::forward_as_tuple(dst.data(), src.data(), exp->data(), max->data(), scaling->data());
+        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+            "tquant", operands, std::index_sequence<0, 2, 3, 4>{}, std::index_sequence<1>{}));
+    }
+}
+
+template <
+    QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
+    typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
+{
+    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
+}
+
+template <
+    QuantType quantType, QuantScaleAlg scaleAlg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
+{
+    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
+}
+
+template <
+    QuantType quantType, VecStoreMode storeMode, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling,
+    TileDataExp* expZz)
+{
+    __VEC_SCOPE__
+    {
+        auto operands =
+            std::forward_as_tuple(dst.data(), src.data(), exp->data(), max->data(), scaling->data(), expZz->data());
+        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+            "tquant", operands, std::index_sequence<0, 2, 3, 4, 5>{}, std::index_sequence<1>{}));
+    }
+}
+
+template <
+    int groupAxis, MxQuantAlg mxAlgorithm, bool interleave, typename TileDataOut, typename TileDataSrc,
+    typename TileDataExp, typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
+{
+    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
+}
+
+template <
+    int groupAxis, MxQuantAlg mxAlgorithm, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+    typename TileDataMax, typename TileDataScaling>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
+{
+    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
+}
+
+template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara>
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut& dst, TileDataSrc& src, TileDataPara& scale, TileDataPara* offset = nullptr)
+{
+    __VEC_SCOPE__
+    {
+        if (offset == nullptr) {
+            auto operands = std::forward_as_tuple(dst.data(), src.data(), scale.data());
+            ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+                "tquant", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{}));
+        } else {
+            auto operands = std::forward_as_tuple(dst.data(), src.data(), scale.data(), offset->data());
+            ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
+                "tquant", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
+        }
+    }
+}
+
+template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp>
+PTO_INTERNAL void TQUANT_IMPL(
+    TileDataOut& dst, TileDataSrc& src, TileDataPara& scale, [[maybe_unused]] TileDataTmp& tmp,
+    TileDataPara* offset = nullptr)
+{
+    TQUANT_IMPL<quantType>(dst, src, scale, offset);
+}
+
+} // namespace pto

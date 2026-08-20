@@ -19,12 +19,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef VLD_VST
 #define VLD_VST 1
 #endif
+#ifndef VST_VST
+#define VST_VST 2
+#endif
 
 namespace pto::mocker::a5::sync {
 
 inline const char* VfMemBarName(int64_t barrierType)
 {
-    return barrierType == static_cast<int64_t>(VLD_VST) ? "VLD_VST" : "VST_VLD";
+    if (barrierType == static_cast<int64_t>(VLD_VST)) {
+        return "VLD_VST";
+    }
+    if (barrierType == static_cast<int64_t>(VST_VST)) {
+        return "VST_VST";
+    }
+    return "VST_VLD";
 }
 
 inline void RecordVfMemBar(int64_t barrierType) { ::pto::mocker::vf::trace::RecordMemBar(VfMemBarName(barrierType)); }
