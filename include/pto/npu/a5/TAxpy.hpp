@@ -27,10 +27,11 @@ PTO_INTERNAL void AxpyInstrSame(__ubuf__ T* dstPtr, __ubuf__ U* src0Ptr, U scala
         RegTensor<U> vreg0;
         RegTensor<T> vreg2;
         MaskReg preg;
+        uint32_t sreg;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
-            uint32_t sreg = validCol;
+            sreg = validCol;
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                 vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, NORM);
                 vlds(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, NORM);

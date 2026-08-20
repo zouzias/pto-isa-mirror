@@ -1,4 +1,4 @@
-﻿# TTEST
+# pto.ttest
 
 ## Introduction
 
@@ -33,7 +33,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST bool TEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -71,7 +71,7 @@ bool check_ready(__gm__ int32_t* local_signal) {
     comm::Signal sig(local_signal);
 
     // Check if signal == 1
-    return comm::TTEST(sig, 1, comm::WaitCmp::EQ);
+    return comm::TEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
 
@@ -87,7 +87,7 @@ bool check_worker_grid(__gm__ int32_t* signal_matrix) {
     comm::Signal2D<4, 8> grid(signal_matrix);
 
     // Returns true only if all 32 signals == 1
-    return comm::TTEST(grid, 1, comm::WaitCmp::EQ);
+    return comm::TEST(grid, 1, comm::WaitCmp::EQ);
 }
 ```
 
@@ -102,7 +102,7 @@ bool poll_with_timeout(__gm__ int32_t* local_signal, int max_iterations) {
     comm::Signal sig(local_signal);
 
     for (int i = 0; i < max_iterations; ++i) {
-        if (comm::TTEST(sig, 1, comm::WaitCmp::EQ)) {
+        if (comm::TEST(sig, 1, comm::WaitCmp::EQ)) {
             return true;  // Signal received
         }
         // Could do other work here between polls
@@ -121,7 +121,7 @@ using namespace pto;
 void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
     comm::Signal counter(local_counter);
 
-    while (!comm::TTEST(counter, expected_count, comm::WaitCmp::GE)) {
+    while (!comm::TEST(counter, expected_count, comm::WaitCmp::GE)) {
         // Do some useful work while waiting
         // ...
     }
@@ -129,7 +129,7 @@ void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
 }
 ```
 
-### Compare TWAIT vs TTEST
+### Compare pto.twait vs pto.ttest
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -140,9 +140,9 @@ void compare_wait_test(__gm__ int32_t* local_signal) {
     comm::Signal sig(local_signal);
 
     // Blocking: spins until signal == 1
-    comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
+    comm::WAIT(sig, 1, comm::WaitCmp::EQ);
 
     // Non-blocking: returns immediately with result
-    bool ready = comm::TTEST(sig, 1, comm::WaitCmp::EQ);
+    bool ready = comm::TEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```

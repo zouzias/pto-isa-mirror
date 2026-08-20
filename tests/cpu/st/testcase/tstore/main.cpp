@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 #include "test_common.h"
 #include <gtest/gtest.h>
 
@@ -61,7 +62,6 @@ void test_tstore()
     std::fill(dstDevice, dstDevice + (dataSize / sizeof(DataType)), 0);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize));
-    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStore<

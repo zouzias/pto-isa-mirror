@@ -10,6 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TTRANS_HPP
 #define TTRANS_HPP
 
+#include <array>
+
 #include <pto/common/pto_tile.hpp>
 #include "pto/cpu/tile_offsets.hpp"
 #include <type_traits>
