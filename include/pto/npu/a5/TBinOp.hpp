@@ -17,6 +17,142 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/utils.hpp>
 
 namespace pto {
+
+enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min };
+
+template <MaskPattern Pattern>
+PTO_INTERNAL constexpr unsigned Int64MaskPatternOffset()
+{
+    if constexpr (Pattern == MaskPattern::P1010 || Pattern == MaskPattern::P0010)
+        return 1;
+    if constexpr (Pattern == MaskPattern::P0100)
+        return 2;
+    if constexpr (Pattern == MaskPattern::P1000)
+        return 3;
+    return 0;
+}
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+PTO_INTERNAL void Int64AddRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
+    vector_s32& rhsHigh, MaskReg& mask)
+{
+    MaskReg carry, carryOut;
+    vaddc(carry, dstLow, lhsLow, rhsLow, mask);
+    vaddcs(carryOut, dstHigh, lhsHigh, rhsHigh, carry, mask);
+}
+
+PTO_INTERNAL void Int64SubRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
+    vector_s32& rhsHigh, MaskReg& mask)
+{
+    MaskReg carry, carryOut;
+    vsubc(carry, dstLow, lhsLow, rhsLow, mask);
+    vsubcs(carryOut, dstHigh, lhsHigh, rhsHigh, carry, mask);
+}
+
+PTO_INTERNAL void Int64MulRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
+    vector_s32& rhsHigh, MaskReg& mask)
+{
+    vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)lhsLow, (vector_u32&)rhsLow, mask);
+    vmula(dstHigh, lhsLow, rhsHigh, mask, MODE_ZEROING);
+    vmula(dstHigh, lhsHigh, rhsLow, mask, MODE_ZEROING);
+}
+
+PTO_INTERNAL void Int64SelectRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
+    vector_s32& rhsHigh, MaskReg& mask)
+{
+    vsel(dstLow, lhsLow, rhsLow, mask);
+    vsel(dstHigh, lhsHigh, rhsHigh, mask);
+}
+
+PTO_INTERNAL void Int64CompareEqRegs(
+    MaskReg& dst, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow, vector_s32& rhsHigh, MaskReg& mask)
+{
+    MaskReg lowEq, highEq;
+    vcmp_eq(lowEq, (vector_u32&)lhsLow, (vector_u32&)rhsLow, mask);
+    vcmp_eq(highEq, (vector_u32&)lhsHigh, (vector_u32&)rhsHigh, mask);
+    pand(dst, lowEq, highEq, mask);
+}
+
+PTO_INTERNAL void Int64CompareGeURegs(
+    MaskReg& dst, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow, vector_s32& rhsHigh, MaskReg& mask)
+{
+    MaskReg highEq, lowGe, highGe;
+    vcmp_eq(highEq, (vector_u32&)lhsHigh, (vector_u32&)rhsHigh, mask);
+    vcmp_ge(lowGe, (vector_u32&)lhsLow, (vector_u32&)rhsLow, mask);
+    vcmp_ge(highGe, (vector_u32&)lhsHigh, (vector_u32&)rhsHigh, mask);
+    psel(dst, lowGe, highGe, highEq);
+}
+
+PTO_INTERNAL void Int64AbsRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& srcLow, vector_s32& srcHigh, MaskReg& mask)
+{
+    vector_s32 zero, negLow, negHigh;
+    vbr(zero, 0);
+    MaskReg negative, carry, carryOut;
+    vcmp_lt(negative, srcHigh, zero, mask);
+    vsubc(carry, negLow, zero, srcLow, negative);
+    vsubcs(carryOut, negHigh, zero, srcHigh, carry, negative);
+    vsel(dstLow, negLow, srcLow, negative);
+    vsel(dstHigh, negHigh, srcHigh, negative);
+}
+
+PTO_INTERNAL void Int64NotRegs(vector_s32& low, vector_s32& high, MaskReg& mask)
+{
+    vnot((vector_u32&)low, (vector_u32&)low, mask, MODE_ZEROING);
+    vnot((vector_u32&)high, (vector_u32&)high, mask, MODE_ZEROING);
+}
+
+PTO_INTERNAL void Int64ToFloat(vector_f32& dst, vector_s32& srcLow, vector_s32& srcHigh)
+{
+    vector_s64 even, odd;
+    vector_f32 evenFloat, oddFloat, dummy;
+    vintlv((vector_s32&)even, (vector_s32&)odd, srcLow, srcHigh);
+    MaskReg allMask = pset_b32(PAT_ALL);
+    vcvt(evenFloat, even, allMask, ROUND_R, PART_EVEN);
+    vcvt(oddFloat, odd, allMask, ROUND_R, PART_EVEN);
+    vdintlv(dst, dummy, evenFloat, oddFloat);
+}
+
+PTO_INTERNAL void FloatToInt64(vector_s32& dstLow, vector_s32& dstHigh, vector_f32& src)
+{
+    vector_f32 evenFloat, oddFloat;
+    vector_s64 even, odd;
+    vintlv(evenFloat, oddFloat, src, src);
+    MaskReg allMask = pset_b32(PAT_ALL);
+    vcvt(even, evenFloat, allMask, ROUND_Z, RS_DISABLE, PART_EVEN);
+    vcvt(odd, oddFloat, allMask, ROUND_Z, RS_DISABLE, PART_EVEN);
+    vdintlv(dstLow, dstHigh, (vector_s32&)even, (vector_s32&)odd);
+}
+
+PTO_INTERNAL void Int64DivFloatPreprocess(vector_u32& reciprocalBits, vector_f32& divisorFloat, MaskReg& mask)
+{
+    vector_f32 one;
+    vbr(one, 1.0f);
+    vdiv(one, one, divisorFloat, mask, MODE_ZEROING);
+    vadds(reciprocalBits, (vector_u32&)one, 0x1ffffffeU, mask);
+}
+
+PTO_INTERNAL void Int64DuplicateRegs(vector_s32& low, vector_s32& high, uint32_t lowScalar, uint32_t highScalar)
+{
+    vbr((vector_u32&)low, lowScalar);
+    vbr((vector_u32&)high, highScalar);
+}
+
+PTO_INTERNAL void Int64DivSign(
+    MaskReg& sameSign, vector_s32& lhsHigh, vector_s32& rhsHigh, vector_s32& zero, MaskReg& mask)
+{
+    MaskReg lhsNonNegative, rhsNonNegative;
+    vcmp_ge(lhsNonNegative, lhsHigh, zero, mask);
+    vcmp_ge(rhsNonNegative, rhsHigh, zero, mask);
+    pxor(sameSign, lhsNonNegative, rhsNonNegative, mask);
+    pnot(sameSign, sameSign, mask);
+}
+#endif
+
 template <typename Op, typename T, unsigned ElementsPerRepeat, unsigned BlockSizeElem>
 PTO_INTERNAL void TBinOps_1D_NoPostUpdate(
     __ubuf__ T* dstPtr, __ubuf__ T* src0Ptr, __ubuf__ T* src1Ptr, unsigned validRows, unsigned validCols)
@@ -255,5 +391,165 @@ PTO_INTERNAL void BinaryInstr(
             dst, src0, src1, validRows, validCols, version);
     }
 }
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <bool Right, typename T>
+PTO_INTERNAL void Int64ShiftRegs(
+    vector_s32& dl, vector_s32& dh, vector_s32& sl, vector_s32& sh, vector_s32& cnt, MaskReg& mask)
+{
+    vector_s32 c32, cm, bias, norm, sixtyThree;
+    vbr(bias, 32);
+    vbr(sixtyThree, 63);
+    vand((vector_u32&)norm, (vector_u32&)cnt, (vector_u32&)sixtyThree, mask, MODE_ZEROING);
+    vadds(c32, norm, 32, mask);
+    vsub(cm, bias, norm, mask);
+    MaskReg lt32, ge32;
+    vcmp_lt(lt32, norm, bias, mask);
+    vcmp_ge(ge32, norm, bias, mask);
+    if constexpr (!Right) {
+        vector_s32 lo0, hi0, lo1, hi1, t;
+        vshl(lo0, sl, norm, mask, MODE_ZEROING);
+        vshl(hi0, sh, norm, mask, MODE_ZEROING);
+        vshr(t, sl, cm, mask, MODE_ZEROING);
+        vor(hi0, hi0, t, mask);
+        vsub(c32, norm, bias, mask);
+        vshl(hi1, sl, c32, mask, MODE_ZEROING);
+        vbr(lo1, 0);
+        vsel(dl, lo0, lo1, lt32);
+        vsel(dh, hi0, hi1, lt32);
+    } else {
+        vector_s32 lo0, hi0, lo1, hi1, t;
+        if constexpr (std::is_same_v<T, int64_t>)
+            vshr(hi0, sh, norm, mask, MODE_ZEROING);
+        else
+            vshr((vector_u32&)hi0, (vector_u32&)sh, norm, mask, MODE_ZEROING);
+        vshr((vector_u32&)lo0, (vector_u32&)sl, norm, mask, MODE_ZEROING);
+        vshl(t, sh, cm, mask, MODE_ZEROING);
+        vor(lo0, lo0, t, mask);
+        vsub(c32, norm, bias, mask);
+        if constexpr (std::is_same_v<T, int64_t>) {
+            vshr(lo1, sh, c32, mask, MODE_ZEROING);
+            vshrs(hi1, sh, 31, mask, MODE_ZEROING);
+        } else {
+            vshr((vector_u32&)lo1, (vector_u32&)sh, c32, mask, MODE_ZEROING);
+            vbr(hi1, 0);
+        }
+        vsel(dl, lo0, lo1, lt32);
+        vsel(dh, hi0, hi1, lt32);
+    }
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64MinMax(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& src0Low, vector_s32& src0High, vector_s32& src1Low,
+    vector_s32& src1High, MaskReg& mask)
+{
+    MaskReg highEq, lowCmp, highCmp, selectMask;
+    vcmp_eq(highEq, src0High, src1High, mask);
+    if constexpr (Op == Int64Op::Max) {
+        vcmp_gt(lowCmp, (vector_u32&)src0Low, (vector_u32&)src1Low, mask);
+        if constexpr (std::is_same_v<T, int64_t>) {
+            vcmp_gt(highCmp, src0High, src1High, mask);
+        } else {
+            vcmp_gt(highCmp, (vector_u32&)src0High, (vector_u32&)src1High, mask);
+        }
+    } else {
+        vcmp_lt(lowCmp, (vector_u32&)src0Low, (vector_u32&)src1Low, mask);
+        if constexpr (std::is_same_v<T, int64_t>) {
+            vcmp_lt(highCmp, src0High, src1High, mask);
+        } else {
+            vcmp_lt(highCmp, (vector_u32&)src0High, (vector_u32&)src1High, mask);
+        }
+    }
+    psel(selectMask, lowCmp, highCmp, highEq);
+    vsel(dstLow, src0Low, src1Low, selectMask);
+    vsel(dstHigh, src0High, src1High, selectMask);
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64Binary(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High;
+        uint16_t rowCount = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = tailCols != 0 ? plt_b32(tailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
+                uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
+                uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+                vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
+                vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
+                MaskReg carry;
+                MaskReg carryOut;
+                if constexpr (Op == Int64Op::Add) {
+                    vaddc(carry, dstLow, src0Low, src1Low, allMask);
+                    vaddcs(carryOut, dstHigh, src0High, src1High, carry, allMask);
+
+                } else if constexpr (Op == Int64Op::Sub) {
+                    vsubc(carry, dstLow, src0Low, src1Low, allMask);
+                    vsubcs(carryOut, dstHigh, src0High, src1High, carry, allMask);
+                } else if constexpr (Op == Int64Op::Mul) {
+                    vmull(
+                        (vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)src0Low, (vector_u32&)src1Low, allMask);
+                    vmula(dstHigh, src0Low, src1High, allMask, MODE_ZEROING);
+                    vmula(dstHigh, src0High, src1Low, allMask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Shl || Op == Int64Op::Shr) {
+                    Int64ShiftRegs<Op == Int64Op::Shr, T>(dstLow, dstHigh, src0Low, src0High, src1Low, allMask);
+                } else {
+                    Int64MinMax<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, allMask);
+                }
+                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
+                uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
+                uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+                vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
+                vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
+                MaskReg carry;
+                MaskReg carryOut;
+                if constexpr (Op == Int64Op::Add) {
+                    vaddc(carry, dstLow, src0Low, src1Low, tailMask);
+                    vaddcs(carryOut, dstHigh, src0High, src1High, carry, tailMask);
+
+                } else if constexpr (Op == Int64Op::Sub) {
+                    vsubc(carry, dstLow, src0Low, src1Low, tailMask);
+                    vsubcs(carryOut, dstHigh, src0High, src1High, carry, tailMask);
+                } else if constexpr (Op == Int64Op::Mul) {
+                    vmull(
+                        (vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)src0Low, (vector_u32&)src1Low,
+                        tailMask);
+                    vmula(dstHigh, src0Low, src1High, tailMask, MODE_ZEROING);
+                    vmula(dstHigh, src0High, src1Low, tailMask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Shl || Op == Int64Op::Shr) {
+                    Int64ShiftRegs<Op == Int64Op::Shr, T>(dstLow, dstHigh, src0Low, src0High, src1Low, tailMask);
+                } else {
+                    Int64MinMax<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, tailMask);
+                }
+                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, tailMask);
+            }
+        }
+    }
+}
+
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// The A5 instruction headers call these templates from discarded if-constexpr
+// branches; they are never instantiated on architectures without 64-bit
+// vector support, so a declaration is sufficient for phase-1 name lookup.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64Binary(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned validRows, unsigned validCols);
+#endif
+
 } // namespace pto
 #endif

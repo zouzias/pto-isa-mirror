@@ -15,9 +15,147 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
-#include "Int64Rearrange.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols>
+PTO_INTERNAL void Int64Scatter(
+    __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols)
+{
+    static_assert(sizeof(I) == sizeof(uint32_t), "Int64Scatter requires b32 indices");
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_u32 zero, idx, wordIdx, highIdx, low, high;
+        vbr(zero, 0u);
+        uint32_t remaining = DstNumel * 2;
+        constexpr uint16_t wordsPerRepeat = CCE_VL / sizeof(uint32_t);
+        constexpr uint16_t initRepeats = (DstNumel * 2 + wordsPerRepeat - 1) / wordsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint16_t initFullRepeats = remaining / wordsPerRepeat;
+        uint32_t initTailWords = remaining - initFullRepeats * wordsPerRepeat;
+        uint32_t initTailMaskCols = initTailWords;
+        MaskReg initTailMask = initTailWords != 0 ? plt_b32(initTailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t repeat = 0; repeat < initFullRepeats; ++repeat) {
+            vsts(zero, (__ubuf__ uint32_t*)dst + repeat * wordsPerRepeat, 0, NORM_B32, allMask);
+        }
+        if (initTailWords != 0) {
+            vsts(zero, (__ubuf__ uint32_t*)dst + initFullRepeats * wordsPerRepeat, 0, NORM_B32, initTailMask);
+        }
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = tailCols != 0 ? plt_b32(tailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vlds(low, high, (__ubuf__ uint32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+                vadd(wordIdx, idx, idx, allMask, MODE_ZEROING);
+                vadds(highIdx, wordIdx, 1u, allMask, MODE_ZEROING);
+                vscatter(low, (__ubuf__ uint32_t*)dst, wordIdx, allMask);
+                vscatter(high, (__ubuf__ uint32_t*)dst, highIdx, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vlds(low, high, (__ubuf__ uint32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+                vadd(wordIdx, idx, idx, tailMask, MODE_ZEROING);
+                vadds(highIdx, wordIdx, 1u, tailMask, MODE_ZEROING);
+                vscatter(low, (__ubuf__ uint32_t*)dst, wordIdx, tailMask);
+                vscatter(high, (__ubuf__ uint32_t*)dst, highIdx, tailMask);
+            }
+        }
+    }
+}
+
+template <MaskPattern Pattern, ScatterAxis Axis, typename T, unsigned DstNumel, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ScatterPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned times = GetTimesByMask<Pattern>();
+    constexpr unsigned offset = Int64MaskPatternOffset<Pattern>();
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_s32 z, l0, h0;
+        vector_u32 lane, elemIndex, lowIndex, highIndex;
+        vbr(z, 0);
+        uint32_t total = DstNumel * 2;
+        uint32_t rem = total;
+        constexpr uint16_t vl = CCE_VL / sizeof(uint32_t);
+        constexpr uint16_t repeats = (DstNumel * 2 + vl - 1) / vl;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint16_t initFullRepeats = rem / vl;
+        uint32_t initTailWords = rem - initFullRepeats * vl;
+        uint32_t initTailMaskCols = initTailWords;
+        MaskReg initTailMask = initTailWords != 0 ? plt_b32(initTailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t r = 0; r < initFullRepeats; ++r) {
+            vsts(z, (__ubuf__ int32_t*)dst + r * vl, 0, NORM_B32, allMask);
+        }
+        if (initTailWords != 0) {
+            vsts(z, (__ubuf__ int32_t*)dst + initFullRepeats * vl, 0, NORM_B32, initTailMask);
+        }
+        vci((vector_s32&)lane, 0, INC_ORDER);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = tailCols != 0 ? plt_b32(tailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t i = 0; i < rows; ++i) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vlds(l0, h0, (__ubuf__ int32_t*)src + (i * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Axis == ScatterAxis::SCATTER_COL) {
+                    vsts(
+                        l0, h0, (__ubuf__ int32_t*)dst + ((i * times + offset) * DstCols + colOffset) * 2, 0, INTLV_B32,
+                        allMask);
+                } else {
+                    vadds(elemIndex, lane, static_cast<uint32_t>(colOffset), allMask, MODE_ZEROING);
+                    vmuls(elemIndex, elemIndex, static_cast<uint32_t>(times), allMask, MODE_ZEROING);
+                    vadds(elemIndex, elemIndex, static_cast<uint32_t>(offset), allMask, MODE_ZEROING);
+                    vadd(lowIndex, elemIndex, elemIndex, allMask, MODE_ZEROING);
+                    vadds(highIndex, lowIndex, 1u, allMask, MODE_ZEROING);
+                    __ubuf__ uint32_t* rowDst = (__ubuf__ uint32_t*)dst + i * DstCols * 2;
+                    vscatter((vector_u32&)l0, rowDst, lowIndex, allMask);
+                    vscatter((vector_u32&)h0, rowDst, highIndex, allMask);
+                }
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vlds(l0, h0, (__ubuf__ int32_t*)src + (i * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Axis == ScatterAxis::SCATTER_COL) {
+                    vsts(
+                        l0, h0, (__ubuf__ int32_t*)dst + ((i * times + offset) * DstCols + colOffset) * 2, 0, INTLV_B32,
+                        tailMask);
+                } else {
+                    vadds(elemIndex, lane, static_cast<uint32_t>(colOffset), tailMask, MODE_ZEROING);
+                    vmuls(elemIndex, elemIndex, static_cast<uint32_t>(times), tailMask, MODE_ZEROING);
+                    vadds(elemIndex, elemIndex, static_cast<uint32_t>(offset), tailMask, MODE_ZEROING);
+                    vadd(lowIndex, elemIndex, elemIndex, tailMask, MODE_ZEROING);
+                    vadds(highIndex, lowIndex, 1u, tailMask, MODE_ZEROING);
+                    __ubuf__ uint32_t* rowDst = (__ubuf__ uint32_t*)dst + i * DstCols * 2;
+                    vscatter((vector_u32&)l0, rowDst, lowIndex, tailMask);
+                    vscatter((vector_u32&)h0, rowDst, highIndex, tailMask);
+                }
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols>
+PTO_INTERNAL void Int64Scatter(
+    __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols);
+
+template <MaskPattern Pattern, ScatterAxis Axis, typename T, unsigned DstNumel, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ScatterPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 template <uint32_t numel, typename T>
 PTO_INTERNAL void InitUBBuffer(__ubuf__ T* dst)
 {

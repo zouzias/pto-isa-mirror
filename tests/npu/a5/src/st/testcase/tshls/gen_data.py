@@ -88,6 +88,10 @@ if __name__ == "__main__":
         TShlSParams(np.uint16, 1, 112, 1, 128, 1, 111),
         TShlSParams(np.int64, 4, 16, 4, 16, 4, 16),
         TShlSParams(np.uint64, 4, 16, 4, 16, 4, 16),
+        TShlSParams(np.int64, 1, 16364, 1, 16364, 1, 16364),
+        TShlSParams(np.uint64, 1, 16364, 1, 16364, 1, 16364),
+        TShlSParams(np.int64, 1, 16368, 1, 16368, 1, 16368),
+        TShlSParams(np.uint64, 1, 16368, 1, 16368, 1, 16368),
     ]
 
     for param in case_params_list:

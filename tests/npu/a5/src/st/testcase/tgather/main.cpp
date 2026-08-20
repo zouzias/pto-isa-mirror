@@ -146,6 +146,10 @@ TEST_F(TGATHERTest, case9_int64_u32_4x16_4x16) { test_gather_index<int64_t, uint
 
 TEST_F(TGATHERTest, case10_uint64_u32_4x16_4x16) { test_gather_index<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>(); }
 
+TEST_F(TGATHERTest, case11_int64_u32_4x72_4x72) { test_gather_index<int64_t, uint32_t, int64_t, 4, 72, 4, 72>(); }
+
+TEST_F(TGATHERTest, case12_uint64_u32_4x72_4x72) { test_gather_index<uint64_t, uint32_t, uint64_t, 4, 72, 4, 72>(); }
+
 template <typename T, pto::MaskPattern PATTERN, uint32_t ROW, uint32_t COL, typename dstT = T>
 void test_gather()
 {
@@ -317,6 +321,14 @@ TEST_F(TGATHERTest, case1_I32_P1111)
 TEST_F(TGATHERTest, case_int64_4x16_P1010) { test_gather<int64_t, pto::MaskPattern::P1010, 4, 16>(); }
 
 TEST_F(TGATHERTest, case_uint64_4x16_P0001) { test_gather<uint64_t, pto::MaskPattern::P0001, 4, 16>(); }
+
+TEST_F(TGATHERTest, case_int64_4x72_P1010) { test_gather<int64_t, pto::MaskPattern::P1010, 4, 72>(); }
+
+TEST_F(TGATHERTest, case_uint64_4x144_P0001) { test_gather<uint64_t, pto::MaskPattern::P0001, 4, 144>(); }
+
+TEST_F(TGATHERTest, case_int64_1x16368_P1010) { test_gather<int64_t, pto::MaskPattern::P1010, 1, 16368>(); }
+
+TEST_F(TGATHERTest, case_uint64_1x16368_P1010) { test_gather<uint64_t, pto::MaskPattern::P1010, 1, 16368>(); }
 
 template <typename T>
 void test_gather_dynamic_b64()

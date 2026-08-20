@@ -34,11 +34,215 @@ full text of the License.
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "TPartBinOps.hpp"
-#include "Int64Reduce.hpp"
 #include <math.h>
 #include <type_traits>
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_u32 low, high, low16, mid16, tmp, mask16, outLow, outHigh, accLow, accHigh;
+        vbr(mask16, 0xffffu);
+        MaskReg oneMask = pset_b32(PAT_VL1);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = tailCols != 0 ? plt_b32(tailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vlds(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0,
+                    DINTLV_B32);
+                vand(low16, low, mask16, allMask, MODE_ZEROING);
+                vcadd(low16, low16, allMask, MODE_ZEROING);
+                vshrs(mid16, low, 16, allMask, MODE_ZEROING);
+                vcadd(mid16, mid16, allMask, MODE_ZEROING);
+                vcadd(outHigh, high, allMask, MODE_ZEROING);
+                vshrs(tmp, low16, 16, allMask, MODE_ZEROING);
+                vadd(mid16, mid16, tmp, allMask, MODE_ZEROING);
+                vshrs(tmp, mid16, 16, allMask, MODE_ZEROING);
+                vadd(outHigh, outHigh, tmp, allMask, MODE_ZEROING);
+                vand(low16, low16, mask16, allMask, MODE_ZEROING);
+                vand(mid16, mid16, mask16, allMask, MODE_ZEROING);
+                vshls(mid16, mid16, 16, allMask, MODE_ZEROING);
+                vor(outLow, low16, mid16, allMask);
+                if (colRepeat == 0) {
+                    accLow = outLow;
+                    accHigh = outHigh;
+                } else {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                }
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vlds(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0,
+                    DINTLV_B32);
+                vand(low16, low, mask16, tailMask, MODE_ZEROING);
+                vcadd(low16, low16, tailMask, MODE_ZEROING);
+                vshrs(mid16, low, 16, tailMask, MODE_ZEROING);
+                vcadd(mid16, mid16, tailMask, MODE_ZEROING);
+                vcadd(outHigh, high, tailMask, MODE_ZEROING);
+                vshrs(tmp, low16, 16, tailMask, MODE_ZEROING);
+                vadd(mid16, mid16, tmp, tailMask, MODE_ZEROING);
+                vshrs(tmp, mid16, 16, tailMask, MODE_ZEROING);
+                vadd(outHigh, outHigh, tmp, tailMask, MODE_ZEROING);
+                vand(low16, low16, mask16, tailMask, MODE_ZEROING);
+                vand(mid16, mid16, mask16, tailMask, MODE_ZEROING);
+                vshls(mid16, mid16, 16, tailMask, MODE_ZEROING);
+                vor(outLow, low16, mid16, tailMask);
+                if (fullRepeats == 0) {
+                    accLow = outLow;
+                    accHigh = outHigh;
+                } else {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                }
+            }
+            vsts(
+                (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32,
+                oneMask);
+        }
+    }
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowReduceHigh(vector_s32& reducedHigh, vector_s32& high, MaskReg& mask)
+{
+    if constexpr (Op == Int64Op::Max) {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmax(reducedHigh, high, mask, MODE_ZEROING);
+        else
+            vcmax((vector_u32&)reducedHigh, (vector_u32&)high, mask, MODE_ZEROING);
+    } else {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmin(reducedHigh, high, mask, MODE_ZEROING);
+        else
+            vcmin((vector_u32&)reducedHigh, (vector_u32&)high, mask, MODE_ZEROING);
+    }
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowSelectHigh(vector_s32& selectedHigh, vector_s32& high, MaskReg& equalLow)
+{
+    if constexpr (Op == Int64Op::Max) {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmax(selectedHigh, high, equalLow, MODE_ZEROING);
+        else
+            vcmax((vector_u32&)selectedHigh, (vector_u32&)high, equalLow, MODE_ZEROING);
+    } else {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmin(selectedHigh, high, equalLow, MODE_ZEROING);
+        else
+            vcmin((vector_u32&)selectedHigh, (vector_u32&)high, equalLow, MODE_ZEROING);
+    }
+}
+
+template <Int64Op Op, typename T, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMaxRepeat(
+    vector_s32& outLow, vector_s32& outHigh, __ubuf__ T* src, unsigned row, unsigned colOffset, MaskReg& mask,
+    MaskReg& allMask)
+{
+    vector_s32 low, high, reducedHigh, highDup, selectedHigh, lowDup;
+    vector_u32 reducedLow;
+    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64RowReduceHigh<Op, T>(reducedHigh, high, mask);
+    vdup(highDup, reducedHigh, allMask, POS_LOWEST, MODE_ZEROING);
+    MaskReg equalHigh;
+    vcmp_eq(equalHigh, highDup, high, mask);
+    if constexpr (Op == Int64Op::Max)
+        vcmax(reducedLow, (vector_u32&)low, equalHigh, MODE_ZEROING);
+    else
+        vcmin(reducedLow, (vector_u32&)low, equalHigh, MODE_ZEROING);
+
+    vdup((vector_s32&)lowDup, (vector_s32&)reducedLow, allMask, POS_LOWEST, MODE_ZEROING);
+    MaskReg equalLow;
+    vcmp_eq(equalLow, (vector_u32&)lowDup, (vector_u32&)low, mask);
+    Int64RowSelectHigh<Op, T>(selectedHigh, high, equalLow);
+    outLow = (vector_s32&)reducedLow;
+    outHigh = selectedHigh;
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowMinMaxInitAcc(
+    vector_s32& accLow, vector_s32& accHigh, vector_s32& repeatLow, vector_s32& repeatHigh)
+{
+    accLow = repeatLow;
+    accHigh = repeatHigh;
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowMinMaxAccumulate(
+    vector_s32& accLow, vector_s32& accHigh, vector_s32& repeatLow, vector_s32& repeatHigh, MaskReg& mask)
+{
+    Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, mask);
+}
+
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64RowMinMaxStore(vector_s32& accLow, vector_s32& accHigh, __ubuf__ T* dst, unsigned row)
+{
+    MaskReg oneMask = pset_b32(PAT_VL1);
+    vsts(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, oneMask);
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 accLow, accHigh, repeatLow, repeatHigh;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = tailCols != 0 ? plt_b32(tailMaskCols, POST_UPDATE) : allMask;
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, allMask, allMask);
+                if (colRepeat == 0) {
+                    Int64RowMinMaxInitAcc<Op, T>(accLow, accHigh, repeatLow, repeatHigh);
+                } else {
+                    MaskReg oneMask = pset_b32(PAT_VL1);
+                    Int64RowMinMaxAccumulate<Op, T>(accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                }
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, tailMask, allMask);
+                if (fullRepeats == 0) {
+                    Int64RowMinMaxInitAcc<Op, T>(accLow, accHigh, repeatLow, repeatHigh);
+                } else {
+                    MaskReg oneMask = pset_b32(PAT_VL1);
+                    Int64RowMinMaxAccumulate<Op, T>(accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                }
+            }
+            Int64RowMinMaxStore<T, DstCols>(accLow, accHigh, dst, row);
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 
 //=============================================================================
 // 归约操作策略（Policy Pattern）
