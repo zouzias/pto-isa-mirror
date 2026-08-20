@@ -14,6 +14,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+#ifndef TINSERT_MODE_DEFINED
+#define TINSERT_MODE_DEFINED
+enum class TInsertMode : uint8_t
+{
+    SPLIT2 = 2,
+    SPLIT4 = 3,
+};
+#endif
+
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TInsertVecToVecNDUnaligned(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,

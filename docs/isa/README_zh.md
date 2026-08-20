@@ -2,12 +2,11 @@
   <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
-# PTO ISA 参考
+# PTO ISA 手册与参考
 
-本目录是 PTO Tile Lib ISA 的指令参考（每条指令一页）。
+本文档目录是 PTO ISA 的权威文档树。它将架构手册、指令集指南、家族契约和精确的指令参考分组整合在同一个位置。
 
-- 权威来源（C++ 内建函数）：`include/pto/common/pto_instr.hpp`
-- [通用约定（操作数、事件、修饰符）](conventions_zh.md)
+## PTO ISA 中的文本汇编
 
 ## 同步
 - [TSYNC](TSYNC_zh.md) - 同步 PTO 执行（等待事件或插入每操作流水线屏障）。
@@ -118,15 +117,12 @@
 - [MGATHER](MGATHER_zh.md) - 使用逐元素索引从全局内存收集加载元素到 Tile 中。
 - [MSCATTER](MSCATTER_zh.md) - 使用逐元素索引将 Tile 中的元素散播存储到全局内存。
 
-## 矩阵乘
-- [TGEMV_MX](TGEMV_MX_zh.md) - 带缩放 Tile 的 GEMV 变体，支持混合精度/量化矩阵向量计算。
-- [TMATMUL_MX](TMATMUL_MX_zh.md) - 带额外缩放 Tile 的矩阵乘法 (GEMM)，用于支持目标上的混合精度/量化矩阵乘法。
-- [TMATMUL](TMATMUL_zh.md) - 矩阵乘法 (GEMM)，生成累加器/输出 Tile。
-- [TMATMUL_ACC](TMATMUL_ACC_zh.md) - 带累加器输入的矩阵乘法（融合累加）。
-- [TMATMUL_BIAS](TMATMUL_BIAS_zh.md) - 带偏置加法的矩阵乘法。
-- [TGEMV](TGEMV_zh.md) - 通用矩阵-向量乘法，生成累加器/输出 Tile。
-- [TGEMV_ACC](TGEMV_ACC_zh.md) - 带显式累加器输入/输出 Tile 的 GEMV。
-- [TGEMV_BIAS](TGEMV_BIAS_zh.md) - 带偏置加法的 GEMV。
+- [编程模型](programming-model/tiles-and-valid-regions_zh.md)
+- [机器模型](machine-model/execution-agents_zh.md)
+- [语法与操作数](syntax-and-operands/assembly-model_zh.md)
+- [类型系统](state-and-types/type-system_zh.md)
+- [位置意图与合法性](state-and-types/location-intent-and-legality_zh.md)
+- [内存模型](memory-model/consistency-baseline_zh.md)
 
 ## 数据搬运 / 布局
 - [TEXTRACT](TEXTRACT_zh.md) - 从源 Tile 中提取子 Tile。
@@ -176,4 +172,17 @@
 
 ## 通信
 
-完整的通信 ISA 指令参考（点对点、异步、同步原语及集合通信）见 [comm/README_zh.md](comm/README_zh.md)。
+## 核间通信
+
+- [TALLOC](TALLOC_zh.md) - 将 TPipe FIFO 槽位分配为一个 GlobalTensor 视图。
+- [TPUSH](TPUSH_zh.md) - 将生产者 tile 推入 TPipe FIFO，用于 Cube-Vector 通信。
+- [TPOP](TPOP_zh.md) - 从 TPipe FIFO 弹出消费者 tile/globalTensor，用于 Cube-Vector 通信。
+- [TFREE](TFREE_zh.md) - 释放 TPipe 的 FIFO 空间；对于 TileData/GlobalTensor 的 TPOP 流程，该操作为空操作。
+
+`tile/`、`vector/`、`scalar/`、`comm/` 和 `system/` 下的分组指令集树是权威的 PTO ISA 路径。
+
+- `docs/isa/tile/ops/`
+- `docs/isa/vector/ops/`
+- `docs/isa/scalar/ops/`
+- `docs/isa/comm/`
+- `docs/isa/system/ops/`
