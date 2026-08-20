@@ -26,6 +26,15 @@ import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from gen_isa_svg_types import (
+    Hif4MatmulLayout,
+    QuantDnLayout,
+    QuantHif4Layout,
+    ScalarArrowFlow,
+    TDequantLayout,
+    TilePatchSpec,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = REPO_ROOT / "docs" / "isa" / "manifest.yaml"
@@ -66,11 +75,63 @@ COLOR_BY_TEMPLATE = {
     "complex": ("#C53A79", "#FDF0F6"),
     "sync": ("#A37000", "#FFF7D6"),
     "config": ("#4C8A25", "#EEF7E6"),
+    "comm": ("#8A4B12", "#FFF3E7"),
 }
 
 
 def _esc(s: object) -> str:
     return html.escape(str(s), quote=True)
+
+
+def _append_svg_text(
+    out: List[str],
+    *,
+    x: object,
+    y: object,
+    cls: str,
+    text: object,
+    text_anchor: Optional[str] = None,
+    dominant_baseline: Optional[str] = None,
+    fill: Optional[str] = None,
+    font_size: Optional[str] = None,
+) -> None:
+    attrs = [f'x="{x}"', f'y="{y}"', f'class="{cls}"']
+    if text_anchor:
+        attrs.append(f'text-anchor="{text_anchor}"')
+    if dominant_baseline:
+        attrs.append(f'dominant-baseline="{dominant_baseline}"')
+    if fill:
+        attrs.append(f'fill="{fill}"')
+    if font_size:
+        attrs.append(f'font-size="{font_size}"')
+    out.append(f'<text {" ".join(attrs)}>{_esc(text)}</text>')
+
+
+def _append_rect(
+    out: List[str],
+    *,
+    x: object,
+    y: object,
+    width: object,
+    height: object,
+    rx: Optional[object] = None,
+    cls: Optional[str] = None,
+    fill: Optional[str] = None,
+    stroke: Optional[str] = None,
+    stroke_width: Optional[object] = None,
+) -> None:
+    attrs = [f'x="{x}"', f'y="{y}"', f'width="{width}"', f'height="{height}"']
+    if rx is not None:
+        attrs.append(f'rx="{rx}"')
+    if cls:
+        attrs.append(f'class="{cls}"')
+    if fill:
+        attrs.append(f'fill="{fill}"')
+    if stroke:
+        attrs.append(f'stroke="{_esc(stroke)}"')
+    if stroke_width is not None:
+        attrs.append(f'stroke-width="{stroke_width}"')
+    out.append(f'<rect {" ".join(attrs)}/>')
 
 
 def load_manifest(path: Path) -> List[Dict[str, object]]:
@@ -168,8 +229,14 @@ def _draw_tile_grid(
             text = text_override.get((r, c))
             if text:
                 cx, cy = _cell_center(x, y, r, c)
-                out.append(
-                    f'<text x="{cx}" y="{cy + 1}" class="cellText" text-anchor="middle" dominant-baseline="middle">{_esc(text)}</text>'
+                _append_svg_text(
+                    out,
+                    x=cx,
+                    y=cy + 1,
+                    cls="cellText",
+                    text=text,
+                    text_anchor="middle",
+                    dominant_baseline="middle",
                 )
 
     if vr and vc:
@@ -231,8 +298,14 @@ def _draw_mem_row(
             out.append(f'<rect x="{rx}" y="{y}" width="{cell_w}" height="{CELL}" class="{cls}" />')
         text = text_override.get(i)
         if text:
-            out.append(
-                f'<text x="{rx + cell_w // 2}" y="{y + CELL // 2 + 1}" class="cellText" text-anchor="middle" dominant-baseline="middle">{_esc(text)}</text>'
+            _append_svg_text(
+                out,
+                x=rx + cell_w // 2,
+                y=y + CELL // 2 + 1,
+                cls="cellText",
+                text=text,
+                text_anchor="middle",
+                dominant_baseline="middle",
             )
 
 
@@ -308,14 +381,27 @@ def _draw_op_node(
     r = max(18, side // 2 + 5)
 
     out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" class="opCircle" stroke="{_esc(accent)}" />')
-    out.append(
-        f'<rect x="{cx - side // 2}" y="{cy - side // 2}" width="{side}" height="{side}" rx="6" class="opRect" stroke="{_esc(accent)}" />'
+    _append_rect(
+        out,
+        x=cx - side // 2,
+        y=cy - side // 2,
+        width=side,
+        height=side,
+        rx=6,
+        cls="opRect",
+        stroke=accent,
     )
     y0 = cy - ((line_count - 1) * line_gap) / 2
     for idx, line in enumerate(label_lines):
         y = y0 + idx * line_gap + 3
-        out.append(
-            f'<text x="{cx}" y="{y:.1f}" class="opText" font-size="{font_px}px" text-anchor="middle">{_esc(line)}</text>'
+        _append_svg_text(
+            out,
+            x=cx,
+            y=f"{y:.1f}",
+            cls="opText",
+            text=line,
+            font_size=f"{font_px}px",
+            text_anchor="middle",
         )
     return ((cx - r, cy), (cx + r, cy), (cx, cy + r))
 
@@ -390,14 +476,17 @@ def _begin_svg(instr: str, summary: str, template: str, accent: str, bg: str) ->
     aria = f"{instr} tile operation diagram"
     out: List[str] = []
     out.append(
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS_W}" height="{CANVAS_H}" viewBox="0 0 {CANVAS_W} {CANVAS_H}" role="img" aria-label="{_esc(aria)}">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS_W}" height="{CANVAS_H}" '
+        f'viewBox="0 0 {CANVAS_W} {CANVAS_H}" role="img" aria-label="{_esc(aria)}">'
     )
     out.append("<defs>")
     out.append(
-        f'  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L0,12 L12,6 z" fill="{_esc(accent)}"/></marker>'
+        f'  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" '
+        f'orient="auto"><path d="M0,0 L0,12 L12,6 z" fill="{_esc(accent)}"/></marker>'
     )
     out.append(
-        '  <marker id="axisArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L0,10 L10,5 z" fill="#64748b"/></marker>'
+        '  <marker id="axisArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" '
+        'orient="auto"><path d="M0,0 L0,10 L10,5 z" fill="#64748b"/></marker>'
     )
     out.append("</defs>")
     out.append("<style>")
@@ -415,7 +504,8 @@ def _begin_svg(instr: str, summary: str, template: str, accent: str, bg: str) ->
                 ".cell { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }",
                 ".cellMasked { fill: #e2e8f0; }",
                 ".cellHL { stroke-width: 2; }",
-                ".cellText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 10px; fill: #0f172a; }",
+                ".cellText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "
+                "'Liberation Mono', 'Courier New', monospace; font-size: 10px; fill: #0f172a; }",
                 ".arrow { stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }",
                 ".axisLine { stroke: #64748b; stroke-width: 1.5; fill: none; }",
                 ".axisText { font-size: 10px; fill: #64748b; font-weight: 700; }",
@@ -424,7 +514,8 @@ def _begin_svg(instr: str, summary: str, template: str, accent: str, bg: str) ->
                 ".opText { font-size: 10px; font-weight: 800; fill: #0f172a; }",
                 ".procBox { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 12; }",
                 ".procTitle { font-size: 14px; font-weight: 700; fill: #0f172a; }",
-                ".procText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; fill: #0f172a; }",
+                ".procText { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "
+                "'Liberation Mono', 'Courier New', monospace; font-size: 12px; fill: #0f172a; }",
                 ".smallLabel { font-size: 12px; fill: #334155; }",
                 ".scalarBox { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }",
                 ".scalarValue { font-size: 16px; font-weight: 700; }",
@@ -435,17 +526,30 @@ def _begin_svg(instr: str, summary: str, template: str, accent: str, bg: str) ->
     out.append("</style>")
 
     out.append(f'<rect x="0" y="0" width="{CANVAS_W}" height="{CANVAS_H}" class="frame" />')
-    out.append(
-        f'<rect x="{MARGIN}" y="{MARGIN}" width="{CANVAS_W - 2 * MARGIN}" height="{CANVAS_H - 2 * MARGIN}" class="panel" />'
+    _append_rect(
+        out,
+        x=MARGIN,
+        y=MARGIN,
+        width=CANVAS_W - 2 * MARGIN,
+        height=CANVAS_H - 2 * MARGIN,
+        cls="panel",
     )
     out.append(f'<text x="{MARGIN + 16}" y="{HEADER_Y}" class="title">{_esc(instr)}</text>')
     out.append(f'<text x="{MARGIN + 16}" y="{HEADER_Y + 26}" class="subtitle">{_esc(summary)}</text>')
     out.append(f'<text x="{MARGIN + 16}" y="{HEADER_Y + 46}" class="meta">Template: {_esc(template)}</text>')
-    out.append(
-        f'<text x="{CANVAS_W - MARGIN - 16}" y="{HEADER_Y + 46}" class="meta" text-anchor="end">Legend: outline=example; dashed=valid rows/cols (Rv,Cv); shaded=masked; r down / c right; ortho arrows=dataflow</text>'
+    _append_svg_text(
+        out,
+        x=CANVAS_W - MARGIN - 16,
+        y=HEADER_Y + 46,
+        cls="meta",
+        text="Legend: outline=example; dashed=valid rows/cols (Rv,Cv); shaded=masked; "
+        "r down / c right; ortho arrows=dataflow",
+        text_anchor="end",
     )
     out.append(
-        f'<line x1="{MARGIN + 12}" y1="{HEADER_DIVIDER_Y}" x2="{CANVAS_W - MARGIN - 12}" y2="{HEADER_DIVIDER_Y}" stroke="#e2e8f0" stroke-width="1.5" />'
+        f'<line x1="{MARGIN + 12}" y1="{HEADER_DIVIDER_Y}" '
+        f'x2="{CANVAS_W - MARGIN - 12}" y2="{HEADER_DIVIDER_Y}" '
+        'stroke="#e2e8f0" stroke-width="1.5" />'
     )
     return out
 
@@ -463,8 +567,24 @@ def _draw_procedure(out: List[str], *, lines: Sequence[str], accent: str) -> Non
     out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" class="procBox" />')
     out.append(f'<text x="{x + PROC_PAD}" y="{y + 26}" class="procTitle">Procedure (conceptual)</text>')
     _draw_text_lines(out, x + PROC_PAD, y + 52, lines, "procText", 16)
-    out.append(
-        f'<text x="{x + PROC_PAD}" y="{y + h - 16}" class="meta">Note: semantics apply to the valid region unless stated otherwise.</text>'
+    _append_svg_text(
+        out,
+        x=x + PROC_PAD,
+        y=y + h - 16,
+        cls="meta",
+        text="Note: semantics apply to the valid region unless stated otherwise.",
+    )
+
+
+def _draw_expr(out: List[str], expr: str, accent: str) -> None:
+    _append_svg_text(
+        out,
+        x=CANVAS_W // 2,
+        y=EXPR_Y,
+        cls="subtitle",
+        text=expr,
+        text_anchor="middle",
+        fill=accent,
     )
 
 
@@ -496,16 +616,19 @@ def _elementwise_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         "TREM": "remainder(src0, src1)",
         "TFMOD": "fmod(src0, src1)",
     }
-    ternary = {"TADDC": "src0 + src1 + src2", "TSUBC": "src0 - src1 + src2"}
-
+    ternary = {
+        "TMULADDDST": ("src0 * src1 + dst(old)", ["src0", "src1", "dst(old)"]),
+        "TFUSEDMULADD": ("src0 * dst(old) + src1", ["src0", "dst(old)", "src1"]),
+    }
     if instr in unary:
         expr = f"dst[r,c] = {unary[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
         return (["src"], expr, proc)
     if instr in ternary:
-        expr = f"dst[r,c] = {ternary[instr]}"
+        op_expr, op_inputs = ternary[instr]
+        expr = f"dst[r,c] = {op_expr}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1", "src2"], expr, proc)
+        return (op_inputs, expr, proc)
     if instr == "TSEL":
         expr = "dst[r,c] = (mask[r,c] != 0) ? src0[r,c] : src1[r,c]"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -561,15 +684,6 @@ def _scalar_spec(instr: str) -> Tuple[List[str], str, List[str]]:
         expr = "dst[r,c] = (x>0) ? x : slope*x"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", "    x = src[r,c]", f"    {expr}"]
         return (["src(tile)"], expr, proc)
-    if instr == "TADDSC":
-        expr = "dst[r,c] = src0[r,c] + s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-    if instr == "TSUBSC":
-        expr = "dst[r,c] = src0[r,c] - s + src1[r,c]"
-        proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        return (["src0", "src1"], expr, proc)
-
     if instr in tile_scalar:
         expr = f"dst[r,c] = {tile_scalar[instr]}"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
@@ -597,12 +711,13 @@ def _reduce_expand_kind(instr: str) -> Tuple[str, str, str]:
 
 
 def _render_elementwise(instr: str, summary: str, accent: str, bg: str) -> str:
+    if instr == "TDEQUANT":
+        return _render_tdequant(instr, summary, accent, bg)
+
     inputs, expr, proc = _elementwise_spec(instr)
     out = _begin_svg(instr, summary, "elementwise", accent, bg)
 
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    _draw_expr(out, expr, accent)
 
     tile_w = _tile_width(TILE_COLS)
     tile_h = _tile_height(TILE_ROWS)
@@ -653,13 +768,130 @@ def _render_elementwise(instr: str, summary: str, accent: str, bg: str) -> str:
     return _end_svg(out)
 
 
+def _render_taxpy(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "scalar", accent, bg)
+    expr = "dst[r,c] = dst(old)[r,c] + src[r,c] * scalar"
+    _draw_expr(out, expr, accent)
+
+    tile_w = _tile_width(TILE_COLS)
+    y_src = SRC_Y
+    y_dst = DST_Y
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w, 160], 70)
+    x_dst_old, x_src, x_scalar = xs[0], xs[1], xs[2]
+
+    _draw_tile_grid(
+        out, x=x_dst_old, y=y_src, label="dst(old)", prefix="d", highlight_cells=[(EX_R, EX_C)], accent=accent
+    )
+    _draw_tile_grid(out, x=x_src, y=y_src, label="src", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent)
+    _draw_scalar_box(out, x=x_scalar, y=y_src + 8, label="scalar", value="s", accent=accent)
+
+    x_dst = (CANVAS_W - tile_w) // 2
+    _draw_tile_grid(out, x=x_dst, y=y_dst, label="dst(out)", prefix="d", highlight_cells=[(EX_R, EX_C)], accent=accent)
+
+    dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    sources = [
+        _tile_port_bottom(x=x_dst_old, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C),
+        _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C),
+        _scalar_port_bottom(x=x_scalar, y=y_src + 8),
+    ]
+    via_base = int((y_src + _tile_height(TILE_ROWS) + y_dst) / 2)
+    for idx, (sx, sy) in enumerate(sources):
+        _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_base + (idx - 1) * 14, accent=accent)
+
+    proc = [
+        "for r in 0..Rv-1:",
+        "  for c in 0..Cv-1:",
+        "    dst[r,c] = dst[r,c] + src[r,c] * scalar",
+        "dst is read and written in-place.",
+    ]
+    _draw_procedure(out, lines=proc, accent=accent)
+    return _end_svg(out)
+
+
+def _render_tdequant(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "elementwise", accent, bg)
+    expr = "dst[r,c] = (src[r,c] - offset[r,pc]) * scale[r,pc]"
+    _draw_expr(out, expr, accent)
+
+    tile_w = _tile_width(TILE_COLS)
+    scale_cols = 3
+    scale_w = _tile_width(scale_cols)
+    y_src = SRC_Y
+    y_para = y_src + 22
+    y_dst = DST_Y
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, scale_w, scale_w], 80)
+    x_src, x_scale, x_offset = xs[0], xs[1], xs[2]
+
+    layout = TDequantLayout(x_src, x_scale, x_offset, y_src, y_para, scale_cols)
+    _draw_tdequant_inputs(out, accent, layout)
+
+    x_dst = (CANVAS_W - tile_w) // 2
+    _draw_tile_grid(
+        out,
+        x=x_dst,
+        y=y_dst,
+        label="dst (FP32)",
+        prefix="d",
+        highlight_cells=[(EX_R, EX_C)],
+        accent=accent,
+    )
+
+    dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    sources = [
+        _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C),
+        _tile_port_bottom(x=x_scale, y=y_para, rows=TILE_ROWS, cols=scale_cols, c=min(EX_C, scale_cols - 1)),
+        _tile_port_bottom(x=x_offset, y=y_para, rows=TILE_ROWS, cols=scale_cols, c=min(EX_C, scale_cols - 1)),
+    ]
+    via_base = int((y_src + _tile_height(TILE_ROWS) + y_dst) / 2)
+    for idx, (sx, sy) in enumerate(sources):
+        _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_base + (idx - 1) * 14, accent=accent)
+
+    proc = [
+        "paraCols = max(1, scale.validCols)",
+        "for r in 0..Rv-1:",
+        "  for c in 0..Cv-1:",
+        "    pc = min(c, paraCols - 1)",
+        "    dst[r,c] = (src[r,c] - offset[r,pc]) * scale[r,pc]",
+    ]
+    _draw_procedure(out, lines=proc, accent=accent)
+    return _end_svg(out)
+
+
+def _draw_tdequant_inputs(
+    out: List[str],
+    accent: str,
+    layout: TDequantLayout,
+) -> None:
+    _draw_tile_grid(
+        out,
+        x=layout.x_src,
+        y=layout.y_src,
+        label="src (S8/S16)",
+        prefix="q",
+        highlight_cells=[(EX_R, EX_C)],
+        accent=accent,
+    )
+    for x, label, prefix in ((layout.x_scale, "scale", "s"), (layout.x_offset, "offset", "o")):
+        _draw_tile_grid(
+            out,
+            x=x,
+            y=layout.y_para,
+            label=label,
+            prefix=prefix,
+            rows=TILE_ROWS,
+            cols=layout.scale_cols,
+            highlight_cells=[(EX_R, min(EX_C, layout.scale_cols - 1))],
+            accent=accent,
+        )
+
+
 def _render_scalar(instr: str, summary: str, accent: str, bg: str) -> str:
+    if instr == "TAXPY":
+        return _render_taxpy(instr, summary, accent, bg)
+
     _inputs, expr, proc = _scalar_spec(instr)
     out = _begin_svg(instr, summary, "scalar", accent, bg)
-
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    _draw_expr(out, expr, accent)
 
     tile_w = _tile_width(TILE_COLS)
     tile_h = _tile_height(TILE_ROWS)
@@ -667,41 +899,63 @@ def _render_scalar(instr: str, summary: str, accent: str, bg: str) -> str:
     y_src = SRC_Y
     y_dst = DST_Y
 
-    src_labels = ["src0", "src1"] if instr in {"TADDSC", "TSUBSC", "TSELS"} else ["src"]
+    src_labels = ["src0", "src1"] if instr == "TSELS" else ["src"]
     src_prefixes = ["a", "b"] if len(src_labels) == 2 else ["a"]
 
     xs = _layout_row_lefts(CANVAS_W // 2, [tile_w] * len(src_labels), gap)
     for x, label, pfx in zip(xs, src_labels, src_prefixes, strict=False):
         _draw_tile_grid(out, x=x, y=y_src, label=label, prefix=pfx, highlight_cells=[(EX_R, EX_C)], accent=accent)
 
+    scalar_x, scalar_y = _draw_scalar_operand(out, instr, y_src, accent)
+    x_dst = _draw_scalar_output(out, instr, tile_w, y_dst, accent)
+    dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    via_base = int((y_src + tile_h + y_dst) / 2)
+    sources = _scalar_sources(xs, scalar_x, scalar_y, y_src)
+    _draw_scalar_arrows(out, accent, ScalarArrowFlow(instr, sources, (dx, dy), via_base))
+    _draw_procedure(out, lines=proc, accent=accent)
+    return _end_svg(out)
+
+
+def _draw_scalar_operand(out: List[str], instr: str, y_src: int, accent: str) -> Tuple[int, int]:
     scalar_label = "selectMode" if instr == "TSELS" else "scalar"
     scalar_value = "mode" if instr == "TSELS" else "s"
     scalar_x = CANVAS_W - MARGIN - 16 - 160
     scalar_y = y_src + 8
     _draw_scalar_box(out, x=scalar_x, y=scalar_y, label=scalar_label, value=scalar_value, accent=accent)
+    return (scalar_x, scalar_y)
 
+
+def _draw_scalar_output(out: List[str], instr: str, tile_w: int, y_dst: int, accent: str) -> int:
     out_label = "dst(mask)" if instr == "TCMPS" else "dst"
     out_prefix = "m" if instr == "TCMPS" else "d"
     x_dst = (CANVAS_W - tile_w) // 2
     _draw_tile_grid(
         out, x=x_dst, y=y_dst, label=out_label, prefix=out_prefix, highlight_cells=[(EX_R, EX_C)], accent=accent
     )
+    return x_dst
 
-    dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-    via_base = int((y_src + tile_h + y_dst) / 2)
 
+def _scalar_sources(xs: Sequence[int], scalar_x: int, scalar_y: int, y_src: int) -> List[Tuple[int, int]]:
     sources: List[Tuple[int, int]] = []
     for x in xs:
         sources.append(_tile_port_bottom(x=x, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C))
     sources.append(_scalar_port_bottom(x=scalar_x, y=scalar_y))
+    return sources
 
+
+def _draw_scalar_arrows(
+    out: List[str],
+    accent: str,
+    flow: ScalarArrowFlow,
+) -> None:
+    instr, sources, dst, via_base = flow
     if len(sources) == 2:
         _draw_binary_flow(
             out,
             instr=instr,
             left_src=sources[0],
             right_src=sources[1],
-            dst=(dx, dy),
+            dst=dst,
             accent=accent,
             op_cx=CANVAS_W // 2,
         )
@@ -709,10 +963,7 @@ def _render_scalar(instr: str, summary: str, accent: str, bg: str) -> str:
         n = len(sources)
         for i, (sx, sy) in enumerate(sources):
             via_y = via_base + int((i - (n - 1) / 2) * 14)
-            _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
-
-    _draw_procedure(out, lines=proc, accent=accent)
-    return _end_svg(out)
+            _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dst[0], y2=dst[1], via_y=via_y, accent=accent)
 
 
 def _render_reduce_expand(instr: str, summary: str, accent: str, bg: str) -> str:
@@ -767,9 +1018,7 @@ def _render_reduce_expand(instr: str, summary: str, accent: str, bg: str) -> str
             sx, sy = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
             dx, dy = _tile_port_top(x=x_dst, y=y_dst2, rows=dst_rows, cols=dst_cols, c=EX_C)
 
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         via_y = int((sy + dy) / 2)
         _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
         _draw_procedure(out, lines=proc, accent=accent)
@@ -813,9 +1062,7 @@ def _render_reduce_expand(instr: str, summary: str, accent: str, bg: str) -> str
             sx, sy = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
             dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
 
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         via_y = int((sy + dy) / 2)
         _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
         _draw_procedure(out, lines=proc, accent=accent)
@@ -873,9 +1120,7 @@ def _render_reduce_expand(instr: str, summary: str, accent: str, bg: str) -> str
     )
     _draw_tile_grid(out, x=x_dst, y=y_dst, label="dst", prefix="d", highlight_cells=[(EX_R, EX_C)], accent=accent)
 
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    _draw_expr(out, expr, accent)
 
     dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
     a_x, a_y = _tile_port_bottom(x=x_src0, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
@@ -895,12 +1140,107 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
     y_src = SRC_Y
     y_dst = DST_Y
 
+    if instr == "TPREFETCH_ASYNC":
+        expr = "AsyncEvent = SDMA_CMO_PREFETCH(GM base, totalBytes)"
+        proc = [
+            "if src is null, not flat-contiguous, or byte count is zero:",
+            "  return empty SDMA AsyncEvent",
+            "initialize or reuse SDMA session from PrefetchAsyncContext",
+            "submit SDMA CMO prefetch for src.data(), totalBytes",
+            "return AsyncEvent for optional wait/test by the caller",
+        ]
+        _draw_expr(out, expr, accent)
+
+        mem_w = 12 * CELL
+        cache_w = 300
+        cache_h = 86
+        xs = _layout_row_lefts(CANVAS_W // 2, [mem_w, 160, cache_w], 100)
+        x_mem, x_ctx, x_cache = xs[0], xs[1], xs[2]
+        y_mem = y_src + 46
+        y_ctx = y_src + 28
+        y_cache = y_src + 20
+
+        _draw_mem_row(out, x=x_mem, y=y_mem, label="GlobalTensor / GM", prefix="g", highlight_idx=6, accent=accent)
+        _draw_scalar_box(out, x=x_ctx, y=y_ctx, label="context", value="SDMA", accent=accent)
+        _append_rect(
+            out,
+            x=x_cache,
+            y=y_cache,
+            width=cache_w,
+            height=cache_h,
+            rx=14,
+            fill="#ffffff",
+            stroke=accent,
+            stroke_width=2,
+        )
+        out.append(f'<text x="{x_cache + 18}" y="{y_cache + 34}" class="tileLabel">L2 cache</text>')
+        _draw_text_lines(
+            out,
+            x_cache + 18,
+            y_cache + 56,
+            ["cache lines warmed", "data remains in GM"],
+            "smallLabel",
+            18,
+        )
+
+        event_x = (CANVAS_W - 240) // 2
+        event_y = y_dst + 20
+        _append_rect(
+            out,
+            x=event_x,
+            y=event_y,
+            width=240,
+            height=70,
+            rx=14,
+            fill="#ffffff",
+            stroke=accent,
+            stroke_width=2,
+        )
+        _append_svg_text(
+            out,
+            x=event_x + 120,
+            y=event_y + 32,
+            cls="tileLabel",
+            text="AsyncEvent",
+            text_anchor="middle",
+        )
+        _append_svg_text(
+            out,
+            x=event_x + 120,
+            y=event_y + 54,
+            cls="smallLabel",
+            text="DmaEngine::SDMA",
+            text_anchor="middle",
+        )
+
+        gm_x, gm_y = _mem_anchor_right(x_mem, y_mem, 6)
+        ctx_x, ctx_y = _scalar_port_bottom(x=x_ctx, y=y_ctx)
+        _draw_ortho_arrow(out, x1=gm_x, y1=gm_y, x2=x_cache, y2=y_cache + cache_h // 2, via_x=x_ctx - 28, accent=accent)
+        _draw_ortho_arrow(
+            out,
+            x1=ctx_x,
+            y1=ctx_y,
+            x2=event_x + 120,
+            y2=event_y,
+            via_y=int((ctx_y + event_y) / 2),
+            accent=accent,
+        )
+        _draw_ortho_arrow(
+            out,
+            x1=x_cache + cache_w // 2,
+            y1=y_cache + cache_h,
+            x2=event_x + 120,
+            y2=event_y,
+            via_y=int((y_cache + cache_h + event_y) / 2),
+            accent=accent,
+        )
+        _draw_procedure(out, lines=proc, accent=accent)
+        return _end_svg(out)
+
     if instr in {"TLOAD", "TPREFETCH"}:
         expr = "dst[r,c] = GM[...]"
         proc = ["for r,c in valid(dst):", "  dst[r,c] = GM[base + (row0+r)*stride + (col0+c)]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         mem_w = 12 * CELL
         x_mem = (CANVAS_W - mem_w) // 2
         y_mem = y_src + (tile_h - CELL) // 2
@@ -921,9 +1261,7 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TSTORE":
         expr = "GM[...] = src[r,c]"
         proc = ["for r,c in valid(src):", "  GM[base + (row0+r)*stride + (col0+c)] = src[r,c]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
             out, x=x_src, y=y_src, label="src tile", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
@@ -944,9 +1282,7 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TSTORE_FP":
         expr = "GM[...] = quantize(src, fp)"
         proc = ["for r,c in valid(src):", "  q = quantize(src[r,c], fp[r,c])", "  GM[...] = q"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 80)
         x_src, x_fp = xs[0], xs[1]
         _draw_tile_grid(
@@ -979,9 +1315,7 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "MGATHER":
         expr = "dst[r,c] = mem[indexes[r,c]]"
         proc = ["for r,c in valid(dst):", "  idx = indexes[r,c]", "  dst[r,c] = mem[idx]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         mem_w = 12 * CELL
         widths = [mem_w, tile_w]
         xs = _layout_row_lefts(CANVAS_W // 2, widths, 80)
@@ -1015,9 +1349,7 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "MSCATTER":
         expr = "mem[indexes[r,c]] = src[r,c]"
         proc = ["for r,c in valid(src):", "  idx = indexes[r,c]", "  mem[idx] = src[r,c]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 80)
         x_src, x_idx = xs[0], xs[1]
         _draw_tile_grid(
@@ -1052,6 +1384,9 @@ def _render_memory(instr: str, summary: str, accent: str, bg: str) -> str:
 
 
 def _render_matmul(instr: str, summary: str, accent: str, bg: str) -> str:
+    if instr == "TMATMUL_MX_HIF4":
+        return _render_matmul_mx_hif4(instr, summary, accent, bg)
+
     out = _begin_svg(instr, summary, "matmul", accent, bg)
 
     tile_w = _tile_width(TILE_COLS)
@@ -1074,9 +1409,7 @@ def _render_matmul(instr: str, summary: str, accent: str, bg: str) -> str:
     else:
         expr = "C[0,j] = sum_k A[0,k] * B[k,j]"
 
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    _draw_expr(out, expr, accent)
 
     dx, dy = _tile_port_top(x=x_c, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
     a_x, a_y = _tile_port_bottom(x=x_a, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=1)
@@ -1096,6 +1429,104 @@ def _render_matmul(instr: str, summary: str, accent: str, bg: str) -> str:
     return _end_svg(out)
 
 
+def _render_matmul_mx_hif4(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "matmul", accent, bg)
+    expr = "L0C[i,j] += dequant_hif4(A, scaleA)[i,k] * dequant_hif4(B, scaleB)[k,j]"
+    _draw_expr(out, expr, accent)
+
+    tile_w = _tile_width(TILE_COLS)
+    scale_w = _tile_width(3)
+    y_data = SRC_Y
+    y_scale = SRC_Y + 126
+    y_dst = DST_Y + 18
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, scale_w, tile_w, scale_w], 48)
+    x_a, x_sa, x_b, x_sb = xs[0], xs[1], xs[2], xs[3]
+    x_c = (CANVAS_W - tile_w) // 2
+    layout = Hif4MatmulLayout(x_a, x_sa, x_b, x_sb, x_c, y_data, y_scale, y_dst)
+
+    _draw_hif4_matmul_inputs(out, accent, layout)
+    _draw_tile_grid(
+        out,
+        x=x_c,
+        y=y_dst,
+        label="L0C / dst (FP32)",
+        prefix="c",
+        highlight_cells=[(EX_R, EX_C)],
+        accent=accent,
+    )
+    _draw_hif4_matmul_arrows(out, accent, layout)
+    _draw_procedure(out, lines=_hif4_matmul_proc(), accent=accent)
+    return _end_svg(out)
+
+
+def _draw_hif4_matmul_inputs(
+    out: List[str],
+    accent: str,
+    layout: Hif4MatmulLayout,
+) -> None:
+    _draw_tile_grid(
+        out,
+        x=layout.x_a,
+        y=layout.y_data,
+        label="A data (HiF4 PK4)",
+        prefix="a",
+        highlight_cells=[(EX_R, 1)],
+        accent=accent,
+    )
+    _draw_hif4_scale_patch(out, accent, TilePatchSpec(layout.x_sa, layout.y_scale, "A scale", "sa"))
+    _draw_tile_grid(
+        out,
+        x=layout.x_b,
+        y=layout.y_data,
+        label="B data (HiF4 PK4)",
+        prefix="b",
+        highlight_cells=[(1, EX_C)],
+        accent=accent,
+    )
+    _draw_hif4_scale_patch(out, accent, TilePatchSpec(layout.x_sb, layout.y_scale, "B scale", "sb"))
+
+
+def _draw_hif4_scale_patch(out: List[str], accent: str, spec: TilePatchSpec) -> None:
+    _draw_tile_grid(
+        out,
+        x=spec.x,
+        y=spec.y,
+        label=spec.label,
+        prefix=spec.prefix,
+        rows=2,
+        cols=3,
+        highlight_cells=[(0, 1)],
+        text_override={(0, 0): "Ea", (0, 1): "Eb", (1, 1): "Ec"},
+        accent=accent,
+    )
+
+
+def _draw_hif4_matmul_arrows(
+    out: List[str],
+    accent: str,
+    layout: Hif4MatmulLayout,
+) -> None:
+    dx, dy = _tile_port_top(x=layout.x_c, y=layout.y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    sources = [
+        _tile_port_bottom(x=layout.x_a, y=layout.y_data, rows=TILE_ROWS, cols=TILE_COLS, c=1),
+        _tile_port_bottom(x=layout.x_sa, y=layout.y_scale, rows=2, cols=3, c=1),
+        _tile_port_bottom(x=layout.x_b, y=layout.y_data, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C),
+        _tile_port_bottom(x=layout.x_sb, y=layout.y_scale, rows=2, cols=3, c=1),
+    ]
+    via_base = int((layout.y_scale + _tile_height(2) + layout.y_dst) / 2)
+    for idx, (sx, sy) in enumerate(sources):
+        _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_base + (idx - 2) * 10, accent=accent)
+
+
+def _hif4_matmul_proc() -> List[str]:
+    return [
+        "TEXTRACT places HiF4 data in L0A/L0B and scale patches in L0AMX/L0BMX.",
+        "Each 64B scale patch carries Ea/Eb and Ec metadata for 64-value groups.",
+        "mad_mx(hifloat4x2_t) applies the three-level scale inside Cube.",
+        "Accumulate into L0C as FP32; TSTORE/FIXPIPE may cast the result to BF16.",
+    ]
+
+
 def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
     out = _begin_svg(instr, summary, "reshape_move", accent, bg)
 
@@ -1106,9 +1537,7 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr.startswith("TEXTRACT"):
         expr = "dst = slice(src, offset)"
         proc = ["for r,c in valid(dst):", "  dst[r,c] = src[r + row_off, c + col_off]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         x_dst = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
@@ -1127,9 +1556,7 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr.startswith("TINSERT"):
         expr = "dst[off + (r,c)] = src[r,c]"
         proc = ["for r,c in valid(src):", "  dst[r + row_off, c + col_off] = src[r,c]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x_dst_in, x_src_win = xs[0], xs[1]
         x_dst_out = (CANVAS_W - tile_w) // 2
@@ -1173,9 +1600,7 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
             "  else:",
             "    dst[r,c] = pad_value",
         ]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         x_dst = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
@@ -1208,9 +1633,7 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TTRANS":
         expr = "dst[r,c] = src[c,r]"
         proc = ["for r,c in valid(dst):", "  dst[r,c] = src[c,r]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         x_dst = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(out, x=x_src, y=y_src, label="src", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent)
@@ -1222,47 +1645,10 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
         _draw_procedure(out, lines=proc, accent=accent)
         return _end_svg(out)
 
-    if instr.startswith("TSUBVIEW"):
-        expr = "dst = subview(src, rI, cI)"
-        proc = ["for r,c in valid(dst):", "  dst[r,c] = src[r + rI, c + cI]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
-        x_src = (CANVAS_W - tile_w) // 2
-        x_dst = (CANVAS_W - tile_w) // 2
-        _draw_tile_grid(
-            out,
-            x=x_src,
-            y=y_src,
-            label="src (rI = 0 and cI = 0)",
-            prefix="a",
-            valid_box=(5, 5),
-            highlight_cells=[(0, 0)],
-            accent=accent,
-        )
-        _draw_tile_grid(
-            out,
-            x=x_dst,
-            y=y_dst,
-            label="dst (subtile)",
-            valid_box=(3, 3),
-            prefix="d",
-            highlight_cells=[(0, 0)],
-            accent=accent,
-        )
-        sx, sy = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=0)
-        dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=0)
-        via_y = int((sy + dy) / 2)
-        _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
-        _draw_procedure(out, lines=proc, accent=accent)
-        return _end_svg(out)
-
     # Default: movement/reshape
     expr = "dst = move/reshape(src)"
     proc = ["for r,c in valid(dst):", "  dst[r,c] = transform(src[r,c])   (layout/location dependent)"]
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    _draw_expr(out, expr, accent)
     x_src = (CANVAS_W - tile_w) // 2
     x_dst = (CANVAS_W - tile_w) // 2
     _draw_tile_grid(out, x=x_src, y=y_src, label="src", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent)
@@ -1275,7 +1661,196 @@ def _render_reshape_move(instr: str, summary: str, accent: str, bg: str) -> str:
     return _end_svg(out)
 
 
+def _render_quant_dn(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "complex", accent, bg)
+    expr = "TQUANT<0>: dst RowMajor + exp/max/scaling DN; TMOV<0> converts exp DN -> ZZ"
+    _draw_expr(out, expr, accent)
+    tile_w = _tile_width(TILE_COLS)
+    y_src = SRC_Y
+    y_dst = DST_Y
+    x_src = (CANVAS_W - tile_w) // 2
+    _draw_tile_grid(out, x=x_src, y=y_src, label="src (FP MxN)", prefix="a", highlight_cols=[EX_C], accent=accent)
+
+    exp_rows = 3
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w, tile_w], 70)
+    x_dst, x_exp, x_zz = xs[0], xs[1], xs[2]
+    layout = QuantDnLayout(x_src, x_dst, x_exp, x_zz, y_src, y_dst, exp_rows)
+    _draw_tile_grid(out, x=x_dst, y=y_dst, label="dst (FP8/FP4 RM)", prefix="q", highlight_cols=[EX_C], accent=accent)
+    _draw_quant_dn_exp_tiles(out, accent, layout)
+    _draw_quant_dn_arrows(out, accent, layout)
+    _draw_procedure(out, lines=_quant_dn_proc(), accent=accent)
+    return _end_svg(out)
+
+
+def _draw_quant_dn_exp_tiles(out: List[str], accent: str, layout: QuantDnLayout) -> None:
+    exp_tiles = [
+        (layout.x_exp, "exp/max/scale (DN)", "e", {(0, 0): "Mhat", (0, 1): "xN"}),
+        (layout.x_zz, "exp (ZZ via TMOV<0>)", "z", {(0, 0): "cb", (1, 1): "p/q"}),
+    ]
+    for x, label, prefix, text_override in exp_tiles:
+        _draw_tile_grid(
+            out,
+            x=x,
+            y=layout.y_dst + 22,
+            label=label,
+            prefix=prefix,
+            rows=layout.exp_rows,
+            cols=TILE_COLS,
+            highlight_cells=[(1, EX_C)],
+            text_override=text_override,
+            accent=accent,
+        )
+
+
+def _draw_quant_dn_arrows(
+    out: List[str],
+    accent: str,
+    layout: QuantDnLayout,
+) -> None:
+    sx, sy = _tile_port_bottom(x=layout.x_src, y=layout.y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    d_x, d_y = _tile_port_top(x=layout.x_dst, y=layout.y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    e_x, e_y = _tile_port_top(x=layout.x_exp, y=layout.y_dst + 22, rows=layout.exp_rows, cols=TILE_COLS, c=EX_C)
+    z_x, z_y = _tile_port_top(x=layout.x_zz, y=layout.y_dst + 22, rows=layout.exp_rows, cols=TILE_COLS, c=EX_C)
+    via = int((sy + d_y) / 2)
+    _draw_ortho_arrow(out, x1=sx, y1=sy, x2=d_x, y2=d_y, via_y=via - 10, accent=accent)
+    _draw_ortho_arrow(out, x1=sx, y1=sy, x2=e_x, y2=e_y, via_y=via + 10, accent=accent)
+    _draw_ortho_arrow(out, x1=e_x, y1=e_y, x2=z_x, y2=z_y, via_y=e_y - 24, accent=accent)
+
+
+def _quant_dn_proc() -> List[str]:
+    return [
+        "TQUANT<0,...> groups source rows along axis 0 in 32-row groups.",
+        "dst keeps the source MxN RowMajor data layout after FP8/FP4 quantization.",
+        "exp, max, and scaling use DN shape Mhat x N, not the Cube ZZ layout.",
+        "Use TMOV<0>(expZZ, expDN, tmp) only when the exponent feeds MMAD_MX.",
+    ]
+
+
+def _draw_quant_hif4_tiles(out: List[str], accent: str) -> QuantHif4Layout:
+    tile_w = _tile_width(TILE_COLS)
+    y_src = SRC_Y
+    y_dst = DST_Y
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w, tile_w], 70)
+    x_src, x_dst, x_meta = xs[0], xs[1], xs[2]
+    _draw_tile_grid(
+        out,
+        x=x_src,
+        y=y_src,
+        label="src (BF16)",
+        prefix="b",
+        highlight_cells=[(EX_R, EX_C)],
+        accent=accent,
+    )
+    _draw_tile_grid(
+        out,
+        x=x_dst,
+        y=y_dst,
+        label="dst FP4 packed",
+        prefix="h",
+        rows=TILE_ROWS,
+        cols=TILE_COLS,
+        highlight_cells=[(EX_R, EX_C)],
+        accent=accent,
+    )
+    _draw_tile_grid(
+        out,
+        x=x_meta,
+        y=y_dst + 22,
+        label="scale metadata",
+        prefix="m",
+        rows=3,
+        cols=TILE_COLS,
+        highlight_cells=[(0, 0), (1, EX_C), (2, EX_C)],
+        text_override={(0, 0): "Ea", (1, 0): "Eb", (2, 0): "Ec"},
+        accent=accent,
+    )
+    return QuantHif4Layout(x_src, x_dst, x_meta, y_src, y_dst)
+
+
+def _draw_quant_hif4_arrows(out: List[str], accent: str, layout: QuantHif4Layout) -> None:
+    dx, dy = _tile_port_top(x=layout.x_dst, y=layout.y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    mx, my = _tile_port_top(x=layout.x_meta, y=layout.y_dst + 22, rows=3, cols=TILE_COLS, c=EX_C)
+    s0 = _tile_port_bottom(x=layout.x_src, y=layout.y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    via = int((s0[1] + dy) / 2)
+    _draw_ortho_arrow(out, x1=s0[0], y1=s0[1], x2=dx, y2=dy, via_y=via - 10, accent=accent)
+    _draw_ortho_arrow(out, x1=s0[0], y1=s0[1], x2=mx, y2=my, via_y=via + 10, accent=accent)
+
+
+def _quant_hif4_proc() -> List[str]:
+    return [
+        "for each 64-element HiF4 block:",
+        "  Ma/Mb/Mc = max(abs(src)) over 64/8/4 element groups.",
+        "  derive Ea(e6m2), Eb bits, Ec bits, and per-4 reciprocal scale.",
+        "  q = round_to_e1m2(src * scale); pack FP4 codes into dst bytes.",
+    ]
+
+
+def _render_quant_hif4(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "complex", accent, bg)
+    expr = "dst(fp4 packed) + Ea/Eb/Ec metadata = HiF4Quant(src BF16)"
+    _draw_expr(out, expr, accent)
+    layout = _draw_quant_hif4_tiles(out, accent)
+    _draw_quant_hif4_arrows(out, accent, layout)
+    proc = _quant_hif4_proc()
+    _draw_procedure(out, lines=proc, accent=accent)
+    return _end_svg(out)
+
+
+def _render_histogram(instr: str, summary: str, accent: str, bg: str) -> str:
+    out = _begin_svg(instr, summary, "complex", accent, bg)
+    expr = "dst[row,bin] = cumulative_count(selected_byte(src[row,*]) <= bin)"
+    _draw_expr(out, expr, accent)
+    tile_w = _tile_width(TILE_COLS)
+    y_src = SRC_Y
+    y_dst = DST_Y
+    xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, _tile_width(1)], 120)
+    x_src, x_idx = xs[0], xs[1]
+    _draw_tile_grid(out, x=x_src, y=y_src, label="src", prefix="a", highlight_rows=[EX_R], accent=accent)
+    _draw_tile_grid(
+        out,
+        x=x_idx,
+        y=y_src,
+        label="idx/filter",
+        prefix="i",
+        rows=TILE_ROWS,
+        cols=1,
+        highlight_cells=[(0, 0), (1, 0), (2, 0)],
+        accent=accent,
+    )
+    x_dst = (CANVAS_W - tile_w) // 2
+    override = {(EX_R, 0): "bin0", (EX_R, 1): "...", (EX_R, 4): "bin255"}
+    _draw_tile_grid(
+        out,
+        x=x_dst,
+        y=y_dst,
+        label="dst cumulative bins",
+        prefix="h",
+        highlight_rows=[EX_R],
+        text_override=override,
+        accent=accent,
+    )
+    dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    s0 = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+    s1 = _tile_port_bottom(x=x_idx, y=y_src, rows=TILE_ROWS, cols=1, c=0)
+    _draw_binary_flow(out, instr=instr, left_src=s0, right_src=s1, dst=(dx, dy), accent=accent, op_cx=CANVAS_W // 2)
+    proc = [
+        "for each source row:",
+        "  filter higher bytes using idx rows when required",
+        "  count selected byte values into 256 bins",
+        "  write prefix sums to dst[row,0..255]",
+    ]
+    _draw_procedure(out, lines=proc, accent=accent)
+    return _end_svg(out)
+
+
 def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
+    if instr == "TQUANT_DN":
+        return _render_quant_dn(instr, summary, accent, bg)
+    if instr == "TQUANT_HIF4":
+        return _render_quant_hif4(instr, summary, accent, bg)
+    if instr == "THISTOGRAM":
+        return _render_histogram(instr, summary, accent, bg)
+
     out = _begin_svg(instr, summary, "complex", accent, bg)
 
     tile_w = _tile_width(TILE_COLS)
@@ -1286,9 +1861,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TCI":
         expr = "dst[r,c] = base + r*stride + c"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         scalar_gap = 40
         scalar_y = y_src + 8
         x_base = (CANVAS_W - (160 * 2 + scalar_gap)) // 2
@@ -1325,9 +1898,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TTRI":
         expr = "mask[r,c] = (r >= c) ? 1 : 0"
         proc = ["for r in 0..Rv-1:", "  for c in 0..Cv-1:", f"    {expr}"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         scalar_x = (CANVAS_W - 160) // 2
         scalar_y = y_src + 8
         _draw_scalar_box(out, x=scalar_x, y=scalar_y, label="pattern", value="r>=c", accent=accent)
@@ -1353,9 +1924,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr in {"TGATHER", "TGATHERB"}:
         expr = "dst[r,c] = src0[ indices[r,c] ]"
         proc = ["for r,c in valid(dst):", "  k = indices[r,c]", "  dst[r,c] = src0[k]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x_src0, x_idx = xs[0], xs[1]
         idx_text = {(EX_R, EX_C): "k"}
@@ -1392,9 +1961,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TSCATTER":
         expr = "dst[ idx[r,c], c ] = src[r,c]"
         proc = ["for r,c in valid(src):", "  rr = idx[r,c]", "  dst[rr, c] = src[r,c]"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x_src, x_idx = xs[0], xs[1]
         idx_text = {(EX_R, EX_C): "rr"}
@@ -1432,9 +1999,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TSORT32":
         expr = "dst[i,k] = src[i, pi_i(k)] ; idx = pi"
         proc = ["for each row i:", "  (dst_row, idx_row) = sort_with_indices(src_row)"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
             out, x=x_src, y=y_src, label="src (block)", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
@@ -1461,9 +2026,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TMRGSORT":
         expr = "dst = merge(src0, src1, ...)"
         proc = ["dst = merge(sorted_lists...)", "(ordering/format are implementation-defined)"]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x0, x1 = xs[0], xs[1]
         _draw_tile_grid(out, x=x0, y=y_src, label="src0 (sorted)", prefix="a", accent=accent)
@@ -1495,9 +2058,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
             "for r,c in valid(src):",
             "  (dst[r,c], exp[r,c]) = quantize(src[r,c], scaling, mode)",
         ]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
             out, x=x_src, y=y_src, label="src (fp32)", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
@@ -1553,9 +2114,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
             "  else:",
             "    dst[r,c] = implementation-defined",
         ]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x0, x1 = xs[0], xs[1]
         _draw_tile_grid(
@@ -1607,9 +2166,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
     if instr == "TPRINT":
         expr = "print(src)   (implementation-defined formatting)"
         proc = [expr]
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+        _draw_expr(out, expr, accent)
         x_src = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
             out, x=x_src, y=y_src, label="src tile", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
@@ -1628,155 +2185,21 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
 
 
 def _render_sync(instr: str, summary: str, accent: str, bg: str) -> str:
-    out = _begin_svg(instr, summary, "sync", accent, bg)
-    expr = "TSYNC establishes ordering: producer -> consumer"
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
+    from gen_isa_svg_state import render_sync
 
-    box_w = 520
-    box_h = 92
-    box_x = (CANVAS_W - box_w) // 2
-    y_prod = SRC_Y + 6
-    y_cons = DST_Y + 6
-
-    def stage_box(y: int, title: str, detail: str) -> None:
-        out.append(
-            f'<rect x="{box_x}" y="{y}" width="{box_w}" height="{box_h}" rx="14" fill="#ffffff" stroke="{_esc(accent)}" stroke-width="2"/>'
-        )
-        out.append(
-            f'<text x="{box_x + box_w // 2}" y="{y + 38}" text-anchor="middle" class="tileLabel">{_esc(title)}</text>'
-        )
-        out.append(
-            f'<text x="{box_x + box_w // 2}" y="{y + 64}" text-anchor="middle" class="smallLabel">{_esc(detail)}</text>'
-        )
-
-    stage_box(y_prod, "Producer stage", "ops tagged as producer_class")
-    stage_box(y_cons, "Consumer stage", "ops tagged as consumer_class (after TSYNC)")
-
-    src_x, src_y = (box_x + box_w // 2, y_prod + box_h)
-    dst_x, dst_y = (box_x + box_w // 2, y_cons)
-    via_x = box_x + box_w + 56
-    _draw_ortho_arrow(out, x1=src_x, y1=src_y, x2=dst_x, y2=dst_y, via_x=via_x, accent=accent)
-
-    proc = [
-        "TSYNC(producer_class, consumer_class)",
-        "1) Let P be all earlier ops issued with class=producer_class.",
-        "2) TSYNC waits until P are complete (or until their events are satisfied).",
-        "3) For all later ops with class=consumer_class: observe results of P.",
-        "Ordering: P happens-before consumer_class ops after TSYNC.",
-    ]
-    _draw_procedure(out, lines=proc, accent=accent)
-    return _end_svg(out)
+    return render_sync(instr, summary, accent, bg)
 
 
 def _render_config(instr: str, summary: str, accent: str, bg: str) -> str:
-    out = _begin_svg(instr, summary, "config", accent, bg)
-    tile_w = _tile_width(TILE_COLS)
-    y_src = SRC_Y
-    y_dst = DST_Y
+    from gen_isa_svg_state import render_config
 
-    def draw_state_box(*, x: int, y: int, title: str, lines: Sequence[str]) -> Tuple[int, int]:
-        w = 520
-        h = 92
-        out.append(
-            f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="14" fill="#ffffff" stroke="{_esc(accent)}" stroke-width="2"/>'
-        )
-        out.append(f'<text x="{x + 18}" y="{y + 34}" class="tileLabel">{_esc(title)}</text>')
-        # Two lines is enough for these config diagrams; keep text tidy.
-        _draw_text_lines(out, x + 18, y + 56, lines[:2], "smallLabel", 18)
-        return (x + w // 2, y)
+    return render_config(instr, summary, accent, bg)
 
-    if instr == "TASSIGN":
-        expr = "tile.bind(address)   (implementation-defined mapping)"
-        proc = [
-            "TASSIGN(tile, address, ...waitEvents)",
-            "1) address := immediate/scalar (implementation-defined base).",
-            "2) Bind tile handle to an on-chip address range starting at address.",
-            "3) Subsequent memory ops on this tile use the bound mapping.",
-        ]
 
-        out.append(
-            f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-        )
+def _render_comm(instr: str, summary: str, accent: str, bg: str) -> str:
+    from gen_isa_svg_state import render_comm
 
-        widths = [tile_w, 160]
-        xs = _layout_row_lefts(CANVAS_W // 2, widths, 220)
-        x_tile = xs[0]
-        x_addr = xs[1]
-        scalar_y = y_src + 8
-
-        _draw_tile_grid(
-            out,
-            x=x_tile,
-            y=y_src,
-            label="tile handle (unbound)",
-            prefix="t",
-            highlight_cells=[(EX_R, EX_C)],
-            accent=accent,
-        )
-        _draw_scalar_box(out, x=x_addr, y=scalar_y, label="address", value="0x....", accent=accent)
-
-        x_dst = (CANVAS_W - tile_w) // 2
-        _draw_tile_grid(
-            out,
-            x=x_dst,
-            y=y_dst,
-            label="tile handle (bound)",
-            prefix="t",
-            highlight_cells=[(EX_R, EX_C)],
-            accent=accent,
-        )
-
-        dx, dy = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-        sx, sy = _tile_port_bottom(x=x_tile, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-        ax, ay = _scalar_port_bottom(x=x_addr, y=scalar_y)
-        _draw_binary_flow(
-            out, instr=instr, left_src=(sx, sy), right_src=(ax, ay), dst=(dx, dy), accent=accent, op_cx=CANVAS_W // 2
-        )
-        _draw_procedure(out, lines=proc, accent=accent)
-        return _end_svg(out)
-
-    if instr == "SETFMATRIX":
-        expr = "set FMATRIX state (used by later ops)"
-        proc = [
-            "SETFMATRIX(value, ...waitEvents)",
-            "1) Update FMATRIX register/state.",
-            "2) Ordering: update takes effect before dependent ops.",
-            "3) Affects subsequent IMG2COL / layout-sensitive operations.",
-        ]
-        scalar_label = "FMATRIX"
-        scalar_value = "set"
-        state_lines = ["FMATRIX state updated", "consulted by later ops"]
-    else:
-        mode = "HF32" if instr == "TSETHF32MODE" else "TF32" if instr == "TSETTF32MODE" else "mode"
-        expr = f"set transform mode ({mode})"
-        proc = [
-            f"{instr}(enable/mode, ...waitEvents)",
-            "1) Update backend transform/rounding mode (implementation-defined).",
-            "2) Ordering: update takes effect before dependent ops.",
-            "3) Affects subsequent GEMV/MATMUL or conversion paths (if applicable).",
-        ]
-        scalar_label = "mode"
-        scalar_value = "enable/mode"
-        state_lines = ["backend mode state updated", "used by later ops"]
-
-    out.append(
-        f'<text x="{CANVAS_W // 2}" y="{EXPR_Y}" class="subtitle" text-anchor="middle" fill="{_esc(accent)}">{_esc(expr)}</text>'
-    )
-
-    scalar_x = CANVAS_W - MARGIN - 16 - 160
-    scalar_y = y_src + 8
-    _draw_scalar_box(out, x=scalar_x, y=scalar_y, label=scalar_label, value=scalar_value, accent=accent)
-
-    state_x = (CANVAS_W - 520) // 2
-    state_y = y_dst + 6
-    dx, dy = draw_state_box(x=state_x, y=state_y, title="Execution state", lines=state_lines)
-    sx, sy = (scalar_x + 160 // 2, scalar_y + 54)
-    via_y = int((sy + dy) / 2)
-    _draw_ortho_arrow(out, x1=sx, y1=sy, x2=dx, y2=dy, via_y=via_y, accent=accent)
-    _draw_procedure(out, lines=proc, accent=accent)
-    return _end_svg(out)
+    return render_comm(instr, summary, accent, bg)
 
 
 def render_svg(entry: Dict[str, object]) -> str:
@@ -1804,6 +2227,8 @@ def render_svg(entry: Dict[str, object]) -> str:
         return _render_sync(instr, summary, accent, bg)
     if template == "config":
         return _render_config(instr, summary, accent, bg)
+    if template == "comm":
+        return _render_comm(instr, summary, accent, bg)
 
     # Fallback
     out = _begin_svg(instr, summary, template, accent, bg)
