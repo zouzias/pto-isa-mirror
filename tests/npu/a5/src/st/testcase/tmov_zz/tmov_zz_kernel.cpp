@@ -293,8 +293,7 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t* outFp8Nz, __gm__ float* src, __gm__ u
         scalingTileBytesRaw > tmpBufSizeAligned ?
             (scalingTileBytesRaw > minScalingBytes ? scalingTileBytesRaw : minScalingBytes) :
             (tmpBufSizeAligned > minScalingBytes ? tmpBufSizeAligned : minScalingBytes);
-    // Pad to 32-byte alignment (required for UB address alignment of adjacent tiles).
-    constexpr int e8TileBytes = PTO_CEIL(groupedColsFlattenedPadded * (int)sizeof(float8_e8m0_t), 0x20);
+    constexpr int e8TileBytes = groupedColsFlattenedPadded * (int)sizeof(float8_e8m0_t);
     constexpr int fp8TileBytes = validRows * paddedCols * sizeof(int8_t);
     constexpr int C0_SIZE_B = 32;
     constexpr int nColGroupsNZ = paddedCols / C0_SIZE_B;
@@ -355,5 +354,8 @@ void LaunchTMovZZ_e8m0(uint8_t* dstFp8Nz, float* src, uint8_t* dstE8Zz, void* st
 {
     launchTMovZZKernel_e8m0<validRows, validCols><<<1, nullptr, stream>>>(dstFp8Nz, src, dstE8Zz);
 }
+
+template void LaunchTMovZZ_e8m0<64, 128>(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
+template void LaunchTMovZZ_e8m0<32, 64>(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
 
 } // namespace TMovZZTest
