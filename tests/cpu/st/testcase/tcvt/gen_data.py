@@ -12,6 +12,7 @@
 
 import os
 import struct
+import en_dtypes as end
 
 import numpy as np
 np.random.seed(19)
@@ -50,7 +51,6 @@ FP4_LIMITS = {
     Float4E2M1: (-6.0, 6.0),
     Float4E1M2: (-4.0, 3.5)
 }
-
 
 def double_to_bits(value):
     return struct.unpack("<Q", struct.pack("<d", float(value)))[0]
@@ -244,20 +244,23 @@ def write_output_data(data, dtype, filename):
     else:
         data.tofile(filename)
 
-
 def gen_golden(param):
     m, n = param.m, param.n
 
     x1_gm = generate_input_data(param)
     input_values = decode_input_data(x1_gm, param.srctype)
 
-    if param.saturation_mode == "SatMode::ON":
-        data_to_cast = apply_saturation(input_values, param.dsttype)
+    if param.dsttype in [end.float4_e1m2, end.float4_e2m1]:
+        golden = input_values.astype(param.dsttype)
+        golden = pack_fp4(golden.view(np.uint8))
     else:
-        data_to_cast = input_values
+        if param.saturation_mode == "SatMode::ON":
+            data_to_cast = apply_saturation(input_values, param.dsttype)
+        else:
+            data_to_cast = input_values
 
-    rounded_data = apply_rounding(data_to_cast, param.mode)
-    golden = convert_to_dsttype(rounded_data, param.dsttype)
+        rounded_data = apply_rounding(data_to_cast, param.mode)
+        golden = convert_to_dsttype(rounded_data, param.dsttype)
     write_output_data(x1_gm, param.srctype, "./x1_gm.bin")
     write_output_data(golden, param.dsttype, "./golden.bin")
 
@@ -338,14 +341,14 @@ if __name__ == "__main__":
         TCvtParams(np.float32, Int4, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
         TCvtParams(Int4, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
 
-        TCvtParams(np.float32, Float4E2M1, 64, 64, "RoundMode::CAST_RINT"),
+        TCvtParams(np.float32, end.float4_e2m1, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E2M1, np.float32, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float32, Float4E2M1, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float32, end.float4_e2m1, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E2M1, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
 
-        TCvtParams(np.float32, Float4E1M2, 64, 64, "RoundMode::CAST_RINT"),
+        TCvtParams(np.float32, end.float4_e1m2, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E1M2, np.float32, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float32, Float4E1M2, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float32, end.float4_e1m2, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(Float4E1M2, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON")
     ]
 

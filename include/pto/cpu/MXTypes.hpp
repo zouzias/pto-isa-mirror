@@ -12,6 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define MXTYPES_HPP
 #include <cstring>
 #include <ostream>
+#include <cmath>
+#include <algorithm>
+#include <array>
 
 constexpr unsigned int MAN_DBL = 52;
 constexpr unsigned int EXP_DBL = 11;
@@ -71,6 +74,65 @@ public:
         data = static_cast<uint8_t>(
             (dblSign << (MAN_SZ + EXP_SZ)) | ((outExponent & ((1ULL << EXP_SZ) - 1)) << MAN_SZ) |
             (outMantissa & ((1ULL << MAN_SZ) - 1)));
+    }
+
+    template <typename = void>
+        requires(EXP_SZ + MAN_SZ == 3)
+    MXType(double val, pto::RoundMode mode) : data(0)
+    {
+        constexpr std::array<float, 8> pos_grid = []() {
+            if constexpr (EXP_SZ == 1)
+                return std::array<float, 8>{0.0f, 0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f};
+            else
+                return std::array<float, 8>{0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f};
+        }();
+
+        uint8_t sign = (val < 0.0f) ? 8 : 0;
+        val = std::abs(val);
+
+        uint8_t max_code = 7u;
+        if (val >= pos_grid[max_code]) {
+            data = sign | max_code;
+            return;
+        }
+
+        // Find the two bracketing grid values: lower_idx <= val <= upper_idx
+        auto it = std::upper_bound(pos_grid.begin(), pos_grid.end(), val);
+        int upper_idx = static_cast<int>(std::distance(pos_grid.begin(), it));
+        int lower_idx = upper_idx - 1;
+
+        float midpoint = (pos_grid[lower_idx] + pos_grid[upper_idx]) / 2.0f;
+        float atol = 1e-8f;
+        bool is_tie = std::abs(val - midpoint) <= atol;
+        bool tie_bit = mode == pto::RoundMode::CAST_ODD;
+
+        int mag_code = lower_idx;
+        switch (mode) {
+            case pto::RoundMode::CAST_FLOOR:
+                mag_code = (sign == 0) ? lower_idx : upper_idx;
+                break;
+            case pto::RoundMode::CAST_CEIL:
+                mag_code = (sign == 0) ? upper_idx : lower_idx;
+                break;
+            case pto::RoundMode::CAST_TRUNC:
+                mag_code = lower_idx;
+                break;
+            case pto::RoundMode::CAST_ODD:
+            case pto::RoundMode::CAST_RINT:
+            case pto::RoundMode::CAST_ROUND:
+            case pto::RoundMode::CAST_NONE:
+            default:
+                if (is_tie) {
+                    if (lower_idx % 2 == tie_bit)
+                        mag_code = lower_idx;
+                    else if (upper_idx % 2 == tie_bit)
+                        mag_code = upper_idx;
+                } else {
+                    mag_code = (val < midpoint) ? lower_idx : upper_idx;
+                }
+                break;
+        }
+        data = sign | mag_code;
     }
 
     operator double() const
