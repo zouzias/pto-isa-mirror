@@ -406,6 +406,8 @@ const std::unordered_map<std::string, int64_t UarchConfig::*>& integerUarchOverr
         {"issue_ports", &UarchConfig::issuePorts},
         {"load_ports", &UarchConfig::loadPorts},
         {"store_ports", &UarchConfig::storePorts},
+        {"ub_slots", &UarchConfig::ubSlots},
+        {"lsu_store_priority_preg_threshold", &UarchConfig::lsuStorePriorityPregThreshold},
         {"idu_window_width", &UarchConfig::iduWindowWidth},
         {"idu_issue_width", &UarchConfig::iduIssueWidth},
         {"ldq_width", &UarchConfig::ldqWidth},

@@ -122,6 +122,12 @@ OooCore::OooCore(
     issuePorts_ = static_cast<int>(uarch.issuePorts);
     threePortsMode_ = uarch.threePortsMode;
     storePorts_ = static_cast<int>(uarch.storePorts);
+    ubSlots_ = static_cast<int>(uarch.ubSlots);
+    lsuStorePriorityPregThreshold_ = static_cast<int>(uarch.lsuStorePriorityPregThreshold);
+    if (loadPorts_ <= 0 || storePorts_ <= 0 || ubSlots_ <= 0)
+        throw std::invalid_argument("load_ports, store_ports, and ub_slots must be positive");
+    if (lsuStorePriorityPregThreshold_ < 0)
+        throw std::invalid_argument("lsu_store_priority_preg_threshold must be non-negative");
     shqDepth_ = static_cast<int>(uarch.shqDepth);
     lsqDepth_ = static_cast<int>(uarch.ldqWidth ? uarch.ldqWidth : 24);
     pregNum_ = static_cast<int>(uarch.vregNum ? uarch.vregNum : 68);
@@ -895,15 +901,22 @@ void OooCoreMainline::retireCompletedUops()
     }
 }
 
-void OooCoreMainline::updateLsqReadiness(int64_t cycle)
+void OooCoreMainline::updateLsqReadiness(int64_t cycle, bool storesOnly)
 {
     for (auto& u : lsq_) {
         if (u.state == "running" || u.state == "done")
             continue;
-        if (u.opClass == "LOAD")
+        if (storesOnly && u.opClass != "STORE")
+            continue;
+        if (u.opClass == "LOAD") {
             u.readyCycle = computeLoadReadyCycle(u);
-        else
-            u.readyCycle = std::get<0>(computeStoreReadyCycle(u));
+        } else {
+            auto ready = computeStoreReadyCycle(u);
+            u.readyCycle = std::get<0>(ready);
+            u.producerOpForStore = std::get<1>(ready);
+            u.producerFormForStore = std::get<2>(ready);
+            u.producerStartForStore = std::get<3>(ready);
+        }
         u.state = (cycle >= u.readyCycle) ? "ready" : "blocked";
     }
 }
@@ -930,42 +943,86 @@ void OooCoreMainline::updateShqReadiness(int64_t cycle)
     }
 }
 
-void OooCoreMainline::issueLoads(int64_t cycle)
+void OooCoreMainline::issueReadyLsu(
+    int64_t cycle, int& issuedLoads, int& issuedStores, int& issuedTotal,
+    std::unordered_set<int64_t>& membarBlockedLoggedIds)
 {
-    int ld = 0;
-    for (auto it = lsq_.begin(); it != lsq_.end();) {
-        auto& u = *it;
-        if (u.state != "ready" || u.opClass != "LOAD") {
-            ++it;
+    if (cycle < vfStartupCost_ || issuedTotal >= ubSlots_)
+        return;
+
+    struct Candidate {
+        int classPriority = 0;
+        int64_t streamSeq = 0;
+        int64_t instId = 0;
+    };
+
+    const bool pregPressure = static_cast<int>(freelist_.size()) < lsuStorePriorityPregThreshold_;
+    const std::string preferredClass = pregPressure ? "STORE" : "LOAD";
+    std::vector<Candidate> candidates;
+    for (const auto& u : lsq_) {
+        if (u.state != "ready" || (u.opClass != "LOAD" && u.opClass != "STORE"))
             continue;
-        }
-        if (ld >= loadPorts_)
+        const int64_t age = u.streamSeq >= 0 ? u.streamSeq : u.instId;
+        candidates.push_back(Candidate{u.opClass == preferredClass ? 0 : 1, age, u.instId});
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& lhs, const Candidate& rhs) {
+        return std::tie(lhs.classPriority, lhs.streamSeq, lhs.instId) <
+               std::tie(rhs.classPriority, rhs.streamSeq, rhs.instId);
+    });
+
+    for (const auto& candidate : candidates) {
+        if (issuedTotal >= ubSlots_)
             break;
+        auto it = std::find_if(lsq_.begin(), lsq_.end(), [&](const Uop& u) { return u.instId == candidate.instId; });
+        if (it == lsq_.end() || it->state != "ready")
+            continue;
+        Uop& u = *it;
+        if (u.opClass == "LOAD" && issuedLoads >= loadPorts_)
+            continue;
+        if (u.opClass == "STORE" && issuedStores >= storePorts_)
+            continue;
         if (blockedByControlUnit(u)) {
-            logMembarBlocked(u);
-            ++it;
+            if (membarBlockedLoggedIds.insert(u.instId).second)
+                logMembarBlocked(u);
             continue;
         }
+        if (u.opClass == "STORE" && !u.producerOpForStore.has_value())
+            continue;
+
         u.startCycle = cycle;
         u.blockedReason.reset();
         u.doneCycle = cycle + u.latency;
         u.state = "running";
         scheduleSrcReleaseFromStart(u);
-        if (auto* robU = findRobUop(u.instId)) {
-            robU->startCycle = u.startCycle;
-            robU->doneCycle = u.doneCycle;
-            robU->state = u.state;
-        }
-        log("start", u);
-        logStartSimple(u);
-        ++ld;
-        for (const auto& pd : u.pregDst) {
-            if (!pd.empty()) {
+        if (u.opClass == "LOAD") {
+            ++issuedLoads;
+            for (const auto& pd : u.pregDst) {
+                if (pd.empty())
+                    continue;
                 pregProducer_[pd] = ProducerInfo{u.op, u.form, *u.startCycle, "LOAD"};
                 pregPending_.erase(pd);
             }
+        } else {
+            ++issuedStores;
+            if (u.isShqTracked) {
+                scheduleShqRelease(cycle, 1);
+                u.isShqTracked = false;
+            }
         }
-        it = lsq_.erase(it);
+        ++issuedTotal;
+
+        if (auto* robU = findRobUop(u.instId)) {
+            robU->producerOpForStore = u.producerOpForStore;
+            robU->producerFormForStore = u.producerFormForStore;
+            robU->producerStartForStore = u.producerStartForStore;
+            robU->startCycle = u.startCycle;
+            robU->doneCycle = u.doneCycle;
+            robU->state = u.state;
+            robU->isShqTracked = u.isShqTracked;
+        }
+        log("start", u);
+        logStartSimple(u);
+        lsq_.erase(it);
     }
 }
 
@@ -980,13 +1037,18 @@ void OooCoreMainline::step()
     tryFreeEligiblePregs(c);
     updateLsqReadiness(c);
     updateShqReadiness(c);
-    issueLoads(c);
+    int issuedLoads = 0;
+    int issuedStores = 0;
+    int issuedLsuTotal = 0;
+    std::unordered_set<int64_t> membarBlockedLoggedIds;
+    issueReadyLsu(c, issuedLoads, issuedStores, issuedLsuTotal, membarBlockedLoggedIds);
     updateShqReadiness(c);
 
     PortUsage exuUsedThisCycle(static_cast<size_t>(issuePorts_), false);
     IssuedSources issuedSrcsThisCycle;
     issueCompute(c, exuUsedThisCycle, issuedSrcsThisCycle);
-    issueStores(c);
+    updateLsqReadiness(c, true);
+    issueReadyLsu(c, issuedLoads, issuedStores, issuedLsuTotal, membarBlockedLoggedIds);
     ++cycle_;
 }
 
@@ -1308,58 +1370,6 @@ void OooCoreMainline::issueComputeFromExq(int64_t c, PortUsage& exuUsedThisCycle
         exuUsedThisCycle[static_cast<size_t>(port)] = true;
         exqInflight_[static_cast<size_t>(port)] += 1;
         publishComputeResults(u);
-    }
-}
-
-void OooCoreMainline::issueStores(int64_t c)
-{
-    int st = 0;
-    for (auto it = lsq_.begin(); it != lsq_.end();) {
-        auto& u = *it;
-        if (u.state != "ready" || u.opClass != "STORE") {
-            ++it;
-            continue;
-        }
-        if (st >= storePorts_)
-            break;
-        auto ready = computeStoreReadyCycle(u);
-        if (c < std::get<0>(ready)) {
-            ++it;
-            continue;
-        }
-        u.producerOpForStore = std::get<1>(ready);
-        u.producerFormForStore = std::get<2>(ready);
-        u.producerStartForStore = std::get<3>(ready);
-        if (!u.producerOpForStore.has_value()) {
-            ++it;
-            continue;
-        }
-        if (blockedByControlUnit(u)) {
-            logMembarBlocked(u);
-            ++it;
-            continue;
-        }
-        u.startCycle = c;
-        u.blockedReason.reset();
-        u.doneCycle = c + u.latency;
-        u.state = "running";
-        scheduleSrcReleaseFromStart(u);
-        if (u.opClass == "COMPUTE" || u.opClass == "STORE") {
-            scheduleShqRelease(c, 1);
-            u.isShqTracked = false;
-        }
-        if (auto* robU = findRobUop(u.instId)) {
-            robU->producerOpForStore = u.producerOpForStore;
-            robU->producerStartForStore = u.producerStartForStore;
-            robU->startCycle = u.startCycle;
-            robU->doneCycle = u.doneCycle;
-            robU->state = u.state;
-            robU->isShqTracked = false;
-        }
-        log("start", u);
-        logStartSimple(u);
-        ++st;
-        it = lsq_.erase(it);
     }
 }
 

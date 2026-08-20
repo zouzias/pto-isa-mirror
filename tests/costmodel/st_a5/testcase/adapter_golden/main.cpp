@@ -10,9 +10,12 @@ See LICENSE in the root of the software repository for the full text of the LICE
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -25,6 +28,7 @@ See LICENSE in the root of the software repository for the full text of the LICE
 #include "pto/costmodel/vfsim/pto_adapter/vfsim_cost_model.hpp"
 
 #include "native/ParamDB.h"
+#include "native/OOO.h"
 #include "native/SimulatorRunner.h"
 
 namespace {
@@ -60,6 +64,33 @@ ptoVf::VfInfo buildPtoVfInfo(bool includePredicateSetup = false)
     body.push_back(makePtoInst("vadd", {v2}, {v0, v1}));
     body.push_back(makePtoInst("vsts", {mem2}, {v2}));
     return ptoVf::VfInfo{"TADD", "1x512", {ptoVf::MakeLoop(LOOP_COUNT, std::move(body))}};
+}
+
+std::string readText(const std::filesystem::path& path)
+{
+    std::ifstream input(path);
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+int64_t cycleForInstId(const std::string& jsonLines, int64_t instId)
+{
+    const std::string instructionNeedle = "\"inst_id\":" + std::to_string(instId);
+    std::istringstream lines(jsonLines);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (line.find(instructionNeedle) == std::string::npos)
+            continue;
+        constexpr const char* CYCLE_NEEDLE = "\"cy\":";
+        const auto position = line.find(CYCLE_NEEDLE);
+        if (position == std::string::npos)
+            break;
+        const auto start = position + std::char_traits<char>::length(CYCLE_NEEDLE);
+        const auto end = line.find_first_of(",}", start);
+        return std::stoll(line.substr(start, end - start));
+    }
+    throw std::runtime_error("instruction not found in native start log: " + std::to_string(instId));
 }
 
 template <typename Invoke>
@@ -100,6 +131,78 @@ TEST(VfSimAdapterGolden, MatchesDirectNativePrediction)
     EXPECT_EQ(adapterResult.ignoredInstructionCount, 0U);
     EXPECT_TRUE(adapterResult.diagnostics.empty());
     EXPECT_EQ(adapterResult.cycles, nativeCycles);
+}
+
+TEST(VfSimAdapterGolden, SharesUbIssueSlotsAcrossLoadsAndStores)
+{
+    const vfsim::ParamDb db(std::filesystem::path(PTO_VFSIM_TEST_SOURCE_ROOT));
+    EXPECT_EQ(db.uarch().ubSlots, 2);
+    EXPECT_EQ(db.uarch().lsuStorePriorityPregThreshold, 1);
+
+    const auto runCase = [&](int64_t vregNum, const std::string& suffix) {
+        vfsim::UarchConfig uarch = db.uarch();
+        uarch.vregNum = vregNum;
+        uarch.loadPorts = 2;
+        uarch.storePorts = 1;
+        uarch.ubSlots = 2;
+        uarch.lsuStorePriorityPregThreshold = 1;
+        vfsim::OooCoreMainline core(uarch, db, "fp32");
+
+        vfsim::DynamicInst producer;
+        producer.type = "inst";
+        producer.instId = 9200;
+        producer.streamSeq = 0;
+        producer.op = "VADD";
+        producer.form = "fp32";
+        producer.dst = {"v0"};
+        core.accept(producer);
+        for (int cycle = 0; cycle < 40; ++cycle)
+            core.step();
+
+        vfsim::DynamicInst store;
+        store.type = "inst";
+        store.instId = 9201;
+        store.streamSeq = 1;
+        store.op = "VSTS";
+        store.form = "fp32";
+        store.src = {"v0"};
+        store.dst = {"mem0"};
+
+        vfsim::DynamicInst firstLoad;
+        firstLoad.type = "inst";
+        firstLoad.instId = 9202;
+        firstLoad.streamSeq = 2;
+        firstLoad.op = "VLDS";
+        firstLoad.form = "fp32";
+        firstLoad.src = {"mem1"};
+        firstLoad.dst = {"v1"};
+
+        vfsim::DynamicInst secondLoad = firstLoad;
+        secondLoad.instId = 9203;
+        secondLoad.streamSeq = 3;
+        secondLoad.dst = {"v2"};
+
+        core.accept(store);
+        core.accept(firstLoad);
+        core.accept(secondLoad);
+        for (int cycle = 0; cycle < 20; ++cycle)
+            core.step();
+
+        const auto outputRoot = std::filesystem::temp_directory_path() / ("pto_vfsim_ub_slot_test_" + suffix);
+        std::filesystem::create_directories(outputRoot);
+        core.dumpSimpleLogs((outputRoot / "starts.jsonl").string(), (outputRoot / "done.jsonl").string());
+        const std::string starts = readText(outputRoot / "starts.jsonl");
+        return std::make_tuple(
+            cycleForInstId(starts, 9201), cycleForInstId(starts, 9202), cycleForInstId(starts, 9203));
+    };
+
+    const auto relaxed = runCase(16, "relaxed");
+    EXPECT_EQ(std::get<1>(relaxed), std::get<2>(relaxed));
+    EXPECT_GT(std::get<0>(relaxed), std::get<1>(relaxed));
+
+    const auto pressured = runCase(1, "pressured");
+    EXPECT_EQ(std::get<0>(pressured), std::get<1>(pressured));
+    EXPECT_GT(std::get<2>(pressured), std::get<1>(pressured));
 }
 
 TEST(VfSimAdapterGolden, PtoTraceLowersDirectlyToCanonicalContract)

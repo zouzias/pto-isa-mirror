@@ -148,6 +148,8 @@ protected:
     int issuePorts_ = 2;
     bool threePortsMode_ = false;
     int storePorts_ = 1;
+    int ubSlots_ = 2;
+    int lsuStorePriorityPregThreshold_ = 1;
     int shqDepth_ = 58;
     int lsqDepth_ = 24;
     int pregNum_ = 68;
@@ -278,14 +280,15 @@ private:
 
     void completeRunningUops(int64_t cycle);
     void retireCompletedUops();
-    void updateLsqReadiness(int64_t cycle);
+    void updateLsqReadiness(int64_t cycle, bool storesOnly = false);
     void updateShqReadiness(int64_t cycle);
-    void issueLoads(int64_t cycle);
+    void issueReadyLsu(
+        int64_t cycle, int& issuedLoads, int& issuedStores, int& issuedTotal,
+        std::unordered_set<int64_t>& membarBlockedLoggedIds);
     void issueCompute(int64_t cycle, PortUsage& portUsage, IssuedSources& issuedSources);
     void issueDirectCompute(int64_t cycle, PortUsage& portUsage, IssuedSources& issuedSources);
     void dispatchComputeToExq(int64_t cycle, IssuedSources& issuedSources);
     void issueComputeFromExq(int64_t cycle, PortUsage& portUsage);
-    void issueStores(int64_t cycle);
     bool hasSameCycleSourceHazard(const Uop& uop, const IssuedSources& issuedSources) const;
     void recordIssuedSources(const Uop& uop, IssuedSources& issuedSources) const;
     int selectDirectIssuePort(const Uop& uop, int64_t cycle, const PortUsage& portUsage) const;

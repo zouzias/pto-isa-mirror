@@ -3,6 +3,8 @@ static constexpr GeneratedUarchField GENERATED_UARCH_FIELDS[] = {
     {"issue_ports", "integer", true, true},
     {"load_ports", "integer", true, true},
     {"store_ports", "integer", true, true},
+    {"ub_slots", "integer", true, true},
+    {"lsu_store_priority_preg_threshold", "integer", true, true},
     {"idu_window_width", "integer", true, true},
     {"idu_issue_width", "integer", true, true},
     {"ldq_width", "integer", true, true},
@@ -43,4 +45,5 @@ static constexpr GeneratedUarchField GENERATED_UARCH_FIELDS[] = {
 };
 static constexpr const char* GENERATED_DEPRECATED_UARCH_FIELDS[] = {
     "load_done_latency",
+    "lsu_issue_policy",
 };
