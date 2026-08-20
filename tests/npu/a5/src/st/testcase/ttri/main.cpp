@@ -97,6 +97,8 @@ TEST_F(TTRITest, case_float_763x32_lower_diag_n41) { test_ttri<float, 763, 32, 0
 TEST_F(TTRITest, case_float_763x32_upper_diag_n41) { test_ttri<float, 763, 32, 1>(-41); }
 TEST_F(TTRITest, case_int64_4x15_upper_diag_0) { test_ttri<int64_t, 4, 15, 1>(0); }
 TEST_F(TTRITest, case_uint64_4x15_lower_diag_n1) { test_ttri<uint64_t, 4, 15, 0>(-1); }
+TEST_F(TTRITest, case_int64_4x64_upper_diag_0) { test_ttri<int64_t, 4, 64, 1>(0); }
+TEST_F(TTRITest, case_uint64_4x64_lower_diag_n1) { test_ttri<uint64_t, 4, 64, 0>(-1); }
 
 // --- Dynamic (static != valid) test cases ---
 

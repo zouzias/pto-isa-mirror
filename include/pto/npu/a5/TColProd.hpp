@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TCOLPROD_HPP
 #define TCOLPROD_HPP
 
-#include "TColReduceOps.hpp"
+#include "pto/npu/a5/TColReduceOps.hpp"
 
 namespace pto {
 template <typename T>

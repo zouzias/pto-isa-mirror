@@ -13,10 +13,69 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
-#include "common.hpp"
-#include "utils.hpp"
+#include "pto/npu/a5/common.hpp"
+#include "pto/npu/a5/utils.hpp"
+#include "pto/npu/a5/TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_s32 dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh;
+        uint64_t scalarBits = static_cast<uint64_t>(scalar);
+        int32_t low = static_cast<int32_t>(scalarBits);
+        int32_t high = static_cast<int32_t>(scalarBits >> 32);
+        vbr(scalarLow, low);
+        vbr(scalarHigh, high);
+        uint16_t rowCount = validRows;
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            uint32_t remainingCols = validCols;
+            for (uint16_t colRepeat = 0; colRepeat < repeatTimes; ++colRepeat) {
+                uint32_t cols = remainingCols > elementsPerRepeat ? elementsPerRepeat : remainingCols;
+                MaskReg mask = plt_b32(cols, POST_UPDATE);
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
+                uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+                vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+                MaskReg carry;
+                MaskReg carryOut;
+                if constexpr (Op == Int64Op::Add) {
+                    vaddc(carry, dstLow, srcLow, scalarLow, mask);
+                    vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Sub) {
+                    vsubc(carry, dstLow, srcLow, scalarLow, mask);
+                    vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+                } else if constexpr (Op == Int64Op::Mul) {
+                    vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
+                    vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
+                    vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
+                } else if constexpr (Op == Int64Op::Shl) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else if constexpr (Op == Int64Op::Shr) {
+                    vbr(scalarLow, static_cast<int32_t>(scalarBits));
+                    Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+                } else {
+                    Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+                }
+                vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+                remainingCols -= cols;
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols);
+#endif
 
 template <typename Op, bool isDynFunc = Op::isDynFunc>
 class BinSOpCaller;

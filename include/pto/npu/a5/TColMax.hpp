@@ -11,8 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TCOLMAX_HPP
 #define TCOLMAX_HPP
 
-#include "TColReduceOps.hpp"
-#include "Int64Reduce.hpp"
+#include "pto/npu/a5/TColReduceOps.hpp"
+#include "TPartBinOps.hpp"
 
 namespace pto {
 template <typename T>
