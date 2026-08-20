@@ -37,6 +37,23 @@ Key points:
 - If no `VfInfo` is generated, the path does not enter VfSim and keeps the normal PTO costmodel cycle result.
 - VF cycles become the Vector pipeline latency in Perf-Sim and are not charged twice.
 
+## UB Load/Store Issue Model
+
+VfSim classifies micro-ops such as `vld` and `vst` as loads or stores through the instruction catalog and models them as sharing UB data-access issue resources. The defaults are defined in `pkg_inc/pto/costmodel/vfsim/configs/uarch.json`:
+
+| Field | Default | Meaning |
+| --- | ---: | --- |
+| `ub_slots` | 2 | Maximum total number of loads and stores that may start in one cycle. |
+| `load_ports` | 2 | Maximum number of loads that may start in one cycle. |
+| `store_ports` | 1 | Maximum number of stores that may start in one cycle. |
+| `lsu_store_priority_preg_threshold` | 1 | Ready stores have higher arbitration priority than ready loads when the real free physical-register count is below this threshold. |
+
+With the default configuration, one cycle may start at most two loads, or one load and one store. It cannot start two stores in the same cycle. Every instruction must still satisfy its data dependencies, ready cycle, memory-barrier constraints, and other scheduling conditions. These values are issue limits; they do not guarantee that both UB slots are filled every cycle.
+
+Without physical-register pressure, arbitration prefers ready loads. If at least two loads are ready in the same cycle, they occupy both UB slots. With the default threshold of 1, arbitration switches to store priority when the real freelist is empty: one ready store may consume the store port and one UB slot, while one ready load may use the remaining slot. Instructions within the same class are ordered by dynamic age.
+
+The historical `lsu_issue_policy` field has been removed and must not be used in the configuration file or a uarch override; its presence in the configuration is an error. Use `lsu_store_priority_preg_threshold` to tune this arbitration behavior. When the CMake helper is used, updated JSON files are synchronized into the build directory on every build, so no manual copy is required.
+
 ## Quickly Run Existing Tests
 
 The current A5 VfSim ST tests are located under:
@@ -76,7 +93,7 @@ tadd, tadds, tsub, tsubs, tmul, tmuls, tdiv,
 tmin, tmins, tmax, tand, tshls, tshrs
 ```
 
-The suite also contains adapter golden, memory/sync routing, ACL Host Runtime, unchanged full-Host TADD, and relocatable-config regression tests.
+The suite also contains adapter golden coverage (including shared UB load/store issue arbitration), memory/sync routing, ACL Host Runtime, unchanged full-Host TADD, and relocatable-config regression tests.
 
 “Supported tileop” refers to the exact dtype/form combinations covered by these regressions; it does not imply that every dtype of the same tileop hits VfSim. An uncovered form returns an observable `UnsupportedForm` or `InvalidTrace` status and uses the A5 fallback.
 

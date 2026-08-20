@@ -35,6 +35,23 @@ PTO/tileop 执行
 - 如果没有收集到 `VfInfo`，不会调用 VfSim，保留普通 PTO costmodel 已累计的 cycle。
 - VF cycle 作为 Perf-Sim 的 Vector pipeline latency，不会重复计费。
 
+## UB Load/Store 发射模型
+
+VfSim 将 `vld`/`vst` 等 micro-op 按 instruction catalog 归类为 load/store，并对它们建模共享的 UB 数据访问发射资源。默认配置位于 `pkg_inc/pto/costmodel/vfsim/configs/uarch.json`：
+
+| 配置项 | 默认值 | 含义 |
+| --- | ---: | --- |
+| `ub_slots` | 2 | 每个 cycle 内新开始执行的 load 和 store 总数上限。 |
+| `load_ports` | 2 | 每个 cycle 内新开始执行的 load 数量上限。 |
+| `store_ports` | 1 | 每个 cycle 内新开始执行的 store 数量上限。 |
+| `lsu_store_priority_preg_threshold` | 1 | 真实空闲物理寄存器数小于该阈值时，ready store 的仲裁优先级高于 ready load。 |
+
+因此默认情况下，一个 cycle 最多可以开始执行两条 load，或者一条 load 和一条 store；不能在同一个 cycle 开始执行两条 store。所有指令仍需先满足数据依赖、ready cycle 和 memory barrier 等条件，这些数值只是发射上限，不保证每个 cycle 都能填满两个 UB slot。
+
+没有物理寄存器压力时，仲裁优先选择 ready load；同拍存在至少两条 ready load 时，两条 load 会占用两个 UB slot。默认阈值为 1，因此当真实 freelist 为空时切换为 store 优先：一条 ready store 可以先占用 store port 和一个 UB slot，剩余 slot 可以由一条 ready load 使用。同一类别内按动态指令年龄排序。
+
+历史配置 `lsu_issue_policy` 已删除，配置文件或 uarch override 不应再使用该字段；配置文件中出现它会直接报错。需要调整仲裁行为时，应使用 `lsu_store_priority_preg_threshold`。通过 CMake helper 构建时，更新后的 JSON 会在每次构建时同步到 build 目录，不需要手工复制。
+
 ## 快速运行现有用例
 
 A5 VfSim costmodel 单 tileop 测试位于：
@@ -74,7 +91,7 @@ tadd, tadds, tsub, tsubs, tmul, tmuls, tdiv,
 tmin, tmins, tmax, tand, tshls, tshrs
 ```
 
-此外还包括 adapter golden、memory/sync 分流、ACL Host Runtime、未修改完整 Host TADD 和配置搬移回归。
+此外还包括 adapter golden（含共享 UB load/store 发射仲裁）、memory/sync 分流、ACL Host Runtime、未修改完整 Host TADD 和配置搬移回归。
 
 “tileop 已支持”指现有回归覆盖的具体 dtype/form；不能据此推断同名 tileop 的所有 dtype 都已命中。例如未列入支持回归的 form 会返回可观测的 `UnsupportedForm` 或 `InvalidTrace`，并使用 A5 fallback。
 
