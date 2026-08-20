@@ -175,11 +175,15 @@ inline D convert_value(S val, RoundMode mode)
     } else if constexpr (
         (is_fp4_v<S> && is_float_like_v<D>) || (is_float_like_v<S> && is_fp4_v<D>) ||
         (is_float_like_v<S> && std::is_integral_v<D>)) {
-        const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
-        if constexpr (std::is_same_v<D, uint8_t>) {
-            return static_cast<D>(static_cast<int64_t>(dval));
+        if constexpr (IsTwinType<D>()) {
+            return D{val, mode};
+        } else {
+            const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
+            if constexpr (std::is_same_v<D, uint8_t>) {
+                return static_cast<D>(static_cast<int64_t>(dval));
+            }
+            return static_cast<D>(dval);
         }
-        return static_cast<D>(dval);
     } else if constexpr (std::is_integral_v<S> && is_float_like_v<D>) {
         return static_cast<D>(static_cast<double>(val));
     } else {
@@ -197,7 +201,7 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
 
             S val = src.GetElement(i, j);
             if constexpr (satMode == SaturationMode::ON) {
-                if constexpr (!is_fp4_v<S>) {
+                if constexpr (!IsTwinType<S>() && !IsTwinType<D>()) {
                     double dval = to_double_value(val);
                     double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
                     double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
