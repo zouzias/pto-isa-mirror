@@ -18,455 +18,291 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "dispatch_mega_combine_tiling.h"
 #include "gmm2_combine_cv_pipe.h"
 #include "gmm_common.h"
+#include "gmm_task_queue_device.h"
 #include "kernel_operator.h"
-#include "utils/common_helpers.hpp"
 #include "utils/const_args.hpp"
+#include "utils/mega_wave_schedule.hpp"
 #include "utils/hccl_window.hpp"
-#include "utils/peer_memory_layout.hpp"
+#include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
-constexpr uint32_t kCombineBufferNum = 2U;
-constexpr uint32_t kCombineSmallTokenSubtileRows = 16U;
-constexpr uint32_t kCombineSmallTokenSubtileCols = 256U;
-constexpr uint32_t kCombineSmallMaxElems = 8192U;
-static_assert(MEGA_MOE_GMM2_COMBINE_CV_SCALE_CACHE_ELEMS % MEGA_MOE_GMM2_COMBINE_CV_TILE_M == 0U);
-constexpr uint32_t kCombineCvScaleMaxRowBlocks =
-    MEGA_MOE_GMM2_COMBINE_CV_SCALE_CACHE_ELEMS / MEGA_MOE_GMM2_COMBINE_CV_TILE_M;
-static_assert(kCombineCvScaleMaxRowBlocks <= 64U);
-static_assert(GmmCommonPipeline::L1_M == MEGA_MOE_GMM2_COMBINE_CV_TILE_M);
+constexpr uint32_t kDirectCombineMetadataMaxElems = kMegaMoeExpertProgressMaxRanks * kMegaMoeFixedMaxExperts;
+constexpr uint64_t kDirectCombineCumsumUbOffset = kGmm2CombineMetadataOffset;
+constexpr uint64_t kDirectCombinePreSumUbOffset =
+    kDirectCombineCumsumUbOffset + static_cast<uint64_t>(kDirectCombineMetadataMaxElems) * sizeof(int32_t);
+constexpr uint64_t kDirectCombineMetadataUbEnd =
+    kDirectCombinePreSumUbOffset + static_cast<uint64_t>(kDirectCombineMetadataMaxElems) * sizeof(int32_t);
+constexpr uint64_t kDirectCombineCompletionUbOffset = REMOTE_WINDOW_PROGRESS_SIGNAL_UB_OFFSET;
+constexpr uint64_t kDirectCombineCompletionUbBytes =
+    static_cast<uint64_t>(kMegaMoeFixedMaxExperts) * REMOTE_WINDOW_READY_SIGNAL_SLOT_BYTES;
+
+static_assert(kDirectCombineMetadataUbEnd <= kGmm2CombineMetadataOffset +
+                                                 kGmm2CombineMetadataBytes);
+static_assert(kDirectCombineCompletionUbOffset + kDirectCombineCompletionUbBytes <=
+              REMOTE_WINDOW_FINAL_SIGNAL_UB_OFFSET);
+
+template <typename CvTile>
+__tf__ AICORE inline void DirectCombineStrideStore(__gm__ bfloat16_t *dst, typename CvTile::TileDType __in__ srcTile,
+                                                   uint32_t rows, uint32_t cols, uint32_t dstLeadingDim)
+{
+    __ubuf__ bfloat16_t *src = reinterpret_cast<__ubuf__ bfloat16_t *>(__cce_get_tile_ptr(srcTile));
+    copy_ubuf_to_gm_align_v2(dst, src, 0, rows, cols * sizeof(bfloat16_t), 0,
+                             static_cast<uint64_t>(dstLeadingDim) * sizeof(bfloat16_t),
+                             CvTile::Cols * sizeof(bfloat16_t));
+}
 
 template <typename OutputElement>
 class Combine {
 public:
-    AICORE inline void Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData* tilingData);
-    AICORE inline void Process();
+    AICORE inline void Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData);
+    AICORE inline void ProcessFixed(uint32_t physicalBlockId);
 
 private:
-    static_assert(
-        std::is_same_v<OutputElement, half> || std::is_same_v<OutputElement, bfloat16_t>,
-        "combine output must be half or bfloat16");
+    static_assert(std::is_same_v<OutputElement, bfloat16_t>, "MXFP8 combine output must be BF16");
 
-    using VectorShape = pto::Shape<1, 1, 1, 1, pto::DYNAMIC>;
-    using VectorStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
-    using ScaleGlobal = pto::GlobalTensor<float, VectorShape, VectorStride, pto::Layout::ND>;
-    using BlockShape = pto::Shape<1, 1, 1, pto::DYNAMIC, pto::DYNAMIC>;
-    using BlockStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
-    using DBlockGlobal = pto::GlobalTensor<OutputElement, BlockShape, BlockStride, pto::Layout::ND>;
-    using SmallTileC = pto::Tile<
-        pto::TileType::Vec, half, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols, pto::BLayout::RowMajor,
-        -1, -1>;
-    using SmallTileFp32 = pto::Tile<
-        pto::TileType::Vec, float, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols, pto::BLayout::RowMajor,
-        -1, -1>;
-    using SmallTileD = pto::Tile<
-        pto::TileType::Vec, OutputElement, kCombineSmallTokenSubtileRows, kCombineSmallTokenSubtileCols,
-        pto::BLayout::RowMajor, -1, -1>;
-    using CvTile = pto::Tile<
-        pto::TileType::Vec, half, MEGA_MOE_GMM2_COMBINE_CV_TILE_M, MEGA_MOE_GMM2_COMBINE_CV_TILE_N,
-        pto::BLayout::RowMajor, -1, -1>;
-    using CvScaleTile = pto::Tile<
-        pto::TileType::Vec, float, 1, MEGA_MOE_GMM2_COMBINE_CV_TILE_M, pto::BLayout::RowMajor, 1, pto::DYNAMIC>;
-    struct CvScaleBlockInfo {
-        uint32_t tileRowOffset;
-        uint32_t srcRowOffset;
-        uint32_t rowNum;
-        uint32_t cacheRowOffset;
-    };
+    AICORE inline void PublishCompletedExpertTiles(const __gm__ MegaMoeGmmQueueTiling &queue,
+                                                   uint32_t expert, uint32_t tileCount) const;
+    AICORE inline void PrefetchDirectMetadata();
+    AICORE inline void PrepareDirectExpert(uint32_t groupIdx);
+    AICORE inline void StoreDirectTile(const GmmCommonTileInfo &tileInfo, uint32_t tileIndex) const;
+    AICORE inline void ConsumeDirectTile(const GmmCommonTileInfo &tileInfo);
+    AICORE inline void ConsumeDirectWave0();
+    AICORE inline void ProcessImpl();
 
-    AICORE inline event_t LoadFreeEvent(uint32_t bufferId) const { return static_cast<event_t>(bufferId); }
-    AICORE inline event_t StoreFreeEvent(uint32_t bufferId) const { return static_cast<event_t>(bufferId); }
-    AICORE inline event_t StoreReadyEvent(uint32_t bufferId) const { return static_cast<event_t>(bufferId + 2U); }
-    AICORE inline event_t CvScaleReadyEvent() const { return EVENT_ID4; }
-    AICORE inline void InitUbLayout();
-    AICORE inline void SetInitialFlags() const;
-    AICORE inline void FinalizeLocalPipe() const;
-    AICORE inline uint32_t TokenPerExpertResetElems() const;
-    AICORE inline bool ResetTokenPerExpert(uint32_t elems) const;
-    AICORE inline void ProcessFinalBoundary();
-    AICORE inline void PopCvTile(Gmm2CombineCvPipe& cvPipe, uint32_t actualM, uint32_t actualN) const;
-    AICORE inline void IssueCvScaleBlockLoad(uint32_t srcRowOffset, uint32_t rowNum, uint32_t cacheRowOffset) const;
-    AICORE inline bool BuildCvAssignedScaleBlocks(
-        CvScaleBlockInfo* scaleBlocks, uint32_t& scaleBlockCount, uint32_t groupBase, uint32_t currentM,
-        uint32_t startLoopIdx, uint32_t coreLoops, uint32_t aicCoreNum, uint32_t l1TileM, uint32_t l1TileN,
-        uint32_t firstCvTileSequence, uint32_t aivSubCoreIdx) const;
-    AICORE inline uint32_t FindCvScaleCacheRowOffset(
-        const CvScaleBlockInfo* scaleBlocks, uint32_t scaleBlockCount, uint32_t tileRowOffset) const;
-    AICORE inline void IssueCvScaleBlockLoads(const CvScaleBlockInfo* scaleBlocks, uint32_t scaleBlockCount) const;
-    AICORE inline void WaitCvScaleBlockLoads() const;
-    AICORE inline void PrepareCvSmallSubtile(
-        uint32_t bufferId, uint32_t cvRowInTile, uint32_t scaleRowOffset, uint32_t rowNum, uint32_t colNum) const;
-    AICORE inline void StoreSmallSubtileIntersection(
-        uint32_t bufferId, __gm__ OutputElement* dstBase, uint32_t dstRowOffset, uint32_t ubRowOffset, uint32_t rowNum,
-        uint32_t colBegin, uint32_t colNum);
-    AICORE inline void StoreSmallSubtileToRanks(
-        uint32_t groupIdx, const GmmCommonTileInfo& tileInfo, uint32_t tileRowBegin, uint32_t rows, uint32_t bufferId);
-    AICORE inline void ProcessDirectTokenPath();
+    GM_ADDR workspaceGM_ = nullptr;
+    const __gm__ MegaMoeTilingData *tilingData_ = nullptr;
+    Gmm2CombineCvPipe cvPipe_;
+    __gm__ int32_t *cumsumMMPtr_ = nullptr;
+    __gm__ int32_t *preSumBeforeRankPtr_ = nullptr;
+    __gm__ OutputElement *remoteOutputBase_[kMegaMoeExpertProgressMaxRanks] = {nullptr};
 
-    PtoRemoteWindow remoteWindow_;
-    MegaMoePeerMemoryLayout peerMemoryLayout_;
-    MegaMoePeerRowMapper rowMapper_;
-    __gm__ float* perTokenScale2Ptr_ = nullptr;
-    __gm__ int32_t* tokenPerExpertPtr_ = nullptr;
-
-    uint32_t problemK_ = 0;
-    uint32_t maxOutputSize_ = 0;
-    uint32_t expertPerRank_ = 0;
-    uint32_t expertNumAligned_ = 0;
-    uint32_t rankSize_ = 0;
-    uint32_t l1TileM_ = 0;
-    uint32_t l1TileN_ = 0;
-    uint32_t coreIdx_ = 0;
-    uint32_t coreNum_ = 1;
-    uint32_t pingpongId_ = 0;
-    uint32_t cvTileSequence_ = 0;
-    uint64_t ubFp32Offset_[kCombineBufferNum] = {0, 0};
-    uint64_t ubDOffset_[kCombineBufferNum] = {0, 0};
+    uint32_t problemK_ = 0U;
+    uint32_t routeElems_ = 0U;
+    uint32_t expertPerRank_ = 0U;
+    uint32_t rankSize_ = 0U;
+    uint32_t physicalBlockId_ = 0U;
+    uint32_t directRankRowBegin_[kMegaMoeExpertProgressMaxRanks] = {0U};
+    uint32_t directRankRowEnd_[kMegaMoeExpertProgressMaxRanks] = {0U};
+    uint32_t directCompactRowBegin_[kMegaMoeExpertProgressMaxRanks] = {0U};
 };
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData* tilingData)
+AICORE inline void Combine<OutputElement>::Init(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData)
 {
-    pingpongId_ = 0;
-    cvTileSequence_ = 0;
+    workspaceGM_ = workspaceGM;
+    tilingData_ = tilingData;
 
-    problemK_ = tilingData->megaMoeInfo.K;
-    maxOutputSize_ = tilingData->megaMoeInfo.maxOutputSize;
-    expertPerRank_ = tilingData->megaMoeInfo.expertPerRank;
-    expertNumAligned_ = tilingData->frontReorderTiling.expertNumAligned;
-    rankSize_ = tilingData->runtimeInfo.rankSize;
-    l1TileM_ = tilingData->gmm2Tiling.l1TileM;
-    l1TileN_ = tilingData->gmm2Tiling.l1TileN;
-    coreIdx_ = get_block_idx() + get_subblockid() * get_block_num();
-    coreNum_ = get_block_num() * get_subblockdim();
+    problemK_ = tilingData_->megaMoeInfo.K;
+    routeElems_ = tilingData_->frontReorderTiling.routeElems;
+    expertPerRank_ = tilingData_->megaMoeInfo.expertPerRank;
+    rankSize_ = tilingData_->runtimeInfo.rankSize;
 
-    remoteWindow_.Init(reinterpret_cast<GM_ADDR>(tilingData->runtimeInfo.remoteWindowContext));
-    peerMemoryLayout_.Init(remoteWindow_);
-
-    perTokenScale2Ptr_ = reinterpret_cast<__gm__ float*>(workspaceGM + tilingData->swigluTiling.perTokenScale2Offset);
-    __gm__ int32_t* cumsumMM =
-        reinterpret_cast<__gm__ int32_t*>(workspaceGM + tilingData->frontReorderTiling.cumsumMMOffset);
-    __gm__ int32_t* preSumBeforeRank =
-        reinterpret_cast<__gm__ int32_t*>(workspaceGM + tilingData->frontReorderTiling.preSumBeforeRankOffset);
-    tokenPerExpertPtr_ =
-        reinterpret_cast<__gm__ int32_t*>(remoteWindow_.LocalBase() + peerMemoryLayout_.offsetPeerTokenPerExpert);
-    rowMapper_.Init(
-        cumsumMM, preSumBeforeRank, tokenPerExpertPtr_, tilingData->runtimeInfo.rank, rankSize_, expertPerRank_,
-        tilingData->frontReorderTiling.expertNumAligned);
-
-    InitUbLayout();
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::InitUbLayout()
-{
-    uint64_t ubOffset = 0;
-    for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
-        ubDOffset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallMaxElems) * sizeof(OutputElement), UB_ALIGN);
-        ubFp32Offset_[i] = ubOffset;
-        ubOffset += alignUp(static_cast<uint64_t>(kCombineSmallMaxElems) * sizeof(float), UB_ALIGN);
-    }
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::SetInitialFlags() const
-{
-    for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
-        set_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(i));
-        set_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(i));
-    }
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::FinalizeLocalPipe() const
-{
-    for (uint32_t i = 0; i < kCombineBufferNum; ++i) {
-        wait_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(i));
-        wait_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(i));
-    }
-}
-
-template <typename OutputElement>
-AICORE inline uint32_t Combine<OutputElement>::TokenPerExpertResetElems() const
-{
-    return rankSize_ * expertNumAligned_;
-}
-
-template <typename OutputElement>
-AICORE inline bool Combine<OutputElement>::ResetTokenPerExpert(uint32_t elems) const
-{
-    if (coreIdx_ != coreNum_ - 1U) {
-        return false;
-    }
-    PtoFillUb<int32_t>(0U, 0, elems);
-    pipe_barrier(PIPE_ALL);
-    PtoStoreVector<int32_t>(tokenPerExpertPtr_, 0U, elems);
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
-    return true;
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::ProcessFinalBoundary()
-{
-    FinalizeLocalPipe();
-    pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
-    (void)ResetTokenPerExpert(TokenPerExpertResetElems());
-    remoteWindow_.CrossRankSync();
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::PopCvTile(
-    Gmm2CombineCvPipe& cvPipe, uint32_t actualM, uint32_t actualN) const
-{
-    CvTile cvTile(actualM, actualN);
-    pto::TPOP<Gmm2CombineCvPipe, CvTile, pto::TileSplitAxis::TILE_NO_SPLIT>(cvPipe, cvTile);
-    pipe_barrier(PIPE_ALL);
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::IssueCvScaleBlockLoad(
-    uint32_t srcRowOffset, uint32_t rowNum, uint32_t cacheRowOffset) const
-{
-    CvScaleTile scaleTile(rowNum);
-    pto::TASSIGN(
-        scaleTile, MEGA_MOE_GMM2_COMBINE_CV_TILE_SCALE_OFFSET + static_cast<uint64_t>(cacheRowOffset) * sizeof(float));
-    VectorShape scaleShape(rowNum);
-    VectorStride scaleStride(rowNum, rowNum, rowNum, rowNum);
-    ScaleGlobal scaleGlobal(perTokenScale2Ptr_ + srcRowOffset, scaleShape, scaleStride);
-    pto::TLOAD(scaleTile, scaleGlobal);
-}
-
-template <typename OutputElement>
-AICORE inline bool Combine<OutputElement>::BuildCvAssignedScaleBlocks(
-    CvScaleBlockInfo* scaleBlocks, uint32_t& scaleBlockCount, uint32_t groupBase, uint32_t currentM,
-    uint32_t startLoopIdx, uint32_t coreLoops, uint32_t aicCoreNum, uint32_t l1TileM, uint32_t l1TileN,
-    uint32_t firstCvTileSequence, uint32_t aivSubCoreIdx) const
-{
-    scaleBlockCount = 0U;
-    uint32_t cvTileSequence = firstCvTileSequence;
-    for (uint32_t scanLoopIdx = startLoopIdx; scanLoopIdx < coreLoops; scanLoopIdx += aicCoreNum) {
-        const uint32_t tileLane = Gmm2CombineCvLane(cvTileSequence);
-        ++cvTileSequence;
-        if (tileLane != aivSubCoreIdx) {
-            continue;
-        }
-        const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfo(currentM, problemK_, l1TileM, l1TileN, scanLoopIdx);
-        bool alreadyLoaded = false;
-        for (uint32_t blockIdx = 0U; blockIdx < scaleBlockCount; ++blockIdx) {
-            if (scaleBlocks[blockIdx].tileRowOffset == tileInfo.blockRowStart) {
-                alreadyLoaded = true;
-                break;
-            }
-        }
-        if (alreadyLoaded) {
-            continue;
-        }
-        if (scaleBlockCount >= kCombineCvScaleMaxRowBlocks) {
-            return false;
-        }
-        scaleBlocks[scaleBlockCount].tileRowOffset = tileInfo.blockRowStart;
-        scaleBlocks[scaleBlockCount].srcRowOffset = groupBase + tileInfo.blockRowStart;
-        scaleBlocks[scaleBlockCount].rowNum = tileInfo.actualM;
-        scaleBlocks[scaleBlockCount].cacheRowOffset = scaleBlockCount * MEGA_MOE_GMM2_COMBINE_CV_TILE_M;
-        ++scaleBlockCount;
-    }
-    return true;
-}
-
-template <typename OutputElement>
-AICORE inline uint32_t Combine<OutputElement>::FindCvScaleCacheRowOffset(
-    const CvScaleBlockInfo* scaleBlocks, uint32_t scaleBlockCount, uint32_t tileRowOffset) const
-{
-    for (uint32_t blockIdx = 0U; blockIdx < scaleBlockCount; ++blockIdx) {
-        if (scaleBlocks[blockIdx].tileRowOffset == tileRowOffset) {
-            return scaleBlocks[blockIdx].cacheRowOffset;
-        }
-    }
-    return 0U;
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::IssueCvScaleBlockLoads(
-    const CvScaleBlockInfo* scaleBlocks, uint32_t scaleBlockCount) const
-{
-    for (uint32_t blockIdx = 0; blockIdx < scaleBlockCount; ++blockIdx) {
-        IssueCvScaleBlockLoad(
-            scaleBlocks[blockIdx].srcRowOffset, scaleBlocks[blockIdx].rowNum, scaleBlocks[blockIdx].cacheRowOffset);
-    }
-    set_flag(PIPE_MTE2, PIPE_S, CvScaleReadyEvent());
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::WaitCvScaleBlockLoads() const
-{
-    wait_flag(PIPE_MTE2, PIPE_S, CvScaleReadyEvent());
-    pipe_barrier(PIPE_ALL);
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::PrepareCvSmallSubtile(
-    uint32_t bufferId, uint32_t cvRowInTile, uint32_t scaleRowOffset, uint32_t rowNum, uint32_t colNum) const
-{
-    wait_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(bufferId));
-
-    SmallTileFp32 fp32Tile(rowNum, colNum);
-    SmallTileC cTile(rowNum, colNum);
-    pto::TASSIGN(fp32Tile, ubFp32Offset_[bufferId]);
-    pto::TASSIGN(
-        cTile, MEGA_MOE_GMM2_COMBINE_CV_SLOT_OFFSET +
-                   static_cast<uint64_t>(cvRowInTile) * kCombineSmallTokenSubtileCols * sizeof(half));
-    pto::TCVT(fp32Tile, cTile, pto::RoundMode::CAST_NONE);
-    // A5 V queue is ordered; this V->MTE2 event releases the buffer after TCVT without a global barrier.
-    set_flag(PIPE_V, PIPE_MTE2, LoadFreeEvent(bufferId));
-
-    CvScaleTile scaleTile(rowNum);
-    pto::TASSIGN(
-        scaleTile, MEGA_MOE_GMM2_COMBINE_CV_TILE_SCALE_OFFSET + static_cast<uint64_t>(scaleRowOffset) * sizeof(float));
-    for (uint32_t row = 0; row < rowNum; ++row) {
-        const float scale = scaleTile.GetValue(row);
-        SmallTileFp32 rowTile(1, colNum);
-        pto::TASSIGN(
-            rowTile,
-            ubFp32Offset_[bufferId] + static_cast<uint64_t>(row) * kCombineSmallTokenSubtileCols * sizeof(float));
-        pto::TMULS(rowTile, rowTile, scale);
-    }
-    pipe_barrier(PIPE_ALL);
-
-    wait_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(bufferId));
-    SmallTileD dTile(rowNum, colNum);
-    pto::TASSIGN(dTile, ubDOffset_[bufferId]);
-    pto::TCVT(dTile, fp32Tile, pto::RoundMode::CAST_RINT);
-    set_flag(PIPE_V, PIPE_MTE3, StoreReadyEvent(bufferId));
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::StoreSmallSubtileIntersection(
-    uint32_t bufferId, __gm__ OutputElement* dstBase, uint32_t dstRowOffset, uint32_t ubRowOffset, uint32_t rowNum,
-    uint32_t colBegin, uint32_t colNum)
-{
-    SmallTileD dTile(rowNum, colNum);
-    pto::TASSIGN(
-        dTile, ubDOffset_[bufferId] +
-                   static_cast<uint64_t>(ubRowOffset) * kCombineSmallTokenSubtileCols * sizeof(OutputElement));
-    BlockShape dShape(rowNum, colNum);
-    BlockStride dStride(
-        static_cast<int64_t>(rowNum) * problemK_, static_cast<int64_t>(rowNum) * problemK_,
-        static_cast<int64_t>(rowNum) * problemK_, problemK_);
-    DBlockGlobal dGlobal(dstBase + static_cast<uint64_t>(dstRowOffset) * problemK_ + colBegin, dShape, dStride);
-    pto::TSTORE(dGlobal, dTile);
-}
-
-template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::StoreSmallSubtileToRanks(
-    uint32_t groupIdx, const GmmCommonTileInfo& tileInfo, uint32_t tileRowBegin, uint32_t rows, uint32_t bufferId)
-{
-    const uint32_t tileEnd = tileRowBegin + rows;
-    uint32_t rankRowBegin = 0U;
-    uint32_t tileOffset = 0U;
-    wait_flag(PIPE_V, PIPE_MTE3, StoreReadyEvent(bufferId));
+    PtoRemoteWindow remoteWindow;
+    remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+    MegaMoePeerMemoryLayout peerMemoryLayout;
+    peerMemoryLayout.Init(tilingData_->frontReorderTiling);
+    cumsumMMPtr_ = reinterpret_cast<__gm__ int32_t *>(workspaceGM + tilingData_->frontReorderTiling.cumsumMMOffset);
+    preSumBeforeRankPtr_ =
+        reinterpret_cast<__gm__ int32_t *>(remoteWindow.LocalBase() + peerMemoryLayout.preSumBeforeRank);
     for (uint32_t srcRank = 0U; srcRank < rankSize_; ++srcRank) {
-        const uint32_t rankRows = rowMapper_.RowsRaw(srcRank, groupIdx);
-        const uint32_t rankRowEnd = rankRowBegin + rankRows;
-        if (rankRowBegin >= tileEnd) {
+        remoteOutputBase_[srcRank] = reinterpret_cast<__gm__ OutputElement *>(
+            remoteWindow.RemoteBase(peerMemoryLayout.combineOutputByRouteSlot, static_cast<int32_t>(srcRank)));
+    }
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::PublishCompletedExpertTiles(
+    const __gm__ MegaMoeGmmQueueTiling &queue, uint32_t expert, uint32_t tileCount) const
+{
+    if (tileCount == 0U || expert >= expertPerRank_) {
+        return;
+    }
+    // Expert progress is an acquire/release boundary for live Unpermute.
+    // Drain this consumer's remote output stores before incrementing the
+    // completion counter; merely ordering both operations on MTE3 allows the
+    // local counter update to become visible before a remote store arrives.
+    pto::PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+    const uint64_t scratchUbOffset = kDirectCombineCompletionUbOffset +
+                                     static_cast<uint64_t>(expert) * REMOTE_WINDOW_READY_SIGNAL_SLOT_BYTES;
+    PtoSetValue<int32_t, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT>(
+        scratchUbOffset, 0U, static_cast<int32_t>(tileCount));
+    pto::PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+    PtoStoreAtomicAddVector<int32_t, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT>(
+        GmmExpertCompletionSlot(workspaceGM_, queue, expert), scratchUbOffset, 1U);
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::PrefetchDirectMetadata()
+{
+    const uint32_t metadataElems = rankSize_ * expertPerRank_;
+    PtoLoadVector<int32_t, kDirectCombineMetadataMaxElems>(kDirectCombineCumsumUbOffset, cumsumMMPtr_, metadataElems);
+    PtoLoadVector<int32_t, kDirectCombineMetadataMaxElems>(kDirectCombinePreSumUbOffset, preSumBeforeRankPtr_,
+                                                           metadataElems);
+    pto::PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::PrepareDirectExpert(uint32_t groupIdx)
+{
+    uint32_t rankRowBegin = 0U;
+    for (uint32_t srcRank = 0U; srcRank < rankSize_; ++srcRank) {
+        const uint32_t metadataIdx = srcRank * expertPerRank_ + groupIdx;
+        const uint32_t rankRowEnd = static_cast<uint32_t>(
+            PtoGetValue<int32_t, kDirectCombineMetadataMaxElems>(kDirectCombineCumsumUbOffset, metadataIdx));
+        directRankRowBegin_[srcRank] = rankRowBegin;
+        directRankRowEnd_[srcRank] = rankRowEnd;
+        directCompactRowBegin_[srcRank] = static_cast<uint32_t>(
+            PtoGetValue<int32_t, kDirectCombineMetadataMaxElems>(kDirectCombinePreSumUbOffset, metadataIdx));
+        rankRowBegin = rankRowEnd;
+    }
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::StoreDirectTile(const GmmCommonTileInfo &tileInfo, uint32_t tileIndex) const
+{
+    const uint32_t tileRowBegin = tileInfo.blockRowStart;
+    const uint32_t tileRowEnd = tileRowBegin + tileInfo.actualM;
+    for (uint32_t srcRank = 0U; srcRank < rankSize_; ++srcRank) {
+        const uint32_t rankRowBegin = directRankRowBegin_[srcRank];
+        const uint32_t rankRowEnd = directRankRowEnd_[srcRank];
+        if (rankRowBegin >= tileRowEnd) {
             break;
         }
         if (rankRowEnd <= tileRowBegin) {
-            rankRowBegin = rankRowEnd;
             continue;
         }
         const uint32_t intersectionBegin = rankRowBegin > tileRowBegin ? rankRowBegin : tileRowBegin;
-        const uint32_t intersectionEnd = rankRowEnd < tileEnd ? rankRowEnd : tileEnd;
-        const uint32_t intersectionRows = intersectionEnd - intersectionBegin;
-        const uint32_t dstRow = rowMapper_.DstRowOffset(srcRank, groupIdx) + intersectionBegin - rankRowBegin;
-        __gm__ OutputElement* dstBase = reinterpret_cast<__gm__ OutputElement*>(
-            remoteWindow_.RemoteBase(peerMemoryLayout_.offsetD, static_cast<int32_t>(srcRank)));
-        if (dstBase != nullptr) {
-            StoreSmallSubtileIntersection(
-                bufferId, dstBase, dstRow, tileOffset, intersectionRows, tileInfo.blockColStart, tileInfo.actualN);
+        const uint32_t intersectionEnd = rankRowEnd < tileRowEnd ? rankRowEnd : tileRowEnd;
+        if (intersectionEnd <= intersectionBegin) {
+            continue;
         }
-        tileOffset += intersectionRows;
-        rankRowBegin = rankRowEnd;
+        const uint32_t rows = intersectionEnd - intersectionBegin;
+        const uint32_t srcTileRow = intersectionBegin - tileRowBegin;
+        const uint32_t compactRow = directCompactRowBegin_[srcRank] + intersectionBegin - rankRowBegin;
+        if (compactRow >= routeElems_ || rows > routeElems_ - compactRow) {
+            continue;
+        }
+        __gm__ OutputElement *dstBase = remoteOutputBase_[srcRank];
+        if (dstBase == nullptr) {
+            continue;
+        }
+        __gm__ OutputElement *dst = dstBase + static_cast<uint64_t>(compactRow) * problemK_ + tileInfo.blockColStart;
+        const uint64_t srcOffset =
+            Gmm2CombineSlotOffset(tileIndex) +
+            static_cast<uint64_t>(srcTileRow) * kGmm2CombineCvTileCols * sizeof(bfloat16_t);
+        Gmm2CombineCvTile srcTile(rows, tileInfo.actualN);
+        pto::TASSIGN(srcTile, srcOffset);
+        DirectCombineStrideStore<Gmm2CombineCvTile>(dst, srcTile.data(), rows,
+                                                                              tileInfo.actualN, problemK_);
     }
-    set_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent(bufferId));
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::ProcessDirectTokenPath()
+AICORE inline void Combine<OutputElement>::ConsumeDirectTile(const GmmCommonTileInfo &tileInfo)
 {
-    Gmm2CombineCvPipe cvPipe(nullptr, MEGA_MOE_GMM2_COMBINE_CV_SLOT_OFFSET, 0U);
-    uint32_t groupBase = 0;
-    uint32_t startCoreIdx = 0;
-    const uint32_t aicCoreIdx = get_block_idx();
-    const uint32_t aicCoreNum = get_block_num();
-    const uint32_t aivSubCoreIdx = get_subblockid();
-    for (uint32_t groupIdx = 0; groupIdx < expertPerRank_; ++groupIdx) {
-        const uint32_t currentMRaw = rowMapper_.CurrentM(groupIdx);
-        const uint32_t currentM = MoeClipCurrentM(currentMRaw, groupBase, maxOutputSize_);
-        const uint32_t coreLoops = GmmCommonCoreLoops(currentM, problemK_, l1TileM_, l1TileN_); // 按照L1的size做切tile
-        const uint32_t startLoopIdx = GmmCommonStartLoopIdx(aicCoreIdx, aicCoreNum, startCoreIdx);
-        CvScaleBlockInfo scaleBlocks[kCombineCvScaleMaxRowBlocks];
-        uint32_t scaleBlockCount = 0U;
-        const bool scaleCacheEnabled = BuildCvAssignedScaleBlocks(
-            scaleBlocks, scaleBlockCount, groupBase, currentM, startLoopIdx, coreLoops, aicCoreNum, l1TileM_, l1TileN_,
-            cvTileSequence_, aivSubCoreIdx);
-        if (scaleCacheEnabled && scaleBlockCount != 0U) {
-            IssueCvScaleBlockLoads(scaleBlocks, scaleBlockCount);
+    // Keep descriptor/expert preparation on Scalar ahead of this wait. The
+    // ready event still orders all payload reads behind the AIC FIX TMOV.
+    Gmm2CombineConsumerEnqueueReadyWait(cvPipe_);
+    const uint32_t tileIndex = cvPipe_.cons.tileIndex;
+    StoreDirectTile(tileInfo, tileIndex);
+    Gmm2CombineConsumerRelease(cvPipe_);
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::ConsumeDirectWave0()
+{
+    const __gm__ MegaMoeFixedGroupTiling &fixed = tilingData_->fixedGroupTiling;
+    if (physicalBlockId_ < fixed.gmm1GroupSize || physicalBlockId_ >= fixed.gmm1GroupSize + fixed.gmm2GroupSize ||
+        fixed.gmm2GroupSize == 0U) {
+        return;
+    }
+    const uint32_t group2LocalId = physicalBlockId_ - fixed.gmm1GroupSize;
+    const MegaMoeExpertWaveRange wave = GetExpertWaveRange(
+        0U, expertPerRank_, fixed.fullAicExpertsPerWave, fixed.expertsPerWave, fixed.fullAicGmm1WaveCount);
+    const __gm__ MegaMoeGmmQueueTiling &queue = tilingData_->gmmSchedulerTiling.gmm2;
+    MegaMoeCoreTileBalancer tileBalancer;
+    SetCoreTileBalancerRange(tileBalancer, fixed.gmm1GroupSize, fixed.gmm2GroupSize);
+    for (uint32_t expert = wave.begin; expert < wave.end; ++expert) {
+        const uint32_t currentM =
+            MoeCurrentMRaw(cumsumMMPtr_, rankSize_, expertPerRank_, expert);
+        const uint32_t coreLoops = GmmCommonCoreLoops(currentM, problemK_, tilingData_->gmm2Tiling.l1TileM,
+                                                       tilingData_->gmm2Tiling.l1TileN);
+        const uint32_t startCoreIdx = SelectCoreTileStart(tileBalancer, coreLoops);
+        const uint32_t startLoopIdx =
+            GmmCommonStartLoopIdx(group2LocalId, fixed.gmm2GroupSize, startCoreIdx);
+        uint32_t assignedTileCount = 0U;
+        if (startLoopIdx < coreLoops) {
+            PrepareDirectExpert(expert);
         }
-        bool scaleLoadsPending = scaleCacheEnabled && scaleBlockCount != 0U;
-        for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += aicCoreNum) {
-            const uint32_t tileLane = Gmm2CombineCvLane(cvTileSequence_);
-            ++cvTileSequence_;
-            if (tileLane != aivSubCoreIdx) {
-                continue;
-            }
-            const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfo(currentM, problemK_, l1TileM_, l1TileN_, loopIdx);
-            const uint32_t subtileCount =
-                static_cast<uint32_t>(ceilDiv(tileInfo.actualM, kCombineSmallTokenSubtileRows));
-            if (!scaleCacheEnabled) {
-                const CvScaleBlockInfo tileScaleBlock = {
-                    tileInfo.blockRowStart, groupBase + tileInfo.blockRowStart, tileInfo.actualM, 0U};
-                IssueCvScaleBlockLoads(&tileScaleBlock, 1U);
-                scaleLoadsPending = true;
-            }
-            PopCvTile(cvPipe, tileInfo.actualM, tileInfo.actualN);
-            if (scaleLoadsPending) {
-                WaitCvScaleBlockLoads();
-                scaleLoadsPending = false;
-            }
-            const uint32_t scaleRowBase =
-                scaleCacheEnabled ? FindCvScaleCacheRowOffset(scaleBlocks, scaleBlockCount, tileInfo.blockRowStart) :
-                                    0U;
-            for (uint32_t subtile = 0; subtile < subtileCount; ++subtile) {
-                const uint32_t rowInTile = subtile * kCombineSmallTokenSubtileRows;
-                const uint32_t rows = (tileInfo.actualM - rowInTile > kCombineSmallTokenSubtileRows) ?
-                                          kCombineSmallTokenSubtileRows :
-                                          (tileInfo.actualM - rowInTile);
-                const uint32_t tileRowBegin = tileInfo.blockRowStart + rowInTile;
-                const uint32_t bufferId = pingpongId_;
-                pingpongId_ = (pingpongId_ + 1U) % kCombineBufferNum;
-                PrepareCvSmallSubtile(bufferId, rowInTile, scaleRowBase + rowInTile, rows, tileInfo.actualN);
-                StoreSmallSubtileToRanks(groupIdx, tileInfo, tileRowBegin, rows, bufferId);
-            }
-            wait_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent((pingpongId_ + kCombineBufferNum - 1U) % kCombineBufferNum));
-            set_flag(PIPE_MTE3, PIPE_V, StoreFreeEvent((pingpongId_ + kCombineBufferNum - 1U) % kCombineBufferNum));
-            pipe_barrier(PIPE_ALL);
-            pto::TFREE<Gmm2CombineCvPipe, pto::TileSplitAxis::TILE_NO_SPLIT>(cvPipe);
+        for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += fixed.gmm2GroupSize) {
+            const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfoWithOffset<kGmm2CombineSwizzleOffset>(
+                currentM, problemK_, tilingData_->gmm2Tiling.l1TileM, tilingData_->gmm2Tiling.l1TileN, loopIdx);
+            ConsumeDirectTile(tileInfo);
+            ++assignedTileCount;
         }
-        startCoreIdx = (startCoreIdx + coreLoops) % aicCoreNum;
-        groupBase += currentM;
+        PublishCompletedExpertTiles(queue, expert, assignedTileCount);
+        CommitCoreTileAssignment(tileBalancer, startCoreIdx, coreLoops);
     }
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::Process()
+AICORE inline void Combine<OutputElement>::ProcessImpl()
+{
+    const __gm__ MegaMoeGmmQueueTiling &queue = tilingData_->gmmSchedulerTiling.gmm2;
+    ConsumeDirectWave0();
+
+    uint32_t preparedExpert = expertPerRank_;
+    uint32_t completionExpert = expertPerRank_;
+    uint32_t completionTileCount = 0U;
+    GmmCvTaskInferenceCache inferenceCache;
+    while (true) {
+        // Both rings use the same logical task sequence. Copy the packed
+        // control first; payload ownership remains unchanged until MTE3
+        // finishes consuming the matching CV slot.
+        Gmm2CombineControlConsumerWait(cvPipe_);
+        const uint32_t taskSequence = cvPipe_.cons.controlIndex;
+        const uint32_t control = ReadGmmCvTaskControl(
+            taskSequence, kGmm2CombineControlFifoDepth);
+        Gmm2CombineControlConsumerRelease(cvPipe_);
+        if (IsGmmStageEndControl(control)) {
+            break;
+        }
+        const MegaMoeGmmTask task = InferGmmCvTask(
+            control, cumsumMMPtr_, rankSize_, expertPerRank_, inferenceCache);
+
+        const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfoFromCoord(
+            task.currentM, problemK_, tilingData_->gmm2Tiling.l1TileM, tilingData_->gmm2Tiling.l1TileN,
+            task.blockM, task.blockN);
+        if (completionExpert != task.expert) {
+            PublishCompletedExpertTiles(queue, completionExpert, completionTileCount);
+            completionExpert = task.expert;
+            completionTileCount = 0U;
+        }
+        if (preparedExpert != task.expert) {
+            PrepareDirectExpert(task.expert);
+            preparedExpert = task.expert;
+        }
+        ConsumeDirectTile(tileInfo);
+        ++completionTileCount;
+    }
+    PublishCompletedExpertTiles(queue, completionExpert, completionTileCount);
+    // Drain only this consumer's ordered data/completion MTE3 chain before
+    // the paired AIV can continue into Unpermute. Global readiness is
+    // published once by Gmm2ExpertProgressCoordinator.
+    pto::PtoSetWaitFlag<PIPE_MTE3, PIPE_S>();
+}
+
+template <typename OutputElement>
+AICORE inline void Combine<OutputElement>::ProcessFixed(uint32_t physicalBlockId)
 {
     if ASCEND_IS_AIC {
         return;
     }
-    SetInitialFlags();
-    ProcessDirectTokenPath();
-    ProcessFinalBoundary();
+    physicalBlockId_ = physicalBlockId;
+    // The Group2 AIV0 coordinator publishes the common start marker only
+    // after local Dispatch and all direct-route metadata are ready.
+    PrefetchDirectMetadata();
+    ProcessImpl();
 }
 
 #endif // DISPATCH_MEGA_COMBINE_COMBINE_H

@@ -13,57 +13,164 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 
+#include "gmm_task_queue.h"
 #include "utils/const_args.hpp"
 
-using Gmm2CombineCvPipe = pto::TPipe<
-    MEGA_MOE_GMM2_COMBINE_CV_READY_HARD_FLAG, pto::Direction::DIR_C2V, MEGA_MOE_GMM2_COMBINE_CV_SLOT_BYTES,
-    MEGA_MOE_GMM2_COMBINE_CV_DEFAULT_FIFO_DEPTH, MEGA_MOE_GMM2_COMBINE_CV_DEFAULT_FIFO_DEPTH, true>;
+constexpr uint32_t kGmm2CombineCvTileRows = 128U;
+constexpr uint32_t kGmm2CombineCvTileCols = 256U;
+constexpr uint32_t kGmm2CombineCvFifoDepth = 3U;
+constexpr uint32_t kGmm2CombineCvSlotBytes =
+    kGmm2CombineCvTileRows * kGmm2CombineCvTileCols * sizeof(uint16_t);
+constexpr uint32_t kGmm2CombineCvBufferBytes = kGmm2CombineCvFifoDepth * kGmm2CombineCvSlotBytes;
+constexpr uint32_t kGmm2CombineMetadataSlotBytes =
+    kGmm2CombineCvTileRows * kMegaMoeRouteMetaFields * sizeof(int32_t);
+constexpr uint32_t kGmm2CombineRequiredUbBytes =
+    kGmm2CombineCvBufferBytes + kGmm2CombineCvFifoDepth * kGmm2CombineMetadataSlotBytes;
 
-static_assert(MEGA_MOE_GMM2_COMBINE_CV_MAX_AIV_PER_AIC == 2U);
+constexpr uint16_t kGmm2CombineCvReadyFlagBase = 3U;
+constexpr uint16_t kGmm2CombineCvFreeFlagBase =
+    kGmm2CombineCvReadyFlagBase + kGmm2CombineCvFifoDepth;
+constexpr uint16_t kGmm2CombineControlReadyFlagBase =
+    kGmm2CombineCvFreeFlagBase + kGmm2CombineCvFifoDepth;
+constexpr uint16_t kGmm2CombineControlFreeFlagBase =
+    kGmm2CombineControlReadyFlagBase + kGmm2CombineCvFifoDepth;
+constexpr uint32_t kGmm2CombineControlFifoDepth = kGmm2CombineCvFifoDepth;
+constexpr uint32_t kGmm2CombineCvBufferOffset = 0U;
+constexpr uint32_t kGmm2CombineMetadataOffset = kGmm2CombineCvBufferOffset + kGmm2CombineCvBufferBytes;
+constexpr uint32_t kGmm2CombineMetadataBytes = kGmm2CombineCvFifoDepth * kGmm2CombineMetadataSlotBytes;
 
-AICORE inline uint32_t Gmm2CombineCvLane(uint32_t tileIndex) { return tileIndex & 1U; }
+struct Gmm2CombineCvPipe {
+    struct Endpoint {
+        uint32_t tileIndex = 0U;
+        // The control and payload rings carry the same task sequence.
+        uint32_t controlIndex = 0U;
+    };
 
-class Gmm2CombineCvProducer {
-public:
-    AICORE inline uint32_t NextLane() const { return Gmm2CombineCvLane(tileIndex_); }
-
-    AICORE inline void WaitLaneFree() const
-    {
-        if (tileIndex_ < MEGA_MOE_GMM2_COMBINE_CV_MAX_AIV_PER_AIC) {
-            return;
-        }
-#ifdef __DAV_CUBE__
-        wait_intra_block(PIPE_FIX, PhysicalFlag(MEGA_MOE_GMM2_COMBINE_CV_FREE_HARD_FLAG, NextLane()));
-#endif
-    }
-
-    AICORE inline void RecordLaneReady()
-    {
-#ifdef __DAV_CUBE__
-        set_intra_block(PIPE_FIX, PhysicalFlag(MEGA_MOE_GMM2_COMBINE_CV_READY_HARD_FLAG, NextLane()));
-#endif
-        ++tileIndex_;
-    }
-
-    AICORE inline void Drain() const
-    {
-#ifdef __DAV_CUBE__
-        if (tileIndex_ != 0U) {
-            wait_intra_block(PIPE_FIX, PhysicalFlag(MEGA_MOE_GMM2_COMBINE_CV_FREE_HARD_FLAG, 0U));
-        }
-        if (tileIndex_ > 1U) {
-            wait_intra_block(PIPE_FIX, PhysicalFlag(MEGA_MOE_GMM2_COMBINE_CV_FREE_HARD_FLAG, 1U));
-        }
-#endif
-    }
-
-private:
-    AICORE inline static uint16_t PhysicalFlag(uint16_t logicalFlag, uint32_t lane)
-    {
-        return static_cast<uint16_t>(logicalFlag + lane * Gmm2CombineCvPipe::VEC_CORE_ID_OFFSET);
-    }
-
-    uint32_t tileIndex_ = 0U;
+    Endpoint prod;
+    Endpoint cons;
 };
+
+using Gmm2CombineCvTile =
+    pto::Tile<pto::TileType::Vec, bfloat16_t, kGmm2CombineCvTileRows, kGmm2CombineCvTileCols,
+              pto::BLayout::RowMajor, pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::NoneBox>;
+
+static_assert(kGmm2CombineCvSlotBytes == 64U * 1024U);
+static_assert(kGmm2CombineCvBufferBytes == 192U * 1024U);
+static_assert(kGmm2CombineRequiredUbBytes <= A5_MAIN_UB_SIZE);
+static_assert(kGmm2CombineCvFreeFlagBase + kGmm2CombineCvFifoDepth <= 16U);
+static_assert(kGmm2CombineControlFreeFlagBase + kGmm2CombineControlFifoDepth <= 16U);
+static_assert(kGmm2CombineControlFreeFlagBase + kGmm2CombineControlFifoDepth - 1U +
+                  kMegaMoeFixedSecondAivSubblockFlagOffset <
+              32U);
+AICORE inline uint16_t Gmm2CombineAiv1Flag(uint16_t logicalFlag)
+{
+    return static_cast<uint16_t>(logicalFlag + kMegaMoeFixedSecondAivSubblockFlagOffset);
+}
+
+AICORE inline uint16_t Gmm2CombineReadyFlag(uint32_t slot)
+{
+    return static_cast<uint16_t>(kGmm2CombineCvReadyFlagBase + slot);
+}
+
+AICORE inline uint16_t Gmm2CombineFreeFlag(uint32_t slot)
+{
+    return static_cast<uint16_t>(kGmm2CombineCvFreeFlagBase + slot);
+}
+
+AICORE inline uint16_t Gmm2CombineControlReadyFlag(uint32_t slot)
+{
+    return static_cast<uint16_t>(kGmm2CombineControlReadyFlagBase + slot);
+}
+
+AICORE inline uint16_t Gmm2CombineControlFreeFlag(uint32_t slot)
+{
+    return static_cast<uint16_t>(kGmm2CombineControlFreeFlagBase + slot);
+}
+
+AICORE inline uint64_t Gmm2CombineSlotOffset(uint32_t tileIndex)
+{
+    return kGmm2CombineCvBufferOffset +
+           static_cast<uint64_t>(tileIndex % kGmm2CombineCvFifoDepth) * kGmm2CombineCvSlotBytes;
+}
+
+AICORE inline void Gmm2CombineProducerAllocate(Gmm2CombineCvPipe &pipe)
+{
+    if (pipe.prod.tileIndex >= kGmm2CombineCvFifoDepth) {
+        const uint32_t slot = pipe.prod.tileIndex % kGmm2CombineCvFifoDepth;
+        wait_intra_block(PIPE_FIX, Gmm2CombineAiv1Flag(Gmm2CombineFreeFlag(slot)));
+    }
+}
+
+AICORE inline void Gmm2CombineProducerRecord(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.prod.tileIndex % kGmm2CombineCvFifoDepth;
+    set_intra_block(PIPE_FIX, Gmm2CombineAiv1Flag(Gmm2CombineReadyFlag(slot)));
+    ++pipe.prod.tileIndex;
+}
+
+AICORE inline void Gmm2CombineControlProducerAllocate(Gmm2CombineCvPipe &pipe)
+{
+    if (pipe.prod.controlIndex >= kGmm2CombineControlFifoDepth) {
+        const uint32_t slot = pipe.prod.controlIndex % kGmm2CombineControlFifoDepth;
+        wait_intra_block(PIPE_S, Gmm2CombineAiv1Flag(Gmm2CombineControlFreeFlag(slot)));
+    }
+}
+
+AICORE inline void Gmm2CombineControlProducerRecord(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.prod.controlIndex % kGmm2CombineControlFifoDepth;
+    set_intra_block(PIPE_S, Gmm2CombineAiv1Flag(Gmm2CombineControlReadyFlag(slot)));
+    ++pipe.prod.controlIndex;
+}
+
+AICORE inline void Gmm2CombineControlProducerDrain(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t firstOutstanding = pipe.prod.controlIndex > kGmm2CombineControlFifoDepth ?
+                                          pipe.prod.controlIndex - kGmm2CombineControlFifoDepth :
+                                          0U;
+    for (uint32_t index = firstOutstanding; index < pipe.prod.controlIndex; ++index) {
+        const uint32_t slot = index % kGmm2CombineControlFifoDepth;
+        wait_intra_block(PIPE_S, Gmm2CombineAiv1Flag(Gmm2CombineControlFreeFlag(slot)));
+    }
+    pipe.prod.controlIndex = 0U;
+}
+
+AICORE inline void Gmm2CombineProducerDrainWave(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t firstOutstanding = pipe.prod.tileIndex > kGmm2CombineCvFifoDepth ?
+                                          pipe.prod.tileIndex - kGmm2CombineCvFifoDepth :
+                                          0U;
+    for (uint32_t index = firstOutstanding; index < pipe.prod.tileIndex; ++index) {
+        const uint32_t slot = index % kGmm2CombineCvFifoDepth;
+        wait_intra_block(PIPE_FIX, Gmm2CombineAiv1Flag(Gmm2CombineFreeFlag(slot)));
+    }
+    pipe.prod.tileIndex = 0U;
+}
+
+AICORE inline void Gmm2CombineControlConsumerWait(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.cons.controlIndex % kGmm2CombineControlFifoDepth;
+    wait_intra_block(PIPE_S, Gmm2CombineControlReadyFlag(slot));
+}
+
+AICORE inline void Gmm2CombineControlConsumerRelease(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.cons.controlIndex % kGmm2CombineControlFifoDepth;
+    set_intra_block(PIPE_S, Gmm2CombineControlFreeFlag(slot));
+    ++pipe.cons.controlIndex;
+}
+
+AICORE inline void Gmm2CombineConsumerEnqueueReadyWait(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.cons.tileIndex % kGmm2CombineCvFifoDepth;
+    wait_intra_block(PIPE_MTE3, Gmm2CombineReadyFlag(slot));
+}
+
+AICORE inline void Gmm2CombineConsumerRelease(Gmm2CombineCvPipe &pipe)
+{
+    const uint32_t slot = pipe.cons.tileIndex % kGmm2CombineCvFifoDepth;
+    set_intra_block(PIPE_MTE3, Gmm2CombineFreeFlag(slot));
+    ++pipe.cons.tileIndex;
+}
 
 #endif // DISPATCH_MEGA_COMBINE_GMM2_COMBINE_CV_PIPE_H

@@ -16,6 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "runtime_context.hpp"
 
 struct CaseConfig {
+    uint32_t data_cache_version = 0;
     uint32_t m = 0;
     uint32_t k = 0;
     uint32_t n = 0;
@@ -27,6 +28,11 @@ struct CaseConfig {
     uint32_t aiv_num = 0;
     double compare_atol = 1e-3;
     double compare_rtol = 1e-3;
+    double input_tokens_all_ranks = 0.0;
+    double routed_tokens_all_ranks = 0.0;
+    double remote_routed_tokens_all_ranks = 0.0;
+    double compute_flops_all_ranks = 0.0;
+    double comm_bytes_all_ranks = 0.0;
 };
 
 struct MegaMoeBuildResult {
@@ -35,4 +41,27 @@ struct MegaMoeBuildResult {
     uint64_t workspace_bytes = 0;
 };
 
-MegaMoeBuildResult BuildMegaMoeTiling(const CaseConfig& cfg, const StandaloneRankRuntime& runtime);
+struct A5FixedScheduleConfig {
+    uint32_t epSize = 0U;
+    uint32_t shapeConfigM = 0U;
+    uint32_t expertPerRank = 0U;
+    uint32_t physicalAicNum = 0U;
+    uint32_t dispatchGroupSize = 0U;
+    uint32_t gmm1GroupSize = 0U;
+    uint32_t gmm2GroupSize = 0U;
+    uint32_t unpermuteTwoPhaseMinM = 0U;
+    uint32_t unpermutePhase1Aiv0WorkerCount = 0U;
+
+    constexpr uint32_t PhysicalAivNum() const
+    {
+        return physicalAicNum * kMegaMoeFixedAivSubblocksPerPhysicalBlock;
+    }
+};
+
+// Returns nullptr when the selected effective launch count has no validated default schedule.
+const A5FixedScheduleConfig *FindA5DefaultSchedule(uint32_t effectiveAicNum);
+
+// Exact canonical-shape cases take precedence over the default for the selected AIC count.
+const A5FixedScheduleConfig *SelectA5FixedSchedule(const CaseConfig &cfg);
+
+MegaMoeBuildResult BuildMegaMoeTiling(const CaseConfig &cfg, const StandaloneRankRuntime &runtime);
