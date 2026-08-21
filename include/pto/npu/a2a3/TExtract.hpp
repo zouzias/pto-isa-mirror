@@ -49,6 +49,29 @@ __tf__ AICORE void TExtractAccToMat(
 }
 
 template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToAVector(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t dstValidCol)
+{
+    using DataType = typename SrcTileData::DType;
+    __cbuf__ DataType* srcAddr = (__cbuf__ DataType*)__cce_get_tile_ptr(src);
+    __ca__ DataType* dstAddr = (__ca__ DataType*)__cce_get_tile_ptr(dst);
+
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / sizeof(DataType);
+
+    static_assert((srcCol % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
+    static_assert((dstCol % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
+    PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol * sizeof(DataType) must be aligned to 512B");
+
+    int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
+    uint16_t baseIdx = indexCol * sizeof(DataType) >> SHIFT_FRACTAL_BYTE;
+    uint8_t repeatTimes = kAlign / fractalSize;
+    pto_load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, 1, 0);
+}
+
+template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
