@@ -14,9 +14,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "utils.hpp"
-#include "Int64Binary.hpp"
+#include "TSel.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols, unsigned MaskRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64SelectScalar(
+    __ubuf__ T* dst, __ubuf__ uint8_t* packedMask, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
+{
+    Int64SelectImpl<true, T, DstCols, MaskRowBytes, SrcCols, SrcCols>(
+        dst, packedMask, src, src, scalar, validRows, validCols);
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols, unsigned MaskRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64SelectScalar(
+    __ubuf__ T* dst, __ubuf__ uint8_t* packedMask, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols);
+#endif
 template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL void TSels_b32(
     typename TileDataDst::TileDType __out__ dst, typename TileDataMask::TileDType __in__ mask,

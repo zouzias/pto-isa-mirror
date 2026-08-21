@@ -115,14 +115,22 @@ TEST_F(TCMPSTest, case_bfloat16_32x32_16x32) { test_tcmps<int16_t, 32, 32, 16, 3
 TEST_F(TCMPSTest, case_bfloat16_77x80_32x32) { test_tcmps<int16_t, 77, 80, 32, 32, CmpMode::LE, false, true>(); }
 #define TCMPS_INT64_CASE(Type, TypeName, Mode) \
     TEST_F(TCMPSTest, case_##TypeName##_4x64_4x64_##Mode) { test_tcmps<Type, 4, 64, 4, 64, CmpMode::Mode>(); }
-#define TCMPS_INT64_MODES(Type, TypeName) \
-    TCMPS_INT64_CASE(Type, TypeName, EQ)  \
-    TCMPS_INT64_CASE(Type, TypeName, NE)  \
-    TCMPS_INT64_CASE(Type, TypeName, LT)  \
-    TCMPS_INT64_CASE(Type, TypeName, GT)  \
-    TCMPS_INT64_CASE(Type, TypeName, GE)  \
-    TCMPS_INT64_CASE(Type, TypeName, LE)
+#define TCMPS_INT64_WIDE_CASE(Type, TypeName, Mode)             \
+    TEST_F(TCMPSTest, case_##TypeName##_1x16368_1x16368_##Mode) \
+    {                                                           \
+        test_tcmps<Type, 1, 16368, 1, 16368, CmpMode::Mode>();  \
+    }
+#define TCMPS_INT64_MODES(Type, TypeName)     \
+    TCMPS_INT64_CASE(Type, TypeName, EQ)      \
+    TCMPS_INT64_CASE(Type, TypeName, NE)      \
+    TCMPS_INT64_CASE(Type, TypeName, LT)      \
+    TCMPS_INT64_CASE(Type, TypeName, GT)      \
+    TCMPS_INT64_CASE(Type, TypeName, GE)      \
+    TCMPS_INT64_CASE(Type, TypeName, LE)      \
+    TCMPS_INT64_WIDE_CASE(Type, TypeName, LT) \
+    TCMPS_INT64_WIDE_CASE(Type, TypeName, GT)
 TCMPS_INT64_MODES(int64_t, int64)
 TCMPS_INT64_MODES(uint64_t, uint64)
 #undef TCMPS_INT64_MODES
+#undef TCMPS_INT64_WIDE_CASE
 #undef TCMPS_INT64_CASE

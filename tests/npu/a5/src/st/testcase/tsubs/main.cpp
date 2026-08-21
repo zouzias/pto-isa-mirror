@@ -48,8 +48,10 @@ bool TSubSTestFramework()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    size_t dstByteSize = dstTileRow * dstTileCol * sizeof(T);
-    size_t srcByteSize = row * col * sizeof(T);
+    size_t dstElementCount = dstTileRow * dstTileCol;
+    size_t srcElementCount = row * col;
+    size_t dstByteSize = dstElementCount * sizeof(T);
+    size_t srcByteSize = srcElementCount * sizeof(T);
     T* dstHost;
     T* srcHost;
     T* dstDevice;
@@ -92,8 +94,8 @@ bool TSubSTestFramework()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(dstByteSize);
-    std::vector<T> devFinal(dstByteSize);
+    std::vector<T> golden(dstElementCount);
+    std::vector<T> devFinal(dstElementCount);
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
@@ -172,3 +174,20 @@ TEST_F(TSUBSTest, case11)
 TEST_F(TSUBSTest, case_int64_4x16) { EXPECT_TRUE((TSubSTestFramework<12, int64_t, 4, 16, 4, 4, 16, 16>())); }
 
 TEST_F(TSUBSTest, case_uint64_4x16) { EXPECT_TRUE((TSubSTestFramework<13, uint64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TSUBSTest, case_int64_96x32768_32x1024_32x128)
+{
+    EXPECT_TRUE((TSubSTestFramework<14, int64_t, 32, 1024, 32, 32, 32768, 1024>()));
+}
+
+TEST_F(TSUBSTest, case_int64_1x16364)
+{
+    bool ret = TSubSTestFramework<15, int64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TSUBSTest, case_uint64_1x16364)
+{
+    bool ret = TSubSTestFramework<16, uint64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}

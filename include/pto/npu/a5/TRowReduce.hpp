@@ -9,79 +9,214 @@ BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
 full text of the License.
 */
-
-/**
- * @file TRowReduce.hpp
- * @brief 行归约操作实现（ROWSUM/ROWMAX/ROWMIN）
- *
- * 本文件实现了针对矩阵按行进行归约操作的算子，支持以下三种操作：
- * - TRowSum: 按行求和
- * - TRowMax: 按行求最大值
- * - TRowMin: 按行求最小值
- *
- * 支持的数据类型：half, float, int32_t, int16_t
- *
- * @note A5架构特殊说明：
- *   - vcadd 对 int16 输入产生 int32 输出（需要类型转换）
- *   - vcmax/vcmin 对 int16 输入输出均为 int16（无需类型转换）
- *   - int16 ROWSUM: int32中间结果转int16时采用回绕溢出（wrap-around），
- *     即截断高16位，剩余16位解释为有符号int16，与numpy行为一致
- */
-
 #ifndef __ROW_REDUCE__
 #define __ROW_REDUCE__
-
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "TPartBinOps.hpp"
-#include "Int64Reduce.hpp"
 #include <math.h>
 #include <type_traits>
 
 namespace pto {
 
-//=============================================================================
-// 归约操作策略（Policy Pattern）
-//=============================================================================
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned SrcCols>
+PTO_INTERNAL void Int64RowSumRepeat(
+    vector_u32& outLow, vector_u32& outHigh, __ubuf__ T* src, uint16_t row, uint32_t colOffset, vector_u32& mask16,
+    MaskReg& mask)
+{
+    vector_u32 low, high, low16, mid16, tmp;
+    vlds((vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    vand(low16, low, mask16, mask, MODE_ZEROING);
+    vcadd(low16, low16, mask, MODE_ZEROING);
+    vshrs(mid16, low, 16, mask, MODE_ZEROING);
+    vcadd(mid16, mid16, mask, MODE_ZEROING);
+    vcadd(outHigh, high, mask, MODE_ZEROING);
+    vshrs(tmp, low16, 16, mask, MODE_ZEROING);
+    vadd(mid16, mid16, tmp, mask, MODE_ZEROING);
+    vshrs(tmp, mid16, 16, mask, MODE_ZEROING);
+    vadd(outHigh, outHigh, tmp, mask, MODE_ZEROING);
+    vand(low16, low16, mask16, mask, MODE_ZEROING);
+    vand(mid16, mid16, mask16, mask, MODE_ZEROING);
+    vshls(mid16, mid16, 16, mask, MODE_ZEROING);
+    vor(outLow, low16, mid16, mask);
+}
 
-/**
- * @brief 通用ROWSUM策略模板
- * @tparam T 数据类型（float, half, int32_t）
- *
- * 对于 float/half/int32，vcadd指令的输入输出类型相同。
- */
+template <typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_u32 mask16, outLow, outHigh, accLow, accHigh;
+        vbr(mask16, 0xffffu);
+        MaskReg oneMask = pset_b32(PAT_VL1);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                Int64RowSumRepeat<T, SrcCols>(
+                    outLow, outHigh, src, row, colRepeat * elementsPerRepeat, mask16, allMask);
+                if (colRepeat == 0) {
+                    accLow = outLow;
+                    accHigh = outHigh;
+                } else {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                }
+            }
+            if (tailCols != 0) {
+                Int64RowSumRepeat<T, SrcCols>(
+                    outLow, outHigh, src, row, fullRepeats * elementsPerRepeat, mask16, tailMask);
+                if (fullRepeats == 0) {
+                    accLow = outLow;
+                    accHigh = outHigh;
+                } else {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                }
+            }
+            vsts(
+                (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32,
+                oneMask);
+        }
+    }
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowReduceHigh(vector_s32& reducedHigh, vector_s32& high, MaskReg& mask)
+{
+    if constexpr (Op == Int64Op::Max) {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmax(reducedHigh, high, mask, MODE_ZEROING);
+        else
+            vcmax((vector_u32&)reducedHigh, (vector_u32&)high, mask, MODE_ZEROING);
+    } else {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmin(reducedHigh, high, mask, MODE_ZEROING);
+        else
+            vcmin((vector_u32&)reducedHigh, (vector_u32&)high, mask, MODE_ZEROING);
+    }
+}
+
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64RowSelectHigh(vector_s32& selectedHigh, vector_s32& high, MaskReg& equalLow)
+{
+    if constexpr (Op == Int64Op::Max) {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmax(selectedHigh, high, equalLow, MODE_ZEROING);
+        else
+            vcmax((vector_u32&)selectedHigh, (vector_u32&)high, equalLow, MODE_ZEROING);
+    } else {
+        if constexpr (std::is_same_v<T, int64_t>)
+            vcmin(selectedHigh, high, equalLow, MODE_ZEROING);
+        else
+            vcmin((vector_u32&)selectedHigh, (vector_u32&)high, equalLow, MODE_ZEROING);
+    }
+}
+
+template <Int64Op Op, typename T, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMaxRepeat(
+    vector_s32& outLow, vector_s32& outHigh, __ubuf__ T* src, unsigned row, unsigned colOffset, MaskReg& mask,
+    MaskReg& allMask)
+{
+    vector_s32 low, high, reducedHigh, highDup, selectedHigh, lowDup;
+    vector_u32 reducedLow;
+    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64RowReduceHigh<Op, T>(reducedHigh, high, mask);
+    vdup(highDup, reducedHigh, allMask, POS_LOWEST, MODE_ZEROING);
+    MaskReg equalHigh;
+    vcmp_eq(equalHigh, highDup, high, mask);
+    if constexpr (Op == Int64Op::Max)
+        vcmax(reducedLow, (vector_u32&)low, equalHigh, MODE_ZEROING);
+    else
+        vcmin(reducedLow, (vector_u32&)low, equalHigh, MODE_ZEROING);
+
+    vdup((vector_s32&)lowDup, (vector_s32&)reducedLow, allMask, POS_LOWEST, MODE_ZEROING);
+    MaskReg equalLow;
+    vcmp_eq(equalLow, (vector_u32&)lowDup, (vector_u32&)low, mask);
+    Int64RowSelectHigh<Op, T>(selectedHigh, high, equalLow);
+    outLow = (vector_s32&)reducedLow;
+    outHigh = selectedHigh;
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 accLow, accHigh, repeatLow, repeatHigh;
+        MaskReg dupMask = pset_b32(PAT_ALL);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg fullMask = plt_b32(fullMaskCols, POST_UPDATE);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, fullMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, fullMask, dupMask);
+                if (colRepeat == 0) {
+                    accLow = repeatLow;
+                    accHigh = repeatHigh;
+                } else {
+                    MaskReg oneMask = pset_b32(PAT_VL1);
+                    Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                }
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, tailMask, dupMask);
+                if (fullRepeats == 0) {
+                    accLow = repeatLow;
+                    accHigh = repeatHigh;
+                } else {
+                    MaskReg oneMask = pset_b32(PAT_VL1);
+                    Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                }
+            }
+            MaskReg oneMask = pset_b32(PAT_VL1);
+            vsts(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, oneMask);
+        }
+    }
+}
+#else
+template <typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
+
 template <typename T>
 struct ROWSUM {
-    using TIN = T;                                                           ///< 输入类型
-    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>; ///< 中间计算类型（int32防止溢出）
+    using TIN = T;
+    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>;
     static constexpr auto InitVal = Padding<TOUT>::Zero;
-
-    /**
-     * @brief 累加操作：dst = src0 + src1
-     */
     static PTO_INTERNAL void Accumulate(
         RegTensor<TOUT>& dst, RegTensor<TOUT>& src0, RegTensor<TOUT>& src1, MaskReg& pred)
     {
         vadd(dst, src0, src1, pred, MODE_ZEROING);
     }
-
-    /**
-     * @brief 归约操作：对向量元素求和
-     * @note vcadd将向量内所有元素相加，输出单个标量值
-     */
     static PTO_INTERNAL void Reduce(RegTensor<TOUT>& dst, RegTensor<TIN>& src, MaskReg& pred, MaskReg& pregdst)
     {
         vcadd(dst, src, pred, MODE_ZEROING);
     }
 };
 
-/**
- * @brief ROWMAX策略：按行求最大值
- * @tparam T 数据类型
- */
 template <typename T>
 struct ROWMAX {
-    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Min; ///< 初始值为最小值
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Min;
     using TIN = T;
     using TOUT = T;
 
@@ -115,13 +250,9 @@ struct ROWMAX {
     }
 };
 
-/**
- * @brief ROWMIN策略：按行求最小值
- * @tparam T 数据类型
- */
 template <typename T>
 struct ROWMIN {
-    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Max; ///< 初始值为最大值
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Max;
     using TIN = T;
     using TOUT = T;
 
@@ -155,126 +286,56 @@ struct ROWMIN {
     }
 };
 
-//=============================================================================
-// 参数校验
-//=============================================================================
-
-/**
- * @brief 编译期和运行期参数校验
- * @tparam TileDataOut 输出Tile类型
- * @tparam TileDataIn 输入Tile类型
- * @tparam idx 是否是输出idx场景
- */
 template <typename TileDataOut, typename TileDataIn, bool idx = false>
 PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
     using T = typename TileDataIn::DType;
-    using TDst = typename TileDataOut::DType;
-    static_assert(
-        idx || std::is_same_v<T, typename TileDataOut::DType>,
-        "Input and output tile data types must match. "
-        "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
+    static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>, "Input/output DType mismatch.");
     static_assert(
         TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
-        "Row reduction only works on vector tiles (TileType::Vec). "
-        "Fix: Instantiate TileDataIn and TileDataOut with Loc_ = TileType::Vec.");
-    static_assert(
-        TileDataIn::isRowMajor && !TileDataIn::isBoxedLayout,
-        "Input tile must use standard ND layout (row-major, non-fractal). "
-        "Fix: Define TileDataIn with BFractal_ = BLayout::RowMajor and SFractal_ "
-        "= SLayout::NoneBox, e.g.,\n"
-        "     Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ..., "
-        "SLayout::NoneBox>");
+        "Row reduction only works on vector tiles.");
+    static_assert(TileDataIn::isRowMajor && !TileDataIn::isBoxedLayout, "Input tile must use ND row-major layout.");
     static_assert(
         (!TileDataOut::isBoxedLayout &&
          (TileDataOut::isRowMajor || (!TileDataOut::isRowMajor && TileDataOut::Cols == 1))),
-        "Output tile layout must be either:\n"
-        "  (a) ND layout: BLayout::RowMajor + SLayout::NoneBox, OR\n"
-        "  (b) DN layout with exactly one column: BLayout::ColMajor + "
-        "SLayout::NoneBox + Cols=1.\n"
-        "Fix: Choose one of the following for TileDataOut:\n"
-        "     - Tile<..., ROWS, COLS, BLayout::RowMajor, ValidRows, 1>   // ND\n"
-        "     - Tile<..., ROWS, 1, BLayout::ColMajor, ValidRows, 1>  // DN with Cols=1");
-    // runtime checks
-    PTO_ASSERT(
-        srcValidRows != 0 && srcValidCols != 0, "Source valid rows or columns is zero — row reduction requires at "
-                                                "least one element per row. "
-                                                "Fix: Ensure srcValidRows > 0 and srcValidCols > 0.");
-    PTO_ASSERT(
-        srcValidRows == dstValidRow, "Input and output valid row counts must be equal in row reduction "
-                                     "(row count is preserved). "
-                                     "Fix: Pass dstValidRow = srcValidRows.");
+        "Output tile must use ND layout or DN layout with one column.");
+    PTO_ASSERT(srcValidRows != 0 && srcValidCols != 0, "Row reduction input must be non-empty.");
+    PTO_ASSERT(srcValidRows == dstValidRow, "Row reduction preserves row count.");
 }
 
-//=============================================================================
-// 核心实现
-//=============================================================================
-
-/**
- * @brief 行归约核心实现
- *
- * 算法流程（每行）：
- *   1. 初始化累加器为初始值（SUM→0, MAX→MIN, MIN→MAX）
- *   2. 按elementsPerRepeat分块处理每行数据
- *   3. 对每块执行Reduce（vcadd/vcmax/vcmin）
- *   4. 将Reduce结果累加到累加器
- *   5. 如需类型转换（TOUT != TDST），执行vcvt后存储
- *
- * @tparam ReduceOp 归约策略（ROWSUM/ROWMAX/ROWMIN）
- * @tparam TileDataOut 输出Tile类型
- * @tparam TileDataIn 输入Tile类型
- * @tparam elementsPerRepeat 每次迭代处理的元素数
- *
- * @param dstPtr 输出缓冲区指针
- * @param srcPtr 输入缓冲区指针
- * @param rows 行数
- * @param cols 列数
- * @param version 实现版本（默认/无POST_UPDATE）
- */
 template <
     typename ReduceOp, typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat, bool postUpdate = true>
 PTO_INTERNAL void TRowReduceProc(
     __ubuf__ typename TileDataOut::DType* dstPtr, __ubuf__ typename TileDataOut::DType* srcPtr, uint32_t rows,
     uint32_t cols, uint16_t repeatTimes, int32_t srcRowAdjust)
 {
-    using TIN = typename ReduceOp::TIN;       ///< 输入数据类型
-    using TOUT = typename ReduceOp::TOUT;     ///< 归约中间结果类型
-    using TDST = typename TileDataOut::DType; ///< 最终输出类型
+    using TIN = typename ReduceOp::TIN;
+    using TOUT = typename ReduceOp::TOUT;
+    using TDST = typename TileDataOut::DType;
     __VEC_SCOPE__
     {
-        // 寄存器分配
-        RegTensor<TIN> vreg0;        ///< 加载输入数据
-        RegTensor<TOUT> vreg1;       ///< Reduce结果
-        RegTensor<TOUT> vregdst;     ///< 累加器
-        RegTensor<TDST> vreg_result; ///< 最终结果（仅TOUT!=TDST时使用）
+        RegTensor<TIN> vreg0;
+        RegTensor<TOUT> vreg1;
+        RegTensor<TOUT> vregdst;
+        RegTensor<TDST> vreg_result;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TDST, DistVST::DIST_ONEPT>())>();
         uint32_t destItems = 1;
         MaskReg pregdst = CreatePredicate<TIN>(destItems);
         for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
-            // Step 1: 初始化累加器
             vbr((RegTensor<typename Padding<TOUT>::Type>&)vregdst, ReduceOp::InitVal);
             uint32_t sreg = cols;
-
-            // Step 2-4: 分块处理
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
                 MaskReg preg = CreatePredicate<TIN>(sreg);
-                // 加载数据块
                 if constexpr (postUpdate) {
                     vlds(vreg0, srcPtr, elementsPerRepeat, NORM, POST_UPDATE);
                 } else {
                     vlds(vreg0, srcPtr, i * TileDataIn::RowStride + j * elementsPerRepeat, NORM);
                 }
-                // 归约：向量→标量
                 ReduceOp::Reduce(vreg1, vreg0, preg, pregdst);
-                // 累加到结果
                 ReduceOp::Accumulate(vregdst, vregdst, vreg1, pregdst);
             }
-
-            // Step 5: 存储结果（必要时类型转换）
             if constexpr (!std::is_same_v<TOUT, TDST>) {
-                // int16 ROWSUM: int32 → int16 回绕溢出转换（截断高16位）
-                // CTRL寄存器已设置为非饱和模式
                 vcvt(vreg_result, vregdst, pregdst, RS_DISABLE, PART_EVEN);
                 if constexpr (postUpdate) {
                     vsts(vreg_result, dstPtr, TileDataOut::RowStride, distValue, pregdst, POST_UPDATE);
@@ -300,12 +361,9 @@ PTO_INTERNAL void TRowReduceImpl(
     __ubuf__ typename TileDataOut::DType* dstPtr, __ubuf__ typename TileDataOut::DType* srcPtr, uint32_t rows,
     uint32_t cols, unsigned version)
 {
-    using TIN = typename ReduceOp::TIN;       ///< 输入数据类型
-    using TOUT = typename ReduceOp::TOUT;     ///< 归约中间结果类型
-    using TDST = typename TileDataOut::DType; ///< 最终输出类型
-
-    // 对于int32→int16转换，需要设置CTRL寄存器以启用非饱和（回绕溢出）模式
-    // CTRL[60]=1, CTRL[59]=1: 非饱和模式（截断高16位）
+    using TIN = typename ReduceOp::TIN;
+    using TOUT = typename ReduceOp::TOUT;
+    using TDST = typename TileDataOut::DType;
     constexpr int SAT_MODE_BIT_60 = 60;
     constexpr int SAT_MODE_BIT_59 = 59;
     constexpr bool needsNonSatMode = std::is_same_v<TOUT, int32_t> && std::is_same_v<TDST, int16_t>;
@@ -330,32 +388,30 @@ PTO_INTERNAL void TRowReduceImpl(
         TRowReduceProc<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat, true>(
             dstPtr, srcPtr, rows, cols, repeatTimes, srcRowAdjust);
     }
-
-    // 恢复原始CTRL寄存器状态
     if constexpr (needsNonSatMode) {
-        if (originalCtrl60) {
+        if (originalCtrl60)
             set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
-        } else {
+        else
             set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));
-        }
-        if (originalCtrl59) {
+        if (originalCtrl59)
             set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
-        } else {
+        else
             set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
-        }
     }
 }
 
-//=============================================================================
-// 算子入口
-//=============================================================================
+template <typename ReduceOp, typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
+PTO_INTERNAL void TRowReduceEntry(
+    typename TileDataOut::TileDType dst, typename TileDataIn::TileDType src, uint32_t dstValidRow,
+    uint32_t srcValidRows, uint32_t srcValidCols, unsigned version)
+{
+    TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
+    using T = typename TileDataIn::DType;
+    TRowReduceImpl<ReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(
+        (__ubuf__ T*)__cce_get_tile_ptr(dst), (__ubuf__ T*)__cce_get_tile_ptr(src), srcValidRows, srcValidCols,
+        version);
+}
 
-/**
- * @brief 按行求最大值
- * @tparam TileDataOut 输出Tile类型
- * @tparam TileDataIn 输入Tile类型
- * @tparam elementsPerRepeat 每次迭代处理的元素数
- */
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWMAX) OP_TYPE(reduce) void TRowMax(
     typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src, uint32_t dstValidRow,
@@ -365,25 +421,11 @@ __tf__ PTO_INTERNAL OP_NAME(TROWMAX) OP_TYPE(reduce) void TRowMax(
     static_assert(
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> ||
             std::is_same_v<T, int16_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>,
-        "Row reduction only supports 'half', 'float', 'int32', 'int16', 'int8' or 'uint8' data types. "
-        "Fix: Define TileDataIn with DType = half, float, int32, int16, int8 or uint8.");
-    TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
-
-    using TIN = typename TileDataIn::DType;
-    __ubuf__ TIN* dstPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(dst);
-    __ubuf__ TIN* srcPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(src);
-
-    using rowReduceOp = ROWMAX<typename TileDataIn::DType>;
-    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(
-        dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+        "TROWMAX supports half, float, int32, int16, int8, and uint8.");
+    TRowReduceEntry<ROWMAX<T>, TileDataOut, TileDataIn, elementsPerRepeat>(
+        dst, src, dstValidRow, srcValidRows, srcValidCols, version);
 }
 
-/**
- * @brief 按行求和
- * @tparam TileDataOut 输出Tile类型
- * @tparam TileDataIn 输入Tile类型
- * @tparam elementsPerRepeat 每次迭代处理的元素数
- */
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWSUM) OP_TYPE(reduce) void TRowSum(
     typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src, uint32_t dstValidRow,
@@ -392,25 +434,11 @@ __tf__ PTO_INTERNAL OP_NAME(TROWSUM) OP_TYPE(reduce) void TRowSum(
     using T = typename TileDataIn::DType;
     static_assert(
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
-        "Row reduction only supports 'half', 'float', 'int32', or 'int16' data types. "
-        "Fix: Define TileDataIn with DType = half, float, int32, or int16.");
-    TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
-
-    using TIN = typename TileDataIn::DType;
-    __ubuf__ TIN* dstPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(dst);
-    __ubuf__ TIN* srcPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(src);
-
-    using rowReduceOp = ROWSUM<typename TileDataIn::DType>;
-    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(
-        dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+        "TROWSUM supports half, float, int32, and int16.");
+    TRowReduceEntry<ROWSUM<T>, TileDataOut, TileDataIn, elementsPerRepeat>(
+        dst, src, dstValidRow, srcValidRows, srcValidCols, version);
 }
 
-/**
- * @brief 按行求最小值
- * @tparam TileDataOut 输出Tile类型
- * @tparam TileDataIn 输入Tile类型
- * @tparam elementsPerRepeat 每次迭代处理的元素数
- */
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWMIN) OP_TYPE(reduce) void TRowMin(
     typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src, uint32_t dstValidRow,
@@ -420,69 +448,51 @@ __tf__ PTO_INTERNAL OP_NAME(TROWMIN) OP_TYPE(reduce) void TRowMin(
     static_assert(
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> ||
             std::is_same_v<T, int16_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>,
-        "Row reduction only supports 'half', 'float', 'int32', 'int16', 'uint8' or 'int8' data types. "
-        "Fix: Define TileDataIn with DType = half, float, int32, int16, uint8 or int8.");
-    TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
-
-    using TIN = typename TileDataIn::DType;
-    __ubuf__ TIN* dstPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(dst);
-    __ubuf__ TIN* srcPtr = (__ubuf__ TIN*)__cce_get_tile_ptr(src);
-
-    using rowReduceOp = ROWMIN<typename TileDataIn::DType>;
-    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(
-        dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+        "TROWMIN supports half, float, int32, int16, uint8, and int8.");
+    TRowReduceEntry<ROWMIN<T>, TileDataOut, TileDataIn, elementsPerRepeat>(
+        dst, src, dstValidRow, srcValidRows, srcValidCols, version);
 }
 
-//=============================================================================
-// 便捷封装（自动计算elementsPerRepeat）
-//=============================================================================
+template <template <typename> class ReduceOp, Int64Op int64Op, bool isSum, typename TileDataOut, typename TileDataIn>
+PTO_INTERNAL void TROWREDUCE_IMPL_COMMON(TileDataOut& dst, TileDataIn& src)
+{
+    using T = typename TileDataIn::DType;
+    constexpr bool is64Bit = std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>;
+    constexpr bool supported = is64Bit || std::is_same_v<T, half> || std::is_same_v<T, float> ||
+                               std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> ||
+                               (!isSum && (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>));
+    static_assert(supported, "Unsupported row reduction dtype.");
+    TRowReduceCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        if constexpr (isSum)
+            Int64RowSum<T, TileDataOut::Cols, TileDataIn::Cols>(
+                (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol());
+        else
+            Int64RowMinMax<int64Op, T, TileDataOut::Cols, TileDataIn::Cols>(
+                (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol());
+    } else {
+        constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+        TRowReduceImpl<ReduceOp<T>, TileDataOut, TileDataIn, elementsPerRepeat>(
+            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol(), VFIMPL_DEFAULT);
+    }
+}
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWMAX_IMPL(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp)
 {
-    using T = typename TileDataIn::DType;
-    TRowReduceCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
-    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
-        Int64RowMinMax<Int64Op::Max, T, TileDataOut::Cols, TileDataIn::Cols>(
-            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol());
-    } else {
-        constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-        unsigned rows = src.GetValidRow();
-        unsigned cols = src.GetValidCol();
-        TRowMax<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
-    }
+    TROWREDUCE_IMPL_COMMON<ROWMAX, Int64Op::Max, false>(dst, src);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWSUM_IMPL(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp)
 {
-    using T = typename TileDataIn::DType;
-    TRowReduceCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
-    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
-        Int64RowSum<T, TileDataOut::Cols, TileDataIn::Cols>(
-            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol());
-    } else {
-        constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-        unsigned rows = src.GetValidRow();
-        unsigned cols = src.GetValidCol();
-        TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
-    }
+    TROWREDUCE_IMPL_COMMON<ROWSUM, Int64Op::Add, true>(dst, src);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWMIN_IMPL(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp)
 {
-    using T = typename TileDataIn::DType;
-    TRowReduceCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
-    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
-        Int64RowMinMax<Int64Op::Min, T, TileDataOut::Cols, TileDataIn::Cols>(
-            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), src.GetValidRow(), src.GetValidCol());
-    } else {
-        constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-        unsigned rows = src.GetValidRow();
-        unsigned cols = src.GetValidCol();
-        TRowMin<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
-    }
+    TROWREDUCE_IMPL_COMMON<ROWMIN, Int64Op::Min, false>(dst, src);
 }
 
 } // namespace pto
