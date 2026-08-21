@@ -456,14 +456,18 @@ template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned 
 PTO_INTERNAL void Int64BinaryRepeat(
     __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint32_t colOffset, MaskReg& mask)
 {
-    vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High;
+    vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High, half0, half1;
+    MaskReg lowMask, highMask;
     uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
     uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
     vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
     vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
     Int64BinaryCalcRegs<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
-    vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(half0, half1, dstLow, dstHigh);
+    vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+    vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
 }
 
 template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
