@@ -270,3 +270,9 @@ TEST_F(TROWMAXTest, case28)
 TEST_F(TROWMAXTest, case_int64_4x16) { EXPECT_TRUE((TRowMaxTestFramework<29, int64_t, 4, 4, 16, 15, 1>())); }
 
 TEST_F(TROWMAXTest, case_uint64_4x16) { EXPECT_TRUE((TRowMaxTestFramework<30, uint64_t, 4, 4, 16, 15, 1>())); }
+
+TEST_F(TROWMAXTest, case_int64_4x64) { EXPECT_TRUE((TRowMaxTestFramework<31, int64_t, 4, 4, 64, 64, 1>())); }
+
+TEST_F(TROWMAXTest, case_uint64_4x64) { EXPECT_TRUE((TRowMaxTestFramework<32, uint64_t, 4, 4, 64, 64, 1>())); }
+TEST_F(TROWMAXTest, case_int64_32x32) { EXPECT_TRUE((TRowMaxTestFramework<33, int64_t, 32, 32, 32, 32, 1>())); }
+TEST_F(TROWMAXTest, case_int64_1x10912) { EXPECT_TRUE((TRowMaxTestFramework<34, int64_t, 1, 1, 10912, 10912, 1>())); }

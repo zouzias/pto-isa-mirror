@@ -219,3 +219,7 @@ TEST_F(TCOLMINTest, case73)
 }
 TEST_F(TCOLMINTest, case_int64_4x16) { EXPECT_TRUE((TCOLMINTestFramework<81, int64_t, 4, 4, 1, 16, 16>())); }
 TEST_F(TCOLMINTest, case_uint64_4x16) { EXPECT_TRUE((TCOLMINTestFramework<82, uint64_t, 4, 4, 1, 16, 16>())); }
+TEST_F(TCOLMINTest, case_int64_4x64) { EXPECT_TRUE((TCOLMINTestFramework<83, int64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMINTest, case_uint64_4x64) { EXPECT_TRUE((TCOLMINTestFramework<84, uint64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMINTest, case_int64_1x4092) { EXPECT_TRUE((TCOLMINTestFramework<85, int64_t, 1, 1, 1, 4092, 4092>())); }
+TEST_F(TCOLMINTest, case_uint64_1x4092) { EXPECT_TRUE((TCOLMINTestFramework<86, uint64_t, 1, 1, 1, 4092, 4092>())); }

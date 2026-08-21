@@ -15,9 +15,94 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include <pto/npu/a5/common.hpp>
 #include <pto/npu/a5/utils.hpp>
-#include <pto/npu/a5/Int64Rearrange.hpp>
+#include <pto/npu/a5/TBinOp.hpp>
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64TriRepeat(
+    __ubuf__ T* dst, uint16_t row, uint32_t colOffset, uint32_t prefixCols, vector_s32& zero, vector_s32& one,
+    bool upper, MaskReg& storeMask)
+{
+    uint32_t prefixMaskCols = prefixCols;
+    MaskReg prefixMask = plt_b32(prefixMaskCols, POST_UPDATE);
+    vector_s32 low;
+    if (upper)
+        vsel(low, zero, one, prefixMask);
+    else
+        vsel(low, one, zero, prefixMask);
+    vsts(low, zero, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, storeMask);
+}
+
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64Tri(__ubuf__ T* dst, unsigned validRows, unsigned validCols, int diagonal, bool upper)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 zero, one;
+        vbr(zero, 0);
+        vbr(one, 1);
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            int boundary = static_cast<int>(row) + diagonal;
+            uint32_t ones;
+            uint32_t zeros;
+            if (upper) {
+                if (boundary <= 0) {
+                    zeros = 0;
+                } else if (boundary >= static_cast<int>(validCols)) {
+                    zeros = validCols;
+                } else {
+                    zeros = boundary;
+                }
+                ones = validCols - zeros;
+            } else {
+                if (boundary < 0) {
+                    ones = 0;
+                } else if (boundary + 1 >= static_cast<int>(validCols)) {
+                    ones = validCols;
+                } else {
+                    ones = boundary + 1;
+                }
+                zeros = validCols - ones;
+            }
+            uint32_t prefix = ones;
+            if (upper)
+                prefix = zeros;
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                uint32_t prefixCols = 0;
+                if (prefix > colOffset)
+                    prefixCols = prefix - colOffset;
+                if (prefixCols > elementsPerRepeat)
+                    prefixCols = elementsPerRepeat;
+                Int64TriRepeat<T, DstCols>(dst, row, colOffset, prefixCols, zero, one, upper, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                uint32_t prefixCols = 0;
+                if (prefix > colOffset)
+                    prefixCols = prefix - colOffset;
+                if (prefixCols > tailCols)
+                    prefixCols = tailCols;
+                Int64TriRepeat<T, DstCols>(dst, row, colOffset, prefixCols, zero, one, upper, tailMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64Tri(__ubuf__ T* dst, unsigned validRows, unsigned validCols, int diagonal, bool upper);
+#endif
 template <typename TileData, unsigned rowStride>
 __tf__ PTO_INTERNAL void TTriu(
     typename TileData::TileDType __out__ dst, unsigned validRows, unsigned validCols, int diagonal)
