@@ -8,6 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include "acl/acl.h"
@@ -39,10 +40,44 @@ __global__ AICORE void runTShrS(__gm__ T __out__* out, __gm__ T __in__* src0, T 
     out = dstGlobal.data();
 }
 
+template <typename T, int cols>
+__global__ AICORE void runTShrSWideInt64(__gm__ T __out__* out, __gm__ T __in__* src0, T scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData src0Global(src0 + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData src0Tile(tileRows, validCols);
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(src0Tile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        Event<Op::TLOAD, Op::TSHRS> event0 = TLOAD(src0Tile, src0Global);
+        Event<Op::TSHRS, Op::TSTORE_VEC> event1 = TSHRS(dstTile, src0Tile, scalar, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <typename T, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
 void LaunchTShrS(T* out, T* src, T scalar, void* stream)
 {
-    runTShrS<T, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src, scalar);
+    constexpr int wideTileCols = 64;
+    if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && dstTileH == 1 && srcTileH == 1 &&
+        dstTileW == srcTileW && dstTileW == vCols && vRows == 1 && vCols > wideTileCols) {
+        runTShrSWideInt64<T, vCols><<<1, nullptr, stream>>>(out, src, scalar);
+    } else {
+        runTShrS<T, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src, scalar);
+    }
 }
 
 template void LaunchTShrS<int16_t, 64, 64, 64, 64, 64, 64>(int16_t* out, int16_t* src, int16_t scalar, void* stream);
@@ -58,3 +93,7 @@ template void LaunchTShrS<uint16_t, 1, 112, 1, 128, 1, 111>(
     uint16_t* out, uint16_t* src, uint16_t scalar, void* stream);
 template void LaunchTShrS<int64_t, 4, 16, 4, 16, 4, 16>(int64_t* out, int64_t* src, int64_t scalar, void* stream);
 template void LaunchTShrS<uint64_t, 4, 16, 4, 16, 4, 16>(uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTShrS<int64_t, 1, 16364, 1, 16364, 1, 16364>(
+    int64_t* out, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTShrS<uint64_t, 1, 16364, 1, 16364, 1, 16364>(
+    uint64_t* out, uint64_t* src, uint64_t scalar, void* stream);

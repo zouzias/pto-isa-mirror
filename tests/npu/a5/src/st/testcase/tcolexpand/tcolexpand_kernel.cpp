@@ -56,11 +56,53 @@ __global__ AICORE void runCOLEXPAND(__gm__ T __out__* out, __gm__ T __in__* src)
     out = dstGlobal.data();
 }
 
+template <typename T, uint32_t cols>
+__global__ AICORE void runCOLEXPANDWideInt64(__gm__ T __out__* out, __gm__ T __in__* src)
+{
+    constexpr uint32_t srcRows = 1;
+    constexpr uint32_t dstRows = 1;
+    constexpr uint32_t tileCols = 64;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using TileData = Tile<TileType::Vec, T, srcRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, dstRows, tileCols, BLayout::RowMajor, -1, -1>;
+
+    for (uint32_t col = 0; col < cols; col += tileCols) {
+        uint32_t validTileCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData srcGlobal(src + col, DynShapeDim5(srcRows, validTileCols), DynStrideDim5(cols, 1));
+        GlobalData dstGlobal(out + col, DynShapeDim5(dstRows, validTileCols), DynStrideDim5(cols, 1));
+        TileData srcTile(srcRows, validTileCols);
+        DstTileData dstTile(dstRows, validTileCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x2000);
+
+        TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        TCOLEXPAND_IMPL(dstTile, srcTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <typename T, uint32_t srcRows, uint32_t dstRows, uint32_t cols, uint32_t validCols>
 void launchTCOLEXPAND(T* out, T* src, void* stream)
 {
+    constexpr uint32_t wideTileCols = 64;
     if constexpr (std::is_same_v<T, aclFloat16>) {
         runCOLEXPAND<half, srcRows, dstRows, cols, validCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
+    } else if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && srcRows == 1 && dstRows == 1 &&
+        cols == validCols && validCols > wideTileCols) {
+        runCOLEXPANDWideInt64<T, validCols><<<1, nullptr, stream>>>(out, src);
     } else {
         runCOLEXPAND<T, srcRows, dstRows, cols, validCols><<<1, nullptr, stream>>>(out, src);
     }
@@ -74,4 +116,8 @@ template void launchTCOLEXPAND<int8_t, 2, 17, 256, 44>(int8_t* out, int8_t* src,
 template void launchTCOLEXPAND<float, 1, 54, 64, 63>(float* out, float* src, void* stream);
 template void launchTCOLEXPAND<int64_t, 1, 4, 16, 16>(int64_t* out, int64_t* src, void* stream);
 template void launchTCOLEXPAND<uint64_t, 1, 4, 16, 16>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 4, 64, 64>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 4, 64, 64>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTCOLEXPAND<int64_t, 1, 1, 16368, 16368>(int64_t* out, int64_t* src, void* stream);
+template void launchTCOLEXPAND<uint64_t, 1, 1, 16368, 16368>(uint64_t* out, uint64_t* src, void* stream);
 } // namespace TColExpandTest

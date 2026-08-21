@@ -70,6 +70,8 @@ if __name__ == "__main__":
         TColsumParams("TCOLSUMTest.case31", np.float32, 1, 1, 512, 511),
         TColsumParams("TCOLSUMTest.case_int64_4x16", np.int64, 4, 4, 16, 16),
         TColsumParams("TCOLSUMTest.case_uint64_4x16", np.uint64, 4, 4, 16, 16),
+        TColsumParams("TCOLSUMTest.case_int64_4x64", np.int64, 4, 4, 64, 64),
+        TColsumParams("TCOLSUMTest.case_uint64_4x64", np.uint64, 4, 4, 64, 64),
     ]
 
     for _, case in enumerate(case_params_list):
