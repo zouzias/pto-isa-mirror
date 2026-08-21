@@ -78,19 +78,22 @@ inline bool BackfillUrmaWindows(const CommConfig& cfg, CommContext& ctx)
 
 inline bool SetupUrmaTransport(const CommConfig& cfg, CommContext& ctx)
 {
+    if (!ctx.ownsComm) {
+        std::cerr << "[PTO-DOMAIN] URMA requires an owned HCCL communicator because the current public API "
+                     "cannot release channels/MRs independently\n";
+        return false;
+    }
     ctx.urmaMgr = std::make_unique<urma::UrmaWorkspaceManager>();
     if (!ctx.urmaMgr->Init(
             ctx.comm, static_cast<uint32_t>(cfg.rankId), static_cast<uint32_t>(cfg.rankNum), ctx.urmaDevBuf,
             cfg.symBytes)) {
         std::cerr << "[PTO-DOMAIN] UrmaWorkspaceManager::Init failed\n";
-        ctx.urmaMgr.reset();
         return false;
     }
     // C-style cast: reinterpret_cast to __gm__* is ill-formed under -xcce.
     ctx.urmaWs = (__gm__ uint8_t*)(ctx.urmaMgr->GetWorkspaceAddr());
     if (ctx.urmaWs == nullptr) {
         std::cerr << "[PTO-DOMAIN] URMA workspace addr is null\n";
-        ctx.urmaMgr.reset();
         return false;
     }
     return BackfillUrmaWindows(cfg, ctx);
