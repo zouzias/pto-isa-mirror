@@ -390,7 +390,7 @@ TEST_F(TMOVTest, case9) { tmov_test<9, float, uint16_t, uint16_t>(64, 128, 64); 
 
 TEST_F(TMOVTest, case10) { tmov_test<10, float, float, float>(64, 128, 64); }
 
-TEST_F(TMOVTest, case11) { tmov_test<11, int32_t, int8_t, int8_t>(65, 40, 66, 96, 64, 96); }
+TEST_F(TMOVTest, case11) { tmov_test<11, int32_t, int8_t, int8_t>(96, 40, 66, 96, 64, 96); }
 
 TEST_F(TMOVTest, case12) { tmov_test<12, float, uint16_t, uint16_t>(65, 40, 66, 80, 48, 80); }
 

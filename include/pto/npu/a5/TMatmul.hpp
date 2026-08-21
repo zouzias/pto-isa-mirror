@@ -18,6 +18,36 @@ namespace pto {
 
 inline namespace TMatmulInternal {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
+// mad has no destination-stride operand: only Acc shapes whose compact write
+// stride (ceil16(m) row fractals per block column) equals the parent's Rows
+// are representable.
+template <typename TileRes>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
+{
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (TileRes::ValidRow == DYNAMIC) {
+        return true;
+    } else {
+        return (TileRes::ValidRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
+}
+
+template <typename TileRes>
+PTO_INTERNAL void CheckAccStrideCompatible(uint16_t m)
+{
+    if constexpr (
+        TileRes::Compact == CompactMode::Null && TileRes::ValidRow == DYNAMIC && TileRes::Cols > FRACTAL_NZ_ROW) {
+        uint16_t roundedM = (m + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
+        if (roundedM != TileRes::Rows) {
+            trap();
+        }
+    }
+}
+
 } // namespace TMatmulInternal
 
 template <typename TileLeft>
@@ -38,6 +68,7 @@ __tf__ AICORE void TMatmul(
     __ca__ typename TileLeft::DType* a = (__ca__ typename TileLeft::DType*)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType* b = (__cb__ typename TileRight::DType*)__cce_get_tile_ptr(bMatrix);
 
+    CheckAccStrideCompatible<TileRes>(m);
     mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
 }
 
@@ -54,6 +85,7 @@ __tf__ AICORE void TMatmulBias(
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType*)xd;
 
+    CheckAccStrideCompatible<TileRes>(m);
     mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
 }
 
@@ -69,6 +101,7 @@ __tf__ AICORE void TMatmulMx(
     __ca__ typename TileLeft::DType* a = (__ca__ typename TileLeft::DType*)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType* b = (__cb__ typename TileRight::DType*)__cce_get_tile_ptr(bMatrix);
 
+    CheckAccStrideCompatible<TileRes>(m);
     mad_mx(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, biasBufferCtrl, cmatrixInitVal);
 }
 
@@ -85,6 +118,7 @@ __tf__ AICORE void TMatmulMxBias(
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType*)xd;
 
+    CheckAccStrideCompatible<TileRes>(m);
     mad_mx(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, biasBufferCtrl, cmatrixInitVal);
 }
 
@@ -165,6 +199,11 @@ PTO_INTERNAL void CheckMadValid()
              (TileRight::SFractal == SLayout::ColMajor)) &&
             ((TileRes::Loc == TileType::Acc) && (!TileRes::isRowMajor) && (TileRes::SFractal == SLayout::RowMajor)),
         "Non-conforming matrix fractal.");
+    static_assert(
+        MadAccStrideCompatible<TileRes>(),
+        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column, "
+        "which mad's compact write stride cannot represent. Use a full-Rows Acc tile per row window, "
+        "or window the columns instead.");
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
