@@ -127,8 +127,8 @@ TEST_F(TMOVTest, case25_bfloat16_0_0_44_39_39_param)
 }
 TEST_F(TMOVTest, case31_float_1_1_29_29_44_param) { tmov_test<31, float, float, float>(29, 29, 44, 32, 32, 48); }
 TEST_F(TMOVTest, case32_float_1_1_29_29_36_param) { tmov_test<32, float, float, float>(29, 29, 36, 32, 32, 48); }
-TEST_F(TMOVTest, case33_int8_1_1_65_66_40_param) { tmov_test<33, int32_t, int8_t, int8_t>(65, 66, 40, 96, 80, 64); }
-TEST_F(TMOVTest, case34_int8_1_1_65_82_40_param) { tmov_test<34, int32_t, int8_t, int8_t>(65, 82, 40, 96, 96, 64); }
+TEST_F(TMOVTest, case33_int8_1_1_65_66_40_param) { tmov_test<33, int32_t, int8_t, int8_t>(81, 66, 40, 96, 80, 64); }
+TEST_F(TMOVTest, case34_int8_1_1_65_82_40_param) { tmov_test<34, int32_t, int8_t, int8_t>(81, 82, 40, 96, 96, 64); }
 TEST_F(TMOVTest, case35_bfloat16_1_1_44_39_39_param)
 {
     tmov_test<35, float, uint16_t, uint16_t>(44, 39, 39, 48, 48, 48);
