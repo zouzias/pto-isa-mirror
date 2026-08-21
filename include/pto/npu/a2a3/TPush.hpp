@@ -205,9 +205,15 @@ struct TPipe {
             } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
                 // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
                 subAIVOffset = subBlockId * gmValidR * gmValidC * sizeof(T);
-            } else { // TILE_LEFT_RIGHT
+            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
                 // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
                 subAIVOffset = subBlockId * gmValidC * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN_ODD) {
+                // TILE_UP_DOWN_ODD: Vec1 starts at the second row-block → offset = (ProdM + 1) * ProdN * sizeof(T)
+                subAIVOffset = subBlockId * (gmValidR + subBlockId) * gmValidC * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT_ODD) {
+                // TILE_LEFT_RIGHT_ODD: Vec1 starts at column ProdN+1 within row 0 → offset = (ProdN + 1) * sizeof(T)
+                subAIVOffset = subBlockId * (gmValidC + subBlockId) * sizeof(T);
             }
             using GlobalShape = pto::Shape<1, 1, 1, -1, -1>;
             using GlobalStride = pto::Stride<1, 1, 1, -1, 1>;
