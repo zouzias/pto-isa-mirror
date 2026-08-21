@@ -89,6 +89,10 @@ if __name__ == "__main__":
         TRowMaxParams("TROWMAXTest.case28", np.int16, 8, 8, 448, 448),
         TRowMaxParams("TROWMAXTest.case_int64_4x16", np.int64, 4, 4, 16, 15),
         TRowMaxParams("TROWMAXTest.case_uint64_4x16", np.uint64, 4, 4, 16, 15),
+        TRowMaxParams("TROWMAXTest.case_int64_4x64", np.int64, 4, 4, 64, 64),
+        TRowMaxParams("TROWMAXTest.case_uint64_4x64", np.uint64, 4, 4, 64, 64),
+        TRowMaxParams("TROWMAXTest.case_int64_32x32", np.int64, 32, 32, 32, 32),
+        TRowMaxParams("TROWMAXTest.case_int64_1x10912", np.int64, 1, 1, 10912, 10912),
     ]
 
     for _, case in enumerate(case_params_list):

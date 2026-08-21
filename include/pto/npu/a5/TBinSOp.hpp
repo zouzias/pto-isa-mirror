@@ -15,8 +15,86 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64ScalarCalcRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& srcLow, vector_s32& srcHigh, vector_s32& scalarLow,
+    vector_s32& scalarHigh, uint64_t scalarBits, MaskReg& mask)
+{
+    MaskReg carry;
+    MaskReg carryOut;
+    if constexpr (Op == Int64Op::Add) {
+        vaddc(carry, dstLow, srcLow, scalarLow, mask);
+        vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+    } else if constexpr (Op == Int64Op::Sub) {
+        vsubc(carry, dstLow, srcLow, scalarLow, mask);
+        vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+    } else if constexpr (Op == Int64Op::Mul) {
+        vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
+        vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
+        vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Shl) {
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+    } else if constexpr (Op == Int64Op::Shr) {
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+    } else {
+        Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+    }
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ScalarRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src, uint16_t row, uint32_t colOffset, vector_s32& scalarLow, vector_s32& scalarHigh,
+    uint64_t scalarBits, MaskReg& mask)
+{
+    vector_s32 dstLow, dstHigh, srcLow, srcHigh;
+    uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
+    uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+    vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+    Int64ScalarCalcRegs<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, scalarBits, mask);
+    vsts(dstLow, dstHigh, (__ubuf__ int32_t*)dst, dstOffset, INTLV_B32, mask);
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 scalarLow, scalarHigh;
+        uint64_t scalarBits = static_cast<uint64_t>(scalar);
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        vbr(scalarHigh, static_cast<int32_t>(scalarBits >> 32));
+        uint16_t rowCount = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                Int64ScalarRepeat<Op, T, DstCols, SrcCols>(
+                    dst, src, row, colRepeat * elementsPerRepeat, scalarLow, scalarHigh, scalarBits, allMask);
+            }
+            if (tailCols != 0) {
+                Int64ScalarRepeat<Op, T, DstCols, SrcCols>(
+                    dst, src, row, fullRepeats * elementsPerRepeat, scalarLow, scalarHigh, scalarBits, tailMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols);
+#endif
 
 template <typename Op, bool isDynFunc = Op::isDynFunc>
 class BinSOpCaller;

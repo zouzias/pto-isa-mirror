@@ -15,9 +15,47 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
-#include "Int64Rearrange.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64ColExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_s32 wordReg;
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskWords = tailCols * 2;
+        MaskReg tailMask = Int64TailMask(tailMaskWords, allMask);
+        for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+            uint32_t colOffset = colRepeat * elementsPerRepeat;
+            vlds(wordReg, (__ubuf__ int32_t*)src + colOffset * 2, 0, NORM);
+            for (uint16_t row = 0; row < rows; ++row) {
+                vsts(wordReg, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, allMask);
+            }
+        }
+        if (tailCols != 0) {
+            uint32_t colOffset = fullRepeats * elementsPerRepeat;
+            vlds(wordReg, (__ubuf__ int32_t*)src + colOffset * 2, 0, NORM);
+            for (uint16_t row = 0; row < rows; ++row) {
+                vsts(wordReg, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, tailMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64ColExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TColExpandCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidCol)
 {

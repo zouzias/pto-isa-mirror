@@ -7,16 +7,259 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-
 #ifndef TPARTIALBINOPS_HPP
 #define TPARTIALBINOPS_HPP
-
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "pto/npu/a5/TBinOp.hpp"
-
 namespace pto {
-
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64PartCalcRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
+    vector_s32& rhsHigh, MaskReg& mask)
+{
+    if constexpr (Op == Int64Op::Add) {
+        Int64AddRegs(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
+    } else {
+        Int64MinMax<Op, T>(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
+    }
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartSameStrideRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint32_t colOffset, MaskReg& mask)
+{
+    vector_s32 dl, dh, al, ah, bl, bh;
+    vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
+    vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
+    Int64PartCalcRegs<Op, T>(dl, dh, al, ah, bl, bh, mask);
+    vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+}
+template <typename T, unsigned DstCols, unsigned SrcRowStride, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartCopyRow(__ubuf__ T* dst, __ubuf__ T* src, uint16_t row, uint32_t colOffset, MaskReg& mask)
+{
+    vector_s32 low, high;
+    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcRowStride + colOffset) * 2, 0, DINTLV_B32);
+    vsts(low, high, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartSameStride(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        uint16_t rows = src0Rows;
+        if (src1Rows < rows)
+            rows = src1Rows;
+        uint16_t fullRepeats = dstCols / elementsPerRepeat;
+        uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                Int64PartSameStrideRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, row, colRepeat * elementsPerRepeat, allMask);
+            }
+            if (tailCols != 0) {
+                Int64PartSameStrideRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, row, fullRepeats * elementsPerRepeat, tailMask);
+            }
+        }
+    }
+    __VEC_SCOPE__
+    {
+        uint16_t firstRow = src0Rows;
+        if (src1Rows < firstRow)
+            firstRow = src1Rows;
+        uint16_t rows = dstRows;
+        __ubuf__ T* src = src0;
+        if (src1Rows >= src0Rows)
+            src = src1;
+        uint16_t fullRepeats = dstCols / elementsPerRepeat;
+        uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = firstRow; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                Int64PartCopyRow<T, DstCols, Src0Cols, Src0Cols, Src1Cols>(
+                    dst, src, row, colRepeat * elementsPerRepeat, allMask);
+            }
+            if (tailCols != 0) {
+                Int64PartCopyRow<T, DstCols, Src0Cols, Src0Cols, Src1Cols>(
+                    dst, src, row, fullRepeats * elementsPerRepeat, tailMask);
+            }
+        }
+    }
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartMergeOverlap(
+    vector_s32& dl, vector_s32& dh, vector_s32& al, vector_s32& ah, vector_s32& bl, vector_s32& bh, unsigned src0Cols,
+    unsigned src1Cols, unsigned colOffset, unsigned cols)
+{
+    bool useSrc0Base = src0Cols >= src1Cols;
+    if (useSrc0Base) {
+        dl = al;
+        dh = ah;
+    } else {
+        dl = bl;
+        dh = bh;
+    }
+    unsigned overlapCols = src0Cols;
+    if (src1Cols < overlapCols)
+        overlapCols = src1Cols;
+    if (colOffset >= overlapCols) {
+        return;
+    }
+    uint32_t overlap = overlapCols - colOffset;
+    if (overlap > cols)
+        overlap = cols;
+    MaskReg opMask = plt_b32(overlap, POST_UPDATE);
+    vector_s32 ol, oh;
+    Int64PartCalcRegs<Op, T>(ol, oh, al, ah, bl, bh, opMask);
+    if (useSrc0Base) {
+        vsel(dl, ol, al, opMask);
+        vsel(dh, oh, ah, opMask);
+    } else {
+        vsel(dl, ol, bl, opMask);
+        vsel(dh, oh, bh, opMask);
+    }
+}
+template <typename T, unsigned SrcCols>
+PTO_INTERNAL void Int64PartLoadRegs(
+    vector_s32& low, vector_s32& high, __ubuf__ T* src, unsigned row, unsigned colOffset)
+{
+    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartGeneralSingleRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols)
+{
+    __VEC_SCOPE__
+    {
+        vector_s32 dl, dh, al, ah, bl, bh;
+        uint16_t rows = dstRows;
+        for (uint16_t row = 0; row < rows; ++row) {
+            uint32_t storeCols = dstCols;
+            MaskReg storeMask = plt_b32(storeCols, POST_UPDATE);
+            bool hasSrc0 = row < src0Rows;
+            bool hasSrc1 = row < src1Rows;
+            if (hasSrc0)
+                Int64PartLoadRegs<T, Src0Cols>(al, ah, src0, row, 0);
+            if (hasSrc1)
+                Int64PartLoadRegs<T, Src1Cols>(bl, bh, src1, row, 0);
+            if (hasSrc0 && hasSrc1) {
+                Int64PartMergeOverlap<Op, T, DstCols, Src0Cols, Src1Cols>(
+                    dl, dh, al, ah, bl, bh, src0Cols, src1Cols, 0, dstCols);
+            } else if (hasSrc0) {
+                dl = al;
+                dh = ah;
+            } else {
+                dl = bl;
+                dh = bh;
+            }
+            vsts(dl, dh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, storeMask);
+        }
+    }
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartGeneralRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, uint16_t row, uint32_t colOffset, uint32_t cols, MaskReg& storeMask)
+{
+    vector_s32 dl, dh, al, ah, bl, bh;
+    bool hasSrc0 = row < src0Rows && colOffset < src0Cols;
+    bool hasSrc1 = row < src1Rows && colOffset < src1Cols;
+    if (hasSrc0)
+        Int64PartLoadRegs<T, Src0Cols>(al, ah, src0, row, colOffset);
+    if (hasSrc1)
+        Int64PartLoadRegs<T, Src1Cols>(bl, bh, src1, row, colOffset);
+    if (row < src0Rows && row < src1Rows) {
+        Int64PartMergeOverlap<Op, T, DstCols, Src0Cols, Src1Cols>(
+            dl, dh, al, ah, bl, bh, src0Cols, src1Cols, colOffset, cols);
+    } else if (hasSrc0) {
+        dl = al;
+        dh = ah;
+    } else {
+        dl = bl;
+        dh = bh;
+    }
+    vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, storeMask);
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartGeneralMultiRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        uint16_t rows = dstRows;
+        uint16_t fullRepeats = dstCols / elementsPerRepeat;
+        uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                Int64PartGeneralRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, row, colRepeat * elementsPerRepeat,
+                    elementsPerRepeat, allMask);
+            }
+            if (tailCols != 0) {
+                Int64PartGeneralRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, row, fullRepeats * elementsPerRepeat,
+                    tailCols, tailMask);
+            }
+        }
+    }
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64PartGeneral(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    if (dstCols <= elementsPerRepeat) {
+        Int64PartGeneralSingleRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+            dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, dstRows, dstCols);
+        return;
+    }
+    Int64PartGeneralMultiRepeat<Op, T, DstCols, Src0Cols, Src1Cols>(
+        dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, dstRows, dstCols);
+}
+template <Int64Op Op, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL bool Int64PartUseSameStride(unsigned src0Cols, unsigned src1Cols, unsigned dstCols)
+{
+    constexpr bool supportsSameStride = Op == Int64Op::Add || Op == Int64Op::Max || Op == Int64Op::Min;
+    constexpr bool hasSameStride = DstCols == Src0Cols && DstCols == Src1Cols;
+    return supportsSameStride && hasSameStride && src0Cols == dstCols && src1Cols == dstCols;
+}
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64Part(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols)
+{
+    if (Int64PartUseSameStride<Op, DstCols, Src0Cols, Src1Cols>(src0Cols, src1Cols, dstCols)) {
+        Int64PartSameStride<Op, T, DstCols, Src0Cols, Src1Cols>(
+            dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, dstRows, dstCols);
+        return;
+    }
+    Int64PartGeneral<Op, T, DstCols, Src0Cols, Src1Cols>(
+        dst, src0, src1, src0Rows, src0Cols, src1Rows, src1Cols, dstRows, dstCols);
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64Part(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned src0Rows, unsigned src0Cols, unsigned src1Rows,
+    unsigned src1Cols, unsigned dstRows, unsigned dstCols);
+#endif
 template <typename T, unsigned dstStride, unsigned elementsPerRepeat>
 PTO_INTERNAL void TPartProcRow(
     __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned srcStride, unsigned row, uint32_t& dstSReg, uint32_t repeatStart,
@@ -32,7 +275,6 @@ PTO_INTERNAL void TPartProcRow(
         vsts(dstReg, dstPtr, row * dstStride + i * elementsPerRepeat, distValue, dstMask);
     }
 }
-
 template <
     typename Op, typename T, unsigned dstStride, unsigned src0Stride, unsigned src1Stride, unsigned elementsPerRepeat>
 PTO_INTERNAL void TPartProcRow(
@@ -54,7 +296,6 @@ PTO_INTERNAL void TPartProcRow(
         vsts(dstReg, dstPtr, row * dstStride + j * elementsPerRepeat, distValue, dstMask);
     }
 }
-
 template <typename T, unsigned dstRowStride, unsigned srcRowStride, unsigned elementsPerRepeat>
 PTO_INTERNAL void TPartCopySrc(
     __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned dstValidRow, unsigned dstValidCol, unsigned srcValidRow,
@@ -63,14 +304,12 @@ PTO_INTERNAL void TPartCopySrc(
     unsigned validRow = min(dstValidRow, srcValidRow);
     unsigned validCol = min(dstValidCol, srcValidCol);
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
-
     __VEC_SCOPE__
     {
         RegTensor<T> srcReg;
         MaskReg mask;
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-
         for (uint16_t i = 0; i < (uint16_t)validRow; i++) {
             uint32_t sreg = validCol;
             for (uint16_t j = 0; j < repeatTimes; j++) {
@@ -81,7 +320,6 @@ PTO_INTERNAL void TPartCopySrc(
         }
     }
 }
-
 template <
     typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat,
     unsigned blockSizeElem, unsigned dstRowStride, unsigned src0RowStride, unsigned src1RowStride>
@@ -136,7 +374,6 @@ __tf__ PTO_INTERNAL void TPartOp(
         }
     }
 }
-
 template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TPARTOP_IMPL(
     TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
@@ -163,7 +400,5 @@ PTO_INTERNAL void TPARTOP_IMPL(
         dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow, src1ValidCol, dstValidRow,
         dstValidCol, version);
 }
-
 } // namespace pto
-
 #endif

@@ -18,6 +18,60 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TCmp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64CompareScalar(
+    __ubuf__ uint8_t* dst, __ubuf__ T* src, T scalar, CmpMode mode, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = 32;
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    uint16_t pairRepeatTimes = repeatTimes / 2;
+    __VEC_SCOPE__
+    {
+        vector_s32 lhsLow0, lhsHigh0, rhsLow, rhsHigh;
+        vector_s32 lhsLow1, lhsHigh1;
+        vbr(rhsLow, static_cast<uint32_t>(scalar));
+        vbr(rhsHigh, static_cast<uint32_t>(static_cast<uint64_t>(scalar) >> 32));
+        uint16_t rows = validRows;
+        for (uint16_t row = 0; row < rows; ++row) {
+            __ubuf__ uint32_t* rowDst = (__ubuf__ uint32_t*)(dst + row * DstRowBytes);
+            uint32_t remainingCols = validCols;
+            for (uint16_t pairRepeat = 0; pairRepeat < pairRepeatTimes; ++pairRepeat) {
+                uint32_t colOffset0, colOffset1;
+                MaskReg mask0, mask1, result0, result1;
+                Int64ComparePairArgs<elementsPerRepeat>(
+                    pairRepeat, remainingCols, colOffset0, colOffset1, mask0, mask1);
+                vlds(lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset0) * 2, 0, DINTLV_B32);
+                vlds(lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset1) * 2, 0, DINTLV_B32);
+                Int64CompareRegs<T>(result0, lhsLow0, lhsHigh0, rhsLow, rhsHigh, mode, mask0);
+                Int64CompareRegs<T>(result1, lhsLow1, lhsHigh1, rhsLow, rhsHigh, mode, mask1);
+                Int64CompareStorePairResult(rowDst, pairRepeat, result0, result1);
+                remainingCols -= elementsPerRepeat * 2;
+            }
+            if ((repeatTimes & 1) != 0) {
+                uint32_t colOffset;
+                MaskReg mask, packedMask;
+                MaskReg result, packed;
+                Int64CompareTailArgs<elementsPerRepeat>(pairRepeatTimes, remainingCols, colOffset, mask, packedMask);
+                vlds(lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                Int64CompareRegs<T>(result, lhsLow0, lhsHigh0, rhsLow, rhsHigh, mode, mask);
+                ppack(packed, result, LOWER);
+                ppack(packed, packed, LOWER);
+                pand(packed, packed, packedMask, packedMask);
+                psts(packed, rowDst + pairRepeatTimes * 2, 0, NORM);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64CompareScalar(
+    __ubuf__ uint8_t* dst, __ubuf__ T* src, T scalar, CmpMode mode, unsigned validRows, unsigned validCols);
+#endif
+
 constexpr const uint16_t RESULT_NUM_PER_INT32 = 32;
 template <typename T>
 AICORE void GenCmpCall(MaskReg& dst, RegTensor<T>& src0, T src1, CmpMode cmpMode, MaskReg& preg)

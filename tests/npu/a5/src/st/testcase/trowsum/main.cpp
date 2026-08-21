@@ -219,3 +219,8 @@ TEST_F(TROWSUMTest, case20)
 TEST_F(TROWSUMTest, case_int64_4x16) { EXPECT_TRUE((TRowSumTestFramework<21, int64_t, 4, 4, 16, 15, 1>())); }
 
 TEST_F(TROWSUMTest, case_uint64_4x16) { EXPECT_TRUE((TRowSumTestFramework<22, uint64_t, 4, 4, 16, 15, 1>())); }
+
+TEST_F(TROWSUMTest, case_int64_4x64) { EXPECT_TRUE((TRowSumTestFramework<23, int64_t, 4, 4, 64, 64, 1>())); }
+
+TEST_F(TROWSUMTest, case_uint64_4x64) { EXPECT_TRUE((TRowSumTestFramework<24, uint64_t, 4, 4, 64, 64, 1>())); }
+TEST_F(TROWSUMTest, case_int64_32x32) { EXPECT_TRUE((TRowSumTestFramework<25, int64_t, 32, 32, 32, 32, 1>())); }

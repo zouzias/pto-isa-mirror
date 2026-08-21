@@ -13,9 +13,62 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include "common.hpp"
-#include "Int64Rearrange.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, typename I, unsigned DstCols, unsigned IdxCols>
+PTO_INTERNAL void Int64Gather(
+    __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols)
+{
+    static_assert(sizeof(I) == sizeof(uint32_t), "Int64Gather requires b32 indices");
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_u32 idx, wordIdx, highIdx, low, high;
+        uint16_t rows = validRows;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t row = 0; row < rows; ++row) {
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+                vadd(wordIdx, idx, idx, allMask, MODE_ZEROING);
+                vadds(highIdx, wordIdx, 1u, allMask, MODE_ZEROING);
+                vgather2(low, (__ubuf__ uint32_t*)src, wordIdx, allMask);
+                vgather2(high, (__ubuf__ uint32_t*)src, highIdx, allMask);
+                vsts(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0,
+                    INTLV_B32, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+                vadd(wordIdx, idx, idx, tailMask, MODE_ZEROING);
+                vadds(highIdx, wordIdx, 1u, tailMask, MODE_ZEROING);
+                vgather2(low, (__ubuf__ uint32_t*)src, wordIdx, tailMask);
+                vgather2(high, (__ubuf__ uint32_t*)src, highIdx, tailMask);
+                vsts(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0,
+                    INTLV_B32, tailMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, typename I, unsigned DstCols, unsigned IdxCols>
+PTO_INTERNAL void Int64Gather(
+    __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols);
+#endif
+
 template <typename DstTileData, typename Src0TileData, typename Src1TileData>
 PTO_INTERNAL void CheckValid()
 {
@@ -281,23 +334,48 @@ PTO_INTERNAL void Int64GatherPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned 
     constexpr unsigned times = GetTimesByMask<maskPattern>();
     constexpr unsigned offset = Int64MaskPatternOffset<maskPattern>();
     constexpr unsigned outputCols = DstCols / times;
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t outputValidCols = validCols / times;
+    uint16_t repeatTimes = CeilDivision(outputValidCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
         vector_u32 lane, elementIndex, lowIndex, highIndex, low, high;
+        vci((vector_s32&)lane, 0, INC_ORDER);
         uint16_t rows = validRows;
         for (uint16_t row = 0; row < rows; ++row) {
-            uint32_t count = validCols / times;
-            MaskReg mask = plt_b32(count, POST_UPDATE);
-            vci((vector_s32&)lane, 0, INC_ORDER);
-            vmuls(elementIndex, lane, static_cast<uint32_t>(times), mask, MODE_ZEROING);
-            vadds(elementIndex, elementIndex, static_cast<uint32_t>(offset), mask, MODE_ZEROING);
-            vadd(lowIndex, elementIndex, elementIndex, mask, MODE_ZEROING);
-            vadds(highIndex, lowIndex, 1u, mask, MODE_ZEROING);
             __ubuf__ uint32_t* rowSrc = (__ubuf__ uint32_t*)src + row * SrcCols * 2;
-            vgather2(low, rowSrc, lowIndex, mask);
-            vgather2(high, rowSrc, highIndex, mask);
-            vsts(
-                (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + row * outputCols * 2, 0, INTLV_B32, mask);
+            uint16_t fullRepeats = outputValidCols / elementsPerRepeat;
+            uint32_t tailCols = outputValidCols - fullRepeats * elementsPerRepeat;
+            uint32_t fullMaskCols = elementsPerRepeat;
+            MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
+            uint32_t tailMaskCols = tailCols;
+            MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vadds(elementIndex, lane, colOffset, allMask, MODE_ZEROING);
+                vmuls(elementIndex, elementIndex, static_cast<uint32_t>(times), allMask, MODE_ZEROING);
+                vadds(elementIndex, elementIndex, static_cast<uint32_t>(offset), allMask, MODE_ZEROING);
+                vadd(lowIndex, elementIndex, elementIndex, allMask, MODE_ZEROING);
+                vadds(highIndex, lowIndex, 1u, allMask, MODE_ZEROING);
+                vgather2(low, rowSrc, lowIndex, allMask);
+                vgather2(high, rowSrc, highIndex, allMask);
+                vsts(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + (row * outputCols + colOffset) * 2, 0,
+                    INTLV_B32, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vadds(elementIndex, lane, colOffset, tailMask, MODE_ZEROING);
+                vmuls(elementIndex, elementIndex, static_cast<uint32_t>(times), tailMask, MODE_ZEROING);
+                vadds(elementIndex, elementIndex, static_cast<uint32_t>(offset), tailMask, MODE_ZEROING);
+                vadd(lowIndex, elementIndex, elementIndex, tailMask, MODE_ZEROING);
+                vadds(highIndex, lowIndex, 1u, tailMask, MODE_ZEROING);
+                vgather2(low, rowSrc, lowIndex, tailMask);
+                vgather2(high, rowSrc, highIndex, tailMask);
+                vsts(
+                    (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)dst + (row * outputCols + colOffset) * 2, 0,
+                    INTLV_B32, tailMask);
+            }
         }
     }
 }
