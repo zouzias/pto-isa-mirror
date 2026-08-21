@@ -45,6 +45,14 @@ PTO_INTERNAL void CheckMadValid()
              (TileRight::SFractal == SLayout::ColMajor)) &&
             ((TileAcc::Loc == TileType::Acc) && (!TileAcc::isRowMajor) && (TileAcc::SFractal == SLayout::RowMajor)),
         "Non-conforming matrix fractal");
+    // Mirror the NPU mad guard: the CPU model could honor the parent geometry,
+    // but parity makes broken kernels fail in CPU sim too.
+    static_assert(
+        (TileAcc::Compact != CompactMode::Null) || (TileAcc::Cols <= FRACTAL_NZ_ROW) ||
+            ((TileAcc::ValidRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileAcc::Rows) ||
+            (TileAcc::ValidRow == DYNAMIC),
+        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column; "
+        "this shape is rejected on NPU (mad has no destination-stride operand) and on CPU for parity.");
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
