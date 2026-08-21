@@ -13,8 +13,68 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 dl, dh, sl, sh, nl, nh;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+            uint32_t colOffset = colRepeat * elementsPerRepeat;
+            vlds(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, 0, DINTLV_B32);
+            uint16_t rows = validRows;
+            for (uint16_t row = 1; row < rows; ++row) {
+                vlds(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Op == Int64Op::Add) {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, nl, dl, sl, allMask);
+                    vaddcs(carryOut, nh, dh, sh, carry, allMask);
+                } else {
+                    Int64MinMax<Op, T>(nl, nh, dl, dh, sl, sh, allMask);
+                }
+                dl = nl;
+                dh = nh;
+            }
+            vsts(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, 0, INTLV_B32, allMask);
+        }
+        if (tailCols != 0) {
+            uint32_t colOffset = fullRepeats * elementsPerRepeat;
+            vlds(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, 0, DINTLV_B32);
+            uint16_t rows = validRows;
+            for (uint16_t row = 1; row < rows; ++row) {
+                vlds(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Op == Int64Op::Add) {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, nl, dl, sl, tailMask);
+                    vaddcs(carryOut, nh, dh, sh, carry, tailMask);
+                } else {
+                    Int64MinMax<Op, T>(nl, nh, dl, dh, sl, sh, tailMask);
+                }
+                dl = nl;
+                dh = nh;
+            }
+            vsts(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, 0, INTLV_B32, tailMask);
+        }
+    }
+}
+
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TColReduceCheck(int srcValidRow, int srcValidCol, int dstValidCol)
 {

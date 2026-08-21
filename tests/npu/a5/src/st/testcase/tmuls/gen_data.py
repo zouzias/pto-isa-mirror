@@ -22,16 +22,21 @@ def gen_golden_data(param):
     cols = param.col
     dst_tile_row = param.dst_tile_row
     dst_tile_col = param.dst_tile_col
+    valid_row = param.valid_row
+    valid_col = param.valid_col
 
     if data_type in (np.int64, np.uint64):
-        input_arr = np.random.randint(1, 1000, size=(rows, cols)).astype(data_type)
-        divider = np.array([[7]], dtype=data_type)
+        low = param.int_low if param.int_low is not None else 1
+        high = param.int_high if param.int_high is not None else 1000
+        input_arr = np.random.randint(low, high, size=(rows, cols)).astype(data_type)
+        divider_value = param.scalar if param.scalar is not None else 7
+        divider = np.array([[divider_value]], dtype=data_type)
     else:
         input_arr = np.random.uniform(low=-8, high=8, size=(rows, cols)).astype(data_type)
         divider = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
-    for i in range(rows):
-        for j in range(cols):
+    for i in range(valid_row):
+        for j in range(valid_col):
             output_arr[i, j] = input_arr[i, j] * divider[0, 0]
 
     input_arr.tofile('input.bin')
@@ -44,13 +49,21 @@ def gen_golden_data(param):
 
 
 class TAddsParams:
-    def __init__(self, name, data_type, dst_tile_row, dst_tile_col, row, col):
+    def __init__(
+        self, name, data_type, dst_tile_row, dst_tile_col, row, col,
+        valid_row=None, valid_col=None, scalar=None, int_low=None, int_high=None
+    ):
         self.name = name
         self.data_type = data_type
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
         self.row = row
         self.col = col
+        self.valid_row = row if valid_row is None else valid_row
+        self.valid_col = col if valid_col is None else valid_col
+        self.scalar = scalar
+        self.int_low = int_low
+        self.int_high = int_high
 
 if __name__ == "__main__":
     case_params_list = [
@@ -63,6 +76,14 @@ if __name__ == "__main__":
         TAddsParams("TMULSTest.case7", np.float32, 1, 32, 1, 16),
         TAddsParams("TMULSTest.case_int64_4x16", np.int64, 4, 16, 4, 16),
         TAddsParams("TMULSTest.case_uint64_4x16", np.uint64, 4, 16, 4, 16),
+        TAddsParams(
+            "TMULSTest.case_int64_96x32768_32x1024_32x128",
+            np.int64, 32, 1024, 32, 32768, 32, 1024, 1, -10, 11
+        ),
+        TAddsParams("TMULSTest.case_int64_1x16364", np.int64, 1, 16364, 1, 16364),
+        TAddsParams("TMULSTest.case_uint64_1x16364", np.uint64, 1, 16364, 1, 16364),
+        TAddsParams("TMULSTest.case_int64_1x16368", np.int64, 1, 16368, 1, 16368),
+        TAddsParams("TMULSTest.case_uint64_1x16368", np.uint64, 1, 16368, 1, 16368),
     ]
 
     for _, case in enumerate(case_params_list):

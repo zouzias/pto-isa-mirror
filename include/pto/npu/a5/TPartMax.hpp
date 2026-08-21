@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TPARTMAX_HPP
 
 #include "TPartBinOps.hpp"
-#include "Int64Reduce.hpp"
+#include "TPartBinOps.hpp"
 
 namespace pto {
 

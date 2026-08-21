@@ -15,13 +15,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 namespace TRowExpandTest {
 
+template <typename T, uint32_t srcCols>
+constexpr uint32_t GetRowExpandSrcTileCols()
+{
+    if constexpr (srcCols * sizeof(T) < 32) {
+        return 32 / sizeof(T);
+    } else {
+        return srcCols;
+    }
+}
+
 template <typename T, uint32_t rows, uint32_t srcCols, uint32_t dstValidCols, uint32_t dstCols>
 __global__ AICORE void runROWEXPAND(__gm__ T __out__* out, __gm__ T __in__* src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, rows, srcCols>;
     using DynStridDim5 = pto::Stride<1, 1, 1, srcCols, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
-    using TileData = Tile<TileType::Vec, T, rows, srcCols, BLayout::RowMajor, -1, -1>;
+    constexpr uint32_t srcTileCols = GetRowExpandSrcTileCols<T, srcCols>();
+    using TileData = Tile<TileType::Vec, T, rows, srcTileCols, BLayout::RowMajor, -1, -1>;
 
     using DstDynShapeDim5 = Shape<1, 1, 1, rows, dstCols>;
     using DstDynStridDim5 = pto::Stride<1, 1, 1, dstCols, 1>;
@@ -74,4 +85,8 @@ template void launchTROWEXPAND<int8_t, 16, 32, 255, 256>(int8_t* out, int8_t* sr
 template void launchTROWEXPAND<float, 16, 8, 127, 128>(float* out, float* src, void* stream);
 template void launchTROWEXPAND<int64_t, 4, 16, 16, 16>(int64_t* out, int64_t* src, void* stream);
 template void launchTROWEXPAND<uint64_t, 4, 16, 16, 16>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTROWEXPAND<int64_t, 4, 16, 64, 64>(int64_t* out, int64_t* src, void* stream);
+template void launchTROWEXPAND<uint64_t, 4, 16, 64, 64>(uint64_t* out, uint64_t* src, void* stream);
+template void launchTROWEXPAND<int64_t, 1, 1, 16368, 16368>(int64_t* out, int64_t* src, void* stream);
+template void launchTROWEXPAND<uint64_t, 1, 1, 16368, 16368>(uint64_t* out, uint64_t* src, void* stream);
 } // namespace TRowExpandTest

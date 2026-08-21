@@ -136,3 +136,5 @@ TEST_F(TDIVTest, case_float_hp_2x16_2x16_2x16_2x16) { test_tdiv<float, 2, 16, 2,
 TEST_F(TDIVTest, case_half_hp_2x32_2x32_2x32_2x32) { test_tdiv<aclFloat16, 2, 32, 2, 32, 2, 32, 2, 32, true, true>(); }
 TEST_F(TDIVTest, case_int64_4x16_4x16_4x16_4x16) { test_tdiv<int64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
 TEST_F(TDIVTest, case_uint64_4x16_4x16_4x16_4x16) { test_tdiv<uint64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TDIVTest, case_int64_4x64_4x64_4x64_4x64) { test_tdiv<int64_t, 4, 64, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TDIVTest, case_uint64_4x64_4x64_4x64_4x64) { test_tdiv<uint64_t, 4, 64, 4, 64, 4, 64, 4, 64>(); }
