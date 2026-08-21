@@ -93,34 +93,40 @@ TPUT_ASYNC_MTE_FALLBACK(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalDa
 
 #ifdef PTO_URMA_SUPPORTED
 template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(
+PTO_INTERNAL uint64_t TPutAsyncCheckUrmaPayload(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer)
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
-
+    PTO_ASSERT(urma::detail::ValidateUrmaSession(session, peer), "TPUT_ASYNC URMA: invalid session, peer or QP.");
     PTO_ASSERT(
-        TPutAsyncIsFlatContiguous1D(srcGlobalData),
-        "TPUT_ASYNC URMA: src tensor must be flat contiguous 1D (packed layout, single logical line). "
-        "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+        srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr,
+        "TPUT_ASYNC URMA: src and dst tensor pointers must not be null.");
     PTO_ASSERT(
-        TPutAsyncIsFlatContiguous1D(dstGlobalData),
-        "TPUT_ASYNC URMA: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
-        "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+        TPutAsyncIsFlatContiguous1D(srcGlobalData) && TPutAsyncIsFlatContiguous1D(dstGlobalData),
+        "TPUT_ASYNC URMA: src and dst tensors must be flat contiguous 1D.");
 
     const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
-    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC URMA: dst buffer too small for src data");
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC URMA: dst buffer too small for src data.");
 
     using T = typename GlobalSrcData::RawDType;
     const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
     PTO_ASSERT(
-        transferSize > 0 && transferSize <= urma::kUrmaMaxWqeTransferBytes,
-        "TPUT_ASYNC URMA: transfer size must be in (0, 256MB] per single WQE");
+        transferSize > 0U && transferSize <= urma::kUrmaMaxWqeTransferBytes,
+        "TPUT_ASYNC URMA: transfer size must be in (0, 256MB] per single WQE.");
+    return transferSize;
+}
 
-    const uint64_t eventHandle = urma::__urma_put_async(
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer)
+{
+    const uint64_t transferSize = TPutAsyncCheckUrmaPayload(dstGlobalData, srcGlobalData, session, peer);
+
+    const urma::detail::UrmaPostResult result = urma::__urma_put_async(
         reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
         reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), transferSize, session, peer);
-    return AsyncEvent(eventHandle, DmaEngine::URMA);
+    return AsyncEvent(result.handle, DmaEngine::URMA, result.targetCqe);
 }
 
 template <typename GlobalDstData, typename GlobalSrcData>
