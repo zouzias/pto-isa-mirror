@@ -191,12 +191,11 @@ size_t inline MapTileIndicesToGlobalOffset(
         i1 = (c / (shape4 * shape2)) % shape1;
         i0 = c / (shape1 * shape2 * shape4);
     } else if constexpr (GlobalData::layout == pto::Layout::NZ) {
-        const size_t outerCol = c / shape4;
-        i0 = outerCol / shape1;
-        i1 = outerCol % shape1;
-        i2 = r / shape3;
-        i3 = r % shape3;
         i4 = c % shape4;
+        i1 = (c / shape4) % shape1;
+        i0 = (c / (shape1 * shape4)) % shape0;
+        i3 = r % shape3;
+        i2 = r / shape3;
     } else if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) {
         i3 = r % shape3;
         i2 = (r / shape3) % shape2;
