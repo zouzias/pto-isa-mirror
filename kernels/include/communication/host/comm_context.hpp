@@ -60,6 +60,13 @@ namespace domain {
 
 inline void CommContext::Reset()
 {
+    // HCCL owns channel/MR registration lifetime. Release it before freeing
+    // URMA manager allocations that were registered through this communicator.
+    if (ownsComm && comm != nullptr) {
+        HcclCommDestroy(comm);
+    }
+    comm = nullptr;
+    ownsComm = false;
 #ifdef PTO_DOMAIN_URMA_HOST
     if (urmaMgr) {
         urmaMgr->Finalize();
@@ -87,11 +94,6 @@ inline void CommContext::Reset()
     winDevCtx = nullptr;
     winBase = nullptr;
     ownsWinDevCtx = false;
-    if (ownsComm && comm != nullptr) {
-        HcclCommDestroy(comm);
-    }
-    comm = nullptr;
-    ownsComm = false;
     if (stream != nullptr) {
         rtStreamDestroy(stream);
         stream = nullptr;
