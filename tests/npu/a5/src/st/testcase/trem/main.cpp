@@ -123,3 +123,7 @@ TEST_F(TREMTest, case11) { test_trem<float, 128, 128, 96, 96, false, true>(); }
 TEST_F(TREMTest, case12) { test_trem<float, 128, 128, 96, 97, false, true>(); }
 TEST_F(TREMTest, case_int64_4x16) { test_trem<int64_t, 4, 16, 4, 16, false>(); }
 TEST_F(TREMTest, case_uint64_4x16) { test_trem<uint64_t, 4, 16, 4, 16, false>(); }
+TEST_F(TREMTest, case_int64_4x64) { test_trem<int64_t, 4, 64, 4, 64, false>(); }
+TEST_F(TREMTest, case_uint64_4x64) { test_trem<uint64_t, 4, 64, 4, 64, false>(); }
+TEST_F(TREMTest, case_int64_32x32) { test_trem<int64_t, 32, 32, 32, 32, false>(); }
+TEST_F(TREMTest, case_uint64_32x32) { test_trem<uint64_t, 32, 32, 32, 32, false>(); }

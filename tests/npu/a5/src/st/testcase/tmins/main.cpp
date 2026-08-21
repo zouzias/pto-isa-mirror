@@ -117,3 +117,19 @@ TEST_F(TMINSTest, case_half_16x256_20x224_16x200)
 TEST_F(TMINSTest, case_half_1x256_1x224_1x200) { test_tmins<aclFloat16, 1, 256, 1, 224, 1, 200, PAD_VALUE_MAX>(); }
 TEST_F(TMINSTest, case_int64_4x16_4x16_4x16) { test_tmins<int64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(); }
 TEST_F(TMINSTest, case_uint64_4x16_4x16_4x16) { test_tmins<uint64_t, 4, 16, 4, 16, 4, 16, PAD_VALUE_NULL>(); }
+TEST_F(TMINSTest, case_int64_1x16364_1x16364_1x16364)
+{
+    test_tmins<int64_t, 1, 16364, 1, 16364, 1, 16364, PAD_VALUE_NULL>();
+}
+TEST_F(TMINSTest, case_uint64_1x16364_1x16364_1x16364)
+{
+    test_tmins<uint64_t, 1, 16364, 1, 16364, 1, 16364, PAD_VALUE_NULL>();
+}
+TEST_F(TMINSTest, case_int64_1x16368_1x16368_1x16368)
+{
+    test_tmins<int64_t, 1, 16368, 1, 16368, 1, 16368, PAD_VALUE_NULL>();
+}
+TEST_F(TMINSTest, case_uint64_1x16368_1x16368_1x16368)
+{
+    test_tmins<uint64_t, 1, 16368, 1, 16368, 1, 16368, PAD_VALUE_NULL>();
+}
