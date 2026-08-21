@@ -13,9 +13,15 @@
 import os
 import struct
 import numpy as np
-import ml_dtypes
+try:
+    import ml_dtypes
+
+    bfloat16 = ml_dtypes.bfloat16
+    BFLOAT16_STORAGE_DTYPE = bfloat16
+except ModuleNotFoundError:
+    bfloat16 = object()
+    BFLOAT16_STORAGE_DTYPE = np.float16
 np.random.seed(19)
-bfloat16 = ml_dtypes.bfloat16
 
 PAD_VALUE_NULL = "PAD_VALUE_NULL"
 PAD_VALUE_MAX = "PAD_VALUE_MAX"
@@ -24,6 +30,7 @@ PAD_VALUE_MIN = "PAD_VALUE_MIN"
 
 def gen_golden_data(param):
     dtype = param.dtype
+    storage_dtype = BFLOAT16_STORAGE_DTYPE if dtype == bfloat16 else dtype
 
     height, width = [param.global_row, param.global_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
@@ -31,21 +38,21 @@ def gen_golden_data(param):
     # Generate random input arrays
     scalar = 0
     if dtype == np.int16:
-        scalar = np.random.randint(-30_000, 30_000, size=1).astype(dtype)
+        scalar = np.random.randint(-30_000, 30_000, size=1).astype(storage_dtype)
     elif dtype == np.int32:
-        scalar = np.random.randint(-2_000_000_000, 2_000_000_000, size=1).astype(dtype)
+        scalar = np.random.randint(-2_000_000_000, 2_000_000_000, size=1).astype(storage_dtype)
     elif dtype == np.int64:
-        scalar = np.array([-4_000_000_007], dtype=dtype)
+        scalar = np.array([-4_000_000_007], dtype=storage_dtype)
     elif dtype == np.uint64:
-        scalar = np.array([10_000_000_019], dtype=dtype)
+        scalar = np.array([10_000_000_019], dtype=storage_dtype)
     elif dtype == np.float16:
-        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
+        scalar = np.random.uniform(-8, 8, size=1).astype(storage_dtype)
     elif dtype == bfloat16:
-        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
+        scalar = np.random.uniform(-8, 8, size=1).astype(storage_dtype)
     elif dtype == np.float32:
-        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
+        scalar = np.random.uniform(-8, 8, size=1).astype(storage_dtype)
 
-    golden = np.full((height, width), 0).astype(dtype)
+    golden = np.full((height, width), 0).astype(storage_dtype)
     golden[:h_valid, :w_valid] = scalar[0]
 
     # Save the golden data to binary files
@@ -117,6 +124,10 @@ if __name__ == "__main__":
         TestParams(np.int16, 1, 200, 1, 512, 1, 200, PAD_VALUE_MAX),
         TestParams(np.int64, 5, 16, 5, 16, 5, 16),
         TestParams(np.uint64, 5, 16, 5, 16, 5, 16),
+        TestParams(np.int64, 5, 64, 5, 64, 5, 64),
+        TestParams(np.uint64, 5, 64, 5, 64, 5, 64),
+        TestParams(np.int64, 1, 32732, 1, 32732, 1, 32732),
+        TestParams(np.uint64, 1, 32732, 1, 32732, 1, 32732),
     ]
 
     for i, param in enumerate(case_params_list):

@@ -42,12 +42,42 @@ __global__ AICORE void runTEXPANDS(__gm__ T* out, __gm__ T* scalar)
     TSTORE(dstGlobal, dstTile, event);
 }
 
+template <typename T, int cols, int padValueType>
+__global__ AICORE void runTEXPANDSWideInt64(__gm__ T* out, __gm__ T* scalar)
+{
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    constexpr PadValue padType = (padValueType == PAD_VALUE_NULL) ? PadValue::Null : PadValue::Max;
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<
+        TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, TileConfig::fractalABSize,
+        padType>;
+
+    T src = *scalar;
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStridDim5(cols, 1));
+        TileData dstTile(tileRows, validCols);
+        TASSIGN(dstTile, 0x0);
+        Event<Op::TEXPANDS, Op::TSTORE_VEC> event = TEXPANDS(dstTile, src);
+        TSTORE(dstGlobal, dstTile, event);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <
     typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
     bool isBf16>
 void LaunchTExpandS(void* out, void* scalar, void* stream)
 {
-    if constexpr (isBf16) {
+    constexpr int wideTileCols = 64;
+    if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && kGRows_ == 1 && kTRows_ == 1 && kVRows_ == 1 &&
+        kGCols_ == kVCols_ && kTCols_ == kVCols_ && kVCols_ > wideTileCols) {
+        runTEXPANDSWideInt64<T, kVCols_, padValueType><<<1, nullptr, stream>>>((T*)out, (T*)scalar);
+    } else if constexpr (isBf16) {
         runTEXPANDS<bfloat16_t, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>
             <<<1, nullptr, stream>>>((bfloat16_t*)out, (bfloat16_t*)scalar);
     } else if constexpr (std::is_same_v<T, uint16_t>) {
@@ -85,4 +115,12 @@ template void LaunchTExpandS<int16_t, 1, 200, 1, 512, 1, 200, PAD_VALUE_MAX, fal
 template void LaunchTExpandS<int64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL, false>(
     void* out, void* scalar, void* stream);
 template void LaunchTExpandS<uint64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<int64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<uint64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<int64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandS<uint64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL, false>(
     void* out, void* scalar, void* stream);

@@ -88,6 +88,8 @@ if __name__ == "__main__":
         TMaxParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
         TMaxParams(np.int64, 4, 16, 4, 16, 4, 16, 4, 16),
         TMaxParams(np.uint64, 4, 16, 4, 16, 4, 16, 4, 16),
+        TMaxParams(np.int64, 1, 16364, 1, 16364, 1, 16364, 1, 16364),
+        TMaxParams(np.uint64, 1, 16364, 1, 16364, 1, 16364, 1, 16364),
     ]
 
     for param in case_params_list:

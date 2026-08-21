@@ -146,6 +146,16 @@ TEST_F(TSCATTERTest, case_uint64_uint32_4x16_4x16)
     EXPECT_TRUE((TScatterTestFramework<9, uint64_t, uint32_t, 4, 16, 4, 16>()));
 }
 
+TEST_F(TSCATTERTest, case_int64_uint32_4x64_4x64)
+{
+    EXPECT_TRUE((TScatterTestFramework<10, int64_t, uint32_t, 4, 64, 4, 64>()));
+}
+
+TEST_F(TSCATTERTest, case_uint64_uint32_4x64_4x64)
+{
+    EXPECT_TRUE((TScatterTestFramework<11, uint64_t, uint32_t, 4, 64, 4, 64>()));
+}
+
 template <typename T, pto::MaskPattern PATTERN, uint32_t DST_ROW, uint32_t DST_COL, uint32_t SRC_ROW, uint32_t SRC_COL>
 void test_scatter_mask()
 {
@@ -222,6 +232,16 @@ TEST_F(TSCATTERTest, case_mask_int64_4x16_4x32_P1010)
 TEST_F(TSCATTERTest, case_mask_uint64_4x16_4x64_P0001)
 {
     test_scatter_mask<uint64_t, pto::MaskPattern::P0001, 4, 64, 4, 16>();
+}
+
+TEST_F(TSCATTERTest, case_mask_int64_4x64_4x128_P1010)
+{
+    test_scatter_mask<int64_t, pto::MaskPattern::P1010, 4, 128, 4, 64>();
+}
+
+TEST_F(TSCATTERTest, case_mask_uint64_4x64_4x256_P0001)
+{
+    test_scatter_mask<uint64_t, pto::MaskPattern::P0001, 4, 256, 4, 64>();
 }
 
 TEST_F(TSCATTERTest, case_mask_half_16x64_16x128_P0101)
