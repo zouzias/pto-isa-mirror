@@ -71,12 +71,61 @@ __global__ AICORE void runTSel(
     out = dstGlobal.data();
 }
 
+template <typename T, int cols>
+__global__ AICORE void runTSelWideInt64(
+    __gm__ T __out__* out, __gm__ uint8_t __in__* mask, __gm__ T __in__* src0, __gm__ T __in__* src1)
+{
+    constexpr int maskCols = (cols + 7) / 8;
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 32;
+    constexpr int maskTileCols = 32;
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using MaskGlobal = GlobalTensor<uint8_t, DynShapeDim5, DynStrideDim5>;
+    using TileData = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using MaskTile = Tile<TileType::Vec, uint8_t, tileRows, maskTileCols, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        int validMaskCols = (validCols + 7) / 8;
+        GlobalData dstGlobal(out + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        GlobalData src0Global(src0 + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        GlobalData src1Global(src1 + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        MaskGlobal maskGlobal(mask + col / 8, DynShapeDim5(tileRows, validMaskCols), DynStrideDim5(maskCols, 1));
+        TileData dstTile(tileRows, validCols);
+        TileData src0Tile(tileRows, validCols);
+        TileData src1Tile(tileRows, validCols);
+        MaskTile maskTile(tileRows, validMaskCols);
+        TmpTile tmpTile(1, 32);
+        TASSIGN(dstTile, 0x0);
+        TASSIGN(src0Tile, 0x2000);
+        TASSIGN(src1Tile, 0x4000);
+        TASSIGN(maskTile, 0x6000);
+        TASSIGN(tmpTile, 0x8000);
+
+        TLOAD(src0Tile, src0Global);
+        TLOAD(src1Tile, src1Global);
+        Event<Op::TLOAD, Op::TSEL> event0 = TLOAD(maskTile, maskGlobal);
+        Event<Op::TSEL, Op::TSTORE_VEC> event1 = TSEL(dstTile, maskTile, src0Tile, src1Tile, tmpTile, event0);
+        TSTORE(dstGlobal, dstTile, event1);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
 template <typename T, int Rows, int Cols, int ValidRows, int ValidCols>
 void LaunchTSel(T* out, uint8_t* mask, T* src0, T* src1, void* stream)
 {
+    constexpr int wideTileCols = 32;
     if constexpr (std::is_same_v<T, aclFloat16>) {
         runTSel<half, Rows, Cols, ValidRows, ValidCols>
             <<<1, nullptr, stream>>>((half*)(out), mask, (half*)(src0), (half*)(src1));
+    } else if constexpr (
+        (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && Rows == 1 && Cols == ValidCols &&
+        ValidRows == 1 && ValidCols > wideTileCols) {
+        runTSelWideInt64<T, ValidCols><<<1, nullptr, stream>>>(out, mask, src0, src1);
     } else {
         runTSel<T, Rows, Cols, ValidRows, ValidCols><<<1, nullptr, stream>>>(out, mask, src0, src1);
     }
@@ -98,4 +147,12 @@ template void LaunchTSel<float, 2, 512, 2, 512>(float* out, uint8_t* mask, float
 template void LaunchTSel<int64_t, 4, 16, 4, 16>(
     int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);
 template void LaunchTSel<uint64_t, 4, 16, 4, 16>(
+    uint64_t* out, uint8_t* mask, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTSel<int64_t, 1, 16364, 1, 16364>(
+    int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTSel<uint64_t, 1, 16364, 1, 16364>(
+    uint64_t* out, uint8_t* mask, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTSel<int64_t, 1, 16368, 1, 16368>(
+    int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTSel<uint64_t, 1, 16368, 1, 16368>(
     uint64_t* out, uint8_t* mask, uint64_t* src0, uint64_t* src1, void* stream);

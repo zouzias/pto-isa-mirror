@@ -100,3 +100,5 @@ TEST_F(TSHRSTest, case_uint16_32x112_32x128_32x111) { test_tshrs<uint16_t, 32, 1
 TEST_F(TSHRSTest, case_uint16_1x112_1x128_1x111) { test_tshrs<uint16_t, 1, 112, 1, 128, 1, 111>(); }
 TEST_F(TSHRSTest, case_int64_4x16_4x16_4x16) { test_tshrs<int64_t, 4, 16, 4, 16, 4, 16>(); }
 TEST_F(TSHRSTest, case_uint64_4x16_4x16_4x16) { test_tshrs<uint64_t, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TSHRSTest, case_int64_1x16364_1x16364_1x16364) { test_tshrs<int64_t, 1, 16364, 1, 16364, 1, 16364>(); }
+TEST_F(TSHRSTest, case_uint64_1x16364_1x16364_1x16364) { test_tshrs<uint64_t, 1, 16364, 1, 16364, 1, 16364>(); }

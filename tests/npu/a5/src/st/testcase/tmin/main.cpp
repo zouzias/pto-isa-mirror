@@ -135,3 +135,11 @@ TEST_F(TMINTest, case_int16_32x128_32x128_32x256_32x127) { test_tmin<int16_t, 32
 TEST_F(TMINTest, case_int32_16x32_16x64_16x32_16x31) { test_tmin<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(); }
 TEST_F(TMINTest, case_int64_4x16_4x16_4x16_4x16) { test_tmin<int64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
 TEST_F(TMINTest, case_uint64_4x16_4x16_4x16_4x16) { test_tmin<uint64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TMINTest, case_int64_1x16364_1x16364_1x16364_1x16364)
+{
+    test_tmin<int64_t, 1, 16364, 1, 16364, 1, 16364, 1, 16364>();
+}
+TEST_F(TMINTest, case_uint64_1x16364_1x16364_1x16364_1x16364)
+{
+    test_tmin<uint64_t, 1, 16364, 1, 16364, 1, 16364, 1, 16364>();
+}

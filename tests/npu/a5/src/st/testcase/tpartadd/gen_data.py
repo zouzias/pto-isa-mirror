@@ -118,6 +118,8 @@ if __name__ == "__main__":
         TPartaddParams(np.int64, 4, 16, 2, 16, 4, 16),
         TPartaddParams(np.uint64, 4, 16, 2, 16, 4, 16),
         TPartaddParams(np.int64, 4, 16, 4, 8, 4, 16),
+        TPartaddParams(np.int64, 4, 64, 4, 64, 4, 64),
+        TPartaddParams(np.uint64, 4, 64, 4, 64, 4, 64),
     ]
 
     for param in case_params_list:

@@ -119,3 +119,9 @@ TEST_F(TDIVSTest, caseHP1) { TDivSTestFramework<float, 2, 16, 2, 16, 2, 16, fals
 TEST_F(TDIVSTest, caseHP2) { TDivSTestFramework<aclFloat16, 2, 32, 2, 32, 2, 32, true, true>(); }
 TEST_F(TDIVSTest, case_int64_4x16) { TDivSTestFramework<int64_t, 4, 16, 4, 16, 4, 16>(); }
 TEST_F(TDIVSTest, case_uint64_4x16) { TDivSTestFramework<uint64_t, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TDIVSTest, case_int64_4x64) { TDivSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TDIVSTest, case_uint64_4x64) { TDivSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TDIVSTest, case_int64_1x16364) { TDivSTestFramework<int64_t, 1, 16364, 1, 16364, 1, 16364>(); }
+TEST_F(TDIVSTest, case_uint64_1x16364) { TDivSTestFramework<uint64_t, 1, 16364, 1, 16364, 1, 16364>(); }
+TEST_F(TDIVSTest, case_int64_4091x4) { TDivSTestFramework<int64_t, 4091, 4, 4091, 4, 4091, 4>(); }
+TEST_F(TDIVSTest, case_uint64_4091x4) { TDivSTestFramework<uint64_t, 4091, 4, 4091, 4, 4091, 4>(); }
