@@ -51,6 +51,28 @@ PTO_INTERNAL void TCI_IMPL(TileData& dst, T start)
     TCI<TileData, T, descending>(dst.data(), start, validCol);
 }
 
+// The tmp path first materializes the ascending sequence S+i. Descending is
+// S-i = 2S-(S+i): negate, then add 2S. Use vmuls/vadds on a signed view so
+// uint16/uint32 tiles compile correctly.
+template <typename IntT>
+PTO_INTERNAL void TCIFinishDescending(__ubuf__ IntT *dstPtr, IntT twoStart, unsigned validCol)
+{
+    set_mask_count();
+    set_vector_mask(0, validCol);
+    vmuls(dstPtr, dstPtr, static_cast<IntT>(-1), 1, 1, 1, 8, 8);
+    pipe_barrier(PIPE_V);
+    vadds(dstPtr, dstPtr, twoStart, 1, 1, 1, 8, 8);
+    pipe_barrier(PIPE_V);
+    set_mask_norm();
+    set_vector_mask((uint64_t)-1, (uint64_t)-1);
+}
+
+PTO_INTERNAL void RestoreVectorMaskNormAfterTci()
+{
+    set_mask_norm();
+    set_vector_mask((uint64_t)-1, (uint64_t)-1);
+}
+
 template <typename TileData, typename TileDataTmp, typename T, int descending>
 __tf__ AICORE void TCI_b32_repeat(
     typename TileData::TileDType __out__ dst, typename TileDataTmp::TileDType __in__ tmp, T S, unsigned validCol,
@@ -94,10 +116,10 @@ __tf__ AICORE void TCI_b32_repeat(
             1, 1, 8, 8);
     }
     pipe_barrier(PIPE_V);
-    if (descending) {
-        set_mask_count();
-        set_vector_mask(0, validCol);
-        vmuls((__ubuf__ int32_t*)dstPtr, (__ubuf__ int32_t*)dstPtr, -1, 1, 1, 1, 8, 8);
+    if constexpr (descending) {
+        TCIFinishDescending((__ubuf__ int32_t *)dstPtr, static_cast<int32_t>(S) * 2, validCol);
+    } else {
+        RestoreVectorMaskNormAfterTci();
     }
 }
 
@@ -136,8 +158,10 @@ __tf__ AICORE void TCI_b32_normal(
     pipe_barrier(PIPE_V);
     vadds((__ubuf__ int32_t*)dstPtr, (__ubuf__ int32_t*)dstPtr, S, 1, 1, 1, 8, 8);
     pipe_barrier(PIPE_V);
-    if (descending) {
-        vmuls((__ubuf__ int32_t*)dstPtr, (__ubuf__ int32_t*)dstPtr, -1, 1, 1, 1, 8, 8);
+    if constexpr (descending) {
+        TCIFinishDescending((__ubuf__ int32_t *)dstPtr, static_cast<int32_t>(S) * 2, validCol);
+    } else {
+        RestoreVectorMaskNormAfterTci();
     }
 }
 
@@ -197,6 +221,12 @@ __tf__ AICORE void TCI_b16_repeat(
             (__ubuf__ int16_t*)(dstPtr + 128 * numRepeatPerLine), (__ubuf__ int16_t*)tmp3, S + 128 * numRepeatPerLine,
             1, 1, 1, 8, 8);
     }
+    pipe_barrier(PIPE_V);
+    if constexpr (descending) {
+        TCIFinishDescending((__ubuf__ int16_t *)dstPtr, static_cast<int16_t>(static_cast<int32_t>(S) * 2), validCol);
+    } else {
+        RestoreVectorMaskNormAfterTci();
+    }
 }
 
 template <typename TileData, typename TileDataTmp, typename T, int descending>
@@ -249,8 +279,10 @@ __tf__ AICORE void TCI_b16_normal(
     pipe_barrier(PIPE_V);
     vadds((__ubuf__ int16_t*)dstPtr, (__ubuf__ int16_t*)dstPtr, S, 1, 1, 1, 8, 8);
     pipe_barrier(PIPE_V);
-    if (descending) {
-        vmuls((__ubuf__ int16_t*)dstPtr, (__ubuf__ int16_t*)dstPtr, -1, 1, 1, 1, 8, 8);
+    if constexpr (descending) {
+        TCIFinishDescending((__ubuf__ int16_t *)dstPtr, static_cast<int16_t>(static_cast<int32_t>(S) * 2), validCol);
+    } else {
+        RestoreVectorMaskNormAfterTci();
     }
 }
 
@@ -264,22 +296,22 @@ PTO_INTERNAL void TCI_IMPL(TileData& dst, T start, TileDataTmp& tmp)
     unsigned numRepeatPerLine = validCol / elementsPerRepeat;
     unsigned numRemainPerLine = validCol % elementsPerRepeat;
 
-    if (sizeof(typename TileData::DType) == 4 && numRepeatPerLine) {
-        TCI_b32_repeat<TileData, TileDataTmp, T, descending>(
-            dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
-    } else if (sizeof(typename TileData::DType) == 4) {
-        TCI_b32_normal<TileData, TileDataTmp, T, descending>(
-            dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
-    } else if (sizeof(typename TileData::DType) == 2 && numRepeatPerLine) {
-        TCI_b16_repeat<TileData, TileDataTmp, T, descending>(
-            dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
-        pipe_barrier(PIPE_V);
-        if (descending) {
-            TMULS_IMPL(dst, dst, -1);
+    if constexpr (sizeof(typename TileData::DType) == 4) {
+        if (numRepeatPerLine) {
+            TCI_b32_repeat<TileData, TileDataTmp, T, descending>(
+                dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
+        } else {
+            TCI_b32_normal<TileData, TileDataTmp, T, descending>(
+                dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
         }
     } else {
-        TCI_b16_normal<TileData, TileDataTmp, T, descending>(
-            dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
+        if (numRepeatPerLine) {
+            TCI_b16_repeat<TileData, TileDataTmp, T, descending>(
+                dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
+        } else {
+            TCI_b16_normal<TileData, TileDataTmp, T, descending>(
+                dst.data(), tmp.data(), start, validCol, numRepeatPerLine, numRemainPerLine);
+        }
     }
 }
 } // namespace pto
