@@ -195,7 +195,10 @@ template <
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData)
 {
     CheckMadValid<TileRes, TileLeft, TileRight>();
+
+#if defined(PTO_NPU_ARCH_KIRIN9030)
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
+#endif
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TileBias must be single row.");
 
     uint16_t k = bMatrix.GetValidRow();

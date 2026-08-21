@@ -139,16 +139,37 @@ __tf__ PTO_INTERNAL void TExtractVecToMat(
     }
 }
 
+template <typename DstTile, typename SrcTile>
+__tf__ AICORE void TExtractToAVector(
+    typename DstTile::TileDType __out__ dst, typename SrcTile::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t dstValidCol)
+{
+    using DataType = typename SrcTile::DType;
+    constexpr int32_t blockSize = BLOCK_BYTE_SIZE / sizeof(DataType);
+    constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / sizeof(DataType);
+
+    static_assert((SrcTile::Cols % blockSize) == 0, "srcCol * sizeof(DataType) must be aligned to 32B");
+    static_assert((DstTile::Cols % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
+    PTO_ASSERT((indexCol % blockSize) == 0, "indexCol * sizeof(DataType) must be aligned to 32B");
+
+    __cbuf__ DataType* srcAddr = ((__cbuf__ DataType*)__cce_get_tile_ptr(src)) + indexCol;
+    __ca__ DataType* dstAddr = (__ca__ DataType*)__cce_get_tile_ptr(dst);
+
+    int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
+    uint8_t repeatTimes = kAlign / fractalSize;
+    pto_load_cbuf_to_ca(dstAddr, srcAddr, 0, repeatTimes, 1, 0);
+}
+
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
     PTO_ASSERT(
         indexRow + DstTileData::Rows <= SrcTileData::Rows,
-        "The sum of indexRow and dstRow should be less than srcRow!");
+        "The sum of indexRow and dstRow should be less than srcRow.");
     PTO_ASSERT(
         indexCol + DstTileData::Cols <= SrcTileData::Cols,
-        "The sum of indexCol and dstCol should be less than srcCol!");
+        "The sum of indexCol and dstCol should be less than srcCol.");
     if constexpr (DstTileData::Loc == TileType::Left) {
         TExtractToLeft<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
     } else if constexpr (DstTileData::Loc == TileType::Right) {
