@@ -17,7 +17,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 template <typename T>
 PTO_INTERNAL constexpr Dist Int64SelectPldsMode()
 {
@@ -27,6 +26,7 @@ PTO_INTERNAL constexpr Dist Int64SelectPldsMode()
         return Dist::DIST_NORM;
 }
 
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
 template <typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
 PTO_INTERNAL void Int64SelectStore(
     __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint32_t colOffset, MaskReg& selectMask,
@@ -118,12 +118,13 @@ PTO_INTERNAL void Int64SelectPairRepeatFull(
     MaskReg selectMask0, selectMask1;
     Int64SelectPairMasks<ElementsPerRepeat, MaskRowBytes>(
         packedMask, row, pairRepeat, colOffset, selectMask0, selectMask1);
-    MaskReg allMask = pset_b32(PAT_ALL);
+    uint32_t fullMaskCols = ElementsPerRepeat;
+    MaskReg fullMask = plt_b32(fullMaskCols, POST_UPDATE);
     Int64SelectStoreByMode<Scalar, T, DstCols, Src0Cols, Src1Cols>(
-        dst, src0, src1, row, colOffset, selectMask0, allMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
+        dst, src0, src1, row, colOffset, selectMask0, fullMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
     colOffset += ElementsPerRepeat;
     Int64SelectStoreByMode<Scalar, T, DstCols, Src0Cols, Src1Cols>(
-        dst, src0, src1, row, colOffset, selectMask1, allMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
+        dst, src0, src1, row, colOffset, selectMask1, fullMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
 }
 
 template <
