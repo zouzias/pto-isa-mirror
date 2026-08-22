@@ -771,6 +771,72 @@ TGEMV_BIAS(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& bi
     return {};
 }
 
+#if defined(PTO_NPU_ARCH_KIRINDEV0000)
+// ============================================================================
+// kirinDev0000 TMATMUL / TMATMUL_ACC with MatmulMacroConfig overloads
+//   These overloads delegate to TMATMUL_MACRO_IMPL / TMATMUL_MACRO_ACC_IMPL,
+//   providing the full FixPipe capabilities (preQuant, preRelu, clipRelu, gemvCtrl)
+//   through the unified TMATMUL / TMATMUL_ACC interface names.
+//   Only compiled for kirinDev0000, does not affect other architectures.
+// ============================================================================
+
+// --- TMATMUL_ACC: no bias, with cfg ---
+// K0 no bias (isClear=true): C = A*B, S32 output, hw zero C
+// K1~K(n-2) (isClear=false): C += A*B, S32 output, bias-broadcast ACC
+template <
+    AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
+    bool isClear = false, typename... WaitEvents>
+PTO_INST RecordEvent
+TMATMUL_ACC(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, MatmulMacroConfig& cfg, WaitEvents&... events)
+{
+    TSYNC(events...);
+    TMATMUL_MACRO_ACC_IMPL<Phase, TileRes, TileLeft, TileRight, void, isClear>(cMatrix, aMatrix, bMatrix, nullptr, cfg);
+    return {};
+}
+
+// --- TMATMUL_ACC: with bias, with cfg ---
+// K0 with bias: C = A*B + bias, S32 output
+template <
+    AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+    typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL_ACC(
+    TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData, const MatmulMacroConfig& cfg,
+    WaitEvents&... events)
+{
+    TSYNC(events...);
+    TMATMUL_MACRO_ACC_IMPL<Phase, TileRes, TileLeft, TileRight, TileBias>(cMatrix, aMatrix, bMatrix, &biasData, cfg);
+    return {};
+}
+
+// --- TMATMUL: no bias, with cfg ---
+// No split-K: C = A*B, pre-stage quant (isAcc=false, zero C)
+// Split-K final: C += A*B, pre-stage quant (isAcc=true, keep C)
+template <
+    AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, bool isAcc = false,
+    typename... WaitEvents>
+PTO_INST RecordEvent
+TMATMUL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, MatmulMacroConfig& cfg, WaitEvents&... events)
+{
+    TSYNC(events...);
+    TMATMUL_MACRO_IMPL<Phase, TileRes, TileLeft, TileRight, isAcc>(cMatrix, aMatrix, bMatrix, cfg);
+    return {};
+}
+
+// --- TMATMUL: with bias, with cfg ---
+template <
+    AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+    bool isAcc = false, typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL(
+    TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData, MatmulMacroConfig& cfg,
+    WaitEvents&... events)
+{
+    TSYNC(events...);
+    TMATMUL_MACRO_IMPL<Phase, TileRes, TileLeft, TileRight, TileBias, isAcc>(cMatrix, aMatrix, bMatrix, biasData, cfg);
+    return {};
+}
+
+#endif // PTO_NPU_ARCH_KIRINDEV0000
+
 template <
     typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData, typename Src2TileData,
     typename Src3TileData, bool exhausted, typename... WaitEvents>
@@ -1046,7 +1112,8 @@ TINSERT(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, u
     return {};
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || \
+    defined(PTO_NPU_ARCH_KIRINDEV0000)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent
 TINSERT(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0, WaitEvents&... events)

@@ -87,7 +87,7 @@ PTO_INTERNAL void pto_vgatherb(T& dstReg, __ubuf__ U* base, S& idxReg, vector_bo
 template <typename T, typename U>
 PTO_INTERNAL void pto_create_cbuf_matrix(__cbuf__ T* dst, int64_t repeatConfig, U value)
 {
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(PTO_NPU_ARCH_KIRINDEV0000)
     if constexpr (std::is_integral_v<U>) {
         set_l0_set_value_ui(value);
     } else if (std::is_same_v<U, half>) {
@@ -176,10 +176,24 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(
     copy_gm_to_cbuf_multi_nd2nz(
         reinterpret_cast<__cbuf__ U*>(dst), reinterpret_cast<__gm__ U*>(src), sid, loop1SrcStride, l2CacheCtl, nValue,
         dValue, loop4SrcStride, smallc0En, false /* enablePreReadIgnoreSync */);
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000)
+#elif defined(PTO_NPU_ARCH_KIRIN9030)
     copy_gm_to_cbuf_multi_nd2nz(
         reinterpret_cast<__cbuf__ U*>(dst), reinterpret_cast<__gm__ U*>(src), sid, loop1SrcStride, nValue, dValue,
         loop4SrcStride, smallc0En, false /* antiq_en */);
+#elif defined(PTO_NPU_ARCH_KIRINDEV0000)
+    if constexpr (sizeof(T) == sizeof(uint16_t)) {
+        copy_gm_to_cbuf_multi_nd2nz(
+            reinterpret_cast<__cbuf__ half*>(dst), reinterpret_cast<__gm__ half*>(src), sid, loop1SrcStride, nValue,
+            dValue, loop4SrcStride);
+    } else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+        copy_gm_to_cbuf_multi_nd2nz(
+            reinterpret_cast<__cbuf__ half*>(dst), reinterpret_cast<__gm__ half*>(src), sid, loop1SrcStride, nValue,
+            dValue * 2, loop4SrcStride);
+    } else {
+        copy_gm_to_cbuf_multi_nd2nz(
+            reinterpret_cast<__cbuf__ U*>(dst), reinterpret_cast<__gm__ U*>(src), sid, loop1SrcStride, nValue, dValue,
+            loop4SrcStride);
+    }
 #endif
 }
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)
@@ -352,7 +366,7 @@ PTO_INTERNAL void pto_copy_matrix_cc_to_ub(
         dst, src, sid, nSize, mSize, dstStride, srcStride, dualDstCtl, subBlockid, clipReluPre, unitFlagCtl, quantPre,
         reluPre, splitEn, nz2ndEn, quantPost, reluPost, clipReluPost, loopEnhanceEn, eltwiseOp, eltwiseAntqEn,
         loopEnhanceMergeEn, c0PadEn, winoPostEn, broadcastEn, nz2dnEn);
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000)
+#elif defined(PTO_NPU_ARCH_KIRIN9030)
     copy_matrix_cc_to_ub(
         dst, src, sid, nSize, mSize, dstStride, srcStride, clipReluPre, unitFlagCtl, quantPre, reluPre, splitEn,
         nz2ndEn, quantPost, reluPost, clipReluPost, loopEnhanceEn, eltwiseOp, eltwiseAntqEn, loopEnhanceMergeEn,
@@ -363,6 +377,31 @@ PTO_INTERNAL void pto_copy_matrix_cc_to_ub(
         nz2ndEn, quantPost, reluPost, clipReluPost, loopEnhanceEn, eltwiseOp, eltwiseAntqEn, loopEnhanceMergeEn,
         c0PadEn, winoPostEn);
 #endif
+}
+#endif
+
+#if defined(PTO_NPU_ARCH_KIRINDEV0000)
+__tf__ PTO_INTERNAL void pto_copy_cbuf_to_ubuf(
+    __ubuf__ void* dst, __cbuf__ void* src, uint8_t sid, uint16_t nBurst, uint16_t lenBurst, uint16_t srcGap,
+    uint16_t dstGap)
+{
+    constexpr uint32_t CBUF_UB_BURST_UNIT = 32;
+
+    uint32_t totalBytes = lenBurst * CBUF_UB_BURST_UNIT;
+    uint64_t loop2DstStride = static_cast<uint64_t>((lenBurst + dstGap) * CBUF_UB_BURST_UNIT);
+    uint32_t loop3Size = totalBytes;
+    uint16_t loop2Size = nBurst;
+
+    fix_cbuf_to_ubuf(
+        reinterpret_cast<__ubuf__ uint8_t*>(dst), reinterpret_cast<__cbuf__ uint8_t*>(src), loop2DstStride, loop3Size,
+        fixp_trans_mode_t::NORMAL_DMA, static_cast<uint64_t>(0), loop2Size);
+}
+#elif !defined(__COSTMODEL)
+PTO_INTERNAL void pto_copy_cbuf_to_ubuf(
+    __ubuf__ void* dst, __cbuf__ void* src, uint8_t sid, uint16_t nBurst, uint16_t lenBurst, uint16_t srcGap,
+    uint16_t dstGap)
+{
+    copy_cbuf_to_ubuf(dst, src, sid, nBurst, lenBurst, srcGap, dstGap);
 }
 #endif
 
