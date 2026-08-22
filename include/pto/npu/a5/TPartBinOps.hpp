@@ -55,7 +55,8 @@ PTO_INTERNAL void Int64PartSameStride(
             rows = src1Rows;
         uint16_t fullRepeats = dstCols / elementsPerRepeat;
         uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t row = 0; row < rows; ++row) {
@@ -80,7 +81,8 @@ PTO_INTERNAL void Int64PartSameStride(
             src = src1;
         uint16_t fullRepeats = dstCols / elementsPerRepeat;
         uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t row = firstRow; row < rows; ++row) {
@@ -201,7 +203,8 @@ PTO_INTERNAL void Int64PartGeneralMultiRepeat(
         uint16_t rows = dstRows;
         uint16_t fullRepeats = dstCols / elementsPerRepeat;
         uint32_t tailCols = dstCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t row = 0; row < rows; ++row) {
