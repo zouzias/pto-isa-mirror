@@ -9,7 +9,6 @@ concurrency:
     events: [mr_id]
 
 on:
-  workflow_dispatch:
   pull_request_comment:
     types: [created]
     branches: [ '*' ]
@@ -20,7 +19,7 @@ on:
 
 env:
   org_name: "${{ vars.ORG_NAME }}"
-  repo_name: "pto-isa"
+  repo_name: ${{atomgit.event.repository.name}}
   MERGE_ID: ${{atomgit.event.pull_request.number}}
   TARGET_BRANCH: ${{atomgit.base_ref}}
   SOURCE_BRANCH: ${{atomgit.head_ref}}
@@ -259,7 +258,7 @@ stages:
     - type: auto
     fail-fast: true
 post:
-  jobs: 
+  jobs:
     job_post:
       name: Test_post
       uses: cann/.gitcode/.gitcode/workflows/post_action.yml@master
