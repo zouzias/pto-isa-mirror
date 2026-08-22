@@ -60,8 +60,8 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
     - `dst` 和 `src` 必须是行主序。
     - 运行时：`dst.GetValidRow() == src.GetValidRow() > 0` 且 `dst.GetValidCol() == src.GetValidCol() > 0`。
     - **tmp缓冲区要求**：
-      - `tmp.GetValidCol() >= TileDataDst::Cols + CeilDivision(TileDataDst::Cols, 64) * 2`
-      - `tmp.GetValidRow() >= 1` (至少1行)
+      - `tmp.GetValidCol() >= dst.GetValidCol()`（至少与dst相同的列数）
+      - `tmp.GetValidRow() >= 1`（至少1行）
       - 数据类型必须与 `TileDataDst::DType` 匹配。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - `dst` 和 `src` 必须使用相同的元素类型。
