@@ -112,7 +112,7 @@ void LaunchTSels(T* out, TMask* mask, T* src, T scalar, void* stream)
     if constexpr (
         (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) && std::is_same_v<TMask, uint8_t> &&
         dstTileH == 1 && srcTileH == 1 && maskTileH == 1 && dstTileW == srcTileW && dstTileW == vCols &&
-        maskTileW == (vCols + 7) / 8 && vRows == 1 && vCols > wideTileCols) {
+        maskTileW >= (vCols + 7) / 8 && vRows == 1 && vCols > wideTileCols) {
         runTSELSWideInt64<T, vCols><<<1, nullptr, stream>>>(out, mask, src, scalar);
     } else {
         runTSELS<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>

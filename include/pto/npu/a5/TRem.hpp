@@ -43,36 +43,47 @@ PTO_INTERNAL void Int64RemRegs(
 }
 
 template <typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
+PTO_INTERNAL void Int64RemRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint32_t colOffset, MaskReg& mask)
+{
+    vector_s32 dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh;
+    Int64LoadRegs<T, Src0Cols>(lhsLow, lhsHigh, src0, row, colOffset);
+    Int64LoadRegs<T, Src1Cols>(rhsLow, rhsHigh, src1, row, colOffset);
+    Int64RemRegs<T>(dstLow, dstHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
+    Int64StoreRegs<T, DstCols>(dstLow, dstHigh, dst, row, colOffset, mask);
+}
+
+template <typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
 PTO_INTERNAL void Int64Rem(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, unsigned validRows, unsigned validCols)
 {
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dl, dh, al, ah, bl, bh;
-        uint16_t rows = validRows;
-        uint16_t fullRepeats = validCols / elementsPerRepeat;
-        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
-        uint32_t tailMaskCols = tailCols;
-        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
-                vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
-                Int64RemRegs<T>(dl, dh, al, ah, bl, bh, allMask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, allMask);
+        const uint16_t rowCount = validRows;
+        const uint16_t repeatCount = validCols / elementsPerRepeat;
+        const uint32_t remainderCols = validCols % elementsPerRepeat;
+        uint32_t maskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(maskCols, POST_UPDATE);
+        MaskReg tailMask = Int64TailMask(remainderCols, allMask);
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            for (uint16_t repeatIdx = 0; repeatIdx < repeatCount; ++repeatIdx) {
+                Int64RemRepeat<T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, row, repeatIdx * elementsPerRepeat, allMask);
             }
-            if (tailCols != 0) {
-                uint32_t colOffset = fullRepeats * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
-                vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
-                Int64RemRegs<T>(dl, dh, al, ah, bl, bh, tailMask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, tailMask);
+            if (remainderCols != 0) {
+                Int64RemRepeat<T, DstCols, Src0Cols, Src1Cols>(
+                    dst, src0, src1, row, repeatCount * elementsPerRepeat, tailMask);
             }
         }
     }
+}
+
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64ZeroRepeat(__ubuf__ T* dst, uint16_t row, uint32_t colOffset, MaskReg& mask)
+{
+    vector_s32 zero;
+    vbr(zero, 0);
+    Int64StoreRegs<T, DstCols>(zero, zero, dst, row, colOffset, mask);
 }
 
 template <typename T, unsigned DstCols>
@@ -82,25 +93,30 @@ PTO_INTERNAL void Int64Zero(__ubuf__ T* dst, unsigned validRows, unsigned validC
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 zero;
-        vbr(zero, 0);
-        uint16_t rows = validRows;
-        uint16_t fullRepeats = validCols / elementsPerRepeat;
-        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
-        uint32_t tailMaskCols = tailCols;
-        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vsts(zero, zero, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, allMask);
-            }
-            if (tailCols != 0) {
-                uint32_t colOffset = fullRepeats * elementsPerRepeat;
-                vsts(zero, zero, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, tailMask);
+        uint16_t rowLimit = validRows;
+        uint32_t maskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(maskCols, POST_UPDATE);
+        for (uint16_t row = 0; row < rowLimit; ++row) {
+            uint32_t remainingCols = validCols;
+            for (uint16_t repeatIdx = 0; repeatIdx < repeatTimes; ++repeatIdx) {
+                uint32_t activeCols = remainingCols < elementsPerRepeat ? remainingCols : elementsPerRepeat;
+                MaskReg mask = activeCols == elementsPerRepeat ? allMask : Int64TailMask(activeCols, allMask);
+                Int64ZeroRepeat<T, DstCols>(dst, row, repeatIdx * elementsPerRepeat, mask);
+                remainingCols -= activeCols;
             }
         }
     }
+}
+
+template <typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64RemScalarRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src, vector_s32& scalarLow, vector_s32& scalarHigh, uint16_t row, uint32_t colOffset,
+    MaskReg& mask)
+{
+    vector_s32 dstLow, dstHigh, srcLow, srcHigh;
+    Int64LoadRegs<T, SrcCols>(srcLow, srcHigh, src, row, colOffset);
+    Int64RemRegs<T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+    Int64StoreRegs<T, DstCols>(dstLow, dstHigh, dst, row, colOffset, mask);
 }
 
 template <typename T, unsigned DstCols, unsigned SrcCols>
@@ -113,30 +129,25 @@ PTO_INTERNAL void Int64RemScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, uns
         }
     }
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        vector_s32 dl, dh, al, ah, bl, bh;
+        vector_s32 scalarLow, scalarHigh;
         uint64_t bits = static_cast<uint64_t>(scalar);
-        Int64DuplicateRegs(bl, bh, static_cast<uint32_t>(bits), static_cast<uint32_t>(bits >> 32));
-        uint16_t rows = validRows;
-        uint16_t fullRepeats = validCols / elementsPerRepeat;
-        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
-        uint32_t tailMaskCols = tailCols;
-        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
-                Int64RemRegs<T>(dl, dh, al, ah, bl, bh, allMask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, allMask);
+        Int64DuplicateRegs(scalarLow, scalarHigh, static_cast<uint32_t>(bits), static_cast<uint32_t>(bits >> 32));
+        const uint16_t rowCount = validRows;
+        const uint16_t repeatCount = validCols / elementsPerRepeat;
+        const uint32_t remainderCols = validCols % elementsPerRepeat;
+        uint32_t maskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(maskCols, POST_UPDATE);
+        MaskReg tailMask = Int64TailMask(remainderCols, allMask);
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            for (uint16_t repeatIdx = 0; repeatIdx < repeatCount; ++repeatIdx) {
+                Int64RemScalarRepeat<T, DstCols, SrcCols>(
+                    dst, src, scalarLow, scalarHigh, row, repeatIdx * elementsPerRepeat, allMask);
             }
-            if (tailCols != 0) {
-                uint32_t colOffset = fullRepeats * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
-                Int64RemRegs<T>(dl, dh, al, ah, bl, bh, tailMask);
-                vsts(dl, dh, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, INTLV_B32, tailMask);
+            if (remainderCols != 0) {
+                Int64RemScalarRepeat<T, DstCols, SrcCols>(
+                    dst, src, scalarLow, scalarHigh, row, repeatCount * elementsPerRepeat, tailMask);
             }
         }
     }
