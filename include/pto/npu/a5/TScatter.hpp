@@ -65,7 +65,8 @@ PTO_INTERNAL void Int64Scatter(
         uint16_t rows = validRows;
         uint16_t fullRepeats = validCols / elementsPerRepeat;
         uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t row = 0; row < rows; ++row) {
@@ -136,7 +137,8 @@ PTO_INTERNAL void Int64ScatterPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned
         uint16_t rows = validRows;
         uint16_t fullRepeats = validCols / elementsPerRepeat;
         uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t i = 0; i < rows; ++i) {
