@@ -237,7 +237,8 @@ PTO_INTERNAL void Int64Div(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
         uint16_t rows = validRows;
         uint16_t fullRepeats = validCols / elementsPerRepeat;
         uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
         for (uint16_t row = 0; row < rows; ++row) {
@@ -312,24 +313,19 @@ PTO_INTERNAL void Int64DivScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, uns
         uint64_t scalarBits = static_cast<uint64_t>(scalar);
         Int64DuplicateRegs(
             scalarLow, scalarHigh, static_cast<uint32_t>(scalarBits), static_cast<uint32_t>(scalarBits >> 32));
-        uint16_t rows = validRows;
-        uint16_t fullRepeats = validCols / elementsPerRepeat;
-        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
-        MaskReg allMask = pset_b32(PAT_ALL);
-        uint32_t tailMaskCols = tailCols;
-        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
+        uint16_t rowLimit = validRows;
+        uint32_t fullMaskCols = elementsPerRepeat;
+        MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
+        for (uint16_t row = 0; row < rowLimit; ++row) {
+            uint32_t remainingCols = validCols;
+            for (uint16_t repeatIdx = 0; repeatIdx < repeatTimes; ++repeatIdx) {
+                uint32_t colOffset = repeatIdx * elementsPerRepeat;
+                uint32_t activeCols = remainingCols < elementsPerRepeat ? remainingCols : elementsPerRepeat;
+                MaskReg mask = activeCols == elementsPerRepeat ? allMask : Int64TailMask(activeCols, allMask);
                 Int64LoadRegs<T, SrcCols>(srcLow, srcHigh, src, row, colOffset);
-                Int64DivScalarRegs<ScalarFirst, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, allMask);
-                Int64StoreRegs<T, DstCols>(dstLow, dstHigh, dst, row, colOffset, allMask);
-            }
-            if (tailCols != 0) {
-                uint32_t colOffset = fullRepeats * elementsPerRepeat;
-                Int64LoadRegs<T, SrcCols>(srcLow, srcHigh, src, row, colOffset);
-                Int64DivScalarRegs<ScalarFirst, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, tailMask);
-                Int64StoreRegs<T, DstCols>(dstLow, dstHigh, dst, row, colOffset, tailMask);
+                Int64DivScalarRegs<ScalarFirst, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+                Int64StoreRegs<T, DstCols>(dstLow, dstHigh, dst, row, colOffset, mask);
+                remainingCols -= activeCols;
             }
         }
     }
