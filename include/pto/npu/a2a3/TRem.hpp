@@ -19,64 +19,58 @@ namespace pto {
 // Formula: remainder(a, b) = a - floor(a/b) * b
 // Note: For fp32, after computing remainder, we check if result * divider < 0.
 //       If signs differ, we add divider to result to ensure the result has the same sign as divider.
-template <typename T, unsigned dstRowStride>
+template <typename T, unsigned TmpStride>
 struct RemOp {
     PTO_INTERNAL static void RemF32Instr(
-        __ubuf__ float* dst, __ubuf__ float* src0, __ubuf__ float* src1, __ubuf__ float* tmp, unsigned repeatTimes,
-        unsigned validCols)
+        __ubuf__ float* dst, __ubuf__ float* src0, __ubuf__ float* src1, __ubuf__ float* tmp)
     {
-        set_mask_count();
-        set_vector_mask(0, validCols);
+        // Step 1: tmp = src0 / src1 (division result before floor)
         vdiv(tmp, src0, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // Step 2: tmp = floor(tmp) - truncate towards zero
         vconv_f322f32f(tmp, tmp, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // Step 3: dst = tmp * src1 = floor(a/b) * b
         vmul(dst, tmp, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // Step 4: dst = src0 - dst = a - floor(a/b) * b (this is the remainder)
         vsub(dst, src0, dst, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // Sign correction: if dst * src1 < 0, then dst += src1
+        // Step 5: tmp = dst * src1 (check if signs differ)
         vmul(tmp, dst, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
-        
 
-        set_mask_norm();
-        set_vector_mask(-1, -1);
-
-        __ubuf__ uint32_t* maskBuf = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride);
-        const uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskBuf));
-        vector_dup(maskBuf, maskAddr, 1, 1, 1, 8, 0);
-        pipe_barrier(PIPE_V);
-        set_cmpmask(maskBuf);
+        // Step 6: Compare tmp < 0 using vcmpvs_lt, result goes to cmpmask
+        // Use tmp buffer cast to uint8_t for comparison result storage
+        __ubuf__ uint8_t* cmpMask = reinterpret_cast<__ubuf__ uint8_t*>(tmp + TmpStride);
+        vcmpvs_lt(cmpMask, tmp, 0.0f, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
 
-        vcmpvs_lt(reinterpret_cast<__ubuf__ uint8_t*>(maskBuf), tmp, 0.0f, repeatTimes, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        
-        set_mask_count();
-        set_vector_mask(0, validCols);
-
+        // Step 7: Compute dst + src1 into tmp
         vadd(tmp, dst, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        vsel(dst, tmp, dst, 1, 1, 1, 1, 8, 8, 8, 2);
+        // Step 8: Set the cmpmask for vsel
+        set_cmpmask(cmpMask);
+
+        // Step 9: vsel with selectMode 0
+        // If cmpmask bit is set (tmp < 0), select tmp (dst + src1), else keep dst
+        vsel(dst, tmp, dst, 1, 1, 1, 1, 8, 8, 8, 0);
         pipe_barrier(PIPE_V);
     }
 
     PTO_INTERNAL static void RemInt32Instr(
-        __ubuf__ int32_t* dst, __ubuf__ int32_t* src0, __ubuf__ int32_t* src1, __ubuf__ int32_t* tmp,
-        unsigned repeatTimes, unsigned validCols)
+        __ubuf__ int32_t* dst, __ubuf__ int32_t* src0, __ubuf__ int32_t* src1, __ubuf__ int32_t* tmp)
     {
         __ubuf__ float* dst_f = reinterpret_cast<__ubuf__ float*>(dst);
         __ubuf__ float* src0_f = reinterpret_cast<__ubuf__ float*>(src0);
         __ubuf__ float* src1_f = reinterpret_cast<__ubuf__ float*>(src1);
         __ubuf__ float* tmp_f = reinterpret_cast<__ubuf__ float*>(tmp);
-
-        set_mask_count();
-        set_vector_mask(0, validCols);
 
         vconv_s322f32(src0_f, src0, 1, 1, 1, 8, 8);
         vconv_s322f32(src1_f, src1, 1, 1, 1, 8, 8);
@@ -100,41 +94,31 @@ struct RemOp {
         vconv_s322f32(dst_f, dst, 1, 1, 1, 8, 8);
         vconv_s322f32(src1_f, src1, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
+        // compute remainder * divisor in fp32 to avoid int32 overflow in the sign check
         vmul(tmp_f, dst_f, src1_f, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        __ubuf__ uint32_t* maskBuf = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride);
-        const uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskBuf));
-        vector_dup(maskBuf, maskAddr, 1, 1, 1, 8, 0);
+        __ubuf__ uint8_t* cmpMask = reinterpret_cast<__ubuf__ uint8_t*>(tmp + TmpStride);
+        vcmpvs_lt(cmpMask, tmp_f, 0.0f, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
-        set_cmpmask(maskBuf);
-        pipe_barrier(PIPE_V);
-        set_mask_norm();
-        set_vector_mask(-1, -1);
-        
-        vcmpvs_lt(reinterpret_cast<__ubuf__ uint8_t*>(maskBuf), tmp_f, 0.0f, repeatTimes, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        
-        set_mask_count();
-        set_vector_mask(0, validCols);
 
         vadd(tmp_f, dst_f, src1_f, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        vsel(dst_f, tmp_f, dst_f, 1, 1, 1, 1, 8, 8, 8, 2);
+        set_cmpmask(cmpMask);
+        vsel(dst_f, tmp_f, dst_f, 1, 1, 1, 1, 8, 8, 8, 0);
         pipe_barrier(PIPE_V);
 
         vconv_f322s32z(dst, dst_f, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
     }
 
-    PTO_INTERNAL static void RemInstr(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, __ubuf__ T* tmp,
-                                      unsigned repeatTimes, unsigned validCols)
+    PTO_INTERNAL static void RemInstr(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, __ubuf__ T* tmp)
     {
         if constexpr (std::is_same_v<T, float> || std::is_same_v<T, float32_t>) {
-            RemF32Instr(dst, src0, src1, tmp, repeatTimes, validCols);
+            RemF32Instr(dst, src0, src1, tmp);
         } else if constexpr (std::is_same_v<T, int32_t>) {
-            RemInt32Instr(dst, src0, src1, tmp, repeatTimes, validCols);
+            RemInt32Instr(dst, src0, src1, tmp);
         }
     }
 };
@@ -155,7 +139,8 @@ __tf__ PTO_INTERNAL void TRem(
     __ubuf__ T* tmpPtr = (__ubuf__ T*)__cce_get_tile_ptr(tmp);
 
     constexpr unsigned tmpRowStride = TileDataTmp::RowStride;
-    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    uint16_t repeatTimes = validCols / elementsPerRepeat;
+    uint16_t repeatRemain = validCols % elementsPerRepeat;
 
     set_mask_norm();
     set_vector_mask(-1, -1);
@@ -163,9 +148,25 @@ __tf__ PTO_INTERNAL void TRem(
         __ubuf__ T* dstNext = dstPtr + i * dstRowStride;
         __ubuf__ T* s0Next = src0Ptr + i * src0RowStride;
         __ubuf__ T* s1Next = src1Ptr + i * src1RowStride;
+        // Note: tmp buffer needs space for two rows:
+        //   - Row 0: intermediate computation results
+        //   - Row 1: comparison mask storage
+        for (uint16_t j = 0; j < repeatTimes; j++) {
+            RemOp<T, tmpRowStride>::RemInstr(dstNext, s0Next, s1Next, tmpPtr);
+            dstNext += elementsPerRepeat;
+            s0Next += elementsPerRepeat;
+            s1Next += elementsPerRepeat;
+        }
+    }
 
-        RemOp<T, dstRowStride>::RemInstr(dstNext, s0Next, s1Next, tmpPtr, repeatTimes, validCols);
-        set_mask_norm();
+    if (repeatRemain) {
+        SetContinuousMask(repeatRemain);
+        for (uint16_t i = 0; i < validRows; i++) {
+            __ubuf__ T* dstNext = dstPtr + i * dstRowStride + repeatTimes * elementsPerRepeat;
+            __ubuf__ T* s0Next = src0Ptr + i * src0RowStride + repeatTimes * elementsPerRepeat;
+            __ubuf__ T* s1Next = src1Ptr + i * src1RowStride + repeatTimes * elementsPerRepeat;
+            RemOp<T, tmpRowStride>::RemInstr(dstNext, s0Next, s1Next, tmpPtr);
+        }
         set_vector_mask(-1, -1);
     }
 }
@@ -185,7 +186,6 @@ PTO_INTERNAL void TRemCheck(
         "Fix: TREM support only row major layout.");
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
-    unsigned repeatBit = 64;
     PTO_ASSERT(
         src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
         "Fix: TREM input tile src0 valid shape mismatch with output tile dst shape.");
@@ -193,8 +193,8 @@ PTO_INTERNAL void TRemCheck(
         src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
         "Fix: TREM input tile src1 valid shape mismatch with output tile dst shape.");
     // tmp buffer needs space for two rows: row 0 for intermediate results, row 1 for comparison mask
-    PTO_ASSERT(tmp.GetValidCol() >= (TileDataDst::RowStride + CeilDivision(TileDataDst::RowStride, repeatBit) * 2),
-               "Fix: TREM tmp tile must have at least validCols columns.");
+    PTO_ASSERT(tmp.GetValidCol() >= validCols, "Fix: TREM tmp tile must have at least validCols columns.");
+    PTO_ASSERT(tmp.GetValidRow() >= 2, "Fix: TREM tmp tile must have at least 2 rows.");
 }
 
 template <

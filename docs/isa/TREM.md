@@ -55,7 +55,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - Tile layout must be row-major (`TileData::isRowMajor`).
     - Tile location must be vector (`TileData::Loc == TileType::Vec`).
     - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
-    - `tmp` tile must have at least 1 rows and `TileDataDst::Cols + CeilDivision(TileDataDst::Cols, 64) * 2` columns.
+    - `tmp` tile must have at least 2 rows and `validCols` columns (row 0 for intermediate results, row 1 for comparison mask).
 - **Implementation checks (A5)**:
     - `TileData::DType` must be one of: `half`, `float`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`.
     - Tile layout must be row-major (`TileData::isRowMajor`).
