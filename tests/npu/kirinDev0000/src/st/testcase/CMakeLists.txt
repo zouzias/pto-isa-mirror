@@ -257,6 +257,7 @@ set(ALL_TESTCASES
     textract_acc2vec
     tmatmul_new
     tmatmul_new_full
+    tflashattn
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
