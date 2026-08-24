@@ -46,14 +46,15 @@ __global__ AICORE void runTSel(
     TmpTile tmpTile(1, 32);
     constexpr uint64_t tileSize = Rows * Cols * sizeof(T);
     constexpr uint64_t maskSize = maskRow * maskCol;
-    constexpr uint64_t totalSize = tileSize * 3 + maskSize;
+    constexpr uint64_t tmpOffset = PTO_CEIL(tileSize * 3 + maskSize, 512);
+    constexpr uint64_t totalSize = tmpOffset + 32;
     static_assert(totalSize <= 192 * 1024, "UB size overflow, should be less than 192KB.");
 
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, (uint64_t)(tileSize));
     TASSIGN(dstTile, (uint64_t)(tileSize * 2));
     TASSIGN(maskTile, (uint64_t)(tileSize * 3));
-    TASSIGN(tmpTile, (uint64_t)(tileSize * 4));
+    TASSIGN(tmpTile, (uint64_t)(tmpOffset));
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);
@@ -147,6 +148,10 @@ template void LaunchTSel<float, 2, 512, 2, 512>(float* out, uint8_t* mask, float
 template void LaunchTSel<int64_t, 4, 16, 4, 16>(
     int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);
 template void LaunchTSel<uint64_t, 4, 16, 4, 16>(
+    uint64_t* out, uint8_t* mask, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTSel<int64_t, 49, 160, 49, 160>(
+    int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTSel<uint64_t, 49, 160, 49, 160>(
     uint64_t* out, uint8_t* mask, uint64_t* src0, uint64_t* src1, void* stream);
 template void LaunchTSel<int64_t, 1, 16364, 1, 16364>(
     int64_t* out, uint8_t* mask, int64_t* src0, int64_t* src1, void* stream);

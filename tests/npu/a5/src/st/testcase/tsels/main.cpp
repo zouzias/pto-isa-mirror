@@ -209,6 +209,14 @@ TEST_F(TSELSTest, case_uint64_uint8_4x16_4x32_4x16_4x16)
 {
     this->Launch<uint64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>();
 }
+TEST_F(TSELSTest, case_int64_uint8_49x160_49x32_49x160_49x160)
+{
+    this->Launch<int64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_49x160_49x32_49x160_49x160)
+{
+    this->Launch<uint64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>();
+}
 TEST_F(TSELSTest, case_int64_uint8_1x16364_1x2048_1x16364_1x16364)
 {
     this->Launch<int64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>();
