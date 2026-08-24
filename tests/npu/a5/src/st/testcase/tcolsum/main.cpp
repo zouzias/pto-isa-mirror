@@ -180,3 +180,16 @@ TEST_F(TCOLSUMTest, case_int64_4x16) { EXPECT_TRUE((TCOLSUMTestFramework<41, int
 TEST_F(TCOLSUMTest, case_uint64_4x16) { EXPECT_TRUE((TCOLSUMTestFramework<42, uint64_t, 4, 4, 1, 16, 16>())); }
 TEST_F(TCOLSUMTest, case_int64_4x64) { EXPECT_TRUE((TCOLSUMTestFramework<43, int64_t, 4, 4, 1, 64, 64>())); }
 TEST_F(TCOLSUMTest, case_uint64_4x64) { EXPECT_TRUE((TCOLSUMTestFramework<44, uint64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLSUMTest, case_int64_tmp_binary_4x16) { EXPECT_TRUE((TCOLSUMTestFramework<45, int64_t, 4, 4, 1, 16, 16>())); }
+TEST_F(TCOLSUMTest, case_int64_tmp_nonbinary_4x16)
+{
+    EXPECT_TRUE((TCOLSUMTestFramework<46, int64_t, 4, 4, 1, 16, 16>()));
+}
+TEST_F(TCOLSUMTest, case_uint64_tmp_binary_4x16)
+{
+    EXPECT_TRUE((TCOLSUMTestFramework<47, uint64_t, 4, 4, 1, 16, 16>()));
+}
+TEST_F(TCOLSUMTest, case_uint64_tmp_nonbinary_4x16)
+{
+    EXPECT_TRUE((TCOLSUMTestFramework<48, uint64_t, 4, 4, 1, 16, 16>()));
+}
