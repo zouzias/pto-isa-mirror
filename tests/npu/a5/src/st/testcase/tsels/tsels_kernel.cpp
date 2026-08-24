@@ -15,6 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+#define PTO_CEIL(x, y) ((((x) + (y) - 1) / (y)) * (y))
+
 template <
     typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW,
     int vRows, int vCols>
@@ -45,14 +47,16 @@ __global__ AICORE void runTSELS(__gm__ T __out__* out, __gm__ TMask* mask, __gm_
     size_t dstSize = sizeof(T) * dstTileH * dstTileW;
     size_t srcSize = sizeof(T) * srcTileH * srcTileW;
     size_t maskSize = sizeof(TMask) * maskTileH * maskTileW;
-    size_t totalSize = dstSize + srcSize + maskSize;
+    size_t tmpOffset = PTO_CEIL(dstSize + srcSize + maskSize, 512);
+    size_t totalSize = tmpOffset + 32;
     size_t dstOffset = totalSize * block_idx;
     size_t srcOffset = totalSize * block_idx + dstSize;
     size_t maskOffset = totalSize * block_idx + dstSize + srcSize;
+    size_t tmpBaseOffset = totalSize * block_idx + tmpOffset;
     TASSIGN(dstTile, dstOffset);
     TASSIGN(maskTile, maskOffset);
     TASSIGN(srcTile, srcOffset);
-    TASSIGN(tmpTile, totalSize);
+    TASSIGN(tmpTile, tmpBaseOffset);
 
     Event<Op::TLOAD, Op::TSELS> event0;
     Event<Op::TSELS, Op::TSTORE_VEC> event1;
@@ -183,6 +187,10 @@ template void LaunchTSels<float, uint8_t, 1, 8192, 1, 4096, 1, 8192, 1, 8192>(
 template void LaunchTSels<int64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>(
     int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);
 template void LaunchTSels<uint64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>(
+    uint64_t* out, uint8_t* mask, uint64_t* src, uint64_t scalar, void* stream);
+template void LaunchTSels<int64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>(
+    int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);
+template void LaunchTSels<uint64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>(
     uint64_t* out, uint8_t* mask, uint64_t* src, uint64_t scalar, void* stream);
 template void LaunchTSels<int64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>(
     int64_t* out, uint8_t* mask, int64_t* src, int64_t scalar, void* stream);

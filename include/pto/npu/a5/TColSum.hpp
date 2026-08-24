@@ -117,7 +117,9 @@ __tf__ PTO_INTERNAL OP_NAME(TCOLSUM) OP_TYPE(reduce) void TColSum(
     __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
     __ubuf__ T* src = (__ubuf__ T*)__cce_get_tile_ptr(srcData);
 
-    if constexpr (isBinary) {
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64ColReduce<Int64Op::Add, T, TileDataOut::Cols, TileDataIn::Cols>(dst, src, validRow, validCol);
+    } else if constexpr (isBinary) {
         __ubuf__ T* tmp = (__ubuf__ T*)__cce_get_tile_ptr(tmpData);
         constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
         constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
@@ -138,7 +140,9 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataOut& dst, TileDataIn& src, TileDataTmp& t
     }
 
     using T = typename TileDataIn::DType;
-    if (isBinary) {
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        TColSum<T, TileDataOut, TileDataIn, TileDataTmp, false>(dst.data(), src.data(), tmp.data(), validRow, validCol);
+    } else if (isBinary) {
         constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
         PTO_ASSERT(
             validCol <= tmpStride, "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
