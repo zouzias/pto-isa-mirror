@@ -57,6 +57,10 @@ struct PerfSimConfig {
     uint32_t block_dim = 1;
     uint32_t cross_core_channel_count = 16; // semaphore IDs for cross-core sync
 
+    // Optional VfSim root or configs directory. Empty selects environment and
+    // relocatable installation discovery.
+    std::string vfsim_config_dir;
+
     // Output
     std::string output_dir = "./perf_sim_output"; // JSON swimlane output directory
 };

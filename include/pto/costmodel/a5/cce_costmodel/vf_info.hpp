@@ -26,7 +26,13 @@ enum class VfNodeKind : uint8_t {
 
 enum class MemLocation : uint8_t {
     PhyRegister,
+    PredicateRegister,
     UB,
+};
+
+enum class VfArgKind : uint8_t {
+    Immediate,
+    Config,
 };
 
 struct MemInfo {
@@ -40,15 +46,30 @@ inline bool operator==(const MemInfo& lhs, const MemInfo& rhs)
     return lhs.name == rhs.name && lhs.location == rhs.location && lhs.dtype == rhs.dtype;
 }
 
+struct VfArgInfo {
+    uint32_t argumentIndex = 0;
+    VfArgKind kind = VfArgKind::Immediate;
+    std::string name;
+    std::string value;
+};
+
+inline bool operator==(const VfArgInfo& lhs, const VfArgInfo& rhs)
+{
+    if (lhs.argumentIndex != rhs.argumentIndex || lhs.kind != rhs.kind || lhs.name != rhs.name)
+        return false;
+    return lhs.kind == VfArgKind::Immediate || lhs.value == rhs.value;
+}
+
 struct VfInst {
     std::string opName;
     std::vector<MemInfo> dst;
     std::vector<MemInfo> src;
+    std::vector<VfArgInfo> arguments;
 };
 
 inline bool operator==(const VfInst& lhs, const VfInst& rhs)
 {
-    return lhs.opName == rhs.opName && lhs.dst == rhs.dst && lhs.src == rhs.src;
+    return lhs.opName == rhs.opName && lhs.dst == rhs.dst && lhs.src == rhs.src && lhs.arguments == rhs.arguments;
 }
 
 struct VfMemBar {
@@ -78,7 +99,7 @@ inline VfNode MakeLoop(uint64_t count, std::vector<VfNode> body)
     return VfNode{VfNodeKind::LOOP, VfLoop{count, std::move(body)}};
 }
 inline VfNode MakeInst(VfInst inst) { return VfNode{VfNodeKind::INST, std::move(inst)}; }
-inline VfNode MakeInst(std::string_view name) { return MakeInst(VfInst{std::string{name}, {}, {}}); }
+inline VfNode MakeInst(std::string_view name) { return MakeInst(VfInst{std::string{name}, {}, {}, {}}); }
 inline VfNode MakeMemBar(std::string_view name) { return VfNode{VfNodeKind::MEMBAR, VfMemBar{std::string{name}}}; }
 
 inline const VfLoop& AsLoop(const VfNode& n) { return std::get<VfLoop>(n.v); }
