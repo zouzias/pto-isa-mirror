@@ -30,10 +30,21 @@ def gen_golden_data(param):
         input_arr = np.random.randint(1, 100, size=(row, col)).astype(data_type)
     else:
         input_arr = np.random.uniform(low=value_min, high=value_max, size=(row, col)).astype(data_type)
-    output_arr = np.zeros((col))
-    for i in range(valid_row):
-        for j in range(valid_col):
-            output_arr[j] += input_arr[i, j]
+    if data_type == np.float16:
+        output_arr = np.zeros((col), dtype=np.float16)
+        if valid_row > 0 and valid_col > 0:
+            output_arr[:valid_col] = input_arr[0, :valid_col]
+            for i in range(1, valid_row - 1, 2):
+                tmp_arr = (input_arr[i, :valid_col] + input_arr[i + 1, :valid_col]).astype(np.float16)
+                output_arr[:valid_col] = (output_arr[:valid_col] + tmp_arr).astype(np.float16)
+            if (valid_row - 1) % 2:
+                output_arr[:valid_col] = (output_arr[:valid_col] + input_arr[valid_row - 1, :valid_col]).astype(
+                    np.float16)
+    else:
+        output_arr = np.zeros((col))
+        for i in range(valid_row):
+            for j in range(valid_col):
+                output_arr[j] += input_arr[i, j]
 
     # 先计算, 再强转类型, 保证结果精度不裂化
     output_arr = output_arr.astype(data_type)
@@ -72,6 +83,10 @@ if __name__ == "__main__":
         TColsumParams("TCOLSUMTest.case_uint64_4x16", np.uint64, 4, 4, 16, 16),
         TColsumParams("TCOLSUMTest.case_int64_4x64", np.int64, 4, 4, 64, 64),
         TColsumParams("TCOLSUMTest.case_uint64_4x64", np.uint64, 4, 4, 64, 64),
+        TColsumParams("TCOLSUMTest.case_int64_tmp_binary_4x16", np.int64, 4, 4, 16, 16),
+        TColsumParams("TCOLSUMTest.case_int64_tmp_nonbinary_4x16", np.int64, 4, 4, 16, 16),
+        TColsumParams("TCOLSUMTest.case_uint64_tmp_binary_4x16", np.uint64, 4, 4, 16, 16),
+        TColsumParams("TCOLSUMTest.case_uint64_tmp_nonbinary_4x16", np.uint64, 4, 4, 16, 16),
     ]
 
     for _, case in enumerate(case_params_list):
