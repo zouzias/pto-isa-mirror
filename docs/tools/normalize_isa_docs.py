@@ -230,31 +230,7 @@ def _fallback_level2(instr: str, level1: str) -> str:
     return f"pto.{instr.lower()} ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)"
 
 
-def _sync_level2_from_table(level_formats: Dict[str, Dict[str, str]]) -> str:
-    segments: List[str] = []
-    for name in ("RECORD_EVENT", "WAIT_EVENT", "BARRIER"):
-        item = level_formats.get(name)
-        if not item:
-            continue
-        body = item.get("level2", "").strip()
-        note = item.get("notes", "").strip()
-        if body:
-            segments.append(body)
-        if note:
-            segments.append(f"// {note}")
-    return "\n".join(segments).strip()
-
-
 def _resolve_level_formats(instr: str, assembly_body: str, level_formats: Dict[str, Dict[str, str]]) -> Dict[str, str]:
-    if instr == "TSYNC":
-        level1 = "// Level 1 (SSA) does not support explicit synchronization primitives."
-        level2 = _sync_level2_from_table(level_formats)
-        if not level2:
-            level2 = (
-                "pto.record_event[src_op, dst_op, eventID]\npto.wait_event[src_op, dst_op, eventID]\npto.barrier(op)"
-            )
-        return {"level1": level1, "level2": level2}
-
     item = level_formats.get(instr, {})
     level1 = item.get("level1", "").strip()
     level2 = item.get("level2", "").strip()
