@@ -64,16 +64,16 @@ __global__ AICORE void runTMovL12Bias(__gm__ cType* out, __gm__ aType* src0, __g
     TASSIGN<0x0>(dstTile);
 
     /******************************TLOAD*****************************/
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    Event<Op::TLOAD, Op::TMOV_M2B> evtLoad_Mov = TLOAD(biasMatTile, src2Global);
+    Event<Op::TLOAD, Op::TMATMUL> evtLoad_MovL = TLOAD(aMatTile, src0Global);
+    Event<Op::TLOAD, Op::TMOV_M2R> evtLoad_MovR = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2B> evtLoad_MovB = TLOAD(biasMatTile, src2Global);
 
     /**************************TMOV**************************/
-    TMOV(bTile, bMatTile);
-    Event<Op::TMOV_M2B, Op::TMATMUL> evtMov_Matmul = TMOV(biasTile, biasMatTile, evtLoad_Mov);
+    Event<Op::TMOV_M2R, Op::TMATMUL> evtMovR_Matmul = TMOV(bTile, bMatTile, evtLoad_MovR);
+    Event<Op::TMOV_M2B, Op::TMATMUL> evtMovB_Matmul = TMOV(biasTile, biasMatTile, evtLoad_MovB);
 
     /****************************TMATMUL********************************/
-    TMATMUL_BIAS(cTile, aMatTile, bTile, biasTile, evtMov_Matmul);
+    TMATMUL_BIAS(cTile, aMatTile, bTile, biasTile, evtLoad_MovL, evtMovR_Matmul, evtMovB_Matmul);
 
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);

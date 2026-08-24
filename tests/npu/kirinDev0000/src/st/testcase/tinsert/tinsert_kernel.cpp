@@ -118,8 +118,8 @@ __global__ AICORE void RunTInsertAcc2Mat(__gm__ CType* out, __gm__ AType* src0, 
 
     TINSERT(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
 
-    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    set_flag(PIPE_FIX, PIPE_FIX, EVENT_ID1);
+    wait_flag(PIPE_FIX, PIPE_FIX, EVENT_ID1);
 
     constexpr uint32_t c0Size = 512 / (16 * sizeof(CType));
     constexpr uint16_t burstLen = M * c0Size * sizeof(CType) / 32;
@@ -127,8 +127,8 @@ __global__ AICORE void RunTInsertAcc2Mat(__gm__ CType* out, __gm__ AType* src0, 
     __ubuf__ CType* dstUbAddr = dstVecTile.data();
     __cbuf__ CType* srcMatAddr = dstMatTile.data();
     test_copy_cbuf_to_ubuf((__ubuf__ void*)dstUbAddr, (__cbuf__ void*)srcMatAddr, 0, burstNum, burstLen, 0, 0);
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstVecTile);
 }
 

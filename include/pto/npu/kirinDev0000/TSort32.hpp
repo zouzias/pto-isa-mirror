@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <limits>
 #include <pto/npu/a5/common.hpp>
+#include <pto/npu/kirinDev0000/custom/TSort32Soft.hpp>
 #define PTO_CEIL(x, y) ((((x) + (y) - 1) / (y)) * (y))
 #define PTO_DIV_ROUNDUP(x, y) ((((x) + (y) - 1) / (y)))
 
@@ -38,9 +39,7 @@ __tf__ AICORE inline void TSort32Impl(
 
     if (repeatNumPerRow <= REPEAT_MAX) {
         for (uint32_t i = 0; i < validRow; i++) {
-            __builtin_cce_vbs(
-                dstPtr + i * dstStride, srcPtr + i * srcStride, idxPtr + i * idxStride,
-                static_cast<uint64_t>(static_cast<uint8_t>(repeatNumPerRow)) << 56);
+            SoftVbsort32Half(dstPtr + i * dstStride, srcPtr + i * srcStride, idxPtr + i * idxStride, repeatNumPerRow);
         }
     } else {
         uint32_t loopNum = PTO_DIV_ROUNDUP(repeatNumPerRow, REPEAT_MAX);
@@ -49,11 +48,10 @@ __tf__ AICORE inline void TSort32Impl(
         for (uint32_t i = 0; i < validRow; i++) {
             for (uint32_t j = 0; j < loopNum; j++) {
                 uint32_t repeatNum = (j == loopNum - 1) ? tailRepeatNum : REPEAT_MAX;
-                __builtin_cce_vbs(
+                SoftVbsort32Half(
                     dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
                     srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    static_cast<uint64_t>(static_cast<uint8_t>(repeatNum)) << 56);
+                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE, repeatNum);
             }
         }
     }
@@ -70,18 +68,16 @@ PTO_INTERNAL void LargeTmpBufferImpl(
     for (int32_t i = 0; i < validRow; i++) {
         for (int32_t j = 0; j < loopNum; j++) {
             if (j < loopNum - 1) {
-                __builtin_cce_vbs(
+                SoftVbsort32Half(
                     dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
                     srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    static_cast<uint64_t>(static_cast<uint8_t>(REPEAT_MAX)) << 56);
+                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE, REPEAT_MAX);
             } else {
                 // sort for last block
-                __builtin_cce_vbs(
+                SoftVbsort32Half(
                     dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
                     srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    static_cast<uint64_t>(static_cast<uint8_t>(srcTailRepeatNum)) << 56);
+                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE, srcTailRepeatNum);
 
                 // copy row src cbuf to tmp cbuf
                 uint16_t lenBurst = PTO_DIV_ROUNDUP(srcTailPerRow * sizeof(T), BLOCK_SIZE);
@@ -110,10 +106,9 @@ PTO_INTERNAL void LargeTmpBufferImpl(
                 }
 
                 // sort for tmp and out to dst
-                __builtin_cce_vbs(
+                SoftVbsort32Half(
                     dstPtr + i * dstStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE * typeCoef, tmpPtr,
-                    idxPtr + i * idxStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE,
-                    static_cast<uint64_t>(static_cast<uint8_t>(1)) << 56);
+                    idxPtr + i * idxStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE, 1);
             }
         }
     }
@@ -162,9 +157,7 @@ __tf__ AICORE void TSort32Impl(
             }
 
             // sort for tmp and out to dst
-            __builtin_cce_vbs(
-                dstPtr + i * dstStride, tmpPtr, idxPtr + i * idxStride,
-                static_cast<uint64_t>(static_cast<uint8_t>(repeatNumPerRow)) << 56);
+            SoftVbsort32Half(dstPtr + i * dstStride, tmpPtr, idxPtr + i * idxStride, repeatNumPerRow);
         }
     } else {
         LargeTmpBufferImpl<T, IdxT, dstStride, srcStride>(
@@ -230,4 +223,4 @@ AICORE inline void TSORT32_IMPL(DstTileData& dst, SrcTileData& src, IdxTileData&
     }
 }
 } // namespace pto
-#endif
+#endif // TSORT32_HPP

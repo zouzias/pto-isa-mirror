@@ -218,6 +218,7 @@ set(ALL_TESTCASES
     # tmov_acc2mat
     tassign
     tmov_ub2l1
+    tmov_ub2ub
     tcmp
     tadd_tdiv
     tmul_tadds
