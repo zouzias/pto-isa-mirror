@@ -44,6 +44,8 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Elementwise (Tile-Tile) | `TOR` | `elementwise` | `dst, src0, src1` | `docs/isa/TOR.md` |
 | Elementwise (Tile-Tile) | `TSUB` | `elementwise` | `dst, src0, src1` | `docs/isa/TSUB.md` |
 | Elementwise (Tile-Tile) | `TMUL` | `elementwise` | `dst, src0, src1` | `docs/isa/TMUL.md` |
+| Elementwise (Tile-Tile) | `TMADD` | `elementwise` | `dst, src0, src1` | `docs/isa/TMADD.md` |
+| Elementwise (Tile-Tile) | `TMULA` | `elementwise` | `dst, src0, src1` | `docs/isa/TMULA.md` |
 | Elementwise (Tile-Tile) | `TMIN` | `elementwise` | `dst, src0, src1` | `docs/isa/TMIN.md` |
 | Elementwise (Tile-Tile) | `TMAX` | `elementwise` | `dst, src0, src1` | `docs/isa/TMAX.md` |
 | Elementwise (Tile-Tile) | `TCMP` | `elementwise` | `dst, src0, src1` | `docs/isa/TCMP.md` |
@@ -65,8 +67,6 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Elementwise (Tile-Tile) | `TNEG` | `elementwise` | `dst, src0, src1` | `docs/isa/TNEG.md` |
 | Elementwise (Tile-Tile) | `TREM` | `elementwise` | `dst, src0, src1` | `docs/isa/TREM.md` |
 | Elementwise (Tile-Tile) | `TFMOD` | `elementwise` | `dst, src0, src1` | `docs/isa/TFMOD.md` |
-| Elementwise (Tile-Tile) | `TMULADDDST` | `elementwise` | `dst, src0, src1` | `docs/isa/TMULADDDST.md` |
-| Elementwise (Tile-Tile) | `TFUSEDMULADD` | `elementwise` | `dst, src0, src1` | `docs/isa/TFUSEDMULADD.md` |
 | Tile-Scalar / Tile-Immediate | `TEXPANDS` | `scalar` | `dst, src, scalar` | `docs/isa/TEXPANDS.md` |
 | Tile-Scalar / Tile-Immediate | `TCMPS` | `scalar` | `dst, src, scalar` | `docs/isa/TCMPS.md` |
 | Tile-Scalar / Tile-Immediate | `TSELS` | `scalar` | `dst, src, scalar` | `docs/isa/TSELS.md` |
