@@ -260,6 +260,7 @@ tput_async_notify
 tput_async_urma
 tput_async_notify_urma
 tput_async_rdma
+tput_async_notify_rdma
 tget_async_urma
 tget_async_rdma
 # Signal-Based Synchronization

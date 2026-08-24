@@ -28,7 +28,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cctype>
 #include <climits>
-#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -88,22 +87,6 @@ inline bool ResolvePhyId(uint32_t& phyId)
 }
 
 namespace detail {
-
-inline bool BootstrapVerboseEnabled()
-{
-    const char* verbose = std::getenv("PTO_ROCE_VERBOSE");
-    return verbose != nullptr && verbose[0] == '1';
-}
-
-template <typename... Args>
-inline void BootstrapTrace(const char* format, Args... args)
-{
-    if (!BootstrapVerboseEnabled()) {
-        return;
-    }
-    std::fprintf(stderr, format, args...);
-    std::fflush(stderr);
-}
 
 // Read an unsigned integer that follows `"key"` (value may be a bare number or a quoted number).
 // Returns false if the key is not present at/after `from`.
@@ -249,50 +232,25 @@ inline bool ResolveLocalRdmaIp(uint32_t phyId, std::string& ip)
 inline bool ResolveLocalRdmaIpFromVirtualTopology(uint32_t phyId, std::string& ip)
 {
     if (phyId > static_cast<uint32_t>(INT_MAX)) {
-        detail::BootstrapTrace("[RDMA][HNS_1825][bootstrap] invalid topology phyId=%u\n", phyId);
         return false;
     }
 
     using ResolveFn = int (*)(int, char*, size_t);
     void* topoHandle = nullptr;
     auto resolve = reinterpret_cast<ResolveFn>(dlsym(RTLD_DEFAULT, "GetRoceIpFromXml"));
-    const bool resolvedFromDefault = resolve != nullptr;
     if (resolve == nullptr) {
         topoHandle = dlopen("libtopoaddrinfo.so", RTLD_NOW | RTLD_LOCAL);
         if (topoHandle == nullptr) {
-            const char* error = dlerror();
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap] dlopen(libtopoaddrinfo.so) failed for phyId=%u: %s\n", phyId,
-                error == nullptr ? "unknown dynamic-loader error" : error);
             return false;
         }
-        (void)dlerror();
         resolve = reinterpret_cast<ResolveFn>(dlsym(topoHandle, "GetRoceIpFromXml"));
-        const char* symbolError = dlerror();
-        if (resolve == nullptr || symbolError != nullptr) {
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap] dlsym(GetRoceIpFromXml) failed for phyId=%u: %s\n", phyId,
-                symbolError == nullptr ? "symbol address is null" : symbolError);
-            dlclose(topoHandle);
-            return false;
-        }
     }
-    detail::BootstrapTrace(
-        "[RDMA][HNS_1825][bootstrap] GetRoceIpFromXml ready for phyId=%u source=%s\n", phyId,
-        resolvedFromDefault ? "RTLD_DEFAULT" : "libtopoaddrinfo.so");
 
     char ipBuffer[64] = {0};
-    const int result = resolve(static_cast<int>(phyId), ipBuffer, sizeof(ipBuffer));
-    ipBuffer[sizeof(ipBuffer) - 1] = '\0';
-    const bool validIpv4 = detail::LooksLikeIpv4(ipBuffer);
-    const bool resolved = result == 0 && validIpv4;
+    const bool resolved = resolve != nullptr && resolve(static_cast<int>(phyId), ipBuffer, sizeof(ipBuffer)) == 0 &&
+                          detail::LooksLikeIpv4(ipBuffer);
     if (resolved) {
         ip = ipBuffer;
-    } else {
-        detail::BootstrapTrace(
-            "[RDMA][HNS_1825][bootstrap] GetRoceIpFromXml failed for phyId=%u path=%s ret=%d value='%s' "
-            "validIpv4=%d\n",
-            phyId, kDefaultVirtualTopologyPath, result, ipBuffer, validIpv4 ? 1 : 0);
     }
     if (topoHandle != nullptr) {
         dlclose(topoHandle);
@@ -305,7 +263,7 @@ using RankAgreementFn = bool (*)(bool, int, const char*, bool*);
 // Out-of-band test bootstrap for HNS_1825.
 //
 // Per rank: phyId, RDMA NIC IPv4, and the registered-buffer base VA.
-//   phyId    : PTO_ROCE_PHYIDS[rank], else ResolvePhyId(), else ACL device id
+//   phyId    : ResolvePhyId(), else PTO_ROCE_PHYIDS[rank], else ACL device id
 //   local IP : fixed rootinfo CLOS entry, then fixed virtualTopology.xml, then
 //              PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS test overrides
 //   sym addr : MPI_Allgather of each rank's local registered-buffer base VA
@@ -341,59 +299,27 @@ struct BootstrapConfig {
         const std::vector<std::string> phyIds = SplitCsv(std::getenv("PTO_ROCE_PHYIDS"));
         if (static_cast<int>(phyIds.size()) == nRanks) {
             phyId = static_cast<uint32_t>(std::strtoul(phyIds[rankId].c_str(), nullptr, 10));
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap][rank %d] deviceId=%d phyId=%u source=PTO_ROCE_PHYIDS\n", rankId, deviceId,
-                phyId);
             return;
         }
-        const bool runtimeResolved = ResolvePhyId(phyId);
-        if (!runtimeResolved) {
+        if (!ResolvePhyId(phyId)) {
             phyId = static_cast<uint32_t>(deviceId);
             std::cerr << "[RDMA][HNS_1825] phyId resolution unavailable, falling back to device id " << deviceId
                       << std::endl;
         }
-        detail::BootstrapTrace(
-            "[RDMA][HNS_1825][bootstrap][rank %d] deviceId=%d phyId=%u source=%s\n", rankId, deviceId, phyId,
-            runtimeResolved ? "acl-runtime" : "device-id-fallback");
     }
 
     static std::string ResolveBootstrapLocalIp(uint32_t phyId, int rankId, int nRanks)
     {
         std::string localIp;
-        if (ResolveLocalRdmaIp(phyId, localIp)) {
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap][rank %d] localIp=%s source=rootinfo path=%s phyId=%u\n", rankId,
-                localIp.c_str(), kDefaultRootInfoPath, phyId);
-            return localIp;
-        }
-        detail::BootstrapTrace(
-            "[RDMA][HNS_1825][bootstrap][rank %d] rootinfo lookup unavailable path=%s phyId=%u\n", rankId,
-            kDefaultRootInfoPath, phyId);
-        if (ResolveLocalRdmaIpFromVirtualTopology(phyId, localIp)) {
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap][rank %d] localIp=%s source=virtual-topology path=%s phyId=%u\n", rankId,
-                localIp.c_str(), kDefaultVirtualTopologyPath, phyId);
+        if (ResolveLocalRdmaIp(phyId, localIp) || ResolveLocalRdmaIpFromVirtualTopology(phyId, localIp)) {
             return localIp;
         }
         const char* localIpEnv = std::getenv("PTO_ROCE_LOCAL_IP");
         if (localIpEnv != nullptr && localIpEnv[0] != '\0') {
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap][rank %d] localIp=%s source=PTO_ROCE_LOCAL_IP phyId=%u\n", rankId,
-                localIpEnv, phyId);
             return localIpEnv;
         }
         const std::vector<std::string> peerIpEnv = SplitCsv(std::getenv("PTO_ROCE_IPS"));
-        if (static_cast<int>(peerIpEnv.size()) == nRanks) {
-            detail::BootstrapTrace(
-                "[RDMA][HNS_1825][bootstrap][rank %d] localIp=%s source=PTO_ROCE_IPS phyId=%u\n", rankId,
-                peerIpEnv[rankId].c_str(), phyId);
-            return peerIpEnv[rankId];
-        }
-        detail::BootstrapTrace(
-            "[RDMA][HNS_1825][bootstrap][rank %d] no local-IP override phyId=%u PTO_ROCE_IPS entries=%zu "
-            "expected=%d\n",
-            rankId, phyId, peerIpEnv.size(), nRanks);
-        return std::string();
+        return static_cast<int>(peerIpEnv.size()) == nRanks ? peerIpEnv[rankId] : std::string();
     }
 
     bool AgreeOnLocalIp(const std::string& localIp, int nRanks, RankAgreementFn agree)

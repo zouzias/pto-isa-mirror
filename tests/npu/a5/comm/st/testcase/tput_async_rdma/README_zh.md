@@ -1,7 +1,7 @@
 # RDMA异步ST（HNS1825目标网卡平台）
 
-本目录包含RDMA异步ST的共享实现。`tput_async_rdma` 验证远程WRITE以及带`Set`通知的远程WRITE，
-`tget_async_rdma` 复用同一套Kernel实现验证远程READ。
+本目录包含RDMA异步ST的共享实现。`tput_async_rdma` 验证远程WRITE，`tget_async_rdma` 验证远程READ，
+`tput_async_notify_rdma` 验证带`Set`通知的远程WRITE；三个目标复用同一套RDMA测试Kernel实现。
 
 ## 前置条件
 
@@ -11,20 +11,21 @@
 
 ## 构建与运行
 
-在CMake配置前选择RDMA实现，再分别运行PUT和GET：
+在CMake配置前选择RDMA实现，再运行所需的RDMA ST target：
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_notify_rdma -d -n 2
 ```
 
 首次验证`TPUT_ASYNC_NOTIFY`时，先只运行2个rank的定向用例：
 
 ```bash
 export PTO_RDMA_BACKEND=HNS_1825
-python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma \
-    -g TPutAsyncRdma.PutAsyncNotifySet -d -n 2
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_notify_rdma \
+    -g TPutAsyncNotifyRdma.Int32SetAndCanaries -d -n 2
 ```
 
 该用例检查远端payload、远端signal及signal两侧canary，并等待接口返回的`AsyncEvent`完成。接收端观察到
@@ -59,10 +60,5 @@ ST不会生成或修改这两个拓扑文件，也不提供路径覆盖变量。
 
 - CMake提示RDMA未使能时，设置 `PTO_RDMA_BACKEND=HNS_1825`，并在不使用 `-w` 的情况下重新配置。
 - 端点发现失败时，检查物理设备映射以及root-info或virtual topology中的CLOS IPv4，必要时使用测试专用IP变量兜底。
-- 设置 `PTO_ROCE_VERBOSE=1` 可打印rank到物理设备的映射、地址来源，
-  `libtopoaddrinfo.so` 加载、`GetRoceIpFromXml` 符号解析、返回码和IPv4格式检查结果，以及
-  endpoint、MR、channel建链和释放进度。
-- HCOMM统一日志可通过 `ASCEND_GLOBAL_LOG_LEVEL=1` 和 `ASCEND_SLOG_PRINT_TO_STDOUT=1` 提高可见性；
-  但本ST直接调用XML resolver，并不保证目标版本已初始化其内部plog，因此定位bootstrap问题时应以
-  `PTO_ROCE_VERBOSE` 的标准错误输出为准。
 - HCOMM无法从默认路径加载HNS1825 verbs provider时，将 `IBV_EXTEND_DRIVERS` 指向驱动提供的 `libhrn5-rdmav34.so`。
+- 设置 `PTO_ROCE_VERBOSE=1`，可区分端点发现、MR注册、channel建链和释放阶段的错误。
