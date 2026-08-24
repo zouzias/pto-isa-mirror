@@ -248,11 +248,12 @@ payload, the caller must ensure visibility according to the target platform and 
 
 - Do not use one session concurrently from multiple execution flows.
 - For A2/A3 SDMA, every concurrent AIV must use a separate session and a distinct Channel Group. Multiple AIVs must
-  not submit concurrently to one group. With `queue_num == N`, at most `kSdmaMaxChannelGroups / N` groups are valid.
+  not submit concurrently to one group. AIVs using different groups may concurrently access the same rank or
+  different ranks. With `queue_num == N`, at most `kSdmaMaxChannelGroups / N` groups are valid.
 - Concurrent `Set` producers should use separate remote signals. Use `AtomicAdd` when multiple AIVs share one signal
   as a completion counter. Payload destination ranges must not overlap in either mode.
-- For URMA and RDMA, submissions to the same peer/QP must be serialized even when callers constructed separate
-  sessions over the same workspace. Different peers use independent queues.
+- For URMA, different AIVs may concurrently access different peers. Accesses to the same peer must be serialized even
+  when callers construct separate sessions over the same workspace.
 - Complete all earlier events before rebuilding a session or reusing its backend queue.
 
 ## Examples
