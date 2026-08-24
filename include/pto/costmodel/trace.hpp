@@ -58,10 +58,6 @@ struct TraceState {
     std::vector<PtoInstrRecord> executed_pto;
     std::vector<std::size_t> active_pto_stack;
     std::array<CcePipeTraceState, kPipeKeyCount> cce_pipe_traces;
-    // True while the vector mask register holds a partial/count mask (set by
-    // set_vector_mask / set_mask_count, cleared by full-mask restore / set_mask_norm).
-    // Vector ALU ops pay a one-time dispatch floor while this is active.
-    bool vector_count_mode = false;
 };
 
 inline thread_local TraceState g_trace_state;
@@ -198,13 +194,7 @@ inline void BeginPtoInstr(std::string_view name)
     auto& trace = g_trace_state;
     if (trace.active_pto_stack.empty()) {
         trace.executed_pto.push_back(PtoInstrRecord{std::string(name), {}, 0});
-        // Reset all pipe traces EXCEPT VECTOR. The vector pipe queue must persist across
-        // consecutive vec PTO instructions so only the first op of a stream pays startup latency
-        // (IsPipeQueueEmpty(VECTOR) stays false for back-to-back vec ops). The vector stream is
-        // broken by sync (FlushPendingTail(VECTOR)) and by core/sub boundaries (ResetVectorStream).
-        const auto saved_vector = trace.cce_pipe_traces[ToPipeIndex(evaluator::PipeKey::VECTOR)];
         trace.cce_pipe_traces = {};
-        trace.cce_pipe_traces[ToPipeIndex(evaluator::PipeKey::VECTOR)] = saved_vector;
         trace.active_pto_stack.push_back(trace.executed_pto.size() - 1);
     } else {
         // Collapse nested PTO helper calls into the current top-level PTO record.

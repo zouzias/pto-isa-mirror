@@ -106,7 +106,7 @@ AICORE inline void RsNotifySubtileReady(
 {
     __gm__ int32_t* counter = signal_base + G_SIGNAL_SUBTILE_READY_OFFSET + meta.local_subtile_id;
     if (meta.owner != my_rank) {
-        counter = CommRemotePtr(hcclCtx, counter, meta.owner);
+        counter = HcclRemotePtr(hcclCtx, counter, meta.owner);
     }
     pto::comm::Signal sig(counter);
     pto::comm::TNOTIFY(sig, static_cast<int32_t>(1), pto::comm::NotifyOp::AtomicAdd);
@@ -117,7 +117,7 @@ AICORE inline void RsNotifyAgSummary(
 {
     __gm__ int32_t* counter = AgSummarySlotPtr(signal_base, meta.ag_summary_block);
     if (meta.owner != my_rank) {
-        counter = CommRemotePtr(hcclCtx, counter, meta.owner);
+        counter = HcclRemotePtr(hcclCtx, counter, meta.owner);
     }
     pto::comm::Signal sig(counter);
     pto::comm::TNOTIFY(sig, static_cast<int32_t>(1), pto::comm::NotifyOp::AtomicAdd);

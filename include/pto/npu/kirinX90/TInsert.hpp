@@ -14,6 +14,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+#ifndef TINSERT_MODE_DEFINED
+#define TINSERT_MODE_DEFINED
+enum class TInsertMode : uint8_t {
+    SPLIT2 = 2,
+    SPLIT4 = 3,
+};
+#endif
+
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TInsertVecToVecNDUnaligned(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
@@ -281,19 +289,34 @@ PTO_INTERNAL void ComputeNZBlockParams(
     dstGap = static_cast<uint16_t>(dstRow - validRow);
 }
 
+template <typename T>
+__tf__ PTO_INTERNAL void CopyNzUbufToCbuf(
+    __cbuf__ T* dstAddr, __ubuf__ T* srcAddr, uint32_t dstOffset, uint16_t burstNum, uint16_t burstLen, uint16_t srcGap,
+    uint16_t dstGap)
+{
+    copy_ubuf_to_cbuf(dstAddr + dstOffset, srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void CopyNzTileToCbuf(
+    typename DstTileData::TileDType __out__ dstTile, typename SrcTileData::TileDType __in__ srcTile, uint16_t validRow,
+    uint16_t validCol, uint16_t dstRow, uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    __cbuf__ T* dstAddr = (__cbuf__ T*)__cce_get_tile_ptr(dstTile);
+    __ubuf__ T* srcAddr = (__ubuf__ T*)__cce_get_tile_ptr(srcTile);
+    uint16_t burstNum, burstLen, srcGap, dstGap;
+    uint32_t dstOffset;
+    ComputeNZBlockParams<T, DstTileData, SrcTileData>(
+        validRow, validCol, dstRow, burstNum, burstLen, srcGap, dstGap, dstOffset, indexRow, indexCol);
+    CopyNzUbufToCbuf(dstAddr, srcAddr, dstOffset, burstNum, burstLen, srcGap, dstGap);
+}
+
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL void TInsertImpl(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol, uint16_t dstRow, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
-    __cbuf__ T* dstAddr = (__cbuf__ T*)__cce_get_tile_ptr(dst);
-    __ubuf__ T* srcAddr = (__ubuf__ T*)__cce_get_tile_ptr(src);
-    uint16_t burstNum, burstLen, srcGap, dstGap;
-    uint32_t dstOffset;
-    ComputeNZBlockParams<T, DstTileData, SrcTileData>(
-        validRow, validCol, dstRow, burstNum, burstLen, srcGap, dstGap, dstOffset, indexRow, indexCol);
-    __cbuf__ T* dstAddr2 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr2, srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
+    CopyNzTileToCbuf<T, DstTileData, SrcTileData>(dst, src, validRow, validCol, dstRow, indexRow, indexCol);
 }
 
 template <typename T, typename DstTileData, typename SrcTileData>

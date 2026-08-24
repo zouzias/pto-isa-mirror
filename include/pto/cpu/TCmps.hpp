@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TCMPS_HPP
 #include <pto/common/pto_tile.hpp>
 #include "pto/cpu/tile_offsets.hpp"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -62,7 +63,7 @@ AICORE void TCmps(
 
     for (size_t i = 0; i < srcValidRow; i++) {
         for (size_t j = 0; j < srcValidCol; j++) {
-            T a = src0[i * srcStride + j];
+            T a = src0[GetTileElementOffset<TileDataSrc>(i, j)];
             golden[i * W + j] = CmpCall<T>(a, src1, mode);
         }
     }
@@ -82,11 +83,16 @@ AICORE void TCmps(
         }
     }
 
-    int c = 0;
-    for (size_t i = 0; i < dstValidRow && c < out_uint8.size(); i++) {
-        for (size_t j = 0; j < dstValidCol && c < out_uint8.size(); j++) {
-            dst[i * W + j] = out_uint8[c++];
-            uint8_t b = dst[i * W + j];
+    std::fill(dst, dst + TileDataDst::Numel, static_cast<typename TileDataDst::DType>(0));
+    const size_t dstPackedCols = static_cast<size_t>(dstValidCol);
+    if (dstPackedCols == 0) {
+        return;
+    }
+    for (size_t c = 0; c < out_uint8.size() && c < TileDataDst::Numel; ++c) {
+        const size_t i = c / dstPackedCols;
+        const size_t j = c % dstPackedCols;
+        if (i < dstValidRow && j < dstValidCol) {
+            dst[GetTileElementOffset<TileDataDst>(i, j)] = static_cast<typename TileDataDst::DType>(out_uint8[c]);
         }
     }
 }
@@ -106,6 +112,67 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst& dst, TileDataSrc& src0, T src1, CmpMod
     TCmps<TileDataDst, TileDataSrc, T>(
         dst.data(), src0.data(), src1, cmpMode, srcValidRow, srcValidCol, dstValidRow, dstValidCol, dstStride,
         srcStride);
+}
+
+template <
+    typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename = std::void_t<typename TileDataSrc1::DType>>
+PTO_INTERNAL void TCMPS_IMPL(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, CmpMode cmpMode)
+{
+    static_assert(
+        std::is_same_v<typename TileDataSrc0::DType, typename TileDataSrc1::DType>,
+        "Fix: TCMPS src0 and src1 must have the same data type.");
+    using T = typename TileDataSrc0::DType;
+
+    unsigned dstValidRow = dst.GetValidRow();
+    unsigned dstValidCol = dst.GetValidCol();
+
+    unsigned srcValidRow = src0.GetValidRow();
+    unsigned srcValidCol = src0.GetValidCol();
+
+    unsigned dstStride = TileDataDst::RowStride;
+    unsigned srcStride = TileDataSrc0::RowStride;
+    unsigned src1Stride = TileDataSrc1::RowStride;
+
+    size_t H = TileDataSrc0::Rows;
+    size_t W = TileDataSrc0::Cols;
+    std::vector<uint8_t> golden(H * W, 0);
+
+    for (size_t i = 0; i < srcValidRow; i++) {
+        for (size_t j = 0; j < srcValidCol; j++) {
+            T a = src0.data()[GetTileElementOffset<TileDataSrc0>(i, j)];
+            T b = src1.data()[GetTileElementOffset<TileDataSrc1>(i, j)];
+            golden[i * W + j] = CmpCall<T>(a, b, cmpMode);
+        }
+    }
+
+    std::vector<uint8_t> out_uint8;
+    size_t bits_per_row = W / 8;
+
+    for (size_t h = 0; h < H; ++h) {
+        for (size_t i = 0; i < bits_per_row; ++i) {
+            uint8_t packed_byte = 0;
+            for (size_t bit = 0; bit < 8; ++bit) {
+                uint8_t bit_val = golden[h * W + (i * 8 + bit)];
+                packed_byte |= (bit_val << bit);
+            }
+            out_uint8.push_back(packed_byte);
+        }
+    }
+
+    std::fill(dst.data(), dst.data() + TileDataDst::Numel, static_cast<typename TileDataDst::DType>(0));
+    const size_t dstPackedCols = static_cast<size_t>(dstValidCol);
+    if (dstPackedCols == 0) {
+        return;
+    }
+    for (size_t c = 0; c < out_uint8.size() && c < TileDataDst::Numel; ++c) {
+        const size_t i = c / dstPackedCols;
+        const size_t j = c % dstPackedCols;
+        if (i < dstValidRow && j < dstValidCol) {
+            dst.data()[GetTileElementOffset<TileDataDst>(i, j)] =
+                static_cast<typename TileDataDst::DType>(out_uint8[c]);
+        }
+    }
 }
 } // namespace pto
 #endif

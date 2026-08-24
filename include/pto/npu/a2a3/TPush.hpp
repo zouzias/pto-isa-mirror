@@ -55,24 +55,13 @@ struct TPipe {
 
     PTO_INTERNAL static bool shouldWaitFree(uint32_t tileIndex)
     {
-        if constexpr (SlotNum == 1) {
-            return tileIndex > 0;
-        } else {
-            if (tileIndex < SlotNum) {
-                return false;
-            }
-            return (tileIndex % SyncPeriod) == 0;
+        if (tileIndex < SlotNum) {
+            return false;
         }
+        return (tileIndex % SyncPeriod) == 0;
     }
 
-    PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex)
-    {
-        if constexpr (SlotNum == 1) {
-            return true;
-        } else {
-            return ((tileIndex + 1) % SyncPeriod) == 0;
-        }
-    }
+    PTO_INTERNAL static bool shouldNotifyFree(uint32_t tileIndex) { return ((tileIndex + 1) % SyncPeriod) == 0; }
 
     // Count TFREE notifications not consumed by steady-state TPUSH waits. Draining a fixed
     // SyncPeriod leaves stale flags or waits for notifications that will never arrive when

@@ -179,6 +179,7 @@ PTO_INTERNAL void InitUBBuffer(__ubuf__ T* dst)
         preg = CreatePredicate<T>(num);
         vsts(v_zeros, dst, i * nElemPerVL, distValue, preg);
     }
+    mem_bar(VST_VLD);
     mem_bar(VST_VST);
 }
 
@@ -205,6 +206,9 @@ __tf__ PTO_INTERNAL void TScatterImpl(
         MaskReg pReg;
         RegTensor<U> idxReg;
         RegTensor<T> v_src;
+        constexpr uint16_t batchSize = CCE_VL / sizeof(U);
+        uint16_t repeat = CeilDivision(validCol, batchSize);
+        using VldsType = std::conditional_t<sizeof(T) == 1, decltype(UNPK_B8), decltype(NORM)>;
         constexpr VldsType vldsValue{};
 
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
@@ -276,7 +280,7 @@ PTO_INTERNAL void ScatterMask(
     if constexpr (Times == PTO_TIME_2) {
         if constexpr (mask == MaskPattern::P1010) {
             vintlv(dstReg0, dstReg1, zeros, srcReg);
-        } else if constexpr (mask == MaskPattern::P0101) {
+        } else if (mask == MaskPattern::P0101) {
             vintlv(dstReg0, dstReg1, srcReg, zeros);
         }
         pReg = CreatePredicate<T>(sReg);
@@ -288,15 +292,15 @@ PTO_INTERNAL void ScatterMask(
             vintlv(tmpReg0, tmpReg1, zeros, srcReg);
             vintlv(dstReg0, dstReg1, zeros, tmpReg0);
             vintlv(dstReg2, dstReg3, zeros, tmpReg1);
-        } else if constexpr (mask == MaskPattern::P0100) {
+        } else if (mask == MaskPattern::P0100) {
             vintlv(tmpReg0, tmpReg1, zeros, srcReg);
             vintlv(dstReg0, dstReg1, tmpReg0, zeros);
             vintlv(dstReg2, dstReg3, tmpReg1, zeros);
-        } else if constexpr (mask == MaskPattern::P0010) {
+        } else if (mask == MaskPattern::P0010) {
             vintlv(tmpReg0, tmpReg1, srcReg, zeros);
             vintlv(dstReg0, dstReg1, zeros, tmpReg0);
             vintlv(dstReg2, dstReg3, zeros, tmpReg1);
-        } else if constexpr (mask == MaskPattern::P0001) {
+        } else if (mask == MaskPattern::P0001) {
             vintlv(tmpReg0, tmpReg1, srcReg, zeros);
             vintlv(dstReg0, dstReg1, tmpReg0, zeros);
             vintlv(dstReg2, dstReg3, tmpReg1, zeros);

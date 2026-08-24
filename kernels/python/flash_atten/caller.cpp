@@ -1,0 +1,41 @@
+/*
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
+ */
+
+#ifndef KERNEL_CPP
+#error "KERNEL_CPP must be defined at compile time (see compile.sh)."
+#endif
+
+#include <cstdint>
+
+extern "C" int rtGetC2cCtrlAddr(uint64_t* ctrlAddr, uint32_t* ctrlLen);
+
+#include KERNEL_CPP
+
+extern "C" void call_kernel(
+    uint32_t blockDim, void* stream, uint8_t* gmSlotBuffer, uint8_t* q, uint8_t* k, uint8_t* v, uint8_t* o, int64_t s0,
+    int64_t s1)
+{
+    void* fftsAddr = nullptr;
+    uint32_t fftsLen = 0;
+    (void)rtGetC2cCtrlAddr(reinterpret_cast<uint64_t*>(&fftsAddr), &fftsLen);
+    (void)fftsLen;
+
+    call_both<<<blockDim, nullptr, stream>>>(
+        (__gm__ uint64_t*)fftsAddr, (__gm__ float*)gmSlotBuffer, (__gm__ half*)gmSlotBuffer, (__gm__ half*)q,
+        (__gm__ half*)k, (__gm__ half*)v, (__gm__ float*)o, s0, s1);
+
+#if defined(FA_KV_SPLIT) && (FA_KV_SPLIT > 1)
+    // T1-A: second grid launch flash-combines the KV_SPLIT partials per Q block
+    // into the final O. Same stream => ordered after call_both (grid sync); same
+    // blockDim => the partial-region base (num_blocks * GM_ELEMS_PER_BLOCK) matches.
+    call_reduce<<<blockDim, nullptr, stream>>>(
+        (__gm__ uint64_t*)fftsAddr, (__gm__ float*)gmSlotBuffer, (__gm__ half*)gmSlotBuffer, (__gm__ float*)o, s0, s1);
+#endif
+}

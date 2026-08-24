@@ -509,6 +509,40 @@ int get_input_golden_case_DN(uint8_t* input, uint8_t* golden)
     return sizeof(gold_arr);
 }
 
+template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_>
+void fill_DN_flat_row_slice(
+    T (&in_arr)[Shape0][Shape1][Shape2][Shape3][Shape4], T (&gold_arr)[kTCols_][kTRows_], int x0, int x1, int x2)
+{
+    for (int i = 0; i < Shape3; i++)
+        for (int j = 0; j < Shape4; j++) {
+            const T value = x0 * Shape1 * Shape2 * Shape3 * Shape4 + x1 * Shape2 * Shape3 * Shape4 +
+                            x2 * Shape3 * Shape4 + i * Shape4 + j;
+            const int flatRow = ((x0 * Shape1 + x1) * Shape2 + x2) * Shape3 + i;
+            in_arr[x0][x1][x2][i][j] = value;
+            gold_arr[j][flatRow] = value;
+        }
+}
+
+template <typename T, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_>
+int get_input_golden_case_DN_flat_rows(uint8_t* input, uint8_t* golden)
+{
+    int in_byteSize = Shape0 * Shape1 * Shape2 * Shape3 * Shape4 * sizeof(T);
+    int out_byteSize = kTRows_ * kTCols_ * sizeof(T);
+
+    T in_arr[Shape0][Shape1][Shape2][Shape3][Shape4] = {};
+    T gold_arr[kTCols_][kTRows_] = {};
+
+    for (int x0 = 0; x0 < Shape0; x0++)
+        for (int x1 = 0; x1 < Shape1; x1++)
+            for (int x2 = 0; x2 < Shape2; x2++)
+                fill_DN_flat_row_slice<T, Shape0, Shape1, Shape2, Shape3, Shape4, kTRows_, kTCols_>(
+                    in_arr, gold_arr, x0, x1, x2);
+
+    std::copy((uint8_t*)in_arr, ((uint8_t*)(in_arr)) + in_byteSize, input);
+    std::copy((uint8_t*)gold_arr, ((uint8_t*)(gold_arr)) + out_byteSize, golden);
+    return out_byteSize;
+}
+
 template <int32_t testKey>
 int get_input_golden(uint8_t* input, uint8_t* golden)
 {
