@@ -628,8 +628,8 @@ BINARY_ELEMENTWISE_EXPR = {
 }
 
 TERNARY_ELEMENTWISE_SPEC = {
-    "TMULADDDST": ("src0 * src1 + dst(old)", ["src0", "src1", "dst(old)"]),
-    "TFUSEDMULADD": ("src0 * dst(old) + src1", ["src0", "dst(old)", "src1"]),
+    "TMADD": ("src0 * dst(old) + src1", ["src0", "dst(old)", "src1"]),
+    "TMULA": ("src0 * src1 + dst(old)", ["src0", "src1", "dst(old)"]),
 }
 
 

@@ -528,10 +528,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec -g TInsertVecTest.case_nz_scalar_nonpow2_int8
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "1" ]; then
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tfusedmuladd -g TFUSEDMULADDTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half
@@ -815,6 +815,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_vec
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula
     if [ "$IS_AUTO_MODE" = "false" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter
@@ -981,6 +983,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_nd2zn -g TMovNd2ZnTest.case_half_32x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul -g TMULTest.case_float_64x64_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuls -g TMULSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tor -g TORTest.case2
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow -g TPOWTest.case1
@@ -1155,6 +1159,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_mx
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuls
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tor
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow

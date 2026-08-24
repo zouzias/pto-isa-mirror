@@ -32,7 +32,8 @@ Migration guidance:
 - Effective version: this cleanup takes effect in PTO ISA v9.2.0. The compatibility window for these legacy wrappers is closed; no public wrapper is retained.
 - Replace `TSYNC(events...)` with ordinary event-based ordering: pass the event object to the consumer intrinsic, or call `WaitAllEvents(events...)` before the consumer when an explicit wait is required.
 - `TSUBVIEW` is not a public ISA replacement. In-repository implementations may use `pto::detail::PtoSubTileView` as an internal helper; external code should express the data view through supported tile construction and public data movement APIs.
-- Replace ternary/scalar fused arithmetic forms with the corresponding primitive arithmetic sequence, such as `TADD`, `TSUB`, `TADDS`, `TSUBS`, `TMUL`, `TFUSEDMULADD`, and `TRELU`.
+- Replace ternary/scalar fused arithmetic forms with the corresponding primitive arithmetic sequence, such as `TADD`, `TSUB`, `TADDS`, `TSUBS`, `TMUL`, `TMADD`, and `TRELU`.
+- Rename legacy fused multiply-add APIs: `TFUSEDMULADD` to `TMADD`, and `TMULADDDST` to `TMULA`.
 - Replace fused add/ReLU/convert or add/dequant/ReLU forms with explicit arithmetic, conversion/dequantization, and `TRELU` steps.
 - Replace `TPairReduceSum` with the supported row/column reduction primitives that match the target layout.
 - Do not call `TGET_SCALE_ADDR`; for AUTO-mode MX tests, bind the scale tile address from the data tile in test code before invoking the MX matmul primitive.
@@ -55,6 +56,8 @@ Migration guidance:
 - [TOR](TOR.md) - Elementwise bitwise OR of two tiles.
 - [TSUB](TSUB.md) - Elementwise subtract of two tiles.
 - [TMUL](TMUL.md) - Elementwise multiply of two tiles.
+- [TMADD](TMADD.md) - Elementwise ternary op: `src0 * dst + src1`.
+- [TMULA](TMULA.md) - Elementwise ternary op: `src0 * src1 + dst`.
 - [TMIN](TMIN.md) - Elementwise minimum of two tiles.
 - [TMAX](TMAX.md) - Elementwise maximum of two tiles.
 - [TCMP](TCMP.md) - Compare two tiles and write a packed predicate mask.
@@ -76,8 +79,6 @@ Migration guidance:
 - [TNEG](TNEG.md) - Elementwise negation of a tile.
 - [TREM](TREM.md) - Elementwise remainder of two tiles.
 - [TFMOD](TFMOD.md) - Elementwise fmod of two tiles.
-- [TMULADDDST](TMULADDDST.md) - Elementwise ternary op: `src0 * src1 + dst`.
-- [TFUSEDMULADD](TFUSEDMULADD.md) - Elementwise ternary op: `src0 * dst + src1`.
 
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
