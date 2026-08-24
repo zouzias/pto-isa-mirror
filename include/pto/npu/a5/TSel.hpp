@@ -58,15 +58,18 @@ PTO_INTERNAL void Int64SelectScalarStore(
 }
 
 template <unsigned ElementsPerRepeat, unsigned MaskRowBytes>
-PTO_INTERNAL void Int64SelectPairMasks(
-    __ubuf__ uint8_t* packedMask, uint16_t row, uint16_t pairRepeat, uint32_t& colOffset, MaskReg& selectMask0,
-    MaskReg& selectMask1)
+PTO_INTERNAL void Int64SelectRepeatMask(
+    __ubuf__ uint8_t* packedMask, uint16_t row, uint16_t repeat, uint32_t& colOffset, MaskReg& selectMask,
+    MaskReg& validMask, vector_s32& lane, vector_u32& wordIndex, vector_s32& maskWord, vector_s32& shifted,
+    vector_s32& bit, vector_s32& one, vector_s32& zero)
 {
-    colOffset = pairRepeat * ElementsPerRepeat * 2;
-    MaskReg packed;
-    plds(packed, (__ubuf__ uint32_t*)packedMask, row * MaskRowBytes + colOffset / 8, US);
-    MaskReg allMask = pset_b16(PAT_ALL);
-    pintlv_b16(selectMask0, selectMask1, packed, allMask);
+    colOffset = repeat * ElementsPerRepeat;
+    uint32_t absoluteWordIndex = row * (MaskRowBytes / sizeof(uint32_t)) + repeat;
+    vbr(wordIndex, absoluteWordIndex);
+    vgather2((vector_u32&)maskWord, (__ubuf__ uint32_t*)packedMask, wordIndex, validMask);
+    vshr(shifted, maskWord, lane, validMask, MODE_ZEROING);
+    vand((vector_u32&)bit, (vector_u32&)shifted, (vector_u32&)one, validMask, MODE_ZEROING);
+    vcmp_ne(selectMask, bit, zero, validMask);
 }
 
 template <unsigned ElementsPerRepeat>
@@ -76,19 +79,6 @@ PTO_INTERNAL void Int64SelectValidMask(uint32_t remainingCols, uint32_t& cols, M
     if (cols > ElementsPerRepeat)
         cols = ElementsPerRepeat;
     validMask = plt_b32(cols, POST_UPDATE);
-}
-
-template <unsigned ElementsPerRepeat, unsigned MaskRowBytes>
-PTO_INTERNAL void Int64SelectTailMasks(
-    __ubuf__ uint8_t* packedMask, uint16_t row, uint16_t pairRepeatTimes, uint32_t remainingCols, uint32_t& colOffset,
-    MaskReg& selectMask, MaskReg& validMask)
-{
-    colOffset = pairRepeatTimes * ElementsPerRepeat * 2;
-    uint32_t cols;
-    Int64SelectValidMask<ElementsPerRepeat>(remainingCols, cols, validMask);
-    MaskReg packed;
-    plds(packed, (__ubuf__ uint32_t*)packedMask, row * MaskRowBytes + colOffset / 8, US);
-    punpack(selectMask, packed, LOWER);
 }
 
 template <bool Scalar, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>
@@ -109,36 +99,18 @@ PTO_INTERNAL void Int64SelectStoreByMode(
 template <
     bool Scalar, typename T, unsigned DstCols, unsigned MaskRowBytes, unsigned Src0Cols, unsigned Src1Cols,
     unsigned ElementsPerRepeat>
-PTO_INTERNAL void Int64SelectPairRepeatFull(
-    __ubuf__ T* dst, __ubuf__ uint8_t* packedMask, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row,
-    uint16_t pairRepeat, vector_s32& dstLow, vector_s32& dstHigh, vector_s32& src0Low, vector_s32& src0High,
-    vector_s32& src1Low, vector_s32& src1High)
-{
-    uint32_t colOffset;
-    MaskReg selectMask0, selectMask1;
-    Int64SelectPairMasks<ElementsPerRepeat, MaskRowBytes>(
-        packedMask, row, pairRepeat, colOffset, selectMask0, selectMask1);
-    uint32_t fullMaskCols = ElementsPerRepeat;
-    MaskReg fullMask = plt_b32(fullMaskCols, POST_UPDATE);
-    Int64SelectStoreByMode<Scalar, T, DstCols, Src0Cols, Src1Cols>(
-        dst, src0, src1, row, colOffset, selectMask0, fullMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
-    colOffset += ElementsPerRepeat;
-    Int64SelectStoreByMode<Scalar, T, DstCols, Src0Cols, Src1Cols>(
-        dst, src0, src1, row, colOffset, selectMask1, fullMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
-}
-
-template <
-    bool Scalar, typename T, unsigned DstCols, unsigned MaskRowBytes, unsigned Src0Cols, unsigned Src1Cols,
-    unsigned ElementsPerRepeat>
-PTO_INTERNAL void Int64SelectTailRepeat(
-    __ubuf__ T* dst, __ubuf__ uint8_t* packedMask, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row,
-    uint16_t pairRepeatTimes, uint32_t remainingCols, vector_s32& dstLow, vector_s32& dstHigh, vector_s32& src0Low,
-    vector_s32& src0High, vector_s32& src1Low, vector_s32& src1High)
+PTO_INTERNAL void Int64SelectRepeat(
+    __ubuf__ T* dst, __ubuf__ uint8_t* packedMask, __ubuf__ T* src0, __ubuf__ T* src1, uint16_t row, uint16_t repeat,
+    uint32_t remainingCols, vector_s32& dstLow, vector_s32& dstHigh, vector_s32& src0Low, vector_s32& src0High,
+    vector_s32& src1Low, vector_s32& src1High, vector_s32& lane, vector_u32& wordIndex, vector_s32& maskWord,
+    vector_s32& shifted, vector_s32& bit, vector_s32& one, vector_s32& zero)
 {
     uint32_t colOffset;
     MaskReg selectMask, validMask;
-    Int64SelectTailMasks<ElementsPerRepeat, MaskRowBytes>(
-        packedMask, row, pairRepeatTimes, remainingCols, colOffset, selectMask, validMask);
+    uint32_t cols;
+    Int64SelectValidMask<ElementsPerRepeat>(remainingCols, cols, validMask);
+    Int64SelectRepeatMask<ElementsPerRepeat, MaskRowBytes>(
+        packedMask, row, repeat, colOffset, selectMask, validMask, lane, wordIndex, maskWord, shifted, bit, one, zero);
     Int64SelectStoreByMode<Scalar, T, DstCols, Src0Cols, Src1Cols>(
         dst, src0, src1, row, colOffset, selectMask, validMask, dstLow, dstHigh, src0Low, src0High, src1Low, src1High);
 }
@@ -150,36 +122,30 @@ PTO_INTERNAL void Int64SelectImpl(
 {
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
-    uint16_t pairRepeatTimes = repeatTimes / 2;
     __VEC_SCOPE__
     {
         vector_s32 dstLow, dstHigh, src0Low, src0High, src1Low, src1High;
+        vector_s32 lane, maskWord, shifted, bit, one, zero;
+        vector_u32 wordIndex;
+        vci(lane, 0, INC_ORDER);
+        vbr(one, 1u);
+        vbr(zero, 0u);
         if constexpr (Scalar) {
             uint64_t scalarBits = static_cast<uint64_t>(scalar);
             vbr(src1Low, static_cast<int32_t>(scalarBits));
             vbr(src1High, static_cast<int32_t>(scalarBits >> 32));
         }
-        uint16_t fullPairTimes = validCols / (2 * elementsPerRepeat);
-        uint32_t tailCols = validCols - fullPairTimes * 2 * elementsPerRepeat;
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
-            for (uint16_t pairRepeat = 0; pairRepeat < fullPairTimes; ++pairRepeat) {
-                Int64SelectPairRepeatFull<Scalar, T, DstCols, MaskRowBytes, Src0Cols, Src1Cols, elementsPerRepeat>(
-                    dst, packedMask, src0, src1, row, pairRepeat, dstLow, dstHigh, src0Low, src0High, src1Low,
-                    src1High);
-            }
-            if (tailCols != 0) {
-                uint16_t tailStartRepeat = fullPairTimes * 2;
-                uint32_t remainingCols = tailCols;
-                if (tailCols > elementsPerRepeat) {
-                    Int64SelectTailRepeat<Scalar, T, DstCols, MaskRowBytes, Src0Cols, Src1Cols, elementsPerRepeat>(
-                        dst, packedMask, src0, src1, row, tailStartRepeat, remainingCols, dstLow, dstHigh, src0Low,
-                        src0High, src1Low, src1High);
+            uint32_t remainingCols = validCols;
+            for (uint16_t repeat = 0; repeat < repeatTimes; ++repeat) {
+                Int64SelectRepeat<Scalar, T, DstCols, MaskRowBytes, Src0Cols, Src1Cols, elementsPerRepeat>(
+                    dst, packedMask, src0, src1, row, repeat, remainingCols, dstLow, dstHigh, src0Low, src0High,
+                    src1Low, src1High, lane, wordIndex, maskWord, shifted, bit, one, zero);
+                if (remainingCols > elementsPerRepeat) {
                     remainingCols -= elementsPerRepeat;
-                    tailStartRepeat += 1;
+                } else {
+                    remainingCols = 0;
                 }
-                Int64SelectTailRepeat<Scalar, T, DstCols, MaskRowBytes, Src0Cols, Src1Cols, elementsPerRepeat>(
-                    dst, packedMask, src0, src1, row, tailStartRepeat, remainingCols, dstLow, dstHigh, src0Low,
-                    src0High, src1Low, src1High);
             }
         }
     }
