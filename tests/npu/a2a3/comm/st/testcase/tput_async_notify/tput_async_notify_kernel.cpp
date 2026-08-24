@@ -38,6 +38,8 @@ constexpr uint32_t kDevicePayloadMismatch = 4U;
 constexpr uint32_t kDeviceUnexpectedValidEvent = 5U;
 constexpr uint32_t kDeviceUnexpectedPostId = 6U;
 constexpr uint32_t kConcurrentAivCount = 2U;
+constexpr uint32_t kConcurrentStatusStride = 64U / sizeof(uint32_t);
+constexpr uint32_t kConcurrentSignalStorageCount = kConcurrentAivCount + kConcurrentStatusStride - 1U;
 
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -171,7 +173,7 @@ AICORE inline void RunConcurrentNotifySender(
     pto::comm::AsyncSession session;
     const pto::comm::sdma::SdmaBaseConfig config{kBlockBytes, 0U, queueNum};
     if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, coreIdx, config)) {
-        statuses[coreIdx] = kDeviceInvalidEvent;
+        statuses[coreIdx * kConcurrentStatusStride] = kDeviceInvalidEvent;
         return;
     }
 
@@ -185,7 +187,8 @@ AICORE inline void RunConcurrentNotifySender(
     const pto::comm::NotifyOp op = notifyOp == 0U ? pto::comm::NotifyOp::Set : pto::comm::NotifyOp::AtomicAdd;
     const int32_t signalValue = notifyOp == 0U ? kSetValue + static_cast<int32_t>(coreIdx) : 1;
     const pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC_NOTIFY(dst, src, signal, signalValue, op, session, 1U);
-    statuses[coreIdx] = event.valid() && event.Wait(session) ? kDeviceSuccess : kDeviceWaitFailed;
+    statuses[coreIdx * kConcurrentStatusStride] =
+        event.valid() && event.Wait(session) ? kDeviceSuccess : kDeviceWaitFailed;
 }
 
 AICORE inline void ValidateConcurrentNotifyReceiver(
@@ -203,7 +206,7 @@ AICORE inline void ValidateConcurrentNotifyReceiver(
         }
     }
     if (!signaled) {
-        statuses[coreIdx] = kDeviceSignalTimeout;
+        statuses[coreIdx * kConcurrentStatusStride] = kDeviceSignalTimeout;
         return;
     }
 
@@ -213,11 +216,11 @@ AICORE inline void ValidateConcurrentNotifyReceiver(
     const uint32_t elemOffset = coreIdx * kElemCount;
     for (uint32_t i = 0U; i < kElemCount; ++i) {
         if (recvBuf[elemOffset + i] != static_cast<int32_t>(1000U + elemOffset + i)) {
-            statuses[coreIdx] = kDevicePayloadMismatch;
+            statuses[coreIdx * kConcurrentStatusStride] = kDevicePayloadMismatch;
             return;
         }
     }
-    statuses[coreIdx] = kDeviceSuccess;
+    statuses[coreIdx * kConcurrentStatusStride] = kDeviceSuccess;
 }
 
 __global__ AICORE void TPutAsyncNotifyConcurrentKernel(
@@ -253,8 +256,8 @@ bool PrepareConcurrentNotifyData(TestContext& ctx, int rankId, ConcurrentNotifyH
     const uint32_t totalElems = kConcurrentAivCount * kElemCount;
     data.sendHost.resize(totalElems);
     data.recvHost.assign(totalElems, -1);
-    data.signalHost.assign(kConcurrentAivCount, 0);
-    data.statusHost.assign(kConcurrentAivCount, UINT32_MAX);
+    data.signalHost.assign(kConcurrentSignalStorageCount, 0);
+    data.statusHost.assign(kConcurrentAivCount * kConcurrentStatusStride, UINT32_MAX);
     for (uint32_t i = 0U; i < totalElems; ++i) {
         data.sendHost[i] = static_cast<int32_t>(1000U + i);
     }
@@ -262,19 +265,20 @@ bool PrepareConcurrentNotifyData(TestContext& ctx, int rankId, ConcurrentNotifyH
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rankId];
     size_t winOffset = 0U;
     const size_t dataBytes = static_cast<size_t>(totalElems) * sizeof(int32_t);
-    const size_t commBytes = 2U * dataBytes + kConcurrentAivCount * (sizeof(int32_t) + sizeof(uint32_t));
+    const size_t commBytes =
+        2U * dataBytes + data.signalHost.size() * sizeof(int32_t) + data.statusHost.size() * sizeof(uint32_t);
     data.sendBuf = reinterpret_cast<int32_t*>(WindowAlloc(localWinBase, winOffset, commBytes));
     data.recvBuf = data.sendBuf + totalElems;
     data.signals = data.recvBuf + totalElems;
-    data.statuses = reinterpret_cast<uint32_t*>(data.signals + kConcurrentAivCount);
+    data.statuses = reinterpret_cast<uint32_t*>(data.signals + data.signalHost.size());
     ctx.aclStatus |= aclrtMemcpy(data.sendBuf, dataBytes, data.sendHost.data(), dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     ctx.aclStatus |= aclrtMemcpy(data.recvBuf, dataBytes, data.recvHost.data(), dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
     ctx.aclStatus |= aclrtMemcpy(
-        data.signals, kConcurrentAivCount * sizeof(int32_t), data.signalHost.data(),
-        kConcurrentAivCount * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+        data.signals, data.signalHost.size() * sizeof(int32_t), data.signalHost.data(),
+        data.signalHost.size() * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     ctx.aclStatus |= aclrtMemcpy(
-        data.statuses, kConcurrentAivCount * sizeof(uint32_t), data.statusHost.data(),
-        kConcurrentAivCount * sizeof(uint32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+        data.statuses, data.statusHost.size() * sizeof(uint32_t), data.statusHost.data(),
+        data.statusHost.size() * sizeof(uint32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     return ctx.aclStatus == 0;
 }
 
@@ -284,11 +288,11 @@ bool ValidateConcurrentNotifyData(
     const uint32_t totalElems = kConcurrentAivCount * kElemCount;
     const size_t dataBytes = static_cast<size_t>(totalElems) * sizeof(int32_t);
     ctx.aclStatus |= aclrtMemcpy(
-        data.statusHost.data(), kConcurrentAivCount * sizeof(uint32_t), data.statuses,
-        kConcurrentAivCount * sizeof(uint32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        data.statusHost.data(), data.statusHost.size() * sizeof(uint32_t), data.statuses,
+        data.statusHost.size() * sizeof(uint32_t), ACL_MEMCPY_DEVICE_TO_HOST);
     bool ok = ctx.aclStatus == 0;
     for (uint32_t core = 0U; core < kConcurrentAivCount; ++core) {
-        ok = ok && data.statusHost[core] == kDeviceSuccess;
+        ok = ok && data.statusHost[core * kConcurrentStatusStride] == kDeviceSuccess;
     }
     if (rankId != 1) {
         return ok;
@@ -296,8 +300,8 @@ bool ValidateConcurrentNotifyData(
 
     ctx.aclStatus |= aclrtMemcpy(data.recvHost.data(), dataBytes, data.recvBuf, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
     ctx.aclStatus |= aclrtMemcpy(
-        data.signalHost.data(), kConcurrentAivCount * sizeof(int32_t), data.signals,
-        kConcurrentAivCount * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        data.signalHost.data(), data.signalHost.size() * sizeof(int32_t), data.signals,
+        data.signalHost.size() * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
     ok = ok && ctx.aclStatus == 0;
     for (uint32_t i = 0U; ok && i < totalElems; ++i) {
         ok = data.recvHost[i] == data.sendHost[i];
