@@ -1,6 +1,7 @@
 # RDMA Async ST (HNS1825 Target Platform)
 
-This directory contains the shared RDMA async ST implementation. `tput_async_rdma` validates remote WRITE, while `tget_async_rdma` reuses the kernel implementation to validate remote READ.
+This directory contains the shared RDMA async ST implementation. `tput_async_rdma` validates remote WRITE and remote
+WRITE with a `Set` notification, while `tget_async_rdma` reuses the kernel implementation to validate remote READ.
 
 ## Prerequisites
 
@@ -17,6 +18,18 @@ export PTO_RDMA_BACKEND=HNS_1825
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma -d -n 2
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 ```
+
+For the first `TPUT_ASYNC_NOTIFY` validation, run only the focused two-rank case:
+
+```bash
+export PTO_RDMA_BACKEND=HNS_1825
+python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_rdma \
+    -g TPutAsyncRdma.PutAsyncNotifySet -d -n 2
+```
+
+The case checks the remote payload, remote signal, and canaries on both sides of the signal, and waits for the returned
+`AsyncEvent`. After observing the signal, the receiver maintains its data cache before checking the payload. The current
+RDMA backend does not support `AtomicAdd`, so there is no corresponding RDMA case.
 
 `PTO_RDMA_BACKEND` is read only while CMake configures this ST build. Unset, empty, or unsupported values build the tests without RDMA support. `run_st.py` rebuilds by default; after changing this variable, do not use `-w/--without-build` to reuse an existing binary.
 
@@ -47,5 +60,11 @@ The ST does not generate or modify either topology file and does not provide pat
 
 - If CMake reports that RDMA is disabled, set `PTO_RDMA_BACKEND=HNS_1825` and reconfigure without `-w`.
 - If endpoint discovery fails, verify the physical device mapping and the RoCE IPv4 in root-info or virtual topology, then use the test-only IP fallback if required.
+- Set `PTO_ROCE_VERBOSE=1` to print the rank-to-physical-device mapping, address source,
+  `libtopoaddrinfo.so` load, `GetRoceIpFromXml` symbol lookup, return code, IPv4-format checks, and endpoint, MR,
+  channel-setup, and cleanup progress.
+- HCOMM unified logging can be made more visible with `ASCEND_GLOBAL_LOG_LEVEL=1` and
+  `ASCEND_SLOG_PRINT_TO_STDOUT=1`. This ST calls the XML resolver directly, however, so its internal plog is not
+  guaranteed to be initialized by the installed HCOMM version; use the `PTO_ROCE_VERBOSE` stderr diagnostics for
+  bootstrap failures.
 - If HCOMM cannot load the HNS1825 verbs provider from its default search path, set `IBV_EXTEND_DRIVERS` to the driver-provided `libhrn5-rdmav34.so`.
-- Set `PTO_ROCE_VERBOSE=1` to distinguish endpoint discovery, MR registration, channel setup, and cleanup failures.

@@ -93,6 +93,18 @@ TEST(TPutAsyncRdma, Vec_Float_PublicEventWaitTest)
     ExpectPutPlan<float, 256>(0, 256, 1, RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST);
 }
 
+TEST(TPutAsyncRdma, PutAsyncNotifySet)
+{
+    if (CommMpiSize() != 2) {
+        GTEST_SKIP() << "Requires exactly two MPI ranks";
+    }
+    const RdmaTestResult result = RunPutAsyncNotifyRdmaSet(2, 2, 0, 0);
+    if (result == RdmaTestResult::SKIPPED) {
+        GTEST_SKIP() << "RDMA runtime prerequisites are unavailable on at least one rank";
+    }
+    ASSERT_EQ(result, RdmaTestResult::PASSED);
+}
+
 // Match the first URMA large-MR tier without making the default PUT suite
 // allocate hundreds of MiB: 2 MiB payload, approximately 4 MiB registered MR.
 TEST(TPutAsyncRdma, Vec_Float_MR_4MB)
