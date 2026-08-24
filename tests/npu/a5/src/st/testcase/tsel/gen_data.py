@@ -88,6 +88,8 @@ if __name__ == "__main__":
         TSelParams("TSELTest.case10", np.float32, 2, 512, 2, 512),
         TSelParams("TSELTest.case_int64_4x16", np.int64, 4, 16, 4, 16),
         TSelParams("TSELTest.case_uint64_4x16", np.uint64, 4, 16, 4, 16),
+        TSelParams("TSELTest.case_int64_49x160", np.int64, 49, 160, 49, 160),
+        TSelParams("TSELTest.case_uint64_49x160", np.uint64, 49, 160, 49, 160),
         TSelParams("TSELTest.case_int64_1x16364", np.int64, 1, 16364, 1, 16364),
         TSelParams("TSELTest.case_uint64_1x16364", np.uint64, 1, 16364, 1, 16364),
         TSelParams("TSELTest.case_int64_1x16368", np.int64, 1, 16368, 1, 16368),

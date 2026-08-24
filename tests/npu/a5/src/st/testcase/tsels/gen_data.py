@@ -121,6 +121,8 @@ if __name__ == "__main__":
         TestParams(np.float32, np.uint8, 1, 8192, 1, 4096, 1, 8192, 1, 8192),
         TestParams(np.int64, np.uint8, 4, 16, 4, 32, 4, 16, 4, 16),
         TestParams(np.uint64, np.uint8, 4, 16, 4, 32, 4, 16, 4, 16),
+        TestParams(np.int64, np.uint8, 49, 160, 49, 32, 49, 160, 49, 160),
+        TestParams(np.uint64, np.uint8, 49, 160, 49, 32, 49, 160, 49, 160),
         TestParams(np.int64, np.uint8, 1, 16364, 1, 2048, 1, 16364, 1, 16364),
         TestParams(np.uint64, np.uint8, 1, 16364, 1, 2048, 1, 16364, 1, 16364),
         TestParams(np.int64, np.uint8, 1, 16368, 1, 2046, 1, 16368, 1, 16368),

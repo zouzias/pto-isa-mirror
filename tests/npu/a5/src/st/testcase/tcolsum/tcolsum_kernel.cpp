@@ -193,6 +193,22 @@ extern "C" __global__ AICORE void launchTCOLSUMCase44(__gm__ uint64_t* out, __gm
     PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
     TSTORE(dstGlobal, dstTile);
 }
+extern "C" __global__ AICORE void launchTCOLSUMCase45(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTColSum<int64_t, 4, 4, 1, 16, 16>(out, src, true);
+}
+extern "C" __global__ AICORE void launchTCOLSUMCase46(__gm__ int64_t* out, __gm__ int64_t* src)
+{
+    runTColSum<int64_t, 4, 4, 1, 16, 16>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLSUMCase47(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTColSum<uint64_t, 4, 4, 1, 16, 16>(out, src, true);
+}
+extern "C" __global__ AICORE void launchTCOLSUMCase48(__gm__ uint64_t* out, __gm__ uint64_t* src)
+{
+    runTColSum<uint64_t, 4, 4, 1, 16, 16>(out, src, false);
+}
 
 template <uint32_t caseId>
 struct TColSumCaseLauncher {
@@ -359,6 +375,38 @@ struct TColSumCaseLauncher<44> {
     }
 };
 
+template <>
+struct TColSumCaseLauncher<45> {
+    static void Launch(void* out, void* src, aclrtStream stream)
+    {
+        launchTCOLSUMCase45<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+    }
+};
+
+template <>
+struct TColSumCaseLauncher<46> {
+    static void Launch(void* out, void* src, aclrtStream stream)
+    {
+        launchTCOLSUMCase46<<<1, nullptr, stream>>>((int64_t*)out, (int64_t*)src);
+    }
+};
+
+template <>
+struct TColSumCaseLauncher<47> {
+    static void Launch(void* out, void* src, aclrtStream stream)
+    {
+        launchTCOLSUMCase47<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+    }
+};
+
+template <>
+struct TColSumCaseLauncher<48> {
+    static void Launch(void* out, void* src, aclrtStream stream)
+    {
+        launchTCOLSUMCase48<<<1, nullptr, stream>>>((uint64_t*)out, (uint64_t*)src);
+    }
+};
+
 template <uint32_t caseId>
 void launchTCOLSUMTestCase(void* out, void* src, aclrtStream stream)
 {
@@ -385,3 +433,7 @@ template void launchTCOLSUMTestCase<41>(void* out, void* src, aclrtStream stream
 template void launchTCOLSUMTestCase<42>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<43>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<44>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<45>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<46>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<47>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<48>(void* out, void* src, aclrtStream stream);
