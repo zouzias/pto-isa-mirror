@@ -236,14 +236,17 @@ Event，也会覆盖此前尚未完成的操作。URMA或RDMA访问不同peer时
 
 ## 并发与Session所有权
 
+- A2/A3 SDMA：不同AIV使用独立Session和Channel Group时，可以并发访问同一rank或不同rank。
+- URMA：不同AIV访问不同peer时可以并发；访问同一peer时必须串行。
+- 并发payload范围不得重叠；共享signal应使用 `AtomicAdd`，`Set` 应使用独立signal。
+
 - 同一个Session不能被多个执行流并发使用。
 - 对A2/A3 SDMA，每个并发AIV必须使用独立Session和独立Channel Group；不得让多个AIV同时提交到同一个
-  Group。不同Group的AIV可以并发访问同一rank或不同rank。`queue_num` 为 `N` 时，合法Group数最多为
-  `kSdmaMaxChannelGroups / N`。
+  Group。`queue_num` 为 `N` 时，合法Group数最多为 `kSdmaMaxChannelGroups / N`。
 - 多个AIV并发 `Set` 时，应为每个生产者使用独立signal；使用同一个signal做完成计数时应使用
   `AtomicAdd`。无论哪种模式，各AIV的payload目的地址范围都不得重叠。
-- 对URMA，不同AIV访问不同peer时可以并发；访问同一peer时必须串行，即使调用方基于同一workspace
-  构建了不同Session。
+- 对URMA和RDMA，即使调用方基于同一workspace构建了不同Session，对同一peer/QP的提交也必须串行；
+  不同peer使用独立队列。
 - 重新构建Session或复用后端队列前，必须先完成此前全部Event。
 
 ## 示例
