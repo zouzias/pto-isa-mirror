@@ -99,8 +99,7 @@ PTO_INTERNAL void DivDiffCompensationFloatImpl(U& dstReg, U& srcReg0, U& srcReg1
 }
 
 template <typename T, typename U>
-PTO_INTERNAL void DivPrecisionImpl(
-    U& dstReg, U& srcReg0, U& srcReg1, MaskReg& activeMask, MaskReg& correctMask)
+PTO_INTERNAL void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& activeMask, MaskReg& correctMask)
 {
     RegTensor<T> rawDst;
     RegTensor<T> r, z, y;
@@ -375,6 +374,8 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0
 
     HalfUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x6400; // 2^10
+    HalfUnion normalizeScaleReduce;
+    normalizeScaleReduce.i = 0x1400; // 2^-10
 
     RegTensor<half> maxSubnormal;
     RegTensor<uint16_t> tmp0;

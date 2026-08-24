@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TMOV_HPP
 
 #include "pto/npu/kirinX90/TExtract.hpp"
-#include "pto/common/arch/memory/tmov_common.hpp"
 
 namespace pto {
 
@@ -102,6 +101,37 @@ __tf__ PTO_INTERNAL void TMovToVecImpl(
     }
 }
 
+template <typename DstTileData, typename SrcTileData, unsigned blockSizeElem, unsigned srcStride, unsigned dstStride>
+__tf__ PTO_INTERNAL void TMovToVecImpl(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint64_t validRow,
+    uint64_t validCol)
+{
+    using T = typename SrcTileData::DType;
+    using U = typename DstTileData::DType;
+    __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    __ubuf__ U* dstPtr = (__ubuf__ U*)__cce_get_tile_ptr(dst);
+
+    static_assert(sizeof(T) == sizeof(U), "TMOV: src and dst data type is different!");
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        RegTensor<T> vreg0;
+        MaskReg pReg;
+        uint32_t sreg;
+        uint16_t repeatTimes = CeilDivision(validCol, nRepeatElem);
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
+            sreg = (uint32_t)validCol;
+            for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                pReg = CreatePredicate<T>(sreg);
+                vlds(vreg0, srcPtr, i * SrcTileData::RowStride + j * nRepeatElem, NORM);
+                vsts(vreg0, dstPtr, i * DstTileData::RowStride + j * nRepeatElem, distValue, pReg);
+            }
+        }
+    }
+}
+
 template <typename DstTileData, typename SrcTileData>
 AICORE void TMovToVec(DstTileData& dst, SrcTileData& src)
 {
@@ -132,11 +162,11 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     constexpr int32_t srcRow = SrcTileData::Rows;
     constexpr int32_t srcCol = SrcTileData::Cols;
     constexpr int32_t srcByteSize = srcRow * srcCol * sizeof(U);
-    constexpr int32_t dstByteSize = DstTileData::Rows * DstTileData::Cols * sizeof(U);
+    constexpr int32_t dstByteSize = DstTile::Rows * DstTile::Cols * sizeof(U);
 
     constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(U);
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
-    constexpr bool isOptForConflict = DstTileData::Compact == CompactMode::RowPlusOne;
+    constexpr bool isOptForConflict = DstTile::Compact == CompactMode::RowPlusOne;
     uint32_t alignRow = (srcRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
     uint32_t blockStride = isOptForConflict ? ((alignRow + 1) * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE :
                                               (alignRow * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE;
@@ -146,7 +176,7 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     uint32_t cfgVsstb = (blockStride << 16u) | (1 & 0xFFFFU);
     uint32_t repeatStrideLast = (CCE_VL * virtualRow - innerLoopNum * BLOCK_BYTE_SIZE) / BLOCK_BYTE_SIZE;
     uint32_t cfgVsstbLast = (blockStride << 16u) | (repeatStrideLast & 0xFFFFU);
-    uint32_t srcOffset = innerLoopNum * SrcTileData::RowStride;
+    uint32_t srcOffset = innerLoopNum * SrcTile::RowStride;
     __VEC_SCOPE__
     {
         RegTensor<U> vreg;
@@ -155,7 +185,7 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
         for (uint16_t j = 0; j < repeatTimes; ++j) {
             preg = CreatePredicate<U>(cols);
             for (uint16_t i = 0; i < innerLoopNum; ++i) {
-                vlds(vreg, srcPtr, SrcTileData::RowStride, NORM, POST_UPDATE);
+                vlds(vreg, srcPtr, SrcTile::RowStride, NORM, POST_UPDATE);
                 vsstb(vreg, dstPtr, cfgVsstb, preg, POST_UPDATE);
             }
             vlds(vreg, srcPtr, elementsPerRepeat, NORM, POST_UPDATE);

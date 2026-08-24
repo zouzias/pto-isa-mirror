@@ -22,5 +22,6 @@ PTO_INTERNAL void SET_IMG2COL_RPT_IMPL(ConvTileData& src)
         set_l3d_rpt(rptConfig);
     }
 }
+
 } // namespace pto
 #endif // SET_IMG2COL_RPT_HPP

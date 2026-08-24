@@ -1315,7 +1315,7 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
         _draw_expr(out, expr, accent)
         xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
         x_src, x_idx = xs[0], xs[1]
-        idx_text = {(EX_R, EX_C): "rr"}
+        idx_text = {(EX_R, EX_C): "k"}
         _draw_tile_grid(out, x=x_src, y=y_src, label="src", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent)
         _draw_tile_grid(
             out,
@@ -1662,7 +1662,7 @@ def _render_config(instr: str, summary: str, accent: str, bg: str) -> str:
         scalar_value = "float"
         state_lines = ["QUANT_SCALAR_REG updated", "consumed by later TPUSH"]
     else:
-        mode = "HF32" if instr == "TSETHF32MODE" else "TF32" if instr == "TSETTF32MODE" else "mode"
+        mode = "HF32" if instr == "SETHF32MODE" else "TF32" if instr == "SETTF32MODE" else "mode"
         expr = f"set transform mode ({mode})"
         proc = [
             f"{instr}(enable/mode, ...waitEvents)",

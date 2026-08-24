@@ -52,7 +52,7 @@ def gen_golden_data_tpartmax(case_name, param):
     # Save the input and golden data to binary files
     src0_in.tofile("input1.bin")
     src1_in.tofile("input2.bin")
-    
+
     dst_out = np.maximum(padded_src0, padded_src1) # elemwise max
     dst_out.tofile("golden.bin")
 
