@@ -60,12 +60,9 @@ namespace domain {
 
 inline void CommContext::Reset()
 {
-#ifdef PTO_DOMAIN_URMA_HOST
-    if (urmaMgr) {
-        urmaMgr->Finalize();
-        urmaMgr.reset();
-    }
-    urmaWs = nullptr;
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
+    DestroyWorkspace(&urmaWorkspace);
+    urmaMgr = nullptr;
     if (ownsUrmaDevCtx && urmaDevCtx != nullptr) {
         aclrtFree(urmaDevCtx);
         urmaDevCtx = nullptr;
@@ -76,11 +73,7 @@ inline void CommContext::Reset()
         urmaDevBuf = nullptr;
     }
 #endif
-    if (sdmaMgr) {
-        sdmaMgr->Finalize();
-        sdmaMgr.reset();
-    }
-    sdmaWs = nullptr;
+    DestroyWorkspace(&sdmaWorkspace);
     if (ownsWinDevCtx && winDevCtx != nullptr) {
         aclrtFree(winDevCtx);
     }
@@ -97,7 +90,7 @@ inline void CommContext::Reset()
         stream = nullptr;
     }
     winHostCtx = {};
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     urmaHostCtx = {};
 #endif
     backends = 0;
@@ -160,7 +153,7 @@ inline __gm__ CommDeviceContext* GetDeviceContext(const CommContext& ctx, AddrFa
     if (family == AddrFamily::Window) {
         return (__gm__ CommDeviceContext*)(ctx.winDevCtx);
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (family == AddrFamily::Urma) {
         return (__gm__ CommDeviceContext*)(ctx.urmaDevCtx);
     }
@@ -178,7 +171,7 @@ inline void* GetSymmetricBase(const CommContext& ctx, AddrFamily family)
     if (family == AddrFamily::Window) {
         return ctx.winBase;
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (family == AddrFamily::Urma) {
         return ctx.urmaDevBuf;
     }
@@ -194,11 +187,11 @@ inline void* GetSymmetricBase(const CommContext& ctx, AddrFamily family)
 inline __gm__ uint8_t* GetEngineWorkspace(const CommContext& ctx, DmaEngine engine)
 {
     if (engine == DmaEngine::SDMA) {
-        return ctx.sdmaWs;
+        return (__gm__ uint8_t*)(ctx.sdmaWorkspace.addr);
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (engine == DmaEngine::URMA) {
-        return ctx.urmaWs;
+        return (__gm__ uint8_t*)(ctx.urmaWorkspace.addr);
     }
 #endif
     return nullptr;
@@ -227,14 +220,14 @@ constexpr uint32_t kDefaultSdmaQueueNum = 1;
 // ============================================================================
 inline bool BuildAsyncSessionSdma(const CommContext& ctx, AsyncSession& out)
 {
-    if (ctx.sdmaWs == nullptr) {
+    if (ctx.sdmaWorkspace.addr == nullptr) {
         std::cerr << "[PTO-DOMAIN] BuildAsyncSession(SDMA): workspace missing\n";
         return false;
     }
     out = AsyncSession{};
     out.engine = DmaEngine::SDMA;
     out.valid = true;
-    out.contextGm = ctx.sdmaWs;
+    out.contextGm = (__gm__ uint8_t*)(ctx.sdmaWorkspace.addr);
     out.tmpBufAddr = nullptr;
     out.tmpBufSize = 0;
     out.syncId = 0;
@@ -245,17 +238,17 @@ inline bool BuildAsyncSessionSdma(const CommContext& ctx, AsyncSession& out)
     return true;
 }
 
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
 inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
 {
-    if (ctx.urmaWs == nullptr) {
+    if (ctx.urmaWorkspace.addr == nullptr) {
         std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): workspace missing\n";
         return false;
     }
     out = AsyncSession{};
     out.engine = DmaEngine::URMA;
     out.valid = true;
-    out.contextGm = ctx.urmaWs;
+    out.contextGm = (__gm__ uint8_t*)(ctx.urmaWorkspace.addr);
     out.destRankId = 0; // unused by new API; kept for compatibility.
     out.qpIdx = 0;
     return true;
@@ -277,7 +270,7 @@ inline bool BuildAsyncSession(const CommContext& ctx, DmaEngine engine, AsyncSes
         }
         return BuildAsyncSessionSdma(ctx, out);
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (engine == DmaEngine::URMA) {
         if (!HasBackend(ctx.backends, CommBackend::URMA)) {
             std::cerr << "[PTO-DOMAIN] BuildAsyncSession: URMA not enabled\n";

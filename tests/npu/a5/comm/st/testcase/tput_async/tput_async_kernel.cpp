@@ -108,20 +108,16 @@ bool RunPutAsyncRootPutKernel(
     aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(recvBuf, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    constexpr size_t kDummyWorkspaceBytes = 16 * 1024;
-    void* dummyWorkspace = nullptr;
-    if (aclrtMalloc(&dummyWorkspace, kDummyWorkspaceBytes, ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
-        std::cerr << "[ERROR] aclrtMalloc for dummy workspace failed!" << std::endl;
-        aclrtFreeHost(input_host);
-        aclrtFreeHost(output_host);
+    pto::comm::Workspace sdmaWorkspace;
+    if (!InitSdmaWorkspace(sdmaWorkspace)) {
         return false;
     }
-    aclrtMemset(dummyWorkspace, kDummyWorkspaceBytes, 0, kDummyWorkspaceBytes);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     TPutAsyncKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, 0, static_cast<int>(count), ctx.deviceCtx, (uint8_t*)dummyWorkspace, 0);
+        sendBuf, n_ranks, root_rank, 0, static_cast<int>(count), ctx.deviceCtx,
+        reinterpret_cast<uint8_t*>(sdmaWorkspace.addr), 0);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -161,7 +157,7 @@ bool RunPutAsyncRootPutKernel(
 
     ctx.aclStatus |= aclrtFreeHost(input_host);
     ctx.aclStatus |= aclrtFreeHost(output_host);
-    aclrtFree(dummyWorkspace);
+    pto::comm::DestroyWorkspace(&sdmaWorkspace);
 
     return ctx.Finalize() && is_ok;
 }

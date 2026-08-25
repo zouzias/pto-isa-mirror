@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/dma_engine.hpp"
 #include "pto/comm/rdma_backend.hpp"
 
 namespace pto {
@@ -113,16 +114,6 @@ enum class ReduceOp : uint8_t {
     Sum = 0, // Element-wise sum
     Max = 1, // Element-wise maximum
     Min = 2, // Element-wise minimum
-};
-
-// ============================================================================
-// DmaEngine: DMA constraints for data transfer
-// ============================================================================
-
-enum class DmaEngine : uint8_t {
-    SDMA = 0, // Supports 2D transfer
-    URMA = 1, // Supports 1D transfer (HCCP V2 Jetty, NPU_ARCH 3510 only)
-    RDMA = 2, // RDMA engine; RdmaBackend identifies the NIC implementation compiled into the binary
 };
 
 // ============================================================================

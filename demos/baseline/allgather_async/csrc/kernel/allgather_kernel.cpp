@@ -208,16 +208,15 @@ static bool RunAllgatherPutAsyncMCKernel(
         sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
+    pto::comm::Workspace sdmaWorkspace;
+    if (!InitSdmaWorkspace(sdmaWorkspace)) {
         return false;
     }
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     AllgatherPutAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0);
+        dataBuf, nRanks, ctx.deviceCtx, reinterpret_cast<uint8_t*>(sdmaWorkspace.addr), 0);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -229,7 +228,7 @@ static bool RunAllgatherPutAsyncMCKernel(
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
+    pto::comm::DestroyWorkspace(&sdmaWorkspace);
     return ctx.Finalize() && ok;
 }
 
@@ -276,16 +275,15 @@ static bool RunAllgatherGetAsyncMCKernel(
         sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
+    pto::comm::Workspace sdmaWorkspace;
+    if (!InitSdmaWorkspace(sdmaWorkspace)) {
         return false;
     }
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     AllgatherGetAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0);
+        dataBuf, nRanks, ctx.deviceCtx, reinterpret_cast<uint8_t*>(sdmaWorkspace.addr), 0);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -297,7 +295,7 @@ static bool RunAllgatherGetAsyncMCKernel(
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
+    pto::comm::DestroyWorkspace(&sdmaWorkspace);
     return ctx.Finalize() && ok;
 }
 
@@ -414,9 +412,8 @@ static bool RunAllgatherRingKernel(
         sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
+    pto::comm::Workspace sdmaWorkspace;
+    if (!InitSdmaWorkspace(sdmaWorkspace)) {
         return false;
     }
 
@@ -425,7 +422,8 @@ static bool RunAllgatherRingKernel(
     int numRounds = nRanks - 1;
     for (int r = 0; r < numRounds; ++r) {
         RingAllgatherRoundKernel<<<1, nullptr, ctx.stream>>>(
-            dataBuf, nRanks, ctx.deviceCtx, (uint8_t*)sdmaMgr.GetWorkspaceAddr(), 0, static_cast<int>(ELEM_COUNT), r);
+            dataBuf, nRanks, ctx.deviceCtx, reinterpret_cast<uint8_t*>(sdmaWorkspace.addr), 0,
+            static_cast<int>(ELEM_COUNT), r);
         ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
         HcclHostBarrier(ctx.comm, ctx.stream);
     }
@@ -438,7 +436,7 @@ static bool RunAllgatherRingKernel(
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
+    pto::comm::DestroyWorkspace(&sdmaWorkspace);
     return ctx.Finalize() && ok;
 }
 

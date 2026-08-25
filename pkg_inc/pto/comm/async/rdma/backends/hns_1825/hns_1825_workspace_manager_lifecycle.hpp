@@ -364,6 +364,7 @@ inline void WorkspaceManager::ResetOwnedState()
     memHandle_ = nullptr;
     endpoint_ = nullptr;
     rdmaInfoDevice_ = nullptr;
+    workspaceBytes_ = 0;
     symmetricAddr_ = nullptr;
     symmetricSize_ = 0;
     localIp_.clear();

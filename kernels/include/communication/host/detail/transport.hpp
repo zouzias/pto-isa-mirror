@@ -16,7 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #include <iostream>
-#include <memory>
 
 #include "securec.h"
 
@@ -32,25 +31,22 @@ namespace detail {
 
 inline bool SetupSdmaTransport(CommContext& ctx)
 {
-    ctx.sdmaMgr = std::make_unique<sdma::SdmaWorkspaceManager>();
-    if (!ctx.sdmaMgr->Init()) {
-        std::cerr << "[PTO-DOMAIN] SdmaWorkspaceManager::Init failed\n";
-        ctx.sdmaMgr.reset();
-        return false;
-    }
-    // C-style cast: reinterpret_cast to __gm__* is ill-formed under -xcce.
-    ctx.sdmaWs = (__gm__ uint8_t*)(ctx.sdmaMgr->GetWorkspaceAddr());
-    if (ctx.sdmaWs == nullptr) {
-        std::cerr << "[PTO-DOMAIN] SDMA workspace addr is null\n";
-        ctx.sdmaMgr.reset();
+    WorkspaceRequest req{};
+    const WorkspaceStatus status = CreateWorkspace(DmaEngine::SDMA, req, &ctx.sdmaWorkspace);
+    if (status != WorkspaceStatus::Ok) {
+        std::cerr << "[PTO-DOMAIN] CreateWorkspace(SDMA) failed: " << static_cast<int32_t>(status) << "\n";
         return false;
     }
     return true;
 }
 
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
 inline bool BackfillUrmaWindows(const CommConfig& cfg, CommContext& ctx)
 {
+    if (ctx.urmaMgr == nullptr) {
+        std::cerr << "[PTO-DOMAIN] URMA workspace manager missing\n";
+        return false;
+    }
     memset_s(&ctx.urmaHostCtx, sizeof(ctx.urmaHostCtx), 0, sizeof(ctx.urmaHostCtx));
     ctx.urmaHostCtx.rankId = static_cast<uint32_t>(cfg.rankId);
     ctx.urmaHostCtx.rankNum = static_cast<uint32_t>(cfg.rankNum);
@@ -78,21 +74,19 @@ inline bool BackfillUrmaWindows(const CommConfig& cfg, CommContext& ctx)
 
 inline bool SetupUrmaTransport(const CommConfig& cfg, CommContext& ctx)
 {
-    ctx.urmaMgr = std::make_unique<urma::UrmaWorkspaceManager>();
-    if (!ctx.urmaMgr->Init(
-            ctx.comm, static_cast<uint32_t>(cfg.rankId), static_cast<uint32_t>(cfg.rankNum), ctx.urmaDevBuf,
-            cfg.symBytes)) {
-        std::cerr << "[PTO-DOMAIN] UrmaWorkspaceManager::Init failed\n";
-        ctx.urmaMgr.reset();
+    WorkspaceRequest req{};
+    req.hcclComm = ctx.comm;
+    req.rankId = static_cast<uint32_t>(cfg.rankId);
+    req.rankNum = static_cast<uint32_t>(cfg.rankNum);
+    req.symmetricAddr = ctx.urmaDevBuf;
+    req.symmetricBytes = cfg.symBytes;
+
+    const WorkspaceStatus status = CreateWorkspace(DmaEngine::URMA, req, &ctx.urmaWorkspace);
+    if (status != WorkspaceStatus::Ok) {
+        std::cerr << "[PTO-DOMAIN] CreateWorkspace(URMA) failed: " << static_cast<int32_t>(status) << "\n";
         return false;
     }
-    // C-style cast: reinterpret_cast to __gm__* is ill-formed under -xcce.
-    ctx.urmaWs = (__gm__ uint8_t*)(ctx.urmaMgr->GetWorkspaceAddr());
-    if (ctx.urmaWs == nullptr) {
-        std::cerr << "[PTO-DOMAIN] URMA workspace addr is null\n";
-        ctx.urmaMgr.reset();
-        return false;
-    }
+    ctx.urmaMgr = static_cast<urma::UrmaWorkspaceManager*>(ctx.urmaWorkspace.impl);
     return BackfillUrmaWindows(cfg, ctx);
 }
 #endif
@@ -104,7 +98,7 @@ inline bool SetupTransport(const CommConfig& cfg, CommContext& ctx)
             return false;
         }
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (HasBackend(cfg.backends, CommBackend::URMA)) {
         if (!SetupUrmaTransport(cfg, ctx)) {
             return false;

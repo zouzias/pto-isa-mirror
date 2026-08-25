@@ -719,10 +719,25 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     return perRankFn(rankId, &rootInfo);
 }
 
-// SdmaWorkspaceManager moved to pto/comm/async/sdma/sdma_workspace_manager.hpp.
-// Host binaries that only need HCCL/MPI helpers (e.g. moe_dispatch) can skip this
-// include — pulling it transitively requires CCE address-space stubs on host.
+// Host binaries that only need HCCL/MPI helpers (e.g. moe_dispatch) can skip
+// SDMA workspace provisioning helpers.
 #ifndef PTO_COMM_ST_SKIP_SDMA_WORKSPACE_MANAGER
-#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
-using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
+#ifndef PTO_COMM_WORKSPACE_URMA_SUPPORTED
+#define PTO_COMM_WORKSPACE_URMA_SUPPORTED 0
+#endif
+#ifndef PTO_COMM_WORKSPACE_RDMA_SUPPORTED
+#define PTO_COMM_WORKSPACE_RDMA_SUPPORTED 0
+#endif
+#include "pto/comm/workspace.hpp"
+
+inline bool InitSdmaWorkspace(pto::comm::Workspace& workspace)
+{
+    pto::comm::WorkspaceRequest req{};
+    const pto::comm::WorkspaceStatus status = pto::comm::CreateWorkspace(pto::comm::DmaEngine::SDMA, req, &workspace);
+    if (status != pto::comm::WorkspaceStatus::Ok) {
+        std::cerr << "[ERROR] CreateWorkspace(SDMA) failed: " << static_cast<int32_t>(status) << std::endl;
+        return false;
+    }
+    return true;
+}
 #endif

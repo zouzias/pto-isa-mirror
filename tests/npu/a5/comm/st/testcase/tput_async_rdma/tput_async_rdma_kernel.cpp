@@ -29,6 +29,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_RDMA_SUPPORTED
 #include "pto/comm/async/rdma/rdma_async_intrin.hpp"
 #include "pto/comm/async/rdma/rdma_workspace_manager.hpp"
+#include "pto/comm/workspace.hpp"
 #include "backends/rdma_test_backend.hpp"
 #endif
 
@@ -364,7 +365,7 @@ static pto::comm::rdma::WorkspaceInitResult AgreeOnRdmaPreflight(int nRanks)
 }
 
 // ============================================================================
-// RdmaTestContext: device, registered communication buffer, and RDMA workspace manager.
+// RdmaTestContext: device, registered communication buffer, and RDMA workspace.
 //
 // Each case owns a complete backend-channel lifecycle. Reusing the same port
 // across the suite validates channel destruction followed by reconnection.
@@ -376,7 +377,7 @@ struct RdmaTestContext {
     rtStream_t stream{nullptr};
     void* devBuf{nullptr};
     size_t allocSize{0};
-    pto::comm::rdma::RdmaWorkspaceManager rdmaMgr;
+    pto::comm::Workspace rdmaWorkspace;
     pto::comm::rdma::test::BackendBootstrap boot;
     uint32_t traceId{0};
 
@@ -433,20 +434,26 @@ struct RdmaTestContext {
 
     bool ConnectRdma()
     {
-        pto::comm::rdma::WorkspaceConfig config{};
-        config.rankId = static_cast<uint32_t>(rankId);
-        config.rankCount = static_cast<uint32_t>(nRanks);
-        config.phyId = boot.phyId;
-        config.localIp = boot.peerIps[rankId];
-        config.basePort = boot.basePort;
-        config.peerIps = boot.peerIps;
-        config.peerPhyIds = boot.peerPhyIds;
-        config.peerSymAddrs = boot.peerSymAddrs;
-        config.symmetricAddr = devBuf;
-        config.symmetricSize = allocSize;
-        const bool localConnected = rdmaMgr.Init(config) == pto::comm::rdma::WorkspaceInitResult::READY;
+        pto::comm::RdmaTransportConfig rdma{};
+        rdma.phyId = boot.phyId;
+        rdma.localIp = boot.peerIps[rankId];
+        rdma.basePort = boot.basePort;
+        rdma.peerIps = boot.peerIps;
+        rdma.peerPhyIds = boot.peerPhyIds;
+        rdma.peerSymAddrs = boot.peerSymAddrs;
+        rdma.traceId = traceId;
+
+        pto::comm::WorkspaceRequest req{};
+        req.rankId = static_cast<uint32_t>(rankId);
+        req.rankNum = static_cast<uint32_t>(nRanks);
+        req.symmetricAddr = devBuf;
+        req.symmetricBytes = allocSize;
+        req.rdma = &rdma;
+        const pto::comm::WorkspaceStatus status =
+            pto::comm::CreateWorkspace(pto::comm::DmaEngine::RDMA, req, &rdmaWorkspace);
+        const bool localConnected = status == pto::comm::WorkspaceStatus::Ok;
         if (!localConnected) {
-            std::cerr << "[ERROR] RDMA workspace initialization failed" << std::endl;
+            std::cerr << "[ERROR] CreateWorkspace(RDMA) failed: " << static_cast<int32_t>(status) << std::endl;
         }
         return AllRanksReady(localConnected, nRanks, "RDMA backend channel initialization");
     }
@@ -459,7 +466,6 @@ struct RdmaTestContext {
         rankId = rank_id;
         nRanks = n_ranks;
         deviceId = rank_id % n_devices + first_device_id;
-        rdmaMgr.SetTraceId(traceId);
         RdmaTrace(traceId, rankId, "SETUP begin device=", deviceId, " commBytes=", commBytesNeeded);
         if (!SetupLocalResources(commBytesNeeded)) {
             return SetupResult::FAILED;
@@ -487,7 +493,8 @@ struct RdmaTestContext {
         const auto cleanupStart = std::chrono::steady_clock::now();
         RdmaTrace(traceId, rankId, "CLEANUP begin devBuf=", devBuf, " stream=", stream);
         CommMpiBarrier();
-        bool localOk = rdmaMgr.Finalize();
+        bool localOk = true;
+        pto::comm::DestroyWorkspace(&rdmaWorkspace);
         if (devBuf != nullptr) {
             aclError ret = aclrtFree(devBuf);
             if (ret != ACL_SUCCESS) {
@@ -732,7 +739,7 @@ static RdmaKernelResult LaunchPutRdmaKernel(
     TPutAsyncRdmaKernelImpl<T, count><<<1, nullptr, context.stream>>>(
         reinterpret_cast<T*>(context.devBuf), config.nRanks, config.rankId, config.firstRankId, config.rootRank,
         config.elemOffset, config.elemCount, config.operationCount, config.completionMode,
-        reinterpret_cast<uint8_t*>(context.rdmaMgr.GetWorkspaceAddr()), 0);
+        reinterpret_cast<uint8_t*>(context.rdmaWorkspace.addr), 0);
     // clang-format on
     const int syncResult = aclrtSynchronizeStream(context.stream);
     return CollectRdmaKernelResult("PUT", config, context, syncResult, kernelStart, output, count, deviceOutput);
@@ -749,7 +756,7 @@ static RdmaKernelResult LaunchGetRdmaKernel(
     TGetAsyncRdmaKernelImpl<T, count><<<1, nullptr, context.stream>>>(
         reinterpret_cast<T*>(context.devBuf), config.nRanks, config.rankId, config.firstRankId, config.rootRank,
         config.elemOffset, config.elemCount, config.operationCount, config.completionMode,
-        reinterpret_cast<uint8_t*>(context.rdmaMgr.GetWorkspaceAddr()), 0);
+        reinterpret_cast<uint8_t*>(context.rdmaWorkspace.addr), 0);
     // clang-format on
     const int syncResult = aclrtSynchronizeStream(context.stream);
     return CollectRdmaKernelResult(

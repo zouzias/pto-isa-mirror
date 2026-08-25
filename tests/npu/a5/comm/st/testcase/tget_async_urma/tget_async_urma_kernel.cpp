@@ -136,7 +136,7 @@ bool RunGetAsyncUrmaRootGetKernel(
 
     TGetAsyncUrmaKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
         reinterpret_cast<T*>(ctx.devBuf), n_ranks, rank_id, first_rank_id, root_rank, 0, static_cast<int>(count),
-        reinterpret_cast<uint8_t*>(ctx.urmaMgr.GetWorkspaceAddr()));
+        reinterpret_cast<uint8_t*>(ctx.GetWorkspaceAddr()));
     int syncRet = aclrtSynchronizeStream(ctx.stream);
 
     CommMpiBarrier();

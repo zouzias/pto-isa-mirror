@@ -22,6 +22,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "common.hpp"
 #include "pto/comm/async/sdma/sdma_types.hpp"
+#ifndef PTO_COMM_WORKSPACE_URMA_SUPPORTED
+#define PTO_COMM_WORKSPACE_URMA_SUPPORTED 0
+#endif
+#ifndef PTO_COMM_WORKSPACE_RDMA_SUPPORTED
+#define PTO_COMM_WORKSPACE_RDMA_SUPPORTED 0
+#endif
+#include "pto/comm/workspace.hpp"
 
 namespace benchmark {
 
@@ -201,7 +208,7 @@ struct DeviceBaselineResources {
     T* shmem = nullptr;
     T* sendShmem = nullptr;
     T* recvShmem = nullptr;
-    SdmaWorkspaceManager sdmaMgr;
+    pto::comm::Workspace sdmaWorkspace;
 
     bool Allocate(size_t totalBytes)
     {
@@ -247,7 +254,7 @@ struct DeviceBaselineResources {
             ctx.aclStatus |= aclrtFreeHost(profileBufHost);
         }
         if (finalizeSdma) {
-            sdmaMgr.Finalize();
+            pto::comm::DestroyWorkspace(&sdmaWorkspace);
         }
     }
 };

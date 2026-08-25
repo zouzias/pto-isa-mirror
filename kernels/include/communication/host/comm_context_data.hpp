@@ -22,7 +22,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #include <cstdint>
-#include <memory>
 
 #include "pto/common/arch_macro.hpp"
 #include "communication/comm_device_context.hpp"
@@ -41,16 +40,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DOMAIN_DEFINED_GM_STUB 1
 #endif
 
-#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
-
-// Host builds often omit __NPU_ARCH__; enable URMA host path unless A2/A3.
-#if defined(PTO_URMA_SUPPORTED) || (!defined(PTO_NPU_ARCH_A2A3) && !defined(__CCE_KT_TEST__))
-#define PTO_DOMAIN_URMA_HOST 1
-#endif
-
-#ifdef PTO_DOMAIN_URMA_HOST
-#include "pto/comm/async/urma/urma_workspace_manager.hpp"
-#endif
+#include "pto/comm/workspace.hpp"
 
 namespace pto {
 namespace comm {
@@ -88,16 +78,15 @@ struct CommContext {
     CommDeviceContext* winDevCtx = nullptr;
     void* winBase = nullptr;
     bool ownsWinDevCtx = false;
-    __gm__ uint8_t* sdmaWs = nullptr;
-    std::unique_ptr<sdma::SdmaWorkspaceManager> sdmaMgr;
+    Workspace sdmaWorkspace{};
 
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     CommDeviceContext urmaHostCtx{};
     CommDeviceContext* urmaDevCtx = nullptr;
     void* urmaDevBuf = nullptr;
-    __gm__ uint8_t* urmaWs = nullptr;
     bool ownsUrmaDevCtx = false;
-    std::unique_ptr<urma::UrmaWorkspaceManager> urmaMgr;
+    Workspace urmaWorkspace{};
+    urma::UrmaWorkspaceManager* urmaMgr = nullptr;
 #endif
 
     void Reset();
@@ -118,15 +107,17 @@ inline void CommContext::MoveFrom(CommContext& other) noexcept
     winDevCtx = other.winDevCtx;
     winBase = other.winBase;
     ownsWinDevCtx = other.ownsWinDevCtx;
-    sdmaWs = other.sdmaWs;
-    sdmaMgr = std::move(other.sdmaMgr);
-#ifdef PTO_DOMAIN_URMA_HOST
+    sdmaWorkspace = other.sdmaWorkspace;
+    other.sdmaWorkspace = {};
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     urmaHostCtx = other.urmaHostCtx;
     urmaDevCtx = other.urmaDevCtx;
     urmaDevBuf = other.urmaDevBuf;
-    urmaWs = other.urmaWs;
     ownsUrmaDevCtx = other.ownsUrmaDevCtx;
-    urmaMgr = std::move(other.urmaMgr);
+    urmaWorkspace = other.urmaWorkspace;
+    urmaMgr = other.urmaMgr;
+    other.urmaWorkspace = {};
+    other.urmaMgr = nullptr;
 #endif
     other.backends = 0;
     other.comm = nullptr;
@@ -136,12 +127,10 @@ inline void CommContext::MoveFrom(CommContext& other) noexcept
     other.winDevCtx = nullptr;
     other.winBase = nullptr;
     other.ownsWinDevCtx = false;
-    other.sdmaWs = nullptr;
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     other.urmaHostCtx = {};
     other.urmaDevCtx = nullptr;
     other.urmaDevBuf = nullptr;
-    other.urmaWs = nullptr;
     other.ownsUrmaDevCtx = false;
 #endif
 }

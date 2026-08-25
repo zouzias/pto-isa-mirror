@@ -23,8 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl/hccl_comm.h"
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
-#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
-#include "pto/comm/async/urma/urma_workspace_manager.hpp"
+#include "pto/comm/workspace.hpp"
 
 // ============================================================================
 // Debug logging helpers. Enabled by cmake -DDEBUG_MODE=ON (defines COMM_DEBUG).
@@ -380,9 +379,16 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     return perRankFn(rankId, &hcclRootInfo);
 }
 
-using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
-
-using UrmaWorkspaceManager = pto::comm::urma::UrmaWorkspaceManager;
+inline bool InitSdmaWorkspace(pto::comm::Workspace& workspace)
+{
+    pto::comm::WorkspaceRequest req{};
+    const pto::comm::WorkspaceStatus status = pto::comm::CreateWorkspace(pto::comm::DmaEngine::SDMA, req, &workspace);
+    if (status != pto::comm::WorkspaceStatus::Ok) {
+        std::cerr << "[ERROR] CreateWorkspace(SDMA) failed: " << static_cast<int32_t>(status) << std::endl;
+        return false;
+    }
+    return true;
+}
 
 // ============================================================================
 // UrmaTestContext: HCCL-based URMA host setup for TGET_ASYNC / TPUT_ASYNC ST.
@@ -396,7 +402,7 @@ struct UrmaTestContext {
     HcclComm comm{nullptr};
     void* devBuf{nullptr};
     size_t allocSize{0};
-    UrmaWorkspaceManager urmaMgr;
+    pto::comm::Workspace urmaWorkspace;
 
     // Symmetric MR buffer: exact commBytesNeeded (no 2MB round-up).
     // HCCL registers with nonPin=1 and 4KB BufAlign internally, so 2MB huge page is not required.
@@ -461,8 +467,16 @@ struct UrmaTestContext {
         }
         CommMpiBarrier();
 
-        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize)) {
-            std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
+        pto::comm::WorkspaceRequest req{};
+        req.hcclComm = comm;
+        req.rankId = static_cast<uint32_t>(rank_id);
+        req.rankNum = static_cast<uint32_t>(n_ranks);
+        req.symmetricAddr = devBuf;
+        req.symmetricBytes = allocSize;
+        const pto::comm::WorkspaceStatus status =
+            pto::comm::CreateWorkspace(pto::comm::DmaEngine::URMA, req, &urmaWorkspace);
+        if (status != pto::comm::WorkspaceStatus::Ok) {
+            std::cerr << "[ERROR] CreateWorkspace(URMA) failed: " << static_cast<int32_t>(status) << std::endl;
             aclrtFree(devBuf);
             devBuf = nullptr;
             HcclCommDestroy(comm);
@@ -472,10 +486,12 @@ struct UrmaTestContext {
         return true;
     }
 
+    void* GetWorkspaceAddr() const { return urmaWorkspace.addr; }
+
     void Cleanup()
     {
         CommMpiBarrier();
-        urmaMgr.Finalize();
+        pto::comm::DestroyWorkspace(&urmaWorkspace);
         if (devBuf) {
             aclrtFree(devBuf);
             devBuf = nullptr;

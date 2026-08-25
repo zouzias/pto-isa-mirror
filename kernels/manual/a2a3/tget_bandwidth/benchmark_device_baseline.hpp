@@ -166,8 +166,8 @@ bool RunDeviceBaselineOuterIterations(
         const bool launchOk = LaunchDeviceBaselineKernel<DirectionPolicy::kIsTGet>(
             ctx, resources.profileBufDev, resources.recvShmem, resources.shmem, nRanks, rootRank, peerRank,
             static_cast<int>(config.elemCount), config.innerWarmup, config.innerIters,
-            rankId == rootRank ? reinterpret_cast<uint8_t*>(resources.sdmaMgr.GetWorkspaceAddr()) : nullptr,
-            config.queueNum, config.blockBytes, config.postCount, config.waitEachEvent);
+            rankId == rootRank ? reinterpret_cast<uint8_t*>(resources.sdmaWorkspace.addr) : nullptr, config.queueNum,
+            config.blockBytes, config.postCount, config.waitEachEvent);
         if (!launchOk) {
             return false;
         }
@@ -224,9 +224,11 @@ bool RunDeviceBaselineKernel(
     if (ok) {
         resources.MapWindow(ctx, rankId, config.totalBytes, requiredWindowBytes);
     }
-    if (ok && rankId == rootRank && !resources.sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        ok = false;
+    if (ok && rankId == rootRank) {
+        ok = InitSdmaWorkspace(resources.sdmaWorkspace);
+        if (!ok) {
+            std::cerr << "[ERROR] CreateWorkspace(SDMA) failed" << std::endl;
+        }
     }
     if (ok && rankId == rootRank) {
         PrintDeviceBaselineConfig(instr, config);

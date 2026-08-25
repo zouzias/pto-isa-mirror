@@ -524,7 +524,7 @@ bool RunTGetBandwidthSweepKernel(
     uint64_t* profileBufDev = nullptr;
     uint64_t* profileBufHost = nullptr;
     T* shmem = nullptr;
-    SdmaWorkspaceManager sdmaMgr;
+    pto::comm::Workspace sdmaWorkspace;
     bool ok = false;
 
     do {
@@ -579,8 +579,7 @@ bool RunTGetBandwidthSweepKernel(
         }
         HcclHostBarrier(ctx.comm, ctx.stream);
 
-        if (rankId == rootRank && !sdmaMgr.Init()) {
-            std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
+        if (rankId == rootRank && !InitSdmaWorkspace(sdmaWorkspace)) {
             break;
         }
 
@@ -601,7 +600,7 @@ bool RunTGetBandwidthSweepKernel(
             if (!RunSingleBandwidthCase(
                     BenchInstr::TGetAsync, ctx, outputBuf, profileBufDev, profileBufHost, shmem, outputHost, elemCount,
                     nRanks, rootRank, peerRank,
-                    rankId == rootRank ? reinterpret_cast<uint8_t*>(sdmaMgr.GetWorkspaceAddr()) : nullptr)) {
+                    rankId == rootRank ? reinterpret_cast<uint8_t*>(sdmaWorkspace.addr) : nullptr)) {
                 sweepOk = false;
                 break;
             }
@@ -631,7 +630,7 @@ bool RunTGetBandwidthSweepKernel(
         ctx.aclStatus |= aclrtFreeHost(profileBufHost);
     }
     if (rankId == rootRank) {
-        sdmaMgr.Finalize();
+        pto::comm::DestroyWorkspace(&sdmaWorkspace);
     }
 
     return ctx.Finalize() && ok;

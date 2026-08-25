@@ -83,6 +83,8 @@ public:
     // Device address of the RdmaInfo table passed to the RDMA kernel.
     void* GetWorkspaceAddr() const { return rdmaInfoDevice_; }
 
+    uint64_t GetWorkspaceSize() const { return workspaceBytes_; }
+
 private:
     struct DecodedRoceSqContext : host::RoceSqContextSplitDb {
         const char* abiName;
@@ -200,6 +202,7 @@ private:
     std::vector<ChannelHandle> channelHandles_;
     std::vector<uint32_t> channelPeer_;
     void* rdmaInfoDevice_{nullptr};
+    uint64_t workspaceBytes_{0};
     bool initialized_{false};
     uint32_t traceId_{0};
 };

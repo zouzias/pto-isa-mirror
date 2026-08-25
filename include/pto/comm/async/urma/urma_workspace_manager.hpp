@@ -59,6 +59,10 @@ public:
 
     bool Init(HcclComm comm, uint32_t rankId, uint32_t rankCount, void* symmetricAddr, uint64_t symmetricSize)
     {
+        if (initialized_) {
+            return true;
+        }
+
         comm_ = comm;
         rankId_ = rankId;
         rankCount_ = rankCount;
@@ -92,6 +96,18 @@ public:
     }
 
     void* GetWorkspaceAddr() const { return urmaInfoDevice_; }
+
+    uint64_t GetWorkspaceSize() const { return WorkspaceBytes(rankCount_); }
+
+    static constexpr uint64_t WorkspaceBytes(uint32_t rankCount, uint32_t qpNum = 1)
+    {
+        if (rankCount == 0) {
+            return 0;
+        }
+        return static_cast<uint64_t>(
+            sizeof(UrmaInfo) + rankCount * (2U * sizeof(UrmaWQCtx) * qpNum + 2U * sizeof(UrmaCqCtx) * qpNum +
+                                            sizeof(UrmaMemInfo) * qpNum));
+    }
 
     // Per-peer symmetric MR base address (self = symmetricAddr_). Valid after Init().
     uint64_t PeerBaseAddr(uint32_t peer) const
@@ -339,9 +355,7 @@ private:
         const std::vector<UrmaMemInfo>& memList, uint32_t localTokenId)
     {
         constexpr uint32_t qpNum = 1;
-        size_t totalSize =
-            sizeof(UrmaInfo) + rankCount_ * (2U * sizeof(UrmaWQCtx) * qpNum + 2U * sizeof(UrmaCqCtx) * qpNum +
-                                             sizeof(UrmaMemInfo) * qpNum);
+        const size_t totalSize = static_cast<size_t>(WorkspaceBytes(rankCount_, qpNum));
 
         aclError err = aclrtMalloc(&urmaInfoDevice_, totalSize, ACL_MEM_MALLOC_HUGE_FIRST);
         if (err != ACL_SUCCESS) {

@@ -178,7 +178,7 @@ inline bool AllocWindowByTiling(CommContext& ctx)
     return InitRingWindow(ctx, ctxPtr);
 }
 
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
 inline bool SetupUrmaDevBuf(const CommConfig& cfg, CommContext& ctx)
 {
     if (cfg.symBytes == 0) {
@@ -202,7 +202,7 @@ inline bool SetupAddressing(const CommConfig& cfg, CommContext& ctx)
             return false;
         }
     }
-#ifdef PTO_DOMAIN_URMA_HOST
+#if PTO_COMM_WORKSPACE_URMA_SUPPORTED
     if (NeedsUrmaFamily(cfg.backends)) {
         if (!SetupUrmaDevBuf(cfg, ctx)) {
             std::cerr << "[PTO-DOMAIN] setupAddressing(URMA) failed\n";

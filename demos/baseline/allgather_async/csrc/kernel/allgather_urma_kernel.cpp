@@ -321,7 +321,7 @@ static bool RunAllgatherUrmaPutMCKernel(
         return false;
 
     AllgatherUrmaPutMulticoreKernel<<<nRanks, nullptr, env.ctx.stream>>>(
-        env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.urmaMgr.GetWorkspaceAddr()));
+        env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.GetWorkspaceAddr()));
     aclrtSynchronizeStream(env.ctx.stream);
     CommMpiBarrier();
 
@@ -338,7 +338,7 @@ static bool RunAllgatherUrmaGetMCKernel(
         return false;
 
     AllgatherUrmaGetMulticoreKernel<<<nRanks, nullptr, env.ctx.stream>>>(
-        env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.urmaMgr.GetWorkspaceAddr()));
+        env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.GetWorkspaceAddr()));
     aclrtSynchronizeStream(env.ctx.stream);
     CommMpiBarrier();
 
@@ -357,7 +357,7 @@ static bool RunAllgatherUrmaRingKernel(
     int numRounds = nRanks - 1;
     for (int r = 0; r < numRounds; ++r) {
         RingUrmaAllgatherRoundKernel<<<1, nullptr, env.ctx.stream>>>(
-            env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.urmaMgr.GetWorkspaceAddr()),
+            env.dataBuf, nRanks, env.myPeer, reinterpret_cast<uint8_t*>(env.ctx.GetWorkspaceAddr()),
             static_cast<int>(ELEM_COUNT), r);
         aclrtSynchronizeStream(env.ctx.stream);
         CommMpiBarrier();
