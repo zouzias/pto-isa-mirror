@@ -37,7 +37,7 @@ inline bool WorkspaceManager::CreateEndpoint()
         std::cerr << "[RoCE] invalid local ip: " << localIp_ << std::endl;
         return false;
     }
-    description.loc.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    description.loc.locType = ENDPOINT_LOC_TYPE_HOST;
     description.loc.device.devPhyId = phyId_;
     result = HcommEndpointCreate(&description, &endpoint_);
     if (result != 0 || endpoint_ == nullptr) {
@@ -94,7 +94,7 @@ inline bool WorkspaceManager::ConfigureChannelDescription(
         std::cerr << "[RoCE] invalid peer ip[" << remoteRank << "]: " << peerIps_[remoteRank] << std::endl;
         return false;
     }
-    description.remoteEndpoint.loc.locType = ENDPOINT_LOC_TYPE_DEVICE;
+    description.remoteEndpoint.loc.locType = ENDPOINT_LOC_TYPE_HOST;
     description.remoteEndpoint.loc.device.devPhyId = peerPhyIds_[remoteRank];
     description.notifyNum = 3;
     description.exchangeAllMems = true;
