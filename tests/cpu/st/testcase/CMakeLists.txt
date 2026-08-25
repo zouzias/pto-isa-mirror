@@ -57,6 +57,8 @@ tcolexpand
 tcolexpandop
 tcolmax
 tcolmin
+tcolprod
+tcolreduceidx
 tcolsum
 tconcat
 tcvt
@@ -132,6 +134,7 @@ trowexpand
 trowexpandop
 trowmax
 trowmin
+trowreduceidx
 trowsum
 trowprod
 trsqrt
@@ -153,6 +156,7 @@ tsubs
 ttest
 ttrans
 ttri
+ttrace
 twait
 txor
 txors
