@@ -152,6 +152,27 @@ template <typename DstTileData, typename SrcTileData, typename FpTileData, AccTo
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
@@ -160,6 +181,8 @@ template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPre
           typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
 ```
+
+`TMOV_FP(...)` is retained for source compatibility and forwards to the no-`mode` `TMOV(..., fp, ...)` overload.
 
 ### ND → NZ / X → ZZ overloads
 
@@ -170,13 +193,15 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...eve
 
 // X -> ZZ (3-arg, with tmp). grp_axis=1 (default) = ND->ZZ; grp_axis=0 = DN->ZZ.
 template <typename DstTileData, typename SrcTileData, typename TmpTileData, typename... WaitEvents,
-          std::enable_if_t<is_tile_data_v<TmpTileData>, int> = 0>
+          std::enable_if_t<is_tile_data_v<TmpTileData> && (TmpTileData::Loc != TileType::Scaling), int> = 0>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, WaitEvents &...events);
 
 template <int grp_axis, typename DstTileData, typename SrcTileData, typename TmpTileData, typename... WaitEvents,
-          std::enable_if_t<is_tile_data_v<TmpTileData>, int> = 0>
+          std::enable_if_t<is_tile_data_v<TmpTileData> && (TmpTileData::Loc != TileType::Scaling), int> = 0>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, WaitEvents &...events);
 ```
+
+The 3-argument `tmp` overloads exclude `TileType::Scaling`; a `Scaling` third operand selects the no-`mode` fp `TMOV(..., fp, ...)` overload.
 
 | Overload | `grp_axis` | Transform | `tmp` used? |
 |----------|-----------|-----------|-------------|
@@ -192,10 +217,20 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
     - plain move: `TMOV(dst, src)`
     - relu form: `TMOV<..., reluMode>(dst, src)`
     - accumulator-to-vector form: `TMOV<..., mode, reluMode>(dst, src)`
-    - vector-quant form: `TMOV<..., FpTileData, mode, reluMode>(dst, src, fp)`
+    - vector-quant forms:
+      `TMOV<..., FpTileData, reluMode>(dst, src, fp)`,
+      `TMOV<Phase, ..., FpTileData, reluMode>(dst, src, fp)`,
+      `TMOV_FP<..., reluMode>(dst, src, fp)`,
+      and target-supported Acc-to-Vec forms
+      `TMOV<..., FpTileData, mode, reluMode>(dst, src, fp)` and
+      `TMOV<Phase, ..., FpTileData, mode, reluMode>(dst, src, fp)`
     - scalar-quant form: `TMOV<..., reluMode>(dst, src, preQuantScalar)` and `TMOV<..., mode, reluMode>(dst, src, preQuantScalar)`
 - `reluMode` is `ReluPreMode::{NoRelu, NormalRelu}`.
 - `mode` is `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
+- The fp `STPhase` overloads are exposed only on targets with backend support
+  (A5, kirin9030, kirinX90, kirinDev0000, and CPU simulator).
+- The vector-quantized `fp + AccToVecMode` overloads are exposed only on targets with backend support
+  (A5, kirin9030, kirinDev0000, and CPU simulator).
 
 ### A2A3 implementation checks
 

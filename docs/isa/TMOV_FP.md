@@ -9,7 +9,7 @@
 
 Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.
 
-`TMOV_FP` is a named wrapper around the `TMOV_IMPL(..., fp)` path and is part of the `TMOV` family (see `docs/isa/TMOV.md`).
+`TMOV_FP(...)` is retained as a source-compatible C++ interface for the no-mode fp move form, including the `STPhase` overload. It forwards to the same no-mode `TMOV(..., fp, ...)` overload, which maps to the `TMOV_IMPL(dst, src, fp)` implementation path without an explicit mode template argument.
 
 ## Math Interpretation
 
@@ -22,19 +22,19 @@ $$ \mathrm{dst}_{i,j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j};\ \mathrm{fp}
 Synchronous form:
 
 ```text
-%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -43,6 +43,18 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -51,10 +63,13 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
 - **Implementation checks (A2A3)**:
     - The fp path is only supported for accumulator conversion and is validated by internal compile-time checks in `TMOV_IMPL(dst, src, fp)`.
     - `FpTileData::Loc` must be `TileType::Scaling` (`static_assert`).
+    - The `STPhase` fp alias is not exposed on A2A3 because the backend has no `TMOV_IMPL(..., fp)` phase form.
 - **Implementation checks (A5)**:
     - Validated by `CheckTMovAccValid(...)` and related compile-time checks in `TMOV_IMPL(dst, src, fp)`.
     - `FpTileData::Loc` must be `TileType::Scaling` (`static_assert`).
     - Destination location is target-dependent (`Vec` or `Mat` are supported in the fp path).
+    - The `STPhase` fp alias is exposed on targets with backend support: A5, kirin9030, kirinX90,
+      kirinDev0000, and CPU simulator.
 
 ## Examples
 
@@ -105,7 +120,7 @@ void example_manual() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
@@ -115,13 +130,13 @@ void example_manual() {
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### PTO Assembly Form
 
 ```text
-%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 # AS Level 2 (DPS)
-pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%dst : !pto.tile_buf<...>)
 ```

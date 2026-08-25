@@ -9,7 +9,8 @@
 
 Store an accumulator tile into global memory using a scaling (`fp`) tile for vector quantization parameters.
 
-`TSTORE_FP` is the fp-quantization overload of `TSTORE` (see `docs/isa/TSTORE.md`).
+`TSTORE_FP(...)` is retained as a source-compatible C++ interface for the fp-quantized store form. It forwards to the same no-mode `TSTORE(..., fp, ...)` overload, which maps to the `TSTORE_IMPL(dst, src, fp)` implementation path.
+The `STPhase` alias forwards to `TSTORE<Phase>(..., fp, ...)` only on targets with backend support.
 
 ## Math Interpretation
 
@@ -28,13 +29,13 @@ tstore.fp %src, %fp, %sv_out[%c0, %c0]
 ### AS Level 1 (SSA)
 
 ```text
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 ## C++ Intrinsic
 
@@ -43,6 +44,15 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 ```cpp
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename TileData, typename GlobalData, typename FpTileData,
+          AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -50,14 +60,16 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 
 - **Implementation checks (A2A3)**:
     - The fp store path is implemented via `TSTORE_IMPL(dst, src, fp)` and uses the same accumulator-to-GM legality checks as quantized accumulator stores:
+    - `FpTileData::Loc` must be `TileType::Scaling` (`static_assert`).
     - Destination layout must be ND, NZ, NC1HWC0, or NDC1HWC0.
     - Source dtype must be `int32_t` or `float`.
     - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND then `1 <= TileData::Rows <= 8192`; if NZ, NC1HWC0, or NDC1HWC0 then `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`.
     - Runtime: `1 <= src.GetValidCol() <= 4095`.
-    - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
 - **Implementation checks (A5)**:
     - Implemented via `TSTORE_IMPL(dst, src, fp)` and validated by `CheckStaticAcc<..., true>()` for the accumulator path (ND/NZ/NHWC/NCHW/NCDHW only, `int32_t/float` source dtype, rows/cols ranges).
-    - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
+    - `FpTileData::Loc` must be `TileType::Scaling` (`static_assert`).
+    - The `STPhase` fp alias is exposed on targets with backend support: A5, kirin9030,
+      kirinDev0000, and CPU simulator.
 
 ## Examples
 
@@ -111,7 +123,7 @@ void example_manual(__gm__ int8_t* out) {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### Manual Mode
@@ -121,7 +133,7 @@ pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### PTO Assembly Form
@@ -129,5 +141,5 @@ pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_
 ```text
 tstore.fp %src, %fp, %sv_out[%c0, %c0]
 # AS Level 2 (DPS)
-pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```

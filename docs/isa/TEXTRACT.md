@@ -53,6 +53,16 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQu
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
+                              uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          std::enable_if_t<is_tile_data_v<FpTileData> && (FpTileData::Loc == TileType::Scaling), int> = 0,
+          typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 
 template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData, typename... WaitEvents>
@@ -61,11 +71,15 @@ PTO_INST RecordEvent TEXTRACT(Dst0TileData &dst0, Dst1TileData &dst1, SrcTileDat
                               uint16_t indexRow1 = 0, uint16_t indexCol1 = 0, WaitEvents &... events);
 ```
 
+`TEXTRACT_FP(...)` is retained for source compatibility and forwards to the no-`mode` `TEXTRACT(..., fp, indexRow, indexCol, ...)` overload.
+The canonical `TEXTRACT(..., fp, ...)` interface also provides an explicit `AccToVecMode` form for target-supported Acc-to-Vec routing.
+
 ## Constraints
 
 ### General constraints / checks
 
-- `DstTileData::DType` must equal `SrcTileData::DType`.
+- For same-dtype extraction/layout paths, `DstTileData::DType` must equal `SrcTileData::DType`.
+  Acc conversion and quantized paths use the target-specific dtype pairs below.
 - Runtime bounds checks:
     - `indexRow + DstTileData::Rows <= SrcTileData::Rows`
     - `indexCol + DstTileData::Cols <= SrcTileData::Cols`
@@ -88,7 +102,10 @@ PTO_INST RecordEvent TEXTRACT(Dst0TileData &dst0, Dst1TileData &dst1, SrcTileDat
     - for `ScaleRight`: `(SFractal == ColMajor && !isRowMajor)`
 - In GEMV scenarios targeting `Left`, the checked source layout also allows `(SrcTileData::Rows == 1 && SrcTileData::isRowMajor)`.
 - Destination supports `TileType::Mat -> TileType::Left/Right/Scale`, `TileType::Acc -> TileType::Mat` (including relu, scalar-quant, and vector-quantized forms), `TileType::Acc -> TileType::Vec`, and specific `TileType::Vec -> TileType::Mat` extraction paths.
-- The vector-quantized form additionally requires an `FpTileData` scaling operand, matching the `TEXTRACT_FP(...)` interface.
+- The vector-quantized form additionally requires an `FpTileData` scaling operand, matching the no-`mode` `TEXTRACT(..., fp, ...)` interface. `TEXTRACT_FP(...)` remains available as a source-compatible forwarding alias.
+- The vector-quantized Acc-to-Vec form is exposed only on targets with matching backend support
+  (A5, kirin9030, kirinX90, and CPU simulator). It accepts
+  `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
 - For `TileType::Acc -> TileType::Vec` with a 32-bit destination type (`float`/`int32_t`), when using `DualModeSplitN` the `ValidCol` (before the split) must be a multiple of `32`.
 
 ### Vec → Vec extraction path
