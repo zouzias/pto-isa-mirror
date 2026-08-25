@@ -24,16 +24,15 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 
 Bootstrap先解析每个rank的物理设备id和RDMA IPv4，再通过MPI交换端点与注册内存信息。本地IPv4的查找顺序为：
 
-1. root-info文件中与物理设备匹配的CLOS IPv4。
+1. 固定 `/etc/hccl_rootinfo.json` 中与物理设备匹配的CLOS IPv4。
 2. 由HCOMM topology组件解析固定 `/var/run/ascend-topologyd/virtualTopology.xml`。
 3. 使用下表中的测试专用IP变量兜底。
 
-默认root-info路径为 `/etc/hccl_rootinfo.json`；设置 `PTO_ROCE_ROOTINFO` 可使用其他文件。ST不会生成或修改这两个拓扑文件。
+ST不会生成或修改这两个拓扑文件，也不提供路径覆盖变量。
 
 | 变量 | 说明 |
 |---|---|
 | `PTO_RDMA_BACKEND` | 配置阶段选择项，当前唯一支持值为 `HNS_1825`。|
-| `PTO_ROCE_ROOTINFO` | 可选root-info JSON路径，优先于virtual topology和IP兜底变量。|
 | `PTO_ROCE_PHYIDS` | 可选，按MPI rank索引、逗号分隔的物理设备id。|
 | `PTO_ROCE_LOCAL_IP` | 当前MPI进程使用的最终兜底IPv4；必要时需为各rank分别设置。|
 | `PTO_ROCE_IPS` | 最终兜底列表，按MPI rank排序且IPv4数量必须等于rank数。|

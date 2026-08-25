@@ -24,16 +24,15 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 
 The bootstrap resolves each rank's physical device id and RDMA IPv4, then exchanges endpoint and registered-memory information through MPI. The local IPv4 lookup order is:
 
-1. RoCE IPv4 in the root-info file for the physical device.
+1. RoCE IPv4 in fixed `/etc/hccl_rootinfo.json` for the physical device.
 2. HCOMM topology parsing of fixed `/var/run/ascend-topologyd/virtualTopology.xml`.
 3. The test-only IP variables below.
 
-The default root-info path is `/etc/hccl_rootinfo.json`; set `PTO_ROCE_ROOTINFO` to use a different file. The ST does not generate or modify either topology file.
+The ST does not generate or modify either topology file and does not provide path overrides.
 
 | Variable | Description |
 |---|---|
 | `PTO_RDMA_BACKEND` | Configure-time selector; the only supported value is `HNS_1825`. |
-| `PTO_ROCE_ROOTINFO` | Optional root-info JSON path used before virtual topology and IP fallback variables. |
 | `PTO_ROCE_PHYIDS` | Optional comma-separated physical device ids indexed by MPI rank. |
 | `PTO_ROCE_LOCAL_IP` | Final fallback IPv4 for the current MPI process; set it separately for each rank when needed. |
 | `PTO_ROCE_IPS` | Final fallback list containing exactly one IPv4 per MPI rank, in rank order. |

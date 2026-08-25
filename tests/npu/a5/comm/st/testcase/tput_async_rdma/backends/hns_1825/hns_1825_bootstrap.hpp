@@ -48,7 +48,6 @@ namespace bootstrap {
 
 constexpr const char* kDefaultRootInfoPath = "/etc/hccl_rootinfo.json";
 constexpr const char* kDefaultVirtualTopologyPath = "/var/run/ascend-topologyd/virtualTopology.xml";
-constexpr const char* kRootInfoEnv = "PTO_ROCE_ROOTINFO";
 
 // Resolve the global physical device id used by HCOMM and the topology data.
 // Returns false (and leaves phyId untouched) if the runtime symbols are unavailable or fail.
@@ -202,13 +201,7 @@ inline bool FindFirstIpv4After(const std::string& text, size_t begin, size_t end
 
 } // namespace detail
 
-inline const char* GetRootInfoPath()
-{
-    const char* path = std::getenv(kRootInfoEnv);
-    return path != nullptr && path[0] != '\0' ? path : kDefaultRootInfoPath;
-}
-
-// Parse the local RDMA NIC IPv4 for `phyId` from a rootinfo JSON file.
+// Parse the local RDMA NIC IPv4 for `phyId` from a rootinfo JSON file (default /etc/hccl_rootinfo.json).
 // Locate the rank whose "device_id" equals phyId, then take the CLOS-level
 // ("net_type":"CLOS") IPv4 address from that rank's block. This dependency-free
 // targeted scan bounds each rank block by the next "device_id" occurrence;
@@ -216,7 +209,7 @@ inline const char* GetRootInfoPath()
 inline bool ResolveLocalRdmaIp(uint32_t phyId, std::string& ip)
 {
     std::string text;
-    if (!detail::ReadTextFile(GetRootInfoPath(), text)) {
+    if (!detail::ReadTextFile(kDefaultRootInfoPath, text)) {
         return false;
     }
     size_t blockBegin = 0;
@@ -334,7 +327,7 @@ struct BootstrapConfig {
         const bool localIpReady = !localIp.empty();
         if (!localIpReady) {
             std::cerr << "[SKIP] RDMA test using HNS_1825 could not resolve local IP for phyId " << phyId
-                      << " (no usable " << GetRootInfoPath() << " CLOS entry, no usable "
+                      << " (no usable " << kDefaultRootInfoPath << " CLOS entry, no usable "
                       << kDefaultVirtualTopologyPath << ", and no PTO_ROCE_LOCAL_IP / PTO_ROCE_IPS)" << std::endl;
         }
         bool anyIpMissing = false;
