@@ -16,19 +16,20 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <int32_t tilingKey>
-void LaunchTPushPopMatmulAddNoSplit(uint8_t *out, uint8_t *srcA, uint8_t *srcB, uint8_t *bias, void *stream);
+void LaunchTPushPopMatmulAddNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
+
+template <int32_t tilingKey>
+void LaunchTPushPopAccValidShapeStripNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream);
 
 class TPushPopCVNoSplitTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -51,15 +52,15 @@ void TPushPopMatmulAddNoSplitTestFunc(uint32_t M, uint32_t K, uint32_t N)
     uint8_t *dstHost, *srcAHost, *srcBHost, *biasHost;
     uint8_t *dstDevice, *srcADevice, *srcBDevice, *biasDevice;
 
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&srcAHost), aFileSize);
-    aclrtMallocHost((void **)(&srcBHost), bFileSize);
-    aclrtMallocHost((void **)(&biasHost), biasFileSize);
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&srcAHost), aFileSize);
+    aclrtMallocHost((void**)(&srcBHost), bFileSize);
+    aclrtMallocHost((void**)(&biasHost), biasFileSize);
 
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcADevice, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcBDevice, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&biasDevice, biasFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcADevice, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcBDevice, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&biasDevice, biasFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, srcAHost, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, srcBHost, bFileSize);
@@ -115,4 +116,71 @@ TEST_F(TPushPopCVNoSplitTest, case2_half_two_tiles)
 TEST_F(TPushPopCVNoSplitTest, case3_float_single_tile)
 {
     TPushPopMatmulAddNoSplitTestFunc<float, float, 3>(16, 32, 32);
+}
+
+template <typename InT, typename OutT, int32_t key>
+void TPushPopAccValidShapeStripNoSplitTestFunc(uint32_t M, uint32_t K, uint32_t N)
+{
+    size_t aFileSize = M * K * sizeof(InT);
+    size_t bFileSize = K * N * sizeof(InT);
+    size_t cFileSize = M * N * sizeof(OutT);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstHost, *srcAHost, *srcBHost;
+    uint8_t *dstDevice, *srcADevice, *srcBDevice;
+
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&srcAHost), aFileSize);
+    aclrtMallocHost((void**)(&srcBHost), bFileSize);
+
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcADevice, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcBDevice, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, srcAHost, aFileSize);
+    ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, srcBHost, bFileSize);
+
+    aclrtMemcpy(srcADevice, aFileSize, srcAHost, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(srcBDevice, bFileSize, srcBHost, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTPushPopAccValidShapeStripNoSplit<key>(dstDevice, srcADevice, srcBDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, cFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcADevice);
+    aclrtFree(srcBDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcAHost);
+    aclrtFreeHost(srcBHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<OutT> golden(cFileSize);
+    std::vector<OutT> devFinal(cFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TPushPopCVNoSplitTest, case4_float_static_acc_valid_shape_strip)
+{
+    TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 4>(32, 32, 128);
+}
+
+TEST_F(TPushPopCVNoSplitTest, case5_float_dynamic_acc_valid_shape_strip)
+{
+    TPushPopAccValidShapeStripNoSplitTestFunc<float, float, 5>(32, 32, 128);
 }

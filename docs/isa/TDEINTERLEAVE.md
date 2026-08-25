@@ -43,8 +43,6 @@ Where `halfValidCols = src.GetValidCol() / 2`.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
 Synchronous form (two-source):
 
 ```text
@@ -91,12 +89,12 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 // Two-source form
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
+PTO_INST RecordEvent TDEINTERLEAVE(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
                                    WaitEvents &...events);
 
 // Single-source form
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src,
+PTO_INST RecordEvent TDEINTERLEAVE(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src,
                                    WaitEvents &...events);
 ```
 
@@ -113,7 +111,7 @@ PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDat
     - The `validCols` of `dst0`/`dst1` tile must be half the `validCols` of `src` tile.
 - **Valid region**:
     - Two-source form: The op uses `dst0.GetValidRow()` / `dst0.GetValidCol()` as the iteration domain. `dst0/dst1` each hold `validCols` elements per row.
-    - Single-source form: `dst0/dst1` each hold `validCols / 2` valid elements per row. Elements beyond `halfValidCols` in each row are **unspecified**.
+    - Single-source form: `dst0/dst1` each hold `src.GetValidCol() / 2` valid elements per row. Elements beyond `halfValidCols` in each row are **unspecified**.
 
 ## Examples
 
@@ -129,7 +127,7 @@ void example_auto_two_src() {
     TileT src0(16, 128), src1(16, 128);
     TileT dst0(16, 128), dst1(16, 128);
 
-    TDeInterleave(dst1, dst0, src1, src0);
+    TDEINTERLEAVE(dst1, dst0, src1, src0);
 }
 ```
 
@@ -145,7 +143,7 @@ void example_auto_single_src() {
     TileT src(16, 128);
     TileT dst0(16, 128), dst1(16, 128);
 
-    TDeInterleave(dst1, dst0, src);
+    TDEINTERLEAVE(dst1, dst0, src);
 }
 ```
 
@@ -165,7 +163,7 @@ void example_manual_two_src() {
     TASSIGN(dst0, 0x3000);
     TASSIGN(dst1, 0x4000);
 
-    TDeInterleave(dst1, dst0, src1, src0);
+    TDEINTERLEAVE(dst1, dst0, src1, src0);
 }
 ```
 
@@ -184,7 +182,7 @@ void example_manual_single_src() {
     TASSIGN(dst0, 0x2000);
     TASSIGN(dst1, 0x3000);
 
-    TDeInterleave(dst1, dst0, src);
+    TDEINTERLEAVE(dst1, dst0, src);
 }
 ```
 

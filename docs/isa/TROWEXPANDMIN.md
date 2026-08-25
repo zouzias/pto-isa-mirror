@@ -79,7 +79,7 @@ PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 ## Constraints
 
 - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
-- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`, `int16`, `int32`, `uint16`, `uint32`.
+- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`, `int16`, `int32` for A2, A3 and A5, `uint16`, `uint32`, `bfloat16_t`, `int8`, `uint8` for A5.
 - `TileDataDst` must be **RowMajor** (`TileDataDst::isRowMajor == true`).
 - Exactly one of `src0` or `src1` must have the same valid shape as `dst` (i.e., `validRow == dst.validRow` and `validCol == dst.validCol`). That operand is the full-sized operand. The other operand is the **expanded operand** (row-broadcast source).
 - The full-sized operand must be **RowMajor** (`isRowMajor == true`).
@@ -103,6 +103,22 @@ When the expanded operand is **RowMajor** (`isRowMajor == true`):
 ### Additional target-specific constraints
 
 Exact layout, fractal, and alignment constraints may vary by backend target. See backend headers under `include/pto/npu/*/TRowExpand*.hpp`.
+
+### Temporary tile
+
+The C++ API provides an overload with an explicit `TileDataTmp &tmp`. This overload only supports **Mode 1** (ColMajor expanded operand, scalar per row).
+
+- **A2A3**: The tmp tile is used as a broadcast buffer. The per-row scalar values from the ColMajor expanded operand are broadcast via the `vbrcb` instruction into the tmp buffer, creating a 32-byte block per row, which is then used as the expanded operand in the binary operation. The `vbrcb` instruction uses a repeat stride of 8 blocks (256 bytes) between repeat groups, processing 8 rows per repeat. Minimum tmp size calculation:
+    - **Common parameters**:
+        - `R = dst.GetValidRow()`, `T = TileDataDst::DType`.
+    - For `R < 256`:
+        $$ \text{tmpSize} = \left\lceil\frac{R}{8}\right\rceil \times 256 \text{ bytes} $$
+    - For `R >= 256`:
+        - The operation is looped, with at most 30 repeats (240 rows) per loop iteration. The tmp buffer is reused across loops, so the per-loop requirement is:
+        $$ \text{tmpSize} = 30 \times 256 = 7680 \text{ bytes} $$
+    - A compact shape-independent upper bound for any Mode 1 invocation is **8KB** (8192 bytes).
+    - The 3-arg overload (without `tmp`) supports both Mode 1 and Mode 2. For Mode 1, it uses an internal 8KB buffer (`TMP_UB_OFFSET`). For Mode 2, no broadcast buffer is needed.
+- **A5**: The `tmp` tile is accepted and ignored (`[[maybe_unused]]`). A5 hardware supports row-broadcast natively via the `vlds` instruction's broadcast modes, so no scratch buffer is required.
 
 ## Examples
 
@@ -134,4 +150,3 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 # AS Level 2 (DPS)
 pto.trowexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

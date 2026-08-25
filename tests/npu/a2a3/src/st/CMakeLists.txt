@@ -82,6 +82,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
+#set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-enable")
 
 if(DEBUG_MODE)
     message(STATUS "Debug Mode Enabled, Add Debug Options")
@@ -91,7 +92,7 @@ endif()
 
 if(AUTO_MODE)
     message(STATUS "Auto Mode Enabled, Add Auto Mode Options")
-    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-pto-passes")
+    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-auto-enable")
 endif()
 
 set(CMAKE_CPP_COMPILE_OPTIONS
@@ -102,6 +103,7 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../../../include
+    ${PROJECT_SOURCE_DIR}/../../../../../pkg_inc
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
     ${ASCEND_HOME_PATH}/pkg_inc

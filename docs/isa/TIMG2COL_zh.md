@@ -26,9 +26,10 @@
 pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
@@ -37,7 +38,9 @@ PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src, uint16_t posM = 
 
 ## 约束
 
-- 此指令是目标/实现特定的。有关支持的 tile 类型/布局和配置字段，请参见 `include/pto/npu/*/TImg2col.hpp`。
+- 此指令是目标/实现特定的。有关支持的tile类型/布局和配置字段，请参见 `include/pto/npu/*/TImg2col.hpp`。
+- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**：`TileData::DType` 必须是以下之一：`int8_t`、`half`、`bfloat16_t`、`float`。
+- **实现检查 (Ascend 950PR/Ascend 950DT)**：`TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
 
 ## 示例
 
@@ -62,11 +65,10 @@ PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src, uint16_t posM = 
 %dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### PTO 汇编形式
+### PTO汇编形式
 
 ```text
 %dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
 # AS Level 2 (DPS)
 pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

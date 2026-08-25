@@ -16,11 +16,11 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTROWMINTestCase(void *out, void *src, aclrtStream stream);
+void launchTROWMINTestCase(void* out, void* src, aclrtStream stream);
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -30,10 +30,10 @@ std::string GetGoldenDir()
 class TROWMINTest : public testing::Test {
 public:
     aclrtStream stream;
-    void *srcHost;
-    void *dstHost;
-    void *srcDevice;
-    void *dstDevice;
+    void* srcHost;
+    void* dstHost;
+    void* srcDevice;
+    void* dstDevice;
 
 protected:
     void SetUp() override
@@ -64,7 +64,7 @@ protected:
         return ResultCmp<T>(golden, result, eps, 0, 1000, false, true);
     }
 
-    template <uint32_t caseId, typename T, int row, int validRow, int srcCol, int srcVaildCol, int dstCol>
+    template <uint32_t caseId, typename T, int row, int validRow, int srcCol, int srcValidCol, int dstCol>
     bool TRowMinTestFramework()
     {
         size_t dstByteSize = row * dstCol * sizeof(T);
@@ -73,6 +73,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);

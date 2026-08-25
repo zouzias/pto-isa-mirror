@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -23,8 +24,12 @@ def gen_golden_data_tpartadd(case_name, param):
     src1_row, src1_col = [param.src1_vr, param.src1_vc]
 
     # Generate random input arrays
-    input1 = np.random.random(src0_row * src0_col).astype(dtype)
-    input2 = np.random.random(src1_row * src1_col).astype(dtype)
+    if dtype in (np.int64, np.uint64):
+        input1 = np.random.randint(1, 100, size=src0_row * src0_col).astype(dtype)
+        input2 = np.random.randint(1, 100, size=src1_row * src1_col).astype(dtype)
+    else:
+        input1 = np.random.random(src0_row * src0_col).astype(dtype)
+        input2 = np.random.random(src1_row * src1_col).astype(dtype)
 
     # Perform the addbtraction
     condsrc0eqdst = dst_row == src0_row and dst_col == src0_col
@@ -70,7 +75,7 @@ def gen_golden_data_tpartadd(case_name, param):
 
 
 class TPartaddParams:
-    def __init__(self, dtype, dst_vr, dst_vc, src0_vr, src0_vc, src1_vr, src1_vc):
+    def __init__(self, dtype, dst_vr, dst_vc, src0_vr, src0_vc, src1_vr, src1_vc, is_inplace=False):
         self.dtype = dtype
         self.dst_vr = dst_vr
         self.dst_vc = dst_vc
@@ -78,17 +83,22 @@ class TPartaddParams:
         self.src0_vc = src0_vc
         self.src1_vr = src1_vr
         self.src1_vc = src1_vc
+        self.is_inplace = is_inplace
 
 
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int16: 'int16',
-        np.int32: 'int32',
+        np.float32: "float",
+        np.float16: "half",
+        np.int16: "int16",
+        np.int32: "int32",
+        np.int64: "int64",
+        np.uint64: "uint64",
     }[param.dtype]
+    inplace_suffix = "_inplace" if getattr(param, "is_inplace", False) else ""
     return f"TPARTADDTest.case_{dtype_str}_{param.dst_vr}x{param.dst_vc}\
-_{param.src0_vr}x{param.src0_vc}_{param.src1_vr}x{param.src1_vc}"
+_{param.src0_vr}x{param.src0_vc}_{param.src1_vr}x{param.src1_vc}{inplace_suffix}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -109,6 +119,16 @@ if __name__ == "__main__":
         TPartaddParams(np.float16, 8, 768, 8, 512, 8, 768),
         TPartaddParams(np.int16, 8, 48, 8, 48, 8, 16),
         TPartaddParams(np.int32, 64, 64, 8, 64, 64, 64),
+        TPartaddParams(np.int64, 4, 16, 2, 16, 4, 16),
+        TPartaddParams(np.uint64, 4, 16, 2, 16, 4, 16),
+        TPartaddParams(np.int64, 4, 16, 4, 8, 4, 16),
+        TPartaddParams(np.int64, 4, 64, 4, 64, 4, 64),
+        TPartaddParams(np.uint64, 4, 64, 4, 64, 4, 64),
+        TPartaddParams(np.int64, 4, 32, 4, 32, 4, 32, is_inplace=True),
+TPartaddParams(np.uint64, 4, 32, 4, 32, 4, 32, is_inplace=True),
+        TPartaddParams(np.int64, 1, 1024, 1, 1024, 1, 1024, is_inplace=True),
+        TPartaddParams(np.int64, 4, 64, 4, 64, 4, 40, is_inplace=True),
+        TPartaddParams(np.int64, 1, 2048, 1, 2048, 1, 2045, is_inplace=True),
     ]
 
     for param in case_params_list:

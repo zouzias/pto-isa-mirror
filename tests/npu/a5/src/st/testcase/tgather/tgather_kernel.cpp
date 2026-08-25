@@ -18,9 +18,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
-          int kTCols_>
-__global__ AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)
+template <MaskPattern maskPattern>
+constexpr int GetHostTimesByMask()
+{
+    if constexpr (maskPattern == MaskPattern::P1111) {
+        return 1;
+    } else if constexpr (maskPattern == MaskPattern::P1010 || maskPattern == MaskPattern::P0101) {
+        return 2;
+    } else {
+        return 4;
+    }
+}
+
+template <
+    typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_, int kTCols_>
+__global__ AICORE void runTGather(__gm__ Tsrc0 __out__* out, __gm__ Tsrc0 __in__* src0, __gm__ Tsrc1 __in__* src1)
 {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
     using DynStridDim5_src0 = pto::Stride<1, 1, 1, kGCols0_, 1>;
@@ -72,20 +84,21 @@ __global__ AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__
     out = dstGlobal.data();
 }
 
-template <typename src0T, typename src1T, typename dstT, uint32_t SRCROW, uint32_t SRCCOL, uint32_t DSTROW,
-          uint32_t DSTCOL, bool isF8E4M3 = false, bool isF8E5M2 = false>
-void launchTGATHER_demo(src0T *src0, src1T *src1, dstT *out, void *stream)
+template <
+    typename src0T, typename src1T, typename dstT, uint32_t SRCROW, uint32_t SRCCOL, uint32_t DSTROW, uint32_t DSTCOL,
+    bool isF8E4M3 = false, bool isF8E5M2 = false>
+void launchTGATHER_demo(src0T* src0, src1T* src1, dstT* out, void* stream)
 {
     cout << "launch TGATHER index start!" << endl;
     if constexpr (isF8E4M3) {
         runTGather<float8_e4m3_t, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
-            <<<1, nullptr, stream>>>((float8_e4m3_t *)(out), (float8_e4m3_t *)(src0), src1);
+            <<<1, nullptr, stream>>>((float8_e4m3_t*)(out), (float8_e4m3_t*)(src0), src1);
     } else if constexpr (isF8E5M2) {
         runTGather<float8_e5m2_t, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
-            <<<1, nullptr, stream>>>((float8_e5m2_t *)(out), (float8_e5m2_t *)(src0), src1);
+            <<<1, nullptr, stream>>>((float8_e5m2_t*)(out), (float8_e5m2_t*)(src0), src1);
     } else if constexpr (std::is_same_v<src0T, int8_t> || std::is_same_v<src0T, uint8_t>) {
         runTGather<float8_e4m3_t, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
-            <<<1, nullptr, stream>>>((float8_e4m3_t *)(out), (float8_e4m3_t *)(src0), src1);
+            <<<1, nullptr, stream>>>((float8_e4m3_t*)(out), (float8_e4m3_t*)(src0), src1);
     } else {
         runTGather<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL>
             <<<1, nullptr, stream>>>(out, src0, src1);
@@ -93,25 +106,33 @@ void launchTGATHER_demo(src0T *src0, src1T *src1, dstT *out, void *stream)
     cout << "launch TGATHER index end!" << endl;
 }
 
-template void launchTGATHER_demo<float, int32_t, float, 32, 1024, 16, 64>(float *src0, int32_t *src1, float *out,
-                                                                          void *stream);
-template void launchTGATHER_demo<int32_t, int32_t, int32_t, 32, 512, 16, 256>(int32_t *src0, int32_t *src1,
-                                                                              int32_t *out, void *stream);
-template void launchTGATHER_demo<int16_t, int16_t, int16_t, 16, 1024, 16, 128>(int16_t *src0, int16_t *src1,
-                                                                               int16_t *out, void *stream);
-template void launchTGATHER_demo<int16_t, int16_t, int16_t, 32, 256, 32, 64>(int16_t *src0, int16_t *src1, int16_t *out,
-                                                                             void *stream);
-template void launchTGATHER_demo<int8_t, int16_t, int8_t, 16, 128, 16, 64, true, false>(int8_t *src0, int16_t *src1,
-                                                                                        int8_t *out, void *stream);
-template void launchTGATHER_demo<int8_t, int16_t, int8_t, 16, 128, 16, 64, false, true>(int8_t *src0, int16_t *src1,
-                                                                                        int8_t *out, void *stream);
-template void launchTGATHER_demo<int8_t, uint16_t, int8_t, 16, 128, 16, 64>(int8_t *src0, uint16_t *src1, int8_t *out,
-                                                                            void *stream);
-template void launchTGATHER_demo<uint8_t, uint16_t, uint8_t, 16, 128, 16, 64>(uint8_t *src0, uint16_t *src1,
-                                                                              uint8_t *out, void *stream);
+template void launchTGATHER_demo<float, int32_t, float, 32, 1024, 16, 64>(
+    float* src0, int32_t* src1, float* out, void* stream);
+template void launchTGATHER_demo<int32_t, int32_t, int32_t, 32, 512, 16, 256>(
+    int32_t* src0, int32_t* src1, int32_t* out, void* stream);
+template void launchTGATHER_demo<int16_t, int16_t, int16_t, 16, 1024, 16, 128>(
+    int16_t* src0, int16_t* src1, int16_t* out, void* stream);
+template void launchTGATHER_demo<int16_t, int16_t, int16_t, 32, 256, 32, 64>(
+    int16_t* src0, int16_t* src1, int16_t* out, void* stream);
+template void launchTGATHER_demo<int8_t, int16_t, int8_t, 16, 128, 16, 64, true, false>(
+    int8_t* src0, int16_t* src1, int8_t* out, void* stream);
+template void launchTGATHER_demo<int8_t, int16_t, int8_t, 16, 128, 16, 64, false, true>(
+    int8_t* src0, int16_t* src1, int8_t* out, void* stream);
+template void launchTGATHER_demo<int8_t, uint16_t, int8_t, 16, 128, 16, 64>(
+    int8_t* src0, uint16_t* src1, int8_t* out, void* stream);
+template void launchTGATHER_demo<uint8_t, uint16_t, uint8_t, 16, 128, 16, 64>(
+    uint8_t* src0, uint16_t* src1, uint8_t* out, void* stream);
+template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 16, 4, 16>(
+    int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
+template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 16, 4, 16>(
+    uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
+template void launchTGATHER_demo<int64_t, uint32_t, int64_t, 4, 72, 4, 72>(
+    int64_t* src0, uint32_t* src1, int64_t* out, void* stream);
+template void launchTGATHER_demo<uint64_t, uint32_t, uint64_t, 4, 72, 4, 72>(
+    uint64_t* src0, uint32_t* src1, uint64_t* out, void* stream);
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
-__global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *src)
+__global__ AICORE void runTGATHER(__gm__ dstT __out__* out, __gm__ srcT __in__* src)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
@@ -141,122 +162,255 @@ __global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *
     out = dstGlobal.data();
 }
 
-template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
-void LaunchTGATHER(dstT *out, srcT *src, void *stream)
+template <typename T, int cols, MaskPattern maskPattern>
+__global__ AICORE void runTGATHERWideInt64(__gm__ T __out__* out, __gm__ T __in__* src)
 {
+    constexpr int tileRows = 1;
+    constexpr int tileCols = 64;
+    constexpr int dstTileCols = tileCols / GetTimesByMask<maskPattern>();
+    constexpr int dstCols = cols / GetTimesByMask<maskPattern>();
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<1, 1, 1, -1, -1>;
+    using SrcGlobal = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using DstGlobal = GlobalTensor<T, DynShapeDim5, DynStrideDim5>;
+    using SrcTile = Tile<TileType::Vec, T, tileRows, tileCols, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, T, tileRows, dstTileCols, BLayout::RowMajor, -1, -1>;
+
+    for (int col = 0; col < cols; col += tileCols) {
+        int validCols = (col + tileCols <= cols) ? tileCols : (cols - col);
+        int validDstCols = validCols / GetTimesByMask<maskPattern>();
+        SrcGlobal srcGlobal(src + col, DynShapeDim5(tileRows, validCols), DynStrideDim5(cols, 1));
+        DstGlobal dstGlobal(
+            out + col / GetTimesByMask<maskPattern>(), DynShapeDim5(tileRows, validDstCols), DynStrideDim5(dstCols, 1));
+        SrcTile srcTile(tileRows, validCols);
+        DstTile dstTile(tileRows, validDstCols);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x4000);
+
+        TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        TGATHER<DstTile, SrcTile, maskPattern>(dstTile, srcTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
+void LaunchTGATHER(dstT* out, srcT* src, void* stream)
+{
+    constexpr int wideTileCols = 64;
+    constexpr int maskTimes = GetHostTimesByMask<maskPattern>();
+    constexpr int safeMaskTimes = (maskTimes == 0) ? 1 : maskTimes;
     if constexpr (std::is_same_v<srcT, uint16_t>) {
         runTGATHER<half, half, kGRows_, kGCols_, kTRows_, kTCols_, maskPattern>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src));
+            <<<1, nullptr, stream>>>(reinterpret_cast<half*>(out), reinterpret_cast<half*>(src));
+    } else if constexpr (
+        (std::is_same_v<srcT, int64_t> || std::is_same_v<srcT, uint64_t>) && kGRows_ == 1 && kTRows_ == 1 &&
+        kGCols_ == kTCols_ && kGCols_ > wideTileCols && maskTimes > 0 && kGCols_ % safeMaskTimes == 0) {
+        runTGATHERWideInt64<srcT, kGCols_, maskPattern><<<1, nullptr, stream>>>(out, src);
     } else {
         runTGATHER<srcT, dstT, kGRows_, kGCols_, kTRows_, kTCols_, maskPattern><<<1, nullptr, stream>>>(out, src);
     }
 }
 
-template void LaunchTGATHER<int8_t, int8_t, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL,
-                            MaskPattern::P0101>(int8_t *out, int8_t *src, void *stream);
+template <typename T, int staticRows, int staticCols, int validRows, int validCols, MaskPattern maskPattern>
+__global__ AICORE void runTGATHERDynamic(__gm__ T* out, __gm__ T* src)
+{
+    constexpr int outputCols = validCols / GetTimesByMask<maskPattern>();
+    constexpr int staticOutputCols = staticCols / GetTimesByMask<maskPattern>();
+    using SrcGlobal = GlobalTensor<T, pto::Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
+    using DstGlobal = GlobalTensor<T, pto::Shape<1, 1, 1, validRows, outputCols>, pto::Stride<1, 1, 1, outputCols, 1>>;
+    using SrcTile = Tile<TileType::Vec, T, staticRows, staticCols, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, T, staticRows, staticCols, BLayout::RowMajor, -1, -1>;
+    using StoreTile = Tile<TileType::Vec, T, staticRows, staticOutputCols, BLayout::RowMajor, -1, -1>;
+    SrcTile srcTile(validRows, validCols);
+    DstTile dstTile(validRows, outputCols);
+    StoreTile storeTile(validRows, outputCols);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+    TASSIGN(storeTile, 0x10000);
+    SrcGlobal srcGlobal(src);
+    DstGlobal dstGlobal(out);
+    TLOAD(srcTile, srcGlobal);
+    pipe_barrier(PIPE_ALL);
+    TGATHER<DstTile, SrcTile, maskPattern>(dstTile, srcTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstGlobal, storeTile);
+}
 
-template void LaunchTGATHER<uint8_t, uint8_t, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL,
-                            MaskPattern::P1010>(uint8_t *out, uint8_t *src, void *stream);
+template <typename T, int staticRows, int staticCols, int validRows, int validCols, MaskPattern maskPattern>
+void LaunchTGATHERDynamic(T* out, T* src, void* stream)
+{
+    runTGATHERDynamic<T, staticRows, staticCols, validRows, validCols, maskPattern><<<1, nullptr, stream>>>(out, src);
+}
 
-template void LaunchTGATHER<int8_t, int8_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL,
-                            MaskPattern::P0001>(int8_t *out, int8_t *src, void *stream);
+template void
+LaunchTGATHER<int8_t, int8_t, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL, MaskPattern::P0101>(
+    int8_t* out, int8_t* src, void* stream);
 
-template void LaunchTGATHER<uint8_t, uint8_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL,
-                            MaskPattern::P0010>(uint8_t *out, uint8_t *src, void *stream);
+template void
+LaunchTGATHER<uint8_t, uint8_t, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL, MaskPattern::P1010>(
+    uint8_t* out, uint8_t* src, void* stream);
 
-template void LaunchTGATHER<int8_t, int8_t, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL,
-                            MaskPattern::P0100>(int8_t *out, int8_t *src, void *stream);
+template void
+LaunchTGATHER<int8_t, int8_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL, MaskPattern::P0001>(
+    int8_t* out, int8_t* src, void* stream);
 
-template void LaunchTGATHER<uint8_t, uint8_t, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL,
-                            MaskPattern::P1000>(uint8_t *out, uint8_t *src, void *stream);
+template void
+LaunchTGATHER<uint8_t, uint8_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL, MaskPattern::P0010>(
+    uint8_t* out, uint8_t* src, void* stream);
 
-template void LaunchTGATHER<int8_t, int8_t, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL,
-                            MaskPattern::P1111>(int8_t *out, int8_t *src, void *stream);
+template void
+LaunchTGATHER<int8_t, int8_t, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL, MaskPattern::P0100>(
+    int8_t* out, int8_t* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL,
-                            MaskPattern::P0101>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<uint8_t, uint8_t, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL, MaskPattern::P1000>(
+    uint8_t* out, uint8_t* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL,
-                            MaskPattern::P1010>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<int8_t, int8_t, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL, MaskPattern::P1111>(
+    int8_t* out, int8_t* src, void* stream);
 
-template void LaunchTGATHER<int16_t, int16_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL,
-                            MaskPattern::P0001>(int16_t *out, int16_t *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL, MaskPattern::P0101>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<int16_t, int16_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL,
-                            MaskPattern::P0010>(int16_t *out, int16_t *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL, MaskPattern::P1010>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<uint32_t, uint32_t, FLOAT_P0100_ROW, FLOAT_P0100_COL, FLOAT_P0100_ROW, FLOAT_P0100_COL,
-                            MaskPattern::P0100>(uint32_t *out, uint32_t *src, void *stream);
+template void
+LaunchTGATHER<int16_t, int16_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL, MaskPattern::P0001>(
+    int16_t* out, int16_t* src, void* stream);
 
-template void LaunchTGATHER<int32_t, int32_t, FLOAT_P1000_ROW, FLOAT_P1000_COL, FLOAT_P1000_ROW, FLOAT_P1000_COL,
-                            MaskPattern::P1000>(int32_t *out, int32_t *src, void *stream);
+template void
+LaunchTGATHER<int16_t, int16_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL, MaskPattern::P0010>(
+    int16_t* out, int16_t* src, void* stream);
 
-template void LaunchTGATHER<int32_t, int32_t, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111_ROW, FLOAT_P1111_COL,
-                            MaskPattern::P1111>(int32_t *out, int32_t *src, void *stream);
+template void LaunchTGATHER<
+    uint32_t, uint32_t, FLOAT_P0100_ROW, FLOAT_P0100_COL, FLOAT_P0100_ROW, FLOAT_P0100_COL, MaskPattern::P0100>(
+    uint32_t* out, uint32_t* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL,
-                            MaskPattern::P0101>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<int32_t, int32_t, FLOAT_P1000_ROW, FLOAT_P1000_COL, FLOAT_P1000_ROW, FLOAT_P1000_COL, MaskPattern::P1000>(
+    int32_t* out, int32_t* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL,
-                            MaskPattern::P1010>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<int32_t, int32_t, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111_ROW, FLOAT_P1111_COL, MaskPattern::P1111>(
+    int32_t* out, int32_t* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL,
-                            MaskPattern::P0001>(half *out, half *src, void *stream);
+template void LaunchTGATHER<int64_t, int64_t, 4, 16, 4, 16, MaskPattern::P1010>(
+    int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHER<uint64_t, uint64_t, 4, 16, 4, 16, MaskPattern::P0001>(
+    uint64_t* out, uint64_t* src, void* stream);
+template void LaunchTGATHER<int64_t, int64_t, 4, 72, 4, 72, MaskPattern::P1010>(
+    int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHER<uint64_t, uint64_t, 4, 144, 4, 144, MaskPattern::P0001>(
+    uint64_t* out, uint64_t* src, void* stream);
+template void LaunchTGATHER<int64_t, int64_t, 1, 16368, 1, 16368, MaskPattern::P1010>(
+    int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHER<uint64_t, uint64_t, 1, 16368, 1, 16368, MaskPattern::P1010>(
+    uint64_t* out, uint64_t* src, void* stream);
+template void LaunchTGATHERDynamic<int64_t, 4, 24, 3, 15, MaskPattern::P1010>(int64_t* out, int64_t* src, void* stream);
+template void LaunchTGATHERDynamic<uint64_t, 4, 24, 3, 15, MaskPattern::P1010>(
+    uint64_t* out, uint64_t* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL,
-                            MaskPattern::P0010>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P0101_ROW, HALF_P0101_COL, HALF_P0101_ROW, HALF_P0101_COL, MaskPattern::P0101>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL,
-                            MaskPattern::P0100>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P1010_ROW, HALF_P1010_COL, HALF_P1010_ROW, HALF_P1010_COL, MaskPattern::P1010>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL,
-                            MaskPattern::P1000>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL, MaskPattern::P0001>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<half, half, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL,
-                            MaskPattern::P1111>(half *out, half *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL, MaskPattern::P0010>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL,
-                            MaskPattern::P0001>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL, MaskPattern::P0100>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL,
-                            MaskPattern::P0010>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL, MaskPattern::P1000>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL,
-                            MaskPattern::P0100>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<half, half, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL, MaskPattern::P1111>(
+    half* out, half* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL,
-                            MaskPattern::P1000>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P0001_ROW, HALF_P0001_COL, HALF_P0001_ROW, HALF_P0001_COL, MaskPattern::P0001>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<uint16_t, uint16_t, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL,
-                            MaskPattern::P1111>(uint16_t *out, uint16_t *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P0010_ROW, HALF_P0010_COL, HALF_P0010_ROW, HALF_P0010_COL, MaskPattern::P0010>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P0101_ROW, FLOAT_P0101_COL, FLOAT_P0101_ROW, FLOAT_P0101_COL,
-                            MaskPattern::P0101>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P0100_ROW, HALF_P0100_COL, HALF_P0100_ROW, HALF_P0100_COL, MaskPattern::P0100>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P1010_ROW, FLOAT_P1010_COL, FLOAT_P1010_ROW, FLOAT_P1010_COL,
-                            MaskPattern::P1010>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P1000_ROW, HALF_P1000_COL, HALF_P1000_ROW, HALF_P1000_COL, MaskPattern::P1000>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P0001_ROW, FLOAT_P0001_COL, FLOAT_P0001_ROW, FLOAT_P0001_COL,
-                            MaskPattern::P0001>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<uint16_t, uint16_t, HALF_P1111_ROW, HALF_P1111_COL, HALF_P1111_ROW, HALF_P1111_COL, MaskPattern::P1111>(
+    uint16_t* out, uint16_t* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P0010_ROW, FLOAT_P0010_COL, FLOAT_P0010_ROW, FLOAT_P0010_COL,
-                            MaskPattern::P0010>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<float, float, FLOAT_P0101_ROW, FLOAT_P0101_COL, FLOAT_P0101_ROW, FLOAT_P0101_COL, MaskPattern::P0101>(
+    float* out, float* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P0100_ROW, FLOAT_P0100_COL, FLOAT_P0100_ROW, FLOAT_P0100_COL,
-                            MaskPattern::P0100>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<float, float, FLOAT_P1010_ROW, FLOAT_P1010_COL, FLOAT_P1010_ROW, FLOAT_P1010_COL, MaskPattern::P1010>(
+    float* out, float* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P1000_ROW, FLOAT_P1000_COL, FLOAT_P1000_ROW, FLOAT_P1000_COL,
-                            MaskPattern::P1000>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<float, float, FLOAT_P0001_ROW, FLOAT_P0001_COL, FLOAT_P0001_ROW, FLOAT_P0001_COL, MaskPattern::P0001>(
+    float* out, float* src, void* stream);
 
-template void LaunchTGATHER<float, float, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111_ROW, FLOAT_P1111_COL,
-                            MaskPattern::P1111>(float *out, float *src, void *stream);
+template void
+LaunchTGATHER<float, float, FLOAT_P0010_ROW, FLOAT_P0010_COL, FLOAT_P0010_ROW, FLOAT_P0010_COL, MaskPattern::P0010>(
+    float* out, float* src, void* stream);
 
-template void LaunchTGATHER<float, int32_t, FLOAT_P1010_ROW, FLOAT_P1010_COL, FLOAT_P1010_ROW, FLOAT_P1010_COL,
-                            MaskPattern::P1010>(int32_t *out, float *src, void *stream);
+template void
+LaunchTGATHER<float, float, FLOAT_P0100_ROW, FLOAT_P0100_COL, FLOAT_P0100_ROW, FLOAT_P0100_COL, MaskPattern::P0100>(
+    float* out, float* src, void* stream);
 
-template <typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
-          CmpMode cmpMode>
-__global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm__ dstT *out, uint32_t offset)
+template void
+LaunchTGATHER<float, float, FLOAT_P1000_ROW, FLOAT_P1000_COL, FLOAT_P1000_ROW, FLOAT_P1000_COL, MaskPattern::P1000>(
+    float* out, float* src, void* stream);
+
+template void
+LaunchTGATHER<float, float, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111_ROW, FLOAT_P1111_COL, MaskPattern::P1111>(
+    float* out, float* src, void* stream);
+
+template void
+LaunchTGATHER<float, int32_t, FLOAT_P1010_ROW, FLOAT_P1010_COL, FLOAT_P1010_ROW, FLOAT_P1010_COL, MaskPattern::P1010>(
+    int32_t* out, float* src, void* stream);
+
+template <
+    typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
+    CmpMode cmpMode>
+__global__ AICORE void runTGATHER_CMP(__gm__ srcT* src, __gm__ src1T* src1, __gm__ dstT* out, uint32_t offset)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
@@ -299,8 +453,8 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TGATHER<DstTileData, TileData, TileData1, ConcatTileData, TmpTileData, cmpMode>(dstTile, srcTile, src1Tile,
-                                                                                    concatTile, tmpTile, offset);
+    TGATHER<DstTileData, TileData, TileData1, ConcatTileData, TmpTileData, cmpMode>(
+        dstTile, srcTile, src1Tile, concatTile, tmpTile, offset);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
@@ -310,40 +464,37 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     out = dstGlobal.data();
 }
 
-template <typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
-          CmpMode cmpMode>
-void LaunchTGATHER_CMP(srcT *src, src1T *src1, dstT *out, uint32_t offset, void *stream)
+template <
+    typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
+    CmpMode cmpMode>
+void LaunchTGATHER_CMP(srcT* src, src1T* src1, dstT* out, uint32_t offset, void* stream)
 {
     if constexpr (std::is_same_v<srcT, aclFloat16>) {
         runTGATHER_CMP<half, src1T, dstT, kGRows_, kGCols_, kTRows_, kTCols_, K, cmpMode>
-            <<<1, nullptr, stream>>>((half *)(src), src1, out, offset);
+            <<<1, nullptr, stream>>>((half*)(src), src1, out, offset);
     } else {
         runTGATHER_CMP<srcT, src1T, dstT, kGRows_, kGCols_, kTRows_, kTCols_, K, cmpMode>
             <<<1, nullptr, stream>>>(src, src1, out, offset);
     }
 }
 
-template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 16, 64, 16, 64, 32, CmpMode::GT>(float *src, uint32_t *src1,
-                                                                                            uint32_t *out,
-                                                                                            uint32_t offset,
-                                                                                            void *stream);
+template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 16, 64, 16, 64, 32, CmpMode::GT>(
+    float* src, uint32_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<uint32_t, uint32_t, uint32_t, 8, 128, 8, 128, 64, CmpMode::GT>(
-    uint32_t *src, uint32_t *src1, uint32_t *out, uint32_t offset, void *stream);
-template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 4, 256, 4, 256, 64, CmpMode::EQ>(float *src, uint32_t *src1,
-                                                                                            uint32_t *out,
-                                                                                            uint32_t offset,
-                                                                                            void *stream);
+    uint32_t* src, uint32_t* src1, uint32_t* out, uint32_t offset, void* stream);
+template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 4, 256, 4, 256, 64, CmpMode::EQ>(
+    float* src, uint32_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::GT>(
-    int16_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    int16_t* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 4, 64, 4, 64, 32, CmpMode::EQ>(
-    int16_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    int16_t* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 2, 256, 2, 256, 32, CmpMode::GT>(
-    aclFloat16 *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    aclFloat16* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 8, 128, 8, 128, 32, CmpMode::EQ>(
-    aclFloat16 *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    aclFloat16* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<int8_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::GT>(
-    int8_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    int8_t* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<int8_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::EQ>(
-    int8_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    int8_t* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);
 template void LaunchTGATHER_CMP<uint8_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::GT>(
-    uint8_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+    uint8_t* src, uint16_t* src1, uint32_t* out, uint32_t offset, void* stream);

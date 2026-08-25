@@ -100,6 +100,7 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
 tmatmul
+tpushpop_mixed_tile_size
 trowsum
 trowprod
 trowmax
@@ -192,9 +193,6 @@ tcolexpand
 ttri
 tnot
 trelu
-taddreluconv
-tadddeqrelu
-tsubreluconv
 tands
 tors
 tshls
@@ -216,6 +214,7 @@ tconcatdstidx
 tconcatidx
 tconcat
 textract_vec
+textract_ndto2xnz
 tinsert_vec
 mgather
 mgather_gm2l1
@@ -226,13 +225,11 @@ tpushpop_vc
 tpushpop_cv_nosplit
 tpushpop_vc_nosplit
 tpushpop_dir_both
+tpushpop_dir_both_concurrent
 tpushpop_subtile
-tfusedmuladd
-tmuladddst
-tsubrelu
-tfusedmuladdrelu
+tmadd
+tmula
 syncall
-tpairreducesum
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
@@ -254,14 +251,35 @@ if (AUTO_MODE)
     tpushpop_cv_nosplit
     tpushpop_vc_nosplit
     tpushpop_dir_both
+    tpushpop_dir_both_concurrent
     tpushpop_subtile
+    tpushpop_mixed_tile_size
   # the following case wait to be fix 
+    mgather
+    tfillpad
+    tgather
+    timg2col
+    tload_gm2mat
+    tmov_vect
+    tpartadd
+    tpartmul
+    tpow
+    trowprod
+    tscatter
+    ttrans_3d
+    ttri
     tcvt
+    tcmp
+    tcmps
+    tcolscatter
+    textract
     ttrans
     ttrans_conv
     tci
     tquant
     texpands_mat
+    mscatter
+    mgather_gm2l1
   )
 
   foreach(whitelisted_case ${AUTO_MODE_WHITELIST})

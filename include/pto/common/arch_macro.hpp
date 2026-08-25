@@ -7,13 +7,13 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-// Implementation of interface adaptation layer for device-side and cloud-side compatibility
+// Defines architecture feature macros shared by host and device builds.
 #ifndef ARCH_MACRO_HPP
 #define ARCH_MACRO_HPP
 
-#define __NPU_ARCH__ 5162
-#ifndef __NPU_ARCH__
-#define __NPU_ARCH__ 5162
+#if defined(__CPU_SIM) && !defined(__DAV_CUBE__) && !defined(__DAV_VEC__)
+#define __DAV_CUBE__
+#define __DAV_VEC__
 #endif
 
 #if __NPU_ARCH__ == 2201
@@ -32,10 +32,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif __NPU_ARCH__ == 3003
 #define PTO_COMM_NOT_SUPPORTED
 #define PTO_NPU_ARCH_KIRINX90
+#elif __NPU_ARCH__ == 5101
+#define PTO_COMM_NOT_SUPPORTED
+#define PTO_NPU_ARCH_KIRINDEV0000
+#elif __NPU_ARCH__ == 9201
+#define PTO_COMM_NOT_SUPPORTED
+#define PTO_NPU_ARCH_A6
 #endif
 
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(PTO_NPU_ARCH_ASCEND5162A)
 
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define __tf__
 #define __in__
 #define __out__

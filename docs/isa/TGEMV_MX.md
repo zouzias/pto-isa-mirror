@@ -11,6 +11,8 @@ GEMV with scaling tiles for mixed-precision / quantized matrix-vector compute on
 
 This instruction family extends `TGEMV` with additional scale operands (mx path). Accumulator and scale handling are target-dependent.
 
+This instruction is currently implemented on A5 (see `include/pto/npu/a5/TMatmul.hpp`).
+
 ## Math Interpretation
 
 Conceptually (base GEMV path):
@@ -77,6 +79,7 @@ Additional overloads support accumulation/bias variants and `AccPhase` selection
 - Uses backend-specific mx legality checks for data types, tile locations, fractal/layout combinations, and scaling formats.
 - Scale tile compatibility and accumulator promotion are implementation-defined by target backend.
 - For portability, validate the exact `(A, B, scaleA, scaleB, C)` type tuple and tile layout against target implementation constraints.
+- On A5, supported `(C, A, B)` triples (`C` is always `float`; scale tiles are `float8_e8m0_t`): FP8 `(float, float8_e4m3_t, float8_e4m3_t)`, `(float, float8_e4m3_t, float8_e5m2_t)`, `(float, float8_e5m2_t, float8_e4m3_t)`, `(float, float8_e5m2_t, float8_e5m2_t)`; FP4 `(float, float4_e1m2x2_t, float4_e1m2x2_t)`, `(float, float4_e1m2x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e1m2x2_t)`.
 
 ## Examples
 
@@ -111,4 +114,3 @@ For practical usage patterns, see:
 # AS Level 2 (DPS)
 pto.tgemv.mx ins(%a, %a_scale, %b, %b_scale : (!pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>)) outs(%acc : !pto.tile_buf<...>)
 ```
-

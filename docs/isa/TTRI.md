@@ -37,24 +37,49 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 ## Constraints
 
 - `isUpperOrLower` must be `0` (lower) or `1` (upper).
-- Destination tile must be row-major on some targets (see `include/pto/npu/*/TTri.hpp`).
+- **Implementation checks (A2A3)**:
+    - Destination tile must be row-major (`isRowMajor`), enforced by `static_assert`.
+    - Supported element types: `int32_t`, `int`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float16_t`, `float`, `float32_t`.
+- **Implementation checks (A5)**:
+    - Supported element types: `int32_t`, `int16_t`, `int8_t`, `uint32_t`, `int64_t`, `uint64_t`, `uint16_t`, `uint8_t`, `half`, `float16_t`, `float32_t`, `bfloat16_t`.
+    - Lower (`upperOrLower == 0`) and upper (`upperOrLower == 1`) are distinguished by `if constexpr` branches.
+- Valid region is obtained via `dst.GetValidRow()` / `dst.GetValidCol()`.
 
 ## Assembly Syntax
 
 ### AS Level 1 (SSA)
 
 ```text
-%dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
 ```
 
 ### AS Level 2 (DPS)
 
 ```text
-pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
 ```
+
 ## Examples
 
-See related examples in `docs/isa/` and `docs/coding/tutorials/`.
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_lower() {
+  using TileT = Tile<TileType::Vec, float, 16, 16>;
+  TileT dst;
+  TASSIGN(dst, 0x1000);
+  TTRI<0>(dst, /*diagonal=*/0);   // lower triangular
+}
+
+void example_upper() {
+  using TileT = Tile<TileType::Vec, float, 16, 16>;
+  TileT dst;
+  TASSIGN(dst, 0x1000);
+  TTRI<1>(dst, /*diagonal=*/-1);  // upper triangular
+}
+```
 
 ## ASM Form Examples
 
@@ -62,23 +87,21 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.ttri {isUpperOrLower = 0} : i32 -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
 # Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
 ```
 
 ### PTO Assembly Form
 
 ```text
-%dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.ttri %diag : i32 -> !pto.tile<...>
 # AS Level 2 (DPS)
-pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
 ```

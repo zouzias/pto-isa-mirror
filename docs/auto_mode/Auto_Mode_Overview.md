@@ -6,7 +6,7 @@ This section gives an overview of PTO auto mode.
 
 ## What is Auto Mode
 
-Auto mode is a compilation mode for PTO. It does all the memory allocation for tiles and synchronization in the compiler. Programming in auto mode works just like in manual mode, except there is no need for `TASSIGN` and `TSYNC`/`Event` (in fact, these will do nothing in auto mode).
+Auto mode is a compilation mode for PTO. It does all the memory allocation for tiles and synchronization in the compiler. Programming in auto mode works just like in manual mode, except there is no need for `TASSIGN` and explicit `Event` synchronization (in fact, these will do nothing in auto mode).
 
 ## Why Use Auto Mode?
 
@@ -48,7 +48,7 @@ In the default mode of PTO compilation, after instantiating `Tile` variables, we
 
 ## Compiling Auto Mode with Ascend CANN
 
-To compile your kernel using PTO auto mode, all you need to do is enable the PTO auto mode passes in the Bisheng CCE toolchain using `--cce-enable-pto-passes`.
+To compile your kernel using PTO auto mode, all you need to do is enable the PTO auto mode passes in the Bisheng CCE toolchain using `--cce-pto-enable --cce-pto-auto-enable`.
 
 ### Example (device compilation)
 
@@ -64,6 +64,7 @@ source /usr/local/Ascend/ascend-toolkit/latest/bin/setenv.bash
 bisheng -c -x cce -O2 --cce-aicore-only \
   --cce-aicore-arch=dav-c310-vec \
   -std=c++17 \
-  --cce-enable-pto-passes \
+  --cce-pto-enable \
+  --cce-pto-auto-enable \
   kernel.cpp -o kernel.o
 ```

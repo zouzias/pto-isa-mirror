@@ -17,31 +17,48 @@ using namespace PtoTestCommon;
 
 class TDIVTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
 
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-          int vCols, bool highPrecision>
-void LaunchTDiv(T *out, T *src0, T *src1, void *stream);
+template <
+    typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
+    int vCols, bool highPrecision>
+void LaunchTDiv(T* out, T* src0, T* src1, void* stream);
 
-template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols,
-          bool highPrecision>
-void LaunchTDivHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
+template <
+    int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols,
+    bool highPrecision>
+void LaunchTDivHalf(aclFloat16* out, aclFloat16* src0, aclFloat16* src1, void* stream);
 
-template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
-          int vCols, bool isHalf = false, bool highPrecision = false>
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void LaunchTDivInplace(T* out, T* src1, void* stream);
+
+template <typename T, bool highPrecision>
+void CheckTDivResult(size_t fileSizeDst)
+{
+    std::vector<T> golden(fileSizeDst / sizeof(T));
+    std::vector<T> devFinal(fileSizeDst / sizeof(T));
+    ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
+    ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>)
+        EXPECT_TRUE(ResultCmpExact(golden, devFinal.data()));
+    else
+        EXPECT_TRUE(ResultCmp<T>(golden, devFinal, highPrecision ? 0.0000001f : 0.001f));
+}
+
+template <
+    typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
+    int vCols, bool isHalf = false, bool highPrecision = false>
 void test_tdiv()
 {
     size_t fileSizeDst = dstTileH * dstTileW * sizeof(T);
@@ -56,13 +73,14 @@ void test_tdiv()
     T *dstHost, *src0Host, *src1Host;
     T *dstDevice, *src0Device, *src1Device;
 
-    aclrtMallocHost((void **)(&dstHost), fileSizeDst);
-    aclrtMallocHost((void **)(&src0Host), fileSizeSrc0);
-    aclrtMallocHost((void **)(&src1Host), fileSizeSrc1);
+    aclrtMallocHost((void**)(&dstHost), fileSizeDst);
+    aclrtMallocHost((void**)(&src0Host), fileSizeSrc0);
+    aclrtMallocHost((void**)(&src1Host), fileSizeSrc1);
 
-    aclrtMalloc((void **)&dstDevice, fileSizeDst, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, fileSizeSrc0, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, fileSizeSrc1, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, fileSizeDst, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, fileSizeSrc0, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, fileSizeSrc1, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSizeDst, 0, fileSizeDst);
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSizeSrc0, src0Host, fileSizeSrc0);
     ReadFile(GetGoldenDir() + "/input2.bin", fileSizeSrc1, src1Host, fileSizeSrc1);
@@ -93,29 +111,55 @@ void test_tdiv()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSizeDst);
-    std::vector<T> devFinal(fileSizeDst);
-    ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
-    ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
-
-    auto resPrecision = highPrecision ? 0.0000001f : 0.001f;
-    bool ret = ResultCmp<T>(golden, devFinal, resPrecision);
-
-    EXPECT_TRUE(ret);
+    CheckTDivResult<T, highPrecision>(fileSizeDst);
 }
 
-TEST_F(TDIVTest, case_float_64x64_64x64_64x64_64x64)
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void test_tdiv_inplace()
 {
-    test_tdiv<float, 64, 64, 64, 64, 64, 64, 64, 64>();
+    size_t fileSize = tileH * tileW * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T *dstHost, *src1Host;
+    T *dstDevice, *src1Device;
+
+    aclrtMallocHost((void**)(&dstHost), fileSize);
+    aclrtMallocHost((void**)(&src1Host), fileSize);
+
+    aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input1.bin", fileSize, dstHost, fileSize);
+    ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src1Host, fileSize);
+
+    aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTDivInplace<T, tileH, tileW, vRows, vCols>(dstDevice, src1Device, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src1Device);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src1Host);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    CheckTDivResult<T, false>(fileSize);
 }
-TEST_F(TDIVTest, case_int32_64x64_64x64_64x64_64x64)
-{
-    test_tdiv<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
-}
-TEST_F(TDIVTest, case_int16_64x64_64x64_64x64_64x64)
-{
-    test_tdiv<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>();
-}
+
+TEST_F(TDIVTest, case_float_64x64_64x64_64x64_64x64) { test_tdiv<float, 64, 64, 64, 64, 64, 64, 64, 64>(); }
+TEST_F(TDIVTest, case_int32_64x64_64x64_64x64_64x64) { test_tdiv<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
+TEST_F(TDIVTest, case_int16_64x64_64x64_64x64_64x64) { test_tdiv<int16_t, 64, 64, 64, 64, 64, 64, 64, 64>(); }
 TEST_F(TDIVTest, case_half_16x256_16x256_16x256_16x256)
 {
     test_tdiv<aclFloat16, 16, 256, 16, 256, 16, 256, 16, 256, true>();
@@ -124,39 +168,24 @@ TEST_F(TDIVTest, case_half_16x64_16x128_16x128_16x64)
 {
     test_tdiv<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64, true>();
 }
-TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x32)
-{
-    test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
-TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x128)
-{
-    test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>();
-}
-TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x32)
-{
-    test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
-}
+TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x32) { test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 32>(); }
+TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x128) { test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 128>(); }
+TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x32) { test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>(); }
 TEST_F(TDIVTest, case_half_16x64_16x128_16x128_16x63)
 {
     test_tdiv<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63, true>();
 }
-TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x31)
-{
-    test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 31>();
-}
-TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x127)
-{
-    test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>();
-}
-TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x31)
-{
-    test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
-}
-TEST_F(TDIVTest, case_float_hp_2x16_2x16_2x16_2x16)
-{
-    test_tdiv<float, 2, 16, 2, 16, 2, 16, 2, 16, false, true>();
-}
-TEST_F(TDIVTest, case_half_hp_2x32_2x32_2x32_2x32)
-{
-    test_tdiv<aclFloat16, 2, 32, 2, 32, 2, 32, 2, 32, true, true>();
-}
+TEST_F(TDIVTest, case_float_16x32_16x64_16x32_16x31) { test_tdiv<float, 16, 32, 16, 64, 16, 32, 16, 31>(); }
+TEST_F(TDIVTest, case_int16_32x128_32x128_32x256_32x127) { test_tdiv<int16_t, 32, 128, 32, 128, 32, 256, 32, 127>(); }
+TEST_F(TDIVTest, case_int32_16x32_16x64_16x32_16x31) { test_tdiv<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(); }
+TEST_F(TDIVTest, case_float_hp_2x16_2x16_2x16_2x16) { test_tdiv<float, 2, 16, 2, 16, 2, 16, 2, 16, false, true>(); }
+TEST_F(TDIVTest, case_half_hp_2x32_2x32_2x32_2x32) { test_tdiv<aclFloat16, 2, 32, 2, 32, 2, 32, 2, 32, true, true>(); }
+TEST_F(TDIVTest, case_int64_4x16_4x16_4x16_4x16) { test_tdiv<int64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TDIVTest, case_uint64_4x16_4x16_4x16_4x16) { test_tdiv<uint64_t, 4, 16, 4, 16, 4, 16, 4, 16>(); }
+TEST_F(TDIVTest, case_int64_4x64_4x64_4x64_4x64) { test_tdiv<int64_t, 4, 64, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TDIVTest, case_uint64_4x64_4x64_4x64_4x64) { test_tdiv<uint64_t, 4, 64, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TDIVTest, case_int64_4x32_inplace) { test_tdiv_inplace<int64_t, 4, 32, 4, 32>(); }
+TEST_F(TDIVTest, case_uint64_4x32_inplace) { test_tdiv_inplace<uint64_t, 4, 32, 4, 32>(); }
+TEST_F(TDIVTest, case_int64_1x1024_inplace) { test_tdiv_inplace<int64_t, 1, 1024, 1, 1024>(); }
+TEST_F(TDIVTest, case_int64_1x2048_2045_inplace) { test_tdiv_inplace<int64_t, 1, 2048, 1, 2045>(); }
+TEST_F(TDIVTest, case_int64_4x64_40_inplace) { test_tdiv_inplace<int64_t, 4, 64, 4, 40>(); }

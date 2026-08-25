@@ -32,7 +32,7 @@ PTO-Auto 面向希望获得简单、可移植体验的开发者：
 PTO-Manual 面向需要完全控制以进行性能调优的开发者：
 
 - 开发者控制内存放置与绑定（例如通过 `TASSIGN`）。
-- 开发者显式表达顺序（events 和/或 `TSYNC`）。
+- 开发者通过 events 或低层 flags 显式表达顺序。
 - 开发者控制操作调度与流水线结构。
 
 该模式使关键内核能够进行专家级优化，同时仍复用同一套 Tile/GlobalTensor 抽象。
@@ -78,4 +78,3 @@ __global__ __aicore__ void KernelMPMD(__gm__ float* out,
 
 - `task_id` 的获取机制依赖平台/运行时；抽象模型只要求 Device Machine 能将不同 tile block 调度到可用核心。
 - 也可以用**多个入口点**（多个 kernel）替代单个入口点 + `switch` 的形式。
-

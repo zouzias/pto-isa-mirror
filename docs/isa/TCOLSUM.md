@@ -60,8 +60,8 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 - `dst` and `src` must use the same element type.
 - Runtime checks:
     - `src.GetValidCol() == dst.GetValidCol()`
-    - `src.GetValidRow() != 0`
-    - `src.GetValidCol() != 0`
+    - `src.GetValidRow() != 0` (implementation silently returns early when zero, no computation performed)
+    - `src.GetValidCol() != 0` (implementation silently returns early when zero, no computation performed)
     - `src.GetValidCol() <= tmp` row stride measured in `src` elements
 - `isBinary` selects the checked backend path:
     - `true`: binary-tree accumulation using `tmp`
@@ -76,8 +76,33 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 
 ### A5 implementation checks
 
-- Shared A5 column-reduce checks allow `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
+- Shared A5 column-reduce checks allow `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `bfloat16_t`.
 - The checked A5 `TCOLSUM` path still takes `tmp` only for the binary accumulation path; no extra compile-time `tmp` type/layout assertions are explicitly enforced in `TCOLSUM_IMPL`.
+
+## Temporary Space
+
+### Without `tmp` (2-argument overload: `TCOLSUM(dst, src)`)
+
+No `tmp` is required. Both A2A3 and A5 use sequential accumulation directly into `dst`.
+
+### With `tmp` and `isBinary` (4-argument overload: `TCOLSUM(dst, src, tmp, isBinary)`)
+
+#### A2A3
+
+- When `isBinary = true`: `tmp` **is used** for binary-tree accumulation. Adjacent row pairs from `src` are summed into `tmp`, then `tmp` is recursively halved until a single row remains.
+  - `tmp` must have the same element type as `src`/`dst`.
+  - `tmp` must be `TileType::Vec`, row-major, non-fractal.
+  - `tmp.GetValidCol() >= src.GetValidCol()` (in element count, accounting for `tmp` stride).
+  - `tmp` needs at least `ceil(src.GetValidRow() / 2)` rows.
+- When `isBinary = false`: `tmp` is accepted but the implementation uses sequential accumulation into `dst`; `tmp` is not actively used.
+
+#### A5
+
+- When `isBinary = true`: `tmp` **is used** for binary-tree accumulation in vector registers with UB storage.
+  - `tmp` must have the same element type as `src`/`dst`.
+  - `tmp.GetValidCol() >= src.GetValidCol()` (in element count, accounting for `tmp` stride).
+  - `tmp` needs at least `ceil(src.GetValidRow() / 2)` rows.
+- When `isBinary = false`: `tmp` is not actively used; the implementation uses sequential reduction via `TColReduceInstr`.
 
 ## Examples
 
@@ -146,4 +171,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tcolsum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

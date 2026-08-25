@@ -12,32 +12,36 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TCOLMIN_HPP
 
 #include "TColReduceOps.hpp"
+#include "TPartBinOps.hpp"
 
 namespace pto {
 template <typename T>
 struct TColMinOp {
     using PadType = typename Padding<T>::Type;
     static constexpr auto InitVal = Padding<T>::Max;
-    PTO_INTERNAL static void ReduceInstr(RegTensor<T> &dst, RegTensor<T> &src0, RegTensor<T> &src1, MaskReg &pReg)
+    PTO_INTERNAL static void ReduceInstr(RegTensor<T>& dst, RegTensor<T>& src0, RegTensor<T>& src1, MaskReg& pReg)
     {
         vmin(dst, src0, src1, pReg, MODE_ZEROING);
     }
 };
 
 template <typename T, typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL OP_NAME(TCOLMIN)
-    OP_TYPE(reduce) void TColMin(typename TileDataOut::TileDType __out__ dstData,
-                                 typename TileDataIn::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
-                                 unsigned version = VFImplKind::VFIMPL_DEFAULT)
+__tf__ PTO_INTERNAL OP_NAME(TCOLMIN) OP_TYPE(reduce) void TColMin(
+    typename TileDataOut::TileDType __out__ dstData, typename TileDataIn::TileDType __in__ srcData, unsigned validRow,
+    unsigned validCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
-    __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
-    __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
+    __ubuf__ T* dst = (__ubuf__ T*)__cce_get_tile_ptr(dstData);
+    __ubuf__ T* src = (__ubuf__ T*)__cce_get_tile_ptr(srcData);
 
-    TColReduceInstr<TColMinOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64ColReduce<Int64Op::Min, T, TileDataOut::Cols, TileDataIn::Cols>(dst, src, validRow, validCol);
+    } else {
+        TColReduceInstr<TColMinOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
+    }
 }
 
 template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut &dst, TileDataIn &src)
+PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut& dst, TileDataIn& src)
 {
     unsigned validCol = src.GetValidCol();
     unsigned validRow = src.GetValidRow();

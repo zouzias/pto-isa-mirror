@@ -7,7 +7,7 @@
 
 ## Introduction
 
-Set the FMATRIX register(s) used by IMG2COL-like operations from an `Img2colTileConfig` (target/implementation-defined).
+Set the FMATRIX register(s) for IMG2COL-like operations from an IMG2COL configuration tile (a `ConvTile`; target/implementation-defined).
 
 ## See also
 
@@ -73,4 +73,3 @@ pto.SETFMATRIX %cfg : !pto.fmatrix_config -> ()
 # AS Level 2 (DPS)
 pto.SETFMATRIX ins(%cfg : !pto.fmatrix_config) outs()
 ```
-

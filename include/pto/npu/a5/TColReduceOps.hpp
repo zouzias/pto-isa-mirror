@@ -13,31 +13,97 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 dl, dh, sl, sh, nl, nh;
+        uint16_t fullRepeats = validCols / elementsPerRepeat;
+        uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint32_t tailMaskCols = tailCols;
+        MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
+        for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+            uint32_t colOffset = colRepeat * elementsPerRepeat;
+            vlds(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, 0, DINTLV_B32);
+            uint16_t rows = validRows;
+            for (uint16_t row = 1; row < rows; ++row) {
+                vlds(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Op == Int64Op::Add) {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, nl, dl, sl, allMask);
+                    vaddcs(carryOut, nh, dh, sh, carry, allMask);
+                } else {
+                    Int64MinMax<Op, T>(nl, nh, dl, dh, sl, sh, allMask);
+                }
+                dl = nl;
+                dh = nh;
+            }
+            vsts(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, 0, INTLV_B32, allMask);
+        }
+        if (tailCols != 0) {
+            uint32_t colOffset = fullRepeats * elementsPerRepeat;
+            vlds(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, 0, DINTLV_B32);
+            uint16_t rows = validRows;
+            for (uint16_t row = 1; row < rows; ++row) {
+                vlds(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                if constexpr (Op == Int64Op::Add) {
+                    MaskReg carry, carryOut;
+                    vaddc(carry, nl, dl, sl, tailMask);
+                    vaddcs(carryOut, nh, dh, sh, carry, tailMask);
+                } else {
+                    Int64MinMax<Op, T>(nl, nh, dl, dh, sl, sh, tailMask);
+                }
+                dl = nl;
+                dh = nh;
+            }
+            vsts(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, 0, INTLV_B32, tailMask);
+        }
+    }
+}
+
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TColReduceCheck(int srcValidRow, int srcValidCol, int dstValidCol)
 {
-    static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
-                  "Fix: TCOLREDUCE only support Vec Tile");
-    static_assert(TileDataIn::isRowMajor && TileDataIn::SFractal == SLayout::NoneBox,
-                  "Fix: TCOLREDUCE input tile only support Nd fractal Tile");
-    static_assert(TileDataOut::isRowMajor && TileDataOut::SFractal == SLayout::NoneBox,
-                  "Fix: TCOLREDUCE output tile only support Nd fractal Tile");
+    static_assert(
+        TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
+        "Fix: TCOLREDUCE only support Vec Tile");
+    static_assert(
+        TileDataIn::isRowMajor && TileDataIn::SFractal == SLayout::NoneBox,
+        "Fix: TCOLREDUCE input tile only support Nd fractal Tile");
+    static_assert(
+        TileDataOut::isRowMajor && TileDataOut::SFractal == SLayout::NoneBox,
+        "Fix: TCOLREDUCE output tile only support Nd fractal Tile");
     using T = typename TileDataIn::DType;
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int8_t> ||
-                      std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> ||
-                      std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, bfloat16_t>,
-                  "Fix: TCOLREDUCE input data type is not supported by this instruction.");
+    static_assert(
+        std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t> || std::is_same_v<T, half> ||
+            std::is_same_v<T, float> || std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
+            std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t> ||
+            std::is_same_v<T, uint32_t> || std::is_same_v<T, bfloat16_t>,
+        "Fix: TCOLREDUCE input data type is not supported by this instruction.");
 
-    static_assert(std::is_same_v<typename TileDataOut::DType, T>,
-                  "Fix: TCOLREDUCE input data type must be consistent with the output data type.");
-    PTO_ASSERT(srcValidCol == dstValidCol,
-               "Fix: TCOLREDUCE input valid row must be consistent with the output valid row.");
+    static_assert(
+        std::is_same_v<typename TileDataOut::DType, T>,
+        "Fix: TCOLREDUCE input data type must be consistent with the output data type.");
+    PTO_ASSERT(
+        srcValidCol == dstValidCol, "Fix: TCOLREDUCE input valid row must be consistent with the output valid row.");
 }
 
 template <typename InstrOp, typename T, unsigned SrcStride>
-PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
     constexpr auto distValue =
@@ -48,8 +114,8 @@ PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, u
 
     __VEC_SCOPE__
     {
-        __ubuf__ T *srcP0;
-        __ubuf__ T *srcP1;
+        __ubuf__ T* srcP0;
+        __ubuf__ T* srcP1;
         RegTensor<T> src0VReg;
         RegTensor<T> src1VReg;
         RegTensor<T> tmpVReg;
@@ -86,7 +152,7 @@ PTO_INTERNAL void TColReduceInstr_PostUpdate(__ubuf__ T *dst, __ubuf__ T *src, u
 }
 
 template <typename InstrOp, typename T, unsigned SrcStride>
-PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned elmPerRpt = CCE_VL / sizeof(T); // 每次repeat涉及多少个元素
     constexpr auto distValue =
@@ -101,7 +167,7 @@ PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src,
         uint32_t sReg = validCol;
         for (uint16_t i = 0; i < rptTimes; ++i) {
             preg = CreatePredicate<T>(sReg);
-            vbr((RegTensor<typename InstrOp::PadType> &)dstVReg, InstrOp::InitVal);
+            vbr((RegTensor<typename InstrOp::PadType>&)dstVReg, InstrOp::InitVal);
             for (uint16_t j = 0; j < (uint16_t)validRow; ++j) {
                 vlds(srcVReg, src + i * elmPerRpt, j * SrcStride, NORM);
                 InstrOp::ReduceInstr(dstVReg, dstVReg, srcVReg, preg);
@@ -112,8 +178,8 @@ PTO_INTERNAL void TColReduceInstr_NoPostUpdate(__ubuf__ T *dst, __ubuf__ T *src,
 }
 
 template <typename InstrOp, typename T, typename TileDataIn>
-PTO_INTERNAL void TColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, unsigned validRow, unsigned validCol,
-                                  unsigned version)
+PTO_INTERNAL void TColReduceInstr(
+    __ubuf__ T* dst, __ubuf__ T* src, unsigned validRow, unsigned validCol, unsigned version)
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:

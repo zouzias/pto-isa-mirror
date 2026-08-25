@@ -106,7 +106,7 @@ if [[ ! -d "${ST_DIR}" ]]; then
   exit 1
 fi
 
-is_async_test() { [[ "$1" == *_async ]]; }
+is_async_test() { [[ "$1" == *"_async"* ]]; }
 
 declare -a tests=()
 if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then

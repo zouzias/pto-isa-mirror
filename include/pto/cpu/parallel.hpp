@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifndef PTO_CPU_MAX_THREADS
-#define PTO_CPU_MAX_THREADS 1u
+#define PTO_CPU_MAX_THREADS 0u
 #endif
 
 // Vectorization hints (portable fallbacks).
@@ -89,7 +89,7 @@ inline void parallel_for_1d(std::size_t begin, std::size_t end, std::size_t tota
             }
         });
     }
-    for (auto &w : workers) {
+    for (auto& w : workers) {
         w.join();
     }
 }

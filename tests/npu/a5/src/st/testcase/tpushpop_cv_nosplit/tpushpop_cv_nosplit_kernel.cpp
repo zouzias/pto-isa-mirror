@@ -43,8 +43,8 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
  * out (accTile + bias) with TADD.  AIV1 is idle throughout the FIFO loop.
  */
 template <typename InT, typename OutT, int TOTAL_M, int CASE_TILE_M, int K, int N>
-__global__ AICORE void runTPushPopMatmulAddNoSplit(__gm__ OutT *out, __gm__ InT *srcA, __gm__ InT *srcB,
-                                                   __gm__ OutT *bias)
+__global__ AICORE void runTPushPopMatmulAddNoSplit(
+    __gm__ OutT* out, __gm__ InT* srcA, __gm__ InT* srcB, __gm__ OutT* bias)
 {
     constexpr uint32_t TILE_K = K;
     constexpr uint32_t TILE_N = N;
@@ -67,22 +67,26 @@ __global__ AICORE void runTPushPopMatmulAddNoSplit(__gm__ OutT *out, __gm__ InT 
     // TILE_NO_SPLIT: slot size equals the full consumer tile; only AIV0 signals
     // free, so DefaultSplit must be TILE_NO_SPLIT to avoid a two-core deadlock
     // in the TPipe destructor.
-    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * CASE_TILE_M * TILE_N, FIFO_DEPTH>;
-    MatPipe mPipe((__gm__ void *)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * CASE_TILE_M * TILE_N, FIFO_DEPTH, 2, true>;
+    MatPipe mPipe((__gm__ void*)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(CASE_TILE_M, 16);
     constexpr uint32_t ALIGNED_K = CeilAlign<uint32_t>(TILE_K, blockAlign);
     constexpr uint32_t ALIGNED_N = CeilAlign<uint32_t>(TILE_N, blockAlign);
 
-    using GlobalA = GlobalTensor<InT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_K>,
-                                 pto::Stride<TOTAL_M * TILE_K, TOTAL_M * TILE_K, CASE_TILE_M * TILE_K, TILE_K, 1>>;
-    using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, TILE_K, TILE_N>,
-                                 pto::Stride<TILE_K * TILE_N, TILE_K * TILE_N, TILE_K * TILE_N, TILE_N, 1>>;
-    using GlobalBias = GlobalTensor<OutT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_N>,
-                                    pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, CASE_TILE_M * TILE_N, TILE_N, 1>>;
-    using GlobalOut = GlobalTensor<OutT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_N>,
-                                   pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, CASE_TILE_M * TILE_N, TILE_N, 1>>;
+    using GlobalA = GlobalTensor<
+        InT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_K>,
+        pto::Stride<TOTAL_M * TILE_K, TOTAL_M * TILE_K, CASE_TILE_M * TILE_K, TILE_K, 1>>;
+    using GlobalB = GlobalTensor<
+        InT, pto::Shape<1, 1, 1, TILE_K, TILE_N>,
+        pto::Stride<TILE_K * TILE_N, TILE_K * TILE_N, TILE_K * TILE_N, TILE_N, 1>>;
+    using GlobalBias = GlobalTensor<
+        OutT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_N>,
+        pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, CASE_TILE_M * TILE_N, TILE_N, 1>>;
+    using GlobalOut = GlobalTensor<
+        OutT, pto::Shape<1, 1, 1, CASE_TILE_M, TILE_N>,
+        pto::Stride<TOTAL_M * TILE_N, TOTAL_M * TILE_N, CASE_TILE_M * TILE_N, TILE_N, 1>>;
 
     using TileMatA =
         Tile<TileType::Mat, InT, ALIGNED_M, ALIGNED_K, BLayout::ColMajor, CASE_TILE_M, TILE_K, SLayout::RowMajor, 512>;
@@ -205,27 +209,249 @@ __global__ AICORE void runTPushPopMatmulAddNoSplit(__gm__ OutT *out, __gm__ InT 
     }
 }
 
-template <int32_t tilingKey>
-void LaunchTPushPopMatmulAddNoSplit(uint8_t *out, uint8_t *srcA, uint8_t *srcB, uint8_t *bias, void *stream)
+template <typename InT, typename MatPipe, typename AccTile, typename TileMatA, typename TileMatB, typename LeftTile,
+    typename RightTile, typename GlobalB, int M, int H, int K>
+AICORE void RunDynamicAccValidShapeStripOnce(MatPipe& mPipe, AccTile& accTile, TileMatA& aMatTile, TileMatB& bMatTile,
+    LeftTile& aTile, RightTile& bTile, __gm__ InT* srcA, GlobalB& globalB, uint32_t strip)
 {
-    if constexpr (tilingKey == 1) {
-        runTPushPopMatmulAddNoSplit<half, float, 16, 16, 32, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(srcA),
-                                     reinterpret_cast<half *>(srcB), reinterpret_cast<float *>(bias));
-    } else if constexpr (tilingKey == 2) {
-        runTPushPopMatmulAddNoSplit<half, float, 32, 16, 32, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(srcA),
-                                     reinterpret_cast<half *>(srcB), reinterpret_cast<float *>(bias));
-    } else if constexpr (tilingKey == 3) {
-        runTPushPopMatmulAddNoSplit<float, float, 16, 16, 32, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float *>(srcA),
-                                     reinterpret_cast<float *>(srcB), reinterpret_cast<float *>(bias));
+    using GlobalA = GlobalTensor<InT, pto::Shape<1, 1, 1, H, K>, pto::Stride<M * K, M * K, H * K, K, 1>>;
+    GlobalA globalA(srcA + strip * H * K);
+
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    TLOAD(aMatTile, globalA);
+    TLOAD(bMatTile, globalB);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+    TMATMUL(accTile, aTile, bTile);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+    TPUSH<MatPipe, AccTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, accTile);
+    set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+}
+
+template <typename InT, typename OutT, typename MatPipe, typename AccTile, int M, int H, int K, int N>
+AICORE void RunDynamicAccValidShapeStripProducer(MatPipe& mPipe, __gm__ InT* srcA, __gm__ InT* srcB)
+{
+    constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
+    constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(H, 16);
+    constexpr uint32_t ALIGNED_K = CeilAlign<uint32_t>(K, blockAlign);
+    constexpr uint32_t ALIGNED_N = CeilAlign<uint32_t>(N, blockAlign);
+    constexpr uint32_t STRIP_COUNT = M / H;
+
+    using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, K, N>, pto::Stride<K * N, K * N, K * N, N, 1>>;
+    using TileMatA = Tile<TileType::Mat, InT, ALIGNED_M, ALIGNED_K, BLayout::ColMajor, H, K, SLayout::RowMajor, 512>;
+    using TileMatB = Tile<TileType::Mat, InT, ALIGNED_K, ALIGNED_N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<InT, ALIGNED_M, ALIGNED_K, H, K>;
+    using RightTile = TileRight<InT, ALIGNED_K, ALIGNED_N, K, N>;
+
+    TileMatA aMatTile;
+    TileMatB bMatTile;
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile accTile(H, N);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x20000);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(accTile, 0x0);
+
+    GlobalB globalB(srcB);
+    set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+
+    for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+        RunDynamicAccValidShapeStripOnce<InT, MatPipe, AccTile, TileMatA, TileMatB, LeftTile, RightTile, GlobalB, M, H,
+            K>(mPipe, accTile, aMatTile, bMatTile, aTile, bTile, srcA, globalB, strip);
+    }
+
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+    pipe_barrier(PIPE_ALL);
+}
+
+template <typename OutT, typename MatPipe, typename VecStripTile, int M, int H, int N, uint32_t STRIP_COUNT>
+AICORE void RunDynamicAccValidShapeStripConsumer(MatPipe& mPipe, __gm__ OutT* out)
+{
+    using GlobalOutStrip =
+        GlobalTensor<OutT, pto::Shape<1, 1, 1, H, N>, pto::Stride<M * N, M * N, H * N, N, 1>>;
+
+    if (get_subblockid() == 0) {
+        VecStripTile vecStripTile;
+        TASSIGN(vecStripTile, 0x10000);
+
+        for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+            TPOP<MatPipe, VecStripTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, vecStripTile);
+            TFREE<MatPipe, TileSplitAxis::TILE_NO_SPLIT>(mPipe);
+
+            GlobalOutStrip globalOut(out + strip * H * N);
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            TSTORE(globalOut, vecStripTile);
+        }
+    }
+
+    pipe_barrier(PIPE_ALL);
+}
+
+template <typename InT, typename OutT, int M, int H, int K, int N>
+__global__ AICORE void runTPushPopAccValidShapeStripNoSplit(__gm__ OutT* out, __gm__ InT* srcA, __gm__ InT* srcB)
+{
+    constexpr uint16_t FLAG_ID = 0;
+    constexpr uint8_t FIFO_DEPTH = 2;
+    constexpr uint32_t STRIP_COUNT = M / H;
+    using AccTile = TileAcc<OutT, M, N, M, N>;
+    using AccStripTile = TileAcc<OutT, M, N, H, N>;
+    using VecStripTile = Tile<TileType::Vec, OutT, H, N, BLayout::RowMajor, H, N>;
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * H * N, FIFO_DEPTH, 2, true>;
+    MatPipe mPipe((__gm__ void*)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
+
+    constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
+    constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(M, 16);
+    constexpr uint32_t ALIGNED_K = CeilAlign<uint32_t>(K, blockAlign);
+    constexpr uint32_t ALIGNED_N = CeilAlign<uint32_t>(N, blockAlign);
+
+    using GlobalA = GlobalTensor<InT, pto::Shape<1, 1, 1, M, K>, pto::Stride<M * K, M * K, M * K, K, 1>>;
+    using GlobalB = GlobalTensor<InT, pto::Shape<1, 1, 1, K, N>, pto::Stride<K * N, K * N, K * N, N, 1>>;
+    using GlobalOutStrip =
+        GlobalTensor<OutT, pto::Shape<1, 1, 1, H, N>, pto::Stride<M * N, M * N, H * N, N, 1>>;
+
+    using TileMatA =
+        Tile<TileType::Mat, InT, ALIGNED_M, ALIGNED_K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
+    using TileMatB =
+        Tile<TileType::Mat, InT, ALIGNED_K, ALIGNED_N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<InT, ALIGNED_M, ALIGNED_K, M, K>;
+    using RightTile = TileRight<InT, ALIGNED_K, ALIGNED_N, K, N>;
+
+    if constexpr (DAV_CUBE) {
+        TileMatA aMatTile;
+        TileMatB bMatTile;
+        LeftTile aTile;
+        RightTile bTile;
+        AccTile accTile;
+        TASSIGN(aMatTile, 0x0);
+        TASSIGN(bMatTile, 0x20000);
+        TASSIGN(aTile, 0x0);
+        TASSIGN(bTile, 0x0);
+        TASSIGN(accTile, 0x0);
+
+        GlobalA globalA(srcA);
+        GlobalB globalB(srcB);
+        TLOAD(aMatTile, globalA);
+        TLOAD(bMatTile, globalB);
+
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
+
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+        TMATMUL(accTile, aTile, bTile);
+
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+        for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+            AccStripTile accStrip;
+            TASSIGN(accStrip, strip * H * 64);
+            TPUSH<MatPipe, AccStripTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, accStrip);
+        }
+
+        pipe_barrier(PIPE_ALL);
+    }
+
+    if constexpr (DAV_VEC) {
+        if (get_subblockid() == 0) {
+            VecStripTile vecStripTile;
+            TASSIGN(vecStripTile, 0x10000);
+
+            for (uint32_t strip = 0; strip < STRIP_COUNT; ++strip) {
+                TPOP<MatPipe, VecStripTile, TileSplitAxis::TILE_NO_SPLIT>(mPipe, vecStripTile);
+                TFREE<MatPipe, TileSplitAxis::TILE_NO_SPLIT>(mPipe);
+
+                GlobalOutStrip globalOut(out + strip * H * N);
+
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                TSTORE(globalOut, vecStripTile);
+            }
+        }
+
+        pipe_barrier(PIPE_ALL);
     }
 }
 
-template void LaunchTPushPopMatmulAddNoSplit<1>(uint8_t *out, uint8_t *srcA, uint8_t *srcB, uint8_t *bias,
-                                                void *stream);
-template void LaunchTPushPopMatmulAddNoSplit<2>(uint8_t *out, uint8_t *srcA, uint8_t *srcB, uint8_t *bias,
-                                                void *stream);
-template void LaunchTPushPopMatmulAddNoSplit<3>(uint8_t *out, uint8_t *srcA, uint8_t *srcB, uint8_t *bias,
-                                                void *stream);
+template <typename InT, typename OutT, int M, int H, int K, int N>
+__global__ AICORE void runTPushPopDynamicAccValidShapeStripNoSplit(__gm__ OutT* out, __gm__ InT* srcA, __gm__ InT* srcB)
+{
+    constexpr uint16_t FLAG_ID = 1;
+    constexpr uint8_t FIFO_DEPTH = 2;
+    constexpr uint32_t STRIP_COUNT = M / H;
+    using AccStripTile = TileAcc<OutT, M, N, -1, -1>;
+    using VecStripTile = Tile<TileType::Vec, OutT, H, N, BLayout::RowMajor, H, N>;
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * H * N, FIFO_DEPTH, 2, true>;
+    MatPipe mPipe((__gm__ void*)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
+
+    if constexpr (DAV_CUBE) {
+        RunDynamicAccValidShapeStripProducer<InT, OutT, MatPipe, AccStripTile, M, H, K, N>(mPipe, srcA, srcB);
+    }
+    if constexpr (DAV_VEC) {
+        RunDynamicAccValidShapeStripConsumer<OutT, MatPipe, VecStripTile, M, H, N, STRIP_COUNT>(mPipe, out);
+    }
+}
+
+template <int32_t tilingKey>
+void LaunchTPushPopMatmulAddNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream)
+{
+    if constexpr (tilingKey == 1) {
+        runTPushPopMatmulAddNoSplit<half, float, 16, 16, 32, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(srcA), reinterpret_cast<half*>(srcB),
+            reinterpret_cast<float*>(bias));
+    } else if constexpr (tilingKey == 2) {
+        runTPushPopMatmulAddNoSplit<half, float, 32, 16, 32, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(srcA), reinterpret_cast<half*>(srcB),
+            reinterpret_cast<float*>(bias));
+    } else if constexpr (tilingKey == 3) {
+        runTPushPopMatmulAddNoSplit<float, float, 16, 16, 32, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<float*>(srcA), reinterpret_cast<float*>(srcB),
+            reinterpret_cast<float*>(bias));
+    }
+}
+
+template <int32_t tilingKey>
+void LaunchTPushPopAccValidShapeStripNoSplit(uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream)
+{
+    if constexpr (tilingKey == 4) {
+        runTPushPopAccValidShapeStripNoSplit<float, float, 32, 16, 32, 128><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<float*>(srcA), reinterpret_cast<float*>(srcB));
+    } else if constexpr (tilingKey == 5) {
+        runTPushPopDynamicAccValidShapeStripNoSplit<float, float, 32, 16, 32, 128><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<float*>(srcA), reinterpret_cast<float*>(srcB));
+    }
+}
+
+template void LaunchTPushPopMatmulAddNoSplit<1>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
+template void LaunchTPushPopMatmulAddNoSplit<2>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
+template void LaunchTPushPopMatmulAddNoSplit<3>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, uint8_t* bias, void* stream);
+template void LaunchTPushPopAccValidShapeStripNoSplit<4>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream);
+template void LaunchTPushPopAccValidShapeStripNoSplit<5>(
+    uint8_t* out, uint8_t* srcA, uint8_t* srcB, void* stream);

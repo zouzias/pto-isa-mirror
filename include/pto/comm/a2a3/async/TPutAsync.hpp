@@ -22,11 +22,11 @@ namespace comm {
 // ============================================================================
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                        const AsyncSession &session)
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session)
 {
     if constexpr (engine == DmaEngine::SDMA) {
-        return detail::TPUT_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+        return detail::TPUT_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session);
     } else {
         static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC: only SDMA engine is supported on A2/A3");
         return AsyncEvent(0, engine);

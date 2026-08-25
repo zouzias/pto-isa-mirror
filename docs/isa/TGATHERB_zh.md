@@ -36,9 +36,10 @@ $$ \mathrm{dst}_{i,j} = *\left(\mathrm{srcBase} + \mathrm{offset}_{i,j}\right) $
 pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataOffset, typename... WaitEvents>
@@ -47,13 +48,13 @@ PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset
 
 ## 约束
 
-- **实现检查 (A2A3)**:
+- **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - 目标布局必须是行主序（`TileDataDst::isRowMajor`）。
     - 目标元素大小必须是 `1`、`2` 或 `4` 字节（通过辅助函数中的 `static_assert` 强制执行）。
-    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
-- **实现检查 (A5)**:
+    - `TileDataSrc::DType`/`TileDataDst::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+- **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - 目标元素大小必须是 `1`、`2` 或 `4` 字节。
-    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - `TileDataSrc::DType`/`TileDataDst::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
 - **偏移量解释**:
     - 偏移量被实现解释为 `uint32_t` 值（字节偏移量）。
     - 偏移量边界不通过显式运行时断言进行验证；超出范围的偏移量由目标定义。
@@ -118,11 +119,10 @@ void example_manual() {
 %dst = pto.tgatherb %src, %offsets : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### PTO 汇编形式
+### PTO汇编形式
 
 ```text
 %dst = tgatherb %src, %offsets : !pto.tile<...> -> !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

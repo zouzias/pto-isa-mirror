@@ -15,22 +15,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
-          int srcTileW, int vRows, int vCols>
-void LaunchTSels(T *out, TMask *mask, T *src, T scalar, void *stream);
-template <typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW,
-          int vRows, int vCols>
-void LaunchTSelsHalf(aclFloat16 *out, TMask *mask, aclFloat16 *src, aclFloat16 scalar, void *stream);
+template <
+    typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW,
+    int vRows, int vCols>
+void LaunchTSels(T* out, TMask* mask, T* src, T scalar, void* stream);
+template <
+    typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW,
+    int vRows, int vCols>
+void LaunchTSelsInplace(T* out, TMask* mask, T scalar, void* stream);
+template <
+    typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH, int srcTileW, int vRows,
+    int vCols>
+void LaunchTSelsHalf(aclFloat16* out, TMask* mask, aclFloat16* src, aclFloat16 scalar, void* stream);
 
 class TSELSTest : public testing::Test {
 private:
     aclrtStream stream;
-    void *dstHost;
-    void *srcHost;
-    void *maskHost;
-    void *dstDevice;
-    void *srcDevice;
-    void *maskDevice;
+    void* dstHost;
+    void* srcHost;
+    void* maskHost;
+    void* dstDevice;
+    void* srcDevice;
+    void* maskDevice;
     size_t dstFileSize;
     size_t maskFileSize;
     size_t srcFileSize;
@@ -38,7 +44,7 @@ private:
 protected:
     std::string GetGoldenDir()
     {
-        const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+        const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
         const std::string caseName = testInfo->name();
         std::string suiteName = testInfo->test_suite_name();
         std::string fullPath = "../" + suiteName + "." + caseName;
@@ -56,9 +62,10 @@ protected:
         aclrtResetDevice(0);
         aclFinalize();
     }
-    template <typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
-              int srcTileW>
-    void BeforeLaunch(T &scalar)
+    template <
+        typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
+        int srcTileW>
+    void BeforeLaunch(T& scalar)
     {
         this->dstFileSize = sizeof(T) * dstTileH * dstTileW;
         this->maskFileSize = sizeof(TMask) * maskTileH * maskTileW;
@@ -97,26 +104,46 @@ protected:
         aclrtFreeHost(this->dstHost);
 
         ReadFile(GetGoldenDir() + "/golden.bin", this->dstFileSize, golden.data(), this->dstFileSize);
-        bool res = ResultCmp<T>(golden, devFinal, 0.0001f);
+        bool res;
+        if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+            res = ResultCmpExact(golden, devFinal.data());
+        } else {
+            res = ResultCmp<T>(golden, devFinal, 0.0001f);
+        }
         if (!res) {
             WriteFile(GetGoldenDir() + "/output.bin", devFinal.data(), this->dstFileSize);
         }
         return res;
     }
 
-    template <typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
-              int srcTileW, int vRows, int vCols, bool isHalf = false>
+    template <
+        typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
+        int srcTileW, int vRows, int vCols, bool isHalf = false>
     void Launch()
     {
         T scalar;
         this->BeforeLaunch<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW>(scalar);
         if constexpr (isHalf) {
             LaunchTSelsHalf<TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>(
-                (T *)this->dstDevice, (TMask *)this->maskDevice, (T *)this->srcDevice, scalar, this->stream);
+                (T*)this->dstDevice, (TMask*)this->maskDevice, (T*)this->srcDevice, scalar, this->stream);
         } else {
             LaunchTSels<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>(
-                (T *)this->dstDevice, (TMask *)this->maskDevice, (T *)this->srcDevice, scalar, this->stream);
+                (T*)this->dstDevice, (TMask*)this->maskDevice, (T*)this->srcDevice, scalar, this->stream);
         }
+        bool res = this->AfterLaunch<T>();
+        EXPECT_TRUE(res);
+    }
+
+    template <
+        typename T, typename TMask, int dstTileH, int dstTileW, int maskTileH, int maskTileW, int srcTileH,
+        int srcTileW, int vRows, int vCols>
+    void LaunchInplace()
+    {
+        T scalar;
+        this->BeforeLaunch<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW>(scalar);
+        aclrtMemcpy(this->dstDevice, this->dstFileSize, this->srcHost, this->srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        LaunchTSelsInplace<T, TMask, dstTileH, dstTileW, maskTileH, maskTileW, srcTileH, srcTileW, vRows, vCols>(
+            (T*)this->dstDevice, (TMask*)this->maskDevice, scalar, this->stream);
         bool res = this->AfterLaunch<T>();
         EXPECT_TRUE(res);
     }
@@ -146,18 +173,9 @@ TEST_F(TSELSTest, case_uint16_uint32_2x16_2x8_2x16_2x16)
 {
     this->Launch<uint16_t, uint32_t, 2, 16, 2, 8, 2, 16, 2, 16>();
 }
-TEST_F(TSELSTest, case_uint32_uint8_2x8_2x32_2x8_2x8)
-{
-    this->Launch<uint32_t, uint8_t, 2, 8, 2, 32, 2, 8, 2, 8>();
-}
-TEST_F(TSELSTest, case_uint32_uint16_2x8_2x16_2x8_2x8)
-{
-    this->Launch<uint32_t, uint16_t, 2, 8, 2, 16, 2, 8, 2, 8>();
-}
-TEST_F(TSELSTest, case_uint32_uint32_2x8_2x8_2x8_2x8)
-{
-    this->Launch<uint32_t, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8>();
-}
+TEST_F(TSELSTest, case_uint32_uint8_2x8_2x32_2x8_2x8) { this->Launch<uint32_t, uint8_t, 2, 8, 2, 32, 2, 8, 2, 8>(); }
+TEST_F(TSELSTest, case_uint32_uint16_2x8_2x16_2x8_2x8) { this->Launch<uint32_t, uint16_t, 2, 8, 2, 16, 2, 8, 2, 8>(); }
+TEST_F(TSELSTest, case_uint32_uint32_2x8_2x8_2x8_2x8) { this->Launch<uint32_t, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8>(); }
 TEST_F(TSELSTest, case_half_uint8_2x16_2x32_2x16_2x16)
 {
     this->Launch<aclFloat16, uint8_t, 2, 16, 2, 32, 2, 16, 2, 16, true>();
@@ -170,18 +188,9 @@ TEST_F(TSELSTest, case_half_uint32_2x16_2x8_2x16_2x16)
 {
     this->Launch<aclFloat16, uint32_t, 2, 16, 2, 8, 2, 16, 2, 16, true>();
 }
-TEST_F(TSELSTest, case_float_uint8_2x8_2x32_2x8_2x8)
-{
-    this->Launch<float, uint8_t, 2, 8, 2, 32, 2, 8, 2, 8>();
-}
-TEST_F(TSELSTest, case_float_uint16_2x8_2x16_2x8_2x8)
-{
-    this->Launch<float, uint16_t, 2, 8, 2, 16, 2, 8, 2, 8>();
-}
-TEST_F(TSELSTest, case_float_uint32_2x8_2x8_2x8_2x8)
-{
-    this->Launch<float, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8>();
-}
+TEST_F(TSELSTest, case_float_uint8_2x8_2x32_2x8_2x8) { this->Launch<float, uint8_t, 2, 8, 2, 32, 2, 8, 2, 8>(); }
+TEST_F(TSELSTest, case_float_uint16_2x8_2x16_2x8_2x8) { this->Launch<float, uint16_t, 2, 8, 2, 16, 2, 8, 2, 8>(); }
+TEST_F(TSELSTest, case_float_uint32_2x8_2x8_2x8_2x8) { this->Launch<float, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8>(); }
 TEST_F(TSELSTest, case_uint8_uint8_2x32_2x64_2x128_2x31)
 {
     this->Launch<uint8_t, uint8_t, 2, 32, 2, 64, 2, 128, 2, 31>();
@@ -209,4 +218,58 @@ TEST_F(TSELSTest, case_float_uint8_32x672_32x96_32x672_32x666)
 TEST_F(TSELSTest, case_float_uint8_1x8192_1x4096_1x8192_1x8192)
 {
     this->Launch<float, uint8_t, 1, 8192, 1, 4096, 1, 8192, 1, 8192>();
+}
+TEST_F(TSELSTest, case_int64_uint8_4x16_4x32_4x16_4x16)
+{
+    this->Launch<int64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_4x16_4x32_4x16_4x16)
+{
+    this->Launch<uint64_t, uint8_t, 4, 16, 4, 32, 4, 16, 4, 16>();
+}
+TEST_F(TSELSTest, case_int64_uint8_49x160_49x32_49x160_49x160)
+{
+    this->Launch<int64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_49x160_49x32_49x160_49x160)
+{
+    this->Launch<uint64_t, uint8_t, 49, 160, 49, 32, 49, 160, 49, 160>();
+}
+TEST_F(TSELSTest, case_int64_uint8_1x16364_1x2048_1x16364_1x16364)
+{
+    this->Launch<int64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_1x16364_1x2048_1x16364_1x16364)
+{
+    this->Launch<uint64_t, uint8_t, 1, 16364, 1, 2048, 1, 16364, 1, 16364>();
+}
+TEST_F(TSELSTest, case_int64_uint8_1x16368_1x2046_1x16368_1x16368)
+{
+    this->Launch<int64_t, uint8_t, 1, 16368, 1, 2046, 1, 16368, 1, 16368>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_1x16368_1x2046_1x16368_1x16368)
+{
+    this->Launch<uint64_t, uint8_t, 1, 16368, 1, 2046, 1, 16368, 1, 16368>();
+}
+TEST_F(TSELSTest, case_int64_uint8_4x32_4x32_4x32_4x32_inplace)
+{
+    this->LaunchInplace<int64_t, uint8_t, 4, 32, 4, 32, 4, 32, 4, 32>();
+}
+TEST_F(TSELSTest, case_uint64_uint8_4x32_4x32_4x32_4x32_inplace)
+{
+    this->LaunchInplace<uint64_t, uint8_t, 4, 32, 4, 32, 4, 32, 4, 32>();
+}
+
+TEST_F(TSELSTest, case_int64_uint8_1x1024_1x128_1x1024_1x1024_inplace)
+{
+    this->LaunchInplace<int64_t, uint8_t, 1, 1024, 1, 128, 1, 1024, 1, 1024>();
+}
+TEST_F(TSELSTest, case_int64_uint8_4x40_4x5_4x40_4x40_inplace)
+{
+    this->LaunchInplace<int64_t, uint8_t, 4, 40, 4, 5, 4, 40, 4, 40>();
+}
+
+TEST_F(TSELSTest, case_int64_uint8_1x2048_1x256_1x2048_1x2045_inplace)
+{
+    this->LaunchInplace<int64_t, uint8_t, 1, 2048, 1, 256, 1, 2048, 1, 2045>();
 }

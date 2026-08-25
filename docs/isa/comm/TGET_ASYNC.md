@@ -13,9 +13,10 @@ Data flow:
 - `engine`:
     - `DmaEngine::SDMA` (default)
     - `DmaEngine::URMA` (Ascend950, NPU_ARCH 3510 only)
+    - `DmaEngine::RDMA` (Ascend950, NPU_ARCH 3510 only; currently supports only the HNS1825 NIC platform)
 
-> **Important (SDMA path)**  
-> `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  
+> **Important (SDMA path)**
+> `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.
 > Non-1D or non-contiguous layouts are not supported by the current SDMA async implementation.
 
 ## C++ Intrinsic
@@ -58,11 +59,12 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `session` | — | Output `AsyncSession` object. |
 | `syncId` | `0` | MTE3/MTE2 pipe sync event id (0-7). Override if kernel uses other pipe barriers on the same id. |
 | `baseConfig` | `{kDefaultSdmaBlockBytes, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`. Suitable for most single-queue transfers. |
-| `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA channel group index. Default uses `get_block_idx()` internally, mapping to current AI core. Override for multi-block or custom channel mapping scenarios. |
+| `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA channel group index. Default uses `get_block_idx()` internally, mapping to current AI core. Override for multi-block, concurrent, or custom channel mapping scenarios. |
 
 ### URMA Construction (NPU_ARCH 3510 only)
 
 > URMA (User-level RDMA Memory Access) is a hardware-accelerated RDMA transport available on Ascend950 (NPU_ARCH 3510).
+> URMA requires CANN Toolkit **>= 9.1.0**.
 
 ```cpp
 #ifdef PTO_URMA_SUPPORTED
@@ -81,6 +83,39 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 
 URMA does not require `scratchTile` — polling uses `ld_dev`/`st_dev` hardware intrinsics directly.
 
+### RDMA Construction (NPU_ARCH 3510 only)
+
+RDMA is intended for standard cross-node networking and currently supports only the HNS1825 NIC platform.
+
+```cpp
+#ifdef PTO_RDMA_SUPPORTED
+template <DmaEngine engine, typename ScratchTile>
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
+                                    __gm__ uint8_t *workspace,
+                                    uint32_t myPe,
+                                    AsyncSession &session,
+                                    uint32_t syncId = 0);
+#endif
+```
+
+| Parameter | Description |
+|---|---|
+| `scratchTile` | UB/Vec tile used for WQE/CQE control data; at least 64 bytes. |
+| `workspace` | GM pointer returned by the host-side RDMA initialization flow. |
+| `myPe` | Local rank id used to select the registered local memory region. |
+| `session` | Output `AsyncSession` object. |
+| `syncId` | MTE/scalar synchronization event id in the range 0-7. |
+
+Build one peer-independent session, then select the source rank with the explicit `peer` argument:
+
+```cpp
+comm::AsyncSession session;
+if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, myPe, session, syncId)) {
+    auto event = comm::TGET_ASYNC<comm::DmaEngine::RDMA>(dstG, srcG, session, peer);
+    (void)event.Wait(session);
+}
+```
+
 ## Constraints
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
@@ -88,14 +123,19 @@ URMA does not require `scratchTile` — polling uses `ld_dev`/`st_dev` hardware 
 - Both SDMA and URMA paths require source tensor to be **flat contiguous logical 1D only**
 - SDMA workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
 - URMA workspace must be a valid GM pointer allocated by host-side `UrmaWorkspaceManager`
+- Keep the session and its workspace alive until all associated events have completed
 - URMA is only available on NPU_ARCH 3510 (Ascend950)
+- URMA requires CANN Toolkit **>= 9.1.0**
 - The symmetric data buffer passed to `UrmaWorkspaceManager::Init()` must be backed by huge-page memory (allocate with `ACL_MEM_MALLOC_HUGE_ONLY`). The underlying MR registration requires huge-page backing; `ACL_MEM_MALLOC_HUGE_FIRST` may silently fall back to 4KB pages for small allocations, causing registration to fail
+- RDMA is available only on Ascend950 / NPU_ARCH 3510 and currently supports only the HNS1825 NIC platform
+- RDMA source and destination tensors must be flat contiguous logical 1D, and the complete local and remote ranges must lie within memory regions registered during host initialization
+- One RDMA transfer must not exceed `0x7fffffff` bytes
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
 
 ## scratchTile Role
 
-`scratchTile` is **not** used to hold transferred payload data.  
+`scratchTile` is **not** used to hold transferred payload data.
 It is converted to `TmpBuffer` and used as temporary UB workspace for:
 
 - writing/reading SDMA control words (flag, sq_tail, channel_info)
@@ -110,20 +150,32 @@ The real payload path remains remote GM -> DMA engine -> local GM; `scratchTile`
 - must be UB/Vec tile (`ScratchTile::Loc == TileType::Vec`)
 - available bytes must be at least `sizeof(uint64_t)` (8 bytes)
 
-Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>` (256B).
+Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>` (256Byte).
 
 ## Completion Semantics (Quiet Semantics)
 
 The completion mechanism differs by engine, but user-facing quiet semantics are identical:
 
-- **SDMA**: `TGET_ASYNC` only submits data transfer SQEs. The flag SQE is deferred to `Wait`, which polls the flag for completion.
+- **SDMA**: Each `TGET_ASYNC` submits data-transfer SQEs and flag SQEs that mark completion of that operation. `Wait` or `Test` on its returned event polls the corresponding flags to determine whether that `TGET_ASYNC` has completed; completion also guarantees that all earlier SDMA operations in the same session have completed.
 - **URMA**: `TGET_ASYNC` submits an RDMA READ WQE and rings the doorbell immediately. `Wait` polls the Completion Queue (CQ) until all expected CQEs have been consumed.
+- **RDMA**: `TGET_ASYNC` submits an RDMA READ WQE to the queue selected by `peer`. Completion is tracked independently for each peer/queue.
 
 - `event.Wait(session)` — blocks until **all async operations issued since the last Wait** are complete
 
 This means after multiple `TGET_ASYNC` calls, a single `Wait` on the last returned `AsyncEvent` drains all pending operations (similar to shmem's quiet semantics).
 
+For RDMA operations targeting different peers, wait for the last event of each peer separately.
+
+Up to 64 operations may be outstanding in one session before submission can apply backpressure.
+
 After wait succeeds, all issued reads into `dstGlobalData` are complete.
+
+## SDMA Concurrency and Session Ownership
+
+- Do not use one session concurrently from multiple execution flows.
+- Operations that share a channel group must also share the same session.
+- Concurrent kernels, or multiple independent sessions within one kernel, must use isolated channel groups.
+- Complete all outstanding events before rebuilding a session or reusing its channel group.
 
 ## Example
 

@@ -46,15 +46,25 @@ PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
     - `dst`, `src`, and `tmp` must use the same element type.
     - In manual mode, source, destination, and temporary storage must not overlap in memory.
 - **Implementation checks (A5)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
     - `dst` and `src` element types must match.
     - `src.GetValidRow()/GetValidCol()` must match `dst`.
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+
+## Temporary Space
+
+### A2A3
+
+`tmp` **is used** as intermediate scratch storage for the scalar XOR decomposition. `tmp` must have the same element type and valid shape as `dst`.
+
+### A5
+
+`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses the `vxor` vector instruction with a broadcast scalar register and does not require scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
 
 ## Examples
 
@@ -100,4 +110,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

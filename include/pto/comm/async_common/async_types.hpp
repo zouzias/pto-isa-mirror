@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cstdint>
 #include <climits>
+#include "pto/comm/async_common/sdma_constants.hpp"
 #include "pto/comm/comm_types.hpp"
 
 namespace pto {
@@ -26,7 +27,6 @@ constexpr uint32_t kSdmaFlagLength = 128U;
 constexpr uint32_t kUbAlignSize = 256U;
 constexpr uint32_t kSdmaEventRecordBytes = 16U;
 constexpr uint32_t kSdmaEventSlotCount = kSdmaFlagLength / kSdmaEventRecordBytes;
-
 constexpr uint32_t SDMA_FLAG_LENGTH = kSdmaFlagLength;
 constexpr uint32_t UB_ALIGN_SIZE = kUbAlignSize;
 constexpr uint32_t SDMA_EVENT_RECORD_BYTES = kSdmaEventRecordBytes;
@@ -46,12 +46,12 @@ using sdma_base_config_t = SdmaBaseConfig;
 // Context types for SDMA async operations
 // ============================================================================
 struct TmpBuffer {
-    __ubuf__ uint8_t *addr;
+    __ubuf__ uint8_t* addr;
     uint32_t size;
 };
 
 struct SdmaExecContext {
-    __gm__ uint8_t *contextGm;
+    __gm__ uint8_t* contextGm;
     TmpBuffer tmpBuf;
     uint32_t syncId;
     uint32_t channelGroupIdx;
@@ -63,12 +63,29 @@ struct SdmaEventContext {
     uint32_t syncId;
 };
 
+namespace detail {
+
+struct SdmaRuntimeContext {
+    uint64_t nextPostId;
+    uint64_t postDoneId[kSdmaMaxChannelGroups];
+    // Per-slot metadata for the shared flag payload ring. Slot index is postId % flag payload depth.
+    uint8_t flagPayloadQueueCount[kSdmaFlagPayloadDepth];
+    uint32_t sqTail[kSdmaMaxChannelGroups];
+    uint32_t sqHead[kSdmaMaxChannelGroups];
+    // Cumulative queue prefix used by this session. Every Post fences these queues.
+    uint32_t usedQueueCount;
+    __gm__ uint8_t* postDoneBase;
+};
+
+} // namespace detail
+
 // ============================================================================
 // SdmaSession: bundles ExecContext + EventContext for convenient async usage.
 // ============================================================================
 struct SdmaSession {
     SdmaExecContext execCtx{};
     SdmaEventContext eventCtx{};
+    mutable detail::SdmaRuntimeContext runtimeCtx{};
     bool valid{false};
 };
 
@@ -78,38 +95,33 @@ constexpr uint64_t kDefaultSdmaBlockBytes = 1024 * 1024;
 } // namespace sdma
 
 // ============================================================================
-// URMA context types for async operations (HCCP V2 Jetty, NPU_ARCH 3510 only)
-// ============================================================================
-namespace urma {
-
-struct UrmaExecContext {
-    __gm__ uint8_t *contextGm{nullptr};
-    uint32_t destRankId{0};
-    uint32_t qpIdx{0};
-};
-
-struct UrmaEventContext {
-    __gm__ uint8_t *contextGm{nullptr};
-};
-
-struct UrmaSession {
-    UrmaExecContext execCtx{};
-    UrmaEventContext eventCtx{};
-    bool valid{false};
-};
-
-} // namespace urma
-
-// ============================================================================
 // AsyncSession: engine-agnostic session for async DMA operations.
 // Users build via comm::BuildAsyncSession<engine>() and pass to
 // TPUT_ASYNC / TGET_ASYNC / event.Wait() without knowing engine internals.
 // ============================================================================
 struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};
-    sdma::SdmaSession sdmaSession{};
-    urma::UrmaSession urmaSession{};
     bool valid{false};
+
+    __gm__ uint8_t* contextGm{nullptr};
+    __ubuf__ uint8_t* tmpBufAddr{nullptr};
+    uint32_t tmpBufSize{0};
+    uint32_t syncId{0};
+    uint32_t channelGroupIdx{sdma::kAutoChannelGroupIdx};
+    uint64_t blockBytes{sdma::kDefaultSdmaBlockBytes};
+    uint64_t commBlockOffset{0};
+    uint32_t queueNum{1};
+
+    // Persistent SDMA runtime state. The SDMA backend threads this across
+    // successive posts/waits, so it lives in the session and is mutated even
+    // through const references (mirrors sdma::SdmaSession::runtimeCtx).
+    mutable sdma::detail::SdmaRuntimeContext sdmaRuntimeCtx{};
+
+    uint32_t destRankId{0};
+    uint32_t qpIdx{0};
+
+    RdmaBackend rdmaBackend{RdmaBackend::NONE};
+    uint32_t myPe{0};
 };
 
 } // namespace comm

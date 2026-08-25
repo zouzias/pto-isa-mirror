@@ -35,8 +35,8 @@ $$ \mathrm{dst}_{i, P \cdot j + \mathrm{pos}_P} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{i, P \cdot j + \mathrm{zeros}_P} = 0 $$
 
 Where:
-- `SrcTileData::ValidCol` = `DstTileData::ValidCol` × expansion_factor
-- `SrcTileData::ValidRow` = `DstTileData::ValidRow`
+- `DstTileData::ValidCol` = `SrcTileData::ValidCol` × expansion_factor
+- `DstTileData::ValidRow` = `SrcTileData::ValidRow`
 
 #### SCATTER_COL
 
@@ -47,8 +47,8 @@ $$ \mathrm{dst}_{P \cdot i + \mathrm{pos}_P, j} = \mathrm{src}_{i,j} $$
 $$ \mathrm{dst}_{P \cdot i + \mathrm{zeros}_P, j} = 0 $$
 
 Where:
-- `SrcTileData::ValidRow` = `DstTileData::ValidRow` × expansion_factor
-- `SrcTileData::ValidCol` = `DstTileData::ValidCol`
+- `DstTileData::ValidRow` = `SrcTileData::ValidRow` × expansion_factor
+- `DstTileData::ValidCol` = `SrcTileData::ValidCol`
 
 #### Expansion Factor
 
@@ -123,7 +123,7 @@ Defined in `include/pto/common/type.hpp`:
 
 - **Implementation checks (A2A3)**:
     - `TileDataD::Loc`, `TileDataS::Loc`, `TileDataI::Loc` must be `TileType::Vec`.
-    - `TileDataD::DType`, `TileDataS::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float32_t`, `uint32_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
+    - `TileDataD::DType`, `TileDataS::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float16_t`, `float32_t`, `uint32_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
     - `TileDataI::DType` must be one of: `int16_t`, `int32_t`, `uint16_t` or `uint32_t`.
     - No bounds checks are enforced on `indexes` values.
     - Static valid bounds: `TileDataD::ValidRow <= TileDataD::Rows`, `TileDataD::ValidCol <= TileDataD::Cols`, `TileDataS::ValidRow <= TileDataS::Rows`, `TileDataS::ValidCol <= TileDataS::Cols`, `TileDataI::ValidRow <= TileDataI::Rows`, `TileDataI::ValidCol <= TileDataI::Cols`.
@@ -133,7 +133,7 @@ Defined in `include/pto/common/type.hpp`:
     - When size of `TileDataD::DType` is 1 bytes, the size of `TileDataI::DType` must be 2 bytes.
 - **Implementation checks (A5)**:
     - `TileDataD::Loc`, `TileDataS::Loc`, `TileDataI::Loc` must be `TileType::Vec`.
-    - `TileDataD::DType`, `TileDataS::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float32_t`, `uint32_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
+    - `TileDataD::DType`, `TileDataS::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float16_t`, `float32_t`, `uint32_t`, `int64_t`, `uint64_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
     - `TileDataI::DType` must be one of: `int16_t`, `int32_t`, `uint16_t` or `uint32_t`.
     - No bounds checks are enforced on `indexes` values.
     - Static valid bounds: `TileDataD::ValidRow <= TileDataD::Rows`, `TileDataD::ValidCol <= TileDataD::Cols`, `TileDataS::ValidRow <= TileDataS::Rows`, `TileDataS::ValidCol <= TileDataS::Cols`, `TileDataI::ValidRow <= TileDataI::Rows`, `TileDataI::ValidCol <= TileDataI::Cols`.
@@ -142,11 +142,18 @@ Defined in `include/pto/common/type.hpp`:
     - When size of `TileDataD::DType` is 2 bytes, the size of `TileDataI::DType` must be 2 bytes.
     - When size of `TileDataD::DType` is 1 bytes, the size of `TileDataI::DType` must be 2 bytes.
 
-### Mask Scatter (A5 only)
+### Mask Scatter
 
+- **Implementation checks (A2A3)**:
+    - `DstTileData::Loc`, `SrcTileData::Loc` must be `TileType::Vec`.
+    - `DstTileData::DType`, `SrcTileData::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float16_t`, `float32_t`, `uint32_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
+    - `DstTileData::DType` and `SrcTileData::DType` must be the same.
+    - `maskPattern` must be in range `P0101` to `P1111`.
+    - Static valid bounds: `DstTileData::ValidCol <= DstTileData::Cols`, `SrcTileData::ValidCol <= SrcTileData::Cols`, `DstTileData::ValidRow <= DstTileData::Rows`, `SrcTileData::ValidRow <= SrcTileData::Rows`.
+    - `P1111` mode is equivalent to `TMOV`: requires `validRow` and `validCol` to match respectively, implemented internally via `TMOV_IMPL`.
 - **Implementation checks (A5)**:
     - `DstTileData::Loc`, `SrcTileData::Loc` must be `TileType::Vec`.
-    - `DstTileData::DType`, `SrcTileData::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float32_t`, `uint32_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
+    - `DstTileData::DType`, `SrcTileData::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `half`, `float16_t`, `float32_t`, `uint32_t`, `int64_t`, `uint64_t`, `uint16_t`, `uint8_t`, `bfloat16_t`.
     - `DstTileData::DType` and `SrcTileData::DType` must be the same.
     - `maskPattern` must be in range `P0101` to `P1111`.
     - Static valid bounds: `DstTileData::ValidRow <= DstTileData::Rows`, `DstTileData::ValidCol <= DstTileData::Cols`, `SrcTileData::ValidRow <= SrcTileData::Rows`, `SrcTileData::ValidCol <= SrcTileData::Cols`.
@@ -155,7 +162,7 @@ Defined in `include/pto/common/type.hpp`:
         - `SrcTileData::ValidCol` must equal `DstTileData::ValidCol * expansion_factor`, where expansion_factor depends on mask pattern (1 for P1111, 2 for P1010/P0101, 4 for P0001/P0010/P0100/P1000).
     - Runtime assertions for `SCATTER_COL`:
         - `SrcTileData::ValidCol` must equal `DstTileData::ValidCol`.
-        - `SrcTileData::ValidRow` must equal `DstTileData::ValidRow * expansion_factor`, where expansion_factor depends on mask pattern (1 for P1111, 2 for P1010/P0101, 4 for P0001/P0010/P0100/P1000).
+        - `SrcTileData::ValidRow` must equal `DstTileData::ValidRow / expansion_factor`, where expansion_factor depends on mask pattern (1 for P1111, 2 for P1010/P0101, 4 for P0001/P0010/P0100/P1000).
 
 ## Important Notes
 
@@ -292,4 +299,3 @@ void example_mask_manual_scatter_col() {
 # AS Level 2 (DPS)
 pto.tscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

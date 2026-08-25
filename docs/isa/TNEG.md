@@ -46,6 +46,8 @@ PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 ## Constraints
 
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Implementation checks (A2A3)**: `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+- **Implementation checks (A5)**: `TileData::DType` must be one of: `int32_t`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float`, `bfloat16_t`.
 
 ## Examples
 
@@ -87,4 +89,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

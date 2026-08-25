@@ -16,11 +16,11 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTCOLMINTestCase(void *out, void *src, aclrtStream stream);
+void launchTCOLMINTestCase(void* out, void* src, aclrtStream stream);
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -30,10 +30,10 @@ std::string GetGoldenDir()
 class TCOLMINTest : public testing::Test {
 public:
     aclrtStream stream;
-    void *dstHost;
-    void *srcHost;
-    void *dstDevice;
-    void *srcDevice;
+    void* dstHost;
+    void* srcHost;
+    void* dstDevice;
+    void* srcDevice;
 
 protected:
     void SetUp() override
@@ -58,6 +58,9 @@ protected:
         float eps = sizeof(T) == 4 ? 0.001f : 0.005f;
         ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
         ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
+        if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+            return ResultCmpExact(golden, result.data());
+        }
         if (printAllEn) {
             return ResultCmp(golden, result, eps, 0, 1000, true);
         }
@@ -73,6 +76,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -213,3 +217,9 @@ TEST_F(TCOLMINTest, case73)
     bool ret = TCOLMINTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TCOLMINTest, case_int64_4x16) { EXPECT_TRUE((TCOLMINTestFramework<81, int64_t, 4, 4, 1, 16, 16>())); }
+TEST_F(TCOLMINTest, case_uint64_4x16) { EXPECT_TRUE((TCOLMINTestFramework<82, uint64_t, 4, 4, 1, 16, 16>())); }
+TEST_F(TCOLMINTest, case_int64_4x64) { EXPECT_TRUE((TCOLMINTestFramework<83, int64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMINTest, case_uint64_4x64) { EXPECT_TRUE((TCOLMINTestFramework<84, uint64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMINTest, case_int64_1x4092) { EXPECT_TRUE((TCOLMINTestFramework<85, int64_t, 1, 1, 1, 4092, 4092>())); }
+TEST_F(TCOLMINTest, case_uint64_1x4092) { EXPECT_TRUE((TCOLMINTestFramework<86, uint64_t, 1, 1, 1, 4092, 4092>())); }

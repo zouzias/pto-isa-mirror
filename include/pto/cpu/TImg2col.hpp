@@ -17,8 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 namespace cpu_img2col {
 template <typename ConvTileData>
-inline size_t GetInputOffset(const ConvTileData &src, int64_t n, int64_t d, int64_t c1, int64_t h, int64_t w,
-                             int64_t c0)
+inline size_t GetInputOffset(
+    const ConvTileData& src, int64_t n, int64_t d, int64_t c1, int64_t h, int64_t w, int64_t c0)
 {
     const int64_t c0Size = src.GetShape(ConvTileData::totalDimCount - 1);
     if constexpr (ConvTileData::layout == Layout::NC1HWC0) {
@@ -40,12 +40,15 @@ inline void Timg2colCheck()
 {
     static_assert(ConvTileData::Loc == TileType::Mat, "TImg2col: Source TileType only support Mat.");
     static_assert(TileData::Loc == TileType::Left, "TImg2col: Destination TileType only support Left.");
-    static_assert((ConvTileData::layout == Layout::NC1HWC0) || (ConvTileData::layout == Layout::NDC1HWC0),
-                  "TImg2col: Source layout only support NC1HWC0/NDC1HWC0.");
-    static_assert(TileData::SFractal == SLayout::RowMajor && !TileData::isRowMajor,
-                  "TImg2col: Destination layout only support SLayout RowMajor + BLayout ColMajor.");
-    static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
-                  "TImg2col: Destination and source tile data types must match.");
+    static_assert(
+        (ConvTileData::layout == Layout::NC1HWC0) || (ConvTileData::layout == Layout::NDC1HWC0),
+        "TImg2col: Source layout only support NC1HWC0/NDC1HWC0.");
+    static_assert(
+        TileData::SFractal == SLayout::RowMajor && !TileData::isRowMajor,
+        "TImg2col: Destination layout only support SLayout RowMajor + BLayout ColMajor.");
+    static_assert(
+        std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
+        "TImg2col: Destination and source tile data types must match.");
 }
 } // namespace cpu_img2col
 
@@ -73,7 +76,7 @@ struct Img2ColParams {
 };
 
 template <typename ConvTileData>
-PTO_INTERNAL Img2ColParams<ConvTileData> ExtractImg2ColParams(const ConvTileData &src)
+PTO_INTERNAL Img2ColParams<ConvTileData> ExtractImg2ColParams(const ConvTileData& src)
 {
     Img2ColParams<ConvTileData> params;
 
@@ -105,13 +108,15 @@ PTO_INTERNAL Img2ColParams<ConvTileData> ExtractImg2ColParams(const ConvTileData
 }
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL>
-PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM, uint16_t posK)
+PTO_INTERNAL void TIMG2COL_IMPL(TileData& dst, ConvTileData& src, uint16_t posM, uint16_t posK)
 {
     (void)FmatrixMode;
     cpu_img2col::Timg2colCheck<TileData, ConvTileData>();
 
     const auto params = ExtractImg2ColParams(src);
     const int64_t mPerBatch = params.fmapD * params.outH * params.outW;
+    const int64_t kernelSize = params.filterH * params.filterW;
+    const int64_t kC0HW = params.fmapC0 * kernelSize;
     const auto padValue = src.GetPadValue();
 
     for (int r = 0; r < dst.GetValidRow(); ++r) {
@@ -125,13 +130,14 @@ PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM,
 
         for (int c = 0; c < dst.GetValidCol(); ++c) {
             const int64_t kIndex = static_cast<int64_t>(posK) + c;
-            const int64_t channelIndex = kIndex / (params.filterH * params.filterW);
-            const int64_t kernelOffset = kIndex % (params.filterH * params.filterW);
+            const int64_t c1Index = kIndex / kC0HW;
+            const int64_t c0Index = kIndex % params.fmapC0;
+            const int64_t kernelOffset = (kIndex % kC0HW) / (params.fmapC0);
             const int64_t kernelH = kernelOffset / params.filterW;
             const int64_t kernelW = kernelOffset % params.filterW;
 
-            auto value =
-                CalculateValue(src, params, nIndex, dIndex, channelIndex, kernelH, kernelW, outRow, outCol, padValue);
+            auto value = CalculateValue(
+                src, params, nIndex, dIndex, c1Index, c0Index, kernelH, kernelW, outRow, outCol, padValue);
 
             dst.data()[GetTileElementOffset<TileData>(r, c)] = value;
         }
@@ -139,15 +145,14 @@ PTO_INTERNAL void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM,
 }
 
 template <typename ConvTileData>
-PTO_INTERNAL auto CalculateValue(const ConvTileData &src, const Img2ColParams<ConvTileData> &params, int64_t nIndex,
-                                 int64_t dIndex, int64_t channelIndex, int64_t kernelH, int64_t kernelW, int64_t outRow,
-                                 int64_t outCol, const typename ConvTileData::DType &padValue)
+PTO_INTERNAL auto CalculateValue(
+    const ConvTileData& src, const Img2ColParams<ConvTileData>& params, int64_t nIndex, int64_t dIndex, int64_t c1Index,
+    int64_t c0Index, int64_t kernelH, int64_t kernelW, int64_t outRow, int64_t outCol,
+    const typename ConvTileData::DType& padValue)
 {
     auto value = padValue;
 
-    if (nIndex < params.fmapN && channelIndex < params.channelSize) {
-        const int64_t c1Index = channelIndex / params.fmapC0;
-        const int64_t c0Index = channelIndex % params.fmapC0;
+    if (nIndex < params.fmapN && c1Index < params.fmapC1 && c0Index < params.fmapC0) {
         const int64_t inputH = outRow * params.strideH + kernelH * params.dilationH - params.padTop;
         const int64_t inputW = outCol * params.strideW + kernelW * params.dilationW - params.padLeft;
 

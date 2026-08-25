@@ -58,13 +58,27 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-    - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
+    - `sizeof(TileData::DType)` must be `1`, `2`, `4`, or `8` bytes.
+    - `TileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `int64_t` or `uint64_t` or `half` or `bfloat16_t` or `float`.
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
     - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Mask encoding**:
     - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+
+## Temporary Space
+
+### A2A3
+
+`tmp` **is used** as a small buffer to hold the comparison mask (`cmpmask`) copied from the mask tile for each row. The A2A3 implementation uses `set_cmpmask` which requires the mask data to be in a specific UB location.
+
+- `tmp` element type must be `uint32_t`.
+- `tmp` size requirement: at least `cmpmaskLen` `uint32_t` elements per row, where `cmpmaskLen = 4` for 16-bit data types (`half`, `bfloat16_t`) — 16 bytes (128 bits), and `cmpmaskLen = 2` for 32-bit data types (`float`, `int32_t`, `uint32_t`) — 8 bytes (64 bits).
+- A typical `tmp` tile declaration: `Tile<TileType::Vec, uint32_t, 1, 16>` suffices for most use cases.
+
+### A5
+
+`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses vector register-based mask operations (`plds`, `vsel`) and does not require scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
 
 ## Examples
 
@@ -135,4 +149,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

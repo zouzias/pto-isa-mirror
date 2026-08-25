@@ -16,32 +16,30 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTScatterTestCase(void *out, void *src, void *indexes, aclrtStream stream);
+void launchTScatterTestCase(void* out, void* src, void* indexes, aclrtStream stream);
 
 template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask>
-void launchTScatterMask(void *out, void *src, void *stream);
+void launchTScatterMask(void* out, void* src, void* stream);
 
 class TSCATTERTest : public testing::Test {
 public:
 protected:
-    void SetUp() override
-    {}
+    void SetUp() override {}
 
-    void TearDown() override
-    {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
 
-template <uint32_t caseId, typename T, typename TI, uint32_t Src0Row, uint32_t Src0Col, uint32_t Src1Row,
-          uint32_t Src1Col>
+template <
+    uint32_t caseId, typename T, typename TI, uint32_t Src0Row, uint32_t Src0Col, uint32_t Src1Row, uint32_t Src1Col>
 bool TScatterTestFramework()
 {
     aclInit(nullptr);
@@ -52,20 +50,20 @@ bool TScatterTestFramework()
 
     size_t dataSize = Src0Row * Src0Col * sizeof(T);
     size_t idxSize = Src1Row * Src1Col * sizeof(TI);
-    T *dstHost;
-    T *srcHost;
-    TI *indHost;
-    T *dstDevice;
-    T *srcDevice;
-    TI *indDevice;
+    T* dstHost;
+    T* srcHost;
+    TI* indHost;
+    T* dstDevice;
+    T* srcDevice;
+    TI* indDevice;
 
-    aclrtMallocHost((void **)(&dstHost), dataSize);
-    aclrtMallocHost((void **)(&srcHost), dataSize);
-    aclrtMallocHost((void **)(&indHost), idxSize);
+    aclrtMallocHost((void**)(&dstHost), dataSize);
+    aclrtMallocHost((void**)(&srcHost), dataSize);
+    aclrtMallocHost((void**)(&indHost), idxSize);
 
-    aclrtMalloc((void **)&dstDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&indDevice, idxSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&indDevice, idxSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
     ReadFile(GetGoldenDir() + "/indexes.bin", idxSize, indHost, idxSize);
@@ -138,6 +136,26 @@ TEST_F(TSCATTERTest, case_float_uint32_32x64_32x64)
     EXPECT_TRUE(ret);
 }
 
+TEST_F(TSCATTERTest, case_int64_uint32_4x16_4x16)
+{
+    EXPECT_TRUE((TScatterTestFramework<8, int64_t, uint32_t, 4, 16, 4, 16>()));
+}
+
+TEST_F(TSCATTERTest, case_uint64_uint32_4x16_4x16)
+{
+    EXPECT_TRUE((TScatterTestFramework<9, uint64_t, uint32_t, 4, 16, 4, 16>()));
+}
+
+TEST_F(TSCATTERTest, case_int64_uint32_4x64_4x64)
+{
+    EXPECT_TRUE((TScatterTestFramework<10, int64_t, uint32_t, 4, 64, 4, 64>()));
+}
+
+TEST_F(TSCATTERTest, case_uint64_uint32_4x64_4x64)
+{
+    EXPECT_TRUE((TScatterTestFramework<11, uint64_t, uint32_t, 4, 64, 4, 64>()));
+}
+
 template <typename T, pto::MaskPattern PATTERN, uint32_t DST_ROW, uint32_t DST_COL, uint32_t SRC_ROW, uint32_t SRC_COL>
 void test_scatter_mask()
 {
@@ -152,10 +170,10 @@ void test_scatter_mask()
     T *dstHost, *srcHost;
     T *dstDevice, *srcDevice;
 
-    aclrtMallocHost((void **)(&dstHost), dstSize);
-    aclrtMallocHost((void **)(&srcHost), srcSize);
-    aclrtMalloc((void **)&dstDevice, dstSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMallocHost((void**)(&dstHost), dstSize);
+    aclrtMallocHost((void**)(&srcHost), srcSize);
+    aclrtMalloc((void**)&dstDevice, dstSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", srcSize, srcHost, srcSize);
     aclrtMemcpy(srcDevice, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -177,7 +195,12 @@ void test_scatter_mask()
     ReadFile(GetGoldenDir() + "/golden.bin", dstSize, golden.data(), dstSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstSize, devFinal.data(), dstSize);
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.0f);
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp<T>(golden, devFinal, 0.0f);
+    }
     EXPECT_TRUE(ret);
 }
 
@@ -199,6 +222,26 @@ TEST_F(TSCATTERTest, case_mask_int32_16x64_16x64_P1111)
 TEST_F(TSCATTERTest, case_mask_half_16x64_16x128_P1010)
 {
     test_scatter_mask<uint16_t, pto::MaskPattern::P1010, 16, 128, 16, 64>();
+}
+
+TEST_F(TSCATTERTest, case_mask_int64_4x16_4x32_P1010)
+{
+    test_scatter_mask<int64_t, pto::MaskPattern::P1010, 4, 32, 4, 16>();
+}
+
+TEST_F(TSCATTERTest, case_mask_uint64_4x16_4x64_P0001)
+{
+    test_scatter_mask<uint64_t, pto::MaskPattern::P0001, 4, 64, 4, 16>();
+}
+
+TEST_F(TSCATTERTest, case_mask_int64_4x64_4x128_P1010)
+{
+    test_scatter_mask<int64_t, pto::MaskPattern::P1010, 4, 128, 4, 64>();
+}
+
+TEST_F(TSCATTERTest, case_mask_uint64_4x64_4x256_P0001)
+{
+    test_scatter_mask<uint64_t, pto::MaskPattern::P0001, 4, 256, 4, 64>();
 }
 
 TEST_F(TSCATTERTest, case_mask_half_16x64_16x128_P0101)

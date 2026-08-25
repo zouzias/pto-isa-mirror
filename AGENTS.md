@@ -19,8 +19,13 @@ python3 tests/script/build_st.py -r npu -v a3 -t all
 # One-click build and run scripts
 ./build.sh --run_all --a3 --sim    # Full ST tests on simulator
 ./build.sh --run_simple --a5 --npu # Simplified ST tests on hardware
-./build.sh --pkg                    # Build package
+./build.sh --pkg                    # Build package (default: makeself .run)
+./build.sh --pkg --pkg-type=rpm     # Build RPM package
+./build.sh --pkg --pkg-type=deb     # Build DEB package
 ```
+
+RPM/DEB packages install to `/usr/local/Ascend/cann-<version>` (e.g.
+`/usr/local/Ascend/cann-9.1.0`). Building RPM requires `rpmbuild` on PATH.
 
 ### Running Single Tests
 ```bash
@@ -36,13 +41,18 @@ python3 tests/script/run_st.py -r sim -v a3 -a -t tadd -g TADDTest.case_float_64
 ```
 
 ### Lint / Format Commands
+
+**Tool versions (pinned):**
+- clang-format: **v18.1.8** (`~/.local/bin/clang-format`, already first in PATH)
+- ruff: **v0.14.14** — system `ruff` on PATH may be newer; always invoke via absolute path `~/.local/bin/ruff`
+
 ```bash
 # Format C++ code (Google style, 120 char limit)
 clang-format -i -style=file <file>
 
-# Format Python code (Ruff)
-ruff format <file>
-ruff check <file>
+# Format Python code (Ruff) — use absolute path to ensure v0.14.14
+~/.local/bin/ruff format <file>
+~/.local/bin/ruff check <file>
 ```
 
 ## Code Style Guidelines

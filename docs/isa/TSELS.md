@@ -52,13 +52,13 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 
 - **Implementation checks (A2A3)**:
     - `sizeof(TileDataDst::DType)` must be `2` or `4` bytes.
-    - Supported data types are `half`, `float16_t`, `float`, and `float32_t`.
+    - Supported data types are 2- or 4-byte types: `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
     - `dst` and `src` must use the same element type.
     - `dst` and `src` must be row-major.
     - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
-    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
+    - `sizeof(TileDataDst::DType)` may be `1`, `2`, `4`, or `8` bytes.
+    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, and `float`.
     - `dst` and `src` must use the same element type.
     - `dst`, `mask`, and `src` must be row-major.
     - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
@@ -66,6 +66,19 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Mask encoding**:
     - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+
+## Temporary Space
+
+### A2A3
+
+`tmp` **is used** as a small buffer to store the scalar value for the `set_cmpmask` operation and to hold the comparison mask. The scalar is written to `tmp[0]` before the select loop.
+
+- `tmp` element type must match `TileDataSrc::DType`.
+- `tmp` size requirement: at least 1 element (to hold the scalar). A typical declaration: `Tile<TileType::Vec, float, 1, 16>` or similar.
+
+### A5
+
+`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses `vdup` to broadcast the scalar into a vector register and `vsel` for selection, requiring no scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
 
 ## Examples
 
@@ -141,4 +154,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

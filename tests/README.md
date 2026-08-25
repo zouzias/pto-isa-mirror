@@ -10,7 +10,9 @@ Common test entry points:
 - GEMM demo: `python3 tests/run_cpu.py --demo gemm --verbose`
 - Flash Attention demo: `python3 tests/run_cpu.py --demo flash_attn --verbose`
 - Single ST testcase: `python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
-- One-click scripts: `./tests/run_st.sh`, `./tests/run_cpu_tests.sh`
+- One-click scripts: `./tests/run_st.sh --a3 --sim --all` (see note below), `./tests/run_cpu_tests.sh`
+
+> `run_st.sh` requires a platform flag (`--a3`/`--a5`/`--a3_a5`/`--kirin9030`) **and**, for `--a3`/`--a5`, a mode flag (`--simple` or `--all`); optionally a run mode (`--sim`/`--npu`, defaults to on-board `npu`). Run `./tests/run_st.sh` with no/invalid arguments to print the full usage. Note the `--` prefixes are required.
 
 ## Layout
 
@@ -38,11 +40,10 @@ Common test entry points:
 - `common/`: Shared test resources
 - `run_cpu.py`: CPU simulator full run entry point
 - `run_cpu_tests.sh`: CPU ST one-click script
-- `run_st.sh`: NPU ST one-click script
+- `run_st.sh`: NPU ST one-click script (requires `--<platform>` and, for a3/a5, `--simple`/`--all`; run with no args for usage)
 - `run_comm_test.sh`: Communication ST one-click script (see below)
 - `run_costmodel.py`: Cost model run script
 - `run_costmodel_tests.sh`: Cost model one-click script
-- `run_pipeline.sh`: Pipeline test script
 - `validate_op_coverage.py`: Operator coverage validation script
 - `validate_testcase_names.py`: Testcase name validation script
 
@@ -147,7 +148,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | Number of available NPUs: 2, 4, or 8 | 8 |
 | `-v` | SoC version: `a3` (Ascend910B) or `a5` (Ascend950) | a3 |
 | `-t` | Run specific testcase(s) (repeatable), e.g. `tput`, `treduce` | all |
-| `-a` | Include async instruction tests (`*_async`), requires CANN 9.0+ | off |
+| `-a` | Include async instruction tests (names containing `_async`), requires CANN 9.0+ | off |
 | `-d` | Enable debug mode with verbose init/sync logging | off |
 
 ### How It Works

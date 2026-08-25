@@ -79,8 +79,8 @@ Recommended suites (wrapper script):
 
 ```bash
 chmod +x ./tests/run_st.sh
-./tests/run_st.sh a3 sim simple
-./tests/run_st.sh a3 npu simple
+./tests/run_st.sh --a3 --sim --simple
+./tests/run_st.sh --a3 --npu --simple
 ```
 
 ## Environment: Ascend CANN / Toolkit
@@ -100,4 +100,3 @@ source $HOME/Ascend/ascend-toolkit/latest/bin/setenv.bash
 - **GTest ABI mismatch on Linux**: some systems have `libgtest*.a` built with `_GLIBCXX_USE_CXX11_ABI=0`.
   - CPU and NPU ST CMake projects support `PTO_GLIBCXX_USE_CXX11_ABI=auto|0|1` and auto-detect when possible.
 - **`sim` open-files limit**: simulator runs may require a higher `ulimit -n` (see `docs/getting-started.md` and `build.sh`).
-

@@ -4,7 +4,7 @@
 
 非阻塞检测信号是否满足比较条件。满足则返回 `true`，否则返回 `false`。适用于基于轮询的同步（含超时）或与其他工作交错执行的场景。
 
-支持单个信号或多维信号 tensor（最高 5 维，形状由 GlobalTensor 决定）。对于 tensor，仅当**所有**信号均满足条件时才返回 `true`。
+支持单个信号或多维信号tensor（最高5维，形状由GlobalSignalData决定）。对于tensor，仅当**所有**信号均满足条件时才返回 `true`。
 
 ## 数学语义
 
@@ -14,11 +14,11 @@
 
 $$\mathrm{result} = (\mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue})$$
 
-信号 tensor（所有元素均须满足）：
+信号tensor（所有元素均须满足）：
 
 $$\mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue})$$
 
-其中 `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
+其中 `cmp` ∈ {`EQ`， `NE`， `GT`， `GE`， `LT`， `LE`}
 
 ## 汇编语法
 
@@ -27,28 +27,29 @@ $$\mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d
 %result = ttest %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32) -> i1
 ```
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp);
 ```
 
 ## 约束
 
 - **类型约束**：
-    - `GlobalSignalData::DType` 必须为 `int32_t`（32 位信号）。
+    - `GlobalSignalData::DType` 必须为 `int32_t`（32位信号）。
 - **内存约束**：
-    - `signalData` 必须指向本地地址（当前 NPU）。
+    - `signalData` 必须指向本地地址（当前NPU）。
 - **返回值**：
     - 条件满足时返回 `true`，否则返回 `false`。
-    - 对于信号 tensor，仅当所有信号均满足条件时才返回 `true`。
+    - 对于信号tensor，仅当所有信号均满足条件时才返回 `true`。
 - **形状语义**：
     - 单个信号：形状为 `<1,1,1,1,1>`。
-    - 信号 tensor：形状决定要检测的多维区域（最高 5 维）。
+    - 信号tensor：形状决定要检测的多维区域（最高5维）。
 - **比较运算符**（WaitCmp）：
+
   | 值 | 条件 |
   |-------|--------|
   | `EQ` | `signal == cmpValue` |
@@ -129,7 +130,7 @@ void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
 }
 ```
 
-### TWAIT 与 TTEST 对比
+### TWAIT与TTEST对比
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -146,4 +147,3 @@ void compare_wait_test(__gm__ int32_t* local_signal) {
     bool ready = comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
-

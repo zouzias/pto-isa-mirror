@@ -17,8 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
-PTO_INTERNAL void TPreluCheck(const TileDataDst &dst, const TileDataSrc0 &src0, const TileDataSrc1 &src1,
-                              const TileDataTmp &tmp)
+PTO_INTERNAL void TPreluCheck(
+    const TileDataDst& dst, const TileDataSrc0& src0, const TileDataSrc1& src1, const TileDataTmp& tmp)
 {
     using T = typename TileDataDst::DType;
     static_assert(
@@ -31,16 +31,19 @@ PTO_INTERNAL void TPreluCheck(const TileDataDst &dst, const TileDataSrc0 &src0, 
         "Fix: TPRELU only support row major layout.");
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
-    PTO_ASSERT(src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
-               "Fix: TPRELU input tile src0 valid shape mismatch with output tile dst shape.");
-    PTO_ASSERT(src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
-               "Fix: TPRELU input tile src1 valid shape mismatch with output tile dst shape.");
-    PTO_ASSERT(tmp.GetValidRow() > validRows,
-               "Fix: TPRELU the valid rows of tmp tile must be greater than the valid rows of output tile.");
+    PTO_ASSERT(
+        src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
+        "Fix: TPRELU input tile src0 valid shape mismatch with output tile dst shape.");
+    PTO_ASSERT(
+        src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
+        "Fix: TPRELU input tile src1 valid shape mismatch with output tile dst shape.");
+    PTO_ASSERT(
+        tmp.GetValidRow() > validRows,
+        "Fix: TPRELU the valid rows of tmp tile must be greater than the valid rows of output tile.");
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
-PTO_INTERNAL void TPRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp)
+PTO_INTERNAL void TPRELU_IMPL(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileDataTmp& tmp)
 {
     using T = typename TileDataDst::DType;
     TPreluCheck(dst, src0, src1, tmp);
@@ -54,7 +57,7 @@ PTO_INTERNAL void TPRELU_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 #endif
     Tile<TileType::Vec, uint8_t, 1, 32> selTmp;
     // TSEL使用的selTmp取tmp后的32B
-    TSUBVIEW(selTmp, tmp, dst.GetValidRow(), 0);
+    detail::PtoSubTileView(selTmp, tmp, dst.GetValidRow(), 0);
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_V);
 #endif
