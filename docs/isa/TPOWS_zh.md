@@ -41,6 +41,7 @@ pto.tpows ins(%base, %exp, %tmp : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>)
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename TmpTile,
@@ -80,6 +81,19 @@ PTO_INTERNAL RecordEvent TPOWS(DstTile &dst, BaseTile &base, typename DstTile::D
 - `DEFAULT` 算法支持的元素类型：`uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t`、`int32_t`、`half`、`float`、`bfloat16_t`。
 - `HIGH_PRECISION` 算法支持的元素类型：`half`、`float`、`bfloat16_t`（仅支持浮点类型）。
 - 整数类型使用独立的整数幂计算路径。
+
+## 临时空间
+
+### A2A3
+
+- 对于**浮点**类型（`float`）：`tmp` **被使用**作为中间暂存存储。实现计算 `pow(base, scalar) = exp(ln(|base|) * scalar)`，并使用 `tmp` 存储中间结果（带绝对值），用于特殊情况处理（负数底数配奇数整数指数）。
+  - `tmp` 必须与 `dst`/`base` 具有相同的元素类型。
+  - `tmp.GetValidRow() >= dst.GetValidRow()` 且 `tmp.GetValidCol() >= dst.GetValidCol()`。
+- 对于**整数**类型：`tmp` **不使用**。整数幂路径使用标量计算，不需要暂存 Tile 存储。
+
+### A5
+
+`tmp` 被接口接受但 A5 实现**不使用**。A5 后端使用基于向量寄存器的计算，不需要暂存 Tile 存储。`tmp` 仅为了与 A2A3 的 API 兼容性而保留在 C++ 内建接口签名中。
 
 ## 示例
 

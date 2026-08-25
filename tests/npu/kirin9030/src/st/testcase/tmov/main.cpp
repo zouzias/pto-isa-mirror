@@ -16,25 +16,23 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <int32_t tilingKey>
-void launchTMovL12Bias(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+void launchTMovL12Bias(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 
 template <int32_t tilingKey>
-void launchTMovL12Fb(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+void launchTMovL12Fb(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 
 template <int32_t tilingKey>
-void launchTMovAcc2Vec(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+void launchTMovAcc2Vec(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 class TMOVTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -57,19 +55,20 @@ void tMovL12Bias(uint32_t m, uint32_t n, uint32_t k)
     uint8_t *dstHost, *src0Host, *src1Host, *src2Host;
     uint8_t *dstDevice, *src0Device, *src1Device, *src2Device;
 
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
-    aclrtMallocHost((void **)(&src2Host), biasFileSize);
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
+    aclrtMallocHost((void**)(&src2Host), biasFileSize);
 
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src2Device, biasFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src2Device, biasFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/bias_gm.bin", biasFileSize, src2Host, biasFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
     aclrtMemset(dstHost, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(dstDevice, cFileSize, dstHost, cFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -122,19 +121,20 @@ void tMovL12Fb(uint32_t m, uint32_t n, uint32_t k)
     uint8_t *dstHost, *src0Host, *src1Host, *src2Host;
     uint8_t *dstDevice, *src0Device, *src1Device, *src2Device;
 
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
-    aclrtMallocHost((void **)(&src2Host), quantFileSize);
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
+    aclrtMallocHost((void**)(&src2Host), quantFileSize);
 
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src2Device, quantFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src2Device, quantFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/quant_gm.bin", quantFileSize, src2Host, quantFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
     aclrtMemset(dstHost, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(dstDevice, cFileSize, dstHost, cFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -186,16 +186,17 @@ void tMovAcc2Vec(uint32_t m, uint32_t n, uint32_t k)
     uint8_t *dstHost, *src0Host, *src1Host;
     uint8_t *dstDevice, *src0Device, *src1Device;
 
-    aclrtMallocHost((void **)(&dstHost), cFileSize);
-    aclrtMallocHost((void **)(&src0Host), aFileSize);
-    aclrtMallocHost((void **)(&src1Host), bFileSize);
+    aclrtMallocHost((void**)(&dstHost), cFileSize);
+    aclrtMallocHost((void**)(&src0Host), aFileSize);
+    aclrtMallocHost((void**)(&src1Host), bFileSize);
 
-    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
     aclrtMemset(dstHost, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(dstDevice, cFileSize, dstHost, cFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -261,7 +262,6 @@ TEST_F(TMOVTest, case_fixpipe2)
     tMovL12Fb<int8_t, int8_t, uint16_t, uint64_t, 2>(M, N, K);
 }
 
-#ifndef PTO_TEST_KIRINX90
 TEST_F(TMOVTest, case_acc2vec_Nz2Nd)
 {
     constexpr uint32_t M = 64;
@@ -277,4 +277,3 @@ TEST_F(TMOVTest, case_acc2vec_Nz2Nz)
     constexpr uint32_t K = 64;
     tMovAcc2Vec<aclFloat16, aclFloat16, aclFloat16, 2>(M, N, K);
 }
-#endif

@@ -15,33 +15,76 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols, unsigned SrcRowStride>
+PTO_INTERNAL void Int64RowExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        vector_s32 lowReg, highReg, srcLow, srcHigh, wordReg, dummy;
+        MaskReg allMask = pset_b32(PAT_ALL);
+        uint16_t rows = validRows;
+        for (uint16_t row = 0; row < rows; ++row) {
+            vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src + row * SrcRowStride * 2, 0, DINTLV_B32);
+            vdup(lowReg, srcLow, allMask, POS_LOWEST, MODE_ZEROING);
+            vdup(highReg, srcHigh, allMask, POS_LOWEST, MODE_ZEROING);
+            vintlv(wordReg, dummy, lowReg, highReg);
+            uint16_t fullRepeats = validCols / elementsPerRepeat;
+            uint32_t tailCols = validCols - fullRepeats * elementsPerRepeat;
+            uint32_t tailMaskWords = tailCols * 2;
+            MaskReg tailMask = Int64TailMask(tailMaskWords, allMask);
+            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                vsts(wordReg, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, allMask);
+            }
+            if (tailCols != 0) {
+                uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                vsts(wordReg, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, tailMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols, unsigned SrcRowStride>
+PTO_INTERNAL void Int64RowExpand(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
+#endif
 
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TRowExpandCheck(unsigned srcValidRow, unsigned srcValidCol, unsigned dstValidRow)
 {
-    static_assert(TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1,
-                  "Fix: TROWEXPAND Src ValidCol must be 1 or -1");
-    static_assert((sizeof(typename TileDataIn::DType) == 1) || (sizeof(typename TileDataIn::DType) == 2) ||
-                      (sizeof(typename TileDataIn::DType) == 4),
-                  "Fix: TROWEXPAND data type must be b8/b16/b32");
+    static_assert(
+        TileDataIn::ValidCol == 1 || TileDataIn::ValidCol == -1, "Fix: TROWEXPAND Src ValidCol must be 1 or -1");
+    static_assert(
+        (sizeof(typename TileDataIn::DType) == 1) || (sizeof(typename TileDataIn::DType) == 2) ||
+            (sizeof(typename TileDataIn::DType) == 4) || (sizeof(typename TileDataIn::DType) == 8),
+        "Fix: TROWEXPAND data type must be b8/b16/b32/b64");
     static_assert(TileDataIn::Loc == pto::TileType::Vec, "Fix: TROWEXPAND Src TileType must be Vec Tile!");
     static_assert(TileDataOut::Loc == pto::TileType::Vec, "Fix: TROWEXPAND Dst TileType must be Vec Tile!");
     static_assert(TileDataIn::SFractal == SLayout::NoneBox, "Fix: TROWEXPAND only support Nd or Dn fractal Tile");
-    static_assert(TileDataOut::isRowMajor && TileDataOut::SFractal == SLayout::NoneBox,
-                  "Fix: TROWEXPAND only support Nd fractal Tile");
-    static_assert(std::is_same_v<typename TileDataOut::DType, typename TileDataIn::DType>,
-                  "Fix: TROWEXPAND input data type must be consistent with the output data type.");
-    PTO_ASSERT(srcValidRow == dstValidRow,
-               "Fix: TROWEXPAND input valid row must be consistent with the output valid row.");
-    PTO_ASSERT(srcValidRow != 0 && srcValidCol != 0,
-               "Fix: TROWEXPAND input shape is invalid, validCol or validRow is 0.");
+    static_assert(
+        TileDataOut::isRowMajor && TileDataOut::SFractal == SLayout::NoneBox,
+        "Fix: TROWEXPAND only support Nd fractal Tile");
+    static_assert(
+        std::is_same_v<typename TileDataOut::DType, typename TileDataIn::DType>,
+        "Fix: TROWEXPAND input data type must be consistent with the output data type.");
+    PTO_ASSERT(
+        srcValidRow == dstValidRow, "Fix: TROWEXPAND input valid row must be consistent with the output valid row.");
+    PTO_ASSERT(
+        srcValidRow != 0 && srcValidCol != 0, "Fix: TROWEXPAND input shape is invalid, validCol or validRow is 0.");
 }
 
 template <typename T, unsigned DstStride, unsigned SrcStride>
-PTO_INTERNAL void TRowExpandInstr_NoPostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned dstValidRow,
-                                               unsigned dstValidCol, uint16_t repeatTimes, uint16_t eleCntValue)
+PTO_INTERNAL void TRowExpandInstr_NoPostUpdate(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned dstValidRow, unsigned dstValidCol, uint16_t repeatTimes,
+    uint16_t eleCntValue)
 {
     constexpr auto distValue =
         std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
@@ -50,7 +93,7 @@ PTO_INTERNAL void TRowExpandInstr_NoPostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *s
         RegTensor<T> vreg0;
         RegTensor<T> vreg1;
         MaskReg preg;
-        __ubuf__ T *dstOffset;
+        __ubuf__ T* dstOffset;
         uint32_t sreg = eleCntValue;
         MaskReg pg0 = CreatePredicate<T>(sreg);
         for (uint16_t i = 0; i < (uint16_t)dstValidRow; i++) {
@@ -92,7 +135,7 @@ PTO_INTERNAL constexpr bool needBrcb()
 }
 
 template <typename T, typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TRowExpandBrcb(__ubuf__ T *dst, __ubuf__ T *src)
+PTO_INTERNAL void TRowExpandBrcb(__ubuf__ T* dst, __ubuf__ T* src)
 {
     constexpr auto nElemPerVlds = CCE_VL / BLOCK_BYTE_SIZE;
     constexpr auto nElemPerVsts = CCE_VL / sizeof(T);
@@ -127,8 +170,9 @@ PTO_INTERNAL void TRowExpandBrcb(__ubuf__ T *dst, __ubuf__ T *src)
 }
 
 template <typename T, typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TRowExpandInstr_PostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned dstValidRow,
-                                             unsigned dstValidCol, uint16_t repeatTimes, uint16_t eleCntValue)
+PTO_INTERNAL void TRowExpandInstr_PostUpdate(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned dstValidRow, unsigned dstValidCol, uint16_t repeatTimes,
+    uint16_t eleCntValue)
 {
     if constexpr (needBrcb<T, TileDataOut, TileDataIn>()) {
         TRowExpandBrcb<T, TileDataOut, TileDataIn>(dstPtr, srcPtr);
@@ -157,15 +201,14 @@ PTO_INTERNAL void TRowExpandInstr_PostUpdate(__ubuf__ T *dstPtr, __ubuf__ T *src
 }
 
 template <typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
-    OP_TYPE(broadcast) void TRowExpand(typename TileDataOut::TileDType __out__ dst,
-                                       typename TileDataIn::TileDType __in__ src, unsigned dstValidRow,
-                                       unsigned dstValidCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPAND) OP_TYPE(broadcast) void TRowExpand(
+    typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src, unsigned dstValidRow,
+    unsigned dstValidCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileDataOut::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-    constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
+    __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    constexpr unsigned nRepeatElem = CCE_VL / sizeof(typename TileDataIn::DType);
     uint16_t repeatTimes = CeilDivision(dstValidCol, nRepeatElem);
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
@@ -174,22 +217,21 @@ __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
                 dstPtr, srcPtr, dstValidRow, dstValidCol, repeatTimes, nRepeatElem);
             break;
         default:
-            TRowExpandInstr_PostUpdate<T, TileDataOut, TileDataIn>(dstPtr, srcPtr, dstValidRow, dstValidCol,
-                                                                   repeatTimes, nRepeatElem);
+            TRowExpandInstr_PostUpdate<T, TileDataOut, TileDataIn>(
+                dstPtr, srcPtr, dstValidRow, dstValidCol, repeatTimes, nRepeatElem);
             break;
     }
 }
 
 template <typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
-    OP_TYPE(broadcast) void TRowExpand_ColMajor(typename TileDataOut::TileDType __out__ dst,
-                                                typename TileDataIn::TileDType __in__ src, unsigned dstValidRow,
-                                                unsigned dstValidCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPAND) OP_TYPE(broadcast) void TRowExpand_ColMajor(
+    typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src, unsigned dstValidRow,
+    unsigned dstValidCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileDataOut::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     uint16_t repeatTimes = CeilDivision(dstValidCol, elementsPerRepeat);
     constexpr unsigned srcRowStride = TileDataIn::Cols;
     constexpr unsigned dstRowStride = TileDataOut::RowStride;
@@ -203,8 +245,8 @@ __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(dstValidRow); ++i) {
-            vldas(ureg_1, (__ubuf__ T *)(srcPtr + i * srcRowStride));
-            vldus(vreg_uld, ureg_1, (__ubuf__ T *)(srcPtr + i * srcRowStride));
+            vldas(ureg_1, (__ubuf__ T*)(srcPtr + i * srcRowStride));
+            vldus(vreg_uld, ureg_1, (__ubuf__ T*)(srcPtr + i * srcRowStride));
             vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
             uint32_t sreg = (uint32_t)(dstValidCol);
             for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
@@ -216,12 +258,16 @@ __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND)
 }
 
 template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TROWEXPAND_IMPL(TileDataOut &dst, TileDataIn &src)
+PTO_INTERNAL void TROWEXPAND_IMPL(TileDataOut& dst, TileDataIn& src)
 {
+    using T = typename TileDataOut::DType;
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
     TRowExpandCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dstValidRow);
-    if constexpr (TileDataIn::isRowMajor) {
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        Int64RowExpand<T, TileDataOut::Cols, TileDataIn::RowStride>(
+            (__ubuf__ T*)dst.data(), (__ubuf__ T*)src.data(), dstValidRow, dstValidCol);
+    } else if constexpr (TileDataIn::isRowMajor) {
         TRowExpand<TileDataOut, TileDataIn>(dst.data(), src.data(), dstValidRow, dstValidCol);
     } else {
         TRowExpand_ColMajor<TileDataOut, TileDataIn>(dst.data(), src.data(), dstValidRow, dstValidCol);

@@ -34,9 +34,10 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{0,j} $$
 pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -46,6 +47,8 @@ PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &
 ## 约束
 
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**：`TileData::DType` 必须为 1、2 或 4 字节类型（b8/b16/b32）：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- **实现检查 (Ascend 950PR/Ascend 950DT)**：`TileData::DType` 必须为 1、2、4 或 8 字节类型（b8/b16/b32/b64）：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
 
 ## 示例
 
@@ -80,11 +83,10 @@ void example() {
 %dst = pto.tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### PTO 汇编形式
+### PTO汇编形式
 
 ```text
 %dst = tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

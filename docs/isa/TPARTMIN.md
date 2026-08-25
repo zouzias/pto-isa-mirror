@@ -65,12 +65,12 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 
 ### A2A3 implementation checks
 
-- Supported element types: `int32_t`, `int16_t`, `half`, `float`.
+- Supported element types: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
 - `dst`, `src0`, and `src1` must all be row-major (`isRowMajor`).
 
 ### A5 implementation checks
 
-- Supported element types: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+- Supported element types: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
 
 ## Examples
 
@@ -131,4 +131,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

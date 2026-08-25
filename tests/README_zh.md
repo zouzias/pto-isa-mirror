@@ -10,7 +10,9 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
 - GEMM demo：`python3 tests/run_cpu.py --demo gemm --verbose`
 - Flash Attention demo：`python3 tests/run_cpu.py --demo flash_attn --verbose`
 - 单个 ST 用例：`python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
-- 一键脚本：`./tests/run_st.sh`、`./tests/run_cpu_tests.sh`
+- 一键脚本：`./tests/run_st.sh --a3 --sim --all`（见下方说明）、`./tests/run_cpu_tests.sh`
+
+> `run_st.sh` 必须指定平台参数（`--a3`/`--a5`/`--a3_a5`/`--kirin9030`），并且对 `--a3`/`--a5` 还需指定模式参数（`--simple` 或 `--all`）；可选地指定运行模式（`--sim`/`--npu`，默认板上 `npu`）。不带参数或参数非法运行 `./tests/run_st.sh` 会打印完整用法。注意各参数均需 `--` 前缀。
 
 ## 目录结构
 
@@ -38,11 +40,10 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
 - `common/`：共享测试资源
 - `run_cpu.py`：CPU 仿真器全量运行入口
 - `run_cpu_tests.sh`：CPU ST 一键脚本
-- `run_st.sh`：NPU ST 一键脚本
+- `run_st.sh`：NPU ST 一键脚本（需指定 `--<平台>`，a3/a5 还需 `--simple`/`--all`；不带参数运行可查看用法）
 - `run_comm_test.sh`：通信 ST 一键脚本（详见下方说明）
 - `run_costmodel.py`：代价模型运行脚本
 - `run_costmodel_tests.sh`：代价模型一键脚本
-- `run_pipeline.sh`：流水线测试脚本
 - `validate_op_coverage.py`：算子覆盖率验证脚本
 - `validate_testcase_names.py`：用例命名规范验证脚本
 
@@ -146,7 +147,7 @@ python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
 | `-n` | 可用 NPU 数量：2、4 或 8 | 8 |
 | `-v` | SoC 版本：`a3`（Ascend910B）或 `a5`（Ascend950） | a3 |
 | `-t` | 指定测试用例（可多次使用），如 `tput`、`treduce` | 全部 |
-| `-a` | 包含异步指令测试（`*_async`），需 CANN 9.0+ | 关闭 |
+| `-a` | 包含名称中含 `_async` 的异步测试，需 CANN 9.0+ | 关闭 |
 | `-d` | 开启调试模式，打印详细初始化与同步日志 | 关闭 |
 
 ### 运行机制

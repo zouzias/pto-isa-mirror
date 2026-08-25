@@ -8,7 +8,7 @@
 
 阅读完本文后，你应当能够：
 
-1. 识别 PTO 代码中的关键概念：`GlobalTensor`、`Tile`、`TileType::Vec`、events 与 `TSYNC`。
+1. 识别 PTO 代码中的关键概念：`GlobalTensor`、`Tile`、`TileType::Vec` 与 events。
 2. 编写一个简单的 **PTO-Auto** 风格 kernel：`TLOAD → compute → TSTORE`。
 3. 编写一个 **PTO-Manual** 风格 kernel：显式 Tile 缓冲绑定（`TASSIGN`）与显式顺序（events/flags）。
 4. 在高层理解更“大”的 kernel 结构，例如 row-softmax 与 GEMM。
@@ -280,7 +280,7 @@ PTO-Auto 包含两部分：
 
 ### 如何找到正确的“启用 PTO passes”编译选项
 
-具体 flag 名称取决于工具链版本：有的版本是 driver flag（例如 `--cce-enable-pto-passes`），有的版本暴露为 LLVM 选项（通过 `-mllvm` 传入）。
+具体 flag 名称取决于工具链版本：有的版本是 driver flag（例如 `--cce-pto-enable --cce-pto-auto-enable`），有的版本暴露为 LLVM 选项（通过 `-mllvm` 传入）。
 
 建议直接查询你安装的 Bisheng 支持哪些选项：
 
@@ -316,11 +316,10 @@ bisheng -c -xcce -O2 --cce-aicore-only \
 
 如果工具链使用 driver-style flag，`<ENABLE_PTO_PASSES_FLAG>` 可能类似：
 
-- `--cce-enable-pto-passes`
+- `--cce-pto-enable --cce-pto-auto-enable`
 
 如果工具链暴露为 LLVM 选项，可能类似：
 
 - `-mllvm -cce-enable-pto-passes`
 
 如果不确定，优先以 `bisheng --help` 与 `bisheng -mllvm --help` 的输出为准，而不要在文档中硬编码某一版本的拼写。
-

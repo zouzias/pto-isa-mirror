@@ -29,8 +29,6 @@ Where `validRows = dst0.GetValidRow()` and `validCols = dst0.GetValidCol()`.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
 Synchronous form:
 
 ```text
@@ -54,7 +52,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
+PTO_INST RecordEvent TINTERLEAVE(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
                                  WaitEvents &...events);
 ```
 
@@ -84,7 +82,7 @@ void example_auto() {
     TileT src0(16, 64), src1(16, 64);
     TileT dst0(16, 64), dst1(16, 64);
 
-    TInterleave(dst1, dst0, src1, src0);
+    TINTERLEAVE(dst1, dst0, src1, src0);
 }
 ```
 
@@ -104,7 +102,7 @@ void example_manual() {
     TASSIGN(dst0, 0x3000);
     TASSIGN(dst1, 0x4000);
 
-    TInterleave(dst1, dst0, src1, src0);
+    TINTERLEAVE(dst1, dst0, src1, src0);
 }
 ```
 

@@ -19,18 +19,18 @@ using namespace PtoTestCommon;
 // Pure index dispatcher (3-arg TCOLARGMAX)
 // =============================================================================
 template <uint32_t caseId>
-void launchTCOLCMAXTestCase(void *out, void *src, aclrtStream stream);
+void launchTCOLCMAXTestCase(void* out, void* src, aclrtStream stream);
 
 // =============================================================================
 // Value + index dispatcher (4-arg TCOLARGMAX)
 // =============================================================================
 template <uint32_t caseId>
-void launchTCOLIDXVALMAXCase(void *outVal, void *outIdx, void *src, aclrtStream stream);
+void launchTCOLIDXVALMAXCase(void* outVal, void* outIdx, void* src, aclrtStream stream);
 
 // =============================================================================
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -43,15 +43,15 @@ std::string GetGoldenDir()
 class TCOLCMAXTest : public testing::Test {
 public:
     aclrtStream stream;
-    void *dstHost;
-    void *srcHost;
-    void *dstDevice;
-    void *srcDevice;
+    void* dstHost;
+    void* srcHost;
+    void* dstDevice;
+    void* srcDevice;
 
-    void *dstHostVal;
-    void *dstHostIdx;
-    void *dstDeviceVal;
-    void *dstDeviceIdx;
+    void* dstHostVal;
+    void* dstHostIdx;
+    void* dstDeviceVal;
+    void* dstDeviceIdx;
 
 protected:
     void SetUp() override
@@ -115,6 +115,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -136,8 +137,8 @@ protected:
     // -------------------------------------------------------------------------
     // Value + index framework (4-arg)
     // -------------------------------------------------------------------------
-    template <uint32_t caseId, typename TVal, typename TIdx, int srcRow, int srcValidRow, int dstRow, int col,
-              int validCol>
+    template <
+        uint32_t caseId, typename TVal, typename TIdx, int srcRow, int srcValidRow, int dstRow, int col, int validCol>
     bool TCOLCMAXTestFramework()
     {
         constexpr int dstCol = (validCol + 7) / 8 * 8;
@@ -150,6 +151,8 @@ protected:
         aclrtMalloc(&dstDeviceIdx, dstIdxByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&dstDeviceVal, dstValByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDeviceIdx, dstIdxByteSize, 0, dstIdxByteSize);
+        aclrtMemset(dstDeviceVal, dstValByteSize, 0, dstValByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);

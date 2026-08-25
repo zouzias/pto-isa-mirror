@@ -17,25 +17,23 @@ using namespace PtoTestCommon;
 
 class TGET_ASYNC_Test : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_>
-void LaunchTGetAsync(T *out, T *src, void *stream);
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
+void LaunchTGetAsync(T* out, T* src, void* stream);
 
-template <typename T, int kGRows_, int kGCols_>
+template <typename T, int kGRows_, int kGCols_, bool Peer = false>
 void test_tget_async()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
@@ -48,16 +46,16 @@ void test_tget_async()
     T *dstHost, *srcHost;
     T *dstDevice, *srcDevice;
 
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
+    aclrtMallocHost((void**)(&dstHost), fileSize);
+    aclrtMallocHost((void**)(&srcHost), fileSize);
 
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize));
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTGetAsync<T, kGRows_, kGCols_>(dstDevice, srcDevice, stream);
+    LaunchTGetAsync<T, kGRows_, kGCols_, Peer>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -83,19 +81,11 @@ void test_tget_async()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TGET_ASYNC_Test, case_float_64x64)
-{
-    test_tget_async<float, 64, 64>();
-}
-TEST_F(TGET_ASYNC_Test, case_int32_64x64)
-{
-    test_tget_async<int32_t, 64, 64>();
-}
-TEST_F(TGET_ASYNC_Test, case_int16_64x64)
-{
-    test_tget_async<int16_t, 64, 64>();
-}
-TEST_F(TGET_ASYNC_Test, case_half_16x256)
-{
-    test_tget_async<aclFloat16, 16, 256>();
-}
+TEST_F(TGET_ASYNC_Test, case_float_64x64) { test_tget_async<float, 64, 64, false>(); }
+TEST_F(TGET_ASYNC_Test, case_int32_64x64) { test_tget_async<int32_t, 64, 64, false>(); }
+TEST_F(TGET_ASYNC_Test, case_int16_64x64) { test_tget_async<int16_t, 64, 64, false>(); }
+TEST_F(TGET_ASYNC_Test, case_half_16x256) { test_tget_async<aclFloat16, 16, 256, false>(); }
+TEST_F(TGET_ASYNC_Test, case_float_64x64_peer) { test_tget_async<float, 64, 64, true>(); }
+TEST_F(TGET_ASYNC_Test, case_int32_64x64_peer) { test_tget_async<int32_t, 64, 64, true>(); }
+TEST_F(TGET_ASYNC_Test, case_int16_64x64_peer) { test_tget_async<int16_t, 64, 64, true>(); }
+TEST_F(TGET_ASYNC_Test, case_half_16x256_peer) { test_tget_async<aclFloat16, 16, 256, true>(); }

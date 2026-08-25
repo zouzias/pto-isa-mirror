@@ -6,7 +6,7 @@
 
 ## 简介
 
-Tile 的逐元素取负。
+Tile的逐元素取负。
 
 ## 数学语义
 
@@ -34,9 +34,10 @@ $$ \mathrm{dst}_{i,j} = -\mathrm{src}_{i,j} $$
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## C++ 内建接口
+## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
+> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -46,6 +47,8 @@ PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 ## 约束
 
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品)**：`TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
+- **实现检查 (Ascend 950PR/Ascend 950DT)**：`TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`uint32_t`、`uint16_t`、`half`、`float`、`bfloat16_t`。
 
 ## 示例
 
@@ -80,11 +83,10 @@ void example() {
 %dst = pto.tneg %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### PTO 汇编形式
+### PTO汇编形式
 
 ```text
 %dst = tneg %src : !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

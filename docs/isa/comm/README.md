@@ -11,6 +11,7 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ## Point-to-Point Communication (Asynchronous)
 - [**TPUT_ASYNC**](TPUT_ASYNC.md): Asynchronous remote write (GM → DMA engine → GM)
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY.md): Remote write followed by a remote `int32_t` signal update
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
 ## Signal-Based Synchronization
@@ -82,7 +83,8 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 | Value | Description |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA engine (supports 1D transfer) |
-| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only) |
+| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only; requires CANN >= 9.1.0) |
+| `DmaEngine::RDMA` | RDMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only; currently supports only the HNS1825 NIC platform) |
 
 ### AsyncEvent
 
@@ -123,7 +125,7 @@ struct ParallelGroup {
     GlobalData *tensors;
     int nranks;   // Number of ranks
     int rootIdx;  // Root NPU's rank index
-    
+
     // Factory function (recommended): build from an existing tensor array.
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };

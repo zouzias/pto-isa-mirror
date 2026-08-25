@@ -30,7 +30,7 @@ license: CANN Open Software License Agreement Version 2.0
 | ISA主索引 | `docs/PTOISA_zh.md` - ISA索引表格（中文） |
 | ISA参考目录 | `docs/isa/README.md` - 按分类排序的指令列表 |
 | ISA参考目录 | `docs/isa/README_zh.md` - 按分类排序的指令列表（中文） |
-| 菜单文档 | `docs/menu_apis.md` - 按分类排序的中文链接 |
+| 菜单文档 | `docs/menu_ops_development.md`（API参考 段）- 按分类排序的中文链接 |
 | 汇编参考 | `docs/assembly/<类别>-ops.md` - 根据指令类型动态选择 |
 | 指令族矩阵 | `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix.md` - 指令族矩阵 |
 | 指令族矩阵 | `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix_zh.md` - 指令族矩阵（中文） |
@@ -74,9 +74,9 @@ license: CANN Open Software License Agreement Version 2.0
 
 #### docs/PTOISA.md / docs/PTOISA_zh.md
 - **位置**: 指令索引表格
-- **分类**: 
+- **分类**:
   - 逐元素（Tile-Tile）指令 → 插在 `TFMOD` 后
-  - Tile-标量 / Tile-立即数 → 插在 `TSUBSC` 后
+  - Tile-标量 / Tile-立即数 → 插在 `TLRELU` 后
 
 #### include/README.md / include/README_zh.md
 - **位置**: 实现状态表格（按字母序）
@@ -90,12 +90,12 @@ license: CANN Open Software License Agreement Version 2.0
 - **位置**: 按分类排序的指令列表
 - **分类**:
   - Elementwise (Tile-Tile) → 插在 `TFMOD` 后
-  - Tile-Scalar / Tile-Immediate → 插在 `TSUBSC` 后
+  - Tile-Scalar / Tile-Immediate → 插在 `TLRELU` 后
 
 ### 3. 菜单文档
 
-#### docs/menu_apis.md
-- **位置**: 按分类排序的中文链接列表
+#### docs/menu_ops_development.md（API参考 段）
+- **位置**: `API参考` 段下按分类排序的中文链接列表
 - **同 ISA 参考目录结构**
 
 ### 4. 汇编文档（动态选择）
@@ -105,7 +105,7 @@ license: CANN Open Software License Agreement Version 2.0
 | 指令类型 | 目标文件 | 插入位置 |
 |----------|----------|----------|
 | TPOW (Elementwise) | `elementwise-ops.md` | TFMOD 后 |
-| TPOWS (Tile-Scalar) | `tile-scalar-ops.md` | TSU BSC 后 |
+| TPOWS (Tile-Scalar) | `tile-scalar-ops.md` | TLRELU 后 |
 | TROWSUM (Axis) | `axis-ops.md` | 最后一个 Axis 指令后 |
 | TLOAD (Memory) | `memory-ops.md` | 最后一个 Memory 指令后 |
 | TMATMUL (Matrix) | `matrix-ops.md` | 最后一个 Matrix 指令后 |
@@ -134,16 +134,19 @@ license: CANN Open Software License Agreement Version 2.0
 ## 常见新增指令分类与插入位置
 
 ### Tile-Tile (逐元素双Tile)
+
 - **插入位置**: `TFMOD` 之后
 - **对应文件**: `elementwise-ops.md`
 - **示例**: TPOW
 
 ### Tile-Scalar (Tile与标量)
-- **插入位置**: `TSUBSC` 之后
+
+- **插入位置**: `TLRELU` 之后
 - **对应文件**: `tile-scalar-ops.md`
 - **示例**: TPOWS
 
 ### Axis Reduce / Expand
+
 - **插入位置**: 最后一个 Axis 指令之后
 - **对应文件**: `axis-ops.md`
 
@@ -167,7 +170,7 @@ license: CANN Open Software License Agreement Version 2.0
 - [ ] `include/README_zh.md` - include索引（中文）
 - [ ] `docs/isa/README.md` - ISA参考目录
 - [ ] `docs/isa/README_zh.md` - ISA参考目录（中文）
-- [ ] `docs/menu_apis.md` - 菜单文档
+- [ ] `docs/menu_ops_development.md` - 菜单文档（API参考 段）
 - [ ] `docs/assembly/<类别>-ops.md` - 动态选择的汇编文件（英文+中文）
 - [ ] `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix.md` - 指令族矩阵
 - [ ] `docs/mkdocs/src/manual/appendix-d-instruction-family-matrix_zh.md` - 指令族矩阵（中文）

@@ -11,33 +11,35 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <acl/acl.h>
+#include <type_traits>
 
 using namespace std;
 using namespace PtoTestCommon;
 
+template <uint32_t caseId, typename T>
+void launchTMULSTestCase(void* out, void* src, T scalar, aclrtStream stream);
+
 template <uint32_t caseId>
-void launchTMULSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+void launchTMULSTestCase(void* out, void* src, float scalar, aclrtStream stream);
 
 class TMULSTest : public testing::Test {
 public:
 protected:
-    void SetUp() override
-    {}
+    void SetUp() override {}
 
-    void TearDown() override
-    {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
 
-template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol>
+template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int srcValidCol>
 bool TMulSTestFramework()
 {
     aclInit(nullptr);
@@ -46,28 +48,36 @@ bool TMulSTestFramework()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    size_t dstByteSize = dstTileRow * dstTileCol * sizeof(T);
-    size_t srcByteSize = row * col * sizeof(T);
-    T *dstHost;
-    T *srcHost;
-    T *dstDevice;
-    T *srcDevice;
-    float scalar;
+    size_t dstElementCount = dstTileRow * dstTileCol;
+    size_t srcElementCount = row * col;
+    size_t dstByteSize = dstElementCount * sizeof(T);
+    size_t srcByteSize = srcElementCount * sizeof(T);
+    T* dstHost;
+    T* srcHost;
+    T* dstDevice;
+    T* srcDevice;
+    using ScalarT = std::conditional_t<std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>, T, float>;
+    ScalarT scalar;
 
-    aclrtMallocHost((void **)(&dstHost), dstByteSize);
-    aclrtMallocHost((void **)(&srcHost), srcByteSize);
+    aclrtMallocHost((void**)(&dstHost), dstByteSize);
+    aclrtMallocHost((void**)(&srcHost), srcByteSize);
 
-    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
     ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
     std::string scalar_file = GetGoldenDir() + "/divider.bin";
     std::ifstream file(scalar_file, std::ios::binary);
 
-    file.read(reinterpret_cast<char *>(&scalar), 4);
+    file.read(reinterpret_cast<char*>(&scalar), sizeof(ScalarT));
     file.close();
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTMULSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        launchTMULSTestCase<caseId, T>(dstDevice, srcDevice, scalar, stream);
+    } else {
+        launchTMULSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    }
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -83,11 +93,14 @@ bool TMulSTestFramework()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(dstByteSize);
-    std::vector<T> devFinal(dstByteSize);
+    std::vector<T> golden(dstElementCount);
+    std::vector<T> devFinal(dstElementCount);
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        return ResultCmpExact(golden, devFinal.data());
+    }
     return ResultCmp<T>(golden, devFinal, 0.001f);
 }
 
@@ -130,5 +143,36 @@ TEST_F(TMULSTest, case6)
 TEST_F(TMULSTest, case7)
 {
     bool ret = TMulSTestFramework<7, float, 1, 32, 1, 1, 16, 16>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TMULSTest, case_int64_4x16) { EXPECT_TRUE((TMulSTestFramework<8, int64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TMULSTest, case_uint64_4x16) { EXPECT_TRUE((TMulSTestFramework<9, uint64_t, 4, 16, 4, 4, 16, 16>())); }
+
+TEST_F(TMULSTest, case_int64_96x32768_32x1024_32x128)
+{
+    EXPECT_TRUE((TMulSTestFramework<10, int64_t, 32, 1024, 32, 32, 32768, 1024>()));
+}
+
+TEST_F(TMULSTest, case_int64_1x16364)
+{
+    bool ret = TMulSTestFramework<11, int64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TMULSTest, case_uint64_1x16364)
+{
+    bool ret = TMulSTestFramework<12, uint64_t, 1, 16364, 1, 1, 16364, 16364>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TMULSTest, case_int64_1x16368)
+{
+    bool ret = TMulSTestFramework<13, int64_t, 1, 16368, 1, 1, 16368, 16368>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TMULSTest, case_uint64_1x16368)
+{
+    bool ret = TMulSTestFramework<14, uint64_t, 1, 16368, 1, 1, 16368, 16368>();
     EXPECT_TRUE(ret);
 }

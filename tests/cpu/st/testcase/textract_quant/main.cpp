@@ -19,15 +19,13 @@ using namespace pto;
 
 class TEXTRACTTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     const std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -49,9 +47,10 @@ std::pair<int, int> get_closest_factor(int c)
     return {1, c};
 }
 
-template <typename SrcT, typename DstT, size_t src_rows, size_t src_cols, size_t src_validRows, size_t src_validCols,
-          size_t dst_rows, size_t dst_cols, size_t dst_validRows, size_t dst_validCols, size_t idx_row, size_t idx_col,
-          bool is_v_quant, bool apply_relu, bool apply_saturation = false>
+template <
+    typename SrcT, typename DstT, size_t src_rows, size_t src_cols, size_t src_validRows, size_t src_validCols,
+    size_t dst_rows, size_t dst_cols, size_t dst_validRows, size_t dst_validCols, size_t idx_row, size_t idx_col,
+    bool is_v_quant, bool apply_relu, bool apply_saturation = false>
 struct Params {
     using ST = SrcT;
     using DT = DstT;
@@ -71,26 +70,30 @@ struct Params {
 };
 
 template <typename Conf>
-void runTEXTRACT_Scalar(typename Conf::DT *dst, typename Conf::ST *src, uint64_t *quant)
+void runTEXTRACT_Scalar(typename Conf::DT* dst, typename Conf::ST* src, uint64_t* quant)
 {
     using ST = typename Conf::ST;
     using DT = typename Conf::DT;
     using GlobalDataDst = GlobalTensor<
         DT, pto::Shape<1, 1, 1, Conf::dstValidRows, Conf::dstValidCols>,
-        pto::Stride<1 * Conf::dstValidRows * Conf::dstValidCols, 1 * Conf::dstValidRows * Conf::dstValidCols,
-                    Conf::dstValidRows * Conf::dstValidCols, Conf::dstValidCols, 1>>;
+        pto::Stride<
+            1 * Conf::dstValidRows * Conf::dstValidCols, 1 * Conf::dstValidRows * Conf::dstValidCols,
+            Conf::dstValidRows * Conf::dstValidCols, Conf::dstValidCols, 1>>;
     using GlobalDataSrc = GlobalTensor<
         ST, pto::Shape<1, 1, 1, Conf::srcValidRows, Conf::srcValidCols>,
-        pto::Stride<1 * Conf::srcValidRows * Conf::srcValidCols, 1 * Conf::srcValidRows * Conf::srcValidCols,
-                    Conf::srcValidRows * Conf::srcValidCols, Conf::srcValidCols, 1>>;
+        pto::Stride<
+            1 * Conf::srcValidRows * Conf::srcValidCols, 1 * Conf::srcValidRows * Conf::srcValidCols,
+            Conf::srcValidRows * Conf::srcValidCols, Conf::srcValidCols, 1>>;
 
     GlobalDataSrc srcGlobal(src);
     GlobalDataDst dstGlobal(dst);
 
-    using SrcTile = Tile<TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows,
-                         Conf::srcValidCols, SLayout::NoneBox, 512>;
-    using DstTile = Tile<TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows,
-                         Conf::dstValidCols, SLayout::NoneBox, 512>;
+    using SrcTile = Tile<
+        TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows, Conf::srcValidCols,
+        SLayout::NoneBox, 512>;
+    using DstTile = Tile<
+        TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows, Conf::dstValidCols,
+        SLayout::NoneBox, 512>;
     SrcTile srcTile;
     DstTile dstTile;
 
@@ -103,8 +106,8 @@ void runTEXTRACT_Scalar(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
 
     uint64_t scalarQuant = quant[0];
     static constexpr ReluPreMode reluMode = Conf::applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
-    TEXTRACT<DstTile, SrcTile, reluMode>(dstTile, srcTile, scalarQuant, static_cast<uint16_t>(Conf::idxRow),
-                                         static_cast<uint16_t>(Conf::idxCol));
+    TEXTRACT<DstTile, SrcTile, reluMode>(
+        dstTile, srcTile, scalarQuant, static_cast<uint16_t>(Conf::idxRow), static_cast<uint16_t>(Conf::idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -113,32 +116,37 @@ void runTEXTRACT_Scalar(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
 }
 
 template <typename Conf>
-void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t *quant)
+void runTEXTRACT_Vector(typename Conf::DT* dst, typename Conf::ST* src, uint64_t* quant)
 {
     using DT = typename Conf::DT;
     using ST = typename Conf::ST;
     using GlobalDataSrc = GlobalTensor<
         ST, pto::Shape<1, 1, 1, Conf::srcValidRows, Conf::srcValidCols>,
-        pto::Stride<1 * Conf::srcValidRows * Conf::srcValidCols, 1 * Conf::srcValidRows * Conf::srcValidCols,
-                    Conf::srcValidRows * Conf::srcValidCols, Conf::srcValidCols, 1>>;
+        pto::Stride<
+            1 * Conf::srcValidRows * Conf::srcValidCols, 1 * Conf::srcValidRows * Conf::srcValidCols,
+            Conf::srcValidRows * Conf::srcValidCols, Conf::srcValidCols, 1>>;
     using GlobalDataDst = GlobalTensor<
         DT, pto::Shape<1, 1, 1, Conf::dstValidRows, Conf::dstValidCols>,
-        pto::Stride<1 * Conf::dstValidRows * Conf::dstValidCols, 1 * Conf::dstValidRows * Conf::dstValidCols,
-                    Conf::dstValidRows * Conf::dstValidCols, Conf::dstValidCols, 1>>;
+        pto::Stride<
+            1 * Conf::dstValidRows * Conf::dstValidCols, 1 * Conf::dstValidRows * Conf::dstValidCols,
+            Conf::dstValidRows * Conf::dstValidCols, Conf::dstValidCols, 1>>;
     using GlobalDataFp = GlobalTensor<
-        uint64_t, pto::Shape<1, 1, 1, 1, Conf::dstValidCols>,
-        pto::Stride<1 * Conf::dstValidCols, Conf::dstValidCols, Conf::dstValidCols, Conf::dstValidCols, 1>>;
+        uint64_t, pto::Shape<1, 1, 1, 1, Conf::srcValidCols>,
+        pto::Stride<1 * Conf::srcValidCols, Conf::srcValidCols, Conf::srcValidCols, Conf::srcValidCols, 1>>;
 
     GlobalDataSrc srcGlobal(src);
     GlobalDataDst dstGlobal(dst);
     GlobalDataFp fpGlobal(quant);
 
-    using SrcTile = Tile<TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows,
-                         Conf::srcValidCols, SLayout::RowMajor, 512>;
-    using DstTile = Tile<TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows,
-                         Conf::dstValidCols, SLayout::RowMajor, 512>;
-    using FbTile = Tile<TileType::Mat, uint64_t, 1, Conf::dstValidCols, BLayout::RowMajor, 1, Conf::dstValidCols,
-                        SLayout::NoneBox, 512>;
+    using SrcTile = Tile<
+        TileType::Mat, ST, Conf::srcRows, Conf::srcCols, BLayout::RowMajor, Conf::srcValidRows, Conf::srcValidCols,
+        SLayout::RowMajor, 512>;
+    using DstTile = Tile<
+        TileType::Mat, DT, Conf::dstRows, Conf::dstCols, BLayout::RowMajor, Conf::dstValidRows, Conf::dstValidCols,
+        SLayout::RowMajor, 512>;
+    using FbTile = Tile<
+        TileType::Mat, uint64_t, 1, Conf::srcValidCols, BLayout::RowMajor, 1, Conf::srcValidCols, SLayout::NoneBox,
+        512>;
     SrcTile srcTile;
     DstTile dstTile;
     FbTile fpTileLocal;
@@ -154,8 +162,8 @@ void runTEXTRACT_Vector(typename Conf::DT *dst, typename Conf::ST *src, uint64_t
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     static constexpr ReluPreMode reluMode = Conf::applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
-    TEXTRACT_FP<DstTile, SrcTile, FbTile, reluMode>(dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(Conf::idxRow),
-                                                    static_cast<uint16_t>(Conf::idxCol));
+    TEXTRACT_FP<DstTile, SrcTile, FbTile, reluMode>(
+        dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(Conf::idxRow), static_cast<uint16_t>(Conf::idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -171,7 +179,7 @@ void test_textract()
 
     size_t srcFileSize = Conf::srcValidRows * Conf::srcValidCols * sizeof(ST);
     size_t dstFileSize = Conf::dstValidRows * Conf::dstValidCols * sizeof(DT);
-    size_t quantFileSize = Conf::isVQuant ? Conf::dstValidCols * sizeof(uint64_t) : sizeof(uint64_t);
+    size_t quantFileSize = Conf::isVQuant ? Conf::srcValidCols * sizeof(uint64_t) : sizeof(uint64_t);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -182,16 +190,17 @@ void test_textract()
     ST *srcHost, *srcDevice;
     uint64_t *quantHost, *quantDevice;
 
-    aclrtMallocHost((void **)(&dstHost), dstFileSize);
-    aclrtMallocHost((void **)(&srcHost), srcFileSize);
-    aclrtMallocHost((void **)(&quantHost), quantFileSize);
+    aclrtMallocHost((void**)(&dstHost), dstFileSize);
+    aclrtMallocHost((void**)(&srcHost), srcFileSize);
+    aclrtMallocHost((void**)(&quantHost), quantFileSize);
 
-    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&quantDevice, quantFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&quantDevice, quantFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/quant.bin", quantFileSize, quantHost, quantFileSize));
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, quantFileSize, quantHost, quantFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -443,4 +452,13 @@ TEST_F(TEXTRACTTest, case_49_int32_t_int16_t)
 TEST_F(TEXTRACTTest, case_50_int32_t_int16_t)
 {
     test_textract<Params<int32_t, int16_t, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, false, false>>();
+}
+
+TEST_F(TEXTRACTTest, case_51_int32_t_uint8_t)
+{
+    test_textract<Params<int32_t, uint8_t, 128, 128, 128, 128, 96, 96, 96, 96, 16, 8, true, false, true>>();
+}
+TEST_F(TEXTRACTTest, case_52_int32_t_uint8_t)
+{
+    test_textract<Params<int32_t, uint8_t, 256, 64, 256, 64, 128, 32, 128, 32, 16, 8, true, true, true>>();
 }

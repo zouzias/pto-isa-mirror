@@ -19,12 +19,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd>
-PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
+PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
 {
     using IndexT = typename TileInd::DType;
     static_assert(std::is_integral_v<IndexT>, "MGATHER: indexes must be an integral type");
-    static_assert(sizeof(typename TileDst::DType) == sizeof(typename GlobalData::DType),
-                  "MGATHER: element sizes must match");
+    static_assert(
+        sizeof(typename TileDst::DType) == sizeof(typename GlobalData::DType), "MGATHER: element sizes must match");
 
     const unsigned validRow = dst.GetValidRow();
     const unsigned validCol = dst.GetValidCol();
@@ -41,30 +41,33 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
         capacity = src.GetShape(GlobalTensorDim::DIM_3);
     }
 
-    auto *base = src.data();
+    auto* base = src.data();
     const auto srcRowStride = src.GetStride(3);
     const auto srcColStride = src.GetStride(4);
-    cpu::parallel_for_rows(validRow, validCol, [&](std::size_t i) {
+    // This procedure should not be parallelized, as it will break down rule "last of the values with same index should stay"
+    for (std::size_t i=0; i<validRow; i++) {
         size_t idx = 0;
         if constexpr (CMode == Coalesce::Elem) {
             for (std::size_t j = 0; j < validCol; ++j) {
-                const size_t dstOff = GetTileElementOffset<TileDst>(i, j);
-                const size_t idx = static_cast<size_t>(indexes.data()[GetTileElementOffset<TileInd>(i, j)]);
+                const size_t idx = static_cast<size_t>(indexes.data()[GetDataElementOffset(indexes, i, j)]);
 
                 if constexpr (Mode == GatherOOB::Clamp) {
-                    dst.data()[dstOff] = base[std::clamp(idx, static_cast<size_t>(0), capacity - 1)];
+                    dst.SetElement(i, j, base[std::clamp(idx, static_cast<size_t>(0), capacity - 1)]);
                 } else if constexpr (Mode == GatherOOB::Wrap) {
-                    dst.data()[dstOff] = base[idx % capacity];
+                    dst.SetElement(i, j, base[idx % capacity]);
                 } else if constexpr (Mode == GatherOOB::Zero) {
-                    dst.data()[dstOff] = idx < capacity && idx >= 0 ? base[idx] : 0;
+                    dst.SetElement(i, j, idx < capacity && idx >= 0 ? base[idx] : 0);
                 } else {
-                    dst.data()[dstOff] = base[idx];
+                    dst.SetElement(i, j, base[idx]);
                 }
             }
 
         } else {
-            static_assert(TileInd::SFractal == SLayout::NoneBox,
-                          "Indicies array should be ND or DN in case of Coalesce::Elem");
+            if constexpr (HasSFractal<TileInd>::value) {
+                static_assert(
+                    TileInd::SFractal == SLayout::NoneBox,
+                    "Indices array should be ND or DN in case of Coalesce::Elem");
+            }
             // indexes shape is [1,dstRows] in case of RowMajor or [dstRows,1] in case of colMajor
             size_t rowIdx = indexes.data()[i];
             bool shouldCopy = true;
@@ -75,7 +78,7 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
             } else if constexpr (Mode == GatherOOB::Zero) {
                 if (rowIdx >= capacity || rowIdx < 0) {
                     for (std::size_t j = 0; j < validCol; ++j) {
-                        dst.data()[GetTileElementOffset<TileDst>(i, j)] = 0;
+                        dst.SetElement(i, j, 0);
                     }
                     shouldCopy = false;
                 }
@@ -83,28 +86,38 @@ PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
 
             if (shouldCopy) {
                 for (std::size_t j = 0; j < validCol; ++j) {
-                    const size_t dstOff = GetTileElementOffset<TileDst>(i, j);
-
                     idx = static_cast<size_t>(rowIdx * srcRowStride + j * srcColStride);
-                    dst.data()[dstOff] = base[idx];
+                    dst.SetElement(i, j, base[idx]);
                 }
             }
         }
-    });
+    };
 }
 
 template <Coalesce CMode, typename TileDst, typename GlobalData, typename TileInd>
-PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
+PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
 {
     MGATHER_IMPL<CMode, GatherOOB::Undefined>(dst, src, indexes);
 }
 
 template <typename TileDst, typename GlobalData, typename TileInd>
-PTO_INTERNAL void MGATHER_IMPL(TileDst &dst, GlobalData &src, TileInd &indexes)
+PTO_INTERNAL void MGATHER_IMPL(TileDst& dst, GlobalData& src, TileInd& indexes)
 {
     MGATHER_IMPL<Coalesce::Elem, GatherOOB::Undefined>(dst, src, indexes);
 }
 
+template <Coalesce CMode, typename TileDst, typename GlobalData, typename GlobalIdx, typename GlobalScratch>
+PTO_INST void MGATHER_IMPL(TileDst& dst, GlobalData& src, GlobalIdx& indexes, GlobalScratch& scratch)
+{
+    MGATHER_IMPL<CMode, GatherOOB::Undefined>(dst, src, indexes);
+}
+
+template <
+    Coalesce CMode, GatherOOB Mode, typename TileDst, typename GlobalData, typename GlobalIdx, typename GlobalScratch>
+PTO_INST void MGATHER_IMPL(TileDst& dst, GlobalData& src, GlobalIdx& indexes, GlobalScratch& scratch)
+{
+    MGATHER_IMPL<CMode, Mode>(dst, src, indexes);
+}
 } // namespace pto
 
 #endif

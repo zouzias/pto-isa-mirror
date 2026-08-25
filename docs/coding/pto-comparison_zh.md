@@ -151,7 +151,7 @@ __syncthreads();
 
 ### Flash Attention 性能
 
-| 实现方式 | Seq=1K | Seq=4K | Seq=16K | 代码行数 |
+| 实现方式 | Seq=1k | Seq=4k | Seq=16k | 代码行数 |
 |---------|--------|--------|---------|----------|
 | PTO | 0.12ms | 0.85ms | 12.5ms | ~800行 |
 | AscendC | 0.11ms | 0.82ms | 12.0ms | ~1500行 |
@@ -249,7 +249,7 @@ __global__ __aicore__ void VecAdd(__gm__ float* out,
 | Block | Block（类似） |
 | Shared Memory | Tile Storage |
 | Global Memory | GlobalTensor |
-| `__syncthreads()` | Event/TSYNC |
+| `__syncthreads()` | Event |
 
 **代码迁移步骤**
 
@@ -304,8 +304,3 @@ PTO 在**性能**和**开发效率**之间取得了良好平衡：
 - [PTO 性能优化](opt_zh.md)
 - [GEMM 性能案例](../../kernels/manual/a2a3/gemm_performance/README_zh.md)
 - [Flash Attention 案例](../../kernels/manual/common/flash_atten/README_zh.md)
-
-
-
-
-

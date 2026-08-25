@@ -15,8 +15,84 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
+#include "TBinOp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <Int64Op Op, typename T>
+PTO_INTERNAL void Int64ScalarCalcRegs(
+    vector_s32& dstLow, vector_s32& dstHigh, vector_s32& srcLow, vector_s32& srcHigh, vector_s32& scalarLow,
+    vector_s32& scalarHigh, uint64_t scalarBits, MaskReg& mask)
+{
+    MaskReg carry;
+    MaskReg carryOut;
+    if constexpr (Op == Int64Op::Add) {
+        vaddc(carry, dstLow, srcLow, scalarLow, mask);
+        vaddcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+    } else if constexpr (Op == Int64Op::Sub) {
+        vsubc(carry, dstLow, srcLow, scalarLow, mask);
+        vsubcs(carryOut, dstHigh, srcHigh, scalarHigh, carry, mask);
+    } else if constexpr (Op == Int64Op::Mul) {
+        vmull((vector_u32&)dstLow, (vector_u32&)dstHigh, (vector_u32&)srcLow, (vector_u32&)scalarLow, mask);
+        vmula(dstHigh, srcLow, scalarHigh, mask, MODE_ZEROING);
+        vmula(dstHigh, srcHigh, scalarLow, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Shl) {
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        Int64ShiftRegs<false, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+    } else if constexpr (Op == Int64Op::Shr) {
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        Int64ShiftRegs<true, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, mask);
+    } else {
+        Int64MinMax<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, mask);
+    }
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64ScalarRepeat(
+    __ubuf__ T* dst, __ubuf__ T* src, uint16_t row, uint32_t colOffset, vector_s32& scalarLow, vector_s32& scalarHigh,
+    uint64_t scalarBits, MaskReg& mask)
+{
+    vector_s32 dstLow, dstHigh, srcLow, srcHigh, half0, half1;
+    MaskReg lowMask, highMask;
+    uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
+    uint32_t dstOffset = (row * DstCols + colOffset) * 2;
+    vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+    Int64ScalarCalcRegs<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, scalarBits, mask);
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(half0, half1, dstLow, dstHigh);
+    vsts(half0, (__ubuf__ int32_t*)dst, dstOffset, NORM_B32, lowMask);
+    vsts(half1, (__ubuf__ int32_t*)dst, dstOffset + CCE_VL / sizeof(int32_t), NORM_B32, highMask);
+}
+
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL * 2 / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 scalarLow, scalarHigh;
+        uint64_t scalarBits = static_cast<uint64_t>(scalar);
+        vbr(scalarLow, static_cast<int32_t>(scalarBits));
+        vbr(scalarHigh, static_cast<int32_t>(scalarBits >> 32));
+        uint16_t rowCount = validRows;
+        uint16_t colRepeats = CeilDivision(validCols, elementsPerRepeat);
+        for (uint16_t row = 0; row < rowCount; ++row) {
+            uint32_t sreg = validCols;
+            for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
+                MaskReg preg = CreatePredicate<uint32_t>(sreg);
+                Int64ScalarRepeat<Op, T, DstCols, SrcCols>(
+                    dst, src, row, colRepeat * elementsPerRepeat, scalarLow, scalarHigh, scalarBits, preg);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
+PTO_INTERNAL void Int64Scalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols);
+#endif
 
 template <typename Op, bool isDynFunc = Op::isDynFunc>
 class BinSOpCaller;
@@ -29,7 +105,7 @@ public:
     {}
 
     template <typename Dst, typename Src0, typename S1, typename Preg>
-    PTO_INTERNAL void operator()(Dst &dst, Src0 &src0, S1 s1, Preg &preg)
+    PTO_INTERNAL void operator()(Dst& dst, Src0& src0, S1 s1, Preg& preg)
     {
         Op::BinSInstr(dst, src0, s1, preg);
     }
@@ -44,17 +120,18 @@ public:
     {}
 
     template <typename Dst, typename Src0, typename S1, typename Preg>
-    PTO_INTERNAL void operator()(Dst &dst, Src0 &src0, S1 s1, Preg &preg)
+    PTO_INTERNAL void operator()(Dst& dst, Src0& src0, S1 s1, Preg& preg)
     {
         op.BinSInstr(dst, src0, s1, preg);
     }
 };
 
-template <typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned rowStride>
-PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
-                                           __ubuf__ typename TileData::DType *src0Ptr, ScalarType src1,
-                                           unsigned kValidRows, unsigned kValidCols)
+template <
+    typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat, unsigned blockSizeElem,
+    unsigned rowStride>
+PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(
+    __ubuf__ typename TileData::DType* dstPtr, __ubuf__ typename TileData::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols)
 {
     uint16_t repeatTimes = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
@@ -76,11 +153,12 @@ PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *ds
     }
 }
 
-template <typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned rowStride>
-PTO_INTERNAL void TBinSOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstPtr,
-                                         __ubuf__ typename TileData::DType *src0Ptr, ScalarType src1,
-                                         unsigned kValidRows, unsigned kValidCols)
+template <
+    typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat, unsigned blockSizeElem,
+    unsigned rowStride>
+PTO_INTERNAL void TBinSOps_1D_PostUpdate(
+    __ubuf__ typename TileData::DType* dstPtr, __ubuf__ typename TileData::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols)
 {
     uint16_t repeatTimes_pu = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
@@ -102,11 +180,12 @@ PTO_INTERNAL void TBinSOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstP
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                           __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
-                                           unsigned kValidRows, unsigned kValidCols)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols)
 {
     uint16_t repeatTimes = CeilDivision(kValidCols, elementsPerRepeat);
 
@@ -130,11 +209,12 @@ PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(__ubuf__ typename TileDataDst::DType 
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeats(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                                     __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
-                                                     unsigned kValidRows, uint16_t fullRepeats)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeats(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, uint16_t fullRepeats)
 {
     const int32_t rowAdvance = static_cast<int32_t>(fullRepeats) * static_cast<int32_t>(elementsPerRepeat);
     const int32_t dstRowAdjust = static_cast<int32_t>(dstRowStride) - rowAdvance;
@@ -159,11 +239,12 @@ PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeats(__ubuf__ typename TileDataD
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeatsTail(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                                         __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
-                                                         unsigned kValidRows, uint16_t fullRepeats, uint32_t tailCount)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeatsTail(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, uint16_t fullRepeats, uint32_t tailCount)
 {
     const uint16_t repeatTimes = fullRepeats + 1;
     const int32_t rowAdvance = static_cast<int32_t>(repeatTimes) * static_cast<int32_t>(elementsPerRepeat);
@@ -193,30 +274,32 @@ PTO_INTERNAL void TBinSOps_2D_PostUpdate_FullRepeatsTail(__ubuf__ typename TileD
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinSOps_2D_PostUpdate(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                         __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
-                                         unsigned kValidRows, unsigned kValidCols)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinSOps_2D_PostUpdate(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols)
 {
     uint16_t fullRepeats = kValidCols / elementsPerRepeat;
     uint32_t tailCount = kValidCols - fullRepeats * elementsPerRepeat;
     if (tailCount == 0) {
-        TBinSOps_2D_PostUpdate_FullRepeats<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat,
-                                           blockSizeElem, dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows,
-                                                                                      fullRepeats);
+        TBinSOps_2D_PostUpdate_FullRepeats<
+            Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+            dstPtr, src0Ptr, src1, kValidRows, fullRepeats);
     } else {
-        TBinSOps_2D_PostUpdate_FullRepeatsTail<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat,
-                                               blockSizeElem, dstRowStride, srcRowStride>(
+        TBinSOps_2D_PostUpdate_FullRepeatsTail<
+            Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
             dstPtr, src0Ptr, src1, kValidRows, fullRepeats, tailCount);
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinOp1DSwitch(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                 __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1, unsigned kValidRows,
-                                 unsigned kValidCols, VFImplKind version)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinOp1DSwitch(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
@@ -225,12 +308,14 @@ PTO_INTERNAL void TBinOp1DSwitch(__ubuf__ typename TileDataDst::DType *dstPtr,
             break;
 
         case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
-                                     dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
+            TBinSOps_2D_NoPostUpdate<
+                Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
+                srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
-                                   dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
+            TBinSOps_2D_PostUpdate<
+                Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
+                srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_1D_POST_UPDATE:
         case VFImplKind::VFIMPL_DEFAULT:
@@ -241,44 +326,53 @@ PTO_INTERNAL void TBinOp1DSwitch(__ubuf__ typename TileDataDst::DType *dstPtr,
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
-          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void TBinOp2DSwitch(__ubuf__ typename TileDataDst::DType *dstPtr,
-                                 __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1, unsigned kValidRows,
-                                 unsigned kValidCols, VFImplKind version)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+    unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void TBinOp2DSwitch(
+    __ubuf__ typename TileDataDst::DType* dstPtr, __ubuf__ typename TileDataSrc::DType* src0Ptr, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
         case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
-                                     dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
+            TBinSOps_2D_NoPostUpdate<
+                Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
+                srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_1D_POST_UPDATE:
         case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
-                                   dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
+            TBinSOps_2D_PostUpdate<
+                Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
+                srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_DEFAULT:
         default:
-            TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
-                                     dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
+            TBinSOps_2D_NoPostUpdate<
+                Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
+                srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
-PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf__ typename TileDataSrc::DType *src0,
-                              ScalarType src1, unsigned kValidRows, unsigned kValidCols, VFImplKind version)
+template <
+    typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
+    unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void BinaryInstr(
+    __ubuf__ typename TileDataDst::DType* dst, __ubuf__ typename TileDataSrc::DType* src0, ScalarType src1,
+    unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
     using T = typename TileDataDst::DType;
-    if constexpr (((TileDataDst::ValidCol == TileDataDst::Cols) && (TileDataSrc::ValidCol == TileDataSrc::Cols)) ||
-                  ((TileDataDst::Rows == 1) && (TileDataSrc::Rows == 1))) {
-        TBinOp1DSwitch<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
-                       srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
+    if constexpr (
+        ((TileDataDst::ValidCol == TileDataDst::Cols) && (TileDataSrc::ValidCol == TileDataSrc::Cols)) ||
+        ((TileDataDst::Rows == 1) && (TileDataSrc::Rows == 1))) {
+        TBinOp1DSwitch<
+            Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+            dst, src0, src1, kValidRows, kValidCols, version);
     } else {
-        TBinOp2DSwitch<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
-                       srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
+        TBinOp2DSwitch<
+            Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+            dst, src0, src1, kValidRows, kValidCols, version);
     }
 }
 } // namespace pto

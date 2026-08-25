@@ -12,39 +12,16 @@ Set IMG2COL padding metadata from an IMG2COL configuration tile (implementation-
 
 No direct tensor arithmetic is produced by this instruction. It updates IMG2COL padding control state consumed by subsequent data-movement operations.
 
-## Assembly Syntax
-
-Schematic form:
-
-```text
-SET_IMG2COL_PADDING %cfg
-```
-
-### AS Level 1 (SSA)
-
-```text
-pto.SET_IMG2COL_PADDING %cfg : !pto.fmatrix_config -> ()
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.SET_IMG2COL_PADDING ins(%cfg : !pto.fmatrix_config) outs()
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename ConvTileData, typename... WaitEvents>
-PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events);
-
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events);
 ```
 
-For `MEMORY_BASE` targets, an overload without `SetFmatrixMode` is also provided.
+This overload is provided per target backend under: `#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)` and `#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(__CPU_SIM)`.
 
 ## Constraints
 
@@ -60,35 +37,13 @@ For `MEMORY_BASE` targets, an overload without `SetFmatrixMode` is also provided
 
 using namespace pto;
 
-void example_set_img2col_padding(Img2colTileConfig<uint64_t>& cfg) {
+void example_set_img2col_padding() {
+  // IMG2COL configuration tile: a ConvTile (Mat, NC1HWC0 layout)
+  using CfgTile = ConvTile<TileType::Mat, half, 1 * 1 * 16 * 16 * 16, Layout::NC1HWC0,
+                           ConvTileShape<1, 1, 16, 16, 16>>;
+  CfgTile cfg;
+  TASSIGN(cfg, 0x0);
+  // After setting fmapH/fmapW, padList, etc., set the padding metadata:
   SET_IMG2COL_PADDING(cfg);
 }
 ```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-pto.SET_IMG2COL_PADDING %cfg : !pto.fmatrix_config -> ()
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-pto.SET_IMG2COL_PADDING %cfg : !pto.fmatrix_config -> ()
-```
-
-### PTO Assembly Form
-
-```text
-pto.SET_IMG2COL_PADDING %cfg : !pto.fmatrix_config -> ()
-# AS Level 2 (DPS)
-pto.SET_IMG2COL_PADDING ins(%cfg : !pto.fmatrix_config) outs()
-```
-

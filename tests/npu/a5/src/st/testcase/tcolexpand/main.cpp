@@ -17,19 +17,16 @@ using namespace PtoTestCommon;
 
 namespace TColExpandTest {
 template <typename T, uint32_t srcRows, uint32_t dstRows, uint32_t cols, uint32_t validCols>
-void launchTCOLEXPAND(T *out, T *src, void *stream);
-
+void launchTCOLEXPAND(T* out, T* src, void* stream);
 class TCOLEXPANDTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
@@ -50,11 +47,11 @@ void test_tcolexpand()
     T *dstHost, *src0Host;
     T *dstDevice, *src0Device;
 
-    aclrtMallocHost((void **)(&dstHost), outputFileSize);
-    aclrtMallocHost((void **)(&src0Host), inputFileSize);
+    aclrtMallocHost((void**)(&dstHost), outputFileSize);
+    aclrtMallocHost((void**)(&src0Host), inputFileSize);
 
-    aclrtMalloc((void **)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", inputFileSize, src0Host, inputFileSize);
     aclrtMemset(dstHost, outputFileSize, 0, outputFileSize);
@@ -77,37 +74,30 @@ void test_tcolexpand()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(outputFileSize);
-    std::vector<T> devFinal(outputFileSize);
+    std::vector<T> golden(outputFileSize / sizeof(T));
+    std::vector<T> devFinal(outputFileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
-    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp(golden, devFinal, 0.001f);
+    }
 
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TCOLEXPANDTest, case_half_1_16_512_512)
-{
-    test_tcolexpand<aclFloat16, 1, 16, 512, 512>();
-}
-TEST_F(TCOLEXPANDTest, case_int8_2_32_256_255)
-{
-    test_tcolexpand<int8_t, 2, 32, 256, 255>();
-}
-TEST_F(TCOLEXPANDTest, case_float_1_8_128_63)
-{
-    test_tcolexpand<float, 1, 8, 128, 63>();
-}
-TEST_F(TCOLEXPANDTest, case_half_1_33_512_512)
-{
-    test_tcolexpand<aclFloat16, 1, 33, 512, 512>();
-}
-TEST_F(TCOLEXPANDTest, case_int8_2_17_256_44)
-{
-    test_tcolexpand<int8_t, 2, 17, 256, 44>();
-}
-TEST_F(TCOLEXPANDTest, case_float_1_54_64_63)
-{
-    test_tcolexpand<float, 1, 54, 64, 63>();
-}
+TEST_F(TCOLEXPANDTest, case_half_1_16_512_512) { test_tcolexpand<aclFloat16, 1, 16, 512, 512>(); }
+TEST_F(TCOLEXPANDTest, case_int8_2_32_256_255) { test_tcolexpand<int8_t, 2, 32, 256, 255>(); }
+TEST_F(TCOLEXPANDTest, case_float_1_8_128_63) { test_tcolexpand<float, 1, 8, 128, 63>(); }
+TEST_F(TCOLEXPANDTest, case_half_1_33_512_512) { test_tcolexpand<aclFloat16, 1, 33, 512, 512>(); }
+TEST_F(TCOLEXPANDTest, case_int8_2_17_256_44) { test_tcolexpand<int8_t, 2, 17, 256, 44>(); }
+TEST_F(TCOLEXPANDTest, case_float_1_54_64_63) { test_tcolexpand<float, 1, 54, 64, 63>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_16_16) { test_tcolexpand<int64_t, 1, 4, 16, 16>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_16_16) { test_tcolexpand<uint64_t, 1, 4, 16, 16>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_4_64_64) { test_tcolexpand<int64_t, 1, 4, 64, 64>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_4_64_64) { test_tcolexpand<uint64_t, 1, 4, 64, 64>(); }
+TEST_F(TCOLEXPANDTest, case_int64_1_1_16368_16368) { test_tcolexpand<int64_t, 1, 1, 16368, 16368>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_1_1_16368_16368) { test_tcolexpand<uint64_t, 1, 1, 16368, 16368>(); }
 } // namespace TColExpandTest

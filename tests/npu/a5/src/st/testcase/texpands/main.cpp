@@ -17,27 +17,31 @@ using namespace PtoTestCommon;
 
 class TEXPANDSTest : public testing::Test {
 protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 std::string GetGoldenDir()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const testing::TestInfo* testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
     std::string fullPath = "../" + suiteName + "." + caseName;
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
-          bool isBf16>
-void LaunchTExpandS(void *out, void *scalar, void *stream);
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool isBf16>
+void LaunchTExpandS(void* out, void* scalar, void* stream);
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool isBf16>
+void LaunchTExpandSInplace(void* out, void* scalar, void* stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
-          bool isBf16 = false>
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool isBf16 = false>
 void test_texpands()
 {
     size_t tSize = sizeof(T);
@@ -48,21 +52,21 @@ void test_texpands()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    T *dstHost;
-    T *dstDevice;
-    T *scalarHost;
-    T *scalarDevice;
+    T* dstHost;
+    T* dstDevice;
+    T* scalarHost;
+    T* scalarDevice;
 
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&scalarHost), tSize);
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&scalarDevice, tSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMallocHost((void**)(&dstHost), fileSize);
+    aclrtMallocHost((void**)(&scalarHost), tSize);
+    aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&scalarDevice, tSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/scalar.bin", tSize, scalarHost, tSize);
     aclrtMemcpy(scalarDevice, tSize, scalarHost, tSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, isBf16>(dstDevice,
-                                                                                                  scalarDevice, stream);
+    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, isBf16>(
+        dstDevice, scalarDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -76,12 +80,77 @@ void test_texpands()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(kGRows_ * kGCols_);
+    std::vector<T> devFinal(kGRows_ * kGCols_);
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    }
+
+    EXPECT_TRUE(ret);
+}
+
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool isBf16 = false>
+void test_texpands_inplace()
+{
+    size_t tSize = sizeof(T);
+    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T* dstHost;
+    T* dstDevice;
+    T* scalarHost;
+    T* scalarDevice;
+    T* srcHost;
+
+    aclrtMallocHost((void**)(&dstHost), fileSize);
+    aclrtMallocHost((void**)(&scalarHost), tSize);
+    aclrtMallocHost((void**)(&srcHost), fileSize);
+    aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&scalarDevice, tSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input1.bin", fileSize, srcHost, fileSize);
+    ReadFile(GetGoldenDir() + "/scalar.bin", tSize, scalarHost, tSize);
+    aclrtMemcpy(dstDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(scalarDevice, tSize, scalarHost, tSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTExpandSInplace<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, isBf16>(
+        dstDevice, scalarDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(kGRows_ * kGCols_);
+    std::vector<T> devFinal(kGRows_ * kGCols_);
+    ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
+
+    bool ret;
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        ret = ResultCmpExact(golden, devFinal.data());
+    } else {
+        ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    }
 
     EXPECT_TRUE(ret);
 }
@@ -130,4 +199,50 @@ TEST_F(TEXPANDSTest, case_int16_16x200_20x512_16x200_PAD_VALUE_MAX)
 TEST_F(TEXPANDSTest, case_int16_1x200_1x512_1x200_PAD_VALUE_MAX)
 {
     test_texpands<int16_t, 1, 200, 1, 512, 1, 200, PAD_VALUE_MAX>();
+}
+TEST_F(TEXPANDSTest, case_int64_5x16_5x16_5x16_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_5x16_5x16_5x16_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 5, 16, 5, 16, 5, 16, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_5x64_5x64_5x64_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_5x64_5x64_5x64_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 5, 64, 5, 64, 5, 64, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_4x32_4x32_4x32_PAD_VALUE_NULL_inplace)
+{
+    test_texpands_inplace<int64_t, 4, 32, 4, 32, 4, 32, PAD_VALUE_NULL>();
+}
+
+TEST_F(TEXPANDSTest, case_uint64_4x32_4x32_4x32_PAD_VALUE_NULL_inplace)
+{
+    test_texpands_inplace<uint64_t, 4, 32, 4, 32, 4, 32, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_1x1024_1x1024_1x1024_PAD_VALUE_NULL_inplace)
+{
+    test_texpands_inplace<int64_t, 1, 1024, 1, 1024, 1, 1024, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_int64_4x64_4x64_4x40_PAD_VALUE_NULL_inplace)
+{
+    test_texpands_inplace<int64_t, 4, 64, 4, 64, 4, 40, PAD_VALUE_NULL>();
+}
+
+TEST_F(TEXPANDSTest, case_int64_1x2048_1x2048_1x2045_PAD_VALUE_NULL_inplace)
+{
+    test_texpands_inplace<int64_t, 1, 2048, 1, 2048, 1, 2045, PAD_VALUE_NULL>();
 }

@@ -66,7 +66,7 @@ def get_quant_vector(dst_dtype, n):
     return np.array(result, dtype=np.uint64)
 
 
-def extract_quant_params(quant_gm):
+def extract_quant_params(quant_gm, is_vector):
     """
     Extract the parameters M1, offset, and sign from the quant_gm of type uint64.
     Args:
@@ -77,23 +77,35 @@ def extract_quant_params(quant_gm):
         sign: A 1-bit boolean value (0 or 1)
     """
     quant_gm = int(quant_gm)
-    m1_bits = (quant_gm >> 13) & 0x7FFFF
+    
     offset = (quant_gm >> 37) & 0x1FF
     sign = (quant_gm >> 46) & 0x1
+    sat_bit = (quant_gm >> 48) & 0x1
 
-    # Parse M1 into a floating-point number in (1,8,10) format.
-    sign_bit = (m1_bits >> 18) & 0x1
-    exponent = (m1_bits >> 10) & 0xFF
-    mantissa = m1_bits & 0x3FF
+    if is_vector:
+        m1_bits = (quant_gm >> 13) & 0x7FFFF
+        # Parse M1 into a floating-point number in (1,8,10) format.
+        sign_bit = (m1_bits >> 18) & 0x1
+        exponent = (m1_bits >> 10) & 0xFF
+        mantissa = m1_bits & 0x3FF
+        mantissa_bits = 10
+    else:
+        m1_bits = quant_gm & 0xFFFFFFFF
+        # Parse M1 into a floating-point number in (1,8,10) format.
+        sign_bit = (m1_bits >> 31) & 0x1
+        exponent = (m1_bits >> 23) & 0xFF
+        mantissa = m1_bits & 0x7FFFFF
+        mantissa_bits = 23
+
     exponent_bias = 127  # Assuming the exponent bias is 127, which aligns with float32.
-    m1 = (-1) ** sign_bit * (1 + mantissa / 1024) * (2 ** (exponent - exponent_bias))
+    m1 = (-1) ** sign_bit * (1 + mantissa / (2 ** mantissa_bits)) * (2 ** (exponent - exponent_bias))
 
     return m1, offset, sign
 
 
-def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False, saturate_inf=False):
+def apply_quant_element(src_val, quant_gm, mode, is_vector, dst_dtype, use_relu=False, saturate_inf=False):
     quant_gm = int(quant_gm)
-    m1, offset, sign = extract_quant_params(quant_gm)
+    m1, offset, sign = extract_quant_params(quant_gm, is_vector)
     res = src_val.astype(np.float32) * m1
 
     if mode in [QuantMode.F32_TO_B8, QuantMode.I32_TO_B8]:
@@ -119,12 +131,12 @@ def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False, satu
         res = np.clip(src_val, int16_lim.min, int16_lim.max)
 
     if use_relu:
-        res = np.maximum(res, 0)
+        res = np.fmax(res, 0)
 
     return NumExt.astype(np.array([res]), dst_dtype)[0]
 
 
-def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_relu, saturate_inf):
+def process_quant(data_array, quant_array, src_dtype, dst_dtype, idx_col, is_vector, use_relu, saturate_inf):
     mode = get_quant_mode(src_dtype, dst_dtype)
     rows, cols = data_array.shape
     if NumExt.is_bf16(dst_dtype):
@@ -133,9 +145,9 @@ def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_
         out = np.zeros_like(data_array, dtype=dst_dtype)
 
     for j in range(cols):
-        q_param = quant_array[j] if is_vector else quant_array[0]
+        q_param = quant_array[idx_col + j] if is_vector else quant_array[0]
         for i in range(rows):
-            out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, dst_dtype, use_relu, saturate_inf)
+            out[i, j] = apply_quant_element(data_array[i, j], q_param, mode, is_vector, dst_dtype, use_relu, saturate_inf)
     
     return out
 
@@ -156,11 +168,11 @@ def gen_golden_data(case_name, param: TExtractParams):
     tile = raw_data[idx_row:(idx_row + dst_shape[0]), idx_col:(idx_col + dst_shape[1])]
 
     if param.is_v_quant:
-        quant_gm = get_quant_vector(param.dst_dtype, param.dst_valid_cols)
+        quant_gm = get_quant_vector(param.dst_dtype, param.src_valid_cols)
     else:
         quant_gm = get_quant_vector(param.dst_dtype, 1)
 
-    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, param.is_v_quant, param.use_relu, param.saturate_inf)
+    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, idx_col, param.is_v_quant, param.use_relu, param.saturate_inf)
     NumExt.write_array("./input.bin", raw_data, param.src_dtype)
     NumExt.write_array("./golden.bin", golden, param.dst_dtype)
     quant_gm.tofile("./quant.bin")
@@ -272,6 +284,9 @@ if __name__ == "__main__":
 
         TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
         TExtractParams(np.int32, np.int16, 128, 64, 128, 64, 0, 0, False, False, False),
+
+        TExtractParams(np.int32, np.uint8, 128, 128, 96, 96, 16, 8, True, True, False),
+        TExtractParams(np.int32, np.uint8, 256, 64, 128, 32, 16, 8, True, True, True),
     ]
 
     for idx, case_param in enumerate(case_params_list):

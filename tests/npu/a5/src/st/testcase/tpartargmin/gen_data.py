@@ -143,6 +143,10 @@ if __name__ == "__main__":
         TPartArgMinParams(np.float32, np.uint32, 8, 7, 8, 7, 0, 7, 8, 8, 8, 8, 1, 8),
         TPartArgMinParams(np.float32, np.uint32, 8, 7, 8, 0, 8, 7, 8, 8, 1, 8, 8, 8),
         TPartArgMinParams(np.float32, np.uint32, 8, 7, 0, 7, 8, 7, 8, 8, 1, 8, 8, 8),
+        TPartArgMinParams(np.float16, np.uint32, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144),
+        TPartArgMinParams(np.float16, np.uint32, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512),
+        TPartArgMinParams(np.float16, np.uint32, 8, 512, 3, 512, 8, 512, 8, 512, 3, 512, 8, 512),
+        TPartArgMinParams(np.float16, np.uint32, 8, 512, 8, 211, 8, 512, 8, 512, 8, 512, 8, 512),
     ]
 
     for param in case_params_list:

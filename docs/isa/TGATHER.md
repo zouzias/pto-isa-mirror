@@ -100,7 +100,7 @@ For each row `i` in `src0`, compare each element `src0[i, j]` against threshold 
     - `src1.GetValidCol() == TmpTileData::Cols` and `src1.GetValidRow() == TmpTileData::Rows`.
     - `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 - **Index-based gather: implementation checks (A5)**:
-    - `sizeof(DstTileData::DType)` must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
+    - `sizeof(DstTileData::DType)` must be 1, 2, 4, or 8 bytes: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
     - `sizeof(Src1TileData::DType)` must be `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
     - `DstTileData::DType` must be the same type as `Src0TileData::DType`.
     - `src1.GetValidCol() == Src1TileData::Cols` and `dst.GetValidCol() == DstTileData::Cols`.
@@ -111,13 +111,24 @@ For each row `i` in `src0`, compare each element `src0[i, j]` against threshold 
     - `dst` and `src` must both be `TileType::Vec` and row-major.
     - `sizeof(dst element) == sizeof(src element)` and `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
 - **Mask-pattern gather: implementation checks (A5)**:
-    - Source element size must be `1` or `2` or `4` bytes.
+    - Source element size must be `1`, `2`, `4`, or `8` bytes.
     - `dst` and `src` must both be `TileType::Vec` and row-major.
     - `SrcTileData::DType`/`DstTileData::DType` must be `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t`
-    or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
+    or `int64_t` or `uint64_t` or `half` or `bfloat16_t` or `float` or `float8_e4m3_t`or `float8_e5m2_t` or `hifloat8_t`.
     - Supported dtypes are restricted to a target-defined set (checked via `static_assert` in the implementation), and `sizeof(dst element) == sizeof(src element)`, `dst.GetValidCol() == DstTileData::Cols` (continuous dst storage).
+- **Comparison-based gather: implementation checks**: type and `cmpMode` constraints are detailed in [C++ Built-in Interface → Comparison-based Gather Constraints](#comparison-based-gather-constraints).
 - **Bounds / validity**:
     - Index bounds are not validated by explicit runtime assertions; out-of-range indices are target-defined.
+- **Temporary tile**:
+    - **Index-based gather (A2A3)**: The C++ API requires an explicit `tmp` tile. `TileDataTmp::DType` must be the same type as `TileDataS1::DType` (`int32_t` or `uint32_t`). `src1.GetValidRow() == TileDataTmp::Rows` and `src1.GetValidCol() == TileDataTmp::Cols`. The tmp tile holds intermediate `vmuls` results used by `vgather` for b16 source types; for b32 source types, the result is written directly to `dst` but the API still requires `tmp`.
+    - **Index-based gather (A5)**: The `tmp` tile is accepted and ignored. A5 hardware handles index-based gather without a scratch buffer.
+    - **Comparison-based gather (A2A3)**: The C++ API requires an explicit `tmp` tile that serves as a combined scratch buffer for three internal regions:
+        1. **cmpsTmp** (comparison result bitmap): offset 0, stored as `uint8_t`, size = `TileDataTmp::Rows × TileDataTmp::Cols` bytes.
+        2. **indexTmp** (index array): offset = `TileDataTmp::Rows × TileDataTmp::Cols × sizeof(uint8_t)`, stored as `TileDataD::DType`, size = `TileDataS::Rows × TileDataS::Cols × sizeof(TileDataD::DType)` bytes.
+        3. **cvtTmp** (converted k-value array): offset = `TileDataTmp::Rows × TileDataTmp::Cols × sizeof(uint8_t)` + `TileDataS::Rows × TileDataS::Cols × sizeof(TileDataD::DType)`, stored as `TileDataS::DType`, size = `TileDataS::Rows × sizeof(TileDataS::DType)` bytes.
+        The minimum tmp size (in bytes) must satisfy:
+        $$ \text{tmpSize} \ge \text{Rows}_\text{tmp} \times \text{Cols}_\text{tmp} + \text{Rows}_\text{src} \times \text{Cols}_\text{src} \times \text{sizeof(DType}_\text{dst}\text{)} + \text{Rows}_\text{src} \times \text{sizeof(DType}_\text{src}\text{)} $$
+    - **Comparison-based gather (A5)**: The `tmp` tile is accepted and ignored. A5 hardware handles comparison-based gather without a scratch buffer.
 
 ## Examples
 
@@ -183,4 +194,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tgather ins(%src, %indices : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

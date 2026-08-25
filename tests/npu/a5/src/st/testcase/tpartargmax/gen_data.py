@@ -135,6 +135,8 @@ if __name__ == "__main__":
 
     case_params_list = [
         TPartArgMaxParams(np.float32, np.uint32, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64),
+        TPartArgMaxParams(np.float32, np.uint32, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512),
+        TPartArgMaxParams(np.float32, np.uint32, 8, 512, 3, 211, 8, 512, 8, 512, 3, 512, 8, 512),
         TPartArgMaxParams(np.float32, np.int32, 2, 24, 2, 24, 2, 8, 4, 32, 3, 24, 2, 16),
         TPartArgMaxParams(np.float32, np.uint32, 12, 63, 12, 63, 6, 60, 12, 64, 12, 64, 6, 64),
         TPartArgMaxParams(np.float16, np.int16, 10, 31, 8, 16, 10, 31, 10, 32, 8, 32, 12, 32),
@@ -143,6 +145,10 @@ if __name__ == "__main__":
         TPartArgMaxParams(np.float32, np.uint32, 8, 7, 8, 7, 0, 7, 8, 8, 8, 8, 1, 8),
         TPartArgMaxParams(np.float32, np.uint32, 8, 7, 8, 0, 8, 7, 8, 8, 1, 8, 8, 8),
         TPartArgMaxParams(np.float32, np.uint32, 8, 7, 0, 7, 8, 7, 8, 8, 1, 8, 8, 8),
+        TPartArgMaxParams(np.float16, np.uint32, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144, 1, 144),
+        TPartArgMaxParams(np.float16, np.uint32, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512, 8, 512),
+        TPartArgMaxParams(np.float16, np.uint32, 8, 512, 3, 512, 8, 512, 8, 512, 3, 512, 8, 512),
+        TPartArgMaxParams(np.float16, np.uint32, 8, 512, 8, 211, 8, 512, 8, 512, 8, 512, 8, 512),
     ]
 
     for param in case_params_list:

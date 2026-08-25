@@ -49,15 +49,30 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (A5)**:
     - `dst`, `src0`, and `src1` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
     - `dst`, `src0`, and `src1` must be row-major.
     - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
 - **Implementation checks (A2A3)**:
     - `dst`, `src0`, `src1`, and `tmp` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
     - `dst`, `src0`, `src1`, and `tmp` must be row-major.
     - `src0`, `src1`, and `tmp` valid shapes must match `dst`.
     - In manual mode, `dst`, `src0`, `src1`, and `tmp` must not overlap in memory.
+
+## Temporary Space
+
+### A2A3
+
+`tmp` **is used** as intermediate scratch storage. The A2A3 implementation computes XOR via decomposition: `XOR(a,b) = AND(NOT(AND(a,b)), OR(a,b))`, which requires `tmp` to hold the intermediate `OR(a,b)` result.
+
+- `tmp` must have the same element type as `dst`/`src0`/`src1`.
+- `tmp` must be row-major.
+- `tmp.GetValidRow() >= dst.GetValidRow()` and `tmp.GetValidCol() >= dst.GetValidCol()`.
+- In manual mode, `tmp` must not overlap in memory with `dst`, `src0`, or `src1`.
+
+### A5
+
+`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses the `vxor` vector instruction directly and does not require scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
 
 ## Examples
 
@@ -105,4 +120,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

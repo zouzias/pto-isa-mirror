@@ -11,6 +11,7 @@
 
 ## 点对点通信（异步）
 - [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：异步远程写（GM → DMA 引擎 → GM）
+- [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY_zh.md)：远程写并更新远端 `int32_t` signal
 - [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
 
 ## 基于信号的同步
@@ -82,7 +83,8 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 | 值 | 说明 |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 引擎（支持一维传输，Ascend950 上仅支持TGET|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅Ascend950 / NPU_ARCH 3510）支持|
+| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；要求 CANN >= 9.1.0）|
+| `DmaEngine::RDMA` | RDMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510；当前网卡平台仅支持 HNS1825）|
 
 ### AsyncEvent
 
@@ -128,4 +130,3 @@ struct ParallelGroup {
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };
 ```
-
