@@ -220,6 +220,40 @@ def find_mpirun():
     return None
 
 
+def is_real_shared_library(path):
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def resolve_mpi_lib_path(mpirun):
+    env_path = os.environ.get("MPI_LIB_PATH", "")
+    if is_real_shared_library(env_path):
+        return env_path
+
+    mpi_lib_dir = os.path.dirname(mpirun).replace("/bin", "/lib")
+    if not os.path.isdir(mpi_lib_dir):
+        return ""
+
+    preferred_names = ["libmpi.so", "libmpi.so.12", "libmpich.so", "libmpich.so.12"]
+    for name in preferred_names:
+        candidate = os.path.join(mpi_lib_dir, name)
+        if is_real_shared_library(candidate):
+            return candidate
+
+    for name in sorted(os.listdir(mpi_lib_dir)):
+        if re.match(r"^lib(mpi|mpich)\.so(\.[0-9]+)*$", name):
+            candidate = os.path.join(mpi_lib_dir, name)
+            if is_real_shared_library(candidate):
+                return candidate
+
+    return ""
+
+
 def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
     original_dir = os.getcwd()
     try:
@@ -252,9 +286,9 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
             except Exception:
                 pass
             cmd = mpi_cmd + cmd
-            mpi_lib_dir = os.path.dirname(mpirun).replace("/bin", "/lib")
-            if os.path.isdir(mpi_lib_dir):
-                os.environ["MPI_LIB_PATH"] = os.path.join(mpi_lib_dir, "libmpi.so")
+            mpi_lib_path = resolve_mpi_lib_path(mpirun)
+            if mpi_lib_path:
+                os.environ["MPI_LIB_PATH"] = mpi_lib_path
 
         print(f"run command: {' '.join(cmd)}")
         output = run_command(cmd)
