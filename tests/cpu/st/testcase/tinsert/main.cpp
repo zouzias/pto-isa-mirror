@@ -136,7 +136,7 @@ void tinsert_test()
     size_t goldenSize = 0;
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", goldenSize, golden.data(), dstFileSize));
 
-    bool ret = ResultCmp(golden, (DT*)dstHost, 0, 100, false, true);
+    bool ret = ResultCmp(golden, (DT*)dstHost, 0, 100, 1000, false, true);
 
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
