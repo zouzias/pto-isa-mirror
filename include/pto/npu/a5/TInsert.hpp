@@ -184,6 +184,7 @@ template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluP
 PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
+    static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPCInsert<FpTileData>(fp.data());
@@ -199,6 +200,7 @@ PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     static_assert((DstTileData::Loc == TileType::Vec), "Destination TileType only support Vec.");
+    static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPCInsert<FpTileData>(fp.data());
