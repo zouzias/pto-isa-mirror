@@ -38,6 +38,10 @@ template <
     typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
     bool isBf16>
 void LaunchTExpandSInplace(void* out, void* scalar, void* stream);
+template <
+    typename DstT, typename ScalarT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_,
+    int padValueType>
+void LaunchTExpandSCrossScalar(void* out, void* scalar, void* stream);
 
 template <
     typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
@@ -155,6 +159,58 @@ void test_texpands_inplace()
     EXPECT_TRUE(ret);
 }
 
+template <
+    typename DstT, typename ScalarT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_,
+    int padValueType>
+void test_texpands_cross_scalar()
+{
+    size_t dstSize = kGRows_ * kGCols_ * sizeof(DstT);
+    size_t scalarSize = sizeof(ScalarT);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    DstT* dstHost;
+    DstT* dstDevice;
+    ScalarT* scalarHost;
+    ScalarT* scalarDevice;
+
+    aclrtMallocHost((void**)(&dstHost), dstSize);
+    aclrtMallocHost((void**)(&scalarHost), scalarSize);
+    aclrtMalloc((void**)&dstDevice, dstSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&scalarDevice, scalarSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/scalar.bin", scalarSize, scalarHost, scalarSize);
+    aclrtMemcpy(scalarDevice, scalarSize, scalarHost, scalarSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTExpandSCrossScalar<DstT, ScalarT, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>(
+        dstDevice, scalarDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstSize, dstDevice, dstSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstSize);
+
+    aclrtFree(dstDevice);
+    aclrtFreeHost(dstHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<DstT> golden(kGRows_ * kGCols_);
+    std::vector<DstT> devFinal(kGRows_ * kGCols_);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstSize, golden.data(), dstSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstSize, devFinal.data(), dstSize);
+
+    if constexpr (std::is_same_v<DstT, int64_t> || std::is_same_v<DstT, uint64_t>) {
+        EXPECT_TRUE(ResultCmpExact(golden, devFinal.data()));
+    } else {
+        EXPECT_TRUE(ResultCmp<DstT>(golden, devFinal, 0.001f));
+    }
+}
+
 TEST_F(TEXPANDSTest, case_float_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
     test_texpands<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
@@ -223,6 +279,10 @@ TEST_F(TEXPANDSTest, case_int64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
 TEST_F(TEXPANDSTest, case_uint64_1x32732_1x32732_1x32732_PAD_VALUE_NULL)
 {
     test_texpands<uint64_t, 1, 32732, 1, 32732, 1, 32732, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_from_float_scalar_1x4_1x4_1x4_PAD_VALUE_NULL)
+{
+    test_texpands_cross_scalar<uint64_t, float, 1, 4, 1, 4, 1, 4, PAD_VALUE_NULL>();
 }
 TEST_F(TEXPANDSTest, case_int64_4x32_4x32_4x32_PAD_VALUE_NULL_inplace)
 {

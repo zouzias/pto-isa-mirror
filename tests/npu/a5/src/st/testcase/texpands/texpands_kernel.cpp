@@ -42,6 +42,27 @@ __global__ AICORE void runTEXPANDS(__gm__ T* out, __gm__ T* scalar)
     TSTORE(dstGlobal, dstTile, event);
 }
 
+template <
+    typename DstT, typename ScalarT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_,
+    int padValueType>
+__global__ AICORE void runTEXPANDSCrossScalar(__gm__ DstT* out, __gm__ ScalarT* scalar)
+{
+    ScalarT src = *scalar;
+    constexpr PadValue padType = (padValueType == PAD_VALUE_NULL) ? PadValue::Null : PadValue::Max;
+    using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
+    using DynStridDim5 = pto::Stride<kGRows_ * kGCols_, kGRows_ * kGCols_, kGRows_ * kGCols_, kGCols_, 1>;
+    using GlobalData = GlobalTensor<DstT, DynShapeDim5, DynStridDim5, Layout::ND>;
+    using TileData = Tile<
+        TileType::Vec, DstT, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, TileConfig::fractalABSize,
+        padType>;
+
+    GlobalData dstGlobal(out);
+    TileData dstTile(kVRows_, kVCols_);
+    TASSIGN(dstTile, 0x0);
+    Event<Op::TEXPANDS, Op::TSTORE_VEC> event = TEXPANDS(dstTile, src);
+    TSTORE(dstGlobal, dstTile, event);
+}
+
 template <typename T, int cols, int padValueType>
 __global__ AICORE void runTEXPANDSWideInt64(__gm__ T* out, __gm__ T* scalar)
 {
@@ -185,6 +206,15 @@ void LaunchTExpandS(void* out, void* scalar, void* stream)
     }
 }
 
+template <
+    typename DstT, typename ScalarT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_,
+    int padValueType>
+void LaunchTExpandSCrossScalar(void* out, void* scalar, void* stream)
+{
+    runTEXPANDSCrossScalar<DstT, ScalarT, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>
+        <<<1, nullptr, stream>>>((DstT*)out, (ScalarT*)scalar);
+}
+
 template void LaunchTExpandS<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(
     void* out, void* scalar, void* stream);
 template void LaunchTExpandS<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, false>(
@@ -229,4 +259,6 @@ template void LaunchTExpandSInplace<int64_t, 1, 1024, 1, 1024, 1, 1024, PAD_VALU
 template void LaunchTExpandSInplace<int64_t, 4, 64, 4, 64, 4, 40, PAD_VALUE_NULL, false>(
     void* out, void* scalar, void* stream);
 template void LaunchTExpandSInplace<int64_t, 1, 2048, 1, 2048, 1, 2045, PAD_VALUE_NULL, false>(
+    void* out, void* scalar, void* stream);
+template void LaunchTExpandSCrossScalar<uint64_t, float, 1, 4, 1, 4, 1, 4, PAD_VALUE_NULL>(
     void* out, void* scalar, void* stream);
