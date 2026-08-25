@@ -63,12 +63,18 @@ __tf__ PTO_INTERNAL void TFillPad(
     __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
     __ubuf__ U* dstPtr = (__ubuf__ U*)__cce_get_tile_ptr(dst);
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
-    // fp4x2 ValidCol/Cols are nibble-counted (same as TLOAD/TSTORE/TCVT).
-    // Packed-byte fill uses GetByteSize so pad starts after the packed payload
-    // and stops at packed tile width (TSTORE burst length).
-    unsigned packedValidCol = GetByteSize<RawT>(static_cast<uint32_t>(srcValidCol));
-    unsigned srcStride = GetByteSize<RawT>(TileDataSrc::Cols);
-    unsigned dstStride = GetByteSize<RawU>(TileDataDst::Cols);
+    // Stride/pad stay in DType elements. fp4x2 ValidCol/Cols are nibble-counted
+    // (same as TLOAD/TSTORE/TCVT); only then GetByteSize packs to bytes so fill
+    // matches TSTORE burst length. Using GetByteSize on float/u16/s32 would
+    // treat sizeof*N as an element count and over-pad / overflow UB.
+    unsigned packedValidCol = static_cast<unsigned>(srcValidCol);
+    unsigned srcStride = TileDataSrc::Cols;
+    unsigned dstStride = TileDataDst::Cols;
+    if constexpr (caps::IsFP4<RawT>()) {
+        packedValidCol = GetByteSize<RawT>(static_cast<uint32_t>(srcValidCol));
+        srcStride = GetByteSize<RawT>(TileDataSrc::Cols);
+        dstStride = GetByteSize<RawU>(TileDataDst::Cols);
+    }
     unsigned padCols = dstStride - packedValidCol;
     unsigned padRows = dstValidRow - srcValidRow;
     auto uint_pv = GetPadValue<TileDataDst>();
