@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TEXPANDS_HPP
 #define TEXPANDS_HPP
 
+#include <type_traits>
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "common.hpp"
@@ -20,15 +21,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
-template <typename T, unsigned DstCols>
-PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsigned validCols)
+template <typename ScalarT>
+PTO_INTERNAL uint64_t GetInt64FillBits(ScalarT scalar)
+{
+    if constexpr (std::is_floating_point_v<ScalarT>) {
+        return static_cast<uint64_t>(static_cast<int64_t>(scalar));
+    } else {
+        return static_cast<uint64_t>(scalar);
+    }
+}
+
+template <typename T, unsigned DstCols, typename ScalarT>
+PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, ScalarT scalar, unsigned validRows, unsigned validCols)
 {
     constexpr unsigned elementsPerRepeat = CCE_VL * 2 / sizeof(T);
     __VEC_SCOPE__
     {
         vector_s32 lowReg, highReg, half0, half1;
         MaskReg lowMask, highMask;
-        uint64_t bits = static_cast<uint64_t>(scalar);
+        uint64_t bits = GetInt64FillBits(scalar);
         vbr(lowReg, static_cast<int32_t>(bits));
         vbr(highReg, static_cast<int32_t>(bits >> 32));
         uint16_t rows = validRows;
@@ -51,8 +62,8 @@ PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsig
 #else
 // Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
 // See TBinOp.hpp for details.
-template <typename T, unsigned DstCols>
-PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsigned validCols);
+template <typename T, unsigned DstCols, typename ScalarT>
+PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, ScalarT scalar, unsigned validRows, unsigned validCols);
 #endif
 inline namespace TExpandsInternal {
 constexpr const int EXPANDS_MAX_SUPPORT_REPEAT_TIMES = 32767; // [0:14]
@@ -66,9 +77,9 @@ struct ExpandSOp {
     }
 };
 
-template <typename TileData>
+template <typename TileData, typename ScalarT>
 __tf__ OP_NAME(TEXPANDS) OP_TYPE(broadcast) PTO_INTERNAL void TExpandS(
-    typename TileData::TileDType __out__ dst, typename TileData::DType scalar, unsigned kValidRows, unsigned kValidCols,
+    typename TileData::TileDType __out__ dst, ScalarT scalar, unsigned kValidRows, unsigned kValidCols,
     VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     using T = typename TileData::DType;
@@ -83,7 +94,7 @@ __tf__ OP_NAME(TEXPANDS) OP_TYPE(broadcast) PTO_INTERNAL void TExpandS(
     } else if constexpr (TileData::isRowMajor) {
         constexpr unsigned stride = TileData::RowStride;
         BinaryInstr<ExpandSOp<T>, TileData, TileData, T, elementsPerRepeat, blockSizeElem, stride, stride>(
-            dstPtr, dstPtr, scalar, kValidRows, kValidCols, version);
+            dstPtr, dstPtr, static_cast<T>(scalar), kValidRows, kValidCols, version);
     } else {
         // switch row and col for colmajor
         constexpr unsigned stride = TileData::ColStride;
@@ -91,7 +102,7 @@ __tf__ OP_NAME(TEXPANDS) OP_TYPE(broadcast) PTO_INTERNAL void TExpandS(
             TileType::Vec, T, TileData::Cols, TileData::Rows, BLayout::RowMajor, TileData::ValidCol,
             TileData::ValidRow>;
         BinaryInstr<ExpandSOp<T>, TmpTile, TmpTile, T, elementsPerRepeat, blockSizeElem, stride, stride>(
-            dstPtr, dstPtr, scalar, kValidCols, kValidRows, version);
+            dstPtr, dstPtr, static_cast<T>(scalar), kValidCols, kValidRows, version);
     }
 }
 
@@ -177,8 +188,8 @@ PTO_INTERNAL void TExpandsConvTile(TileData& dst, typename TileData::DType scala
     }
 }
 
-template <typename TileData>
-PTO_INTERNAL void TEXPANDS_IMPL(TileData& dst, typename TileData::DType scalar)
+template <typename TileData, typename ScalarT>
+PTO_INTERNAL void TEXPANDS_IMPL(TileData& dst, ScalarT scalar)
 {
     using T = typename TileData::DType;
     static_assert(
@@ -204,9 +215,9 @@ PTO_INTERNAL void TEXPANDS_IMPL(TileData& dst, typename TileData::DType scalar)
         TExpandS<TileData>(dst.data(), scalar, validRow, validCol);
     } else if constexpr (TileData::Loc == TileType::Mat) {
         if constexpr (is_conv_tile_v<TileData>) {
-            TExpandsConvTile<TileData>(dst, scalar);
+            TExpandsConvTile<TileData>(dst, static_cast<T>(scalar));
         } else {
-            TExpandsTile<TileData>(dst.data(), scalar);
+            TExpandsTile<TileData>(dst.data(), static_cast<T>(scalar));
         }
     }
 }

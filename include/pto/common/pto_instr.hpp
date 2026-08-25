@@ -195,8 +195,8 @@ PTO_INST RecordEvent TMAX(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& sr
     return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TEXPANDS(TileData& dst, typename TileData::DType scalar, WaitEvents&... events)
+template <typename TileData, typename ScalarT, typename... WaitEvents>
+PTO_INST RecordEvent TEXPANDS(TileData& dst, ScalarT scalar, WaitEvents&... events)
 {
     detail::PtoWaitEvents(events...);
     MAP_INSTR_IMPL(TEXPANDS, dst, scalar);
