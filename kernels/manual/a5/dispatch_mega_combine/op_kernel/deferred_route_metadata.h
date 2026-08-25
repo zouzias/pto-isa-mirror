@@ -55,12 +55,11 @@ public:
     AICORE inline void Sync()
     {
         const uint32_t phase = phase_++;
-        NotifyGroupConsumersMte(
-            workspaceGM_, tilingData_, kMegaMoeFixedSyncDeferredMetadataArrivalBase,
-            kMegaMoeFixedSyncDeferredMetadataReadyBase, workerCount_, workerCount_, workerIdx_, 0U, phase);
+        NotifyGroupConsumersMte(workspaceGM_, tilingData_, kMegaMoeFixedSyncDeferredMetadataArrivalBase,
+                                kMegaMoeFixedSyncDeferredMetadataReadyBase, workerCount_, workerCount_, workerIdx_, 0U,
+                                phase);
         WaitEpochAcquire(
-            FixedSyncSlot(workspaceGM_, tilingData_,
-                                                     kMegaMoeFixedSyncDeferredMetadataReadyBase + workerIdx_),
+            FixedSyncSlot(workspaceGM_, tilingData_, kMegaMoeFixedSyncDeferredMetadataReadyBase + workerIdx_),
             static_cast<int32_t>(phase + 1U));
     }
 
@@ -99,29 +98,21 @@ public:
 
     AICORE inline void Run()
     {
-        if (workerCount_ == 0U || workerIdx_ >= workerCount_) {
-            return;
-        }
-
         const bool gmm1Mailbox =
             tilingData_->gmmSchedulerTiling.gmm1ScheduleMode == kMegaMoeGmm1ScheduleWave0MailboxSuffix;
-        if (tilingData_->gmmSchedulerTiling.mailbox.enabled != 0U) {
-            ParallelGmmTaskDescriptorBuilder descriptorBuilder;
-            descriptorBuilder.Init(workspaceGM_, tilingData_, workerIdx_, workerCount_);
-
-            if (gmm1Mailbox) {
-                const uint32_t gmm1TaskCount = descriptorBuilder.BuildGmm1();
-                barrier_.Sync();
-                if (workerIdx_ == 0U) {
-                    descriptorBuilder.PublishGeneratedTail(tilingData_->gmmSchedulerTiling.gmm1, gmm1TaskCount);
-                }
-            }
-
-            const uint32_t gmm2TaskCount = descriptorBuilder.BuildGmm2();
+        ParallelGmmTaskDescriptorBuilder descriptorBuilder;
+        descriptorBuilder.Init(workspaceGM_, tilingData_, workerIdx_, workerCount_);
+        if (gmm1Mailbox) {
+            const uint32_t gmm1TaskCount = descriptorBuilder.BuildGmm1();
             barrier_.Sync();
             if (workerIdx_ == 0U) {
-                descriptorBuilder.PublishGeneratedTail(tilingData_->gmmSchedulerTiling.gmm2, gmm2TaskCount);
+                descriptorBuilder.PublishGeneratedTail(tilingData_->gmmSchedulerTiling.gmm1, gmm1TaskCount);
             }
+        }
+        const uint32_t gmm2TaskCount = descriptorBuilder.BuildGmm2();
+        barrier_.Sync();
+        if (workerIdx_ == 0U) {
+            descriptorBuilder.PublishGeneratedTail(tilingData_->gmmSchedulerTiling.gmm2, gmm2TaskCount);
         }
         // Core 0 owns the single-run sort used by small-M cases. Run preSum on
         // the last worker so both metadata paths overlap at the sort barrier.
@@ -137,17 +128,15 @@ public:
         BuildExpandedRowIdx();
         barrier_.Sync();
         if (workerIdx_ == 0U) {
-            PublishScalarEpoch(
-                FixedSyncSlot(workspaceGM_, tilingData_,
-                                                         kMegaMoeFixedSyncDeferredExpandedReadySlot),
-                kMegaMoeFixedDeferredExpandedReadyMarker);
+            PublishScalarEpoch(FixedSyncSlot(workspaceGM_, tilingData_, kMegaMoeFixedSyncDeferredExpandedReadySlot),
+                               kMegaMoeFixedDeferredExpandedReadyMarker);
         }
     }
 
 private:
     AICORE inline uint32_t FrontAivCount() const
     {
-        return tilingData_->fixedGroupTiling.physicalAivNum;
+        return tilingData_->fixedGroupTiling.physicalAicNum * kMegaMoeFixedAivSubblocksPerPhysicalBlock;
     }
 
     AICORE inline uint32_t FrontExpertCoreBegin(uint32_t globalExpert) const

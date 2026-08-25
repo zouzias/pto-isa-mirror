@@ -101,9 +101,7 @@ public:
     {
         coreIdx_ = groupLocalId;
         coreNum_ = groupSize;
-        if ASCEND_IS_AIV {
-            ProcessRankSplitCopy();
-        }
+        ProcessRankSplitCopy();
     }
 
 private:
@@ -114,8 +112,7 @@ private:
 
     AICORE inline uint64_t DispatchGatherPackedUbOffset(uint32_t bufferId) const
     {
-        return tilingData_->dispatchTiling.copyBufferUbOffset +
-               static_cast<uint64_t>(bufferId) * tilingData_->dispatchTiling.copyBufferBytes;
+        return static_cast<uint64_t>(bufferId) * tilingData_->dispatchTiling.copyBufferBytes;
     }
 
     AICORE inline event_t DispatchGatherBufferEvent(uint32_t bufferId) const
@@ -125,7 +122,8 @@ private:
 
     AICORE inline uint64_t DispatchGatherMetaUbOffset(uint32_t bufferId) const
     {
-        return tilingData_->dispatchTiling.metaBufferUbOffset +
+        return static_cast<uint64_t>(tilingData_->dispatchTiling.bufferCount) *
+                   tilingData_->dispatchTiling.copyBufferBytes +
                static_cast<uint64_t>(bufferId) * kDispatchMetaSlotBytes;
     }
 
@@ -138,15 +136,16 @@ private:
 
     AICORE inline uint32_t DispatchShardRowBegin(uint32_t rows, uint32_t shardIdx, uint32_t shardCount) const
     {
-        return shardCount == 0U ? 0U : static_cast<uint32_t>((static_cast<uint64_t>(rows) * shardIdx) / shardCount);
+        return static_cast<uint32_t>((static_cast<uint64_t>(rows) * shardIdx) / shardCount);
     }
 
     AICORE inline __gm__ int32_t *ReadyCountSlot(uint32_t groupIdx, uint32_t tileIdx) const
     {
         const __gm__ MegaMoeDispatchTiling &dispatch = tilingData_->dispatchTiling;
-        const uint64_t byteOffset = dispatch.readyCountOffset +
-                                    static_cast<uint64_t>(groupIdx) * dispatch.readyCountExpertStrideBytes +
-                                    static_cast<uint64_t>(tileIdx) * dispatch.readyCountSlotBytes;
+        const uint64_t byteOffset =
+            dispatch.readyCountOffset +
+            static_cast<uint64_t>(groupIdx) * dispatch.readyCountMaxTilesPerExpert * kMegaMoeReadyCountSlotBytes +
+            static_cast<uint64_t>(tileIdx) * kMegaMoeReadyCountSlotBytes;
         return reinterpret_cast<__gm__ int32_t *>(workspaceGM_ + byteOffset);
     }
 
@@ -156,7 +155,7 @@ private:
         if (expertRowBegin >= expertRowEnd) {
             return;
         }
-        const uint32_t tileM = tilingData_->gmm1Tiling.l1TileM;
+        constexpr uint32_t tileM = kMegaMoeGmmTileM;
         const uint32_t firstTile = expertRowBegin / tileM;
         const uint32_t lastTile = (expertRowEnd - 1U) / tileM;
         const uint64_t scratchUbOffset = tilingData_->dispatchTiling.routeCountUbOffset;
@@ -268,8 +267,8 @@ private:
     {
         const uint32_t bufferCount = tilingData_->dispatchTiling.bufferCount;
         const uint64_t routeIndexUbOffset = tilingData_->dispatchTiling.routeIndexUbOffset;
-        __gm__ int8_t *remoteRecords = reinterpret_cast<__gm__ int8_t *>(
-            remoteWindow_.RemoteBase(peerMemoryLayout_.sourceTokenRecords, static_cast<int32_t>(srcRank)));
+        __gm__ int8_t *remoteRecords =
+            reinterpret_cast<__gm__ int8_t *>(remoteWindow_.RemoteBase(0, static_cast<int32_t>(srcRank)));
 
         const uint32_t firstRouteSlot = PtoGetValue<uint32_t>(routeIndexUbOffset, routeIndexBegin);
         IssueRemoteRouteToken<false>(remoteRecords, srcRank, firstRouteSlot, 0U);
@@ -301,16 +300,16 @@ private:
         return localRouteMaskSlots_ + slot * tilingData_->frontReorderTiling.maskSlotBytes;
     }
 
-    AICORE inline void FetchRankGroupRows(uint32_t srcRank, uint32_t groupIdx, uint32_t dstRowBase,
-                                          uint32_t rowBegin, uint32_t rowEnd) const
+    AICORE inline void FetchRankGroupRows(uint32_t srcRank, uint32_t groupIdx, uint32_t dstRowBase, uint32_t rowBegin,
+                                          uint32_t rowEnd) const
     {
-        if (rowBegin == rowEnd || topK_ == 0U) {
+        if (rowBegin == rowEnd) {
             return;
         }
 
         const __gm__ MegaMoeDispatchTiling &dispatch = tilingData_->dispatchTiling;
         const uint32_t batchRoutes = dispatch.routeItemsPerBatch;
-        const uint32_t routeBatchCount = dispatch.routeBatchCount;
+        const uint32_t routeBatchCount = (routeElems_ + batchRoutes - 1U) / batchRoutes;
 
         __gm__ uint8_t *maskSlot = LocalMaskSlot(groupIdx, srcRank);
         uint32_t matchedOrdinal = 0U;
@@ -344,24 +343,20 @@ private:
 
     AICORE inline void ProcessRankSplitCopy() const
     {
-        const uint32_t lanesPerRank = rankSize_ == 0U ? 0U : coreNum_ / rankSize_;
-        const uint32_t activeWorkerCount = rankSize_ * lanesPerRank;
-        const bool activeCopyCore = lanesPerRank != 0U && coreIdx_ < activeWorkerCount;
-        const uint32_t srcRank = activeCopyCore ? coreIdx_ / lanesPerRank : 0U;
-        const uint32_t shardIdx = activeCopyCore ? coreIdx_ % lanesPerRank : 0U;
+        const uint32_t lanesPerRank = coreNum_ / rankSize_;
+        const uint32_t srcRank = coreIdx_ / lanesPerRank;
+        const uint32_t shardIdx = coreIdx_ % lanesPerRank;
         uint32_t prevGroupSum = 0U;
         for (uint32_t groupIdx = 0U; groupIdx < expertPerRank_; ++groupIdx) {
             const uint32_t currentM =
                 static_cast<uint32_t>(cumsumMMPtr_[static_cast<uint64_t>(rankSize_ - 1U) * expertPerRank_ + groupIdx]);
-            if (activeCopyCore) {
-                const uint32_t rawRows = RawRowsForLocalGroup(srcRank, groupIdx);
-                const uint32_t shardRowBegin = DispatchShardRowBegin(rawRows, shardIdx, lanesPerRank);
-                const uint32_t shardRowEnd = DispatchShardRowBegin(rawRows, shardIdx + 1U, lanesPerRank);
-                const uint32_t sourceRowBase = CopyCumsumBeforeSource(srcRank, groupIdx);
-                FetchRankGroupRows(srcRank, groupIdx, prevGroupSum + sourceRowBase, shardRowBegin, shardRowEnd);
-                PublishDispatchReadyRange(groupIdx, sourceRowBase + shardRowBegin, sourceRowBase + shardRowEnd);
-                prevGroupSum += currentM;
-            }
+            const uint32_t rawRows = RawRowsForLocalGroup(srcRank, groupIdx);
+            const uint32_t shardRowBegin = DispatchShardRowBegin(rawRows, shardIdx, lanesPerRank);
+            const uint32_t shardRowEnd = DispatchShardRowBegin(rawRows, shardIdx + 1U, lanesPerRank);
+            const uint32_t sourceRowBase = CopyCumsumBeforeSource(srcRank, groupIdx);
+            FetchRankGroupRows(srcRank, groupIdx, prevGroupSum + sourceRowBase, shardRowBegin, shardRowEnd);
+            PublishDispatchReadyRange(groupIdx, sourceRowBase + shardRowBegin, sourceRowBase + shardRowEnd);
+            prevGroupSum += currentM;
         }
     }
 

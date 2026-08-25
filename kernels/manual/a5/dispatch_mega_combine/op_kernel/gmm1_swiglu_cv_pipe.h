@@ -19,7 +19,7 @@ constexpr uint16_t kGmm1SwigluCvReadyFlag = 7U;
 constexpr uint16_t kGmm1SwigluCvFreeFlag = 8U;
 constexpr uint16_t kGmm1SwigluControlReadyFlagBase = 9U;
 constexpr uint16_t kGmm1SwigluControlFreeFlagBase = 11U;
-constexpr uint32_t kGmm1SwigluCvTileRows = 128U;
+constexpr uint32_t kGmm1SwigluCvTileRows = 256U;
 constexpr uint32_t kGmm1SwigluCvOutputCols = 256U;
 constexpr uint32_t kGmm1SwigluCvTileCols = 2U * kGmm1SwigluCvOutputCols;
 constexpr uint32_t kGmm1SwigluCvFifoDepth = 1U;
@@ -32,20 +32,24 @@ constexpr uint32_t kGmm1SwigluCvBufferOffset = 0U;
 constexpr uint32_t kGmm1SwigluCvBufferBytes = kGmm1SwigluCvFifoDepth * kGmm1SwigluCvSlotBytes;
 
 struct Gmm1SwigluCvPipe {
-    struct Endpoint {
+    struct ProducerEndpoint {
         uint32_t tileIndex = 0U;
         uint32_t controlIndex = 0U;
     };
+    struct ConsumerEndpoint {
+        uint32_t controlIndex = 0U;
+    };
 
-    Endpoint prod;
-    Endpoint cons;
+    ProducerEndpoint prod;
+    ConsumerEndpoint cons;
 };
 
 using Gmm1SwigluCvHalfTile = pto::Tile<pto::TileType::Vec, bfloat16_t, kGmm1SwigluCvTileRows, kGmm1SwigluCvOutputCols,
                                        pto::BLayout::RowMajor, pto::DYNAMIC, pto::DYNAMIC, pto::SLayout::NoneBox>;
 
 static_assert(2U * kGmm1SwigluCvHalfSlotBytes == kGmm1SwigluCvSlotBytes);
-static_assert(kGmm1SwigluCvSlotBytes == 128U * 1024U);
+static_assert(kGmm1SwigluCvHalfSlotBytes == 128U * 1024U);
+static_assert(kGmm1SwigluCvSlotBytes == AtlasA5::UB_SIZE);
 static_assert(kGmm1SwigluControlFreeFlagBase + kGmm1SwigluControlFifoDepth - 1U +
                   kMegaMoeFixedSecondAivSubblockFlagOffset <
               32U);
@@ -139,8 +143,8 @@ AICORE inline void Gmm1SwigluControlConsumerRelease(Gmm1SwigluCvPipe &pipe)
 
 AICORE inline void Gmm1SwigluConsumerRelease(Gmm1SwigluCvPipe &pipe)
 {
+    (void)pipe;
     set_intra_block(PIPE_V, kGmm1SwigluCvFreeFlag);
-    ++pipe.cons.tileIndex;
 }
 
 #endif // DISPATCH_MEGA_COMBINE_GMM1_SWIGLU_CV_PIPE_H

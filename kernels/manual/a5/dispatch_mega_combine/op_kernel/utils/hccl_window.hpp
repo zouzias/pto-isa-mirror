@@ -265,8 +265,7 @@ public:
     AICORE inline void WaitPreSumReady(int32_t sourceRank, int32_t epoch) const
     {
         volatile __gm__ int32_t *slot = LocalPreSumReadySlot(sourceRank);
-        while (slot != nullptr &&
-               ReadEpochMaskMte(const_cast<__gm__ int32_t *>(slot), 1U, epoch) != 1U) {
+        while (slot != nullptr && ReadEpochMaskMte(const_cast<__gm__ int32_t *>(slot), 1U, epoch) != 1U) {
             RemoteWindowSyncPollBackoff();
         }
         AcquireDataReady();
@@ -421,8 +420,7 @@ public:
         pto::PtoSetWaitFlag<PIPE_MTE3, PIPE_S>(REMOTE_WINDOW_SYNC_SNAPSHOT_EVENT, REMOTE_WINDOW_SYNC_SNAPSHOT_EVENT);
     }
 
-    AICORE inline void ReadExpertProgressMte(int32_t epoch, uint32_t expertPerRank,
-                                             uint32_t *readyExpertCounts) const
+    AICORE inline void ReadExpertProgressMte(int32_t epoch, uint32_t expertPerRank, uint32_t *readyExpertCounts) const
     {
         if (readyExpertCounts == nullptr || rankSize_ <= 0 ||
             static_cast<uint32_t>(rankSize_) > COMBINE_EXPERT_PROGRESS_MAX_RANKS) {
@@ -600,7 +598,6 @@ private:
 };
 
 struct MegaMoePeerMemoryLayout {
-    int64_t sourceTokenRecords = 0;
     int64_t routeMaskSlots = 0;
     int64_t preSumBeforeRank = 0;
     int64_t combineOutputByRouteSlot = 0;
@@ -608,7 +605,6 @@ struct MegaMoePeerMemoryLayout {
     template <typename FrontTiling>
     AICORE inline void Init(const FrontTiling &front)
     {
-        sourceTokenRecords = static_cast<int64_t>(front.sourceTokenRecordOffset);
         routeMaskSlots = static_cast<int64_t>(front.routeMaskOffset);
         preSumBeforeRank = static_cast<int64_t>(front.preSumBeforeRankPeerOffset);
         combineOutputByRouteSlot = static_cast<int64_t>(front.combineOutputOffset);

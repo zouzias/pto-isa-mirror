@@ -46,7 +46,8 @@ constexpr uint64_t kGmmProducerReadySnapshotBytes =
 constexpr uint64_t kGmmProducerReadySnapshotUbBase = kGmmProducerP2cShadowUbBase + kGmmProducerP2cShadowBytes;
 constexpr uint64_t kGmmProducerStateUbEnd = kGmmProducerReadySnapshotUbBase + kGmmProducerReadySnapshotBytes;
 
-enum class GmmMailboxLanePhase : uint32_t {
+enum class GmmMailboxLanePhase : uint32_t
+{
     kAwaitGmm1Wave0End = 0U,
     kGmm1Pc = 1U,
     kAwaitGmm2Wave0End = 2U,
@@ -55,8 +56,8 @@ enum class GmmMailboxLanePhase : uint32_t {
     kDone = 5U,
 };
 
-AICORE inline GmmMailboxLanePhase ObserveGmmMailboxWave0End(
-    GmmMailboxLanePhase phase, bool group2Lane, bool gmm1Wave0End, bool gmm2Wave0End)
+AICORE inline GmmMailboxLanePhase ObserveGmmMailboxWave0End(GmmMailboxLanePhase phase, bool group2Lane,
+                                                            bool gmm1Wave0End, bool gmm2Wave0End)
 {
     if (phase == GmmMailboxLanePhase::kAwaitGmm1Wave0End) {
         if (group2Lane && gmm2Wave0End) {
@@ -71,8 +72,8 @@ AICORE inline GmmMailboxLanePhase ObserveGmmMailboxWave0End(
     return phase;
 }
 
-AICORE inline GmmMailboxLanePhase AdvanceGmmMailboxLanePhase(
-    GmmMailboxLanePhase phase, bool gmm1SuffixPublished, bool gmm2GateReady, bool gmm2SuffixPublished)
+AICORE inline GmmMailboxLanePhase AdvanceGmmMailboxLanePhase(GmmMailboxLanePhase phase, bool gmm1SuffixPublished,
+                                                             bool gmm2GateReady, bool gmm2SuffixPublished)
 {
     if (phase == GmmMailboxLanePhase::kGmm1Pc && gmm1SuffixPublished) {
         return gmm2GateReady ? GmmMailboxLanePhase::kGmm2Pc : phase;
@@ -123,9 +124,9 @@ private:
 
     struct ExpertTaskLayout {
         uint32_t currentM[kMegaMoeFixedMaxExperts] = {};
-        uint32_t tileM[kGmmProducerMailboxStageCount][kMegaMoeFixedMaxExperts] = {};
+        uint32_t gmm1TileM[kMegaMoeFixedMaxExperts] = {};
         uint32_t taskBase[kGmmProducerMailboxStageCount][kMegaMoeFixedMaxExperts + 1U] = {};
-        uint32_t tileN[2] = {};
+        uint32_t tileN[kGmmProducerMailboxStageCount] = {};
     };
 
     struct ReadyTracker {
@@ -133,39 +134,21 @@ private:
         uint32_t publishExpert = 0U;
         uint32_t readyTail = 0U;
         uint32_t publishTail = 0U;
-        uint32_t stage = 0U;
     };
 
     AICORE inline volatile __gm__ int32_t *DispatchReadySlot(uint32_t expert, uint32_t blockM) const
     {
         const __gm__ MegaMoeDispatchTiling &dispatch = tilingData_->dispatchTiling;
-        const uint64_t offset = dispatch.readyCountOffset +
-                                static_cast<uint64_t>(expert) * dispatch.readyCountExpertStrideBytes +
-                                static_cast<uint64_t>(blockM) * dispatch.readyCountSlotBytes;
+        const uint64_t offset =
+            dispatch.readyCountOffset +
+            static_cast<uint64_t>(expert) * dispatch.readyCountMaxTilesPerExpert * kMegaMoeReadyCountSlotBytes +
+            static_cast<uint64_t>(blockM) * kMegaMoeReadyCountSlotBytes;
         return reinterpret_cast<volatile __gm__ int32_t *>(workspaceGM_ + offset);
     }
 
     AICORE inline bool Gmm2EntryGateReady() const
     {
-        const bool dispatchReady =
-            ReadScalarEpoch(FixedSyncSlot(workspaceGM_, tilingData_, kMegaMoeFixedSyncDispatchDoneSlot)) >=
-            kMegaMoeFixedDispatchDoneMarker;
-        if (!dispatchReady) {
-            return false;
-        }
-        const bool deferredReady =
-            ReadScalarEpoch(FixedSyncSlot(workspaceGM_, tilingData_, kMegaMoeFixedSyncDeferredExpandedReadySlot)) >=
-            kMegaMoeFixedDeferredExpandedReadyMarker;
-        if (!deferredReady) {
-            return false;
-        }
-        const bool entryReady = Gmm2EntryReady(workspaceGM_, tilingData_);
-        if (!entryReady) {
-            return false;
-        }
-        // Publication may lead the per-lane consumer. Each AIC waits for its
-        // own Combine consumer before executing the published GMM2 task.
-        return true;
+        return Gmm2EntryReady(workspaceGM_, tilingData_);
     }
 
     AICORE inline event_t MailboxP2cEvent() const
@@ -203,8 +186,8 @@ private:
                                         MailboxLaneState &lane, GmmProducerP2cShadowTile &p2cShadow, bool &p2cDirty)
     {
         const __gm__ MegaMoeGmmMailboxTiling &mailbox = tilingData_->gmmSchedulerTiling.mailbox;
-        const uint32_t globalTicket =
-            stage == MailboxStage::kGmm1 ? mailbox.gmm1TicketBase + localTicket : mailbox.gmm2TicketBase + localTicket;
+        const uint32_t globalTicket = stage == MailboxStage::kGmm1 ? kGmmMailboxFirstTaskTicket + localTicket :
+                                                                     mailbox.gmm2TicketBase + localTicket;
         StageMailboxTicket(physicalBlockId, globalTicket, lane, p2cShadow, p2cDirty);
     }
 
@@ -212,8 +195,8 @@ private:
     {
         constexpr uint32_t gmm1Stage = static_cast<uint32_t>(MailboxStage::kGmm1);
         constexpr uint32_t gmm2Stage = static_cast<uint32_t>(MailboxStage::kGmm2);
-        layout.tileN[gmm1Stage] = GmmCommonTileN(tilingData_->megaMoeInfo.N / 2U, tilingData_->gmm1Tiling.l1TileN);
-        layout.tileN[gmm2Stage] = GmmCommonTileN(tilingData_->megaMoeInfo.K, tilingData_->gmm2Tiling.l1TileN);
+        layout.tileN[gmm1Stage] = GmmCommonTileN(tilingData_->megaMoeInfo.N / 2U);
+        layout.tileN[gmm2Stage] = GmmCommonTileN(tilingData_->megaMoeInfo.K);
         layout.taskBase[gmm1Stage][0U] = 0U;
         layout.taskBase[gmm2Stage][0U] = 0U;
     }
@@ -223,15 +206,10 @@ private:
         constexpr uint32_t gmm1Stage = static_cast<uint32_t>(MailboxStage::kGmm1);
         constexpr uint32_t gmm2Stage = static_cast<uint32_t>(MailboxStage::kGmm2);
         const uint32_t currentM = CurrentM(expert);
-        const GmmCommonTaskShape gmm1Shape =
-            GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.N / 2U, tilingData_->gmm1Tiling.l1TileM,
-                                     tilingData_->gmm1Tiling.l1TileN);
-        const GmmCommonTaskShape gmm2Shape =
-            GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.K, tilingData_->gmm2Tiling.l1TileM,
-                                     tilingData_->gmm2Tiling.l1TileN);
+        const GmmCommonTaskShape gmm1Shape = GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.N / 2U);
+        const GmmCommonTaskShape gmm2Shape = GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.K);
         layout.currentM[expert] = currentM;
-        layout.tileM[gmm1Stage][expert] = gmm1Shape.tileM;
-        layout.tileM[gmm2Stage][expert] = gmm2Shape.tileM;
+        layout.gmm1TileM[expert] = gmm1Shape.tileM;
         layout.taskBase[gmm1Stage][expert + 1U] = layout.taskBase[gmm1Stage][expert] + gmm1Shape.taskCount;
         layout.taskBase[gmm2Stage][expert + 1U] = layout.taskBase[gmm2Stage][expert] + gmm2Shape.taskCount;
     }
@@ -241,10 +219,10 @@ private:
         return static_cast<event_t>(2U);
     }
 
-    AICORE inline void AdvanceExpert(uint32_t &expert, uint32_t tail, const ReadyTracker &tracker,
+    AICORE inline void AdvanceExpert(uint32_t &expert, uint32_t tail, uint32_t stage,
                                      const ExpertTaskLayout &layout) const
     {
-        while (expert < expertPerRank_ && tail >= layout.taskBase[tracker.stage][expert + 1U]) {
+        while (expert < expertPerRank_ && tail >= layout.taskBase[stage][expert + 1U]) {
             ++expert;
         }
     }
@@ -265,9 +243,9 @@ private:
             constexpr uint32_t gmm1Stage = static_cast<uint32_t>(MailboxStage::kGmm1);
             return layout.taskBase[gmm1Stage][expert + 1U] - layout.taskBase[gmm1Stage][expert];
         }
-        const uint32_t rowBegin = blockM * tilingData_->gmm1Tiling.l1TileM;
+        const uint32_t rowBegin = blockM * kMegaMoeGmmTileM;
         const uint32_t remaining = layout.currentM[expert] - rowBegin;
-        return remaining < tilingData_->gmm1Tiling.l1TileM ? remaining : tilingData_->gmm1Tiling.l1TileM;
+        return remaining < kMegaMoeGmmTileM ? remaining : kMegaMoeGmmTileM;
     }
 
     AICORE inline void LoadReadyExpertSnapshot(uint32_t stage, uint32_t expert, uint32_t blockMCount) const
@@ -276,11 +254,10 @@ private:
         SnapshotTile snapshot(1, blockMCount);
         pto::TASSIGN(snapshot, kGmmProducerReadySnapshotUbBase);
         __gm__ uint8_t *src = reinterpret_cast<__gm__ uint8_t *>(ReadyCounterSlot(stage, expert, 0U));
-        const uint64_t srcStride = stage == static_cast<uint32_t>(MailboxStage::kGmm1) ?
-                                       tilingData_->dispatchTiling.readyCountSlotBytes :
-                                       kMegaMoeFixedSyncSlotBytes;
+        const uint64_t srcStride = stage == static_cast<uint32_t>(MailboxStage::kGmm1) ? kMegaMoeReadyCountSlotBytes :
+                                                                                         kMegaMoeFixedSyncSlotBytes;
         LoadGmmSnapshot<SnapshotTile>(snapshot.data(), src, static_cast<uint16_t>(blockMCount), sizeof(uint32_t),
-                                       srcStride);
+                                      srcStride);
         set_flag(PIPE_MTE2, PIPE_S, ReadySnapshotEvent());
         wait_flag(PIPE_MTE2, PIPE_S, ReadySnapshotEvent());
     }
@@ -291,16 +268,10 @@ private:
         if (tracker.readyTail >= totalTasks) {
             return false;
         }
-        AdvanceExpert(tracker.scanExpert, tracker.readyTail, tracker, layout);
-        if (tracker.scanExpert >= expertPerRank_) {
-            return false;
-        }
+        AdvanceExpert(tracker.scanExpert, tracker.readyTail, stage, layout);
         const uint32_t expert = tracker.scanExpert;
         const uint32_t blockMCount =
-            stage == static_cast<uint32_t>(MailboxStage::kGmm2) ? 1U : layout.tileM[stage][expert];
-        if (blockMCount == 0U || blockMCount > kGmmProducerReadySnapshotMaxBlockM) {
-            return false;
-        }
+            stage == static_cast<uint32_t>(MailboxStage::kGmm2) ? 1U : layout.gmm1TileM[expert];
         LoadReadyExpertSnapshot(stage, expert, blockMCount);
 
         using SnapshotTile = PtoVecTile<uint32_t, kGmmProducerReadySnapshotMaxBlockM>;
@@ -333,18 +304,15 @@ private:
         return tracker.readyTail != previousReadyTail;
     }
 
-    AICORE inline bool TakeReadyTicket(ReadyTracker &tracker, const ExpertTaskLayout &layout,
+    AICORE inline bool TakeReadyTicket(uint32_t stage, ReadyTracker &tracker, const ExpertTaskLayout &layout,
                                        uint32_t &localTicket) const
     {
         if (tracker.publishTail >= tracker.readyTail) {
             return false;
         }
-        AdvanceExpert(tracker.publishExpert, tracker.publishTail, tracker, layout);
-        if (tracker.publishExpert >= expertPerRank_) {
-            return false;
-        }
+        AdvanceExpert(tracker.publishExpert, tracker.publishTail, stage, layout);
         localTicket = tracker.publishTail++;
-        AdvanceExpert(tracker.publishExpert, tracker.publishTail, tracker, layout);
+        AdvanceExpert(tracker.publishExpert, tracker.publishTail, stage, layout);
         return true;
     }
 
@@ -393,12 +361,9 @@ private:
         pto::TASSIGN(p2cShadow, kGmmProducerP2cShadowUbBase);
         pto::PtoSetWaitFlag<PIPE_V, PIPE_S>();
 
-        const uint32_t aicCount = tilingData_->gmmSchedulerTiling.mailbox.physicalAicCount;
+        const uint32_t aicCount = tilingData_->fixedGroupTiling.physicalAicNum;
         const bool gmm1Mailbox =
             tilingData_->gmmSchedulerTiling.gmm1ScheduleMode == kMegaMoeGmm1ScheduleWave0MailboxSuffix;
-        if (aicCount == 0U) {
-            return;
-        }
 
         MailboxLaneState lanes[kGmmProducerMaxAicCount] = {};
         ExpertTaskLayout taskLayout;
@@ -406,9 +371,9 @@ private:
         constexpr uint32_t gmm1Stage = static_cast<uint32_t>(MailboxStage::kGmm1);
         constexpr uint32_t gmm2Stage = static_cast<uint32_t>(MailboxStage::kGmm2);
         const __gm__ MegaMoeFixedGroupTiling &fixed = tilingData_->fixedGroupTiling;
-        const MegaMoeExpertWaveRange wave0 = GetExpertWaveRange(
-            0U, expertPerRank_, fixed.fullAicExpertsPerWave, fixed.expertsPerWave, fixed.fullAicGmm1WaveCount);
-        const uint32_t wave0ExpertEnd = wave0.end < expertPerRank_ ? wave0.end : expertPerRank_;
+        const MegaMoeExpertWaveRange wave0 = GetExpertWaveRange(0U, expertPerRank_, fixed.fullAicExpertsPerWave,
+                                                                fixed.expertsPerWave, fixed.fullAicGmm1WaveCount);
+        const uint32_t wave0ExpertEnd = wave0.end;
         uint32_t layoutExpert = 0U;
         while (layoutExpert < wave0ExpertEnd) {
             AppendExpertTaskLayout(taskLayout, layoutExpert);
@@ -423,8 +388,6 @@ private:
         const uint32_t initialGmm1TaskCount = gmm1Mailbox ? gmm1Wave0TaskCount : 0U;
         const uint32_t initialGmm2TaskCount = gmm2Wave0TaskCount;
         ReadyTracker readyTrackers[kGmmProducerMailboxStageCount];
-        readyTrackers[gmm1Stage].stage = gmm1Stage;
-        readyTrackers[gmm2Stage].stage = gmm2Stage;
         // Ready discovery is independent of lane phases. Both shared suffix
         // pools start immediately after their stage-local direct wave0 prefix.
         readyTrackers[gmm1Stage].scanExpert = gmm1Mailbox ? wave0ExpertEnd : expertPerRank_;
@@ -498,9 +461,9 @@ private:
                     const uint32_t progress =
                         completedProgress.GetValue(physicalBlockId * kGmmProducerProgressWordsPerLane);
                     const bool group2Lane = physicalBlockId >= gmm1GroupSize;
-                    const GmmMailboxLanePhase observedPhase = ObserveGmmMailboxWave0End(
-                        lane.phase, group2Lane, progress == kGmmMailboxGmm1Wave0EndTicket,
-                        progress == kGmmMailboxGmm2Wave0EndTicket);
+                    const GmmMailboxLanePhase observedPhase =
+                        ObserveGmmMailboxWave0End(lane.phase, group2Lane, progress == kGmmMailboxGmm1Wave0EndTicket,
+                                                  progress == kGmmMailboxGmm2Wave0EndTicket);
                     if (observedPhase != lane.phase) {
                         lane.phase = observedPhase;
                         progressed = true;
@@ -519,8 +482,8 @@ private:
                     if (lane.phase != GmmMailboxLanePhase::kDone && lane.publishedTicket == kGmmMailboxEmptyTicket) {
                         for (uint32_t phaseAdvance = 0U; phaseAdvance < 2U; ++phaseAdvance) {
                             const GmmMailboxLanePhase advancedPhase = AdvanceGmmMailboxLanePhase(
-                                lane.phase, readyTrackers[gmm1Stage].publishTail >= gmm1TaskCount,
-                                gmm2Gate, readyTrackers[gmm2Stage].publishTail >= gmm2TaskCount);
+                                lane.phase, readyTrackers[gmm1Stage].publishTail >= gmm1TaskCount, gmm2Gate,
+                                readyTrackers[gmm2Stage].publishTail >= gmm2TaskCount);
                             if (advancedPhase == lane.phase) {
                                 break;
                             }
@@ -530,13 +493,13 @@ private:
                         uint32_t localTicket = 0U;
                         bool published = false;
                         if (lane.phase == GmmMailboxLanePhase::kGmm1Pc) {
-                            if (TakeReadyTicket(readyTrackers[gmm1Stage], taskLayout, localTicket)) {
+                            if (TakeReadyTicket(gmm1Stage, readyTrackers[gmm1Stage], taskLayout, localTicket)) {
                                 StageMailboxWork(physicalBlockId, MailboxStage::kGmm1, localTicket, lane, p2cShadow,
                                                  p2cDirty);
                                 published = true;
                             }
                         } else if (lane.phase == GmmMailboxLanePhase::kGmm2Pc && gmm2Gate) {
-                            if (TakeReadyTicket(readyTrackers[gmm2Stage], taskLayout, localTicket)) {
+                            if (TakeReadyTicket(gmm2Stage, readyTrackers[gmm2Stage], taskLayout, localTicket)) {
                                 StageMailboxWork(physicalBlockId, MailboxStage::kGmm2, localTicket, lane, p2cShadow,
                                                  p2cDirty);
                                 published = true;

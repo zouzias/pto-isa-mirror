@@ -28,10 +28,8 @@ constexpr uint32_t kMergeMaxFanIn = 4U;
 constexpr float kSortNegInf = -3.4028235e38F;
 
 using SortKeyTile = pto::Tile<pto::TileType::Vec, float, 1, kSortMaxElems, pto::BLayout::RowMajor, -1, -1>;
-using SortPayloadTile =
-    pto::Tile<pto::TileType::Vec, uint32_t, 1, kSortMaxElems, pto::BLayout::RowMajor, -1, -1>;
-using PackedSortTile =
-    pto::Tile<pto::TileType::Vec, float, 1, kSortMaxElems * 2U, pto::BLayout::RowMajor, -1, -1>;
+using SortPayloadTile = pto::Tile<pto::TileType::Vec, uint32_t, 1, kSortMaxElems, pto::BLayout::RowMajor, -1, -1>;
+using PackedSortTile = pto::Tile<pto::TileType::Vec, float, 1, kSortMaxElems * 2U, pto::BLayout::RowMajor, -1, -1>;
 using PackedPayloadTile =
     pto::Tile<pto::TileType::Vec, uint32_t, 1, kSortMaxElems * 2U, pto::BLayout::RowMajor, -1, -1>;
 
@@ -71,7 +69,7 @@ AICORE inline int32_t FillTailMergePlan(int32_t *mergePlan, int32_t validCols, i
 }
 
 AICORE inline void MergeTailPackedRecords(PackedSortTile &packedTile, PackedSortTile &tmpTile, uint32_t validCols,
-                                           uint32_t blockLen)
+                                          uint32_t blockLen)
 {
     int32_t mergePlan[15] = {0};
     const int32_t planCount =
@@ -122,9 +120,8 @@ AICORE inline void MergePackedRecords(PackedSortTile &packedTile, PackedSortTile
     }
 }
 
-AICORE inline void SortInt32ToPackedUb(uint64_t valueUb, uint64_t payloadUb, uint64_t packedUb,
-                                       uint64_t mergeTmpUb, uint64_t sortKeyUb, uint32_t elemNum,
-                                       uint32_t alignedElemNum)
+AICORE inline void SortInt32ToPackedUb(uint64_t valueUb, uint64_t payloadUb, uint64_t packedUb, uint64_t mergeTmpUb,
+                                       uint64_t sortKeyUb, uint32_t elemNum, uint32_t alignedElemNum)
 {
     PtoCastUb<float, int32_t>(sortKeyUb, valueUb, elemNum, pto::RoundMode::CAST_ROUND);
     PtoMulScalarUb<float>(sortKeyUb, sortKeyUb, elemNum, -1.0F);
@@ -149,8 +146,8 @@ AICORE inline void SortInt32ToPackedUb(uint64_t valueUb, uint64_t payloadUb, uin
     MergePackedRecords(packedTile, tmpTile, alignedElemNum * 2U);
 }
 
-AICORE inline void ExtractPackedResult(uint64_t sortedValueUb, uint64_t sortedPayloadUb,
-                                       uint64_t valueScratchUb, uint64_t packedUb, uint32_t elemNum)
+AICORE inline void ExtractPackedResult(uint64_t sortedValueUb, uint64_t sortedPayloadUb, uint64_t valueScratchUb,
+                                       uint64_t packedUb, uint32_t elemNum)
 {
     PackedPayloadTile packedPayloadTile(1, elemNum * 2U);
     SortPayloadTile payloadTile(1, elemNum);
@@ -168,8 +165,7 @@ AICORE inline void ExtractPackedResult(uint64_t sortedValueUb, uint64_t sortedPa
 }
 
 AICORE inline void MergePackedRecordsWithCounts(uint64_t dstUb, uint64_t tmpUb, const uint64_t *srcUb,
-                                                const uint16_t *elementCount, uint32_t listNum,
-                                                uint32_t *sortedCount)
+                                                const uint16_t *elementCount, uint32_t listNum, uint32_t *sortedCount)
 {
     const uint32_t src0Cols = PackedLen(elementCount[0]);
     const uint32_t src1Cols = listNum >= 2U ? PackedLen(elementCount[1]) : 0U;
@@ -222,7 +218,7 @@ public:
         routeElems_ = tiling->routeElems;
         runElems_ = tiling->sortRunElems;
         runCount_ = tiling->sortRunCount;
-        mergeLoopElems_ = tiling->sortOutLoopElems;
+        mergeLoopElems_ = kMegaMoeFrontMetadataSortOutLoopElems;
         coreIdx_ = coreIdx;
         coreNum_ = coreNum;
     }
@@ -446,8 +442,7 @@ private:
             const uint32_t lastGroupLists = state.listNum - (groupCount - 1U) * kMergeMaxFanIn;
             for (uint32_t group = coreIdx_; group < groupCount; group += coreNum_) {
                 const uint32_t listNum = group == groupCount - 1U ? lastGroupLists : kMergeMaxFanIn;
-                const uint32_t lastListElems =
-                    group == groupCount - 1U ? state.lastListElems : state.perListElems;
+                const uint32_t lastListElems = group == groupCount - 1U ? state.lastListElems : state.perListElems;
                 const uint32_t baseElem = group * kMergeMaxFanIn * state.perListElems;
                 MergeListGroup(Workspace(state.srcWorkspace), Workspace(1U - state.srcWorkspace), baseElem, baseElem,
                                listNum, state.perListElems, lastListElems, false);
