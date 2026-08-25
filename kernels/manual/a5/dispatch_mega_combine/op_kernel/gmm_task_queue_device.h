@@ -81,7 +81,6 @@ AICORE inline uint32_t ReadGmmCvTaskControl(uint32_t taskIndex, uint32_t fifoDep
 }
 
 struct GmmCvTaskInferenceCache {
-    uint32_t expert = kGmmTaskExpertMask + 1U;
     uint32_t nextExpert = 0U;
     uint32_t nextExpertBase = 0U;
     uint32_t expertBase = 0U;
@@ -98,19 +97,11 @@ AICORE inline MegaMoeGmmTask InferGmmCvTask(uint32_t control, __gm__ int32_t *cu
                                             uint32_t expertPerRank, GmmCvTaskInferenceCache &cache)
 {
     MegaMoeGmmTask task = DecodeGmmTaskDescriptor(control, 0U, 0U);
-    if (IsGmmStageEndControl(control)) {
-        return task;
-    }
-    if (cache.expert != task.expert) {
-        if (task.expert < cache.nextExpert) {
-            cache.nextExpert = 0U;
-            cache.nextExpertBase = 0U;
-        }
+    if (cache.nextExpert <= task.expert) {
         const uint64_t lastRankBase = static_cast<uint64_t>(rankSize - 1U) * expertPerRank;
         while (cache.nextExpert <= task.expert) {
             const uint32_t currentM = static_cast<uint32_t>(cumsumMMPtr[lastRankBase + cache.nextExpert]);
             if (cache.nextExpert == task.expert) {
-                cache.expert = task.expert;
                 cache.expertBase = cache.nextExpertBase;
                 cache.currentM = currentM;
             }
@@ -150,10 +141,9 @@ struct GmmMailboxTicketProbe {
 struct GmmClaimedTask {
     MegaMoeGmmTask task;
     GmmMailboxConsumerCursor mailboxCursor;
-    uint32_t ticket = 0U;
-    uint32_t preloadedDataSlotBase = 0U;
-    uint32_t preloadedScaleSlotBase = 0U;
-    bool claimed = false;
+    uint32_t ticket = kGmmMailboxEmptyTicket;
+    uint32_t dataSlotBase = 0U;
+    uint32_t scaleSlotBase = 0U;
     bool valid = false;
     bool stageTransition = false;
 };
@@ -242,7 +232,6 @@ AICORE inline GmmClaimedTask WaitGmmMailboxTask(GM_ADDR workspaceGM, const __gm_
     cursor.previousTicket = ticket;
     result.mailboxCursor = cursor;
     result.ticket = ticket;
-    result.claimed = true;
     result.stageTransition = stage == GmmTaskStage::kGmm1 && ticket >= mailbox.gmm2TicketBase &&
                              ticket < kGmmMailboxTerminalTicket;
     if (!result.stageTransition) {

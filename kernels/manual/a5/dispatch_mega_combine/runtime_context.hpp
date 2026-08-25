@@ -30,13 +30,12 @@ extern "C" HcclResult HcomGetL0TopoTypeEx(const char *group, uint32_t *topoType,
 struct StandaloneHcclContext {
     int rank_id = 0;
     int world_size = 0;
-    int device_id = 0;
     rtStream_t hccl_stream = nullptr;
     HcclComm comm = nullptr;
     PtoRemoteWindowContext *remote_window_ctx = nullptr;
     PtoRemoteWindowContext host_remote_window_ctx{};
     uint64_t raw_window_bytes = 0;
-    uint64_t raw_window_in[PTO_HCCL_MAX_RANKS] = {};
+    uint64_t raw_local_window_in = 0;
     bool owns_remote_window_ctx = false;
 
     PtoRemoteWindowContext *RemoteWindowContextPtr() const
@@ -49,20 +48,14 @@ struct StandaloneHcclContext {
         return host_remote_window_ctx.windowBytes;
     }
 
-    void *WindowIn(uint32_t rank) const
-    {
-        return reinterpret_cast<void *>(host_remote_window_ctx.windowIn[rank]);
-    }
-
     uint64_t WindowClearBytes() const
     {
-        return raw_window_bytes == 0 ? host_remote_window_ctx.windowBytes : raw_window_bytes;
+        return raw_window_bytes;
     }
 
-    void *WindowClearBase(uint32_t rank) const
+    void *WindowClearBase() const
     {
-        const uint64_t rawBase = raw_window_in[rank];
-        return reinterpret_cast<void *>(rawBase == 0 ? host_remote_window_ctx.windowIn[rank] : rawBase);
+        return reinterpret_cast<void *>(raw_local_window_in);
     }
 
     void AttachExternalRemoteWindowContext(PtoRemoteWindowContext *remoteWindowCtx);

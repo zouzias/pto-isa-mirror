@@ -30,10 +30,6 @@ public:
 
     AICORE inline void Process()
     {
-        if ASCEND_IS_AIC {
-            return;
-        }
-
         const __gm__ MegaMoeGmmQueueTiling &queue = tilingData_->gmmSchedulerTiling.gmm2;
         const uint32_t expertCount = tilingData_->megaMoeInfo.expertPerRank;
         const uint32_t rankCount = tilingData_->runtimeInfo.rankSize;
@@ -43,8 +39,7 @@ public:
         for (uint32_t readyExpertCount = 1U; readyExpertCount <= expertCount; ++readyExpertCount) {
             const uint32_t expert = readyExpertCount - 1U;
             const uint32_t currentM = MoeCurrentMRaw(cumsumMMPtr_, rankCount, expertCount, expert);
-            const uint32_t expectedTiles = GmmCommonCoreLoops(currentM, problemK, tilingData_->gmm2Tiling.l1TileM,
-                                                              tilingData_->gmm2Tiling.l1TileN);
+            const uint32_t expectedTiles = GmmCommonCoreLoops(currentM, problemK);
             __gm__ int32_t *completion = GmmExpertCompletionSlot(workspaceGM_, queue, expert);
             while (static_cast<uint32_t>(ld_dev(completion, 0)) < expectedTiles) {
                 GmmPollBackoff();

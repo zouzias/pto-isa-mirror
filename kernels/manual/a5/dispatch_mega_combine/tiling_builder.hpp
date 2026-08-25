@@ -49,6 +49,7 @@ struct A5FixedScheduleConfig {
     uint32_t dispatchGroupSize = 0U;
     uint32_t gmm1GroupSize = 0U;
     uint32_t gmm2GroupSize = 0U;
+    uint32_t fullAicGmm1WaveCount = kMegaMoeFullAicGmm1WaveCount;
     uint32_t unpermuteTwoPhaseMinM = 0U;
     uint32_t unpermutePhase1Aiv0WorkerCount = 0U;
 

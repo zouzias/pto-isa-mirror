@@ -97,8 +97,7 @@ public:
 
         remoteWindow_.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
         peerMemoryLayout_.Init(tilingData_->frontReorderTiling);
-        sourceTokenRecords_ = reinterpret_cast<__gm__ int8_t *>(
-            remoteWindow_.LocalBase() + peerMemoryLayout_.sourceTokenRecords);
+        sourceTokenRecords_ = reinterpret_cast<__gm__ int8_t *>(remoteWindow_.LocalBase());
         localRouteMaskSlots_ =
             reinterpret_cast<__gm__ uint8_t *>(remoteWindow_.LocalBase() + peerMemoryLayout_.routeMaskSlots);
         cumsumMMPtr_ =
@@ -107,9 +106,6 @@ public:
 
     AICORE inline void Process()
     {
-        if ASCEND_IS_AIC {
-            return;
-        }
         if (coreIdx_ == 0U) {
             remoteWindow_.PrepareFrontReadyEpoch();
         }
@@ -390,7 +386,7 @@ private:
         const uint32_t unboundedRouteEnd = laneBlockEnd * kFrontMaskRoutesPerStoreBlock;
         const uint32_t laneRouteEnd = unboundedRouteEnd < routeElems_ ? unboundedRouteEnd : routeElems_;
         const uint32_t laneMaskByteEnd = laneBlockEnd * kMegaMoeFrontMaskCountRecordBytes;
-        const uint32_t batchRoutes = tilingData_->frontReorderTiling.maskRouteItemsPerBatch;
+        constexpr uint32_t batchRoutes = kMegaMoeFrontMaskRouteItemsPerBatch;
         const uint32_t laneRouteCount = laneRouteEnd - laneRouteBegin;
         const uint32_t batchCount = static_cast<uint32_t>(ceilDiv(laneRouteCount, batchRoutes));
         __gm__ uint8_t *remoteSlot = RemoteMaskSlot(globalExpert);

@@ -64,7 +64,7 @@ private:
                                                    uint32_t expert, uint32_t tileCount) const;
     AICORE inline void PrefetchDirectMetadata();
     AICORE inline void PrepareDirectExpert(uint32_t groupIdx);
-    AICORE inline void StoreDirectTile(const GmmCommonTileInfo &tileInfo, uint32_t tileIndex) const;
+    AICORE inline void StoreDirectTile(const GmmCommonTileInfo &tileInfo) const;
     AICORE inline void ConsumeDirectTile(const GmmCommonTileInfo &tileInfo);
     AICORE inline void ConsumeDirectWave0();
     AICORE inline void ProcessImpl();
@@ -158,7 +158,7 @@ AICORE inline void Combine<OutputElement>::PrepareDirectExpert(uint32_t groupIdx
 }
 
 template <typename OutputElement>
-AICORE inline void Combine<OutputElement>::StoreDirectTile(const GmmCommonTileInfo &tileInfo, uint32_t tileIndex) const
+AICORE inline void Combine<OutputElement>::StoreDirectTile(const GmmCommonTileInfo &tileInfo) const
 {
     const uint32_t tileRowBegin = tileInfo.blockRowStart;
     const uint32_t tileRowEnd = tileRowBegin + tileInfo.actualM;
@@ -187,9 +187,8 @@ AICORE inline void Combine<OutputElement>::StoreDirectTile(const GmmCommonTileIn
             continue;
         }
         __gm__ OutputElement *dst = dstBase + static_cast<uint64_t>(compactRow) * problemK_ + tileInfo.blockColStart;
-        const uint64_t srcOffset =
-            Gmm2CombineSlotOffset(tileIndex) +
-            static_cast<uint64_t>(srcTileRow) * kGmm2CombineCvTileCols * sizeof(bfloat16_t);
+        const uint64_t srcOffset = kGmm2CombineCvBufferOffset +
+                                   static_cast<uint64_t>(srcTileRow) * kGmm2CombineCvTileCols * sizeof(bfloat16_t);
         Gmm2CombineCvTile srcTile(rows, tileInfo.actualN);
         pto::TASSIGN(srcTile, srcOffset);
         DirectCombineStrideStore<Gmm2CombineCvTile>(dst, srcTile.data(), rows,
@@ -203,8 +202,7 @@ AICORE inline void Combine<OutputElement>::ConsumeDirectTile(const GmmCommonTile
     // Keep descriptor/expert preparation on Scalar ahead of this wait. The
     // ready event still orders all payload reads behind the AIC FIX TMOV.
     Gmm2CombineConsumerEnqueueReadyWait(cvPipe_);
-    const uint32_t tileIndex = cvPipe_.cons.tileIndex;
-    StoreDirectTile(tileInfo, tileIndex);
+    StoreDirectTile(tileInfo);
     Gmm2CombineConsumerRelease(cvPipe_);
 }
 
@@ -212,8 +210,7 @@ template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::ConsumeDirectWave0()
 {
     const __gm__ MegaMoeFixedGroupTiling &fixed = tilingData_->fixedGroupTiling;
-    if (physicalBlockId_ < fixed.gmm1GroupSize || physicalBlockId_ >= fixed.gmm1GroupSize + fixed.gmm2GroupSize ||
-        fixed.gmm2GroupSize == 0U) {
+    if (physicalBlockId_ < fixed.gmm1GroupSize) {
         return;
     }
     const uint32_t group2LocalId = physicalBlockId_ - fixed.gmm1GroupSize;
@@ -225,8 +222,7 @@ AICORE inline void Combine<OutputElement>::ConsumeDirectWave0()
     for (uint32_t expert = wave.begin; expert < wave.end; ++expert) {
         const uint32_t currentM =
             MoeCurrentMRaw(cumsumMMPtr_, rankSize_, expertPerRank_, expert);
-        const uint32_t coreLoops = GmmCommonCoreLoops(currentM, problemK_, tilingData_->gmm2Tiling.l1TileM,
-                                                       tilingData_->gmm2Tiling.l1TileN);
+        const uint32_t coreLoops = GmmCommonCoreLoops(currentM, problemK_);
         const uint32_t startCoreIdx = SelectCoreTileStart(tileBalancer, coreLoops);
         const uint32_t startLoopIdx =
             GmmCommonStartLoopIdx(group2LocalId, fixed.gmm2GroupSize, startCoreIdx);
@@ -235,8 +231,8 @@ AICORE inline void Combine<OutputElement>::ConsumeDirectWave0()
             PrepareDirectExpert(expert);
         }
         for (uint32_t loopIdx = startLoopIdx; loopIdx < coreLoops; loopIdx += fixed.gmm2GroupSize) {
-            const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfoWithOffset<kGmm2CombineSwizzleOffset>(
-                currentM, problemK_, tilingData_->gmm2Tiling.l1TileM, tilingData_->gmm2Tiling.l1TileN, loopIdx);
+            const GmmCommonTileInfo tileInfo =
+                GmmCommonBuildTileInfoWithOffset<kGmm2CombineSwizzleOffset>(currentM, problemK_, loopIdx);
             ConsumeDirectTile(tileInfo);
             ++assignedTileCount;
         }
@@ -260,9 +256,7 @@ AICORE inline void Combine<OutputElement>::ProcessImpl()
         // control first; payload ownership remains unchanged until MTE3
         // finishes consuming the matching CV slot.
         Gmm2CombineControlConsumerWait(cvPipe_);
-        const uint32_t taskSequence = cvPipe_.cons.controlIndex;
-        const uint32_t control = ReadGmmCvTaskControl(
-            taskSequence, kGmm2CombineControlFifoDepth);
+        const uint32_t control = ReadGmmCvTaskControl(0U, kGmm2CombineControlFifoDepth);
         Gmm2CombineControlConsumerRelease(cvPipe_);
         if (IsGmmStageEndControl(control)) {
             break;
@@ -270,9 +264,8 @@ AICORE inline void Combine<OutputElement>::ProcessImpl()
         const MegaMoeGmmTask task = InferGmmCvTask(
             control, cumsumMMPtr_, rankSize_, expertPerRank_, inferenceCache);
 
-        const GmmCommonTileInfo tileInfo = GmmCommonBuildTileInfoFromCoord(
-            task.currentM, problemK_, tilingData_->gmm2Tiling.l1TileM, tilingData_->gmm2Tiling.l1TileN,
-            task.blockM, task.blockN);
+        const GmmCommonTileInfo tileInfo =
+            GmmCommonBuildTileInfoFromCoord(task.currentM, problemK_, task.blockM, task.blockN);
         if (completionExpert != task.expert) {
             PublishCompletedExpertTiles(queue, completionExpert, completionTileCount);
             completionExpert = task.expert;
@@ -295,9 +288,6 @@ AICORE inline void Combine<OutputElement>::ProcessImpl()
 template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::ProcessFixed(uint32_t physicalBlockId)
 {
-    if ASCEND_IS_AIC {
-        return;
-    }
     physicalBlockId_ = physicalBlockId;
     // The Group2 AIV0 coordinator publishes the common start marker only
     // after local Dispatch and all direct-route metadata are ready.

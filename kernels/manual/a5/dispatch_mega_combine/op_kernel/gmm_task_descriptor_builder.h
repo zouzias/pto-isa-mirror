@@ -47,9 +47,9 @@ public:
             currentM_[expert] = currentM;
             expertBase_[expert] = expertBase;
             const GmmCommonTaskShape gmm1Shape =
-                GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.N / 2U, kMegaMoeGmmTileM, kMegaMoeGmmTileN);
+                GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.N / 2U);
             const GmmCommonTaskShape gmm2Shape =
-                GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.K, kMegaMoeGmmTileM, kMegaMoeGmmTileN);
+                GmmCommonBuildTaskShape(currentM, tilingData_->megaMoeInfo.K);
             gmm1TaskBase_[expert + 1U] = gmm1TaskBase_[expert] + gmm1Shape.taskCount;
             gmm2TaskBase_[expert + 1U] = gmm2TaskBase_[expert] + gmm2Shape.taskCount;
             expertBase += currentM;
@@ -77,8 +77,8 @@ private:
     AICORE inline uint32_t BuildStage(const __gm__ MegaMoeGmmQueueTiling &queue, const uint32_t *taskBase)
     {
         const uint32_t totalTasks = taskBase[expertPerRank_];
-        if (workerCount_ == 0U || workerIdx_ >= workerCount_ || totalTasks == 0U) {
-            return totalTasks;
+        if (totalTasks == 0U) {
+            return 0U;
         }
 
         const uint32_t pairCount = (totalTasks + 1U) / 2U;
@@ -112,8 +112,7 @@ private:
                 }
                 const uint32_t expertLoop = ticket - taskBase[expert];
                 const uint32_t problemN = IsGmm2 ? tilingData_->megaMoeInfo.K : tilingData_->megaMoeInfo.N / 2U;
-                const GmmCommonTileInfo tile = GmmCommonBuildTileInfo(
-                    currentM_[expert], problemN, kMegaMoeGmmTileM, kMegaMoeGmmTileN, expertLoop);
+                const GmmCommonTileInfo tile = GmmCommonBuildTileInfo(currentM_[expert], problemN, expertLoop);
                 MegaMoeGmmTask task;
                 task.flags = kGmmTaskFlagNormal;
                 task.expert = expert;

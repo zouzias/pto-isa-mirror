@@ -19,58 +19,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "dispatch_mega_combine_tiling.h"
 #include "const_args.hpp"
 
-struct MegaMoeFixedCoreRoleInfo {
-    uint32_t role = 0U;
-    uint32_t physicalBlockId = 0U;
-    uint32_t subblockId = 0U;
-    uint32_t groupLocalId = 0U;
-    uint32_t groupSize = 0U;
-};
-
-AICORE inline MegaMoeFixedCoreRoleInfo FixedCoreRole(const __gm__ MegaMoeTilingData *tilingData)
-{
-    MegaMoeFixedCoreRoleInfo info;
-    const __gm__ MegaMoeFixedGroupTiling &fixed = tilingData->fixedGroupTiling;
-    info.physicalBlockId = get_block_idx();
-    const bool firstGmmGroup = info.physicalBlockId < fixed.gmm1GroupSize;
-#if defined(__DAV_CUBE__)
-    {
-        if (firstGmmGroup) {
-            info.role = kMegaMoeFixedRoleGmm1;
-            info.groupLocalId = info.physicalBlockId;
-            info.groupSize = fixed.gmm1GroupSize;
-        } else {
-            info.role = kMegaMoeFixedRoleGmm2;
-            info.groupLocalId = info.physicalBlockId - fixed.gmm1GroupSize;
-            info.groupSize = fixed.gmm2GroupSize;
-        }
-        return info;
-    }
-#elif defined(__DAV_VEC__)
-    info.subblockId = get_subblockid();
-    if (info.subblockId == 0U && info.physicalBlockId < fixed.dispatchGroupSize) {
-        info.role = kMegaMoeFixedRoleDispatch;
-        info.groupLocalId = info.physicalBlockId;
-        info.groupSize = fixed.dispatchGroupSize;
-    } else if (info.subblockId == 1U && firstGmmGroup) {
-        info.role = kMegaMoeFixedRoleSwiglu;
-        info.groupLocalId = info.physicalBlockId;
-        info.groupSize = fixed.physicalAicNum;
-    } else {
-        info.role = kMegaMoeFixedRoleCombine;
-        // AIV1 follows the post-Dispatch GMM2 split. AIV0 follows the wider
-        // Dispatch split and uses the trailing coordinates for metadata work.
-        if (info.subblockId == 1U) {
-            info.groupLocalId = info.physicalBlockId - fixed.gmm1GroupSize;
-        } else {
-            info.groupLocalId = fixed.gmm2GroupSize + info.physicalBlockId - fixed.dispatchGroupSize;
-        }
-        info.groupSize = fixed.gmm2GroupSize * kMegaMoeFixedAivSubblocksPerPhysicalBlock;
-    }
-#endif
-    return info;
-}
-
 AICORE inline volatile __gm__ int32_t *FixedSyncSlot(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData,
                                                      uint32_t slot)
 {
@@ -78,12 +26,6 @@ AICORE inline volatile __gm__ int32_t *FixedSyncSlot(GM_ADDR workspaceGM, const 
     return reinterpret_cast<volatile __gm__ int32_t *>(workspaceGM + fixed.syncOffset +
                                                        static_cast<uint64_t>(slot) * kMegaMoeFixedSyncSlotBytes);
 }
-
-struct MegaMoeGroupBarrierResult {
-    int32_t arriveEpoch = 0;
-    int32_t releaseEpoch = 0;
-    int32_t observedArrivalMin = 0;
-};
 
 // The doorbell is a scalar GM store. The caller drains payload pipelines before publishing.
 AICORE inline void PublishScalarEpoch(volatile __gm__ int32_t *slot, int32_t epoch)
@@ -121,13 +63,7 @@ AICORE inline int32_t ReadScalarEpoch(volatile __gm__ int32_t *slot)
     return *slot;
 }
 
-AICORE inline bool TestEpoch(volatile __gm__ int32_t *slot, int32_t epoch, int32_t &observed)
-{
-    observed = ReadScalarEpoch(slot);
-    return observed >= epoch;
-}
-
-AICORE inline void EpochPollBackoff(uint32_t = 0U)
+AICORE inline void EpochPollBackoff()
 {
     constexpr uint32_t kDelayTicks = 3U;
     const uint64_t deadline = get_sys_cnt() + kDelayTicks;
@@ -139,8 +75,8 @@ AICORE inline void EpochPollBackoff(uint32_t = 0U)
 AICORE inline int32_t WaitEpochRaw(volatile __gm__ int32_t *slot, int32_t epoch)
 {
     while (true) {
-        int32_t observed = 0;
-        if (TestEpoch(slot, epoch, observed)) {
+        const int32_t observed = ReadScalarEpoch(slot);
+        if (observed >= epoch) {
             return observed;
         }
         EpochPollBackoff();
@@ -160,6 +96,14 @@ AICORE inline void PublishCombineConsumerArmed(GM_ADDR workspaceGM,
                                                 uint32_t physicalBlockId)
 {
     PublishScalarEpoch(
+        FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncCombineConsumerArmedBase + physicalBlockId),
+        kMegaMoeFixedCombineConsumerArmedMarker);
+}
+
+AICORE inline void WaitCombineConsumerArmed(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData,
+                                            uint32_t physicalBlockId)
+{
+    WaitEpochAcquire(
         FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncCombineConsumerArmedBase + physicalBlockId),
         kMegaMoeFixedCombineConsumerArmedMarker);
 }
@@ -197,41 +141,6 @@ AICORE inline void WaitGmm2ConsumerReady(GM_ADDR workspaceGM, const __gm__ MegaM
     dsb(DSB_DDR);
 }
 
-AICORE inline int32_t EncodeGmm1SplitDecision(uint32_t completedWaveCount, bool split)
-{
-    const uint32_t epoch = completedWaveCount & static_cast<uint32_t>(kMegaMoeFixedGmm1SplitDecisionMask);
-    return static_cast<int32_t>(epoch | (split ? static_cast<uint32_t>(kMegaMoeFixedGmm1SplitDecisionBit) : 0U));
-}
-
-AICORE inline bool Gmm1SplitDecisionEnabled(int32_t decision, uint32_t completedWaveCount)
-{
-    const uint32_t splitWave = static_cast<uint32_t>(decision & kMegaMoeFixedGmm1SplitDecisionMask);
-    return (decision & kMegaMoeFixedGmm1SplitDecisionBit) != 0 && completedWaveCount >= splitWave;
-}
-
-AICORE inline int32_t CoordinateGmm1SplitDecision(GM_ADDR workspaceGM,
-                                                   const __gm__ MegaMoeTilingData *tilingData,
-                                                   uint32_t localId, uint32_t completedWaveCount)
-{
-    if (localId == 0U) {
-        const bool gmm2Ready =
-            ReadScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncGmm2EntryReadySlot)) >=
-            kMegaMoeFixedGmm2EntryReadyMarker;
-        PublishScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncGmm1SplitDecisionSlot),
-                           EncodeGmm1SplitDecision(completedWaveCount, gmm2Ready));
-    }
-    return WaitEpochAcquire(FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncGmm1SplitDecisionSlot),
-                            static_cast<int32_t>(completedWaveCount));
-}
-
-AICORE inline int32_t WaitGmm1SplitDecision(GM_ADDR workspaceGM,
-                                             const __gm__ MegaMoeTilingData *tilingData,
-                                             uint32_t completedWaveCount)
-{
-    return WaitEpochAcquire(FixedSyncSlot(workspaceGM, tilingData, kMegaMoeFixedSyncGmm1SplitDecisionSlot),
-                            static_cast<int32_t>(completedWaveCount));
-}
-
 #if defined(__DAV_VEC__)
 // These snapshot helpers require AIV UB and MTE2/MTE3; AIC callers publish scalar arrivals only.
 constexpr uint32_t kMegaMoeSyncSnapshotValuesPerSlot = kMegaMoeFixedSyncSlotBytes / sizeof(int32_t);
@@ -248,10 +157,6 @@ static_assert(kMegaMoeSyncSnapshotUbOffset % UB_ALIGN == 0U);
 AICORE inline int32_t ReadArrivalMinMte(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData,
                                         uint32_t arrivalBaseSlot, uint32_t producerCount)
 {
-    if (producerCount == 0U || producerCount > kMegaMoeFixedPhysicalAicNum) {
-        return 0;
-    }
-
     using SnapshotShape = pto::Shape<1, 1, 1, 1, pto::DYNAMIC>;
     using SnapshotStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
     using SnapshotGlobal = pto::GlobalTensor<int32_t, SnapshotShape, SnapshotStride, pto::Layout::ND>;
@@ -293,10 +198,6 @@ AICORE inline int32_t WaitArrivalMinMte(GM_ADDR workspaceGM, const __gm__ MegaMo
 AICORE inline void PublishEpochRangeMte(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData,
                                         uint32_t baseSlot, uint32_t count, int32_t epoch)
 {
-    if (count == 0U || count > kMegaMoeFixedPhysicalAicNum) {
-        return;
-    }
-
     using SnapshotShape = pto::Shape<1, 1, 1, 1, pto::DYNAMIC>;
     using SnapshotStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, 1>;
     using SnapshotGlobal = pto::GlobalTensor<int32_t, SnapshotShape, SnapshotStride, pto::Layout::ND>;
@@ -321,61 +222,31 @@ AICORE inline void PublishEpochRangeMte(GM_ADDR workspaceGM, const __gm__ MegaMo
 }
 #endif
 
-AICORE inline MegaMoeGroupBarrierResult PublishGroupArrival(GM_ADDR workspaceGM,
-                                                            const __gm__ MegaMoeTilingData *tilingData,
-                                                            uint32_t arrivalBaseSlot, uint32_t localId,
-                                                            uint32_t notifyCall)
+AICORE inline void PublishGroupArrival(GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData,
+                                       uint32_t arrivalBaseSlot, uint32_t localId, uint32_t notifyCall)
 {
-    MegaMoeGroupBarrierResult result;
-    result.arriveEpoch = static_cast<int32_t>(notifyCall + 1U);
-    result.releaseEpoch = result.arriveEpoch;
-    result.observedArrivalMin = result.arriveEpoch;
-
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    PublishScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, arrivalBaseSlot + localId), result.arriveEpoch);
-    return result;
+    PublishScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, arrivalBaseSlot + localId),
+                       static_cast<int32_t>(notifyCall + 1U));
 }
 
 #if defined(__DAV_VEC__)
-AICORE inline MegaMoeGroupBarrierResult CoordinateGroupConsumersMte(GM_ADDR workspaceGM,
-                                                                    const __gm__ MegaMoeTilingData *tilingData,
-                                                                    uint32_t arrivalBaseSlot, uint32_t readyBaseSlot,
-                                                                    uint32_t producerCount, uint32_t consumerCount,
-                                                                    uint32_t notifyCall)
-{
-    MegaMoeGroupBarrierResult result;
-    result.arriveEpoch = static_cast<int32_t>(notifyCall + 1U);
-    result.releaseEpoch = result.arriveEpoch;
-    result.observedArrivalMin =
-        WaitArrivalMinMte(workspaceGM, tilingData, arrivalBaseSlot, producerCount, result.arriveEpoch);
-    pipe_barrier(PIPE_ALL);
-    dsb(DSB_DDR);
-    PublishEpochRangeMte(workspaceGM, tilingData, readyBaseSlot, consumerCount, result.releaseEpoch);
-    return result;
-}
-
-AICORE inline MegaMoeGroupBarrierResult NotifyGroupConsumersMte(
+AICORE inline void NotifyGroupConsumersMte(
     GM_ADDR workspaceGM, const __gm__ MegaMoeTilingData *tilingData, uint32_t arrivalBaseSlot, uint32_t readyBaseSlot,
     uint32_t producerCount, uint32_t consumerCount, uint32_t localId, uint32_t coordinatorLocalId, uint32_t notifyCall)
 {
-    MegaMoeGroupBarrierResult result;
-    result.arriveEpoch = static_cast<int32_t>(notifyCall + 1U);
-    result.releaseEpoch = result.arriveEpoch;
-    result.observedArrivalMin = result.arriveEpoch;
-
+    const int32_t epoch = static_cast<int32_t>(notifyCall + 1U);
     pipe_barrier(PIPE_ALL);
     dsb(DSB_DDR);
-    PublishScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, arrivalBaseSlot + localId), result.arriveEpoch);
+    PublishScalarEpoch(FixedSyncSlot(workspaceGM, tilingData, arrivalBaseSlot + localId), epoch);
 
     if (localId == coordinatorLocalId) {
-        result.observedArrivalMin =
-            WaitArrivalMinMte(workspaceGM, tilingData, arrivalBaseSlot, producerCount, result.arriveEpoch);
+        WaitArrivalMinMte(workspaceGM, tilingData, arrivalBaseSlot, producerCount, epoch);
         pipe_barrier(PIPE_ALL);
         dsb(DSB_DDR);
-        PublishEpochRangeMte(workspaceGM, tilingData, readyBaseSlot, consumerCount, result.releaseEpoch);
+        PublishEpochRangeMte(workspaceGM, tilingData, readyBaseSlot, consumerCount, epoch);
     }
-    return result;
 }
 #endif
 

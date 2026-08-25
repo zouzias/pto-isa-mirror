@@ -222,7 +222,7 @@ public:
         routeElems_ = tiling->routeElems;
         runElems_ = tiling->sortRunElems;
         runCount_ = tiling->sortRunCount;
-        mergeLoopElems_ = tiling->sortOutLoopElems;
+        mergeLoopElems_ = kMegaMoeFrontMetadataSortOutLoopElems;
         coreIdx_ = coreIdx;
         coreNum_ = coreNum;
     }

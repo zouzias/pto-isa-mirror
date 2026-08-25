@@ -202,24 +202,6 @@ bool ParseFirstDevice(int argc, char **argv, int worldSize, int &firstDevice)
     return true;
 }
 
-uint64_t AlignUpU64(uint64_t value, uint64_t alignment)
-{
-    if (alignment == 0U || value > UINT64_MAX - (alignment - 1U)) {
-        throw std::runtime_error("invalid uint64 alignment");
-    }
-    return (value + alignment - 1U) / alignment * alignment;
-}
-
-uint64_t SwigluFullRowUbBytes(uint32_t n)
-{
-    auto alignUb = [](uint64_t value) { return AlignUpU64(value, UB_ALIGN); };
-    const uint64_t outputN = n / 2U;
-    const uint64_t stageBytes = alignUb(static_cast<uint64_t>(n) * sizeof(uint16_t)) +
-                                alignUb(static_cast<uint64_t>(n) * sizeof(float)) +
-                                alignUb(outputN * sizeof(float));
-    return stageBytes * 2U;
-}
-
 uint64_t CheckedMulU64(uint64_t lhs, uint64_t rhs, const char *name)
 {
     if (lhs != 0U && rhs > UINT64_MAX / lhs) {
@@ -240,18 +222,6 @@ void ValidateFullPathConstraints(const CaseConfig &cfg)
     if (cfg.expert_per_rank != 4U && cfg.expert_per_rank != 8U && cfg.expert_per_rank != 16U &&
         cfg.expert_per_rank != 32U) {
         throw std::runtime_error("expert_per_rank must be one of 4, 8, 16 or 32");
-    }
-    if (cfg.k % 128U != 0U) {
-        throw std::runtime_error("GMM1 requires K % 128 == 0");
-    }
-    if ((cfg.n & 1U) != 0U || (cfg.n / 2U) % 128U != 0U) {
-        throw std::runtime_error("MXFP8 GMM2 requires even N and (N/2) % 128 == 0");
-    }
-    if (SwigluFullRowUbBytes(cfg.n) > A5_MAIN_UB_SIZE) {
-        throw std::runtime_error("SwiGLU full-row UB capacity exceeded");
-    }
-    if ((cfg.k * sizeof(uint16_t)) % 32U != 0U) {
-        throw std::runtime_error("combine/unpermute requires K * sizeof(BF16) to be 32-byte aligned");
     }
 }
 
@@ -436,7 +406,7 @@ void ValidateMaskPullRoutes(const CaseConfig &cfg, const RankHostInputs &inputs,
 bool ZeroWindowMemory(const StandaloneRankRuntime &runtime)
 {
     const uint64_t bytes = runtime.hccl.WindowClearBytes();
-    void *window = runtime.hccl.WindowClearBase(static_cast<uint32_t>(runtime.hccl.rank_id));
+    void *window = runtime.hccl.WindowClearBase();
     return aclrtMemset(window, bytes, 0, bytes) == ACL_SUCCESS;
 }
 

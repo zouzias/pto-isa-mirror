@@ -600,7 +600,6 @@ private:
 };
 
 struct MegaMoePeerMemoryLayout {
-    int64_t sourceTokenRecords = 0;
     int64_t routeMaskSlots = 0;
     int64_t preSumBeforeRank = 0;
     int64_t combineOutputByRouteSlot = 0;
@@ -608,7 +607,6 @@ struct MegaMoePeerMemoryLayout {
     template <typename FrontTiling>
     AICORE inline void Init(const FrontTiling &front)
     {
-        sourceTokenRecords = static_cast<int64_t>(front.sourceTokenRecordOffset);
         routeMaskSlots = static_cast<int64_t>(front.routeMaskOffset);
         preSumBeforeRank = static_cast<int64_t>(front.preSumBeforeRankPeerOffset);
         combineOutputByRouteSlot = static_cast<int64_t>(front.combineOutputOffset);

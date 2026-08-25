@@ -58,8 +58,7 @@ public:
     static_assert(L0_K * L0_N * sizeof(ElementB) <= L0_PINGPONG_BYTES, "MX B tile exceeds one L0B slot");
     static_assert(BUFFER_NUM * L0_PINGPONG_BYTES <= AtlasA5::L0A_SIZE, "MX A ping-pong exceeds L0A");
     static_assert(BUFFER_NUM * L0_PINGPONG_BYTES <= AtlasA5::L0B_SIZE, "MX B ping-pong exceeds L0B");
-    static_assert(L0_C_TILE_BYTES <= AtlasA5::L0C_SIZE, "MX accumulator exceeds L0C");
-    static_assert(2U * L0_C_TILE_BYTES <= AtlasA5::L0C_SIZE, "MX pair accumulators exceed L0C");
+    static_assert(L0_C_TILE_BYTES == AtlasA5::L0C_SIZE, "MX pipeline expects one full-size L0C accumulator");
 
     struct TileRun {
         __gm__ ElementA *gmA = nullptr;
@@ -77,9 +76,9 @@ public:
         uint32_t scaleSlotBase = 0U;
     };
 
-    AICORE inline explicit PtoGmmMxPreloadPipeline(uint32_t l1BufAddrStart = 0U)
+    AICORE inline PtoGmmMxPreloadPipeline()
     {
-        InitL1Offsets(l1BufAddrStart);
+        InitL1Offsets();
         InitEvents();
     }
 
@@ -87,7 +86,6 @@ public:
     {
         SynchronizeBlock();
         WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        WaitFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
         for (uint32_t slot = 0U; slot < BUFFER_NUM; ++slot) {
             WaitFlag<PIPE_MTE1, PIPE_MTE2>(ADataEvent(slot));
             WaitFlag<PIPE_MTE1, PIPE_MTE2>(BDataEvent(slot));
@@ -109,35 +107,32 @@ public:
     }
 
     template <typename PanelProbe>
-    AICORE inline void ComputePairDirect(const TileRun &x, const TileRun &gate, PanelProbe &panelProbe)
+    AICORE inline void ComputePairDirect(Gmm1SwigluCvPipe &cvPipe, const TileRun &x, const TileRun &gate,
+                                         PanelProbe &panelProbe)
     {
         WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        WaitFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
         using AccTile = pto::TileAccCompact<float, L0_M, L0_N, pto::DYNAMIC, pto::DYNAMIC>;
-        AccTile xTile(x.actualM, x.actualN);
-        AccTile gateTile(gate.actualM, gate.actualN);
-        pto::TASSIGN(xTile, 0U);
-        pto::TASSIGN(gateTile, L0_C_TILE_BYTES);
-        // GMM1 is a pair of serial GEMMs. Its credit is published near the end
-        // of the gate GEMM, while the successor-ticket probe stays on the
-        // final gate K tile.
-        ComputeResultRange<false>(xTile, x, 0U, x.actualK / L0_K);
-        ComputeResultRangeWithProbe<false>(gateTile, gate, 0U, gate.actualK / L0_K, panelProbe);
+        AccTile cTile(x.actualM, x.actualN);
+        pto::TASSIGN(cTile, 0U);
+
+        ComputeResultRange(cTile, x, 0U, x.actualK / L0_K);
+        Gmm1SwigluProducerAllocate(cvPipe);
+        EnqueuePairHalfToAiv1(cTile, x.actualM, x.actualN, kGmm1SwigluCvXOffset);
+
+        // A 256x256 accumulator fills L0C. Complete the x FIX transfer before
+        // reusing the same accumulator for gate.
+        SetFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
+        WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
+        ComputeResultRangeWithProbe<false>(cTile, gate, 0U, gate.actualK / L0_K, panelProbe);
     }
 
     AICORE inline void EnqueuePairDirect(Gmm1SwigluCvPipe &cvPipe, uint32_t actualM,
                                          uint32_t actualN)
     {
         using AccTile = pto::TileAccCompact<float, L0_M, L0_N, pto::DYNAMIC, pto::DYNAMIC>;
-        AccTile xTile(actualM, actualN);
         AccTile gateTile(actualM, actualN);
-        pto::TASSIGN(xTile, 0U);
-        pto::TASSIGN(gateTile, L0_C_TILE_BYTES);
-        SetFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
-        SetFlag<PIPE_M, PIPE_FIX>(kGateStoreReadyEvent);
-        WaitFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
-        WaitFlag<PIPE_M, PIPE_FIX>(kGateStoreReadyEvent);
-        EnqueuePairTileToAiv1(cvPipe, xTile, gateTile, actualM, actualN);
+        pto::TASSIGN(gateTile, 0U);
+        EnqueuePairHalfToAiv1(gateTile, actualM, actualN, kGmm1SwigluCvGateOffset);
     }
 
     AICORE inline void DrainPairDirectStore()
@@ -147,23 +142,21 @@ public:
 
     AICORE inline void RecordPairDirect(Gmm1SwigluCvPipe &cvPipe)
     {
-        // TMOV is asynchronous on FIX.  The AIV ready flag must not become
+        // TMOV is asynchronous on FIX. The AIV ready flag must not become
         // visible before both halves of the pair have reached the CV slot.
-        // Keep this ordering identical to the V6 direct producer path.
         pipe_barrier(PIPE_FIX);
         Gmm1SwigluProducerRecord(cvPipe);
         SetFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        SetFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
     }
 
-    template <bool EnableUnitFlag, typename PanelProbe>
+    template <typename PanelProbe>
     AICORE inline void ComputeDirect(const TileRun &run, PanelProbe &panelProbe)
     {
         WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
         using AccTile = pto::TileAccCompact<float, L0_M, L0_N, pto::DYNAMIC, pto::DYNAMIC>;
         AccTile cTile(run.actualM, run.actualN);
         pto::TASSIGN(cTile, 0U);
-        ComputeResultRangeWithProbe<EnableUnitFlag>(cTile, run, 0U, run.actualK / L0_K, panelProbe);
+        ComputeResultRangeWithProbe<true>(cTile, run, 0U, run.actualK / L0_K, panelProbe);
     }
 
     AICORE inline void EnqueueDirectReserved(Gmm2CombineCvPipe &cvPipe, uint32_t actualM, uint32_t actualN)
@@ -178,7 +171,7 @@ public:
         // scalar wait would then prevent the next CUBE command from issuing.
         Gmm2CombineProducerAllocate(cvPipe);
         Gmm2CombineCvTile cvTile(actualM, actualN);
-        pto::TASSIGN(cvTile, Gmm2CombineSlotOffset(cvPipe.prod.tileIndex));
+        pto::TASSIGN(cvTile, kGmm2CombineCvBufferOffset);
         pto::TMOV<pto::STPhase::Final, Gmm2CombineCvTile, AccTile,
                   pto::AccToVecMode::SingleModeVec1>(cvTile, cTile);
     }
@@ -202,28 +195,24 @@ public:
                                      uint32_t bLeadingDim, uint32_t bScaleLeadingDim)
     {
         WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        WaitFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
 
         using AccTile = pto::TileAccCompact<float, L0_M, L0_N, pto::DYNAMIC, pto::DYNAMIC>;
-        AccTile xTile(actualM, actualPairN);
-        AccTile gateTile(actualM, actualPairN);
-        pto::TASSIGN(xTile, 0U);
-        pto::TASSIGN(gateTile, L0_C_TILE_BYTES);
+        AccTile cTile(actualM, actualPairN);
+        pto::TASSIGN(cTile, 0U);
 
-        ComputeResult<false>(xTile, gmBlockA, gmBlockAScale, gmBlockBX, gmBlockBScaleX, actualM, actualPairN, actualK,
-                             aLeadingDim, aScaleLeadingDim, bLeadingDim, bScaleLeadingDim);
-        ComputeResult<false>(gateTile, gmBlockA, gmBlockAScale, gmBlockBGate, gmBlockBScaleGate, actualM, actualPairN,
-                             actualK, aLeadingDim, aScaleLeadingDim, bLeadingDim, bScaleLeadingDim);
+        ComputeResult(cTile, gmBlockA, gmBlockAScale, gmBlockBX, gmBlockBScaleX, actualM, actualPairN, actualK,
+                      aLeadingDim, aScaleLeadingDim, bLeadingDim, bScaleLeadingDim);
+        Gmm1SwigluProducerAllocate(cvPipe);
+        EnqueuePairHalfToAiv1(cTile, actualM, actualPairN, kGmm1SwigluCvXOffset);
+        SetFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
+        WaitFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
 
-        SetFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
-        SetFlag<PIPE_M, PIPE_FIX>(kGateStoreReadyEvent);
-        WaitFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
-        WaitFlag<PIPE_M, PIPE_FIX>(kGateStoreReadyEvent);
-        EnqueuePairTileToAiv1(cvPipe, xTile, gateTile, actualM, actualPairN);
+        ComputeResult(cTile, gmBlockA, gmBlockAScale, gmBlockBGate, gmBlockBScaleGate, actualM, actualPairN,
+                      actualK, aLeadingDim, aScaleLeadingDim, bLeadingDim, bScaleLeadingDim);
+        EnqueuePairHalfToAiv1(cTile, actualM, actualPairN, kGmm1SwigluCvGateOffset);
         pipe_barrier(PIPE_FIX);
         Gmm1SwigluProducerRecord(cvPipe);
         SetFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        SetFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
     }
 
     AICORE inline void SynchronizeBlock()
@@ -233,9 +222,7 @@ public:
 
 private:
     static constexpr uint32_t kCReuseEvent = 0U;
-    static constexpr uint32_t kGateCReuseEvent = 1U;
     static constexpr uint32_t kStoreReadyEvent = 0U;
-    static constexpr uint32_t kGateStoreReadyEvent = 1U;
     static constexpr uint32_t kL0ReadyEvent = 0U;
 
     AICORE static inline uint32_t MinU32(uint32_t lhs, uint32_t rhs)
@@ -285,9 +272,9 @@ private:
         wait_flag(SrcPipe, DstPipe, static_cast<event_t>(eventId));
     }
 
-    AICORE inline void InitL1Offsets(uint32_t start)
+    AICORE inline void InitL1Offsets()
     {
-        uint64_t next = start;
+        uint64_t next = 0U;
         for (uint32_t slot = 0U; slot < BUFFER_NUM; ++slot) {
             l1ADataOffset_[slot] = next;
             next += L1_A_DATA_BYTES;
@@ -309,7 +296,6 @@ private:
     AICORE inline void InitEvents()
     {
         SetFlag<PIPE_FIX, PIPE_M>(kCReuseEvent);
-        SetFlag<PIPE_FIX, PIPE_M>(kGateCReuseEvent);
         for (uint32_t slot = 0U; slot < BUFFER_NUM; ++slot) {
             SetFlag<PIPE_MTE1, PIPE_MTE2>(ADataEvent(slot));
             SetFlag<PIPE_MTE1, PIPE_MTE2>(BDataEvent(slot));
@@ -355,7 +341,7 @@ private:
             LaunchMatmul<EnableUnitFlag>(cTile, l0Slot, run.actualM, run.actualN, kTileIdx == 0U,
                                          kTileIdx + 1U == kTileCount);
             // Publish the relaxed C2P credit at the stage-selected K tile.
-            // Legacy claim probes keep their no-op implementation.
+            // Non-probing direct callers use the no-op probe implementation.
             panelProbe.ProbeMidpoint(kTileIdx, kTileCount);
             if constexpr (EnablePanelProbe) {
                 // Claim the next task only after the final TMATMUL has been
@@ -375,11 +361,11 @@ private:
         {}
     };
 
-    template <bool EnableUnitFlag, typename AccTile>
+    template <typename AccTile>
     AICORE inline void ComputeResultRange(AccTile &cTile, const TileRun &run, uint32_t beginKTile, uint32_t endKTile)
     {
         NoopPanelProbe panelProbe;
-        ComputeResultRangeImpl<EnableUnitFlag, false>(cTile, run, beginKTile, endKTile, panelProbe);
+        ComputeResultRangeImpl<false, false>(cTile, run, beginKTile, endKTile, panelProbe);
     }
 
     template <bool EnableUnitFlag, typename AccTile, typename PanelProbe>
@@ -389,7 +375,7 @@ private:
         ComputeResultRangeImpl<EnableUnitFlag, true>(cTile, run, beginKTile, endKTile, panelProbe);
     }
 
-    template <bool EnableUnitFlag, typename AccTile>
+    template <typename AccTile>
     AICORE inline void ComputeResult(AccTile &cTile, __gm__ ElementA *gmBlockA, __gm__ ScaleElement *gmBlockAScale,
                                      __gm__ ElementB *gmBlockB, __gm__ ScaleElement *gmBlockBScale, uint32_t actualM,
                                      uint32_t actualN, uint32_t actualK, uint32_t aLeadingDim,
@@ -397,26 +383,18 @@ private:
     {
         TileRun run{gmBlockA,    gmBlockAScale,    gmBlockB,    gmBlockBScale,    actualM, actualN, actualK,
                     aLeadingDim, aScaleLeadingDim, bLeadingDim, bScaleLeadingDim, 0U,      0U};
-        ComputeResultRange<EnableUnitFlag>(cTile, run, 0U, actualK / L0_K);
+        ComputeResultRange(cTile, run, 0U, actualK / L0_K);
     }
 
     template <typename AccTile>
-    AICORE inline void EnqueuePairTileToAiv1(Gmm1SwigluCvPipe &cvPipe, AccTile &xTile,
-                                             AccTile &gateTile, uint32_t actualM, uint32_t actualPairN)
+    AICORE inline void EnqueuePairHalfToAiv1(AccTile &cTile, uint32_t actualM, uint32_t actualPairN,
+                                             uint64_t dstOffset)
     {
-        Gmm1SwigluProducerAllocate(cvPipe);
-        const uint64_t slotBase =
-            kGmm1SwigluCvBufferOffset +
-            static_cast<uint64_t>(cvPipe.prod.tileIndex % kGmm1SwigluCvFifoDepth) *
-                kGmm1SwigluCvSlotBytes;
-        Gmm1SwigluCvHalfTile xCvTile(actualM, actualPairN);
-        Gmm1SwigluCvHalfTile gateCvTile(actualM, actualPairN);
-        pto::TASSIGN(xCvTile, slotBase + kGmm1SwigluCvXOffset);
-        pto::TASSIGN(gateCvTile, slotBase + kGmm1SwigluCvGateOffset);
-        pto::TMOV<Gmm1SwigluCvHalfTile, AccTile, pto::AccToVecMode::SingleModeVec1>(xCvTile,
-                                                                                                              xTile);
-        pto::TMOV<Gmm1SwigluCvHalfTile, AccTile, pto::AccToVecMode::SingleModeVec1>(
-            gateCvTile, gateTile);
+        Gmm1SwigluCvHalfTile cvTile(actualM, actualPairN);
+        pto::TASSIGN(cvTile, kGmm1SwigluCvBufferOffset + dstOffset);
+        SetFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
+        WaitFlag<PIPE_M, PIPE_FIX>(kStoreReadyEvent);
+        pto::TMOV<Gmm1SwigluCvHalfTile, AccTile, pto::AccToVecMode::SingleModeVec1>(cvTile, cTile);
     }
 
     AICORE inline void LoadDataPanel(uint32_t slot, __gm__ ElementA *gmA, __gm__ ElementB *gmB, uint32_t actualM,
