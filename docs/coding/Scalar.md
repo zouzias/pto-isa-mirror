@@ -8,7 +8,8 @@ This document summarizes the scalar/enumeration types that appear in the public 
 
 Some instructions take scalar values as plain C++ types:
 
-- `TADDS/TMULS/TDIVS/TEXPANDS`: scalar is `TileData::DType`.
+- `TADDS/TMULS/TDIVS`: scalar is `TileData::DType`.
+- `TEXPANDS`: scalar is a template type `ScalarT` and must be convertible to `TileData::DType`; the value is broadcast after destination element type conversion.
 - `TMINS`: scalar is a template type `T` and must be convertible to the tile element type.
 - `TCI`: scalar `S` is a template type `T` and must match `TileData::DType` (enforced by `static_assert` in the implementation).
 

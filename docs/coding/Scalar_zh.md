@@ -8,7 +8,8 @@
 
 部分指令直接使用 C++ 基本类型作为标量参数：
 
-- `TADDS/TMULS/TDIVS/TEXPANDS`：标量类型为 `TileData::DType`。
+- `TADDS/TMULS/TDIVS`：标量类型为 `TileData::DType`。
+- `TEXPANDS`：标量类型为模板参数 `ScalarT`，必须可转换为 `TileData::DType`；实际广播前会按目标元素类型转换。
 - `TMINS`：标量为模板类型 `T`，必须可转换为 Tile 元素类型。
 - `TCI`：标量 `S` 为模板类型 `T`，并且必须与 `TileData::DType` 匹配（由实现中的 `static_assert` 强制）。
 

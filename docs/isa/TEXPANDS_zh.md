@@ -40,12 +40,15 @@ pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, WaitEvents &... events);
+template <typename TileData, typename ScalarT, typename... WaitEvents>
+PTO_INST RecordEvent TEXPANDS(TileData &dst, ScalarT scalar, WaitEvents &... events);
 ```
 
 ## 约束
 
+- **标量类型**:
+    - `ScalarT` 可以与 `TileData::DType` 不同，但必须可转换为目标 Tile 元素类型。
+    - 标量值按 `TileData::DType` 语义转换后再广播到 `dst`。
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
     - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
@@ -98,6 +101,20 @@ void example_manual() {
   TileT dst;
   TASSIGN(dst, 0x1000);
   TEXPANDS(dst, 0.0f);
+}
+```
+
+### 标量类型转换
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_scalar_conversion() {
+  using TileT = Tile<TileType::Vec, uint64_t, 1, 4>;
+  TileT dst;
+  TEXPANDS(dst, 1.0f);  // 广播 uint64_t(1)，不是 fp32 原始 bit pattern。
 }
 ```
 

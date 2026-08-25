@@ -39,12 +39,15 @@ pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, WaitEvents &... events);
+template <typename TileData, typename ScalarT, typename... WaitEvents>
+PTO_INST RecordEvent TEXPANDS(TileData &dst, ScalarT scalar, WaitEvents &... events);
 ```
 
 ## Constraints
 
+- **Scalar type**:
+    - `ScalarT` may differ from `TileData::DType`, but it must be convertible to the destination tile element type.
+    - The scalar value is converted to `TileData::DType` semantics before being broadcast into `dst`.
 - **Implementation checks (A2A3)**:
     - For `TileType::Vec` :
       - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
@@ -98,6 +101,20 @@ void example_manual() {
   TileT dst;
   TASSIGN(dst, 0x1000);
   TEXPANDS(dst, 0.0f);
+}
+```
+
+### Scalar Type Conversion
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_scalar_conversion() {
+  using TileT = Tile<TileType::Vec, uint64_t, 1, 4>;
+  TileT dst;
+  TEXPANDS(dst, 1.0f);  // Broadcasts uint64_t(1), not the raw fp32 bit pattern.
 }
 ```
 
