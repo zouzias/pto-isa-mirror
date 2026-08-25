@@ -8,6 +8,8 @@
 
 带 fp/缩放 Tile 的插入（向量量化参数）。
 
+`TINSERT_FP(...)` 保留为无 mode fp 插入形态的源码兼容 C++ 调用入口。它转发到同一个无 mode 的 `TINSERT(..., fp, indexRow, indexCol, ...)` 重载，实现路径对应不显式传入 mode 模板参数的 `TINSERT_IMPL(dst, src, fp, indexRow, indexCol)`。
+
 ## 数学语义
 
 除非另有说明，语义在有效区域上定义，目标相关的行为标记为实现定义。
@@ -17,13 +19,13 @@
 ### AS Level 1（SSA）
 
 ```text
-%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
 ```text
-pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
+pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
@@ -34,12 +36,17 @@ pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_b
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
 PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
 
 ## 约束
 
 类型/布局/位置/形状的合法性取决于后端；将实现特定的说明视为该后端的规范。
+`FpTileData::Loc` 必须是 `TileType::Scaling`。
 
 ## 示例
 
@@ -51,7 +58,7 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### 手动模式
@@ -61,13 +68,13 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 ```
 
 ### PTO 汇编形式
 
 ```text
-%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<...>, dtype, dtype) -> !pto.tile<...>
+%dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<scaling, ...>, dtype, dtype) -> !pto.tile<...>
 # AS Level 2 (DPS)
-pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
+pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

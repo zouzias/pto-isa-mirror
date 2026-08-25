@@ -8,6 +8,9 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 存储到全局内存。
 
+`TSTORE_FP(...)` 保留为 fp 量化存储形态的源码兼容 C++ 调用入口。它转发到同一个无 mode 的 `TSTORE(..., fp, ...)` 重载，实现路径对应 `TSTORE_IMPL(dst, src, fp)`。
+`STPhase` 别名仅在存在对应后端实现的目标上转发到 `TSTORE<Phase>(..., fp, ...)`。
+
 ## 数学语义
 
 设 `R = src.GetValidRow()`，`C = src.GetValidCol()`。概念上（二维视图，带基础偏移），对 `0 <= i < R` 且 `0 <= j < C`：
@@ -25,13 +28,13 @@ tstore.fp %src, %fp, %sv_out[%c0, %c0]
 ### AS Level 1（SSA）
 
 ```text
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### AS Level 2（DPS）
 
 ```text
-pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 
 ## C++ 内建接口
@@ -42,6 +45,15 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 ```cpp
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename TileData, typename GlobalData, typename FpTileData,
+          AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -49,14 +61,16 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 
 - **实现检查 (A2A3)**:
     - fp 存储路径通过 `TSTORE_IMPL(dst, src, fp)` 实现，并使用与量化累加器存储相同的累加器到 GM 合法性检查：
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
     - 目标布局必须是 ND、NZ、NC1HWC0 或 NDC1HWC0。
     - 源数据类型必须是 `int32_t` 或 `float`。
     - 静态形状约束：`1 <= TileData::Cols <= 4095`；若为 ND 则 `1 <= TileData::Rows <= 8192`；若为 NZ、NC1HWC0 或 NDC1HWC0 则 `1 <= TileData::Rows <= 65535` 且 `TileData::Cols % 16 == 0`。
     - 运行时：`1 <= src.GetValidCol() <= 4095`。
-    - 对 `FpTileData` 不执行显式 `static_assert`（实现使用 `fp` 设置 FPC 状态）。
 - **实现检查 (A5)**:
     - 通过 `TSTORE_IMPL(dst, src, fp)` 实现，并由 `CheckStaticAcc<..., true>()` 验证累加器路径（支持 ND/NZ/NHWC/NCHW/NCDHW，源数据类型为 `int32_t`/`float`，行/列范围有限制）。
-    - 对 `FpTileData` 不执行显式 `static_assert`（实现使用 `fp` 设置 FPC 状态）。
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
+    - `STPhase` fp 别名仅在存在对应后端实现的目标上暴露：
+      A5、kirin9030、kirinDev0000 和 CPU 模拟器。
 
 ## 示例
 
@@ -110,7 +124,7 @@ void example_manual(__gm__ int8_t* out) {
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### 手动模式
@@ -120,7 +134,7 @@ pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<scaling, ...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### PTO 汇编形式
@@ -128,5 +142,5 @@ pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_
 ```text
 tstore.fp %src, %fp, %sv_out[%c0, %c0]
 # AS Level 2 (DPS)
-pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```

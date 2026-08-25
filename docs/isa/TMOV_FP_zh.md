@@ -8,6 +8,8 @@
 
 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。
 
+`TMOV_FP(...)` 保留为无 mode fp 移动形态的源码兼容 C++ 调用入口，并包含 `STPhase` 重载。它转发到同一个无 mode 的 `TMOV(..., fp, ...)` 重载，实现路径对应不显式传入 mode 模板参数的 `TMOV_IMPL(dst, src, fp)`。
+
 ## 数学语义
 
 概念上使用从 `fp` 派生的实现定义的量化/反量化配置转换每个元素：
@@ -19,19 +21,19 @@ $$ \mathrm{dst}_{i,j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j};\ \mathrm{fp}
 同步形式：
 
 ```text
-%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### AS Level 1（SSA）
 
 ```text
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
 ```text
-pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
@@ -42,6 +44,18 @@ pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
@@ -50,10 +64,13 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
 - **实现检查 (A2A3)**:
     - fp 路径仅支持累加器转换，并通过 `TMOV_IMPL(dst, src, fp)` 中的内部编译时检查进行验证。
     - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
+    - A2A3 后端没有 `TMOV_IMPL(..., fp)` phase 形态，因此不暴露 `STPhase` fp 别名。
 - **实现检查 (A5)**:
     - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
     - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
-    - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
+    - `STPhase` fp 别名仅在存在对应后端实现的目标上暴露：
+      A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器。
 
 ## 示例
 
@@ -104,7 +121,7 @@ void example_manual() {
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### 手动模式
@@ -114,13 +131,13 @@ void example_manual() {
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 ```
 
 ### PTO 汇编形式
 
 ```text
-%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
+%dst = tmov.fp %src, %fp : !pto.tile<...>, !pto.tile<scaling, ...> -> !pto.tile<...>
 # AS Level 2 (DPS)
-pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<scaling, ...>) outs(%dst : !pto.tile_buf<...>)
 ```

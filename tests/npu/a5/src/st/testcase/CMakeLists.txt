@@ -179,6 +179,7 @@ set(ALL_TESTCASES
     tlog
     trecip
     tstore_acc2gm
+    pto_instr_fp_overload
     tdivs
     tmuls
     tadds
