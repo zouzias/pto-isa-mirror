@@ -22,7 +22,7 @@ namespace pto {
 template <typename GlobalData, typename TileData>
 PTO_INLINE void CheckTileDataStore(GlobalData& dst, TileData& src)
 {
-    constexpr size_t C0 = GetC0ElemCount<typename GlobalData::DType>();
+    const size_t C0 = dst.GetStride(GlobalTensorDim::DIM_4);
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         assert(
             src.GetValidRow() == dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) &&

@@ -19,8 +19,7 @@ namespace pto {
 template <typename T>
 constexpr size_t GetC0ElemCount()
 {
-    return std::is_same_v<T, int32_t> ? static_cast<size_t>(ACC_C0_SIZE)
-                                      : static_cast<size_t>(C0_SIZE_BYTE) / sizeof(T);
+    return static_cast<size_t>(C0_SIZE_BYTE) / sizeof(T);
 }
 
 template <typename T, typename = void>
@@ -213,12 +212,13 @@ size_t inline MapTileIndicesToGlobalOffset(
         i4 = c % shape4;
         i1 = c / shape4;
     } else if (GlobalData::layout == pto::Layout::NDC1HWC0) {
+        const size_t dstC0 = globalStrides[GlobalTensorDim::DIM_4];
         i4 = r % shape4;
         i3 = (r / shape4) % shape3;
         i0 = r / (shape3 * shape4);
-        c0 = c % C0;
-        i2 = (c / C0) % shape2;
-        i1 = c / (shape2 * C0);
+        c0 = c % dstC0;
+        i2 = (c / dstC0) % shape2;
+        i1 = c / (shape2 * dstC0);
     } else if (GlobalData::layout == pto::Layout::FRACTAL_Z) {
         i4 = r % shape4;
         i2 = (r / shape4) % shape2;
