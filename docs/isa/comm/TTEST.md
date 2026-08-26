@@ -1,4 +1,4 @@
-﻿# TTEST
+# TTEST
 
 ## Introduction
 

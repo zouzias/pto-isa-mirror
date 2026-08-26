@@ -1,4 +1,4 @@
-﻿# TWAIT
+# TWAIT
 
 ## Introduction
 
