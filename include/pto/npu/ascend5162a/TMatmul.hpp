@@ -223,7 +223,7 @@ PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftS
 template <bool isEnable, RoundMode tf32TransMode = RoundMode::CAST_ROUND>
 PTO_INTERNAL void TSETTF32MODE_IMPL()
 {
-    static_assert(!isEnable, "Fix: Kirin9030 does not support setting the TF32 mode to enabled.");
+    static_assert(!isEnable, "Fix: Ascend5162a does not support setting the TF32 mode to enabled.");
     set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
 }
 } // namespace pto
