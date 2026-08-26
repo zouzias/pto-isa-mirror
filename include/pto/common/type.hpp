@@ -117,6 +117,8 @@ struct int4b_t {
 };
 } // namespace pto
 
+#include <type_traits>
+
 namespace pto {
 enum class TileType {
     Vec,

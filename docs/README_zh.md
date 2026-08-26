@@ -69,7 +69,7 @@ PTO 相关文档主要覆盖以下几类内容：
 
 ## 相关入口
 
-- [根目录 README_zh](../README_zh.md)：项目总览、快速开始与仓库入口
+- [根目录 README_zh](isa/README_zh.md)：项目总览、快速开始与仓库入口
 - [kernels 目录说明](../kernels/README_zh.md)：kernel 与算子实现入口
 - [include 目录说明](../include/README_zh.md)：头文件与接口说明
 - [tests 目录说明](../tests/README_zh.md)：测试与运行入口
