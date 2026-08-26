@@ -69,7 +69,7 @@ Key entries are listed below:
 
 ## Related Entry Points
 
-- [Root README](../README.md): project overview, quick start, and repository entry page
+- [Root README](isa/README.md): project overview, quick start, and repository entry page
 - [kernels Directory Guide](../kernels/README.md): kernel and operator implementation entry point
 - [include Directory Guide](../include/README.md): headers and public interface overview
 - [tests Directory Guide](../tests/README.md): testing and execution entry point
