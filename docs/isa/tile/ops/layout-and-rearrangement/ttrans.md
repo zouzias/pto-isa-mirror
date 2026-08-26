@@ -1,0 +1,211 @@
+# pto.ttrans
+
+`pto.ttrans` is part of the [Layout And Rearrangement](../../layout-and-rearrangement.md) instruction set.
+
+## Summary
+
+Transpose with a temporary tile whose allocation and usage depend on the target. On A2/A3 the transpose is performed in-place using the scratchpad as staging; on A5 the operation requires an explicit `tmp` tile passed via the C++ API because the A5 DMA engine cannot perform a true in-place transpose and needs a scratch buffer of the same shape as the source. On the CPU simulator the `tmp` tile is not used but must still be provided.
+
+## Mechanism
+
+Transpose with a temporary tile whose allocation and usage depend on the target. On A2/A3 the transpose is performed in-place using the scratchpad as staging; on A5 the operation requires an explicit `tmp` tile passed via the C++ API because the A5 DMA engine cannot perform a true in-place transpose and needs a scratch buffer of the same shape as the source. On the CPU simulator the `tmp` tile is not used but must still be provided. It belongs to the tile instructions and carries architecture-visible behavior that is not reducible to a plain elementwise compute pattern.
+
+For a 2D tile, over the effective transpose domain:
+
+$$ \mathrm{dst}_{i,j} = \mathrm{src}_{j,i} $$
+
+Exact shape/layout and the transpose domain depend on the target (see Constraints).
+
+## Syntax
+
+Textual spelling is defined by the PTO ISA syntax-and-operands pages.
+
+Synchronous form:
+
+```text
+%dst = ttrans %src : !pto.tile<...> -> !pto.tile<...>
+```
+Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+## C++ Intrinsic
+
+Declared in `include/pto/common/pto_instr.hpp`:
+
+```cpp
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events);
+```
+
+## Inputs
+
+- `src` is the source tile.
+- `tmp` is a temporary tile used during transpose (may not be used by all implementations).
+- `dst` names the destination tile. The operation iterates over dst's valid region.
+
+## Expected Outputs
+
+`dst` holds the transposed version of `src`: `dst[i,j]` = `src[j,i]`.
+
+## Side Effects
+
+No architectural side effects beyond producing the destination tile. Does not implicitly fence unrelated traffic.
+
+## Constraints
+
+!!! warning "Constraints"
+    - **Temporary tile**:
+        - The C++ API requires `tmp`. Some implementations may not use it when the selected path can execute without temporary storage.
+        - Basic parameters:
+            - `RowStride` is `32` for 8-bit element types and `16` for 16/32-bit element types.
+            - `ElemPerBlock` is `32 / sizeof(T)`, the number of elements in one 32-byte block.
+            - 8-bit types are `uint8_t` and `int8_t`; 16-bit types are `uint16_t`, `int16_t`, `half`, and `bfloat16_t`; 32-bit types are `uint32_t`, `int32_t`, and `float`.
+        - When stride alignment requirements are met (`dstStride % RowStride == 0`, `srcStride % ElemPerBlock == 0`, and `srcStride / ElemPerBlock <= 255`), the implementation uses `tmp` for the efficient transpose path. Otherwise it uses scalar copy and does not need `tmp`.
+        - 2D tile transpose `[H, W] -> [W, H]`:
+
+            ```text
+            tmpSize = W * ceil(H / RowStride) * RowStride * sizeof(T)
+            ```
+
+            where `W` is `validCol`, `H` is `validRow`, and `tmpStride` must be aligned to `RowStride`. `tmp` is needed only when the stride alignment requirements are met.
+        - `NCHW <-> NC1HWC0`:
+            - Forward `[N, C, H, W] -> [N, C1, H, W, C0]`:
+
+                ```text
+                tmpSize = H * W * ceil(C0 / RowStride) * RowStride * sizeof(T)
+                ```
+
+                where `C1 = (C + C0 - 1) / C0` and the transpose domain is `C0` rows by `H * W` columns.
+            - Reverse `[N, C1, H, W, C0] -> [N, C, H, W]`:
+
+                ```text
+                tmpSize = C0 * ceil((H * W) / RowStride) * RowStride * sizeof(T)
+                ```
+
+                where the transpose domain is `H * W` rows by `C0` columns.
+        - `GNCHW <-> GNC1HWC0` uses the same formulas as `NCHW <-> NC1HWC0`, with `G` carried as an outer group dimension.
+        - `NC1HWC0 -> FRACTAL_Z` and `GNC1HWC0 -> FRACTAL_Z` do not require temporary space; they directly execute memory reorganization.
+
+    - **ConvTile**:
+        - Transpose of ConvTile for `TileType::Vec` is supported。 Element size must be `1`、`2` or `4` bytes. Supported element types are `uint32_t`、`int32_t`、`float`、`uint16_t`、`int16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`.
+        - Format transformation from `NCHW` to `NC1HWC0` is supported, while `C1 == (C + C0 - 1)/C0`，HW matches alignment constraint，which means `H*W*sizeof(T)==0`. C0 means `c0_size`, which `C0 * sizeof(T) == 32`。C0 can also be 4.
+        - Format transformation from `NC1HWC0` to `FRACTAL_Z` is supported， while `N1 == (N + N0 - 1)/N0`。N0 should be 16.
+        - Format transformation from `NCDHW` to `FRACTAL_Z_3D` is supported, with destination shape `[D * C1 * H * W, N1, N0, C0]`, where `C1 == (C + C0 - 1) / C0` and `N1 == (N + N0 - 1) / N0`. `N0` is `16`. `C0` depends on element width: `64` for 4-bit data, `32` for 8-bit data, `16` for 16-bit data, and `8` for 32-bit data. The temporary tile must be large enough to hold one `N * C1 * C0 * H * W` plane plus a second region of `max(N * C1 * C0 * H * W, H * W * alignedC0)` elements, where `alignedC0` rounds `dstC0` up to `16` for 16/32-bit data and to `32` for 8-bit data:
+
+            ```text
+            tmpTotalElem   = ncplaneElem + max(ncplaneElem, subTmpElem)
+                           = N * C1 * C0 * H * W
+                           + max(N * C1 * C0 * H * W, H * W * alignedC0)
+            tmpAlignedElem = ceil(tmpTotalElem / elemPerBlock) * elemPerBlock
+            tmpBytes       = tmpAlignedElem * sizeof(T)
+            ```
+
+## Exceptions
+
+!!! danger "Exceptions"
+    - Illegal operand tuples, unsupported types, invalid layout combinations, or unsupported target-profile modes are rejected by the verifier or by the selected backend instruction set.
+    - Programs must not rely on behavior outside the documented legal domain of this operation, even if one backend currently accepts it.
+
+## Target-Profile Restrictions
+
+??? info "Target-Profile Restrictions"
+    - **Implementation checks (A2A3)**:
+        - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
+        - Source layout must be row-major (`TileDataSrc::isRowMajor`).
+        - Element size must be `1`, `2`, or `4` bytes.
+        - Supported element types are restricted per element width:
+        - 4 bytes: `uint32_t`, `int32_t`, `float`
+        - 2 bytes: `uint16_t`, `int16_t`, `half`, `bfloat16_t`
+        - 1 byte: `uint8_t`, `int8_t`
+        - The transpose size is taken from `src.GetValidRow()` / `src.GetValidCol()`.
+
+    - **Implementation checks (A5)**:
+        - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
+        - 32-byte alignment constraints are enforced on the major dimension of both input and output (row-major checks `Cols * sizeof(T) % 32 == 0`, col-major checks `Rows * sizeof(T) % 32 == 0`).
+        - Supported element types are restricted per element width:
+        - 4 bytes: `uint32_t`, `int32_t`, `float`
+        - 2 bytes: `uint16_t`, `int16_t`, `half`, `bfloat16_t`
+        - 1 byte: `uint8_t`, `int8_t`
+        - The implementation operates over the static tile shape (`TileDataSrc::Rows/Cols`) and does not consult `GetValidRow/GetValidCol`.
+
+## Examples
+
+### Auto
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_auto() {
+  using SrcT = Tile<TileType::Vec, float, 16, 16>;
+  using DstT = Tile<TileType::Vec, float, 16, 16>;
+  using TmpT = Tile<TileType::Vec, float, 16, 16>;
+  SrcT src;
+  DstT dst;
+  TmpT tmp;
+  TTRANS(dst, src, tmp);
+}
+```
+
+### Manual
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_manual() {
+  using SrcT = Tile<TileType::Vec, float, 16, 16>;
+  using DstT = Tile<TileType::Vec, float, 16, 16>;
+  using TmpT = Tile<TileType::Vec, float, 16, 16>;
+  SrcT src;
+  DstT dst;
+  TmpT tmp;
+  TASSIGN(src, 0x1000);
+  TASSIGN(dst, 0x2000);
+  TASSIGN(tmp, 0x3000);
+  TTRANS(dst, src, tmp);
+}
+```
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = ttrans %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+## Related Ops / Instruction Set Links
+
+- Instruction set overview: [Layout And Rearrangement](../../layout-and-rearrangement.md)
+- Previous op in instruction set: [pto.treshape](./treshape.md)

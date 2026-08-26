@@ -1,8 +1,8 @@
-﻿# TSort32
+# TSort32
 
 ## Tile Operation Diagram
 
-![TSort32 tile operation](../figures/isa/TSort32.svg)
+![TSort32 tile operation](../figures/isa/TSORT32.svg)
 
 ## Introduction
 
