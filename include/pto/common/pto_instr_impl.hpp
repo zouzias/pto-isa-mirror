@@ -225,7 +225,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TLoad.hpp"
 #ifdef __DAV_VEC__
 #include "pto/npu/a5/TCvt.hpp"
-#endif
+#endif // __DAV_VEC__
 #include "pto/npu/a5/TStore.hpp"
 #include "pto/npu/a5/TMrgSort.hpp"
 #include "pto/npu/a5/TMatmul.hpp"
@@ -312,7 +312,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TInterleave.hpp"
 #include "pto/npu/a5/TDeInterleave.hpp"
 #endif // __COSTMODEL
-#endif
+#endif // PTO_NPU_ARCH_A5
 
 #ifdef PTO_NPU_ARCH_A6
 #include "pto/npu/a6/header.hpp"
