@@ -18,7 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min };
+enum class Int64Op { Add, Sub, Mul, Shl, Shr, Max, Min, And, Or, Xor, Not, Abs };
 
 template <MaskPattern Pattern>
 PTO_INTERNAL constexpr unsigned Int64MaskPatternOffset()
@@ -151,17 +151,18 @@ PTO_INTERNAL void TBinOps_1D_PostUpdate(
     uint16_t repeatTimes = CeilDivision(validRows * validCols, ElementsPerRepeat);
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0, vreg1, vreg2;
+        RegTensor<T> vreg0_PU, vreg1_PU, vreg2_PU;
         MaskReg preg;
+
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         unsigned sreg = validRows * validCols;
         for (uint16_t i = 0; i < (uint16_t)repeatTimes; ++i) {
             preg = CreatePredicate<T>(sreg);
-            vlds(vreg0, src0Ptr, i * ElementsPerRepeat, NORM);
-            vlds(vreg1, src1Ptr, i * ElementsPerRepeat, NORM);
-            Op::BinInstr(vreg2, vreg0, vreg1, preg);
-            vsts(vreg2, dstPtr, i * ElementsPerRepeat, distValue, preg);
+            vlds(vreg0_PU, src0Ptr, ElementsPerRepeat, NORM, POST_UPDATE);
+            vlds(vreg1_PU, src1Ptr, ElementsPerRepeat, NORM, POST_UPDATE);
+            Op::BinInstr(vreg2_PU, vreg0_PU, vreg1_PU, preg);
+            vsts(vreg2_PU, dstPtr, ElementsPerRepeat, distValue, preg, POST_UPDATE);
         }
     }
 }
@@ -446,6 +447,15 @@ PTO_INTERNAL void Int64BinaryCalcRegs(
         vmula(dstHigh, src0High, src1Low, mask, MODE_ZEROING);
     } else if constexpr (Op == Int64Op::Shl || Op == Int64Op::Shr) {
         Int64ShiftRegs<Op == Int64Op::Shr, T>(dstLow, dstHigh, src0Low, src0High, src1Low, mask);
+    } else if constexpr (Op == Int64Op::And) {
+        vand((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vand((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Or) {
+        vor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
+    } else if constexpr (Op == Int64Op::Xor) {
+        vxor((vector_u32&)dstLow, (vector_u32&)src0Low, (vector_u32&)src1Low, mask, MODE_ZEROING);
+        vxor((vector_u32&)dstHigh, (vector_u32&)src0High, (vector_u32&)src1High, mask, MODE_ZEROING);
     } else {
         Int64MinMax<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
     }

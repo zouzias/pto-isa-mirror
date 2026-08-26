@@ -69,8 +69,8 @@ add_link_options(
     -Wl,-z,relro
     -Wl,-z,now
 )
-if (SOC_VERSION STREQUAL "Kirin9030")
-    set(CCE_AICORE_ARCH dav-l311)
+if (SOC_VERSION STREQUAL "Ascend5162A")
+    set(CCE_AICORE_ARCH dav-c310)
 endif()
 
 if(RUN_MODE STREQUAL "npu")
