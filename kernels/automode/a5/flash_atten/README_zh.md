@@ -4,7 +4,7 @@
 
 本示例演示如何使用 PTO 在 Ascend A5 平台上实现混合精度的 Flash Attention（FA）算子，包含工程结构、构建与运行方式。
 
-关于 Flash Attention 算子的详细说明、优化策略和流水线编排，请参考通用版本文档：[../../common/flash_atten/README_zh.md](../../common/flash_atten/README_zh.md)
+关于 Flash Attention 算子的详细说明、优化策略和流水线编排，请参考通用版本文档：[../../../manual/common/flash_atten/README_zh.md](../../../manual/common/flash_atten/README_zh.md)
 
 ## 支持的 AI 处理器
 
@@ -91,7 +91,7 @@ test success
 
 Flash Attention 算子的详细实现说明、数学公式、分块计算策略、流水线编排等内容，请参考：
 
-- [通用 Flash Attention 文档](../../common/flash_atten/README_zh.md)
+- [通用 Flash Attention 文档](../../../manual/common/flash_atten/README_zh.md)
 
 该文档包含：
 1. 计算流程（FlashAttention 2.0）
