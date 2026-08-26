@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 /**
  * @file TCvt.hpp
- * @brief Type Conversion (TCVT) Implementation for NPU Kirin9030 Architecture
+ * @brief Type Conversion (TCVT) Implementation for NPU Ascend5162a Architecture
  *
  * FILE ORGANIZATION (for easy navigation):
  * =======================================
@@ -175,7 +175,7 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
         if constexpr (std::is_same<R, void>::value) {
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
         } else {
             vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
@@ -379,7 +379,7 @@ inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
         } else {
             // SAT_PART mode for int-to-int
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
         }
         vsts(v_output_even, dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
@@ -484,7 +484,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
         } else {
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
         }
 
@@ -520,7 +520,7 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
 
     vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
     if constexpr (std::is_same<R, void>::value) {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
         vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
     } else {
@@ -556,7 +556,7 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
     vlds(v_input, src, srcOffset, NORM);
     if constexpr (std::is_same<R, void>::value) {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output, v_input, preg_b32, RS_ENABLE, PART_EVEN);
     } else {
         vcvt(v_output, v_input, preg_b32, R(), RS_DISABLE, PART_EVEN);
@@ -738,7 +738,7 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
         vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
     } else {
         // SAT_PART mode: saturation without rounding (integer->integer)
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_odd, v_input_1, preg_b16, RS_ENABLE, PART_ODD);
         vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
     }
@@ -773,7 +773,7 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
     } else {
         // SAT_PART mode: s16 -> u8
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
     }
     vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
@@ -921,7 +921,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
     if constexpr (MODE == CastMode::ROUND_SAT_PART) {
         vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
     } else {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // Ascend5162a set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
     }
 
@@ -1733,8 +1733,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
  * Converts tile data from source type to destination type using specified rounding mode
  * Iterates over rows and calls appropriate castData specialization
  *
- * @param satMode: Saturation mode control (Kirin9030-specific):
- *                 In Kirin9030, saturation is controlled by both:
+ * @param satMode: Saturation mode control (Ascend5162a-specific):
+ *                 In Ascend5162a, saturation is controlled by both:
  *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based on conversion type
  *                 2. RS_DISABLE/RS_DISABLE parameters in vcvt intrinsics
  *
@@ -2103,7 +2103,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 }
 
 // ============================================================================
-// TCVT_IMPL Overloads with tmp buffer (unused in Kirin9030, for API compatibility)
+// TCVT_IMPL Overloads with tmp buffer (unused in Ascend5162a, for API compatibility)
 // ============================================================================
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)

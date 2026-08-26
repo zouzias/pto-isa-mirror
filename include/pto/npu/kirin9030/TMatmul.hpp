@@ -135,7 +135,7 @@ PTO_INTERNAL void CheckMadValid()
         static_assert(sizeof(CType) == 0, "TMATMUL: Acc Type only supports int32_t or half.");
     }
 
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_ASCEND5162A)
+#if defined(PTO_NPU_ARCH_KIRIN9030)
     constexpr bool tileTypeValid =
         TileLeft::Loc == TileType::Left && TileRight::Loc == TileType::Right && TileRes::Loc == TileType::Acc;
     constexpr bool blockLayoutValid = !TileLeft::isRowMajor && TileRight::isRowMajor && !TileRes::isRowMajor;
