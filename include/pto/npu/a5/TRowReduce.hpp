@@ -46,6 +46,9 @@ template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
 {
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    constexpr unsigned alignedBytes = 32;
+    constexpr unsigned dstRowBytes = DstCols * sizeof(T);
+    constexpr bool dstRowAligned = dstRowBytes % alignedBytes == 0;
     __VEC_SCOPE__
     {
         vector_u32 mask16, outLow, outHigh, accLow, accHigh;
@@ -58,34 +61,111 @@ PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRo
         MaskReg allMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, allMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                Int64RowSumRepeat<T, SrcCols>(
-                    outLow, outHigh, src, row, colRepeat * elementsPerRepeat, mask16, allMask);
-                if (colRepeat == 0) {
-                    accLow = outLow;
-                    accHigh = outHigh;
-                } else {
-                    MaskReg carry, carryOut;
-                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
-                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+        if constexpr (dstRowAligned) {
+            for (uint16_t row = 0; row < rows; ++row) {
+                for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                    Int64RowSumRepeat<T, SrcCols>(
+                        outLow, outHigh, src, row, colRepeat * elementsPerRepeat, mask16, allMask);
+                    if (colRepeat == 0) {
+                        accLow = outLow;
+                        accHigh = outHigh;
+                    } else {
+                        MaskReg carry, carryOut;
+                        vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                        vaddcs(
+                            carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                    }
                 }
-            }
-            if (tailCols != 0) {
-                Int64RowSumRepeat<T, SrcCols>(
-                    outLow, outHigh, src, row, fullRepeats * elementsPerRepeat, mask16, tailMask);
-                if (fullRepeats == 0) {
-                    accLow = outLow;
-                    accHigh = outHigh;
-                } else {
-                    MaskReg carry, carryOut;
-                    vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
-                    vaddcs(carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                if (tailCols != 0) {
+                    Int64RowSumRepeat<T, SrcCols>(
+                        outLow, outHigh, src, row, fullRepeats * elementsPerRepeat, mask16, tailMask);
+                    if (fullRepeats == 0) {
+                        accLow = outLow;
+                        accHigh = outHigh;
+                    } else {
+                        MaskReg carry, carryOut;
+                        vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                        vaddcs(
+                            carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry, oneMask);
+                    }
                 }
+                vsts(
+                    (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32,
+                    oneMask);
             }
-            vsts(
-                (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32,
-                oneMask);
+        } else {
+            static_assert(DstCols == 1, "Unaligned int64 row reduction output must be compact scalar rows.");
+            constexpr uint16_t rowsPerStore = alignedBytes / sizeof(T);
+            uint16_t groups = (rows + rowsPerStore - 1) / rowsPerStore;
+            for (uint16_t g = 0; g < groups; ++g) {
+                vector_u32 slotALow, slotAHigh, slotBLow, slotBHigh, slotCLow, slotCHigh, slotDLow, slotDHigh;
+                vbr(slotALow, 0);
+                vbr(slotAHigh, 0);
+                vbr(slotBLow, 0);
+                vbr(slotBHigh, 0);
+                vbr(slotCLow, 0);
+                vbr(slotCHigh, 0);
+                vbr(slotDLow, 0);
+                vbr(slotDHigh, 0);
+                uint16_t rowsInGroup =
+                    (rows - g * rowsPerStore) < rowsPerStore ? (rows - g * rowsPerStore) : rowsPerStore;
+                for (uint16_t k = 0; k < rowsInGroup; ++k) {
+                    uint16_t row = g * rowsPerStore + k;
+                    for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                        Int64RowSumRepeat<T, SrcCols>(
+                            outLow, outHigh, src, row, colRepeat * elementsPerRepeat, mask16, allMask);
+                        if (colRepeat == 0) {
+                            accLow = outLow;
+                            accHigh = outHigh;
+                        } else {
+                            MaskReg carry, carryOut;
+                            vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                            vaddcs(
+                                carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry,
+                                oneMask);
+                        }
+                    }
+                    if (tailCols != 0) {
+                        Int64RowSumRepeat<T, SrcCols>(
+                            outLow, outHigh, src, row, fullRepeats * elementsPerRepeat, mask16, tailMask);
+                        if (fullRepeats == 0) {
+                            accLow = outLow;
+                            accHigh = outHigh;
+                        } else {
+                            MaskReg carry, carryOut;
+                            vaddc(carry, (vector_s32&)accLow, (vector_s32&)accLow, (vector_s32&)outLow, oneMask);
+                            vaddcs(
+                                carryOut, (vector_s32&)accHigh, (vector_s32&)accHigh, (vector_s32&)outHigh, carry,
+                                oneMask);
+                        }
+                    }
+                    if (k == 0) {
+                        vdup((vector_s32&)slotALow, (vector_s32&)accLow, allMask, POS_LOWEST, MODE_ZEROING);
+                        vdup((vector_s32&)slotAHigh, (vector_s32&)accHigh, allMask, POS_LOWEST, MODE_ZEROING);
+                    } else if (k == 1) {
+                        vdup((vector_s32&)slotCLow, (vector_s32&)accLow, allMask, POS_LOWEST, MODE_ZEROING);
+                        vdup((vector_s32&)slotCHigh, (vector_s32&)accHigh, allMask, POS_LOWEST, MODE_ZEROING);
+                    } else if (k == 2) {
+                        vdup((vector_s32&)slotBLow, (vector_s32&)accLow, allMask, POS_LOWEST, MODE_ZEROING);
+                        vdup((vector_s32&)slotBHigh, (vector_s32&)accHigh, allMask, POS_LOWEST, MODE_ZEROING);
+                    } else {
+                        vdup((vector_s32&)slotDLow, (vector_s32&)accLow, allMask, POS_LOWEST, MODE_ZEROING);
+                        vdup((vector_s32&)slotDHigh, (vector_s32&)accHigh, allMask, POS_LOWEST, MODE_ZEROING);
+                    }
+                }
+                vector_u32 p0, p1, q0, q1, r0, r1, ph0, ph1, qh0, qh1, rh0, rh1;
+                vintlv((vector_s32&)p0, (vector_s32&)p1, (vector_s32&)slotALow, (vector_s32&)slotBLow);
+                vintlv((vector_s32&)q0, (vector_s32&)q1, (vector_s32&)slotCLow, (vector_s32&)slotDLow);
+                vintlv((vector_s32&)r0, (vector_s32&)r1, (vector_s32&)p0, (vector_s32&)q0);
+                vintlv((vector_s32&)ph0, (vector_s32&)ph1, (vector_s32&)slotAHigh, (vector_s32&)slotBHigh);
+                vintlv((vector_s32&)qh0, (vector_s32&)qh1, (vector_s32&)slotCHigh, (vector_s32&)slotDHigh);
+                vintlv((vector_s32&)rh0, (vector_s32&)rh1, (vector_s32&)ph0, (vector_s32&)qh0);
+                uint32_t groupMaskElems = rowsInGroup;
+                MaskReg groupMask = plt_b32(groupMaskElems, POST_UPDATE);
+                vsts(
+                    (vector_s32&)r0, (vector_s32&)rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2, 0,
+                    INTLV_B32, groupMask);
+            }
         }
     }
 }
@@ -151,6 +231,9 @@ template <Int64Op Op, typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols)
 {
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
+    constexpr unsigned alignedBytes = 32;
+    constexpr unsigned dstRowBytes = DstCols * sizeof(T);
+    constexpr bool dstRowAligned = dstRowBytes % alignedBytes == 0;
     __VEC_SCOPE__
     {
         vector_s32 accLow, accHigh, repeatLow, repeatHigh;
@@ -162,34 +245,104 @@ PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
         MaskReg fullMask = plt_b32(fullMaskCols, POST_UPDATE);
         uint32_t tailMaskCols = tailCols;
         MaskReg tailMask = Int64TailMask(tailMaskCols, fullMask);
-        for (uint16_t row = 0; row < rows; ++row) {
-            for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
-                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, fullMask, dupMask);
-                if (colRepeat == 0) {
-                    accLow = repeatLow;
-                    accHigh = repeatHigh;
-                } else {
-                    MaskReg oneMask = pset_b32(PAT_VL1);
-                    Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+        if constexpr (dstRowAligned) {
+            for (uint16_t row = 0; row < rows; ++row) {
+                for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                    uint32_t colOffset = colRepeat * elementsPerRepeat;
+                    Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, fullMask, dupMask);
+                    if (colRepeat == 0) {
+                        accLow = repeatLow;
+                        accHigh = repeatHigh;
+                    } else {
+                        MaskReg oneMask = pset_b32(PAT_VL1);
+                        Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                    }
                 }
-            }
-            if (tailCols != 0) {
-                uint32_t colOffset = fullRepeats * elementsPerRepeat;
-                Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, tailMask, dupMask);
-                if (fullRepeats == 0) {
-                    accLow = repeatLow;
-                    accHigh = repeatHigh;
-                } else {
-                    MaskReg oneMask = pset_b32(PAT_VL1);
-                    Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                if (tailCols != 0) {
+                    uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                    Int64RowMinMaxRepeat<Op, T, SrcCols>(repeatLow, repeatHigh, src, row, colOffset, tailMask, dupMask);
+                    if (fullRepeats == 0) {
+                        accLow = repeatLow;
+                        accHigh = repeatHigh;
+                    } else {
+                        MaskReg oneMask = pset_b32(PAT_VL1);
+                        Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                    }
                 }
+                MaskReg oneMask = pset_b32(PAT_VL1);
+                vsts(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, oneMask);
             }
-            MaskReg oneMask = pset_b32(PAT_VL1);
-            vsts(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, oneMask);
+        } else {
+            static_assert(DstCols == 1, "Unaligned int64 row reduction output must be compact scalar rows.");
+            constexpr uint16_t rowsPerStore = alignedBytes / sizeof(T);
+            uint16_t groups = (rows + rowsPerStore - 1) / rowsPerStore;
+            for (uint16_t g = 0; g < groups; ++g) {
+                vector_s32 slotALow, slotAHigh, slotBLow, slotBHigh, slotCLow, slotCHigh, slotDLow, slotDHigh;
+                vbr(slotALow, 0);
+                vbr(slotAHigh, 0);
+                vbr(slotBLow, 0);
+                vbr(slotBHigh, 0);
+                vbr(slotCLow, 0);
+                vbr(slotCHigh, 0);
+                vbr(slotDLow, 0);
+                vbr(slotDHigh, 0);
+                uint16_t rowsInGroup =
+                    (rows - g * rowsPerStore) < rowsPerStore ? (rows - g * rowsPerStore) : rowsPerStore;
+                for (uint16_t k = 0; k < rowsInGroup; ++k) {
+                    uint16_t row = g * rowsPerStore + k;
+                    for (uint16_t colRepeat = 0; colRepeat < fullRepeats; ++colRepeat) {
+                        uint32_t colOffset = colRepeat * elementsPerRepeat;
+                        Int64RowMinMaxRepeat<Op, T, SrcCols>(
+                            repeatLow, repeatHigh, src, row, colOffset, fullMask, dupMask);
+                        if (colRepeat == 0) {
+                            accLow = repeatLow;
+                            accHigh = repeatHigh;
+                        } else {
+                            MaskReg oneMask = pset_b32(PAT_VL1);
+                            Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                        }
+                    }
+                    if (tailCols != 0) {
+                        uint32_t colOffset = fullRepeats * elementsPerRepeat;
+                        Int64RowMinMaxRepeat<Op, T, SrcCols>(
+                            repeatLow, repeatHigh, src, row, colOffset, tailMask, dupMask);
+                        if (fullRepeats == 0) {
+                            accLow = repeatLow;
+                            accHigh = repeatHigh;
+                        } else {
+                            MaskReg oneMask = pset_b32(PAT_VL1);
+                            Int64MinMax<Op, T>(accLow, accHigh, accLow, accHigh, repeatLow, repeatHigh, oneMask);
+                        }
+                    }
+                    if (k == 0) {
+                        vdup(slotALow, accLow, dupMask, POS_LOWEST, MODE_ZEROING);
+                        vdup(slotAHigh, accHigh, dupMask, POS_LOWEST, MODE_ZEROING);
+                    } else if (k == 1) {
+                        vdup(slotCLow, accLow, dupMask, POS_LOWEST, MODE_ZEROING);
+                        vdup(slotCHigh, accHigh, dupMask, POS_LOWEST, MODE_ZEROING);
+                    } else if (k == 2) {
+                        vdup(slotBLow, accLow, dupMask, POS_LOWEST, MODE_ZEROING);
+                        vdup(slotBHigh, accHigh, dupMask, POS_LOWEST, MODE_ZEROING);
+                    } else {
+                        vdup(slotDLow, accLow, dupMask, POS_LOWEST, MODE_ZEROING);
+                        vdup(slotDHigh, accHigh, dupMask, POS_LOWEST, MODE_ZEROING);
+                    }
+                }
+                vector_s32 p0, p1, q0, q1, r0, r1, ph0, ph1, qh0, qh1, rh0, rh1;
+                vintlv(p0, p1, slotALow, slotBLow);
+                vintlv(q0, q1, slotCLow, slotDLow);
+                vintlv(r0, r1, p0, q0);
+                vintlv(ph0, ph1, slotAHigh, slotBHigh);
+                vintlv(qh0, qh1, slotCHigh, slotDHigh);
+                vintlv(rh0, rh1, ph0, qh0);
+                uint32_t groupMaskElems = rowsInGroup;
+                MaskReg groupMask = plt_b32(groupMaskElems, POST_UPDATE);
+                vsts(r0, rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2, 0, INTLV_B32, groupMask);
+            }
         }
     }
 }
+
 #else
 template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRows, unsigned validCols);
