@@ -1,13 +1,13 @@
-# include/pto/npu/kirin9030/
+# include/pto/npu/ascend5162a/
 
-Kirin9030 系列 PTO 指令实现头文件。
+Ascend5162a 系列 PTO 指令实现头文件。
 
 ## 概览
 
 - 按指令（或指令族）组织实现，例如：`TAdd.hpp`、`TMatmul.hpp`、`TLoad.hpp`、`TStore.hpp`
-- 包含 Kirin9030 专用的算子模式与工具（如适用）
+- 包含 Ascend5162a 专用的算子模式与工具（如适用）
 
 ## 相关内容
 
 - ISA 语义与示例：`docs/isa/`
-- Kirin9030 NPU ST 测试：`tests/npu/Kirin9030/src/st/`
+- Ascend5162a NPU ST 测试：`tests/npu/Ascend5162a/src/st/`
