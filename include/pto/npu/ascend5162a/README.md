@@ -1,13 +1,13 @@
-# include/pto/npu/kirin9030/
+# include/pto/npu/ascend5162a/
 
-Kirin9030 series PTO instruction implementation headers.
+Ascend5162a series PTO instruction implementation headers.
 
 ## Overview
 
 - Implementations are organized per instruction (or instruction family), for example: `TAdd.hpp`, `TMatmul.hpp`, `TLoad.hpp`, `TStore.hpp`
-- Includes Kirin9030-specific operator patterns and utilities where applicable
+- Includes Ascend5162a-specific operator patterns and utilities where applicable
 
 ## Related
 
 - ISA semantics and examples: `docs/isa/`
-- Kirin9030 NPU ST tests: `tests/npu/Kirin9030/src/st/`
+- Ascend5162a NPU ST tests: `tests/npu/Ascend5162a/src/st/`

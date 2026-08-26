@@ -121,7 +121,7 @@ template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, type
 PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                               TileDataScaling *scaling)
 {
-    static_assert(sizeof(typename TileDataSrc::DType) == 0, "Fix: TQUANT does not support MX data type in Kirin9030.");
+    static_assert(sizeof(typename TileDataSrc::DType) == 0, "Fix: TQUANT does not support MX data type in Ascend5162a.");
 }
 } // namespace pto
 #endif // TQUANT_HPP

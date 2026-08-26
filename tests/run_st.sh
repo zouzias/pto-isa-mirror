@@ -531,7 +531,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuladddst -g TMULADDDSTTest.case_float_32x128_32x192_32x256_32x127
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz -g TExtractNd2xNzTest.case_half
@@ -816,7 +816,6 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t textract_ndto2xnz
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tinsert_vec
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmadd
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t tmula
     if [ "$IS_AUTO_MODE" = "false" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolgather
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolscatter
@@ -897,6 +896,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc_nosplit -g TPushPopVCNSTest.case1_int8_single_k_tile
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subtile -g TPushTpopSubtileTest.case1_half_128x512
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subblock_dispatch -g TPushPopSubBlockDispatchTest.case1_v2c_nosplit_implicit_id
       python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
       python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolgather -g TCOLGATHERTest.case_mask_half_16x64_16x64_P1111
@@ -984,7 +984,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul -g TMULTest.case_float_64x64_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd -g TMADDTest.case_float_32x128_32x192_32x256_32x127
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula -g TMULATest.case_float_32x128_32x192_32x256_32x127
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuls -g TMULSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tor -g TORTest.case2
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow -g TPOWTest.case1
@@ -1109,6 +1108,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_vc_nosplit
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subtile
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_subblock_dispatch
       python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolgather
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolscatter
@@ -1160,7 +1160,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmrgsort
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmadd
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t tmula
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmuls
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tor
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpow
