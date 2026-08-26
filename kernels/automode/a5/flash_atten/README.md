@@ -4,7 +4,7 @@
 
 This example demonstrates how to implement a mixed-precision Flash Attention (FA) operator using PTO on the Ascend A5 platform, including project setup, build, and execution.
 
-For detailed operator description, optimization strategies, and pipeline orchestration of Flash Attention, please refer to the common version documentation: [../../common/flash_atten/README.md](../../common/flash_atten/README.md)
+For detailed operator description, optimization strategies, and pipeline orchestration of Flash Attention, please refer to the common version documentation: [../../../manual/common/flash_atten/README.md](../../../manual/common/flash_atten/README.md)
 
 ## Supported AI Processors
 
@@ -91,7 +91,7 @@ The following data were collected on Ascend A5:
 
 For detailed implementation notes, mathematical formulas, tiling strategies, and pipeline orchestration of the Flash Attention operator, please refer to:
 
-- [Common Flash Attention Documentation](../../common/flash_atten/README.md)
+- [Common Flash Attention Documentation](../../../manual/common/flash_atten/README.md)
 
 The documentation includes:
 1. Computation Flow (FlashAttention 2.0)
