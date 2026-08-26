@@ -20,17 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
-__aicore__ inline void set_mark(uint64_t v)
-{
-#if defined(__CCE_KT_TEST__) && __CCE_KT_TEST__ == 1
-
-#else
-    __asm__ __volatile__("");
-    asm volatile("MOV COND, %0\n" : "+l"(v));
-    __asm__ __volatile__("");
-#endif
-}
-
 #include "pto/npu/ascend5162a/TCvt.hpp"
 #include "pto/npu/ascend5162a/TExtract.hpp"
 #include "pto/npu/ascend5162a/TGather.hpp"
