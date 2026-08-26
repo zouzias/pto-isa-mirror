@@ -1,4 +1,4 @@
-﻿# TROWPROD
+# TROWPROD
 
 
 ## Tile Operation Diagram

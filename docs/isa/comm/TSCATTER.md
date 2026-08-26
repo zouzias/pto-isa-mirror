@@ -1,4 +1,4 @@
-﻿# TSCATTER
+# TSCATTER
 
 ## Introduction
 
