@@ -112,7 +112,7 @@ inline aclError aclrtDestroyStream(aclrtStream stream)
     return ACL_SUCCESS;
 }
 
-inline aclError aclrtStreamGetId(aclrtStream stream, uint32_t* streamId)
+inline aclError aclrtStreamGetId(aclrtStream stream, int32_t* streamId)
 {
     if (stream == nullptr || streamId == nullptr) {
         return pto::costmodel::aclrt_stub::kInvalidParameter;
