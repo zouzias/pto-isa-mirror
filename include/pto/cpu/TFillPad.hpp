@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <bit>
 #include <cstring>
+#include <limits>
 #include "pto/cpu/tile_offsets.hpp"
 #include "pto/cpu/parallel.hpp"
 
@@ -27,7 +28,17 @@ void TFillPad(TileDataDst& dst, TileDataSrc& src)
     const auto validSrcCol = src.GetValidCol();
 
     // Decode PadValue via GetPadValue so fp8/fp4/custom share the NPU bit maps.
-    {
+    // PadValueMap<bfloat16_t> is NPU-only: default CPU_SIM aliases bf16 to half
+    // (half's map already applies). Distinct std::bfloat16_t has no map, so keep
+    // the previous numeric_limits path for standard Zero/Min/Max.
+    if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half> &&
+                  !isCustomPadValue(PadVal)) {
+        if constexpr (PadVal == PadValue::Max) {
+            padVal = std::numeric_limits<DType>::infinity();
+        } else if constexpr (PadVal == PadValue::Min) {
+            padVal = -std::numeric_limits<DType>::infinity();
+        }
+    } else {
         constexpr auto padBits = GetPadValue<TileDataDst>();
         if constexpr (sizeof(DType) == 4) {
             const uint32_t bits = static_cast<uint32_t>(padBits);
