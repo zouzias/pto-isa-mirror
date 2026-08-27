@@ -33,13 +33,6 @@ PTO_INTERNAL constexpr unsigned Int64MaskPatternOffset()
 }
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
-PTO_INTERNAL MaskReg Int64TailMask(uint32_t cols, MaskReg& fullMask)
-{
-    if (cols == 0)
-        return fullMask;
-    return plt_b32(cols, POST_UPDATE);
-}
-
 PTO_INTERNAL void Int64AddRegs(
     vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
     vector_s32& rhsHigh, MaskReg& mask)
