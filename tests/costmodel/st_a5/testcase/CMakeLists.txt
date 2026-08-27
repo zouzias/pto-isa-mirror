@@ -57,6 +57,7 @@ endforeach()
 
 if(TARGET tadd)
     get_filename_component(_vfsim_configs "${CMAKE_SOURCE_DIR}/../../../pkg_inc/pto/costmodel/vfsim/configs" ABSOLUTE)
+    get_filename_component(_repo_root "${CMAKE_SOURCE_DIR}/../../.." ABSOLUTE)
     add_test(
         NAME vfsim_relocated_config
         COMMAND ${CMAKE_COMMAND}
@@ -64,4 +65,15 @@ if(TARGET tadd)
             -DVFSIM_CONFIGS=${_vfsim_configs}
             -DRELOCATED_ROOT=${CMAKE_BINARY_DIR}/relocated_vfsim
             -P ${CMAKE_SOURCE_DIR}/verify_relocated_vfsim.cmake)
+    add_test(
+        NAME vfsim_external_project
+        COMMAND ${CMAKE_COMMAND}
+            -DPTO_ISA_ROOT=${_repo_root}
+            -DPTO_A5_LLVM_CONFIG=${PTO_A5_LLVM_CONFIG}
+            -DPTO_A5_CLANGXX=${PTO_A5_CLANGXX}
+            -DCPU_TADD_DIR=${_repo_root}/tests/cpu/st/testcase/tadd
+            -DTEST_COMMON_DIR=${_repo_root}/tests/common
+            -DFIXTURE_WRITER=${CMAKE_CURRENT_SOURCE_DIR}/full_host_tadd/fixture_writer.cpp
+            -DEXTERNAL_ROOT=${CMAKE_BINARY_DIR}/external_vfsim_project
+            -P ${CMAKE_SOURCE_DIR}/verify_external_vfsim_project.cmake)
 endif()

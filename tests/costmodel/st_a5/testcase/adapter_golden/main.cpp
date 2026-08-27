@@ -248,6 +248,28 @@ TEST(VfSimAdapterGolden, ReportsInvalidTraceInsteadOfSilentFallback)
     EXPECT_FALSE(result.diagnostics.empty());
 }
 
+TEST(VfSimAdapterGolden, ScopeSentinelPreservesTraceParserErrors)
+{
+    ptoVf::trace::Reset();
+    ::pto::mocker::ResetTrace();
+    ::pto::mocker::BeginPtoInstr("TADD");
+    {
+        ptoVf::ScopeSentinel scope;
+        __pto_trace_loop_iter(123);
+        (void)scope;
+    }
+    ::pto::mocker::EndPtoInstr();
+
+    const auto& trace = ::pto::mocker::GetTrace();
+    ASSERT_FALSE(trace.executed_pto.empty());
+    const auto& prediction = trace.executed_pto.back().vfPrediction;
+    EXPECT_EQ(prediction.status, ptoVf::VfPredictionStatus::INVALID_TRACE);
+    EXPECT_EQ(prediction.vfSimHitCount, 0U);
+    EXPECT_EQ(prediction.fallbackCount, 1U);
+    ASSERT_FALSE(prediction.diagnostics.empty());
+    EXPECT_NE(prediction.diagnostics.front().find("stray loop_iter/exit"), std::string::npos);
+}
+
 TEST(VfSimAdapterGolden, CapturesPredicateMemoryAndConfigOperands)
 {
     vector_bool predicate0;

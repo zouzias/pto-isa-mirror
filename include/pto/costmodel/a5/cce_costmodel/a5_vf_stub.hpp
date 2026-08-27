@@ -166,6 +166,8 @@ struct ScopeSentinel {
         if (br.ok) {
             if (!ts.active_pto_stack.empty())
                 ts.executed_pto[ts.active_pto_stack.back()].vf_infos.push_back(std::move(br.info));
+        } else if (!br.err.empty()) {
+            ::pto::mocker::RecordVfTraceError(std::move(br.err));
         }
         trace::Reset();
     }

@@ -51,6 +51,7 @@ struct PtoInstrRecord {
     uint64_t total_cycles = 0;
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
     std::vector<vf::VfInfo> vf_infos;
+    std::vector<std::string> vf_trace_errors;
     vf::VfPredictionResult vfPrediction;
 #endif
 };
@@ -72,6 +73,30 @@ inline void ResetTrace() { g_trace_state = {}; }
 inline TraceState& GetMutableTrace() { return g_trace_state; }
 
 inline const TraceState& GetTrace() { return g_trace_state; }
+
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+inline void RecordVfTraceError(std::string error)
+{
+    auto& trace = g_trace_state;
+    if (trace.active_pto_stack.empty()) {
+        return;
+    }
+    trace.executed_pto[trace.active_pto_stack.back()].vf_trace_errors.push_back(std::move(error));
+}
+
+inline void AppendVfTraceErrors(PtoInstrRecord& pto)
+{
+    if (pto.vf_trace_errors.empty()) {
+        return;
+    }
+    for (const std::string& error : pto.vf_trace_errors) {
+        pto.vfPrediction.diagnostics.push_back("VF trace parse failed: " + error);
+    }
+    pto.vfPrediction.fallbackCount += static_cast<uint32_t>(pto.vf_trace_errors.size());
+    pto.vfPrediction.status = pto.vfPrediction.vfSimHitCount > 0 ? vf::VfPredictionStatus::PARTIAL_FALLBACK :
+                                                                 vf::VfPredictionStatus::INVALID_TRACE;
+}
+#endif
 
 inline uint64_t GetLastPtoInstrCycles()
 {
@@ -225,6 +250,7 @@ inline void EndPtoInstr()
                 pto.vfPrediction = vf::predictVfCyclesDetailed(pto.vf_infos, vf::GetVfPredictionOptions());
                 pto.total_cycles += pto.vfPrediction.cycles;
             }
+            AppendVfTraceErrors(pto);
 #endif
         }
         stack.pop_back();
