@@ -16,7 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBinOp.hpp"
 
 namespace pto {
-
 template <typename T>
 struct AddOp {
     PTO_INTERNAL static void BinInstr(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, uint8_t repeats)

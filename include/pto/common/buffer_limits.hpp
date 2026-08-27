@@ -35,7 +35,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_UBUF_SIZE_BYTES (256u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3)
 #define PTO_UBUF_SIZE_BYTES (192u * 1024u)
-#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(PTO_NPU_ARCH_KIRINX90)
+#elif defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define PTO_UBUF_SIZE_BYTES (128u * 1024u)
 #else
 #error \
@@ -53,6 +53,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_CBUF_SIZE_BYTES (1024u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030)
 #define PTO_CBUF_SIZE_BYTES (512u * 1024u)
+#elif defined(PTO_NPU_ARCH_ASCEND5162A)
+#define PTO_CBUF_SIZE_BYTES (768u * 1024u)
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_CBUF_SIZE_BYTES (512u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
@@ -73,6 +75,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_L0A_SIZE_BYTES (32u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRINX90)
 #define PTO_L0A_SIZE_BYTES (64u * 1024u)
+#elif defined(PTO_NPU_ARCH_ASCEND5162A)
+#define PTO_L0A_SIZE_BYTES (0u)
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_L0A_SIZE_BYTES (64u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
@@ -93,6 +97,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_L0B_SIZE_BYTES (32u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRINX90)
 #define PTO_L0B_SIZE_BYTES (64u * 1024u)
+#elif defined(PTO_NPU_ARCH_ASCEND5162A)
+#define PTO_L0B_SIZE_BYTES (16u * 1024u)
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_L0B_SIZE_BYTES (64u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
@@ -117,6 +123,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_L0C_SIZE_BYTES (128u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRIN9030)
 #define PTO_L0C_SIZE_BYTES (64u * 1024u)
+#elif defined(PTO_NPU_ARCH_ASCEND5162A)
+#define PTO_L0C_SIZE_BYTES (0u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
 #define PTO_L0C_SIZE_BYTES PTO_CBUF_SIZE_BYTES
 #else
@@ -136,7 +144,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_BIAS_SIZE_BYTES (4u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || \
-    defined(PTO_NPU_ARCH_KIRINX90)
+    defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define PTO_BIAS_SIZE_BYTES (1u * 1024u)
 #else
 #error \
@@ -158,7 +166,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_FBUF_SIZE_BYTES (4u * 1024u)
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_FBUF_SIZE_BYTES (4u * 1024u)
-#elif defined(PTO_NPU_ARCH_A2A3)
+#elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define PTO_FBUF_SIZE_BYTES (2u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
 #define PTO_FBUF_SIZE_BYTES (6u * 1024u)
@@ -175,7 +183,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_SCALELEFT_SIZE_BYTES (4u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || \
-    defined(PTO_NPU_ARCH_KIRINX90)
+    defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define PTO_SCALELEFT_SIZE_BYTES 0u
 #else
 #error \
@@ -190,7 +198,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_SCALERIGHT_SIZE_BYTES (4u * 1024u)
 #elif defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || \
-    defined(PTO_NPU_ARCH_KIRINX90)
+    defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_ASCEND5162A)
 #define PTO_SCALERIGHT_SIZE_BYTES 0u
 #else
 #error \

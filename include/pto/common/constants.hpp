@@ -17,7 +17,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/memory.hpp>
 
 namespace pto {
+#if defined(PTO_NPU_ARCH_ASCEND5162A)
+constexpr int REPEAT_BYTE = 32;
+#else
 constexpr int REPEAT_BYTE = 256;
+#endif
 constexpr const uint64_t BLOCK_MAX_PER_REPEAT = 8; // 256 / 32 = 8
 constexpr int REPEAT_MAX = 255;
 constexpr const int BLOCK_BYTE_SIZE = 32;
@@ -343,7 +347,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
     static constexpr auto value = uint32_t(0xffffffffUL);
 };
 
-#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030))
+#if (!defined(__CPU_SIM)) && (!defined(__COSTMODEL)) && (!defined(PTO_NPU_ARCH_KIRIN9030)) && (!defined(PTO_NPU_ARCH_ASCEND5162A))
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);
