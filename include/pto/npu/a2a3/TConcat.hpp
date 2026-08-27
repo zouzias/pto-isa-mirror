@@ -49,6 +49,17 @@ __tf__ PTO_INTERNAL void TConcatImpl(
             pto_copy_ubuf_to_ubuf(
                 dstPtr + i * dstRowStride + validCol0, src1Ptr + i * src1RowStride, 1, src1BlockLen, src1Gap, dstGap);
         }
+        unsigned dstPadStart = validCol0 + validCol1;
+        unsigned dstPadCount = TileDataD::Cols - dstPadStart;
+        if (dstPadCount > 0) {
+            set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            for (unsigned i = 0; i < validRow; i++) {
+                for (unsigned j = 0; j < dstPadCount; j++) {
+                    dstPtr[i * dstRowStride + dstPadStart + j] = static_cast<TD>(0);
+                }
+            }
+        }
     } else {
         set_flag(PIPE_V, PIPE_S, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
