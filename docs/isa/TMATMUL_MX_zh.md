@@ -89,6 +89,14 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## 约束
 
+- **累加器目的步幅（A5 和 A6）**：
+    - `mad_mx` 没有目的步幅操作数。对于 `TileRes::Cols > FRACTAL_NZ_ROW`（16）的非 compact
+      `TileRes`，调用方必须保证 `align_up(M, 16) == TileRes::Rows`，其中
+      `M = aMatrix.GetValidRow()`。
+    - 当 `TileRes::ValidRow == DYNAMIC` 时，不兼容的运行时 `M` 会执行 `trap()`，外部表现为
+      AI Core 异常。对于静态有效行，该条件在当前 `TMATMUL_MX` 实现中仍由调用方保证。
+    - 当 `TileRes::Cols <= 16` 或 `TileRes::Compact != CompactMode::Null` 时，不受此限制。可使用完整
+      Rows 的 Acc Tile、列方向 window，或者在下游布局语义一致时使用 `TileAccCompact`。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - `m/k/n` 取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()`、`bMatrix.GetValidCol()`。
     - 静态合法性检查通过 `CheckMadMxValid<...>()`（类型、形状、分形和缩放tile合法性）。

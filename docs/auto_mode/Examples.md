@@ -78,6 +78,11 @@ AICORE void runTAdd(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__
 
 ## TMATMUL
 
+The example below uses a non-compact `TileAcc`. Instantiate it with `N <= 16` or
+`M == align_up(ValidM, 16)` so that the Acc block-column stride can be represented by `mad`. For a larger parent
+row extent, retile the M/N windows or use `TileAccCompact` only when `TSTORE_FP` and every other consumer use the
+same compact layout. See `docs/isa/TMATMUL.md` for details.
+
 ```cpp
 
 #include <pto/pto-inst.hpp>

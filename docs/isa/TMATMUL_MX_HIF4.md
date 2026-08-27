@@ -52,6 +52,10 @@ the kernel tiles over N:
 - Each iteration extracts a `tileN`-wide B column slice, runs `TMATMUL_MX`, and
   stores the `M × tileN` chunk to GM at offset `j × tileN` with `stride = N`.
 
+Each L0C destination must also satisfy the Acc destination-stride constraint in
+`docs/isa/TMATMUL_MX.md`. N-tiling is a column-window scheme and therefore keeps
+the full aligned M-row extent for every destination window.
+
 ## Accumulator dtype
 
 The L0C accumulator is always `float` (4 B), enforced by `CheckMadMxValid`:

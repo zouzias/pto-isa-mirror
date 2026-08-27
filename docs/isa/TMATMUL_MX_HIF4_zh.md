@@ -48,6 +48,9 @@ L0C 为 256 KB，以 FP32（4字节/元素）累加。当 `M × N × 4 > 256 KB`
 - 每次迭代提取 `tileN` 宽的 B 列切片，执行 `TMATMUL_MX`，将 `M × tileN` 块以
   偏移 `j × tileN`、步幅 `N` 存入 GM。
 
+每个 L0C 目的 Tile 还必须满足 `docs/isa/TMATMUL_MX_zh.md` 中的 Acc 目的步幅约束。按 N 分块属于
+列方向 window，因此每个目的窗口都保留完整且对齐的 M 行范围。
+
 ## 累加器数据类型
 
 L0C 累加器始终为 `float`（4字节），由 `CheckMadMxValid` 强制：

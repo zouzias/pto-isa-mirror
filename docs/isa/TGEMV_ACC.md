@@ -75,6 +75,13 @@ pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.t
 - Runtime valid-size constraints:
     - `m` must be `1`
     - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+- Acc destination stride:
+    - The shared `mad` implementation also applies the Acc stride rule described by `TMATMUL`.
+    - For a non-compact result with `TileRes::Cols > 16`, use
+      `TileRes::Rows == TileLeft::Rows == 16` while keeping the valid `M` equal to 1, or use a compact Acc tile
+      consistently throughout the downstream pipeline.
+    - An incompatible static shape fails at compile time; an incompatible dynamic Acc valid row executes
+      `trap()` on NPU and is reported as an AI Core exception.
 
 ### Datatype constraints
 

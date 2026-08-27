@@ -56,6 +56,18 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## Constraints
 
+- **Accumulator destination stride (CPU, A2A3, A5, A6, and Kirin9030)**:
+    - `mad` has no destination-stride operand. For a non-compact `TileRes` with more than one Acc block column
+      (`TileRes::Cols > FRACTAL_NZ_ROW`, where `FRACTAL_NZ_ROW` is 16), the shape is legal only when
+      `align_up(M, 16) == TileRes::Rows`.
+    - A static `TileRes::ValidRow` is checked at compile time. It must describe the same `M` as
+      `aMatrix.GetValidRow()`; an incompatible shape fails with `static_assert`.
+    - A dynamic `TileRes::ValidRow` is checked on the NPU with the runtime `M` from `aMatrix.GetValidRow()`.
+      An incompatible shape executes `trap()` and is reported as an AI Core exception.
+    - The restriction does not apply when `TileRes::Cols <= 16` or `TileRes::Compact != CompactMode::Null`.
+    - To process row windows, use a full-Rows Acc tile for each window (`Rows = align_up(M, 16)`), split the
+      result into column windows, or use `TileAccCompact` when every downstream consumer uses the same compact
+      layout.
 - **Implementation checks (A2A3)**:
     - Supported `(CType, AType, BType)` triples:
     - `(int32_t, int8_t, int8_t)`
