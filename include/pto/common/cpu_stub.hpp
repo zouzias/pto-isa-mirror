@@ -17,6 +17,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <cstdio>
 #include <algorithm>
+#include <chrono>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <sstream>
+#include <thread>
+#include <vector>
 #include <type_traits>
 #include <dlfcn.h>
 #include <string>
@@ -37,6 +45,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __cb__
 #define __cc__
 #define __fbuf__
+#define __biasbuf__
 #define __tf__
 
 typedef void* aclrtStream;
@@ -52,11 +61,7 @@ const pipe_t PIPE_ALL = 6;
 const pipe_t PIPE_FIX = 7;
 inline void pipe_barrier(pipe_t pipe) { (void)pipe; }
 
-#define aclFloat16ToFloat(x) (float)(x)
-#define aclInit(x)
-#define aclrtSetDevice(x)
-
-#define aclrtCreateStream(x)
+#define aclFloat16ToFloat(x) ((float)(x))
 
 #if !defined(__COSTMODEL)
 enum {
@@ -148,6 +153,12 @@ inline uint64_t sbitset0(uint64_t value, int bit) { return value & ~(1ULL << bit
 #define set_mask_norm(...)
 #define set_vector_mask(...)
 
+inline uint32_t get_block_idx();
+
+#if !defined(__COSTMODEL)
+#include <pto/cpu/trace.hpp>
+#endif
+
 /* <Hccl> */
 #define HcclHostBarrier(x, y)
 #define CommMpiInit(x, y) (true)
@@ -184,10 +195,238 @@ struct CommDeviceContext {
 #define F16_MAX 65504.0f
 
 namespace pto::cpu_sim {
+#if !defined(__COSTMODEL)
+struct RuntimeConfig {
+    bool initialized = false;
+    uint32_t device_id = 0;
+    uint32_t num_cores = 1;
+    bool trace_enabled = kInstructionTraceEnabled;
+    std::filesystem::path trace_root = "cpu_sim_traces";
+    uint64_t next_stream_id = 1;
+    uint64_t next_launch_id = 0;
+    std::mutex mutex;
+};
+
+struct StreamState {
+    uint64_t id = 0;
+};
+
+inline const auto g_time_origin = std::chrono::steady_clock::now();
+#endif
+
 using SetExecutionContextHookFn = void (*)(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim);
 using GetExecutionContextHookFn = void (*)(uint32_t* block_idx, uint32_t* subblock_id, uint32_t* subblock_dim);
 using GetSharedStorageHookFn = void* (*)(std::string key, size_t size);
 using GetTaskCookieHookFn = uint64_t (*)();
+using GetSubblockIdInjectedHookFn = uint32_t (*)();
+using GetPipeSharedStateInjectedHookFn = void* (*)(uint64_t pipe_key, size_t size);
+
+inline void set_execution_context(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim);
+inline void reset_execution_context();
+
+inline GetSubblockIdInjectedHookFn injected_subblock_id_hook = nullptr;
+inline GetPipeSharedStateInjectedHookFn injected_pipe_shared_state_hook = nullptr;
+
+#if !defined(__COSTMODEL)
+inline RuntimeConfig& runtime_config()
+{
+    static RuntimeConfig config;
+    return config;
+}
+
+inline uint32_t ReadEnvU32(const char* name, uint32_t fallback)
+{
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return fallback;
+    }
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value, &end, 10);
+    if (end == value || *end != '\0') {
+        return fallback;
+    }
+    return parsed == 0 ? fallback : static_cast<uint32_t>(parsed);
+}
+
+inline bool ReadEnvBool(const char* name, bool fallback)
+{
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return fallback;
+    }
+    if (std::strcmp(value, "0") == 0 || std::strcmp(value, "false") == 0 || std::strcmp(value, "FALSE") == 0) {
+        return false;
+    }
+    if (std::strcmp(value, "1") == 0 || std::strcmp(value, "true") == 0 || std::strcmp(value, "TRUE") == 0) {
+        return true;
+    }
+    return fallback;
+}
+
+inline void InitializeRuntime()
+{
+    auto& config = runtime_config();
+    std::scoped_lock lock(config.mutex);
+    config.device_id = 0;
+    config.num_cores = ReadEnvU32("PTO_CPU_SIM_NUM_CORES", 4);
+    config.trace_enabled = kInstructionTraceEnabled && ReadEnvBool("PTO_CPU_SIM_TRACE_ENABLE", true);
+    if (const char* trace_dir = std::getenv("PTO_CPU_SIM_TRACE_DIR"); trace_dir != nullptr && *trace_dir != '\0') {
+        config.trace_root = trace_dir;
+    } else {
+        config.trace_root = "cpu_sim_traces";
+    }
+    config.next_stream_id = 1;
+    if (config.trace_enabled) {
+        std::filesystem::create_directories(config.trace_root);
+    }
+    config.initialized = true;
+}
+
+inline void ShutdownRuntime()
+{
+    auto& config = runtime_config();
+    std::scoped_lock lock(config.mutex);
+    config.initialized = false;
+    config.next_stream_id = 1;
+}
+
+inline void EnsureRuntimeInitialized()
+{
+    if (!runtime_config().initialized) {
+        InitializeRuntime();
+    }
+}
+
+inline uint32_t GetConfiguredCoreCount()
+{
+    EnsureRuntimeInitialized();
+    return runtime_config().num_cores;
+}
+
+inline bool IsTraceEnabled()
+{
+    EnsureRuntimeInitialized();
+    return runtime_config().trace_enabled;
+}
+
+inline std::filesystem::path GetTraceRoot()
+{
+    EnsureRuntimeInitialized();
+    return runtime_config().trace_root;
+}
+
+inline uint64_t NextLaunchId()
+{
+    auto& config = runtime_config();
+    std::scoped_lock lock(config.mutex);
+    return config.next_launch_id++;
+}
+
+inline std::filesystem::path CreateKernelTraceDir(const std::string& kernel_name)
+{
+    EnsureRuntimeInitialized();
+    const auto dir = GetTraceRoot() / kernel_name / ("launch_" + std::to_string(NextLaunchId()));
+    if (IsTraceEnabled()) {
+        std::filesystem::create_directories(dir);
+    }
+    return dir;
+}
+
+struct KernelLaunchOptions {
+    std::string kernel_name;
+    uint32_t requested_cores = 0;
+    uint32_t total_work_items = 0;
+    uint32_t work_quantum = 1;
+    uint32_t subblocks_per_block = 1;
+    uint32_t explicit_block_count = 0;
+    bool write_trace_files = true;
+};
+
+inline uint32_t ResolveActiveCoreCount(
+    uint32_t requested_cores, uint32_t total_work_items = 0, uint32_t work_quantum = 1)
+{
+    const uint32_t configured = requested_cores == 0 ? GetConfiguredCoreCount() : requested_cores;
+    uint32_t active = std::max<uint32_t>(1, configured);
+    if (total_work_items == 0) {
+        return active;
+    }
+
+    active = std::max<uint32_t>(1, std::min(active, total_work_items));
+    const uint32_t quantum = std::max<uint32_t>(1, work_quantum);
+    while (active > 1) {
+        const uint32_t chunk = (total_work_items + active - 1) / active;
+        if (chunk % quantum == 0) {
+            break;
+        }
+        --active;
+    }
+    return active;
+}
+
+template <typename KernelFn>
+inline void LaunchKernelMultiCore(const KernelLaunchOptions& options, aclrtStream stream, KernelFn&& kernel)
+{
+    (void)stream;
+    EnsureRuntimeInitialized();
+
+    const uint32_t subblocks_per_block = std::max<uint32_t>(1, options.subblocks_per_block);
+    const uint32_t active_blocks =
+        options.explicit_block_count != 0 ?
+            options.explicit_block_count :
+            ResolveActiveCoreCount(options.requested_cores, options.total_work_items, options.work_quantum);
+    const uint32_t active_cores = active_blocks * subblocks_per_block;
+    const bool trace_enabled = IsTraceEnabled() && options.write_trace_files;
+    const std::filesystem::path trace_dir =
+        trace_enabled ? CreateKernelTraceDir(options.kernel_name) : std::filesystem::path{};
+
+    std::vector<std::thread> workers;
+    workers.reserve(active_cores);
+    std::vector<std::string> trace_chunks(active_cores);
+    std::exception_ptr first_error;
+    std::mutex error_mutex;
+
+    for (uint32_t core_id = 0; core_id < active_cores; ++core_id) {
+        workers.emplace_back([&, core_id]() {
+            try {
+                const uint32_t block_idx = core_id / subblocks_per_block;
+                const uint32_t subblock_id = core_id % subblocks_per_block;
+                ResetInstructionTrace();
+                reset_execution_context();
+                set_execution_context(block_idx, subblock_id, subblocks_per_block);
+                kernel();
+                if (trace_enabled) {
+                    std::ostringstream out;
+                    DumpInstructionTraceJson(out);
+                    trace_chunks[core_id] = out.str();
+                }
+                reset_execution_context();
+            } catch (...) {
+                std::scoped_lock lock(error_mutex);
+                if (first_error == nullptr) {
+                    first_error = std::current_exception();
+                }
+            }
+        });
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    if (first_error != nullptr) {
+        std::rethrow_exception(first_error);
+    }
+
+    if (trace_enabled) {
+        std::ofstream combined(trace_dir / "trace.jsonl", std::ios::trunc);
+        for (const auto& chunk : trace_chunks) {
+            combined << chunk;
+        }
+    }
+}
+
+inline StreamState* ToStreamState(aclrtStream stream) { return reinterpret_cast<StreamState*>(stream); }
+#endif
 
 inline SetExecutionContextHookFn ResolveSetExecutionContextHook()
 {
@@ -215,6 +454,19 @@ inline GetTaskCookieHookFn ResolveTaskCookieHook()
     return hook;
 }
 
+inline GetSubblockIdInjectedHookFn ResolveSubblockIdHook()
+{
+    static auto hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_subblock_id"));
+    return hook;
+}
+
+inline GetPipeSharedStateInjectedHookFn ResolvePipeSharedStateHook()
+{
+    static auto hook =
+        reinterpret_cast<GetPipeSharedStateInjectedHookFn>(dlsym(RTLD_DEFAULT, "pto_sim_get_pipe_shared_state"));
+    return hook;
+}
+
 struct ExecutionContext {
     uint32_t block_idx = 0;
     uint32_t subblock_id = 0;
@@ -223,6 +475,12 @@ struct ExecutionContext {
 };
 
 inline thread_local ExecutionContext execution_context{};
+
+inline void register_hooks(void* get_subblock_id, void* get_pipe_shared_state)
+{
+    injected_subblock_id_hook = reinterpret_cast<GetSubblockIdInjectedHookFn>(get_subblock_id);
+    injected_pipe_shared_state_hook = reinterpret_cast<GetPipeSharedStateInjectedHookFn>(get_pipe_shared_state);
+}
 
 inline void set_execution_context(uint32_t block_idx, uint32_t subblock_id, uint32_t subblock_dim = 1)
 {
@@ -253,6 +511,43 @@ private:
 };
 } // namespace pto::cpu_sim
 
+namespace cce {
+template <typename... Args>
+inline int printf(const char* fmt, Args... args)
+{
+    return std::printf(fmt, args...);
+}
+} // namespace cce
+
+#if !defined(__COSTMODEL)
+inline int aclInit(const char*)
+{
+    pto::cpu_sim::InitializeRuntime();
+    return 0;
+}
+
+inline int aclrtSetDevice(int device_id)
+{
+    auto& config = pto::cpu_sim::runtime_config();
+    std::scoped_lock lock(config.mutex);
+    config.device_id = static_cast<uint32_t>(std::max(0, device_id));
+    return 0;
+}
+
+inline int aclrtCreateStream(aclrtStream* stream)
+{
+    pto::cpu_sim::EnsureRuntimeInitialized();
+    auto& config = pto::cpu_sim::runtime_config();
+    auto* state = new pto::cpu_sim::StreamState();
+    {
+        std::scoped_lock lock(config.mutex);
+        state->id = config.next_stream_id++;
+    }
+    *stream = reinterpret_cast<aclrtStream>(state);
+    return 0;
+}
+#endif
+
 inline uint32_t get_block_idx()
 {
     if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
@@ -267,6 +562,12 @@ inline uint32_t get_block_idx()
 
 inline uint32_t get_subblockid()
 {
+    if (pto::cpu_sim::injected_subblock_id_hook != nullptr) {
+        return pto::cpu_sim::injected_subblock_id_hook();
+    }
+    if (auto hook = pto::cpu_sim::ResolveSubblockIdHook(); hook != nullptr) {
+        return hook();
+    }
     if (auto hook = pto::cpu_sim::ResolveExecutionContextHook(); hook != nullptr) {
         uint32_t block_idx = 0;
         uint32_t subblock_id = 0;
@@ -288,6 +589,12 @@ inline uint32_t get_subblockdim()
     }
     return pto::cpu_sim::execution_context.subblock_dim;
 }
+
+#if !defined(__COSTMODEL)
+inline uint32_t get_block_num() { return pto::cpu_sim::GetConfiguredCoreCount(); }
+
+inline uint32_t get_coreid() { return get_block_idx(); }
+#endif
 
 inline uint64_t get_task_cookie()
 {
