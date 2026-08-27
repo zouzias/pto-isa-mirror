@@ -26,6 +26,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif __NPU_ARCH__ == 3113
 #define PTO_COMM_NOT_SUPPORTED
 #define PTO_NPU_ARCH_KIRIN9030
+#elif __NPU_ARCH__ == 5162
+#define PTO_COMM_NOT_SUPPORTED
+#define PTO_NPU_ARCH_ASCEND5162A
 #elif __NPU_ARCH__ == 3003
 #define PTO_COMM_NOT_SUPPORTED
 #define PTO_NPU_ARCH_KIRINX90
@@ -37,7 +40,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_NPU_ARCH_A6
 #endif
 
-#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_KIRINDEV0000)
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(PTO_NPU_ARCH_ASCEND5162A)
+
 #define __tf__
 #define __in__
 #define __out__

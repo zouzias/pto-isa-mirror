@@ -320,5 +320,4 @@ bool ResultCmp(
     return ResultCmp(
         outDataValExp, outDataValAct.data(), eps, threshold, zeroCountThreshold, printAll, printErr, testNum);
 }
-
 } // namespace PtoTestCommon
