@@ -31,6 +31,8 @@
 #include <cstddef>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 #include <pto/common/pto_tile.hpp>
 
@@ -57,6 +59,8 @@ public:
     using ArchMemorySizes = std::size_t[MemoryRegion::_MAX_REGIONS];
 
 private:
+    static inline constexpr std::size_t kDefaultCpuSimUBScratchSize = 512 * 1024;
+
     // Memory sizes by architecture
     // A2/A3:
     // https://www.hiascend.com/doc_center/source/zh/canncommercial/80RC3/devguide/appdevg/sdpdevg/atlasprogramming_12_0003.html
@@ -81,6 +85,30 @@ private:
         4 * 1024,   // L0A_MX: 4 KB
         4 * 1024,   // L0B: 4 KB
     };
+
+    static std::size_t ReadSizeOverride(const char* name, std::size_t fallback)
+    {
+        const char* value = std::getenv(name);
+        if (value == nullptr || *value == '\0') {
+            return fallback;
+        }
+        char* end = nullptr;
+        const unsigned long long parsed = std::strtoull(value, &end, 10);
+        if (end == value || *end != '\0' || parsed == 0) {
+            return fallback;
+        }
+        return static_cast<std::size_t>(parsed);
+    }
+
+    void ApplySizeOverrides()
+    {
+        sizes_[MemoryRegion::UB] =
+            ReadSizeOverride("PTO_CPU_SIM_UB_BYTES", std::max(sizes_[MemoryRegion::UB], kDefaultCpuSimUBScratchSize));
+        sizes_[MemoryRegion::L1] = ReadSizeOverride("PTO_CPU_SIM_L1_BYTES", sizes_[MemoryRegion::L1]);
+        sizes_[MemoryRegion::L0A] = ReadSizeOverride("PTO_CPU_SIM_L0A_BYTES", sizes_[MemoryRegion::L0A]);
+        sizes_[MemoryRegion::L0B] = ReadSizeOverride("PTO_CPU_SIM_L0B_BYTES", sizes_[MemoryRegion::L0B]);
+        sizes_[MemoryRegion::L0C] = ReadSizeOverride("PTO_CPU_SIM_L0C_BYTES", sizes_[MemoryRegion::L0C]);
+    }
 
 public:
     // Each thread gets its own NPUMemoryModel instance, accurately modeling
@@ -111,6 +139,8 @@ public:
                 }
                 break;
         }
+
+        ApplySizeOverrides();
 
         for (int i = 0; i < MemoryRegion::_MAX_REGIONS; i++) {
             buffers_[i].resize(sizes_[i], 0);
@@ -222,6 +252,28 @@ public:
     const NPUMemoryModel::ArchMemorySizes& GetSizes() const { return sizes_; }
     NPUArch GetArch() const { return arch_; }
     bool IsInitialized() const { return initialized_; }
+
+    // Returns true when rawAddr already points into one of this thread's
+    // simulated on-chip memory buffers. This is needed for patterns like:
+    //   TASSIGN(alias_tile, reinterpret_cast<uintptr_t>(base_tile.data()));
+    // where the "address" is not an offset but an actual host pointer into UB/L1/L0.
+    bool ContainsAddress(std::uintptr_t rawAddr) const
+    {
+        if (!initialized_) {
+            return false;
+        }
+        for (const auto& buf : buffers_) {
+            if (buf.empty()) {
+                continue;
+            }
+            const auto begin = reinterpret_cast<std::uintptr_t>(buf.data());
+            const auto end = begin + buf.size();
+            if (rawAddr >= begin && rawAddr < end) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // Clear all memory (zero-fill)
     void Clear()
