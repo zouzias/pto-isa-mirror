@@ -37,6 +37,19 @@ Use these codes referenced in the assertion index:
 - Many assertions are backend- and SoC-specific (e.g., `include/pto/npu/a2a3/*` vs `include/pto/npu/a5/*`).
 - For instruction legality (tile types/layouts/supported dtypes), the authoritative reference is the instruction page under `docs/isa/`.
 
+### Matmul Acc row-window failures
+
+`TMATMUL`, `TMATMUL_ACC`, `TMATMUL_BIAS`, and their GEMV/MX paths may reject an Acc destination whose block
+columns require a row stride that `mad`/`mad_mx` cannot encode. On the standard `mad` path, a static shape reports
+a message beginning with `The Acc tile is a row window`; a dynamic Acc valid row executes `trap()` and may appear
+only as an AI Core exception. A static MX valid-row shape is a caller-side legality requirement in the current
+implementation.
+
+For a non-compact Acc tile wider than 16 columns, verify
+`align_up(aMatrix.GetValidRow(), 16) == TileRes::Rows`. Otherwise use a full-Rows destination per row window,
+split the output into column windows, or use `TileAccCompact` consistently across the producer and all consumers.
+See `docs/isa/TMATMUL.md` and `docs/coding/Tile.md` for the complete constraint and compact-layout contract.
+
 <!-- The assertion index below is generated from `include/pto/`. Keep it sorted and indexed for quick lookup. -->
 
 ## Assertion Index

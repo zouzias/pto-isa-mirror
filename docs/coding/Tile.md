@@ -125,12 +125,19 @@ These constraints are intentional: they prevent generating programs that would b
 - `pto::TileLeft<Element, Rows, Cols>`
 - `pto::TileRight<Element, Rows, Cols>`
 - `pto::TileAcc<Element, Rows, Cols>`
+- `pto::TileAccCompact<Element, Rows, Cols>`
 
 These aliases select target-appropriate boxed layouts and fractal sizes. For example, on the CPU simulator backend:
 
 - `TileLeft`: outer col-major + inner row-major (often referred to as “Nz”)
 - `TileRight`: outer row-major + inner col-major (often referred to as “Zn”)
 - `TileAcc`: accumulator layout with `TileConfig::fractalCSize`
+- `TileAccCompact`: the same accumulator fractal with `CompactMode::Normal`; block columns are packed using the
+  fractal-aligned valid row extent instead of the parent tile's row extent
+
+`TileAccCompact` is useful when a `mad`/`mad_mx` result is intentionally produced with compact block-column
+stride. Every consumer of the same storage (for example `TMOV`, `TSTORE`, or a rewrapped tile view) must use the
+matching compact interpretation. Do not change only the matmul destination type to bypass an Acc stride check.
 
 ## Address binding (`TASSIGN`)
 

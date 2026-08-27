@@ -96,6 +96,13 @@ These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwi
 - Runtime valid-size constraints:
     - `m` must be `1`
     - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+- Acc destination stride:
+    - The shared `mad` implementation also applies the Acc stride rule described by `TMATMUL`.
+    - For a non-compact result wider than one block column (`TileRes::Cols > 16`), use capacity
+      `TileRes::Rows == TileLeft::Rows == 16` while keeping the valid `M` equal to 1. Alternatively, use a
+      compact Acc tile and keep the same compact interpretation in downstream operations.
+    - An incompatible static shape fails at compile time; an incompatible dynamic Acc valid row executes
+      `trap()` on NPU and is reported as an AI Core exception.
 
 ### TGEMV / TGEMV_ACC datatype constraints
 

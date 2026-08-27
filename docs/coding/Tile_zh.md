@@ -125,12 +125,19 @@ PTO 用两层布局描述 Tile：
 - `pto::TileLeft<Element, Rows, Cols>`
 - `pto::TileRight<Element, Rows, Cols>`
 - `pto::TileAcc<Element, Rows, Cols>`
+- `pto::TileAccCompact<Element, Rows, Cols>`
 
 这些别名会为目标选择合适的盒化布局与分形大小。例如在 CPU 仿真后端：
 
 - `TileLeft`：外层 col-major + 内层 row-major（常称 “Nz”）
 - `TileRight`：外层 row-major + 内层 col-major（常称 “Zn”）
 - `TileAcc`：使用 `TileConfig::fractalCSize` 的累加器布局
+- `TileAccCompact`：使用相同累加器分形并设置 `CompactMode::Normal`；不同列基块之间按分形对齐后的
+  有效行范围紧密排列，而不是使用父 Tile 的行范围作为步幅
+
+当 `mad`/`mad_mx` 的结果本来就按紧凑列基块步幅产生时，可以使用 `TileAccCompact`。同一块存储的所有
+消费者（例如 `TMOV`、`TSTORE` 或重新封装的 Tile 视图）都必须采用一致的 compact 解释；不能只修改
+matmul 目的 Tile 类型来绕过 Acc stride 检查。
 
 ## 地址绑定（`TASSIGN`）
 
