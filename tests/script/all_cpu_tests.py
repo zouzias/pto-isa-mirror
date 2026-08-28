@@ -37,6 +37,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Enable BF16 CPU-SIM coverage. This switches to a compiler that supports std::bfloat16_t and C++23.",
     )
+    parser.add_argument(
+        "--trace-mode",
+        action="store_true",
+        help="Enable PTO instruction tracing in CPU-SIM via PTO_CPU_SIM_TRACE_MODE.",
+    )
     parser.add_argument("-g", "--generator", required=False,
                         help="Optional CMake generator, for example Ninja.")
     parser.add_argument(
@@ -51,6 +56,15 @@ def parse_arguments() -> argparse.Namespace:
         type=int,
         default=30,
         help="Per-test timeout in seconds.",
+    )
+    parser.add_argument(
+        "--build-folder",
+        required=False,
+        help=(
+            "Optional build root used to isolate generated build artifacts. "
+            "When set, each CPU test suite builds under this directory using "
+            "its default leaf name."
+        ),
     )
     return parser.parse_args()
 
@@ -112,6 +126,7 @@ def build_single_test(repo_root: Path, tests_path: Path, build_dir: Path, args: 
         str(build_dir),
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DPTO_CPU_SIM_ENABLE_BF16={'ON' if args.enable_bf16 else 'OFF'}",
+        f"-DPTO_CPU_SIM_TRACE_MODE={'ON' if args.trace_mode else 'OFF'}",
     ]
     if cc:
         configure_cmd.append(f"-DCMAKE_C_COMPILER={cc}")
@@ -130,10 +145,20 @@ TEST_SOURCES = [
 ]
 
 
+def resolve_build_dir(repo_root: Path, build_rel: str, args: argparse.Namespace) -> Path:
+    if not args.build_folder:
+        return repo_root / build_rel
+
+    base = Path(args.build_folder)
+    if not base.is_absolute():
+        base = repo_root / base
+    return base / Path(build_rel).name
+
+
 def build_all_cpu_tests(repo_root: Path, args: argparse.Namespace) -> None:
     for src_rel, build_rel in TEST_SOURCES:
         tests_path = repo_root / src_rel
-        this_build_dir = repo_root / build_rel
+        this_build_dir = resolve_build_dir(repo_root, build_rel, args)
         if not tests_path.exists():
             print(f"Skipping non-existent source: {tests_path}")
             continue
@@ -150,7 +175,7 @@ def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
         testcase_src_root = repo_root / src_rel / "testcase"
         if not testcase_src_root.exists():
             continue
-        testcase_build_root = repo_root / build_rel / "testcase"
+        testcase_build_root = resolve_build_dir(repo_root, build_rel, args) / "testcase"
         testcase_build_root.mkdir(parents=True, exist_ok=True)
 
         env = gen_env.copy()
@@ -170,7 +195,7 @@ def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
     for src_rel, build_rel in TEST_SOURCES:
         name = src_rel.split("/")[-2].upper()
         print("=" * 60 + f" {name} " + "=" * 60)
-        build_dir = repo_root / build_rel
+        build_dir = resolve_build_dir(repo_root, build_rel, args)
         bin_dir = build_dir / "bin"
         if not bin_dir.exists():
             continue

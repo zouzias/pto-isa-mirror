@@ -17,11 +17,64 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/utils.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#ifdef __CPU_SIM
+#include "pto/cpu/trace.hpp"
+#endif
+
+#define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
+
+#ifdef __CPU_SIM
+#define PTO_INSTR_SCOPE(API, ...) \
+    ::pto::cpu_sim::PtoInstrTraceScope _pto_instr_trace_scope(#API, 1 __VA_OPT__(, ) __VA_ARGS__)
+#define PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, ...) \
+    ::pto::cpu_sim::PtoInstrTraceScope _pto_instr_trace_scope(#API, OUT_COUNT __VA_OPT__(, ) __VA_ARGS__)
+#define PTO_INSTR_SCOPE_ROLES(API, ROLES, ...) \
+    ::pto::cpu_sim::PtoInstrTraceScope _pto_instr_trace_scope(#API, ROLES __VA_OPT__(, ) __VA_ARGS__)
+#define MAP_INSTR_IMPL(API, ...)           \
+    do {                                   \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__); \
+        API##_IMPL(__VA_ARGS__);           \
+    } while (0)
+#define MAP_INSTR_IMPL_OUTS(API, OUT_COUNT, ...)           \
+    do {                                                   \
+        PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, __VA_ARGS__); \
+        API##_IMPL(__VA_ARGS__);                           \
+    } while (0)
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) \
+    do {                                          \
+        PTO_INSTR_SCOPE(API, __VA_ARGS__);        \
+        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);    \
+    } while (0)
+#define MAP_INSTR_IMPL_T_OUTS(API, TEMPLATE_ARGS, OUT_COUNT, ...) \
+    do {                                                          \
+        PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, __VA_ARGS__);        \
+        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                    \
+    } while (0)
+#define MAP_INSTR_IMPL_ROLES(API, ROLES, ...)           \
+    do {                                                \
+        PTO_INSTR_SCOPE_ROLES(API, ROLES, __VA_ARGS__); \
+        API##_IMPL(__VA_ARGS__);                        \
+    } while (0)
+#define MAP_INSTR_IMPL_T_ROLES(API, TEMPLATE_ARGS, ROLES, ...) \
+    do {                                                       \
+        PTO_INSTR_SCOPE_ROLES(API, ROLES, __VA_ARGS__);        \
+        API##_IMPL TEMPLATE_ARGS(__VA_ARGS__);                 \
+    } while (0)
+#else
+#define PTO_INSTR_SCOPE(API, ...)
+#define PTO_INSTR_SCOPE_OUTS(API, OUT_COUNT, ...)
+#define PTO_INSTR_SCOPE_ROLES(API, ROLES, ...)
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_OUTS(API, OUT_COUNT, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_OUTS(API, TEMPLATE_ARGS, OUT_COUNT, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#define MAP_INSTR_IMPL_ROLES(API, ROLES, ...) API##_IMPL(__VA_ARGS__)
+#define MAP_INSTR_IMPL_T_ROLES(API, TEMPLATE_ARGS, ROLES, ...) API##_IMPL TEMPLATE_ARGS(__VA_ARGS__)
+#endif
+
 #if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
 #include "pto/comm/pto_comm_inst.hpp"
 #endif
-
-#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
 
 namespace pto {
 
@@ -105,13 +158,13 @@ PTO_INST void SYNCALL(GlobalData& gmWorkspace, int32_t usedCores = 0)
 template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData>
 PTO_INST void TPRINT(TileData& src)
 {
-    TPRINT_IMPL<Format>(src);
+    MAP_INSTR_IMPL_T_OUTS(TPRINT, PTO_TEMPLATE_ARGS(Format), 0, src);
 }
 
 template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData, typename GlobalData>
 PTO_INST void TPRINT(TileData& src, GlobalData& tmp)
 {
-    TPRINT_IMPL<Format>(src, tmp);
+    MAP_INSTR_IMPL_T_OUTS(TPRINT, PTO_TEMPLATE_ARGS(Format), 0, src, tmp);
 }
 #endif
 
@@ -501,7 +554,7 @@ PTO_INST RecordEvent TRECIP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... e
     /*
      * A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
      */
-    TDIVS_IMPL<static_cast<DivAlgorithm>(PrecisionType)>(dst, 1, src);
+    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(static_cast<DivAlgorithm>(PrecisionType)), dst, 1, src);
     return {};
 }
 
@@ -1223,14 +1276,14 @@ PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData& dst, SrcTileData& src, WaitEve
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
 PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx)
 {
-    MAP_INSTR_IMPL(TSORT32, dst, src, idx);
+    MAP_INSTR_IMPL_ROLES(TSORT32, "OIO", dst, src, idx);
     return {};
 }
 
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
 PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx, TmpTileData& tmp)
 {
-    MAP_INSTR_IMPL(TSORT32, dst, src, idx, tmp);
+    MAP_INSTR_IMPL_ROLES(TSORT32, "OIOI", dst, src, idx, tmp);
     return {};
 }
 
