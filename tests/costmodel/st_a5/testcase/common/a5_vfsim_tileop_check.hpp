@@ -37,7 +37,8 @@ inline std::string JoinDiagnostics(const std::vector<std::string>& diagnostics)
 
 inline bool IsAdapterIgnoredPredicateSetup(const vf::VfInst& inst)
 {
-    return inst.opName == "plt_b8" || inst.opName == "plt_b16" || inst.opName == "plt_b32";
+    return inst.opName == "plt_b8" || inst.opName == "plt_b16" || inst.opName == "plt_b32" ||
+           inst.opName == "pset_b8" || inst.opName == "pset_b16" || inst.opName == "pset_b32";
 }
 
 inline void CollectAdapterModeledInstructions(
