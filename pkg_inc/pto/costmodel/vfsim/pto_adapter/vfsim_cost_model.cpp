@@ -8,7 +8,6 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 #include <algorithm>
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -31,41 +30,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto::mocker::vf {
 namespace {
-
-std::string toUpper(std::string value)
-{
-    std::transform(
-        value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    return value;
-}
-
-bool isIgnoredPredicateSetup(const std::string& opName)
-{
-    const std::string op = toUpper(opName);
-    return op == "PLT_B8" || op == "PLT_B16" || op == "PLT_B32";
-}
-
-bool requiresUnsupportedNativeModel(const std::string& opName)
-{
-    const std::string op = toUpper(opName);
-    return op == "PXOR" || op == "PSEL" || op == "PLDS" || op == "PPACK" || op == "PSTS" || op == "PUNPACK" ||
-           op == "VADDC" || op == "VADDCS" || op == "VSUBC" || op == "VSUBCS" || op == "VMULL" || op == "VCMP_GE" ||
-           op == "VINTLV" || op == "VDINTLV" || op == "PSET_B8" || op == "PSET_B16" || op == "PSET_B32" ||
-           op == "PAND" || op == "POR" || op == "PNOT";
-}
-
-std::optional<std::string> findUnsupportedNativeInstruction(const std::vector<VfNode>& nodes)
-{
-    for (const VfNode& node : nodes) {
-        if (IsLoop(node)) {
-            if (auto unsupported = findUnsupportedNativeInstruction(AsLoop(node).body))
-                return unsupported;
-        } else if (IsInst(node) && requiresUnsupportedNativeModel(AsInst(node).opName)) {
-            return AsInst(node).opName;
-        }
-    }
-    return std::nullopt;
-}
 
 uint64_t fallbackNodes(const std::vector<VfNode>& nodes, uint64_t multiplier)
 {
@@ -91,7 +55,7 @@ uint64_t fallback(const std::vector<VfInfo>& vfs)
     return total;
 }
 
-bool formsSupported(const std::vector<vfsim::CanonicalNode>& nodes, const vfsim::ParamDb& db, std::string& reason)
+bool formsSupported(const std::vector<vfsim::CanonicalNode>& nodes, const vfsim::ParamDB& db, std::string& reason)
 {
     for (const vfsim::CanonicalNode& node : nodes) {
         if (const auto* loop = std::get_if<std::shared_ptr<const vfsim::CanonicalLoop>>(&node.payload)) {
@@ -116,7 +80,7 @@ bool formsSupported(const std::vector<vfsim::CanonicalNode>& nodes, const vfsim:
             return false;
         }
         if (!db.hasInst(instruction.opcode, instruction.form)) {
-            reason = "ParamDb has no entry for " + instruction.opcode + "/" + instruction.form;
+            reason = "ParamDB has no entry for " + instruction.opcode + "/" + instruction.form;
             return false;
         }
     }
@@ -242,12 +206,12 @@ std::filesystem::path resolveConfigRoot(const VfPredictionOptions& options)
                              "PerfSimConfig::vfsim_config_dir, or PTO_VFSIM_CONFIG_DIR");
 }
 
-const vfsim::ParamDb& getParamDb(const std::filesystem::path& configRoot)
+const vfsim::ParamDB& getParamDb(const std::filesystem::path& configRoot)
 {
     static thread_local std::filesystem::path cachedRoot;
-    static thread_local std::unique_ptr<vfsim::ParamDb> cachedDb;
+    static thread_local std::unique_ptr<vfsim::ParamDB> cachedDb;
     if (!cachedDb || cachedRoot != configRoot) {
-        cachedDb = std::make_unique<vfsim::ParamDb>(configRoot);
+        cachedDb = std::make_unique<vfsim::ParamDB>(configRoot);
         cachedRoot = configRoot;
     }
     return *cachedDb;
@@ -294,18 +258,9 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
     }
 
     try {
-        const vfsim::ParamDb& db = getParamDb(resolveConfigRoot(options));
+        const vfsim::ParamDB& db = getParamDb(resolveConfigRoot(options));
         for (std::size_t vfIndex = 0; vfIndex < vfs.size(); ++vfIndex) {
             const VfInfo& vf = vfs[vfIndex];
-            if (auto unsupported = findUnsupportedNativeInstruction(vf.tree)) {
-                prediction.cycles += fallbackNodes(vf.tree, 1);
-                ++prediction.fallbackCount;
-                updateFailureStatus(prediction, VfPredictionStatus::UNSUPPORTED_FORM);
-                addDiagnostic(
-                    prediction, options, vfIndex, VfPredictionStatus::UNSUPPORTED_FORM,
-                    "native VfSim has no model for captured instruction " + *unsupported);
-                continue;
-            }
             PtoCanonicalLoweringResult lowering;
             try {
                 lowering = lowerPtoVfToCanonical(vf);
@@ -322,7 +277,7 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
                 prediction.ignoredInstructionCount += lowering.ignoredInstructionCount;
                 std::ostringstream diagnostic;
                 diagnostic << "vf[" << vfIndex << "]: approximation: ignored " << lowering.ignoredInstructionCount
-                           << " PLT predicate setup instruction(s) because predicate registers are not modeled";
+                           << " predicate setup instruction(s) because predicate registers are not modeled";
                 prediction.diagnostics.push_back(diagnostic.str());
                 if (shouldLog(options.logLevel, VfSimLogLevel::DETAILED))
                     std::cerr << "[VfSim] " << diagnostic.str() << '\n';
@@ -373,7 +328,7 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
         prediction.status = VfPredictionStatus::SIMULATOR_ERROR;
         addDiagnostic(
             prediction, options, 0, VfPredictionStatus::SIMULATOR_ERROR,
-            std::string("failed to initialize VfSim ParamDb: ") + exception.what());
+            std::string("failed to initialize VfSim ParamDB: ") + exception.what());
     }
 
     if (shouldLog(options.logLevel, VfSimLogLevel::SUMMARY)) {

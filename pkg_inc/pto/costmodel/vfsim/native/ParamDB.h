@@ -6,8 +6,10 @@
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
 
-#ifndef VFSIM_NATIVE_PARAM_DB_H_
-#define VFSIM_NATIVE_PARAM_DB_H_
+#ifndef VFSIM_NATIVE_PARAM_DB_H
+#define VFSIM_NATIVE_PARAM_DB_H
+
+#include "native/ParamSchema.h"
 
 #include <filesystem>
 #include <map>
@@ -16,43 +18,49 @@
 #include <unordered_map>
 #include <vector>
 
-#include "native/ParamSchema.h"
-
 namespace vfsim {
 
-class ParamDb {
+class ParamDB {
 public:
-    explicit ParamDb(std::filesystem::path baseDir = {});
+  explicit ParamDB(std::filesystem::path baseDir = {});
 
-    const ParamBundle& bundle() const noexcept { return bundle_; }
-    const UarchConfig& uarch() const noexcept { return bundle_.uarch; }
-    const IsaDefaults& isaDefaults() const noexcept { return bundle_.isaDefaults; }
+  const ParamBundle &bundle() const noexcept { return bundle_; }
+  const UarchConfig &uarch() const noexcept { return bundle_.uarch; }
+  const IsaDefaults &isaDefaults() const noexcept { return bundle_.isaDefaults; }
 
-    bool hasInst(const std::string& op, const std::string& dtype) const;
-    InstConfig inst(const std::string& op, const std::string& dtype) const;
-    void recordWarning(const std::string& kind, std::map<std::string, std::string> fields = {}) const;
-    std::vector<ModelWarning> warnings() const;
+  bool hasInst(const std::string &op, const std::string &dtype) const;
+  InstConfig inst(const std::string &op, const std::string &dtype) const;
+  void recordWarning(const std::string &kind,
+                     std::map<std::string, std::string> fields = {}) const;
+  std::vector<ModelWarning> warnings() const;
 
-    int64_t forwardingCycles(const std::string& dtype, const std::string& prod, const std::string& cons) const;
-    int64_t forwardingCycles(
-        const std::string& prod, const std::string& prodForm, const std::string& cons,
-        const std::string& consForm) const;
-    int64_t initiationInterval(const std::string& dtype, const std::string& prev, const std::string& cur) const;
-    int64_t initiationInterval(
-        const std::string& prev, const std::string& prevForm, const std::string& cur, const std::string& curForm) const;
+  int64_t forwardingCycles(const std::string &dtype, const std::string &prod,
+                           const std::string &cons) const;
+  int64_t forwardingCycles(const std::string &prod, const std::string &prodForm,
+                           const std::string &cons,
+                           const std::string &consForm) const;
+  int64_t initiationInterval(const std::string &dtype, const std::string &prev,
+                             const std::string &cur) const;
+  int64_t initiationInterval(const std::string &prev,
+                             const std::string &prevForm,
+                             const std::string &cur,
+                             const std::string &curForm) const;
 
-    static std::filesystem::path resolveBaseDir(std::filesystem::path baseDir);
+  static std::filesystem::path resolveBaseDir(std::filesystem::path baseDir);
 
 private:
-    ParamBundle bundle_;
-    std::filesystem::path baseDir_;
-    mutable std::map<std::string, ModelWarning> warnings_;
-    mutable std::mutex warningsMutex_;
+  ParamBundle bundle_;
+  std::filesystem::path baseDir_;
+  mutable std::map<std::string, ModelWarning> warnings_;
+  mutable std::mutex warningsMutex_;
 
-    InstConfig fallbackInst(const std::string& op, const std::string& dtype, bool unsupportedForm) const;
-    void recordWarningOnce(const std::string& kind, std::map<std::string, std::string> fields) const;
+  InstConfig fallbackInst(const std::string &op,
+                          const std::string &dtype,
+                          bool unsupportedForm) const;
+  void recordWarningOnce(const std::string &kind,
+                         std::map<std::string, std::string> fields) const;
 };
 
 } // namespace vfsim
 
-#endif // VFSIM_NATIVE_PARAM_DB_H_
+#endif // VFSIM_NATIVE_PARAM_DB_H

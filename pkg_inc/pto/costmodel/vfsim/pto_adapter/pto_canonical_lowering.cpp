@@ -27,7 +27,7 @@ namespace {
 using Environment = std::unordered_map<std::string, std::string>;
 
 struct LogicalValue {
-    vfsim::CanonicalStorageKind storage = vfsim::CanonicalStorageKind::UNKNOWN;
+    vfsim::CanonicalStorageKind storage = vfsim::CanonicalStorageKind::Unknown;
     std::string dtype;
 };
 
@@ -171,45 +171,46 @@ std::string inferForm(const VfInst& instruction, const vfsim::NativeInstructionS
 
 vfsim::CanonicalStorageKind canonicalStorage(MemLocation location)
 {
-    return location == MemLocation::UB ? vfsim::CanonicalStorageKind::UB : vfsim::CanonicalStorageKind::REGISTER;
+    return location == MemLocation::UB ? vfsim::CanonicalStorageKind::UB : vfsim::CanonicalStorageKind::Register;
 }
 
 vfsim::CanonicalInstructionClass canonicalClass(vfsim::CatalogInstructionClass instructionClass)
 {
     switch (instructionClass) {
-        case vfsim::CatalogInstructionClass::LOAD:
-            return vfsim::CanonicalInstructionClass::LOAD;
-        case vfsim::CatalogInstructionClass::STORE:
-            return vfsim::CanonicalInstructionClass::STORE;
-        case vfsim::CatalogInstructionClass::COMPUTE:
-            return vfsim::CanonicalInstructionClass::COMPUTE;
-        case vfsim::CatalogInstructionClass::CONTROL:
-            return vfsim::CanonicalInstructionClass::CONTROL;
+        case vfsim::CatalogInstructionClass::Load:
+            return vfsim::CanonicalInstructionClass::Load;
+        case vfsim::CatalogInstructionClass::Store:
+            return vfsim::CanonicalInstructionClass::Store;
+        case vfsim::CatalogInstructionClass::Compute:
+            return vfsim::CanonicalInstructionClass::Compute;
+        case vfsim::CatalogInstructionClass::Control:
+            return vfsim::CanonicalInstructionClass::Control;
     }
-    return vfsim::CanonicalInstructionClass::UNKNOWN;
+    return vfsim::CanonicalInstructionClass::Unknown;
 }
 
 vfsim::CanonicalOperandRole canonicalRole(const std::string& role)
 {
     if (role == "source")
-        return vfsim::CanonicalOperandRole::SOURCE;
+        return vfsim::CanonicalOperandRole::Source;
     if (role == "destination")
-        return vfsim::CanonicalOperandRole::DESTINATION;
+        return vfsim::CanonicalOperandRole::Destination;
     if (role == "memory")
-        return vfsim::CanonicalOperandRole::MEMORY;
+        return vfsim::CanonicalOperandRole::Memory;
     if (role == "scalar")
-        return vfsim::CanonicalOperandRole::SCALAR;
+        return vfsim::CanonicalOperandRole::Scalar;
     if (role == "predicate")
-        return vfsim::CanonicalOperandRole::PREDICATE;
+        return vfsim::CanonicalOperandRole::Predicate;
     if (role == "config")
-        return vfsim::CanonicalOperandRole::CONFIG;
-    return vfsim::CanonicalOperandRole::UNKNOWN;
+        return vfsim::CanonicalOperandRole::Config;
+    return vfsim::CanonicalOperandRole::Unknown;
 }
 
 bool isIgnoredPredicateSetup(const std::string& operation)
 {
     const std::string normalized = toUpper(operation);
-    return normalized == "PLT_B8" || normalized == "PLT_B16" || normalized == "PLT_B32";
+    return normalized == "PLT_B8" || normalized == "PLT_B16" || normalized == "PLT_B32" || normalized == "PSET_B8" ||
+           normalized == "PSET_B16" || normalized == "PSET_B32";
 }
 
 class PtoCanonicalLowerer {
@@ -280,7 +281,7 @@ private:
             dtype = firstDtype(instruction.src);
         if (dtype.empty())
             dtype = "fp32";
-        logicalValues_.emplace(logicalId, LogicalValue{vfsim::CanonicalStorageKind::SCALAR, normalizeDtype(dtype)});
+        logicalValues_.emplace(logicalId, LogicalValue{vfsim::CanonicalStorageKind::Scalar, normalizeDtype(dtype)});
         return logicalId;
     }
 
@@ -334,7 +335,7 @@ private:
         if (logical.storage == vfsim::CanonicalStorageKind::UB) {
             vfsim::CanonicalMemoryAccess memory;
             memory.baseObjectId = "ub." + safeId(logicalId);
-            memory.accessKind = output ? vfsim::CanonicalAccessKind::WRITE : vfsim::CanonicalAccessKind::READ;
+            memory.accessKind = output ? vfsim::CanonicalAccessKind::Write : vfsim::CanonicalAccessKind::Read;
             result.memoryAccess = std::move(memory);
         }
         return result;
@@ -365,8 +366,8 @@ private:
             });
         if (argument == instruction.arguments.end())
             return std::nullopt;
-        if (expected.kind != vfsim::CatalogArgumentKind::SCALAR &&
-            expected.kind != vfsim::CatalogArgumentKind::REGISTER_OR_SCALAR) {
+        if (expected.kind != vfsim::CatalogArgumentKind::Scalar &&
+            expected.kind != vfsim::CatalogArgumentKind::RegisterOrScalar) {
             return std::nullopt;
         }
         return registerScalar(instruction, "__pto_immediate_");
@@ -380,37 +381,37 @@ private:
             registerLogicalValue(*source);
 
         std::vector<std::pair<std::string, vfsim::CanonicalOperandRole>> result;
-        const auto expectedInputs = trackedOperands(specification, vfsim::CatalogOperandDirection::INPUT);
+        const auto expectedInputs = trackedOperands(specification, vfsim::CatalogOperandDirection::Input);
         std::size_t sourceIndex = 0;
         for (const vfsim::NativeOperandSpec* expected : expectedInputs) {
             if (auto scalar = capturedScalar(instruction, *expected)) {
                 const vfsim::CanonicalOperandRole catalogRole = canonicalRole(expected->role);
                 result.emplace_back(
-                    std::move(*scalar), catalogRole == vfsim::CanonicalOperandRole::UNKNOWN ?
-                                            vfsim::CanonicalOperandRole::SCALAR :
+                    std::move(*scalar), catalogRole == vfsim::CanonicalOperandRole::Unknown ?
+                                            vfsim::CanonicalOperandRole::Scalar :
                                             catalogRole);
                 continue;
             }
             if (sourceIndex < sources.size()) {
                 const MemInfo& source = *sources[sourceIndex++];
                 const vfsim::CanonicalOperandRole fallback = source.location == MemLocation::UB ?
-                                                                 vfsim::CanonicalOperandRole::MEMORY :
-                                                                 vfsim::CanonicalOperandRole::SOURCE;
+                                                                 vfsim::CanonicalOperandRole::Memory :
+                                                                 vfsim::CanonicalOperandRole::Source;
                 const vfsim::CanonicalOperandRole catalogRole = canonicalRole(expected->role);
                 result.emplace_back(
-                    source.name, catalogRole == vfsim::CanonicalOperandRole::UNKNOWN ? fallback : catalogRole);
+                    source.name, catalogRole == vfsim::CanonicalOperandRole::Unknown ? fallback : catalogRole);
                 continue;
             }
-            if (expected->kind == vfsim::CatalogArgumentKind::SCALAR) {
+            if (expected->kind == vfsim::CatalogArgumentKind::Scalar) {
                 result.emplace_back(
-                    registerScalar(instruction, "__pto_omitted_scalar_"), vfsim::CanonicalOperandRole::SCALAR);
+                    registerScalar(instruction, "__pto_omitted_scalar_"), vfsim::CanonicalOperandRole::Scalar);
             }
         }
         while (sourceIndex < sources.size()) {
             const MemInfo& source = *sources[sourceIndex++];
             result.emplace_back(
-                source.name, source.location == MemLocation::UB ? vfsim::CanonicalOperandRole::MEMORY :
-                                                                  vfsim::CanonicalOperandRole::SOURCE);
+                source.name, source.location == MemLocation::UB ? vfsim::CanonicalOperandRole::Memory :
+                                                                  vfsim::CanonicalOperandRole::Source);
         }
         return result;
     }
@@ -431,7 +432,7 @@ private:
         result.instructionId = nodeId("instruction");
         result.opcode = opcode;
         result.form = form;
-        result.instructionClass = specification == nullptr ? vfsim::CanonicalInstructionClass::COMPUTE :
+        result.instructionClass = specification == nullptr ? vfsim::CanonicalInstructionClass::Compute :
                                                              canonicalClass(specification->instructionClass);
 
         for (const auto& [logicalId, role] : instructionInputs(instruction, specification)) {
@@ -441,16 +442,16 @@ private:
         const std::vector<const MemInfo*> destinations = dataOperands(instruction.dst);
         if (destinations.empty())
             throw std::runtime_error("PTO instruction has no non-predicate destination: " + opcode);
-        const auto expectedOutputs = trackedOperands(specification, vfsim::CatalogOperandDirection::OUTPUT);
+        const auto expectedOutputs = trackedOperands(specification, vfsim::CatalogOperandDirection::Output);
         for (std::size_t index = 0; index < destinations.size(); ++index) {
             const MemInfo& destination = *destinations[index];
             registerLogicalValue(destination);
             vfsim::CanonicalOperandRole role = destination.location == MemLocation::UB ?
-                                                   vfsim::CanonicalOperandRole::MEMORY :
-                                                   vfsim::CanonicalOperandRole::DESTINATION;
+                                                   vfsim::CanonicalOperandRole::Memory :
+                                                   vfsim::CanonicalOperandRole::Destination;
             if (index < expectedOutputs.size()) {
                 const vfsim::CanonicalOperandRole catalogRole = canonicalRole(expectedOutputs[index]->role);
-                if (catalogRole != vfsim::CanonicalOperandRole::UNKNOWN)
+                if (catalogRole != vfsim::CanonicalOperandRole::Unknown)
                     role = catalogRole;
             }
             const std::string definitionId = newDefinition(destination.name, result.instructionId);

@@ -1,13 +1,8 @@
 // Copyright (c) 2026 Huawei Technologies Co., Ltd.
-// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-// CANN Open Software License Agreement Version 2.0 (the "License").
-// Please refer to the License for details. You may not use this file except in compliance with the License.
-// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-// See LICENSE in the root of the software repository for the full text of the License.
+// SPDX-License-Identifier: CANN-1.0
 
-#ifndef VFSIM_API_NATIVE_CANONICAL_VF_INFO_H_
-#define VFSIM_API_NATIVE_CANONICAL_VF_INFO_H_
+#ifndef VFSIM_API_NATIVE_CANONICAL_VF_INFO_H
+#define VFSIM_API_NATIVE_CANONICAL_VF_INFO_H
 
 #include <cstdint>
 #include <map>
@@ -20,152 +15,154 @@
 
 namespace vfsim {
 
-constexpr int64_t CANONICAL_VF_INFO_SCHEMA_VERSION = 1;
+constexpr int64_t kCanonicalVfInfoSchemaVersion = 1;
 
 using CanonicalScalar = std::variant<std::monostate, bool, int64_t, double, std::string>;
 using CanonicalIntegerExpression = std::variant<int64_t, std::string>;
 
-enum class CanonicalStorageKind { UNKNOWN, REGISTER, UB, SCALAR };
-enum class CanonicalInstructionClass { UNKNOWN, LOAD, STORE, COMPUTE, CONTROL };
-enum class CanonicalOperandRole { UNKNOWN, SOURCE, DESTINATION, MEMORY, SCALAR, PREDICATE, CONFIG };
-enum class CanonicalAccessKind { UNKNOWN, READ, WRITE };
-enum class CanonicalDependencyKind { UNKNOWN, MEMORY, CONTROL };
+enum class CanonicalStorageKind { Unknown, Register, UB, Scalar };
+enum class CanonicalInstructionClass { Unknown, Load, Store, Compute, Control };
+enum class CanonicalOperandRole { Unknown, Source, Destination, Memory, Scalar, Predicate, Config };
+enum class CanonicalAccessKind { Unknown, Read, Write };
+enum class CanonicalDependencyKind { Unknown, Memory, Control };
 
 struct CanonicalSourceLocation {
-    std::optional<std::string> source;
-    std::optional<int64_t> line;
-    std::optional<int64_t> column;
-    std::optional<std::string> path;
+  std::optional<std::string> source;
+  std::optional<int64_t> line;
+  std::optional<int64_t> column;
+  std::optional<std::string> path;
 };
 
 struct CanonicalAffineTerm {
-    std::string variableId;
-    int64_t coefficient = 1;
+  std::string variableId;
+  int64_t coefficient = 1;
 };
 
 struct CanonicalAffineExpression {
-    int64_t constant = 0;
-    std::vector<CanonicalAffineTerm> terms;
+  int64_t constant = 0;
+  std::vector<CanonicalAffineTerm> terms;
 };
 
 struct CanonicalMemoryAccess {
-    std::string baseObjectId;
-    CanonicalAffineExpression offset;
-    CanonicalAccessKind accessKind = CanonicalAccessKind::UNKNOWN;
-    std::optional<int64_t> span;
-    std::optional<std::string> aliasGroup;
+  std::string baseObjectId;
+  CanonicalAffineExpression offset;
+  CanonicalAccessKind accessKind = CanonicalAccessKind::Unknown;
+  std::optional<int64_t> span;
+  std::optional<std::string> aliasGroup;
 };
 
 struct CanonicalStorageObject {
-    std::string objectId;
-    CanonicalStorageKind storage = CanonicalStorageKind::UNKNOWN;
-    std::vector<int64_t> shape;
-    std::optional<CanonicalSourceLocation> sourceLocation;
+  std::string objectId;
+  CanonicalStorageKind storage = CanonicalStorageKind::Unknown;
+  std::vector<int64_t> shape;
+  std::optional<CanonicalSourceLocation> sourceLocation;
 };
 
 struct CanonicalValue {
-    std::string definitionId;
-    std::string logicalId;
-    CanonicalStorageKind storage = CanonicalStorageKind::UNKNOWN;
-    std::string dtype;
-    std::vector<int64_t> shape;
-    std::optional<std::string> producerNodeId;
-    std::optional<std::string> storageObjectId;
-    std::optional<CanonicalSourceLocation> sourceLocation;
+  std::string definitionId;
+  std::string logicalId;
+  CanonicalStorageKind storage = CanonicalStorageKind::Unknown;
+  std::string dtype;
+  std::vector<int64_t> shape;
+  std::optional<std::string> producerNodeId;
+  std::optional<std::string> storageObjectId;
+  std::optional<CanonicalSourceLocation> sourceLocation;
 };
 
 struct CanonicalOperand {
-    std::string valueId;
-    CanonicalOperandRole role = CanonicalOperandRole::UNKNOWN;
-    std::optional<std::string> dtype;
-    std::optional<CanonicalMemoryAccess> memoryAccess;
+  std::string valueId;
+  CanonicalOperandRole role = CanonicalOperandRole::Unknown;
+  std::optional<std::string> dtype;
+  std::optional<CanonicalMemoryAccess> memoryAccess;
 };
 
 struct CanonicalDependencyRef {
-    std::string producerNodeId;
-    CanonicalDependencyKind kind = CanonicalDependencyKind::UNKNOWN;
-    std::optional<int64_t> operandIndex;
+  std::string producerNodeId;
+  CanonicalDependencyKind kind = CanonicalDependencyKind::Unknown;
+  std::optional<int64_t> operandIndex;
 };
 
 struct CanonicalInstruction {
-    std::string instructionId;
-    std::string opcode;
-    CanonicalInstructionClass instructionClass = CanonicalInstructionClass::UNKNOWN;
-    std::string form;
-    std::vector<CanonicalOperand> inputs;
-    std::vector<CanonicalOperand> outputs;
-    std::vector<CanonicalDependencyRef> dependencies;
-    std::map<std::string, CanonicalScalar> attributes;
-    std::optional<CanonicalSourceLocation> sourceLocation;
+  std::string instructionId;
+  std::string opcode;
+  CanonicalInstructionClass instructionClass = CanonicalInstructionClass::Unknown;
+  std::string form;
+  std::vector<CanonicalOperand> inputs;
+  std::vector<CanonicalOperand> outputs;
+  std::vector<CanonicalDependencyRef> dependencies;
+  std::map<std::string, CanonicalScalar> attributes;
+  std::optional<CanonicalSourceLocation> sourceLocation;
 };
 
 struct CanonicalMembar {
-    std::string instructionId;
-    std::string barrier;
-    std::vector<CanonicalDependencyRef> dependencies;
-    std::optional<CanonicalSourceLocation> sourceLocation;
+  std::string instructionId;
+  std::string barrier;
+  std::vector<CanonicalDependencyRef> dependencies;
+  std::optional<CanonicalSourceLocation> sourceLocation;
 };
 
 struct CanonicalInductionVariable {
-    std::string variableId;
-    CanonicalIntegerExpression start = int64_t{0};
-    CanonicalIntegerExpression step = int64_t{1};
+  std::string variableId;
+  CanonicalIntegerExpression start = int64_t{0};
+  CanonicalIntegerExpression step = int64_t{1};
 };
 
 struct CanonicalLoopCarriedValue {
-    std::string logicalId;
-    std::string entryValueId;
-    std::string backEdgeValueId;
-    std::string exitValueId;
+  std::string logicalId;
+  std::string entryValueId;
+  std::string backEdgeValueId;
+  std::string exitValueId;
 };
 
 struct CanonicalLoop;
 
 struct CanonicalNode {
-    using Payload = std::variant<CanonicalInstruction, std::shared_ptr<const CanonicalLoop>, CanonicalMembar>;
-    Payload payload;
+  using Payload = std::variant<CanonicalInstruction,
+                               std::shared_ptr<const CanonicalLoop>,
+                               CanonicalMembar>;
+  Payload payload;
 
-    static CanonicalNode makeInstruction(CanonicalInstruction value);
-    static CanonicalNode makeLoop(CanonicalLoop value);
-    static CanonicalNode makeMembar(CanonicalMembar value);
+  static CanonicalNode makeInstruction(CanonicalInstruction value);
+  static CanonicalNode makeLoop(CanonicalLoop value);
+  static CanonicalNode makeMembar(CanonicalMembar value);
 };
 
 struct CanonicalLoop {
-    std::string loopId;
-    CanonicalInductionVariable induction;
-    CanonicalIntegerExpression count = int64_t{1};
-    CanonicalIntegerExpression unroll = int64_t{1};
-    std::vector<CanonicalLoopCarriedValue> carriedValues;
-    std::vector<CanonicalNode> body;
-    std::optional<CanonicalSourceLocation> sourceLocation;
+  std::string loopId;
+  CanonicalInductionVariable induction;
+  CanonicalIntegerExpression count = int64_t{1};
+  CanonicalIntegerExpression unroll = int64_t{1};
+  std::vector<CanonicalLoopCarriedValue> carriedValues;
+  std::vector<CanonicalNode> body;
+  std::optional<CanonicalSourceLocation> sourceLocation;
 };
 
 struct CanonicalVfInfo {
-    int64_t schemaVersion = CANONICAL_VF_INFO_SCHEMA_VERSION;
-    std::vector<CanonicalNode> context;
-    std::unordered_map<std::string, CanonicalValue> values;
-    std::unordered_map<std::string, CanonicalStorageObject> storageObjects;
-    std::unordered_map<std::string, int64_t> params;
-    std::map<std::string, CanonicalScalar> uarch;
-    std::map<std::string, CanonicalScalar> source;
+  int64_t schemaVersion = kCanonicalVfInfoSchemaVersion;
+  std::vector<CanonicalNode> context;
+  std::unordered_map<std::string, CanonicalValue> values;
+  std::unordered_map<std::string, CanonicalStorageObject> storageObjects;
+  std::unordered_map<std::string, int64_t> params;
+  std::map<std::string, CanonicalScalar> uarch;
+  std::map<std::string, CanonicalScalar> source;
 };
 
 struct CanonicalValidationDiagnostic {
-    std::string code;
-    std::string severity = "error";
-    std::string message;
-    std::string path;
-    std::optional<CanonicalSourceLocation> sourceLocation;
-    std::map<std::string, CanonicalScalar> context;
+  std::string code;
+  std::string severity = "error";
+  std::string message;
+  std::string path;
+  std::optional<CanonicalSourceLocation> sourceLocation;
+  std::map<std::string, CanonicalScalar> context;
 };
 
 struct CanonicalValidationResult {
-    std::vector<CanonicalValidationDiagnostic> diagnostics;
-    bool ok() const;
+  std::vector<CanonicalValidationDiagnostic> diagnostics;
+  bool ok() const;
 };
 
-CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo& vfInfo);
+CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo &vfInfo);
 
 } // namespace vfsim
 
-#endif // VFSIM_API_NATIVE_CANONICAL_VF_INFO_H_
+#endif // VFSIM_API_NATIVE_CANONICAL_VF_INFO_H

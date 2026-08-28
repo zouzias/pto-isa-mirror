@@ -1,115 +1,100 @@
 // Copyright (c) 2026 Huawei Technologies Co., Ltd.
-// This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-// CANN Open Software License Agreement Version 2.0 (the "License").
-// Please refer to the License for details. You may not use this file except in compliance with the License.
-// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-// INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-// See LICENSE in the root of the software repository for the full text of the License.
+// SPDX-License-Identifier: CANN-1.0
+
+#include "api/native/UarchOverrideSchema.h"
 
 #include <iterator>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "api/native/UarchOverrideSchema.h"
-
 namespace vfsim {
 namespace {
 
 struct GeneratedUarchField {
-    const char* name;
-    const char* type;
-    bool supportsPython;
-    bool supportsCpp;
+  const char *name;
+  const char *type;
+  bool supportsPython;
+  bool supportsCpp;
 };
 
 #include "api/native/generated/UarchOverrideSchemaData.inc"
 
-UarchOverrideFieldType parseType(const std::string& type)
-{
-    if (type == "integer")
-        return UarchOverrideFieldType::INTEGER;
-    if (type == "boolean")
-        return UarchOverrideFieldType::BOOLEAN;
-    if (type == "string")
-        return UarchOverrideFieldType::STRING;
-    throw std::runtime_error("Unsupported generated uarch field type: " + type);
+UarchOverrideFieldType parseType(const std::string &type) {
+  if (type == "integer")
+    return UarchOverrideFieldType::Integer;
+  if (type == "boolean")
+    return UarchOverrideFieldType::Boolean;
+  if (type == "string")
+    return UarchOverrideFieldType::String;
+  throw std::runtime_error("Unsupported generated uarch field type: " + type);
 }
 
-const std::unordered_map<std::string, UarchOverrideFieldType>& fieldTypes()
-{
-    static const auto fields = [] {
-        std::unordered_map<std::string, UarchOverrideFieldType> result;
-        for (const auto& field : GENERATED_UARCH_FIELDS)
-            result.emplace(field.name, parseType(field.type));
-        return result;
-    }();
-    return fields;
+const std::unordered_map<std::string, UarchOverrideFieldType> &fieldTypes() {
+  static const auto fields = [] {
+    std::unordered_map<std::string, UarchOverrideFieldType> result;
+    for (const auto &field : kGeneratedUarchFields)
+      result.emplace(field.name, parseType(field.type));
+    return result;
+  }();
+  return fields;
 }
 
-const std::unordered_set<std::string>& deprecatedFields()
-{
-    static const std::unordered_set<std::string> fields(
-        std::begin(GENERATED_DEPRECATED_UARCH_FIELDS), std::end(GENERATED_DEPRECATED_UARCH_FIELDS));
-    return fields;
+const std::unordered_set<std::string> &deprecatedFields() {
+  static const std::unordered_set<std::string> fields(
+      std::begin(kGeneratedDeprecatedUarchFields),
+      std::end(kGeneratedDeprecatedUarchFields));
+  return fields;
 }
 
 } // namespace
 
-std::string normalizeUarchOverrideFieldName(const std::string& name)
-{
-    static const std::unordered_map<std::string, std::string> aliases{
-        {"IDU_window_width", "idu_window_width"},
-        {"IDU_issue_width", "idu_issue_width"},
-        {"LDQ_width", "ldq_width"},
-    };
-    const auto found = aliases.find(name);
-    return found == aliases.end() ? name : found->second;
+std::optional<UarchOverrideFieldType>
+uarchOverrideFieldType(const std::string &name) {
+  const auto found = fieldTypes().find(name);
+  if (found == fieldTypes().end())
+    return std::nullopt;
+  return found->second;
 }
 
-std::optional<UarchOverrideFieldType> uarchOverrideFieldType(const std::string& name)
-{
-    const auto found = fieldTypes().find(normalizeUarchOverrideFieldName(name));
-    if (found == fieldTypes().end())
-        return std::nullopt;
-    return found->second;
+bool isDeprecatedUarchOverrideField(const std::string &name) {
+  return deprecatedFields().count(name) != 0;
 }
 
-bool isDeprecatedUarchOverrideField(const std::string& name) { return deprecatedFields().count(name) != 0; }
-
-bool uarchOverrideFieldSupportsTarget(const std::string& name, UarchOverrideTarget target)
-{
-    const std::string normalizedName = normalizeUarchOverrideFieldName(name);
-    for (const auto& field : GENERATED_UARCH_FIELDS) {
-        if (normalizedName != field.name)
-            continue;
-        return target == UarchOverrideTarget::PYTHON ? field.supportsPython : field.supportsCpp;
-    }
-    return false;
+bool uarchOverrideFieldSupportsTarget(const std::string &name,
+                                      UarchOverrideTarget target) {
+  for (const auto &field : kGeneratedUarchFields) {
+    if (name != field.name)
+      continue;
+    return target == UarchOverrideTarget::Python ? field.supportsPython
+                                                  : field.supportsCpp;
+  }
+  return false;
 }
 
-std::set<std::string> uarchOverrideFieldsForTarget(UarchOverrideTarget target)
-{
-    std::set<std::string> result;
-    for (const auto& field : GENERATED_UARCH_FIELDS) {
-        const bool supported = target == UarchOverrideTarget::PYTHON ? field.supportsPython : field.supportsCpp;
-        if (supported)
-            result.emplace(field.name);
-    }
-    return result;
+std::set<std::string>
+uarchOverrideFieldsForTarget(UarchOverrideTarget target) {
+  std::set<std::string> result;
+  for (const auto &field : kGeneratedUarchFields) {
+    const bool supported = target == UarchOverrideTarget::Python
+                               ? field.supportsPython
+                               : field.supportsCpp;
+    if (supported)
+      result.emplace(field.name);
+  }
+  return result;
 }
 
-const char* uarchOverrideFieldTypeName(UarchOverrideFieldType type)
-{
-    switch (type) {
-        case UarchOverrideFieldType::INTEGER:
-            return "integer";
-        case UarchOverrideFieldType::BOOLEAN:
-            return "boolean";
-        case UarchOverrideFieldType::STRING:
-            return "string";
-    }
-    return "unknown";
+const char *uarchOverrideFieldTypeName(UarchOverrideFieldType type) {
+  switch (type) {
+  case UarchOverrideFieldType::Integer:
+    return "integer";
+  case UarchOverrideFieldType::Boolean:
+    return "boolean";
+  case UarchOverrideFieldType::String:
+    return "string";
+  }
+  return "unknown";
 }
 
 } // namespace vfsim
