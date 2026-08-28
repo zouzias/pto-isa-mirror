@@ -75,6 +75,11 @@ PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale
 
 ## 约束
 
+- Acc 目的步幅遵循 `TMATMUL_MX` 的规则。当非 compact 结果满足 `TileRes::Cols > 16` 时，容量形状应
+  使用 `TileRes::Rows == TileLeft::Rows == 16`，同时有效 `M` 仍为 1；或者使用 compact Acc Tile，
+  并确保下游布局语义一致。
+- 当 `TileRes::ValidRow == DYNAMIC` 时，不兼容的形状会在 NPU 上执行 `trap()`，外部表现为 AI Core
+  异常。对于静态有效行，该条件在当前实现中由调用方保证。
 - 使用后端特定的mx合法性检查，用于数据类型、tile位置、分形/布局组合以及缩放格式。
 - 缩放tile兼容性和累加器提升由目标后端的实现定义。
 - 为了可移植性，请根据目标实现约束验证确切的 `(A, B, scaleA, scaleB, C)` 类型元组和tile布局。

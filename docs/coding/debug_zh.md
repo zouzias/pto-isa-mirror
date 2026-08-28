@@ -37,6 +37,18 @@ PTO 使用三种常见的断言机制：
 - 许多断言是特定于后端和 SoC 的（例如 `include/pto/npu/a2a3/*` 与 `include/pto/npu/a5/*`）。
 - 对于指令合法性（tile 类型/布局/支持的数据类型），权威参考是 `docs/isa/` 下的指令页面。
 
+### Matmul Acc 行窗口异常
+
+`TMATMUL`、`TMATMUL_ACC`、`TMATMUL_BIAS` 及其 GEMV/MX 路径可能拒绝这样的 Acc 目的 Tile：其列基块
+所需的行步幅无法由 `mad`/`mad_mx` 表示。在标准 `mad` 路径中，静态形状会报告以
+`The Acc tile is a row window` 开头的编译错误；动态 Acc 有效行会执行 `trap()`，外部可能只看到
+AI Core 异常。对于静态 MX 有效行，该条件在当前实现中由调用方保证。
+
+对于宽度超过 16 列的非 compact Acc Tile，应检查
+`align_up(aMatrix.GetValidRow(), 16) == TileRes::Rows`。否则应为每个行窗口使用完整 Rows 的目的 Tile、
+改为按列 window，或者在生产者和所有消费者中一致使用 `TileAccCompact`。完整约束和 compact 布局契约
+参见 `docs/isa/TMATMUL_zh.md` 与 `docs/coding/Tile_zh.md`。
+
 <!-- 下面的断言索引是从 `include/pto/` 生成的。保持排序和索引以便快速查找。-->
 
 ## 断言索引

@@ -77,6 +77,11 @@ AICORE void runTAdd(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__
 
 ## TMATMUL
 
+以下示例使用非 compact `TileAcc`。实例化时应满足 `N <= 16` 或
+`M == align_up(ValidM, 16)`，使 `mad` 能够表示 Acc 列基块步幅。如果父 Tile 的行范围更大，应重新
+划分 M/N window；只有当 `TSTORE_FP` 和其他所有消费者都采用相同紧凑布局时，才能使用
+`TileAccCompact`。详情参见 `docs/isa/TMATMUL_zh.md`。
+
 ```cpp
 
 #include <pto/pto-inst.hpp>

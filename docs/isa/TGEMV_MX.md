@@ -76,6 +76,12 @@ Additional overloads support accumulation/bias variants and `AccPhase` selection
 
 ## Constraints
 
+- Acc destination stride follows `TMATMUL_MX`. For a non-compact result with `TileRes::Cols > 16`, use capacity
+  `TileRes::Rows == TileLeft::Rows == 16` while the effective `M` remains 1, or use a compact Acc tile with
+  matching downstream layout semantics.
+- When `TileRes::ValidRow == DYNAMIC`, an incompatible shape executes `trap()` on NPU and is reported as an
+  AI Core exception. A static valid-row shape must satisfy the same rule as a caller-side precondition in the
+  current implementation.
 - Uses backend-specific mx legality checks for data types, tile locations, fractal/layout combinations, and scaling formats.
 - Scale tile compatibility and accumulator promotion are implementation-defined by target backend.
 - For portability, validate the exact `(A, B, scaleA, scaleB, C)` type tuple and tile layout against target implementation constraints.

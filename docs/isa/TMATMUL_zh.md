@@ -57,6 +57,17 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## 约束
 
+- **累加器目的步幅（CPU、A2A3、A5、A6 和 Kirin9030）**：
+    - `mad` 没有目的步幅操作数。对于超过一个 Acc 列基块的非 compact `TileRes`
+      （`TileRes::Cols > FRACTAL_NZ_ROW`，其中 `FRACTAL_NZ_ROW` 为 16），仅当
+      `align_up(M, 16) == TileRes::Rows` 时形状才合法。
+    - 静态 `TileRes::ValidRow` 在编译期检查，并且必须与 `aMatrix.GetValidRow()` 表示相同的 `M`；
+      不兼容的形状会触发 `static_assert`。
+    - 动态 `TileRes::ValidRow` 在 NPU 上使用 `aMatrix.GetValidRow()` 得到的运行时 `M` 检查；
+      不兼容的形状会执行 `trap()`，外部表现为 AI Core 异常。
+    - 当 `TileRes::Cols <= 16` 或 `TileRes::Compact != CompactMode::Null` 时，不受此限制。
+    - 处理行窗口时，应为每个窗口使用完整 Rows 的 Acc Tile（`Rows = align_up(M, 16)`）、改为按列
+      window，或者在所有下游消费者都采用相同紧凑布局时使用 `TileAccCompact`。
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - 支持的 `(CType, AType, BType)` 三元组：
     - `(int32_t, int8_t, int8_t)`

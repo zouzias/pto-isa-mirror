@@ -76,6 +76,13 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 - 运行时有效尺寸约束：
     - `m` 必须为 `1`
     - `k` 和 `n`（取自 `bMatrix.GetValidRow()` 与 `bMatrix.GetValidCol()`）必须位于 `[1, 4095]`
+- Acc 目的步幅：
+    - 共享的 `mad` 实现同样应用 `TMATMUL` 文档中的 Acc 步幅规则。
+    - 当非 compact 结果满足 `TileRes::Cols > 16` 时，容量形状应使用
+      `TileRes::Rows == TileLeft::Rows == 16`，同时有效 `M` 仍为 1；或者在整个下游流水中一致使用
+      compact Acc Tile。
+    - 不兼容的静态形状在编译期失败；动态 Acc 有效行不兼容时会在 NPU 上执行 `trap()`，外部表现为
+      AI Core 异常。
 
 ### 数据类型约束
 

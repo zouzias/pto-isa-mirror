@@ -88,6 +88,15 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## Constraints
 
+- **Accumulator destination stride (A5 and A6)**:
+    - `mad_mx` has no destination-stride operand. For a non-compact `TileRes` with
+      `TileRes::Cols > FRACTAL_NZ_ROW` (16), callers must ensure
+      `align_up(M, 16) == TileRes::Rows`, where `M = aMatrix.GetValidRow()`.
+    - When `TileRes::ValidRow == DYNAMIC`, an incompatible runtime `M` executes `trap()` and is reported as an
+      AI Core exception. For a static valid row, this remains a caller-side legality requirement in the current
+      `TMATMUL_MX` implementation.
+    - The restriction does not apply when `TileRes::Cols <= 16` or `TileRes::Compact != CompactMode::Null`.
+      Use a full-Rows Acc tile, column windows, or `TileAccCompact` with matching downstream layout semantics.
 - **Implementation checks (A5)**:
     - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`.
     - Static legality checks are enforced via `CheckMadMxValid<...>()` (types, shapes, fractals, and scaling tile legality).
