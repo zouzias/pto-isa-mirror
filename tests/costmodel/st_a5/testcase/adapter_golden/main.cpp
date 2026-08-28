@@ -66,6 +66,18 @@ ptoVf::VfInfo buildPtoVfInfo(bool includePredicateSetup = false)
     return ptoVf::VfInfo{"TADD", "1x512", {ptoVf::MakeLoop(LOOP_COUNT, std::move(body))}};
 }
 
+ptoVf::VfInfo buildPtoVfInfoWithPredicateSetup(std::string opName)
+{
+    ptoVf::VfInfo info = buildPtoVfInfo();
+    ptoVf::VfLoop loop = ptoVf::AsLoop(info.tree.front());
+    loop.body.insert(loop.body.begin(), makePtoInst(
+                                           std::move(opName),
+                                           {ptoVf::MemInfo{"p0", ptoVf::MemLocation::PredicateRegister, "bool"}},
+                                           {}));
+    info.tree.front() = ptoVf::MakeLoop(loop.count, std::move(loop.body));
+    return info;
+}
+
 std::string readText(const std::filesystem::path& path)
 {
     std::ifstream input(path);
@@ -120,7 +132,7 @@ TEST(VfSimAdapterGolden, MatchesDirectNativePrediction)
 {
     const auto adapterResult = ptoVf::predictVfCyclesWithVfSim({buildPtoVfInfo()});
 
-    const vfsim::ParamDb db(std::filesystem::path(PTO_VFSIM_TEST_SOURCE_ROOT));
+    const vfsim::ParamDB db(std::filesystem::path(PTO_VFSIM_TEST_SOURCE_ROOT));
     const ptoVf::PtoCanonicalLoweringResult lowering = ptoVf::lowerPtoVfToCanonical(buildPtoVfInfo());
     const auto nativeResult = vfsim::runCanonicalVfInfo(lowering.program, db);
     const uint64_t nativeCycles = static_cast<uint64_t>(std::max<int64_t>(0, nativeResult.vfEndCycle));
@@ -135,7 +147,7 @@ TEST(VfSimAdapterGolden, MatchesDirectNativePrediction)
 
 TEST(VfSimAdapterGolden, SharesUbIssueSlotsAcrossLoadsAndStores)
 {
-    const vfsim::ParamDb db(std::filesystem::path(PTO_VFSIM_TEST_SOURCE_ROOT));
+    const vfsim::ParamDB db(std::filesystem::path(PTO_VFSIM_TEST_SOURCE_ROOT));
     EXPECT_EQ(db.uarch().ubSlots, 2);
     EXPECT_EQ(db.uarch().lsuStorePriorityPregThreshold, 1);
 
@@ -146,7 +158,7 @@ TEST(VfSimAdapterGolden, SharesUbIssueSlotsAcrossLoadsAndStores)
         uarch.storePorts = 1;
         uarch.ubSlots = 2;
         uarch.lsuStorePriorityPregThreshold = 1;
-        vfsim::OooCoreMainline core(uarch, db, "fp32");
+        vfsim::OoOCoreMainline core(uarch, db, "fp32");
 
         vfsim::DynamicInst producer;
         producer.type = "inst";
@@ -231,6 +243,34 @@ TEST(VfSimAdapterGolden, FiltersPredicateSetupAsAnObservableApproximation)
     EXPECT_EQ(approximateResult.ignoredInstructionCount, 1U);
     EXPECT_FALSE(approximateResult.diagnostics.empty());
     EXPECT_EQ(approximateResult.cycles, exactResult.cycles);
+}
+
+TEST(VfSimAdapterGolden, FiltersPsetPredicateSetupAsAnObservableApproximation)
+{
+    const auto exactResult = ptoVf::predictVfCyclesWithVfSim({buildPtoVfInfo()});
+    for (const std::string& opName : {"pset_b8", "pset_b16", "pset_b32"}) {
+        const ptoVf::VfInfo info = buildPtoVfInfoWithPredicateSetup(opName);
+        const auto lowering = ptoVf::lowerPtoVfToCanonical(info);
+
+        EXPECT_EQ(lowering.ignoredInstructionCount, 1U) << opName;
+        ASSERT_EQ(lowering.program.context.size(), 1U) << opName;
+        const auto& loopNode = lowering.program.context.front();
+        ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const vfsim::CanonicalLoop>>(loopNode.payload)) << opName;
+        const auto& loop = std::get<std::shared_ptr<const vfsim::CanonicalLoop>>(loopNode.payload);
+        ASSERT_NE(loop, nullptr) << opName;
+        for (const vfsim::CanonicalNode& node : loop->body) {
+            if (!std::holds_alternative<vfsim::CanonicalInstruction>(node.payload))
+                continue;
+            EXPECT_NE(std::get<vfsim::CanonicalInstruction>(node.payload).opcode, opName) << opName;
+        }
+
+        const auto approximateResult = ptoVf::predictVfCyclesWithVfSim({info});
+        EXPECT_EQ(approximateResult.status, ptoVf::VfPredictionStatus::VF_SIM_HIT) << opName;
+        EXPECT_EQ(approximateResult.vfSimHitCount, 1U) << opName;
+        EXPECT_EQ(approximateResult.fallbackCount, 0U) << opName;
+        EXPECT_EQ(approximateResult.ignoredInstructionCount, 1U) << opName;
+        EXPECT_EQ(approximateResult.cycles, exactResult.cycles) << opName;
+    }
 }
 
 TEST(VfSimAdapterGolden, ReportsInvalidTraceInsteadOfSilentFallback)

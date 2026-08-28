@@ -6,30 +6,37 @@
 // INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 // See LICENSE in the root of the software repository for the full text of the License.
 
-#ifndef VFSIM_NATIVE_ISA_TRAITS_H_
-#define VFSIM_NATIVE_ISA_TRAITS_H_
-
-#include <string>
+#ifndef VFSIM_NATIVE_ISA_TRAITS_H
+#define VFSIM_NATIVE_ISA_TRAITS_H
 
 #include "native/ParamDB.h"
+
+#include <string>
 
 namespace vfsim {
 
 enum class OpClass {
-    LOAD,
-    STORE,
-    COMPUTE,
-    UNKNOWN,
+  Load,
+  Store,
+  Compute,
+  Unknown,
 };
 
-OpClass getOpClass(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool isLoadOp(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool isStoreOp(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool isComputeOp(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool usesLsq(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool usesShqQueue(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
-bool usesSharedShqCredit(const ParamDb& db, const std::string& op, const std::string& dtype = "fp32");
+OpClass getOpClass(const ParamDB &db, const std::string &op,
+                   const std::string &dtype = "fp32");
+bool isLoadOp(const ParamDB &db, const std::string &op,
+              const std::string &dtype = "fp32");
+bool isStoreOp(const ParamDB &db, const std::string &op,
+               const std::string &dtype = "fp32");
+bool isComputeOp(const ParamDB &db, const std::string &op,
+                 const std::string &dtype = "fp32");
+bool usesLsq(const ParamDB &db, const std::string &op,
+             const std::string &dtype = "fp32");
+bool usesShqQueue(const ParamDB &db, const std::string &op,
+                  const std::string &dtype = "fp32");
+bool usesSharedShqCredit(const ParamDB &db, const std::string &op,
+                         const std::string &dtype = "fp32");
 
 } // namespace vfsim
 
-#endif // VFSIM_NATIVE_ISA_TRAITS_H_
+#endif // VFSIM_NATIVE_ISA_TRAITS_H
