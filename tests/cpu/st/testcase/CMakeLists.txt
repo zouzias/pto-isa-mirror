@@ -98,7 +98,7 @@ tmins
 tmov
 tmrgsort
 tmul
-tmuladddst
+tmula
 tmuls
 tneg
 tnot
