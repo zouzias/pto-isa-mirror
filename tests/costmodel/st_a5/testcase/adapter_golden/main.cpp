@@ -266,8 +266,53 @@ TEST(VfSimAdapterGolden, ScopeSentinelPreservesTraceParserErrors)
     EXPECT_EQ(prediction.status, ptoVf::VfPredictionStatus::INVALID_TRACE);
     EXPECT_EQ(prediction.vfSimHitCount, 0U);
     EXPECT_EQ(prediction.fallbackCount, 1U);
+    EXPECT_EQ(prediction.cycles, ptoVf::kUnknownInstructionFallbackCycles);
+    EXPECT_EQ(trace.executed_pto.back().total_cycles, ptoVf::kUnknownInstructionFallbackCycles);
     ASSERT_FALSE(prediction.diagnostics.empty());
     EXPECT_NE(prediction.diagnostics.front().find("stray loop_iter/exit"), std::string::npos);
+}
+
+TEST(VfSimAdapterGolden, MixedScopeTraceFailureKeepsFallbackCycles)
+{
+    ptoVf::trace::Reset();
+    ::pto::mocker::ResetTrace();
+    ::pto::mocker::BeginPtoInstr("TADD");
+    {
+        ptoVf::ScopeSentinel scope;
+        __pto_trace_loop_enter(1, __FILE__, __LINE__, 0);
+        __pto_trace_loop_iter(1);
+        ptoVf::trace::RecordOp(ptoVf::AsInst(makePtoInst(
+            "vlds", {makePtoValue("v0", ptoVf::MemLocation::PhyRegister)}, {makePtoValue("mem0", ptoVf::MemLocation::UB)})));
+        ptoVf::trace::RecordOp(ptoVf::AsInst(makePtoInst(
+            "vlds", {makePtoValue("v1", ptoVf::MemLocation::PhyRegister)}, {makePtoValue("mem1", ptoVf::MemLocation::UB)})));
+        ptoVf::trace::RecordOp(ptoVf::AsInst(makePtoInst(
+            "vadd",
+            {makePtoValue("v2", ptoVf::MemLocation::PhyRegister)},
+            {makePtoValue("v0", ptoVf::MemLocation::PhyRegister),
+             makePtoValue("v1", ptoVf::MemLocation::PhyRegister)})));
+        ptoVf::trace::RecordOp(ptoVf::AsInst(makePtoInst(
+            "vsts", {makePtoValue("mem2", ptoVf::MemLocation::UB)}, {makePtoValue("v2", ptoVf::MemLocation::PhyRegister)})));
+        __pto_trace_loop_exit(1);
+        (void)scope;
+    }
+    {
+        ptoVf::ScopeSentinel scope;
+        ptoVf::trace::RecordOp(ptoVf::VfInst{"vmull", {}, {}, {}});
+        __pto_trace_loop_exit(456);
+        (void)scope;
+    }
+    ::pto::mocker::EndPtoInstr();
+
+    const auto& trace = ::pto::mocker::GetTrace();
+    ASSERT_FALSE(trace.executed_pto.empty());
+    const auto& prediction = trace.executed_pto.back().vfPrediction;
+    EXPECT_EQ(prediction.status, ptoVf::VfPredictionStatus::PARTIAL_FALLBACK);
+    EXPECT_EQ(prediction.vfSimHitCount, 1U);
+    EXPECT_EQ(prediction.fallbackCount, 1U);
+    EXPECT_GT(prediction.cycles, ptoVf::FallbackVecCycle("vmull"));
+    EXPECT_EQ(trace.executed_pto.back().total_cycles, prediction.cycles);
+    ASSERT_FALSE(prediction.diagnostics.empty());
+    EXPECT_NE(prediction.diagnostics.back().find("stray loop_iter/exit"), std::string::npos);
 }
 
 TEST(VfSimAdapterGolden, CapturesPredicateMemoryAndConfigOperands)

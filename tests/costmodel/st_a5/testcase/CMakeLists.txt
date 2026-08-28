@@ -74,6 +74,7 @@ if(TARGET tadd)
             -DCPU_TADD_DIR=${_repo_root}/tests/cpu/st/testcase/tadd
             -DTEST_COMMON_DIR=${_repo_root}/tests/common
             -DFIXTURE_WRITER=${CMAKE_CURRENT_SOURCE_DIR}/full_host_tadd/fixture_writer.cpp
+            -DINSTALL_ARCH_DIR=${CMAKE_SYSTEM_PROCESSOR}-linux
             -DEXTERNAL_ROOT=${CMAKE_BINARY_DIR}/external_vfsim_project
             -P ${CMAKE_SOURCE_DIR}/verify_external_vfsim_project.cmake)
 endif()

@@ -148,6 +148,19 @@ namespace pto::mocker::vf::capture {
 void ResetOperands();
 }
 namespace pto::mocker::vf {
+inline uint64_t FallbackCyclesForCurrentTraceEvents()
+{
+    uint64_t cycles = 0;
+    for (const trace::Event& event : trace::Events()) {
+        if (event.kind == trace::EvKind::Op) {
+            cycles += FallbackVecCycle(event.inst.opName);
+        } else if (event.kind == trace::EvKind::MemBar) {
+            cycles += kMemBarPenaltyPlaceholder;
+        }
+    }
+    return cycles == 0 ? kUnknownInstructionFallbackCycles : cycles;
+}
+
 struct ScopeSentinel {
     ScopeSentinel()
     {
@@ -167,7 +180,7 @@ struct ScopeSentinel {
             if (!ts.active_pto_stack.empty())
                 ts.executed_pto[ts.active_pto_stack.back()].vf_infos.push_back(std::move(br.info));
         } else if (!br.err.empty()) {
-            ::pto::mocker::RecordVfTraceError(std::move(br.err));
+            ::pto::mocker::RecordVfTraceError(std::move(br.err), FallbackCyclesForCurrentTraceEvents());
         }
         trace::Reset();
     }

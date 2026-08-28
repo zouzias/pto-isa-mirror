@@ -38,6 +38,9 @@ TEST(A5CostmodelHostRuntime, AllocationCopyStreamAndDeviceLifecycle)
     aclrtStream stream = nullptr;
     EXPECT_EQ(aclrtCreateStream(&stream), ACL_SUCCESS);
     ASSERT_NE(stream, nullptr);
+    int32_t streamId = -1;
+    EXPECT_EQ(aclrtStreamGetId(stream, &streamId), ACL_SUCCESS);
+    EXPECT_EQ(streamId, 0);
 
     std::array<uint32_t, kElementCount> input{};
     for (size_t i = 0; i < input.size(); ++i) {

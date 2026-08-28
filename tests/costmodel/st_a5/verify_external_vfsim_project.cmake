@@ -6,18 +6,58 @@
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 
-if(NOT PTO_ISA_ROOT OR NOT EXTERNAL_ROOT OR NOT CPU_TADD_DIR OR NOT TEST_COMMON_DIR OR NOT FIXTURE_WRITER)
+if(NOT PTO_ISA_ROOT OR NOT EXTERNAL_ROOT OR NOT CPU_TADD_DIR OR NOT TEST_COMMON_DIR OR NOT FIXTURE_WRITER OR
+   NOT INSTALL_ARCH_DIR)
     message(FATAL_ERROR "external VfSim project test is missing an input path")
 endif()
 
 set(_source_dir "${EXTERNAL_ROOT}/src")
 set(_build_dir "${EXTERNAL_ROOT}/build")
-set(_install_root "${EXTERNAL_ROOT}/install_root")
+set(_install_build_dir "${EXTERNAL_ROOT}/pto_install_build")
+set(_install_prefix "${EXTERNAL_ROOT}/install_prefix")
+set(_relocated_prefix "${EXTERNAL_ROOT}/relocated_prefix")
+set(_install_root "${_relocated_prefix}/${INSTALL_ARCH_DIR}")
 set(_case_dir "${EXTERNAL_ROOT}/TADDTest.case_float_64x64_64x64_64x64")
 file(REMOVE_RECURSE "${EXTERNAL_ROOT}")
 file(MAKE_DIRECTORY "${_source_dir}")
-file(COPY "${PTO_ISA_ROOT}/include" DESTINATION "${_install_root}")
-file(COPY "${PTO_ISA_ROOT}/pkg_inc" DESTINATION "${_install_root}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -S "${PTO_ISA_ROOT}" -B "${_install_build_dir}"
+            -DCMAKE_BUILD_TYPE=Debug
+            -DCMAKE_INSTALL_PREFIX=${_install_prefix}
+    RESULT_VARIABLE _pto_configure_result
+    OUTPUT_VARIABLE _pto_configure_output
+    ERROR_VARIABLE _pto_configure_error)
+if(NOT _pto_configure_result EQUAL 0)
+    message(FATAL_ERROR "PTO-ISA install configure failed:\n${_pto_configure_output}\n${_pto_configure_error}")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${_install_build_dir}" --target version_pto-isa_info
+    RESULT_VARIABLE _version_result
+    OUTPUT_VARIABLE _version_output
+    ERROR_VARIABLE _version_error)
+if(NOT _version_result EQUAL 0)
+    message(FATAL_ERROR "PTO-ISA version info generation failed:\n${_version_output}\n${_version_error}")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --install "${_install_build_dir}" --prefix "${_install_prefix}" --component pto-isa
+    RESULT_VARIABLE _install_result
+    OUTPUT_VARIABLE _install_output
+    ERROR_VARIABLE _install_error)
+if(NOT _install_result EQUAL 0)
+    message(FATAL_ERROR "PTO-ISA install failed:\n${_install_output}\n${_install_error}")
+endif()
+
+if(NOT EXISTS "${_install_prefix}/${INSTALL_ARCH_DIR}/include" OR
+   NOT EXISTS "${_install_prefix}/${INSTALL_ARCH_DIR}/pkg_inc")
+    message(FATAL_ERROR "PTO-ISA install did not create the expected ${INSTALL_ARCH_DIR}/include and pkg_inc layout")
+endif()
+
+file(MAKE_DIRECTORY "${_relocated_prefix}")
+file(RENAME "${_install_prefix}/${INSTALL_ARCH_DIR}" "${_install_root}")
+
 file(COPY "${CPU_TADD_DIR}/main.cpp" "${CPU_TADD_DIR}/tadd_kernel.cpp" DESTINATION "${_source_dir}")
 file(COPY "${TEST_COMMON_DIR}/test_common.h" DESTINATION "${_source_dir}")
 file(COPY "${FIXTURE_WRITER}" DESTINATION "${_source_dir}")
