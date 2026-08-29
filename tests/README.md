@@ -14,6 +14,32 @@ Common test entry points:
 
 > `run_st.sh` requires a platform flag (`--a3`/`--a5`/`--a3_a5`/`--kirin9030`) **and**, for `--a3`/`--a5`, a mode flag (`--simple` or `--all`); optionally a run mode (`--sim`/`--npu`, defaults to on-board `npu`). Run `./tests/run_st.sh` with no/invalid arguments to print the full usage. Note the `--` prefixes are required.
 
+## TCI/TADD CPU_SIM Regression Coverage
+
+The focused CPU_SIM regressions cover the backend-compatibility cases that differ from the simplest same-type calls:
+
+- `TCI_Test.*_with_tmp` verifies that the three-argument `TCI(dst, start, tmp)` overload is available and preserves
+  ascending and descending results.
+- `TADDTest.case_int32_64x64_mixed_static_valid` verifies that `TADD` accepts distinct Tile C++ types with matching
+  runtime valid shapes (a static-valid `src0` with dynamic-valid `dst` and `src1`).
+
+Run them with:
+
+```bash
+python3 tests/run_cpu.py --testcase tci --gtest_filter 'TCI_Test.*_with_tmp'
+python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.case_int32_64x64_mixed_static_valid'
+```
+
+The corresponding full A3 on-board ST suites can be run with:
+
+```bash
+LDFLAGS=-no-pie python3 tests/script/run_st.py -r npu -v a3 -t tci
+LDFLAGS=-no-pie python3 tests/script/run_st.py -r npu -v a3 -t tadd
+```
+
+`LDFLAGS=-no-pie` is needed when the host links against a non-PIC static `libgtest.a`; environments with a PIC
+GoogleTest library can omit it.
+
 ## Layout
 
 - `script/`: Recommended entry scripts

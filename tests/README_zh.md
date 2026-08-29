@@ -14,6 +14,29 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
 
 > `run_st.sh` 必须指定平台参数（`--a3`/`--a5`/`--a3_a5`/`--kirin9030`），并且对 `--a3`/`--a5` 还需指定模式参数（`--simple` 或 `--all`）；可选地指定运行模式（`--sim`/`--npu`，默认板上 `npu`）。不带参数或参数非法运行 `./tests/run_st.sh` 会打印完整用法。注意各参数均需 `--` 前缀。
 
+## TCI/TADD CPU_SIM 回归覆盖
+
+以下定向 CPU_SIM 回归用例覆盖了不同于最简单同类型调用的后端兼容场景：
+
+- `TCI_Test.*_with_tmp` 验证三参数 `TCI(dst, start, tmp)` 重载可用，并保证升序和降序结果不变。
+- `TADDTest.case_int32_64x64_mixed_static_valid` 验证 `TADD` 可接受运行时有效形状一致的不同 Tile C++ 类型（`src0` 使用静态有效形状，`dst` 和 `src1` 使用动态有效形状）。
+
+运行命令如下：
+
+```bash
+python3 tests/run_cpu.py --testcase tci --gtest_filter 'TCI_Test.*_with_tmp'
+python3 tests/run_cpu.py --testcase tadd --gtest_filter 'TADDTest.case_int32_64x64_mixed_static_valid'
+```
+
+对应的 A3 板上完整 ST 可使用以下命令运行：
+
+```bash
+LDFLAGS=-no-pie python3 tests/script/run_st.py -r npu -v a3 -t tci
+LDFLAGS=-no-pie python3 tests/script/run_st.py -r npu -v a3 -t tadd
+```
+
+当 host 链接到 non-PIC 静态 `libgtest.a` 时，需要设置 `LDFLAGS=-no-pie`；如果环境使用 PIC GoogleTest 库，可省略该设置。
+
 ## 目录结构
 
 - `script/`：推荐的入口脚本

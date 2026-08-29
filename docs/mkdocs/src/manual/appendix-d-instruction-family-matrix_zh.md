@@ -149,7 +149,7 @@
 | 复杂指令 | `TMRGSORT` | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT_zh.md` |
 | 复杂指令 | `TSORT32` | `complex` | `dst, src0, src1` | `docs/isa/TSORT32_zh.md` |
 | 复杂指令 | `TGATHER` | `complex` | `dst, src0, src1` | `docs/isa/TGATHER_zh.md` |
-| 复杂指令 | `TCI` | `complex` | `dst, src0, src1` | `docs/isa/TCI_zh.md` |
+| 复杂指令 | `TCI` | `complex` | `dst, start, tmp (overload)` | `docs/isa/TCI_zh.md` |
 | 复杂指令 | `TTRI` | `complex` | `dst, src0, src1` | `docs/isa/TTRI_zh.md` |
 | 复杂指令 | `TRANDOM` | `complex` | `dst, key, counter` | `docs/isa/TRANDOM_zh.md` |
 | 复杂指令 | `TPARTADD` | `complex` | `dst, src0, src1` | `docs/isa/TPARTADD_zh.md` |

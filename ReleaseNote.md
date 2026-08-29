@@ -18,7 +18,9 @@ The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated 
 
 ### Fixed
 
-- N/A
+- CPU_SIM now accepts the scratch-tile overload of `TCI` and matches the no-scratch sequence behavior.
+- CPU_SIM `TADD` now supports distinct operand Tile types, including compatible static/dynamic valid-shape types,
+  while retaining runtime valid-shape checks.
 
 ### Deprecated
 

@@ -18,7 +18,8 @@
 
 ### Fixed
 
-- 暂无
+- CPU_SIM 现已支持带临时 Tile 的 `TCI` 重载，序列行为与不带临时 Tile 的形式一致。
+- CPU_SIM `TADD` 现已支持不同的操作数 Tile 类型，包括有效形状兼容的静态/动态类型，同时保留运行时有效形状检查。
 
 ### Deprecated
 
