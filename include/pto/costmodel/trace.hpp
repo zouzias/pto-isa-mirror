@@ -50,7 +50,13 @@ struct PtoInstrRecord {
     std::vector<CceCallRecord> cce_calls;
     uint64_t total_cycles = 0;
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+    struct VfTraceError {
+        std::string message;
+        uint64_t fallback_cycles = 0;
+    };
     std::vector<vf::VfInfo> vf_infos;
+    std::vector<VfTraceError> vf_trace_errors;
+    vf::VfPredictionResult vfPrediction;
 #endif
 };
 
@@ -71,6 +77,35 @@ inline void ResetTrace() { g_trace_state = {}; }
 inline TraceState& GetMutableTrace() { return g_trace_state; }
 
 inline const TraceState& GetTrace() { return g_trace_state; }
+
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+inline void RecordVfTraceError(std::string error, uint64_t fallbackCycles)
+{
+    auto& trace = g_trace_state;
+    if (trace.active_pto_stack.empty()) {
+        return;
+    }
+    trace.executed_pto[trace.active_pto_stack.back()].vf_trace_errors.push_back(
+        PtoInstrRecord::VfTraceError{std::move(error), fallbackCycles});
+}
+
+inline void AppendVfTraceErrors(PtoInstrRecord& pto)
+{
+    if (pto.vf_trace_errors.empty()) {
+        return;
+    }
+    uint64_t fallbackCycles = 0;
+    for (const PtoInstrRecord::VfTraceError& error : pto.vf_trace_errors) {
+        fallbackCycles += error.fallback_cycles;
+        pto.vfPrediction.diagnostics.push_back("VF trace parse failed: " + error.message);
+    }
+    pto.vfPrediction.cycles += fallbackCycles;
+    pto.total_cycles += fallbackCycles;
+    pto.vfPrediction.fallbackCount += static_cast<uint32_t>(pto.vf_trace_errors.size());
+    pto.vfPrediction.status = pto.vfPrediction.vfSimHitCount > 0 ? vf::VfPredictionStatus::PARTIAL_FALLBACK :
+                                                                 vf::VfPredictionStatus::INVALID_TRACE;
+}
+#endif
 
 inline uint64_t GetLastPtoInstrCycles()
 {
@@ -221,8 +256,10 @@ inline void EndPtoInstr()
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
             auto& pto = g_trace_state.executed_pto[stack.back()];
             if (!pto.vf_infos.empty()) {
-                pto.total_cycles += vf::PredictVfCycles(pto.vf_infos);
+                pto.vfPrediction = vf::predictVfCyclesDetailed(pto.vf_infos, vf::GetVfPredictionOptions());
+                pto.total_cycles += pto.vfPrediction.cycles;
             }
+            AppendVfTraceErrors(pto);
 #endif
         }
         stack.pop_back();
