@@ -6,7 +6,7 @@ CPU_SIM 是一个面向纯 CPU 系统执行的后端实现。
 
 - 每个 CPU 工作线程内的 PTO 指令同步执行。对于已支持的同步和通信操作，CPU_SIM 会使用 CPU 同步原语进行模拟，其中包括 TileData `TPUSH`/`TPOP`/`TFREE` FIFO 流程。
 - 使用特定的内存模型来模拟 NPU 内存层次（见下文）。
-- 多线程支持尚不完整。`Tile` 对象的内存访问不具备线程间同步能力，因此除已支持的通信操作外，不建议跨线程共享 Tile。
+- 多线程支持尚不完整。`Tile` 对象的内存访问不具备线程间同步能力，因此除已支持的通信操作外，不建议跨线程共享 Tile。Tile 的惰性内存分配同样不具备线程间同步能力；`TMatmul` 的访问方式见下文“多线程指令”一节。
 
 ## 启用 CPU_SIM
 
@@ -57,6 +57,14 @@ CPU_SIM 默认提供至少 512 KiB 的 UB 临时空间。应在初始化内存�
 定义 `__PTO_AUTO__` 后，CPU_SIM 中的常规 `Tile` 支持惰性后备存储。如果 Tile 尚未通过 `TASSIGN` 绑定内存，则首次调用 `data()` 时会为其分配私有的主机内存。未定义 `__PTO_AUTO__` 时，常规 Tile 必须在访问前显式绑定内存。
 
 后备存储来自主机内存，不对应 Tile 声明的内存位置，也不会与模拟的 UB、L1、L0A、L0B 或 L0C 缓冲区重叠。如果需要模拟内存位置、偏移、别名或通信行为，应使用 `TASSIGN`。不提供惰性后备存储的其他 Tile 抽象仍需显式绑定内存。
+
+## 多线程指令
+
+启用 `__PTO_AUTO__` 后，当 `data_` 为空时，`Tile::data()` 会执行首次自动分配，包括调整 Tile 内部缓冲区大小并更新 `data_`，因此并发执行首次访问是不安全的。
+
+调用 `parallel_for_1d` 前，`TMatmulNzZn` 在调用线程中取得输出、可选累加器和两个输入 Tile 的底层指针；`TMatmulMX` 还会取得两个缩放 Tile 的底层指针。工作函数按值捕获这些指针，并通过 `GetProperDataPart`、`SetProperDataPart` 和 `GetTileElementOffset` 访问元素，不再调用 `Tile::data()`、`GetElement()` 或 `SetElement()`。每个工作线程负责互不重叠的输出行。输入和缩放缓冲区只读；如果累加器与输出是同一个 Tile，工作线程也只会读写自己负责行中的累加器元素。`parallel_for_1d` 会在返回前 join 所有工作线程。
+
+对于这两个函数，工作量小于 `PTO_CPU_PARALLEL_THRESHOLD_ELEMS`（默认值为 `16384`）时顺序执行；工作量达到阈值、输出行数大于 1 且可用线程数大于 1 时可以并行执行。`PTO_CPU_MAX_THREADS` 默认为 `0`，此时工作线程数受硬件并发数限制；非零值会增加一个配置上限。
 
 ## 使用建议
 

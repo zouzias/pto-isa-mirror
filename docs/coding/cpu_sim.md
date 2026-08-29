@@ -5,7 +5,8 @@ It has some limitations and differences comparing to NPU backends at this moment
   including the TileData `TPUSH`/`TPOP`/`TFREE` FIFO flow, are simulated with CPU synchronization primitives.
 - Specific memory model to mimic NPU memory (see below)
 - Multithreading support is not complete. Memory access in Tile objects is not synchronized across threads, so tiles
-  should not be shared across threads except through supported communication operations.
+  should not be shared across threads except through supported communication operations. Tile lazy allocation is also
+  not synchronized; the `TMatmul` access pattern is described in the multithreaded-instructions section below.
 
 ## Enabling CPU_SIM
 You may enable CPU backend (CPU_SIM) by setting `__CPU_SIM` compiler definition. In this case, programs can be built using standard CPU-targeted compiler (gcc or clang).
@@ -42,6 +43,14 @@ tiles must be bound explicitly before access.
 Fallback storage is allocated from host memory regardless of the tile location and does not overlap the simulated UB,
 L1, L0A, L0B, or L0C buffers. Use `TASSIGN` when the simulated memory location, offset, aliasing, or communication
 behavior matters. Tile abstractions that do not provide lazy fallback storage must still be explicitly bound.
+
+## Multithreaded instructions
+
+With `__PTO_AUTO__`, `Tile::data()` performs the first automatic allocation when `data_` is null. That operation resizes the Tile's internal buffer and updates `data_`, so concurrent first access is not safe.
+
+Before calling `parallel_for_1d`, `TMatmulNzZn` resolves the backing pointers for its destination, optional accumulator, and two input Tiles on the caller thread. `TMatmulMX` additionally resolves both scale Tiles. The worker captures these pointers by value and accesses elements through `GetProperDataPart`, `SetProperDataPart`, and `GetTileElementOffset`; it does not call `Tile::data()`, `GetElement()`, or `SetElement()`. Each worker owns a disjoint range of output rows. Input and scale buffers are read-only; if the accumulator aliases the destination, a worker only reads and writes accumulator elements in its own rows. `parallel_for_1d` joins all workers before returning.
+
+For these functions, work below `PTO_CPU_PARALLEL_THRESHOLD_ELEMS` (default `16384`) runs serially. Work at or above the threshold is eligible for parallel execution when there is more than one output row and more than one available thread. `PTO_CPU_MAX_THREADS` defaults to `0`, which leaves the worker count capped by hardware concurrency; a nonzero value adds a configured cap.
 
 ### To summarize:
 For regular `Tile` objects, use one of these strategies:

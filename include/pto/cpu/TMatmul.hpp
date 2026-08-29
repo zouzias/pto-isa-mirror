@@ -64,14 +64,23 @@ void TMatmulNzZn(TileAcc& dst, TileAcc* acc, TileLeft& src0, TileRight& src1)
     uint16_t K = src0.GetValidCol();
     uint16_t N = src1.GetValidCol();
 
-    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
+    // Materialize lazy tile storage before starting workers. Tile::data() is not
+    // thread-safe during its first access in CPU auto-allocation mode.
+    typename TileAcc::TileDType dstData = dst.data();
+    typename TileAcc::TileDType accData = acc == nullptr ? nullptr : acc->data();
+    typename TileLeft::TileDType src0Data = src0.data();
+    typename TileRight::TileDType src1Data = src1.data();
+
+    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [=](std::size_t i) {
         for (uint16_t j = 0; j < N; j++) {
             typename TileAcc::DType mul_acc = 0;
 
             PTO_CPU_VECTORIZE_LOOP
             for (uint16_t k = 0; k < K; k++) {
-                auto a = static_cast<typename TileAcc::DType>(src0.GetElement(i, k));
-                auto b = static_cast<typename TileAcc::DType>(src1.GetElement(k, j));
+                const auto a = static_cast<typename TileAcc::DType>(
+                    GetProperDataPart(src0Data, GetTileElementOffset<TileLeft>(i, k)));
+                const auto b = static_cast<typename TileAcc::DType>(
+                    GetProperDataPart(src1Data, GetTileElementOffset<TileRight>(k, j)));
                 if constexpr (std::is_same<float, typename TileAcc::DType>::value) {
                     mul_acc = std::fma(a, b, mul_acc);
                 } else {
@@ -79,7 +88,11 @@ void TMatmulNzZn(TileAcc& dst, TileAcc* acc, TileLeft& src0, TileRight& src1)
                 }
             }
 
-            dst.SetElement(i, j, acc ? acc->GetElement(i, j) + mul_acc : mul_acc);
+            const auto dstOffset = GetTileElementOffset<TileAcc>(i, j);
+            if (accData != nullptr) {
+                mul_acc += GetProperDataPart(accData, dstOffset);
+            }
+            SetProperDataPart(dstData, dstOffset, mul_acc);
         }
     });
 }
@@ -153,19 +166,38 @@ void TMatmulMX(
     uint16_t N = src1.GetValidCol();
     CheckMadMxValid<TileAcc, TileLeft, TileLeftScale, TileRight, TileRightScale>();
     CheckDynamicMmad(M, K, N);
-    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [&](std::size_t i) {
+
+    // Resolve all backing storage on the caller thread so workers never race
+    // while lazily allocating a shared Tile.
+    typename TileAcc::TileDType dstData = dst.data();
+    typename TileAcc::TileDType accData = acc == nullptr ? nullptr : acc->data();
+    typename TileLeft::TileDType src0Data = src0.data();
+    typename TileRight::TileDType src1Data = src1.data();
+    typename TileLeftScale::TileDType scale0Data = scale0.data();
+    typename TileRightScale::TileDType scale1Data = scale1.data();
+
+    cpu::parallel_for_1d(0, M, static_cast<std::size_t>(M) * N * K, [=](std::size_t i) {
         for (uint16_t j = 0; j < N; j++) {
             typename TileAcc::DType mul_acc = 0;
 
             PTO_CPU_VECTORIZE_LOOP
             for (uint16_t k = 0; k < K; k++) {
                 // Each scale factor is applied to the group of 32 values
-                double scaleFactor = scale0.GetElement(i, k / 32) * scale1.GetElement(k / 32, j);
+                const double scaleFactor =
+                    GetProperDataPart(scale0Data, GetTileElementOffset<TileLeftScale>(i, k / 32)) *
+                    GetProperDataPart(scale1Data, GetTileElementOffset<TileRightScale>(k / 32, j));
 
-                mul_acc += src0.GetElement(i, k) * src1.GetElement(k, j) * scaleFactor;
+                const auto src0Value = GetProperDataPart(src0Data, GetTileElementOffset<TileLeft>(i, k));
+                const auto src1Value = GetProperDataPart(src1Data, GetTileElementOffset<TileRight>(k, j));
+
+                mul_acc += src0Value * src1Value * scaleFactor;
             }
 
-            dst.SetElement(i, j, acc ? acc->GetElement(i, j) + mul_acc : mul_acc);
+            const auto dstOffset = GetTileElementOffset<TileAcc>(i, j);
+            if (accData != nullptr) {
+                mul_acc += GetProperDataPart(accData, dstOffset);
+            }
+            SetProperDataPart(dstData, dstOffset, mul_acc);
         }
     });
 }
