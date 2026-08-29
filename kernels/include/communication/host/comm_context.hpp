@@ -246,10 +246,24 @@ inline bool BuildAsyncSessionSdma(const CommContext& ctx, AsyncSession& out)
 }
 
 #ifdef PTO_DOMAIN_URMA_HOST
-inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
+// jettyIdx names the jetty this session posts on; the default means the caller did
+// not pick one. Same rule as the device-side builder.
+inline bool BuildAsyncSessionUrma(
+    const CommContext& ctx, AsyncSession& out, uint32_t jettyIdx = urma::kUrmaAutoJettyIdx)
 {
     if (ctx.urmaWs == nullptr) {
         std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): workspace missing\n";
+        return false;
+    }
+    if (jettyIdx == urma::kUrmaAutoJettyIdx) {
+        if (ctx.urmaMgr != nullptr && ctx.urmaMgr->Layout() == urma::UrmaLayout::SHARED_POOL) {
+            std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): shared jetty pool requires an explicit jettyIdx\n";
+            return false;
+        }
+        jettyIdx = 0;
+    } else if (ctx.urmaMgr != nullptr && jettyIdx >= ctx.urmaMgr->JettyCount()) {
+        std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): jettyIdx " << jettyIdx << " out of range, jettyCount is "
+                  << ctx.urmaMgr->JettyCount() << "\n";
         return false;
     }
     out = AsyncSession{};
@@ -257,7 +271,7 @@ inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
     out.valid = true;
     out.contextGm = ctx.urmaWs;
     out.destRankId = 0; // unused by new API; kept for compatibility.
-    out.qpIdx = 0;
+    out.qpIdx = jettyIdx;
     return true;
 }
 #endif
@@ -267,6 +281,10 @@ inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
 // Fills engine-agnostic / host-known fields (workspace, defaults).
 // URMA sessions typically need no device Modify; peer is passed at the call.
 // Returns false if the engine is not enabled or workspace is missing.
+//
+// Engine-agnostic, so it names no jetty and therefore cannot serve a URMA shared
+// jetty pool; those callers know about jetties already and go through
+// BuildAsyncSessionUrma(ctx, out, jettyIdx).
 // ============================================================================
 inline bool BuildAsyncSession(const CommContext& ctx, DmaEngine engine, AsyncSession& out)
 {

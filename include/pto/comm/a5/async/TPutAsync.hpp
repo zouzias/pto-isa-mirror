@@ -77,10 +77,9 @@ PTO_INTERNAL uint64_t TPutAsyncCheckUrmaPayload(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer)
 {
     PTO_ASSERT(urma::detail::ValidateUrmaSession(session, peer), "TPUT_ASYNC URMA: invalid session, peer or QP.");
+    // No upper bound on transfer size: UrmaPostSend auto-splits payloads larger
+    // than a single WQE's 256MB capacity into multiple WQEs.
     const uint64_t transferSize = TPutAsyncValidatePayload(dstGlobalData, srcGlobalData);
-    PTO_ASSERT(
-        transferSize > 0U && transferSize <= urma::kUrmaMaxWqeTransferBytes,
-        "TPUT_ASYNC URMA: transfer size must be in (0, 256MB] per single WQE.");
     return transferSize;
 }
 
