@@ -73,6 +73,43 @@ TEST(TPutAsyncUrma, Vec_Int32_MR_Over512MB)
     ASSERT_TRUE((RunPutAsyncUrmaRootPut<int32_t, 67108864>(2, 2, 0, 0)));
 }
 
+// ============================================================================
+// >256MB single transfer: one TPUT_ASYNC whose payload exceeds a single WQE's
+// 256MB cap must be auto-split by UrmaPostSend into multiple <=256MB WQEs and
+// drained by one event.Wait. End-to-end value check proves the second (1MB)
+// chunk lands at the right offset.
+// ============================================================================
+TEST(TPutAsyncUrma, Vec_Int32_Over256MB_Chunked)
+{
+    SKIP_IF_RANKS_LT(2);
+    // 67,371,008 int32 = 257MB > 256MB → split into 256MB + 1MB (two WQEs).
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<int32_t, 67371008>(2, 2, 0, 0)));
+}
+
+// ============================================================================
+// SharedPool (Init with sharedJettyCount >= 1; filter: TPutAsyncUrma.Pool_*)
+// ============================================================================
+TEST(TPutAsyncUrma, Pool_OneJettyManyPeers_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunPutAsyncUrmaPool<float, 256, 1, 1, UrmaPoolJettyPolicy::SingleJetty>(4, 4, 0, 0)));
+}
+TEST(TPutAsyncUrma, Pool_MultiAivDifferentJetties_2Ranks)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunPutAsyncUrmaPool<float, 256, 2, 2, UrmaPoolJettyPolicy::AivOwnsJetty>(2, 2, 0, 0)));
+}
+TEST(TPutAsyncUrma, Pool_MultiAivDifferentJetties_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunPutAsyncUrmaPool<float, 256, 2, 2, UrmaPoolJettyPolicy::AivOwnsJetty>(4, 4, 0, 0)));
+}
+TEST(TPutAsyncUrma, Pool_OneAivManyJetties_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunPutAsyncUrmaPool<float, 256, 1, 2, UrmaPoolJettyPolicy::RoundRobinJetty>(4, 4, 0, 0)));
+}
+
 int main(int argc, char** argv)
 {
     CommMpiInit(&argc, &argv);
