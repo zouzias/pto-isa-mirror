@@ -1167,8 +1167,8 @@ PTO_INST RecordEvent TTRI(TileData& dst, int diagonal, WaitEvents&... events)
 }
 
 template <
-    typename DstTileData, typename SrcTileData, MaskPattern maskPattern, auto gatherType = GatherAxis::GATHER_ROW,
-    typename... WaitEvents>
+    typename DstTileData, typename SrcTileData, MaskPattern maskPattern = MaskPattern::P1111,
+    auto gatherType = GatherAxis::GATHER_ROW, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
     detail::PtoWaitEvents(events...);
@@ -1772,12 +1772,13 @@ TFMODS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, W
 }
 
 template <
-    auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+    auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
+    typename... WaitEvents>
 PTO_INST RecordEvent
-TREMS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events)
+TREMS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, TileDataTmp& tmp, WaitEvents&... events)
 {
     detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TREMS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, scalar);
+    MAP_INSTR_IMPL_T(TREMS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, scalar, tmp);
     return {};
 }
 
@@ -1960,11 +1961,12 @@ TDEQUANT(TileDataDst& dst, TileDataSrc& src, TileDataPara& scale, TileDataPara& 
 
 template <
     auto PrecisionType = RemAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
-    typename... WaitEvents>
-PTO_INST RecordEvent TREM(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
+    typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent
+TREM(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileDataTmp& tmp, WaitEvents&... events)
 {
     detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TREM, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1);
+    MAP_INSTR_IMPL_T(TREM, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1, tmp);
     return {};
 }
 

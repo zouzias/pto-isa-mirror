@@ -651,11 +651,44 @@ inline void pintlv_b32(A&&... args)
 {
     RecordPredicateInterleave("pintlv_b32", std::forward<A>(args)...);
 }
-PTO_VF_RECORD_VOID(vdup)
+
+template <class Dst, class Src, class Predicate, class Mode>
+inline void vdup(Dst&& dst, Src&& src, Predicate&& predicate, Mode&& mode)
+{
+    auto operands = std::forward_as_tuple(dst, src, predicate);
+    auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
+        "vdup", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{});
+    if (!::pto::mocker::vf::capture::Operand(src)) {
+        ::pto::mocker::vf::capture::AddArgument(
+            instruction, 1, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", src);
+    }
+    ::pto::mocker::vf::capture::AddArgument(
+        instruction, 3, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::rec(std::move(instruction));
+}
+
+template <class Dst, class Src, class Predicate, class Mode, class ExtendedMode>
+inline void vdup(Dst&& dst, Src&& src, Predicate&& predicate, Mode&& mode, ExtendedMode&& extendedMode)
+{
+    auto operands = std::forward_as_tuple(dst, src, predicate);
+    auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
+        "vdup", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{});
+    if (!::pto::mocker::vf::capture::Operand(src)) {
+        ::pto::mocker::vf::capture::AddArgument(
+            instruction, 1, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", src);
+    }
+    ::pto::mocker::vf::capture::AddArgument(
+        instruction, 3, ::pto::mocker::vf::VfArgKind::Config, "mode", mode);
+    ::pto::mocker::vf::capture::AddArgument(
+        instruction, 4, ::pto::mocker::vf::VfArgKind::Config, "extended_mode", extendedMode);
+    ::pto::mocker::vf::capture::rec(std::move(instruction));
+}
+
 PTO_VF_RECORD_VOID(vadd)
 PTO_VF_RECORD_VOID(vsub)
 PTO_VF_RECORD_VOID(vmul)
 PTO_VF_RECORD_VOID(vdiv)
+PTO_VF_RECORD_VOID(vmod)
 PTO_VF_RECORD_VOID(vpack)
 PTO_VF_RECORD_VOID(vaxpy)
 PTO_VF_RECORD_VOID(vmax)

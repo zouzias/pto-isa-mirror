@@ -173,3 +173,54 @@ inline void wait_flag_dev(auto flagId)
     const uint64_t cycles = EstimateConstCycles();
     ::pto::mocker::RecordCceCall("wait_flag_dev", cycles, flagId);
 }
+
+// Supply costmodel SyncAll implementations before pto_instr.hpp defines the
+// public SYNCALL wrappers. A2/A3 costmodel should stay on the mock path and must
+// not enter syncall_soft.hpp, which depends on device-only intrinsics.
+#ifndef PTO_NPU_A2A3_SYNCALL_HPP
+#define PTO_NPU_A2A3_SYNCALL_HPP
+
+namespace pto {
+
+inline uint16_t CostmodelFftsMessage(uint16_t eventId)
+{
+    return static_cast<uint16_t>(1U + ((eventId & 0xfU) << 8U));
+}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
+inline void SYNCALL_IMPL()
+{
+    ::pto_costmodel_pipe_barrier(PIPE_ALL);
+    if constexpr (CoreType == SyncCoreType::AIVOnly) {
+        ::ffts_cross_core_sync(PIPE_MTE3, CostmodelFftsMessage(SYNC_AIV_ONLY_ALL));
+        ::wait_flag_dev(SYNC_AIV_ONLY_ALL);
+    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
+        ::ffts_cross_core_sync(PIPE_FIX, CostmodelFftsMessage(SYNC_AIC_FLAG));
+        ::wait_flag_dev(SYNC_AIC_FLAG);
+    } else {
+        ::ffts_cross_core_sync(PIPE_MTE3, CostmodelFftsMessage(SYNC_AIV_FLAG));
+        ::wait_flag_dev(SYNC_AIC_AIV_FLAG);
+    }
+}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly, typename T>
+inline void SYNCALL_SOFT_IMPL(T*, int32_t)
+{
+    SYNCALL_IMPL<CoreType>();
+}
+
+template <typename T>
+inline void SYNCALL_SOFT_AIC_IMPL(T*, int32_t)
+{
+    SYNCALL_IMPL<SyncCoreType::AICOnly>();
+}
+
+template <SyncCoreType CoreType = SyncCoreType::Mix, typename T>
+inline void SYNCALL_SOFT_MIX_IMPL(T*, int32_t)
+{
+    SYNCALL_IMPL<CoreType>();
+}
+
+} // namespace pto
+
+#endif // PTO_NPU_A2A3_SYNCALL_HPP
