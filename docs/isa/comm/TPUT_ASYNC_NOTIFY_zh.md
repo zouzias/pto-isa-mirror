@@ -212,7 +212,7 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
 - payload目的地址范围不得与 `dstSignalData` 重叠。
 - 对于URMA和RDMA，payload目的地址与signal必须属于同一个目标peer；本地payload、远端payload和远端
   signal的完整地址范围都必须位于Host初始化阶段注册的内存区域内。
-- 单次URMA payload不得超过256 MB；单次RDMA payload不得超过 `0x7fffffff` 字节。
+- URMA payload无单次大小上限：超过256 MB（单WQE传输上限）的payload由实现自动拆分为多个WQE，对调用方透明，且signal仍保证在所有payload分片之后最后完成。单次RDMA payload不得超过 `0x7fffffff` 字节。
 - RDMA仅支持 `NotifyOp::Set`，不得使用 `NotifyOp::AtomicAdd`。
 - SDMA workspace必须由Host侧 `SdmaWorkspaceManager` 初始化；URMA workspace必须由Host侧
   `UrmaWorkspaceManager` 初始化。

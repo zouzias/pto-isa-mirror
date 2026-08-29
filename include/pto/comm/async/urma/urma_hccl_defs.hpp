@@ -41,6 +41,11 @@ extern HcclResult HcclCommMemReg(HcclComm comm, const char* memTag, const CommMe
 extern HcclResult HcclChannelGetRemoteMems(
     HcclComm comm, ChannelHandle channel, uint32_t* memNum, CommMem** remoteMems, char*** memTags);
 
+// The shared-jetty API (HcclChannelConfig*, HcclChannelAcquireWithConfig) needs no
+// declaration here: hccl_res.h includes hccl_channel.h, which is also where the
+// HcclChannelDesc / HcclChannelAcquire this file already relies on come from.
+// Declaring them again collides with the real header.
+
 #ifdef __cplusplus
 }
 #endif

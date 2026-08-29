@@ -24,7 +24,13 @@ constexpr uint32_t kUrmaMaxPollTimes = 1000000;
 constexpr uint64_t kCacheLineSize = 64;
 constexpr size_t kUrmaEidBytes = 16;
 
-// UB 协议单 WQE 最大传输量，对齐设备 max_read/write_size（现网 A5 典型值）
+// "Caller did not pick a jetty." Resolves to jetty 0 under PER_PEER, where the
+// destination rank already determines the queue, and is rejected under SHARED_POOL,
+// where defaulting would silently put every producer on the same jetty.
+constexpr uint32_t kUrmaAutoJettyIdx = UINT32_MAX;
+
+// UB 协议单 WQE 最大传输量，对齐设备 max_read/write_size（现网 A5 典型值）。
+// 超过此值的传输由 UrmaPostSend 自动拆成多个 WQE，调用方无需关心。
 constexpr uint64_t kUrmaMaxWqeTransferBytes = 256ULL * 1024ULL * 1024ULL;
 
 constexpr uint32_t kUrmaSqeSizeBytes = 48;
@@ -77,12 +83,21 @@ enum class UrmaOpcode : uint32_t {
 };
 
 // ============================================================================
+// UrmaLayout — how the SQ/CQ context table is indexed
+//
+// PER_PEER:    one jetty per peer, jetty i only reaches peer i. Selecting a peer
+//              is the same act as selecting a queue, so a ctx row is a peer.
+// SHARED_POOL: a pool of jetties, each reaching every peer. Peer and queue are
+//              chosen independently, so a ctx row is a jetty and the caller must
+//              name the jetty it owns.
+// ============================================================================
+enum class UrmaLayout : uint32_t { PER_PEER = 0, SHARED_POOL = 1 };
+
+// ============================================================================
 // UrmaInfo — device-side workspace root
 // ============================================================================
 struct UrmaInfo {
-    uint32_t qpNum;
-    uint32_t localTokenId;
-    uint32_t notifyPoolTokenId;
+    uint32_t rowsPerPeer; // SQ/CQ ctx rows occupied per peer; >= 1
     uint32_t rankCount;
     uint64_t sqPtr;
     uint64_t rqPtr;
@@ -90,6 +105,8 @@ struct UrmaInfo {
     uint64_t rcqPtr;
     uint64_t memPtr;
     uint64_t notifyPoolPtr;
+    UrmaLayout layout;
+    uint32_t jettyCount; // local jetty total == SQ/CQ ctx row count; >= 1
 };
 
 // ============================================================================
@@ -105,6 +122,11 @@ struct UrmaMemInfo {
     uint32_t len;
     uint64_t addr;
     uint64_t eidAddr;
+    // Local tokens bound to this channel. hcomm issues a fresh tokenId per
+    // channel even for the same HcclCommMemReg, so a single UrmaInfo token
+    // cannot be required to match every peer.
+    uint32_t localTokenId;
+    uint32_t notifyTokenId;
 };
 
 // ============================================================================
