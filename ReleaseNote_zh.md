@@ -18,7 +18,11 @@
 
 ### Fixed
 
-- 暂无
+- CPU_SIM 现已支持带临时 Tile 的 `TCI` 重载，序列行为与不带临时 Tile 的形式一致。
+- CPU_SIM `TADD` 现已支持不同的操作数 Tile 类型，包括有效形状兼容的静态/动态类型，同时保留运行时有效形状检查。
+- CPU_SIM 现已支持显式或默认饱和行为的两个带临时 Tile 的 `TCVT` 重载，并保持对应不带临时 Tile 形式的转换语义。
+- Atlas A2/A3 `TCVT` NonSatTorch 测试现通过与实现一致的 `int32` 中间结果生成 `half -> int16` 参考数据，
+  保持不饱和低 16 位窄化语义。
 
 ### Deprecated
 
