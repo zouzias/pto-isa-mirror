@@ -43,24 +43,43 @@ PTO_INTERNAL bool BuildAsyncSession(
 }
 
 #ifdef PTO_URMA_SUPPORTED
+// URMA session builders. session.qpIdx is the jetty to post on; leaving it at
+// kUrmaAutoJettyIdx means the caller did not pick one, which only PER_PEER can
+// resolve. PTO range-checks the index but does not arbitrate: keeping one jetty to
+// one producer at a time is the caller's job, the way the scheduler already hands
+// out cores.
 template <DmaEngine engine>
-PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& session)
+PTO_INTERNAL bool BuildAsyncSession(
+    __gm__ uint8_t* workspace, AsyncSession& session, uint32_t jettyIdx = urma::kUrmaAutoJettyIdx)
 {
     static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
     session = AsyncSession{};
     session.engine = engine;
     session.contextGm = workspace;
-    session.qpIdx = 0;
     session.destRankId = 0;
-    session.valid = (workspace != nullptr);
+    session.qpIdx = 0;
+    if (workspace == nullptr) {
+        return false;
+    }
+    __gm__ urma::UrmaInfo* info = reinterpret_cast<__gm__ urma::UrmaInfo*>(workspace);
+    if (jettyIdx == urma::kUrmaAutoJettyIdx) {
+        // Defaulting to jetty 0 under SHARED_POOL would put every AIV on one SQ and
+        // corrupt its producer index, since read-head / fill-WQE / store-head is not
+        // atomic. Fail instead of corrupting.
+        session.valid = (info->layout != urma::UrmaLayout::SHARED_POOL);
+        return session.valid;
+    }
+    session.qpIdx = jettyIdx;
+    session.valid = (jettyIdx < urma::detail::UrmaJettyIdxBound(info));
     return session.valid;
 }
 
 template <DmaEngine engine>
-PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, uint32_t destRankId, AsyncSession& session)
+PTO_INTERNAL bool BuildAsyncSession(
+    __gm__ uint8_t* workspace, uint32_t destRankId, AsyncSession& session, uint32_t jettyIdx = urma::kUrmaAutoJettyIdx)
 {
     static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
-    if (!BuildAsyncSession<engine>(workspace, session)) {
+    if (!BuildAsyncSession<engine>(workspace, session, jettyIdx)) {
         return false;
     }
     session.destRankId = destRankId;
