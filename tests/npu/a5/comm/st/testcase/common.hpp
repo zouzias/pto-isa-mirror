@@ -472,7 +472,11 @@ struct UrmaTestContext {
         }
     }
 
-    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
+    // sharedJettyCount: 0 keeps the PerPeer layout used by existing URMA tests.
+    // N >= 1 builds a SharedPool of N jetties; the kernel must then name jettyIdx.
+    bool Setup(
+        int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded,
+        uint32_t sharedJettyCount = 0)
     {
         if (n_devices <= 0 || n_ranks <= 0) {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
@@ -486,7 +490,9 @@ struct UrmaTestContext {
             CleanupSetupFailure();
             return false;
         }
-        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize)) {
+        if (!urmaMgr.Init(
+                comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize,
+                sharedJettyCount)) {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             CleanupSetupFailure();
             return false;
