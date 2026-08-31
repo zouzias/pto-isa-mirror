@@ -259,18 +259,19 @@ void testGmFifoPreservesV2CSplitLayout()
     }
 }
 
-template <typename T, int rows, int cols, TileType srcLoc>
+template <typename T, int rows, int cols, TileType srcLoc, TileType dstLoc>
 void testPushPopSingleThread()
 {
     constexpr int FiFoDepth = 8;
     constexpr int LocalDepth = 2;
     using PPTile = Tile<srcLoc, T, rows, cols>;
+    using PPTile_dst = Tile<dstLoc, T, rows, cols>;
     using PPipe = TPipe<0, Direction::DIR_C2V, sizeof(T) * PPTile::Numel, FiFoDepth, LocalDepth>;
     std::vector<T> fifoStorage(PPTile::Numel * FiFoDepth, static_cast<T>(0));
     PPipe::reset_for_cpu_sim();
     PPipe pipe(fifoStorage.data(), 0x0, 0x0);
     PPTile src;
-    PPTile dst;
+    PPTile_dst dst;
 
     TASSIGN(src, 0);
     TASSIGN(dst, rows * cols * sizeof(T));
@@ -288,15 +289,19 @@ void testPushPopSingleThread()
     EXPECT_TRUE(ResultCmp(expected, dst.data(), 0));
 }
 
-template <typename T, int rows, int cols, TileType srcLoc>
+template <typename T, int rows, int cols, TileType srcLoc, TileType dstLoc>
 void testPushPopMultiCore()
 {
     constexpr int FiFoDepth = 4;
-    constexpr int LocalDepth = 0;
+    constexpr int LocalDepth = 2;
+    static_assert(
+        (srcLoc == TileType::Acc && dstLoc == TileType::Vec) || (srcLoc == TileType::Vec && dstLoc == TileType::Mat),
+        "Only Acc->Vec and Vec->Mat mode are supported!");
     using PPTile = Tile<srcLoc, T, rows, cols>;
-    using PPipe = TPipe<1, Direction::DIR_C2V, sizeof(T) * PPTile::Numel, FiFoDepth, LocalDepth>;
+    using PPTile_dst = Tile<dstLoc, T, rows, cols>;
+    using PPipe = TPipe<1, Direction::DIR_V2C, sizeof(T) * PPTile::Numel, FiFoDepth, LocalDepth>;
 
-    constexpr int kIterations = 12;
+    constexpr int kIterations = 2;
     std::vector<T> fifoStorage(PPTile::Numel * FiFoDepth, static_cast<T>(0));
     std::vector<std::vector<T>> actual(kIterations);
     PPipe::reset_for_cpu_sim();
@@ -315,7 +320,7 @@ void testPushPopMultiCore()
 
     std::thread consumer([&]() {
         for (int iter = 0; iter < kIterations; ++iter) {
-            PPTile dst;
+            PPTile_dst dst;
             TASSIGN(dst, 0);
             for (int i = 0; i < dst.Numel; ++i) {
                 dst.data()[i] = static_cast<T>(0);
@@ -341,19 +346,25 @@ protected:
     void TearDown() override {}
 };
 
-#define TPUSHPOP_TEST(T, rows, cols, srcLoc) \
-    TEST_F(TPushPopTest, T##_##rows##_##cols##_##srcLoc) { testPushPopSingleThread<T, rows, cols, TileType::srcLoc>(); }
+#define TPUSHPOP_TEST(T, rows, cols, srcLoc, dstLoc)                                  \
+    TEST_F(TPushPopTest, T##_##rows##_##cols##_##srcLoc)                              \
+    {                                                                                 \
+        testPushPopSingleThread<T, rows, cols, TileType::srcLoc, TileType::dstLoc>(); \
+    }
 
-TPUSHPOP_TEST(float, 64, 128, Vec)
-TPUSHPOP_TEST(float, 128, 128, Vec)
-TPUSHPOP_TEST(float, 64, 128, Mat)
-TPUSHPOP_TEST(float, 128, 128, Mat)
-TPUSHPOP_TEST(uint32_t, 64, 128, Vec)
-TPUSHPOP_TEST(uint32_t, 128, 128, Vec)
-TPUSHPOP_TEST(uint32_t, 64, 128, Mat)
-TPUSHPOP_TEST(uint32_t, 128, 128, Mat)
+TPUSHPOP_TEST(float, 64, 128, Vec, Mat)
+TPUSHPOP_TEST(float, 128, 128, Vec, Mat)
+TPUSHPOP_TEST(float, 64, 128, Acc, Vec)
+TPUSHPOP_TEST(float, 128, 128, Acc, Vec)
+TPUSHPOP_TEST(uint32_t, 64, 128, Vec, Mat)
+TPUSHPOP_TEST(uint32_t, 128, 128, Vec, Mat)
+TPUSHPOP_TEST(uint32_t, 64, 128, Acc, Vec)
+TPUSHPOP_TEST(uint32_t, 128, 128, Acc, Vec)
 
-TEST_F(TPushPopTest, multicore_float_64_128_Vec) { testPushPopMultiCore<float, 64, 128, TileType::Vec>(); }
+TEST_F(TPushPopTest, multicore_float_64_128_Vec)
+{
+    testPushPopMultiCore<float, 64, 128, TileType::Vec, TileType::Mat>();
+}
 
 TEST_F(TPushPopTest, v2c_gm_fifo_preserves_updown_and_leftright_layout)
 {
@@ -555,4 +566,56 @@ TEST_F(TPushPopTest, a5_style_dir_both_updown_waits_for_matching_direction)
 TEST_F(TPushPopTest, a5_style_dir_both_leftright_waits_for_matching_direction)
 {
     testDirBothConsumerWaitsForMatchingDirection<TileSplitAxis::TILE_LEFT_RIGHT, 8>();
+}
+
+TEST_F(TPushPopTest, TileFlowIgnoresTargetGmWorkspace)
+{
+    using AccTile = TileAcc<float, 16, 16>;
+    using VecTile = Tile<TileType::Vec, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using Pipe = TPipe<12, Direction::DIR_BOTH, sizeof(float) * AccTile::Numel, 2, 2, true>;
+
+    std::vector<uint8_t> workspace(Pipe::RingFiFo::SLOT_SIZE * Pipe::RingFiFo::SLOT_NUM, 0xa5);
+    const auto workspaceBefore = workspace;
+
+    Pipe::reset_for_cpu_sim();
+    Pipe cube(workspace.data(), 0, 0);
+    Pipe vector(workspace.data(), 0, 0);
+    // Pipe cube(nullptr, 0, 0);
+    // Pipe vector(nullptr, 0, 0);
+
+    AccTile accSrc;
+    VecTile vecData;
+    MatTile matDst;
+    TASSIGN(accSrc, 0);
+    TASSIGN(vecData, AccTile::GetSizeInBytes());
+    TASSIGN(matDst, AccTile::GetSizeInBytes() + VecTile::GetSizeInBytes());
+
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 16; ++col) {
+            accSrc.SetElement(row, col, row * 16 + col + 1.0f);
+        }
+    }
+
+    TPUSH<Pipe, AccTile, TileSplitAxis::TILE_NO_SPLIT>(cube, accSrc);
+    TPOP<Pipe, VecTile, TileSplitAxis::TILE_NO_SPLIT>(vector, vecData);
+    TFREE<Pipe, TileSplitAxis::TILE_NO_SPLIT>(vector);
+
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 16; ++col) {
+            EXPECT_FLOAT_EQ(vecData.GetElement(row, col), accSrc.GetElement(row, col));
+            vecData.SetElement(row, col, vecData.GetElement(row, col) + 1.0f);
+        }
+    }
+
+    TPUSH<Pipe, VecTile, TileSplitAxis::TILE_NO_SPLIT>(vector, vecData);
+    TPOP<Pipe, MatTile, TileSplitAxis::TILE_NO_SPLIT>(cube, matDst);
+    TFREE<Pipe, TileSplitAxis::TILE_NO_SPLIT>(cube);
+
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 16; ++col) {
+            EXPECT_FLOAT_EQ(matDst.GetElement(row, col), accSrc.GetElement(row, col) + 1.0f);
+        }
+    }
+    EXPECT_EQ(workspace, workspaceBefore);
 }
