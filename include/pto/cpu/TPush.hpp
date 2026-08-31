@@ -889,10 +889,7 @@ struct TPipe {
         template <typename TileCons, TileSplitAxis Split>
         PTO_INTERNAL bool pop(RingFiFo& fifo, TileCons& tile)
         {
-            if (fifo.GM_SLOT_BUFFER != nullptr) {
-                popTileFromGMFiFo<TileCons, Split>(fifo, tile);
-                return true;
-            } else if constexpr (TPipe::is_c2v && cpu_pipe::IsC2VConsumerTile<TileCons>()) {
+            if constexpr (TPipe::is_c2v && cpu_pipe::IsC2VConsumerTile<TileCons>()) {
                 if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                     popTileFromVecFiFo<TileCons, Split>(fifo, tile);
                 } else {
@@ -906,6 +903,9 @@ struct TPipe {
                         return false;
                     }
                 }
+            } else if (fifo.GM_SLOT_BUFFER != nullptr) {
+                popTileFromGMFiFo<TileCons, Split>(fifo, tile);
+                return true;
             }
             return false;
         }
@@ -1073,12 +1073,12 @@ PTO_INTERNAL void TPush_impl(Pipe& pipe, TileProd& tile)
     const std::size_t entryBase =
         slotIndex * Pipe::RingFiFo::SLOT_SIZE + static_cast<std::size_t>(pipe.prod.entryOffset);
 
-    if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
-        TPush_gm<Pipe, TileProd, TConfig, Split>(pipe, tile, entryBase);
-    } else if constexpr (Pipe::is_v2c && TileProd::Loc == TileType::Vec) {
+    if constexpr (Pipe::is_v2c && TileProd::Loc == TileType::Vec) {
         TPush_v2c<Pipe, TileProd, TConfig, Split>(pipe, tile, entryBase, slotIndex);
     } else if constexpr (Pipe::is_c2v && TileProd::Loc != TileType::Vec) {
         TPush_c2v<Pipe, TileProd, TConfig, Split>(pipe, tile, entryBase, slotIndex);
+    } else if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
+        TPush_gm<Pipe, TileProd, TConfig, Split>(pipe, tile, entryBase);
     }
     if (pipe.prod.getRecordStatus()) {
         pipe.prod.template record<TileProd, Split>();
