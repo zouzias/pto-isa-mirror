@@ -96,6 +96,7 @@ These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwi
 - Runtime valid-size constraints:
     - `m` must be `1`
     - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+- The `TMATMUL` accumulator destination constraint also applies.
 
 ### TGEMV / TGEMV_ACC datatype constraints
 
@@ -105,7 +106,7 @@ These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwi
         - `(float, half, half)`
         - `(float, float, float)`
         - `(float, bfloat16_t, bfloat16_t)`
-- **Implementation checks (A5)**:
+- **Implementation checks (Ascend 950PR/Ascend 950DT)**:
     - Accumulator type must be `int32_t` or `float`.
     - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
     - If `float`: supports `half`, `bfloat16_t`, `float`, selected fp8 pairs, and `hifloat8_t/hifloat8_t` (target-defined).
@@ -119,8 +120,8 @@ These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwi
 - Bias tile datatype must exactly match `TileRes::DType`.
 - Bias tile must be configured as a single row.
 - Bias tile location must be `TileType::Bias`.
-- **Additional A5 note**:
-    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
+- **Additional Ascend 950PR/Ascend 950DT note**:
+    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying Ascend 950PR/Ascend 950DT matmul implementation beyond the GEMV contract described above.
 
 ## Examples
 

@@ -9,7 +9,8 @@
 
 Matrix multiply (GEMM) with additional scaling tiles for mixed-precision / quantized matmul on supported targets.
 
-This instruction is currently implemented on A5 (see `include/pto/npu/a5/TMatmul.hpp`).
+This instruction is currently implemented on Ascend 950PR/Ascend 950DT and Ascend 960 (see
+`include/pto/npu/a5/TMatmul.hpp` and `include/pto/npu/a6/TMatmul.hpp`).
 
 ## Math Interpretation
 
@@ -88,14 +89,14 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## Constraints
 
-- **Implementation checks (A5)**:
+- **Implementation checks (Ascend 950PR/Ascend 950DT)**:
     - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`.
     - Static legality checks are enforced via `CheckMadMxValid<...>()` (types, shapes, fractals, and scaling tile legality).
     - Supported `(C, A, B)` triples (`C` is always `float`; scale tiles are `float8_e8m0_t`):
         - FP8: `(float, float8_e4m3_t, float8_e4m3_t)`, `(float, float8_e4m3_t, float8_e5m2_t)`, `(float, float8_e5m2_t, float8_e4m3_t)`, `(float, float8_e5m2_t, float8_e5m2_t)`.
         - FP4: `(float, float4_e1m2x2_t, float4_e1m2x2_t)`, `(float, float4_e1m2x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e1m2x2_t)`.
 - **Bias form**:
-    - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias` with `TileBias::Rows == 1` (A5 checks via `static_assert`).
+    - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias` with `TileBias::Rows == 1` (Ascend 950PR/Ascend 950DT checks via `static_assert`).
 
 ## Examples
 

@@ -7,7 +7,7 @@ A and B operands are HiF4 (4-bit) packed data, each accompanied by the three-lev
 HiF4 scale (Ea/Eb/Ec). The result accumulates in FP32 in L0C, and is typically
 cast to BF16 on store via FIXPIPE.
 
-This is the A6 (dav-920r1) HiF4 matmul pipeline:
+This is the Ascend 960 (dav-920r1) HiF4 matmul pipeline:
 **TLOAD → TEXTRACT → TMATMUL_MX → TSTORE (FIXPIPE)**.
 
 ## Pipeline

@@ -56,6 +56,12 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## Constraints
 
+- **Accumulator destination constraint (CPU, A2A3, Ascend 950PR/Ascend 950DT, Ascend 960, Kirin9030, and KirinX90)**:
+    - A static non-compact `TileRes` with `TileRes::Cols > FRACTAL_NZ_ROW` must satisfy
+      `((TileRes::ValidRow + 15) / 16) * 16 == TileRes::Rows`.
+    - `FRACTAL_NZ_ROW` is 16. This Acc-stride condition is not enforced when
+      `TileRes::ValidRow == DYNAMIC`, `TileRes::Cols <= FRACTAL_NZ_ROW`, or
+      `TileRes::Compact != CompactMode::Null`.
 - **Implementation checks (A2A3)**:
     - Supported `(CType, AType, BType)` triples:
     - `(int32_t, int8_t, int8_t)`
@@ -65,7 +71,7 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
     - Tile locations: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
     - Runtime: `m/k/n` (taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-- **Implementation checks (A5)**:
+- **Implementation checks (Ascend 950PR/Ascend 950DT)**:
     - Accumulator type must be `int32_t` or `float`.
     - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
     - If `float`: supports `half/bfloat16_t/float`, selected fp8 pairs, and `hifloat8_t/hifloat8_t` (target-defined).
