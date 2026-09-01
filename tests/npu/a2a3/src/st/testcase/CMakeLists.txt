@@ -111,6 +111,7 @@ textract
 timg2col
 tmov
 tload
+tload_l2hint
 ttrans
 ttrans_conv
 ttrans_3d
@@ -162,6 +163,7 @@ tmins
 tmin
 tmax
 tload_gm2mat
+tload_l2hint_mat
 tstore_acc2gm
 trsqrt
 tsqrt
@@ -260,6 +262,7 @@ if (AUTO_MODE)
     tgather
     timg2col
     tload_gm2mat
+    tload_l2hint_mat
     tmov_vect
     tpartadd
     tpartmul

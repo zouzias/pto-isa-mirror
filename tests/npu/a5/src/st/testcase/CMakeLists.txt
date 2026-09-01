@@ -107,6 +107,8 @@ set(ALL_TESTCASES
     tload_mix
     tload_shape2d
     tload
+    tload_l2hint
+    tload_l2hint_mat
     tload_mx_ND_DN
     tload_mx_NZ
     tload_mx_gmtensor

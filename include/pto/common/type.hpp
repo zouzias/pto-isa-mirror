@@ -322,6 +322,44 @@ enum class TFillPadMode : uint8_t {
     Expand = 2,
 };
 
+enum class TLoadL2Hint : uint8_t {
+    NormalFirstVictim = 0,           // DEFAULT, normal first victim
+    NormalLastVictim = 1,            // normal last victim
+    NormalPersistent = 2,            // normal persistent
+    NormalPrefetch = 3,              // normal prefetch
+    NotAllocKeep = 4,                // not-alloc keep
+    NotAllocClean = 5,               // not-alloc clean
+    NotAllocDrop = 6,                // not-alloc drop
+    InterDomainShareFirstVictim = 8, // inter domain share first victim
+    InterDomainShareLastVictim = 9,
+    InterDomainSharePersistent = 10,
+    InterDomainSharePrefetch = 11,
+    ExclusiveShareFirstVictim = 12, // exclusive first victim
+    ExclusiveLastVictim = 13,
+    ExclusivePersistent = 14,
+    ExclusivePrefetch = 15,
+};
+
+enum class TStoreL2Hint : uint8_t {
+    NormalFirstVictim = 0, // DEFAULT, normal first victim
+    NormalLastVictim = 1,
+    NormalPersistent = 2,
+    NormalReduce = 3,
+    NotAlloc = 4,     // not-alloc / clean-invalid
+    CleanInvalid = 4, // alias of NotAlloc
+    NotAllocPreWriteback = 5,
+    NotAllocPreInvalid = 6,
+    NotAllocReduce = 7,
+    WriteBackHomeFirstVictim = 8, // write-back-home first victim
+    WriteBackHomeLastVictim = 9,
+    WriteBackHomePersistent = 10,
+    WriteBackHomeReduce = 11,
+    BackThroughShareFirstVictim = 12, // write-through-share first victim
+    BackThroughShareLastVictim = 13,
+    BackThroughSharePersistent = 14,
+    BackThroughShareReduce = 15,
+};
+
 enum class SaturationMode : uint8_t {
     // Saturation enabled (default) - CTRL bit 59 = 0
     ON = 0,
