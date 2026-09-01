@@ -159,7 +159,7 @@ PTO_INTERNAL void TStoreVecND(
                 dstGlobalAddr = dstAddr + k * gStride0 + i * gStride1 + j * gStride2;
                 srcTileAddr =
                     srcAddr + k * srcStride0 + i * gShape2 * gShape3 * TileData::Cols + j * gShape3 * TileData::Cols;
-                TStoreInstr<TileData, GlobalData>(
+                TStoreInstr<TileData, GlobalData, l2Control>(
                     dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
             }
         }
@@ -195,7 +195,7 @@ PTO_INTERNAL void TStoreVecDN(
                 dstGlobalAddr = dstAddr + k * gStride0 + i * gStride1 + j * gStride2;
                 srcTileAddr =
                     srcAddr + k * srcStride0 + i * gShape2 * TileData::Rows * gShape4 + j * TileData::Rows * gShape4;
-                TStoreInstr<TileData, GlobalData>(
+                TStoreInstr<TileData, GlobalData, l2Control>(
                     dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
             }
         }
@@ -204,7 +204,7 @@ PTO_INTERNAL void TStoreVecDN(
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     constexpr int dim0 = pto::GlobalTensorDim::DIM_0;
@@ -229,7 +229,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
     } else if constexpr (TileData::Loc == pto::TileType::Vec) {
         CheckStaticVec<TileData, GlobalData>();
 
-        TStore<GlobalData, TileData>(
+        TStore<GlobalData, TileData, l2Control>(
             dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
             dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
             dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
@@ -238,7 +238,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
@@ -260,7 +260,8 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantScalar)
 {
     static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
@@ -284,7 +285,8 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantS
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
