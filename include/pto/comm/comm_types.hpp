@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/dma_engine.hpp"
 #include "pto/comm/rdma_backend.hpp"
 
 namespace pto {
@@ -116,16 +117,6 @@ enum class ReduceOp : uint8_t {
 };
 
 // ============================================================================
-// DmaEngine: DMA constraints for data transfer
-// ============================================================================
-
-enum class DmaEngine : uint8_t {
-    SDMA = 0, // Supports 2D transfer
-    URMA = 1, // Supports 1D transfer (HCCP V2 Jetty, NPU_ARCH 3510 only)
-    RDMA = 2, // RDMA engine; RdmaBackend identifies the NIC implementation compiled into the binary
-};
-
-// ============================================================================
 // CollEngine: Backend engine selector for collective instructions
 //   AIV  — default tile-based path (TLOAD + compute + TSTORE)
 //   CCU  — AIV triggers CKE gate, CCU hardware performs the collective
@@ -181,13 +172,10 @@ struct AsyncSession;
 struct AsyncEvent {
     uint64_t handle{0};
     DmaEngine engine{DmaEngine::SDMA};
-    uint32_t urmaTargetCqe{0};
 
     AICORE constexpr AsyncEvent() = default;
-    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e, uint32_t targetCqe = 0U)
-        : handle(h), engine(e), urmaTargetCqe(targetCqe)
-    {}
-    AICORE constexpr bool valid() const { return handle != 0U; }
+    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
+    AICORE constexpr bool valid() const { return handle != 0; }
 
     PTO_INTERNAL bool Wait(const AsyncSession& session) const;
     PTO_INTERNAL bool Test(const AsyncSession& session) const;
