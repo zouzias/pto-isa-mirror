@@ -107,6 +107,7 @@ inline bool WorkspaceManager::PrepareRdmaInfoLayout(std::vector<uint8_t>& hostBu
     const size_t cqBytes = sizeof(RoceCqCtx) * rankCount_ * kQpNum;
     const size_t memBytes = sizeof(RdmaMemInfo) * rankCount_;
     layout.totalSize = sizeof(RdmaInfo) + 2 * sqBytes + 2 * cqBytes + memBytes;
+    workspaceBytes_ = static_cast<uint64_t>(layout.totalSize);
     if (aclrtMalloc(&rdmaInfoDevice_, layout.totalSize, ACL_MEM_MALLOC_HUGE_FIRST) != 0 || rdmaInfoDevice_ == nullptr) {
         std::cerr << "[RoCE] aclrtMalloc(rdmaInfo) failed" << std::endl;
         return false;
