@@ -1330,6 +1330,12 @@ public:
     AICORE float GetCycle() { return cycle; }
 #endif
 
+#ifdef __CPU_SIM
+    DType GetElement(int64_t offset) { return GetProperDataPart(data(), offset); }
+
+    void SetElement(int64_t offset, const DType& val) { SetProperDataPart(data(), offset, val); }
+#endif
+
     AICORE TileDType& data() { return data_; }
     AICORE const TileDType& data() const { return data_; }
 
