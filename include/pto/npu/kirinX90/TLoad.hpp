@@ -335,13 +335,13 @@ PTO_INTERNAL void CheckConvTileData(TileDataDst& dst, GlobalDataSrc& src)
 
 #include "pto/common/arch/memory/tload_common.hpp"
 
-template <typename TileDataDst, typename GlobalDataSrc>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileDataDst, typename GlobalDataSrc>
 PTO_INTERNAL void TLOAD_IMPL(TileDataDst& dst, GlobalDataSrc& src)
 {
     if constexpr (is_conv_tile_v<TileDataDst>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL<TileDataDst, GlobalDataSrc>(dst, src);
+        TLOAD_TILE_IMPL<l2Control, TileDataDst, GlobalDataSrc>(dst, src);
     }
 }
 
