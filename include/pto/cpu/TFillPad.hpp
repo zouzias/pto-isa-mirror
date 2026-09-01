@@ -31,8 +31,7 @@ void TFillPad(TileDataDst& dst, TileDataSrc& src)
     // PadValueMap<bfloat16_t> is NPU-only: default CPU_SIM aliases bf16 to half
     // (half's map already applies). Distinct std::bfloat16_t has no map, so keep
     // the previous numeric_limits path for standard Zero/Min/Max.
-    if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half> &&
-                  !isCustomPadValue(PadVal)) {
+    if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half> && !isCustomPadValue(PadVal)) {
         if constexpr (PadVal == PadValue::Max) {
             padVal = std::numeric_limits<DType>::infinity();
         } else if constexpr (PadVal == PadValue::Min) {

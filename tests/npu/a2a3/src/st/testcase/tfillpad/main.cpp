@@ -210,4 +210,4 @@ TEST_F(TFILLPADTest, case_e1m2x2_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<36
 TEST_F(TFILLPADTest, case_e1m2x2_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<37, uint8_t, 1>(); }
 TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADCUSTOM_42) { tfillpad_test<38, uint8_t, 1>(); }
 TEST_F(TFILLPADTest, case_e2m1x2_GT_1_15_VT_1_32_BLK1_PADCUSTOM_33) { tfillpad_test<39, uint8_t, 1>(); }
-#endif  // PTO_NPU_ARCH_A5
+#endif // PTO_NPU_ARCH_A5

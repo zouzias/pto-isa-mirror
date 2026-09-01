@@ -563,7 +563,7 @@ extern "C" __global__ AICORE void launchTFILLPAD_39(
     runTFILLPAD<float4_e2m1x2_t, 1, 1, 1, 1, 15, 1, 32, 0, PadValue::Null, kPad>(
         (__gm__ float4_e2m1x2_t*)out, (__gm__ float4_e2m1x2_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
-#endif  // PTO_NPU_ARCH_A5
+#endif // PTO_NPU_ARCH_A5
 
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
@@ -649,7 +649,7 @@ void launchTFILLPAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
     } else if constexpr (testKey == 39) {
         launchTFILLPAD_39<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 15, gLog);
     }
-#endif  // PTO_NPU_ARCH_A5
+#endif // PTO_NPU_ARCH_A5
 }
 
 template <typename T>
@@ -714,7 +714,6 @@ int get_input_golden_case(uint8_t* input, uint8_t* golden)
     std::copy((uint8_t*)gold_arr, ((uint8_t*)(gold_arr)) + out_byteSize, golden);
     return sizeof(gold_arr);
 }
-
 
 template <
     typename U, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_, uint8_t PadBits>
@@ -829,7 +828,7 @@ int get_input_golden(uint8_t* input, uint8_t* golden)
     } else if constexpr (testKey == 39) {
         return get_input_golden_bits<uint8_t, 1, 1, 1, 1, 8, 1, 16, 0x33>(input, golden);
     }
-#endif  // PTO_NPU_ARCH_A5
+#endif // PTO_NPU_ARCH_A5
 
     return 0;
 }
@@ -916,4 +915,4 @@ template int get_input_golden<36>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<37>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<38>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<39>(uint8_t* input, uint8_t* golden);
-#endif  // PTO_NPU_ARCH_A5
+#endif // PTO_NPU_ARCH_A5
