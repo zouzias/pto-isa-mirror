@@ -329,7 +329,7 @@ PTO_INTERNAL void CheckNormalTileData(TileData& dst, GlobalData& src)
         "The shape of src and dst must be greater than 0!");
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
     CheckNormalTileData<TileData, GlobalData>(dst, src);
@@ -340,12 +340,12 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     if constexpr (TileData::Loc == TileType::Vec) {
         static_assert(isSameLayout, "Fix: TLOAD(VecTile, GlobalTensor) only support ND2ND/DN2DN/NZ2NZ!");
         TLoadGm2ub<TileData, GlobalData>(
-            dst.data(), src.data(), src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
-            src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
-            src.GetShape(GlobalTensorDim::DIM_4), src.GetStride(GlobalTensorDim::DIM_0),
-            src.GetStride(GlobalTensorDim::DIM_1), src.GetStride(GlobalTensorDim::DIM_2),
-            src.GetStride(GlobalTensorDim::DIM_3), src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(),
-            dst.GetValidCol());
+            dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(GlobalTensorDim::DIM_0),
+            src.GetShape(GlobalTensorDim::DIM_1), src.GetShape(GlobalTensorDim::DIM_2),
+            src.GetShape(GlobalTensorDim::DIM_3), src.GetShape(GlobalTensorDim::DIM_4),
+            src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(GlobalTensorDim::DIM_1),
+            src.GetStride(GlobalTensorDim::DIM_2), src.GetStride(GlobalTensorDim::DIM_3),
+            src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
     } else if constexpr (TileData::Loc == TileType::Mat) {
         static_assert(
             isSameLayout ||
@@ -354,54 +354,54 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
             "Fix: TLOAD(MatTile, GlobalTensor) only support ND2ND/DN2DN/NZ2NZ/ND2NZ/DN2ZN!");
         if constexpr (isSameLayout) {
             TLoadGm2L1<TileData, GlobalData>(
-                dst.data(), src.data(), src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
-                src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
-                src.GetShape(GlobalTensorDim::DIM_4), src.GetStride(GlobalTensorDim::DIM_0),
-                src.GetStride(GlobalTensorDim::DIM_1), src.GetStride(GlobalTensorDim::DIM_2),
-                src.GetStride(GlobalTensorDim::DIM_3), src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(),
-                dst.GetValidCol());
+                dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(GlobalTensorDim::DIM_0),
+                src.GetShape(GlobalTensorDim::DIM_1), src.GetShape(GlobalTensorDim::DIM_2),
+                src.GetShape(GlobalTensorDim::DIM_3), src.GetShape(GlobalTensorDim::DIM_4),
+                src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(GlobalTensorDim::DIM_1),
+                src.GetStride(GlobalTensorDim::DIM_2), src.GetStride(GlobalTensorDim::DIM_3),
+                src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (
             GlobalData::layout == Layout::ND && GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
             TLoadGm2L1Nd2nz<TileData, GlobalData>(
-                dst.data(), src.data(), src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
-                src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
-                src.GetShape(GlobalTensorDim::DIM_4), src.GetStride(GlobalTensorDim::DIM_0),
-                src.GetStride(GlobalTensorDim::DIM_1), src.GetStride(GlobalTensorDim::DIM_2),
-                src.GetStride(GlobalTensorDim::DIM_3), src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(),
-                dst.GetValidCol());
+                dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(GlobalTensorDim::DIM_0),
+                src.GetShape(GlobalTensorDim::DIM_1), src.GetShape(GlobalTensorDim::DIM_2),
+                src.GetShape(GlobalTensorDim::DIM_3), src.GetShape(GlobalTensorDim::DIM_4),
+                src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(GlobalTensorDim::DIM_1),
+                src.GetStride(GlobalTensorDim::DIM_2), src.GetStride(GlobalTensorDim::DIM_3),
+                src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (
             GlobalData::layout == Layout::DN && GetTileLayoutCustom<TileData>() == TileLayoutCustom::ZN) {
             TLoadGm2L1Dn2zn<TileData, GlobalData>(
-                dst.data(), src.data(), src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
-                src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
-                src.GetShape(GlobalTensorDim::DIM_4), src.GetStride(GlobalTensorDim::DIM_0),
-                src.GetStride(GlobalTensorDim::DIM_1), src.GetStride(GlobalTensorDim::DIM_2),
-                src.GetStride(GlobalTensorDim::DIM_3), src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(),
-                dst.GetValidCol());
+                dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(GlobalTensorDim::DIM_0),
+                src.GetShape(GlobalTensorDim::DIM_1), src.GetShape(GlobalTensorDim::DIM_2),
+                src.GetShape(GlobalTensorDim::DIM_3), src.GetShape(GlobalTensorDim::DIM_4),
+                src.GetStride(GlobalTensorDim::DIM_0), src.GetStride(GlobalTensorDim::DIM_1),
+                src.GetStride(GlobalTensorDim::DIM_2), src.GetStride(GlobalTensorDim::DIM_3),
+                src.GetStride(GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         }
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData& dst, GlobalData& src)
 {
     CheckConvTileData<TileData, GlobalData>(dst, src);
     if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) {
         TLoad5HD<TileData, GlobalData>(
-            dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
-            src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
-            dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+            dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            src.GetShape(3), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4),
+            dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (
         GlobalData::layout == pto::Layout::FRACTAL_Z || GlobalData::layout == pto::Layout::FRACTAL_Z_3D) {
         TLoadFractalZ<TileData, GlobalData>(
-            dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
-            src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
-            dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+            dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+            src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (GlobalData::layout == pto::Layout::NDC1HWC0) {
         TLoadNDC1HWC0<TileData, GlobalData>(
-            dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
-            src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
-            dst.GetShape(1), dst.GetShape(2), dst.GetShape(3), dst.GetShape(4));
+            dst.data(), ApplyTLoadL2HintAddr<l2Control>(src.data()), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+            src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3), dst.GetShape(4));
     }
 }
 
