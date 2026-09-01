@@ -248,11 +248,13 @@ PTO_INST RecordEvent TEXPANDS(TileData& dst, typename TileData::DType scalar, Wa
     return {};
 }
 
-template <typename TileData, typename GlobalData, typename... WaitEvents>
+template <
+    TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData,
+    typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events)
 {
     detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TLOAD, dst, src);
+    MAP_INSTR_IMPL_T(TLOAD, PTO_TEMPLATE_ARGS(l2Control), dst, src);
     return {};
 }
 
@@ -481,6 +483,122 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 {
     detail::PtoWaitEvents(events...);
     TSTORE_IMPL<TileData, GlobalData, FpTileData, atomicType, reluPreMode, Phase>(dst, src, fp);
+    return {};
+}
+#endif
+
+// L2-hint-first TSTORE overloads. First template is TStoreL2Hint so
+// TSTORE<TStoreL2Hint::NotAlloc>(dst, src) works without colliding with
+// TSTORE<TileT, GTensor, AtomicType::AtomicAdd>(dst, src).
+template <
+    TStoreL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone, STPhase::Unspecified, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone, Phase, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, typename TileData, typename GlobalData, AtomicType atomicType, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, STPhase::Unspecified, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType,
+    typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, Phase, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode,
+    typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, STPhase::Unspecified, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType,
+    ReluPreMode reluPreMode, typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase, l2Control>(dst, src);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, STPhase::Unspecified, l2Control>(
+        dst, src, preQuantScalar);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData,
+    AtomicType atomicType = AtomicType::AtomicNone, ReluPreMode reluPreMode = ReluPreMode::NoRelu,
+    typename... WaitEvents, std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase, l2Control>(dst, src, preQuantScalar);
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, typename TileData, typename GlobalData, typename FpTileData,
+    AtomicType atomicType = AtomicType::AtomicNone, ReluPreMode reluPreMode = ReluPreMode::NoRelu,
+    typename... WaitEvents,
+    std::enable_if_t<
+        is_tile_data_v<FpTileData> && (FpTileData::Loc == TileType::Scaling) && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, FpTileData, atomicType, reluPreMode, STPhase::Unspecified, l2Control>(
+        dst, src, fp);
+    return {};
+}
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000) || \
+    defined(__CPU_SIM)
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, typename FpTileData,
+    AtomicType atomicType = AtomicType::AtomicNone, ReluPreMode reluPreMode = ReluPreMode::NoRelu,
+    typename... WaitEvents,
+    std::enable_if_t<
+        is_tile_data_v<FpTileData> && (FpTileData::Loc == TileType::Scaling) && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    TSTORE_IMPL<TileData, GlobalData, FpTileData, atomicType, reluPreMode, Phase, l2Control>(dst, src, fp);
     return {};
 }
 #endif

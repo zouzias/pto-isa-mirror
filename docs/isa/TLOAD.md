@@ -40,9 +40,39 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename GlobalData, typename... WaitEvents>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData,
+          typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+`l2Control` selects an L2 cache hint. The default `TLoadL2Hint::NormalFirstVictim` keeps existing `TLOAD(dst, src)` call sites unchanged. A non-default hint is specified as the first template argument, e.g. `TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src)`.
+
+Hardware mapping:
+
+- **A5**: the hint is passed through to the DMA intrinsic `l2CacheCtl` field (`static_cast<uint8_t>(l2Control)`). All encoding values 0-15 are supported (value 7 is unused).
+- **A2A3**: `copy_gm_to_ubuf` / `copy_gm_to_cbuf` have no `l2CacheCtl` argument. The not-alloc hints (`NotAllocKeep` / `NotAllocClean` / `NotAllocDrop`) add `L2_CACHE_DISABLE_OFFSET` (`0x80000000000ULL`) to the GM pointer used for the copy; the `GlobalTensor` itself is not mutated. Other TLOAD hints are no-ops (same as default).
+- **CPU SIM / costmodel / other backends**: the template is accepted and ignored.
+
+`TLoadL2Hint` (enum class `uint8_t`, declared next to `TFillPadMode` in `include/pto/common/type.hpp`):
+
+| Enumerator | Value | dav3510 LD comment |
+| --- | --- | --- |
+| NormalFirstVictim | 0 | normal first victim (DEFAULT) |
+| NormalLastVictim | 1 | normal last victim |
+| NormalPersistent | 2 | normal persistent |
+| NormalPrefetch | 3 | normal prefetch |
+| NotAllocKeep | 4 | not-alloc keep |
+| NotAllocClean | 5 | not-alloc clean |
+| NotAllocDrop | 6 | not-alloc drop |
+| InterDomainShareFirstVictim | 8 | inter domain share first victim |
+| InterDomainShareLastVictim | 9 | |
+| InterDomainSharePersistent | 10 | |
+| InterDomainSharePrefetch | 11 | |
+| ExclusiveShareFirstVictim | 12 | exclusive first victim |
+| ExclusiveLastVictim | 13 | |
+| ExclusivePersistent | 14 | |
+| ExclusivePrefetch | 15 | |
+
 
 ## Constraints
 

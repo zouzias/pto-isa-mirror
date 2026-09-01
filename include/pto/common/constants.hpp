@@ -41,6 +41,28 @@ constexpr const int MX_ROW_LEN = 16;
 constexpr const int MX_BLOCK_SIZE = 32;
 constexpr const int BIT_TO_BYTE = 8;
 
+inline constexpr uint64_t L2_CACHE_DISABLE_OFFSET = 0x80000000000ULL;
+
+AICORE constexpr bool IsNotAllocTLoadL2Hint(TLoadL2Hint hint)
+{
+    return hint == TLoadL2Hint::NotAllocKeep || hint == TLoadL2Hint::NotAllocClean || hint == TLoadL2Hint::NotAllocDrop;
+}
+
+template <TLoadL2Hint l2Control, typename T>
+PTO_INTERNAL T* ApplyTLoadL2HintAddr(T* addr)
+{
+#if defined(PTO_NPU_ARCH_A2A3)
+    if constexpr (IsNotAllocTLoadL2Hint(l2Control)) {
+        return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(addr) + L2_CACHE_DISABLE_OFFSET);
+    } else {
+        return addr;
+    }
+#else
+    (void)addr;
+    return addr;
+#endif
+}
+
 constexpr const int HIF4_COL_LEN = 4;
 constexpr const int HIF4_ROW_LEN = 16;
 constexpr const int HIF4_BLOCK_SIZE = 64;

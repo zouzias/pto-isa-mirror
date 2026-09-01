@@ -279,7 +279,7 @@ PTO_INTERNAL void CheckAcc2gm(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     static_assert(
@@ -293,7 +293,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
     static_assert(currentAtomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on kirinX90.");
     if constexpr (TileData::Loc == TileType::Vec) {
         CheckStaticForVecAndMat<TileData, GlobalData>();
-        TStore<GlobalData, TileData>(
+        TStore<GlobalData, TileData, l2Control>(
             dst.data(), src.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
             dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
             dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),
@@ -324,7 +324,8 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode, STPhase Phase = STPhase::Unspecified>
+    ReluPreMode reluPreMode, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     static_assert(TileData::Loc == TileType::Acc, "Source TileType only support Acc!");
@@ -342,7 +343,8 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType currentAtomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantScalar)
 {
     static_assert(TileData::Loc == TileType::Acc, "Source TileType only support Acc!");
@@ -361,7 +363,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantS
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType currentAtomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     static_assert(TileData::Loc == TileType::Acc, "Source TileType only support Acc!");
