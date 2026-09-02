@@ -263,9 +263,10 @@ void TestFP8ExactMatch()
             src.data()[GetTileElementOffset<SrcTile>(r, c)] = static_cast<SrcType>(base);
         }
     }
-    src.data()[GetTileElementOffset<SrcTile>(1, 0)] = BitsToFloat(0x04600001u);
-    src.data()[GetTileElementOffset<SrcTile>(2, 0)] = std::nextafter(448.0f, std::numeric_limits<float>::infinity());
-    src.data()[GetTileElementOffset<SrcTile>(3, 0)] = -896.0f;
+    src.data()[GetTileElementOffset<SrcTile>(1, 0)] = static_cast<SrcType>(BitsToFloat(0x04600001u));
+    src.data()[GetTileElementOffset<SrcTile>(2, 0)] =
+        static_cast<SrcType>(std::nextafter(448.0f, std::numeric_limits<float>::infinity()));
+    src.data()[GetTileElementOffset<SrcTile>(3, 0)] = static_cast<SrcType>(-896.0f);
 
     TQUANT<QuantType::MXFP8>(dst, src, &expTile, &max, &scaling);
 
@@ -602,8 +603,9 @@ void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int row, int group, floa
     using DstT = typename DstTile::DType;
     for (int col = 0; col < 32; ++col) {
         const int col0 = group * 32 + col;
-        const uint8_t expected = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
-            src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
+        const uint8_t expected = cpu_quant::EncodeE2M1Magic(
+            cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+                src.data()[GetTileElementOffset<SrcTile>(row, col0)], expectedScaling));
         const uint8_t actual = dst.GetElement(row, col0).RawData();
         EXPECT_EQ(actual, expected);
     }
