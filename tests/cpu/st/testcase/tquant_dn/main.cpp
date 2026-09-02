@@ -231,7 +231,8 @@ void ExpectMxFp4PackedBytes(SrcTile& src, DstTile& dst, int group, int col, floa
     using DstT = typename DstTile::DType;
     for (int row = 0; row < 32; ++row) {
         const int row0 = group * 32 + row;
-        const uint8_t expected = cpu_quant::EncodeE2M1Magic(cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
+        const uint8_t expected = cpu_quant::EncodeE2M1Magic(
+            cpu_quant::ApplyE2M1ScaleForSource<SrcT>(
             src.data()[GetTileElementOffset<SrcTile>(row0, col)], expectedScaling));
         const uint8_t actual = dst.GetElement(row0, col).RawData();
         EXPECT_EQ(actual, actual);
@@ -258,7 +259,7 @@ void ExpectMxFp4Result(SrcTile& src, DstTile& dst, ExpTile& exp, MaxTile& max, M
     }
 }
 
-template <typename SrcT, int validRows = 64, int validCols = 32, QuantScaleAlg scaleAlg = QuantScaleAlg::OCP>
+template <typename SrcT, int validRows = 64, int validCols = 64, QuantScaleAlg scaleAlg = QuantScaleAlg::OCP>
 void RunMxFp4E2M1DnCase(MxFp4Case caseId)
 {
     constexpr int groupRows = validRows / 32;
@@ -285,12 +286,12 @@ void RunMxFp4E2M1DnCase(MxFp4Case caseId)
 
 void RunMxFp4E2M1Fp16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<aclFloat16>(caseId); }
 
-void RunMxFp4E2M1NvFp16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<aclFloat16, 64, 32, QuantScaleAlg::NV>(caseId); }
+void RunMxFp4E2M1NvFp16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<aclFloat16, 64, 64, QuantScaleAlg::NV>(caseId); }
 
 #if defined(PTO_CPU_SIM_ENABLE_BF16)
 void RunMxFp4E2M1Bf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t>(caseId); }
 
-void RunMxFp4E2M1NvBf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t, 64, 32, QuantScaleAlg::NV>(caseId); }
+void RunMxFp4E2M1NvBf16DnCase(MxFp4Case caseId) { RunMxFp4E2M1DnCase<bfloat16_t, 64, 64, QuantScaleAlg::NV>(caseId); }
 #endif
 
 TEST(TQuantCpuSimTest, MxFp4E2M1Fp16DnSpecial) { RunMxFp4E2M1Fp16DnCase(MxFp4Case::Special); }
