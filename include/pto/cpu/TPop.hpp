@@ -35,11 +35,9 @@ PTO_INTERNAL void TPOP_IMPL(Pipe& pipe, TileCons& tile)
 
     // 2. Address calculation + TASSIGN + data transfer
     pipe.cons.template pop<TileCons, Split>(pipe.fifo, tile);
-    if constexpr (participateNoSplitC2V) {
-        if (get_subblockid() != 0) {
-            cpu_pipe::FillTile(tile, typename TileCons::DType{});
-        }
-    }
+    // No zero-fill after a successful pop: under the dual-lane C2V protocol this lane holds a
+    // real slot and every participating lane reads the same payload. Only the inactive lane
+    // gets a zeroed tile, via the early return above.
 }
 
 template <
