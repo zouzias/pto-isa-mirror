@@ -15,8 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tload_common.hpp"
 
 namespace pto {
-struct Kirin9030LoadOp : LoadOpBase {
-    using LoadOpBase::TLoadCubeInstr;
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim>
+struct Kirin9030LoadOp : LoadOpBase<l2Control> {
+    using LoadOpBase<l2Control>::TLoadCubeInstr;
     template <Layout Layout = Layout::ND, typename T>
     PTO_INTERNAL static void TLoadCubeInstr(
         __cbuf__ T* dst, __gm__ T* src, uint64_t loop1SrcStride, uint16_t nValue, uint32_t dValue,
@@ -208,12 +209,12 @@ PTO_INTERNAL void TLoadCubeDN2DN(
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
     StaticCheck<TileData, GlobalData>();
     if constexpr (TileData::Loc == pto::TileType::Vec) {
-        TLoad<Kirin9030LoadOp, TileData, GlobalData>(
+        TLoad<Kirin9030LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
             src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
             src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
@@ -223,7 +224,7 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     } else if constexpr (TileData::Loc == pto::TileType::Mat) {
         static_assert(!IsScale<TileData, GlobalData>(), "Fix: TLOAD not supported Mx cube.");
         TLoadCubeCheck<TileData, GlobalData>();
-        TLoadCube<Kirin9030LoadOp, TileData, GlobalData>(
+        TLoadCube<Kirin9030LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
             src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
             src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
@@ -285,23 +286,23 @@ PTO_INTERNAL void CheckConvTileData(TileData& dst, GlobalData& src)
     static_assert(isSameLayout == true, "Fix: Src Dst layout must be NC1HWC0 or FRACTAL_Z!");
 }
 
-template <typename DstTile, typename SrcGlobal>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename DstTile, typename SrcGlobal>
 PTO_INTERNAL void TLOAD_CONVTILE_IMPL(DstTile& dst, SrcGlobal& src)
 {
     CheckConvTileData<DstTile, SrcGlobal>(dst, src);
     if constexpr (SrcGlobal::layout == pto::Layout::NC1HWC0) { // layout is [N,C1,H,W,C0]
-        TLoad5HD<Kirin9030LoadOp, DstTile, SrcGlobal>(
+        TLoad5HD<Kirin9030LoadOp<l2Control>, DstTile, SrcGlobal>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (SrcGlobal::layout == pto::Layout::FRACTAL_Z) {
         if constexpr (DstTile::totalDimCount == 4) { // layout is [C1HW,N/16,16,C0]
-            TLoadFractalZ<Kirin9030LoadOp, DstTile, SrcGlobal>(
+            TLoadFractalZ<Kirin9030LoadOp<l2Control>, DstTile, SrcGlobal>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
                 src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
         } else { // layout is [C1,H,W,N,C0]
-            TLoad5HD<Kirin9030LoadOp, DstTile, SrcGlobal>(
+            TLoad5HD<Kirin9030LoadOp<l2Control>, DstTile, SrcGlobal>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4),
                 dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
@@ -309,13 +310,13 @@ PTO_INTERNAL void TLOAD_CONVTILE_IMPL(DstTile& dst, SrcGlobal& src)
     }
 }
 
-template <typename DstTile, typename SrcGlobal>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename DstTile, typename SrcGlobal>
 PTO_INTERNAL void TLOAD_IMPL(DstTile& dst, SrcGlobal& src)
 {
     if constexpr (is_conv_tile_v<DstTile>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL(dst, src);
+        TLOAD_TILE_IMPL<l2Control>(dst, src);
     }
 }
 } // namespace pto
