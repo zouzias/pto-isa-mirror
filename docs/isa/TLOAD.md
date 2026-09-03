@@ -1,6 +1,7 @@
 # TLOAD
 
 
+
 ## Tile Operation Diagram
 
 ![TLOAD tile operation](../figures/isa/TLOAD.svg)
@@ -42,7 +43,33 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+Existing `TLOAD(dst, src)` and `TLOAD<TileT, GTensor>(dst, src)` still work. The `TLoadL2Hint`-first form is an extra overload (no default on `l2Control`).
+
+## L2 cache hint
+
+Optional first-template overload (existing `TLOAD(dst, src)` unchanged):
+
+```cpp
+TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src);
+```
+
+Supported `TLoadL2Hint` values:
+
+| Enumerator | Value | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | no-op (default) | yes |
+| NormalLastVictim | 1 | no-op | yes |
+| NormalPersistent | 2 | no-op | yes |
+| NotAllocKeep | 4 | yes (GM addr += runtime `l2Cacheoffset`) | yes |
+| NotAllocClean | 5 | yes (same as Keep) | yes |
+| NotAllocDrop | 6 | yes (same as Keep) | yes |
+
+On A2/A3 only the NotAlloc* values change behavior; Normal* match the default path. On A5 all listed values are passed through to DMA. CPU / costmodel accept the template and ignore it.
 
 ## Constraints
 
