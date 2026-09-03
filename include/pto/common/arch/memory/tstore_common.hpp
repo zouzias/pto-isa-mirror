@@ -389,12 +389,15 @@ PTO_INTERNAL void TStoreUb2gmNd2nd(
     }
 }
 
-template <typename GlobalData, typename TileData, AtomicType currentAtomicType = AtomicType::AtomicNone>
+template <
+    typename GlobalData, typename TileData, AtomicType currentAtomicType = AtomicType::AtomicNone,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __tf__ PTO_INTERNAL void TStore(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol)
 {
+    (void)l2Control;
     __ubuf__ typename TileData::DType* srcAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(src);
     typename GlobalData::DType* dstAddr = dst;
 

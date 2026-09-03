@@ -1,6 +1,7 @@
 # TLOAD
 
 
+
 ## Tile Operation Diagram
 
 ![TLOAD tile operation](../figures/isa/TLOAD.svg)
@@ -42,7 +43,31 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+Existing `TLOAD(dst, src)` and `TLOAD<TileT, GTensor>(dst, src)` still work. `TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src)` is an extra overload: `l2Control` is the first template argument and has no default (otherwise `TLOAD(dst, src)` would be ambiguous).
+
+`l2Control` selects an L2 cache hint.
+
+Hardware mapping:
+
+- **A5**: the hint is passed through to the DMA intrinsic `l2CacheCtl` field (`static_cast<uint8_t>(l2Control)`). Pass-through uses AscendC-aligned values (`0,1,2,4,5,6`).
+- **A2A3**: `copy_gm_to_ubuf` / `copy_gm_to_cbuf` have no `l2CacheCtl` argument. The not-alloc hints (`NotAllocKeep` / `NotAllocClean` / `NotAllocDrop`) add `g_opL2CacheHintCfg.l2Cacheoffset` to the GM pointer used for the copy (runtime-filled on NPU, typically `0x100000000000`; left 0 on CA/sim so addr is unchanged); the `GlobalTensor` itself is not mutated. Other TLOAD hints are no-ops (same as default).
+- **CPU SIM / costmodel / other backends**: the template is accepted and ignored.
+
+`TLoadL2Hint` (enum class `uint8_t`, declared next to `TFillPadMode` in `include/pto/common/type.hpp`):
+
+| Enumerator | Value | AscendC `asc_load_l2_cache_mode` |
+| --- | --- | --- |
+| NormalFirstVictim | 0 | normal first victim (DEFAULT) |
+| NormalLastVictim | 1 | normal last victim |
+| NormalPersistent | 2 | normal persistent |
+| NotAllocKeep | 4 | not-alloc keep |
+| NotAllocClean | 5 | not-alloc clean |
+| NotAllocDrop | 6 | not-alloc drop |
 
 ## Constraints
 
