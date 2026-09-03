@@ -186,3 +186,30 @@ tstore %t1, %sv_out[%c0, %c0]
 # AS Level 2 (DPS)
 pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
+
+
+## L2 cache hint
+
+An extra template parameter `TStoreL2Hint l2Control` (default `TStoreL2Hint::NormalFirstVictim`) can be specified as the **first** template argument:
+
+```cpp
+TSTORE(dst, src);                                  // default hint, existing call sites unchanged
+TSTORE<TStoreL2Hint::NotAllocClean>(dst, src);
+TSTORE<TStoreL2Hint::NotAllocClean, AtomicType::AtomicAdd>(dst, src);
+```
+
+Do not write `TSTORE<TileT, GTensor, AtomicType::AtomicAdd>` with a defaulted first `TStoreL2Hint` — that overload set is unchanged. Combine a hint with `STPhase` / `AtomicType` / `ReluPreMode` by putting `TStoreL2Hint` first.
+
+- **A5**: the hint is passed through to DMA `l2CacheCtl` (`copy_ubuf_to_gm_align_v2` and equivalent). Pass-through uses AscendC-aligned values (`0,1,2,4`).
+- **A2A3**: TSTORE hints are accepted and ignored (no `l2CacheCtl` argument; no address offset).
+- **CPU SIM / costmodel**: accepted and ignored.
+
+`TStoreL2Hint` (enum class `uint8_t`):
+
+| Enumerator | Value | AscendC `asc_store_l2_cache_mode` |
+| --- | --- | --- |
+| NormalFirstVictim | 0 | normal first victim (DEFAULT) |
+| NormalLastVictim | 1 | |
+| NormalPersistent | 2 | |
+| NotAllocClean | 4 | only not-alloc store mode in ASC |
+

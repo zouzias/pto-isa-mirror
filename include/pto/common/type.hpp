@@ -322,6 +322,24 @@ enum class TFillPadMode : uint8_t {
     Expand = 2,
 };
 
+// Match AscendC asc_load_l2_cache_mode (do not expose home/dual/inter-domain/prefetch first).
+enum class TLoadL2Hint : uint8_t {
+    NormalFirstVictim = 0, // DEFAULT, normal first victim
+    NormalLastVictim = 1,  // normal last victim
+    NormalPersistent = 2,  // normal persistent
+    NotAllocKeep = 4,      // not-alloc keep
+    NotAllocClean = 5,     // not-alloc clean
+    NotAllocDrop = 6,      // not-alloc drop
+};
+
+// Match AscendC asc_store_l2_cache_mode (only NotAllocClean for not-alloc store).
+enum class TStoreL2Hint : uint8_t {
+    NormalFirstVictim = 0, // DEFAULT, normal first victim
+    NormalLastVictim = 1,
+    NormalPersistent = 2,
+    NotAllocClean = 4, // only not-alloc store mode in ASC
+};
+
 enum class SaturationMode : uint8_t {
     // Saturation enabled (default) - CTRL bit 59 = 0
     ON = 0,
