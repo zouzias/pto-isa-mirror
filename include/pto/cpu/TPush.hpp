@@ -1042,11 +1042,36 @@ PTO_INTERNAL void TPush_v2c(Pipe& pipe, TileProd& tile, size_t slotIndex)
 {
     using DstT = FixpipeConsType<TileProd, TConfig>;
 
-    constexpr int consRows =
+    constexpr int slotRows =
         (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
-    constexpr int consCols =
+    constexpr int slotCols =
         (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
-    using SlotTile = Tile<TileType::Mat, DstT, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
+    using SlotTile = Tile<TileType::Mat, DstT, slotRows, slotCols, BLayout::RowMajor, slotRows, slotCols>;
+
+    // The FIFO payload is laid out with the shape of the window actually pushed, which is
+    // the producer tile's valid shape - the consumer pops it into a tile declared with that
+    // shape. Taking the width from TileProd::Cols instead strides the payload by the parent
+    // width whenever a narrower view is pushed (for example q[:, 0:256] of a 16x512 tile),
+    // and the consumer then reads every other row. Mirrors TPush_c2v.
+    const uint32_t consRows = [&tile]() -> uint32_t {
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            return static_cast<uint32_t>(tile.GetValidRow());
+        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+            return static_cast<uint32_t>(TileProd::Rows * 2);
+        } else {
+            return static_cast<uint32_t>(TileProd::Rows);
+        }
+    }();
+    const uint32_t consCols = [&tile]() -> uint32_t {
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            return static_cast<uint32_t>(tile.GetValidCol());
+        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
+            return static_cast<uint32_t>(TileProd::Cols * 2);
+        } else {
+            return static_cast<uint32_t>(TileProd::Cols);
+        }
+    }();
+
     auto& slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
     const std::size_t baseByteOffset = static_cast<std::size_t>(pipe.prod.entryOffset);
     if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {

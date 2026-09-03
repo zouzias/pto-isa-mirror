@@ -275,6 +275,58 @@ size_t inline MapTileIndicesToGlobalOffset(
     return static_cast<size_t>(offset);
 }
 
+// TSTORE picks its GM traversal from the *tile's* layout, not from the GlobalTensor's
+// declared layout: the hardware selects TStoreUb2gmNd2nd or TStoreUb2gmDn2dn with
+// TileData::isRowMajor. The two agree for ordinary kernels, and CheckStaticForVecAndMat
+// rejects a mismatch except for one legal carve-out: a single-row or single-column tile.
+// There the DMA moves the vector as one contiguous burst and never looks at the other
+// axis' stride, so a ColMajor [N, 1] tile stored through an ND GlobalTensor lands as N
+// consecutive elements rather than one element every row-stride.
+// TLOAD needs no such case: Vec loads only accept matching layouts (ND->ND, DN->DN,
+// NZ->NZ), so its mapping always comes from the GlobalTensor.
+template <typename GlobalData, typename TileData>
+constexpr bool IsVecTransferLayoutSwapped()
+{
+    if constexpr (std::is_same_v<TileData, void>) {
+        return false;
+    } else if constexpr (!HasSFractal<TileData>::value) {
+        return false;
+    } else if constexpr (TileData::Loc != TileType::Vec || TileData::SFractal != SLayout::NoneBox) {
+        return false;
+    } else if constexpr (GlobalData::layout == pto::Layout::ND) {
+        return !TileData::isRowMajor && TileData::Cols == 1;
+    } else if constexpr (GlobalData::layout == pto::Layout::DN) {
+        return TileData::isRowMajor && TileData::Rows == 1;
+    } else {
+        return false;
+    }
+}
+
+// Global offset of tile element (r, c) for such a transfer. The tile is one row or one
+// column, so exactly one index varies and the vector is contiguous in the GlobalTensor;
+// every outer dimension is 1 (the DMA's own shape check requires it).
+template <typename GlobalData, typename TileData>
+size_t inline MapSwappedTileIndicesToGlobalOffset(
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
+{
+    (void)globalShapes;
+    (void)globalStrides;
+    return r + c;
+}
+
+// Entry point for TSTORE. Same mapping as MapTileIndicesToGlobalOffset except where the
+// tile and the GlobalTensor select different DMA paths on hardware.
+template <typename GlobalData, typename TileData = void>
+size_t inline MapTransferIndicesToGlobalOffset(
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
+{
+    if constexpr (IsVecTransferLayoutSwapped<GlobalData, TileData>()) {
+        return MapSwappedTileIndicesToGlobalOffset<GlobalData, TileData>(r, c, globalShapes, globalStrides);
+    } else {
+        return MapTileIndicesToGlobalOffset<GlobalData, TileData>(r, c, globalShapes, globalStrides);
+    }
+}
+
 template <typename DataStorage>
 size_t inline GetDataElementOffset(DataStorage& storage, size_t r, size_t c)
 {

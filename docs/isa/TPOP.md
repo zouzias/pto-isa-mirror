@@ -77,6 +77,8 @@ struct TPipe;
     - Split modes select the lane from the current subblock context. For a C2V pipe configured with `IsNoSplit`, `TILE_NO_SPLIT` coordinates one or two vector consumer subblocks according to the runtime subblock count. In other no-split vector cases, a nonzero inactive lane is zero-filled where required.
     - The overload with an explicit `int32_t subBlockId` is not currently implemented by CPU_SIM; use the simulated subblock execution context to select a split lane.
     - For `DIR_BOTH`, the consumer searches the shared ring for a committed slot matching its direction. Overlapping pops reserve distinct slots.
+    - TileData payloads are read back with the consumer tile's declared shape, so that shape must match the window
+      the producer pushed (its valid shape under `TILE_NO_SPLIT`).
     - The GlobalData overload is not currently available in CPU_SIM.
 
 ## Examples
