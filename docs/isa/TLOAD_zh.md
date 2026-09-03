@@ -1,5 +1,6 @@
 # TLOAD
 
+
 ## 指令示意图
 
 ![TLOAD tile operation](../figures/isa/TLOAD.svg)
@@ -43,7 +44,33 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+原有 `TLOAD(dst, src)` 与 `TLOAD<TileT, GTensor>(dst, src)` 仍可用。`TLoadL2Hint` 为首模板的形式为额外重载（`l2Control` 无默认值）。
+
+## L2 cache hint
+
+可选首模板参数重载（原有 `TLOAD(dst, src)` 不变）：
+
+```cpp
+TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src);
+```
+
+支持的 `TLoadL2Hint`：
+
+| 枚举 | 值 | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | 无效果（默认） | 支持 |
+| NormalLastVictim | 1 | 无效果 | 支持 |
+| NormalPersistent | 2 | 无效果 | 支持 |
+| NotAllocKeep | 4 | 支持（GM 地址加上运行时 `l2Cacheoffset`） | 支持 |
+| NotAllocClean | 5 | 支持（同 Keep） | 支持 |
+| NotAllocDrop | 6 | 支持（同 Keep） | 支持 |
+
+A2/A3 仅 NotAlloc* 改变行为；Normal* 与默认路径相同。A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
 
 ## 约束
 
