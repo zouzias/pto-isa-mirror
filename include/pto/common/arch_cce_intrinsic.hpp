@@ -314,6 +314,20 @@ PTO_INTERNAL void pto_copy_ubuf_to_gm_align_v2(
 }
 #endif
 
+#if defined(PTO_NPU_ARCH_KIRIN9030)
+template <typename T>
+PTO_INTERNAL void pto_copy_cbuf_to_gm_align_v2(
+    __gm__ T* dst, __cbuf__ T* src, uint8_t sid, uint32_t nBurst, uint32_t lenBurst, uint64_t burstDstStride,
+    uint32_t burstSrcStride)
+{
+    using U = std::conditional_t<
+        sizeof(T) == sizeof(uint8_t), uint8_t, std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
+    copy_cbuf_to_gm_align_v2(
+        reinterpret_cast<__gm__ U*>(dst), reinterpret_cast<__cbuf__ U*>(src), sid, nBurst, lenBurst, burstDstStride,
+        burstSrcStride);
+}
+#endif
+
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINDEV0000)
 template <typename T, typename U>
 PTO_INTERNAL void pto_copy_matrix_cc_to_cbuf(

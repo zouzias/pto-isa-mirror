@@ -205,6 +205,7 @@ set(ALL_TESTCASES
     tlog
     trecip
     tstore_acc2gm
+    tstore_mat2gm
     tdivs
     tmuls
     tadds
