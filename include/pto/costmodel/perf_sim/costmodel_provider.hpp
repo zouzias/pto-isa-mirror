@@ -30,6 +30,7 @@ static constexpr uint64_t kMTE1LatencyBase = 1;
 static constexpr uint64_t kMTE1ElemsPerUnit = 64;
 static constexpr uint64_t kDefaultLatencyBase = 2;
 static constexpr uint64_t kDefaultElemsPerUnit = 32;
+static constexpr uint64_t kIntTDivsFallbackCycles = 4;
 
 // ── Runtime context passed to costmodel ──
 
@@ -142,7 +143,7 @@ inline uint64_t FallbackCycles(const std::string& opcode, int rows, int cols)
 inline uint64_t EstimateInstrCycles(const std::string& opcode, int rows, int cols, const std::string& dtype)
 {
     if (opcode == "TDIVS" && (dtype == "int16" || dtype == "int32")) {
-        return 4;
+        return kIntTDivsFallbackCycles;
     }
     uint64_t cycles = EstimateLightweightCycles(opcode, rows, cols, dtype);
     return cycles > 0 ? cycles : FallbackCycles(opcode, rows, cols);

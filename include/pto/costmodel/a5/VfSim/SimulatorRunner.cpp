@@ -27,6 +27,8 @@ namespace vfsim {
 
 namespace {
 
+constexpr int64_t kDefaultDispatchIssueBudget = 5;
+
 template <typename T>
 void dumpJsonLines(const std::vector<T>& records, const std::string& path)
 {
@@ -155,7 +157,7 @@ IDUDispatchBudget makeDispatchBudget(
     budget.freeShqQueue = std::max<int64_t>(0, ooo.getFreeShqQueue() - pending.shqQueue);
     budget.freeLsq = std::max<int64_t>(0, ooo.getFreeLsq() - pending.lsq);
     budget.freeShq = useExplicitIduCreditBank ? iduShqCredit : std::max<int64_t>(0, ooo.getFreeShq() - pending.shq);
-    budget.issueBudget = 5;
+    budget.issueBudget = kDefaultDispatchIssueBudget;
     return budget;
 }
 

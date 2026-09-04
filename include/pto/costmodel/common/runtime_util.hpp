@@ -15,7 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/costmodel/common/qualifiers.hpp>
 
+// NOLINTNEXTLINE(bugprone-reserved-identifier): compatibility with PTO_FLAG_TEST low-level flag hooks.
 inline CceEventIdType __pto_set_flag(pipe_t, pipe_t) { return EVENT_ID0; }
+// NOLINTNEXTLINE(bugprone-reserved-identifier): compatibility with PTO_FLAG_TEST low-level flag hooks.
 inline void __pto_wait_flag(pipe_t, pipe_t, CceEventIdType) {}
 [[noreturn]] inline void trap() { std::terminate(); }
 
