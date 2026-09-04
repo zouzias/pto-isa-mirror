@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_COMM_TYPES_HPP
 #define PTO_COMM_COMM_TYPES_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -169,16 +170,40 @@ struct CcuTriggerContext {
 
 struct AsyncSession;
 
+enum class CompletionKind : uint32_t {
+    SDMA_POST_DONE = 1,
+    URMA_CQE_DW0 = 2,
+    RDMA_HNS1825_CQE = 3,
+};
+
+struct AsyncCompletionRecord {
+    __gm__ uint8_t* addr{nullptr};
+    uint64_t expected{0};
+    CompletionKind kind{CompletionKind::SDMA_POST_DONE};
+};
+
+static_assert(std::is_standard_layout_v<AsyncCompletionRecord>);
+static_assert(sizeof(AsyncCompletionRecord) == 24U);
+static_assert(alignof(AsyncCompletionRecord) == alignof(uint64_t));
+static_assert(offsetof(AsyncCompletionRecord, addr) == 0U);
+static_assert(offsetof(AsyncCompletionRecord, expected) == 8U);
+static_assert(offsetof(AsyncCompletionRecord, kind) == 16U);
+
 struct AsyncEvent {
     uint64_t handle{0};
     DmaEngine engine{DmaEngine::SDMA};
+    uint32_t urmaTargetCqe{0};
 
     AICORE constexpr AsyncEvent() = default;
-    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
+    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e, uint32_t targetCqe = 0)
+        : handle(h), engine(e), urmaTargetCqe(targetCqe)
+    {}
     AICORE constexpr bool valid() const { return handle != 0; }
 
     PTO_INTERNAL bool Wait(const AsyncSession& session) const;
     PTO_INTERNAL bool Test(const AsyncSession& session) const;
+    PTO_INTERNAL uint32_t CompletionRecordCount(const AsyncSession& session) const;
+    PTO_INTERNAL AsyncCompletionRecord CompletionRecordAt(const AsyncSession& session, uint32_t idx) const;
 };
 
 // ============================================================================

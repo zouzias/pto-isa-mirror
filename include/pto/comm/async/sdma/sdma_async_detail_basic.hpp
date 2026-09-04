@@ -213,6 +213,11 @@ PTO_INTERNAL __gm__ uint8_t* GetPostDoneRecordAddr(__gm__ uint8_t* postDoneBase,
     return postDoneBase + static_cast<uint64_t>(queue) * kPostDoneStrideBytes;
 }
 
+PTO_INTERNAL __gm__ uint8_t* GetNextPostIdAddr(__gm__ uint8_t* postDoneBase, uint32_t queueNum)
+{
+    return postDoneBase + static_cast<uint64_t>(queueNum) * kPostDoneStrideBytes;
+}
+
 PTO_INTERNAL __gm__ uint8_t* GetFlagPayloadAddr(__gm__ uint8_t* flagPayloadBase, uint64_t postId)
 {
     return flagPayloadBase + (postId % kSdmaFlagPayloadDepth) * kSdmaPostIdFlagBytes;

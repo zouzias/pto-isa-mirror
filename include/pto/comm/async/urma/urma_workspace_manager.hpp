@@ -280,7 +280,10 @@ private:
         }
 
         FillWqCtx(wqList[peer], sq);
-        FillCqCtx(cqList[peer], cq);
+        if (!FillCqCtx(cqList[peer], cq)) {
+            std::cerr << "[URMA] unsupported AIV completion queue configuration for peer=" << peer << std::endl;
+            return false;
+        }
         FillMemInfo(memList[peer], sq, symRemoteBuf, symRmaAddr, symRmaSize);
 
         (void)memcpy_s(&eidTable[peer * kUrmaEidBytes], kUrmaEidBytes, sq.contextInfo.ubJfs.remoteEID, kUrmaEidBytes);
@@ -304,16 +307,24 @@ private:
         wq.sl = 0;
     }
 
-    static void FillCqCtx(UrmaCqCtx& cqCtx, const CqContext& cq)
+    static bool FillCqCtx(UrmaCqCtx& cqCtx, const CqContext& cq)
     {
+        constexpr uint32_t kMinAivUrmaCqDepth = 128U;
+        const uint32_t depth = cq.contextInfo.ubJfc.cqDepth;
+        if (depth < kMinAivUrmaCqDepth || (depth & (depth - 1U)) != 0U || cq.contextInfo.ubJfc.cqeSize == 0U ||
+            (cq.contextInfo.ubJfc.cqeSize & (cq.contextInfo.ubJfc.cqeSize - 1U)) != 0U ||
+            cq.contextInfo.ubJfc.scqVa == 0U) {
+            return false;
+        }
         cqCtx.cqn = cq.contextInfo.ubJfc.jfcID;
         cqCtx.bufAddr = cq.contextInfo.ubJfc.scqVa;
         cqCtx.cqeShiftSize = Log2U32(cq.contextInfo.ubJfc.cqeSize);
-        cqCtx.depth = cq.contextInfo.ubJfc.cqDepth;
+        cqCtx.depth = depth;
         cqCtx.headAddr = cq.contextInfo.ubJfc.headAddr;
         cqCtx.tailAddr = cq.contextInfo.ubJfc.tailAddr;
         cqCtx.dbMode = UrmaDbMode::SW_DB;
         cqCtx.dbAddr = cq.contextInfo.ubJfc.dbVa;
+        return true;
     }
 
     static void FillMemInfo(

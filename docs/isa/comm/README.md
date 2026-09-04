@@ -91,6 +91,12 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
 
 ```cpp
+struct AsyncCompletionRecord {
+    __gm__ uint8_t *addr;
+    uint64_t expected;
+    CompletionKind kind;
+};
+
 struct AsyncEvent {
     uint64_t handle;
     DmaEngine engine;
@@ -98,7 +104,11 @@ struct AsyncEvent {
     bool valid() const;                        // true if handle != 0
     bool Wait(const AsyncSession &session) const; // block until transfer completes
     bool Test(const AsyncSession &session) const; // non-blocking completion check
+    uint32_t CompletionRecordCount(const AsyncSession &session) const;
+    AsyncCompletionRecord CompletionRecordAt(const AsyncSession &session, uint32_t index) const;
 };
+
+`CompletionRecordCount` and `CompletionRecordAt` expose the AICore-side completion observation for deferred runtime integration. SDMA records are monotonic post-done counters; URMA records identify one CQE DW0 and its expected owner bit.
 ```
 
 ### AsyncSession

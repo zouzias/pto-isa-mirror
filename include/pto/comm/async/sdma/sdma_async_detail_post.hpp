@@ -62,14 +62,15 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
 
     UbTmpBuf tmpBuf = execCtx.tmpBuf;
     runtimeCtx.postDoneBase = ResolvePostDoneBase(execCtx);
-    if (runtimeCtx.postDoneBase == nullptr) {
+    if (runtimeCtx.postDoneBase == nullptr || execCtx.baseConfig.queue_num == 0U ||
+        execCtx.baseConfig.queue_num > kSdmaMaxChannelGroups) {
         return false;
     }
-    for (uint32_t queue = 0U; queue < execCtx.baseConfig.queue_num; ++queue) {
-        SetValue<uint64_t>(GetPostDoneRecordAddr(runtimeCtx.postDoneBase, queue), tmpBuf, execCtx.syncId, 0ULL);
-    }
-    pipe_barrier(PIPE_ALL);
+    static_assert(
+        kPostDoneStrideBytes + sizeof(uint64_t) <= kSdmaFlagLength,
+        "The persistent next post ID must remain inside the per-queue record region.");
 
+    __gm__ uint8_t* nextPostIdAddr = GetNextPostIdAddr(runtimeCtx.postDoneBase, execCtx.baseConfig.queue_num);
     __gm__ BatchWriteChannelInfo* channelBase =
         reinterpret_cast<__gm__ BatchWriteChannelInfo*>(execCtx.contextGm + sizeof(BatchWriteFlagInfo));
     __gm__ BatchWriteChannelInfo* channels = channelBase + execCtx.channelGroupIdx * execCtx.baseConfig.queue_num;
@@ -85,6 +86,7 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
         runtimeCtx.sqHead[queue] = static_cast<uint32_t>(packedHeadTail);
         runtimeCtx.sqTail[queue] = static_cast<uint32_t>(packedHeadTail >> 32U);
     }
+    runtimeCtx.nextPostId = GetValue<uint64_t>(nextPostIdAddr, tmpBuf);
     return true;
 }
 
@@ -257,6 +259,7 @@ PTO_INTERNAL void PersistSqTails(
         const uint64_t packed = (static_cast<uint64_t>(runtimeCtx.sqTail[queue]) << 32U) | runtimeCtx.sqHead[queue];
         SetValue<uint64_t>((__gm__ uint8_t*)(channels + queue), tmpBuf, syncId, packed);
     }
+    SetValue<uint64_t>(GetNextPostIdAddr(runtimeCtx.postDoneBase, queueNum), tmpBuf, syncId, runtimeCtx.nextPostId);
     pipe_barrier(PIPE_ALL);
 }
 
