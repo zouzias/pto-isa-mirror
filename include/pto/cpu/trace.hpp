@@ -235,7 +235,8 @@ std::string TraceDTypeName()
     } else if constexpr (std::is_enum_v<Decayed>) {
         return "enum";
     } else if constexpr (std::is_integral_v<Decayed>) {
-        return std::string(std::is_signed_v<Decayed> ? "int" : "uint") + std::to_string(sizeof(Decayed) * 8);
+        constexpr int bitsInByte = 8;
+        return std::string(std::is_signed_v<Decayed> ? "int" : "uint") + std::to_string(sizeof(Decayed) * bitsInByte);
     } else {
         return "unknown";
     }
@@ -359,10 +360,13 @@ TileOperandTrace CaptureTileOperand(TileData& tile)
     return operand;
 }
 
+// Small slack to avoid reallocation for strings containing escapable characters.
+inline constexpr std::size_t kJsonEscapeReserveSlack = 8;
+
 inline std::string JsonEscape(std::string_view text)
 {
     std::string escaped;
-    escaped.reserve(text.size() + 8);
+    escaped.reserve(text.size() + kJsonEscapeReserveSlack);
     for (char ch : text) {
         switch (ch) {
             case '\\':
