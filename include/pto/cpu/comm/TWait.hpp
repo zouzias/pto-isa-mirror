@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <type_traits>
 #if defined(__linux__)
 #include <dlfcn.h>
@@ -57,9 +58,10 @@ inline uint32_t ReadTwaitMaxSpin()
     if (value == nullptr || *value == '\0') {
         return kDefaultMaxSpinCount;
     }
-    char* end = nullptr;
-    const unsigned long parsed = std::strtoul(value, &end, 10);
-    if (end == value || *end != '\0') {
+    const std::string strValue(value);
+    std::size_t pos = 0;
+    const unsigned long parsed = std::stoul(strValue, &pos, 10);
+    if (pos != strValue.size()) {
         return kDefaultMaxSpinCount;
     }
     return static_cast<uint32_t>(parsed);

@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 #include <pto/common/pto_tile.hpp>
 
@@ -92,9 +93,10 @@ private:
         if (value == nullptr || *value == '\0') {
             return fallback;
         }
-        char* end = nullptr;
-        const unsigned long long parsed = std::strtoull(value, &end, 10);
-        if (end == value || *end != '\0' || parsed == 0) {
+        const std::string strValue(value);
+        std::size_t pos = 0;
+        const unsigned long long parsed = std::stoull(strValue, &pos, 10);
+        if (pos != strValue.size() || parsed == 0) {
             return fallback;
         }
         return static_cast<std::size_t>(parsed);
