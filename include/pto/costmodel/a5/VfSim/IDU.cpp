@@ -19,6 +19,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace vfsim {
 namespace {
 
+constexpr int64_t kOuterLoopDepth = 1;
+constexpr int64_t kMiddleLoopDepth = 2;
+constexpr int64_t kInnerLoopDepth = 3;
+constexpr size_t kOuterIterStackSize = 1;
+constexpr size_t kMiddleIterStackSize = 2;
+
 std::string joinInts(const std::vector<int64_t>& values)
 {
     std::ostringstream oss;
@@ -89,19 +95,19 @@ void IDU::initTopBlockNestedStarts(int64_t topBlockId, int64_t topVloopStart)
         return;
 
     setTopBlockVloop(topBlockId, topVloopStart);
-    if (depth >= 1) {
+    if (depth >= kOuterLoopDepth) {
         const std::string key0 = makeKey(topBlockId, "loop0", {});
         vloopStart_[key0] = topVloopStart;
         bodyOpenTime_[key0] = topVloopStart + vloopToDispatchDelay_;
     }
-    if (depth >= 2 && bounds[0] > 0) {
+    if (depth >= kMiddleLoopDepth && bounds[0] > 0) {
         const std::string key1 = makeKey(topBlockId, "loop1", {0});
         vloopStart_[key1] = topVloopStart + nestedVloopInitialStartGap_;
         bodyOpenTime_[key1] = vloopStart_[key1] + vloopToDispatchDelay_;
     }
-    if (depth >= 3 && bounds[0] > 0 && bounds[1] > 0) {
+    if (depth >= kInnerLoopDepth && bounds[0] > 0 && bounds[1] > 0) {
         const std::string key2 = makeKey(topBlockId, "loop2", {0, 0});
-        vloopStart_[key2] = topVloopStart + 2 * nestedVloopInitialStartGap_;
+        vloopStart_[key2] = topVloopStart + kMiddleLoopDepth * nestedVloopInitialStartGap_;
         bodyOpenTime_[key2] = vloopStart_[key2] + vloopToDispatchDelay_;
     }
 }
@@ -140,11 +146,11 @@ std::optional<std::string> IDU::currentInnerBlockKey(const DynamicInst& inst) co
         std::min<int64_t>(static_cast<int64_t>(loopBounds_.size()), static_cast<int64_t>(inst.loopDepth));
     if (depth <= 0)
         return std::nullopt;
-    if (depth == 1)
+    if (depth == kOuterLoopDepth)
         return makeKey(topBlockId, "loop0", {});
-    if (depth == 2 && iterStack.size() >= 1)
+    if (depth == kMiddleLoopDepth && iterStack.size() >= kOuterIterStackSize)
         return makeKey(topBlockId, "loop1", {iterStack[0]});
-    if (depth >= 3 && iterStack.size() >= 2)
+    if (depth >= kInnerLoopDepth && iterStack.size() >= kMiddleIterStackSize)
         return makeKey(topBlockId, "loop2", {iterStack[0], iterStack[1]});
     return std::nullopt;
 }
@@ -220,7 +226,7 @@ void IDU::triggerDepth2Vloops(const DynamicInst& inst, const std::vector<int64_t
 
 void IDU::triggerDepth3InnerVloops(const DynamicInst& inst, const std::vector<int64_t>& bounds, int64_t cycle)
 {
-    if (!hasBlockEndLevel(inst, 2) || inst.iterStack.size() < 2)
+    if (!hasBlockEndLevel(inst, kMiddleLoopDepth) || inst.iterStack.size() < kMiddleIterStackSize)
         return;
     const int64_t topBlockId = inst.topBlockId;
     const int64_t i = inst.iterStack[0];
@@ -266,9 +272,9 @@ void IDU::updateLastDispatch(const DynamicInst& inst, int64_t cycle)
     const int64_t depth = static_cast<int64_t>(inst.loopDepth);
     if (depth == 1) {
         lastDispatchTime_[makeKey(topBlockId, "loop0", {})] = cycle;
-    } else if (depth == 2 && iterStack.size() >= 1) {
+    } else if (depth == kMiddleLoopDepth && iterStack.size() >= kOuterIterStackSize) {
         lastDispatchTime_[makeKey(topBlockId, "loop1", {iterStack[0]})] = cycle;
-    } else if (depth >= 3 && iterStack.size() >= 2) {
+    } else if (depth >= kInnerLoopDepth && iterStack.size() >= kMiddleIterStackSize) {
         lastDispatchTime_[makeKey(topBlockId, "loop2", {iterStack[0], iterStack[1]})] = cycle;
         lastDispatchTime_[makeKey(topBlockId, "loop1", {iterStack[0]})] = cycle;
         lastDispatchTime_[makeKey(topBlockId, "loop0", {})] = cycle;
@@ -286,13 +292,13 @@ void IDU::triggerNextVloops(const DynamicInst& inst, int64_t cycle)
     if (depth <= 0 || inst.blockEndLevels.empty())
         return;
 
-    if (depth == 1)
+    if (depth == kOuterLoopDepth)
         return;
-    if (depth == 2) {
+    if (depth == kMiddleLoopDepth) {
         triggerDepth2Vloops(inst, bounds, cycle);
         return;
     }
-    if (depth == 3) {
+    if (depth == kInnerLoopDepth) {
         triggerDepth3InnerVloops(inst, bounds, cycle);
         triggerDepth3OuterVloops(inst, bounds, cycle);
     }

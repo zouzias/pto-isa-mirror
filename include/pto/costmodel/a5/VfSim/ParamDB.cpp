@@ -21,6 +21,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace vfsim {
 namespace {
 
+constexpr int64_t kDefaultForwardingLatencyDiscount = 3;
+
 struct IntUarchParam {
     std::string_view key;
     int64_t UarchConfig::*member;
@@ -204,7 +206,7 @@ int64_t ParamDB::forwardingCycles(const std::string& dtype, const std::string& p
         }
     }
     const int64_t latency = hasInst(prod, dtype) ? inst(prod, dtype).latency : 0;
-    return std::max<int64_t>(0, latency - 3);
+    return std::max<int64_t>(0, latency - kDefaultForwardingLatencyDiscount);
 }
 
 int64_t ParamDB::forwardingCycles(
@@ -219,7 +221,7 @@ int64_t ParamDB::forwardingCycles(
     if (prodForm == consForm)
         return forwardingCycles(prodForm, prod, cons);
     const int64_t latency = hasInst(prod, prodForm) ? inst(prod, prodForm).latency : 0;
-    return std::max<int64_t>(0, latency - 3);
+    return std::max<int64_t>(0, latency - kDefaultForwardingLatencyDiscount);
 }
 
 int64_t ParamDB::initiationInterval(const std::string& dtype, const std::string& prev, const std::string& cur) const

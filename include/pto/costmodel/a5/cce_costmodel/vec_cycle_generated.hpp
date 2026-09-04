@@ -17,6 +17,10 @@ namespace pto::mocker::vf {
 
 inline constexpr uint64_t kMemBarPenaltyPlaceholder = 20;
 inline constexpr uint64_t kUnknownInstructionFallbackCycles = 5;
+inline constexpr uint64_t kPredicateFallbackCycles = 2;
+inline constexpr uint64_t kMoveFallbackCycles = 4;
+inline constexpr uint64_t kSimpleComputeFallbackCycles = 6;
+inline constexpr uint64_t kComplexComputeFallbackCycles = 10;
 
 inline bool IsOneOf(std::string_view name, std::initializer_list<std::string_view> candidates)
 {
@@ -31,19 +35,19 @@ inline bool IsOneOf(std::string_view name, std::initializer_list<std::string_vie
 inline uint64_t VecCycle(std::string_view name)
 {
     if (IsOneOf(name, {"plt_b8", "plt_b16", "plt_b32", "pset_b8", "pset_b16", "pset_b32"})) {
-        return 2;
+        return kPredicateFallbackCycles;
     }
     if (IsOneOf(name, {"vlds", "vsts", "vdup", "vmov", "vsel"})) {
-        return 4;
+        return kMoveFallbackCycles;
     }
     if (IsOneOf(
             name, {"vadd",  "vsub",   "vmul", "vand", "vor",  "vxor", "vshl",  "vshr",  "vshls", "vshrs", "vabs",
                    "vrelu", "vlrelu", "vnot", "vneg", "vmin", "vmax", "vmins", "vadds", "pand",  "por",   "pnot"})) {
-        return 6;
+        return kSimpleComputeFallbackCycles;
     }
     if (IsOneOf(name, {"vdiv", "vexp", "vsqrt", "vln", "vcvt", "vmadd", "vmuls", "vmula", "vtrc"}) ||
         name.rfind("vcmp", 0) == 0) {
-        return 10;
+        return kComplexComputeFallbackCycles;
     }
     if (name == "pipe_barrier") {
         return kMemBarPenaltyPlaceholder;

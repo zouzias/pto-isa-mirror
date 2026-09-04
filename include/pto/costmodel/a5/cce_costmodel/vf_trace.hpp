@@ -230,7 +230,8 @@ inline BuildResult BuildVfInfo(std::string_view op, std::string_view shape)
 
 inline void FormatNodes(const std::vector<VfNode>& nodes, int depth, std::string& out)
 {
-    std::string ind(depth * 2, ' ');
+    constexpr int kTraceIndentWidth = 2;
+    std::string ind(depth * kTraceIndentWidth, ' ');
     for (const VfNode& n : nodes) {
         if (IsLoop(n)) {
             const VfLoop& lp = AsLoop(n);
