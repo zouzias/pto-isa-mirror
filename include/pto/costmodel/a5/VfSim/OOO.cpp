@@ -13,12 +13,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a5/VfSim/JsonDumpUtils.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
 
 namespace vfsim {
 namespace {
+
+constexpr int kDefaultLdqWidth = 24;
+constexpr int kDefaultVregNum = 68;
+constexpr int kDefaultLoadDoneLatency = 9;
+constexpr int kDefaultExqDepth = 26;
+constexpr int kExu01PortCount = 2;
+constexpr int kExu012PortCount = 3;
+constexpr int64_t kUnboundedCycle = 1000000000;
+constexpr int64_t kNeverIssuedCycle = -kUnboundedCycle;
+constexpr size_t kStoreReadyCycleIndex = 0;
+constexpr size_t kStoreReadyProducerOpIndex = 1;
+constexpr size_t kStoreReadyFormIndex = 2;
+constexpr size_t kStoreReadyProducerStartIndex = 3;
 
 bool isIntermediateMemName(const std::string& name)
 {
@@ -41,25 +55,25 @@ OoOCore::OoOCore(
     issuePorts_ = static_cast<int>(uarch.issuePorts);
     storePorts_ = static_cast<int>(uarch.storePorts);
     shqDepth_ = static_cast<int>(uarch.shqDepth);
-    lsqDepth_ = static_cast<int>(uarch.ldqWidth ? uarch.ldqWidth : 24);
-    pregNum_ = static_cast<int>(uarch.vregNum ? uarch.vregNum : 68);
+    lsqDepth_ = static_cast<int>(uarch.ldqWidth ? uarch.ldqWidth : kDefaultLdqWidth);
+    pregNum_ = static_cast<int>(uarch.vregNum ? uarch.vregNum : kDefaultVregNum);
     vfStartupCost_ = static_cast<int>(db_.isaDefaults().vfStartupCost);
     vfDrainCost_ = static_cast<int>(db_.isaDefaults().vfDrainCost);
     freelist_.clear();
     for (int i = 0; i < pregNum_; ++i)
         freelist_.push_back("p" + std::to_string(i));
     visiblePregFree_ = pregNum_;
-    lastIssueCycleALU_.assign(issuePorts_, -1000000000);
-    lastIssueCycleSFU_.assign(issuePorts_, -1000000000);
+    lastIssueCycleALU_.assign(issuePorts_, kNeverIssuedCycle);
+    lastIssueCycleSFU_.assign(issuePorts_, kNeverIssuedCycle);
     lastOpALU_.assign(issuePorts_, "");
     lastFormALU_.assign(issuePorts_, "");
     lastOpSFU_.assign(issuePorts_, "");
     lastFormSFU_.assign(issuePorts_, "");
-    lastIssueCycleExu_.assign(issuePorts_, -1000000000);
+    lastIssueCycleExu_.assign(issuePorts_, kNeverIssuedCycle);
     lastOpExu_.assign(issuePorts_, "");
     lastFormExu_.assign(issuePorts_, "");
     exqInflight_.assign(issuePorts_, 0);
-    loadDoneLatency_ = static_cast<int>(uarch.loadDoneLatency ? uarch.loadDoneLatency : 9);
+    loadDoneLatency_ = static_cast<int>(uarch.loadDoneLatency ? uarch.loadDoneLatency : kDefaultLoadDoneLatency);
     oooToShqDelay_ = static_cast<int>(uarch.oooToShqDelay ? uarch.oooToShqDelay : 1);
     oooToLsqDelay_ = static_cast<int>(uarch.oooToLsqDelay ? uarch.oooToLsqDelay : 1);
     exqRecvDelay_ = static_cast<int>(uarch.exqRecvDelay ? uarch.exqRecvDelay : 1);
@@ -70,7 +84,7 @@ OoOCore::OoOCore(
     enableCreditVisibilityDelay_ = uarch.enableCreditVisibilityDelay;
     enableCrossFuIi_ = uarch.enableCrossFuIi;
     exqCapacityCountsInflight_ = uarch.exqCapacityCountsInflight;
-    exqDepth_ = static_cast<int>(uarch.exqDepth ? uarch.exqDepth : 26);
+    exqDepth_ = static_cast<int>(uarch.exqDepth ? uarch.exqDepth : kDefaultExqDepth);
     shqToExqPortPerCycle_ = static_cast<int>(uarch.shqToExqPortPerCycle ? uarch.shqToExqPortPerCycle : 1);
     exqIssueInflightCapPerPort_ = static_cast<int>(uarch.exqIssueInflightCapPerPort);
     computeInflightCap_ = static_cast<int>(uarch.computeInflightCap);
@@ -83,7 +97,7 @@ OoOCore::OoOCore(
 int OoOCore::getFreePreg() const
 {
     if (theoreticalLimitMode_)
-        return 1000000000;
+        return kUnboundedCycle;
     if (enableCreditVisibilityDelay_)
         return std::max(0, visiblePregFree_);
     return static_cast<int>(freelist_.size());
@@ -91,18 +105,18 @@ int OoOCore::getFreePreg() const
 
 int OoOCore::getFreeShqQueue() const
 {
-    return theoreticalLimitMode_ ? 1000000000 : std::max(0, shqDepth_ - static_cast<int>(shq_.size()));
+    return theoreticalLimitMode_ ? kUnboundedCycle : std::max(0, shqDepth_ - static_cast<int>(shq_.size()));
 }
 
 int OoOCore::getFreeLsq() const
 {
-    return theoreticalLimitMode_ ? 1000000000 : std::max(0, lsqDepth_ - static_cast<int>(lsq_.size()));
+    return theoreticalLimitMode_ ? kUnboundedCycle : std::max(0, lsqDepth_ - static_cast<int>(lsq_.size()));
 }
 
 int OoOCore::getFreeShq() const
 {
     if (theoreticalLimitMode_ || !enableShqCreditModel_)
-        return 1000000000;
+        return kUnboundedCycle;
     if (enableCreditVisibilityDelay_)
         return std::max(0, shqDepth_ - visibleShqUsed_);
     return std::max(0, shqDepth_ - shqUsed_);
@@ -167,7 +181,7 @@ int64_t OoOCore::computeLoadReadyCycle(const Uop& u) const
                 continue;
             const auto it = blockReleaseCycle_.find(u.topBlockId - 1);
             if (it == blockReleaseCycle_.end())
-                return 1000000000;
+                return kUnboundedCycle;
             t = std::max<int64_t>(t, it->second);
         }
     }
@@ -181,7 +195,7 @@ OoOCore::computeStoreReadyCycle(const Uop& u) const
         if (!ps.has_value())
             continue;
         if (pregPending_.count(*ps) && pregProducer_.find(*ps) == pregProducer_.end())
-            return {1000000000, std::nullopt, std::nullopt, std::nullopt};
+            return {kUnboundedCycle, std::nullopt, std::nullopt, std::nullopt};
     }
 
     int64_t bestT = -1;
@@ -206,7 +220,7 @@ OoOCore::computeStoreReadyCycle(const Uop& u) const
         }
     }
     if (bestT < 0)
-        return {1000000000, std::nullopt, std::nullopt, std::nullopt};
+        return {kUnboundedCycle, std::nullopt, std::nullopt, std::nullopt};
     bestT = std::max<int64_t>(bestT, u.lsqReadyCycle);
     return {bestT, pop, pform, pst};
 }
@@ -236,9 +250,9 @@ std::vector<int> OoOCore::eligibleExuPorts(const std::string& op, const std::str
     if (tag == "EXU0_ONLY")
         return issuePorts_ > 0 ? std::vector<int>{0} : std::vector<int>{};
     if (tag == "EXU01")
-        return issuePorts_ >= 2 ? std::vector<int>{0, 1} : std::vector<int>{0};
+        return issuePorts_ >= kExu01PortCount ? std::vector<int>{0, 1} : std::vector<int>{0};
     if (tag == "EXU012")
-        return issuePorts_ >= 3 ? std::vector<int>{0, 1, 2} : std::vector<int>{0, 1};
+        return issuePorts_ >= kExu012PortCount ? std::vector<int>{0, 1, 2} : std::vector<int>{0, 1};
     std::vector<int> out;
     for (int i = 0; i < issuePorts_; ++i)
         out.push_back(i);
@@ -435,7 +449,7 @@ int64_t OoOCore::predictExqIssueCycle(
     int64_t pred = recvCycle;
     const std::string* prevOp = nullptr;
     const std::string* prevForm = nullptr;
-    int64_t prevIssue = -1000000000;
+    int64_t prevIssue = kNeverIssuedCycle;
     if (enableCrossFuIi_) {
         prevOp = &lastOpExu_[static_cast<size_t>(port)];
         prevForm = &lastFormExu_[static_cast<size_t>(port)];
@@ -678,7 +692,7 @@ int64_t OoOCoreMainline::computeShqReadyCycle(const Uop& u) const
         auto it = pregProducer_.find(*preg);
         if (it == pregProducer_.end()) {
             if (pregPending_.count(*preg))
-                ready = std::max<int64_t>(ready, 1000000000);
+                ready = std::max<int64_t>(ready, kUnboundedCycle);
             continue;
         }
         ready = std::max<int64_t>(ready, computeReadyTimeForSrc(it->second, u.op, u.form));
@@ -694,7 +708,7 @@ void OoOCoreMainline::updateLsqReadiness(int64_t cycle)
         if (isLoadOp(db_, u.op, u.form))
             u.readyCycle = computeLoadReadyCycle(u);
         else
-            u.readyCycle = std::get<0>(computeStoreReadyCycle(u));
+            u.readyCycle = std::get<kStoreReadyCycleIndex>(computeStoreReadyCycle(u));
         u.state = (cycle >= u.readyCycle) ? "ready" : "blocked";
     }
 }
@@ -996,13 +1010,13 @@ void OoOCoreMainline::issueReadyStores(int64_t cycle)
         if (st >= storePorts_)
             break;
         auto ready = computeStoreReadyCycle(u);
-        if (cycle < std::get<0>(ready)) {
+        if (cycle < std::get<kStoreReadyCycleIndex>(ready)) {
             ++it;
             continue;
         }
-        u.producerOpForStore = std::get<1>(ready);
-        u.producerFormForStore = std::get<2>(ready);
-        u.producerStartForStore = std::get<3>(ready);
+        u.producerOpForStore = std::get<kStoreReadyProducerOpIndex>(ready);
+        u.producerFormForStore = std::get<kStoreReadyFormIndex>(ready);
+        u.producerStartForStore = std::get<kStoreReadyProducerStartIndex>(ready);
         if (!u.producerOpForStore.has_value()) {
             ++it;
             continue;
