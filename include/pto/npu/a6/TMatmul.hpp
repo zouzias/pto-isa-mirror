@@ -253,23 +253,37 @@ PTO_INTERNAL void CheckA6MadFractal()
     static_assert(leftFractalValid && rightFractalValid && accFractalValid, "Non-conforming matrix fractal.");
 }
 
-template <typename TileRes>
-PTO_INTERNAL void CheckA6MadAccStride()
+// mad writes Acc block columns at a pitch of ceil16(m) while readers take the pitch from
+// Rows; a mismatch corrupts every block column past the first. MadRows is the m the caller
+// passes: TileLeft::ValidRow for TMATMUL, 1 for TGEMV. One block column has no pitch.
+template <typename TileRes, int MadRows>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
 {
-    constexpr bool accStrideRepresentable = MadAccStrideCompatible<TileRes>();
-    static_assert(
-        accStrideRepresentable,
-        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column, "
-        "which mad's compact write stride cannot represent. Use a full-Rows Acc tile per row window, "
-        "or window the columns instead.");
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (MadRows == DYNAMIC || TileRes::Rows == DYNAMIC || TileRes::ValidRow == DYNAMIC) {
+        // A dynamic valid shape means readers follow the runtime shape, not the static Rows.
+        return true;
+    } else {
+        // TMatmul promotes m == 1 to 16 outside gemv.
+        constexpr int madRows = (MadRows == 1) ? FRACTAL_NZ_ROW : MadRows;
+        return (madRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
 }
 
-template <typename TileRes, typename TileLeft, typename TileRight>
+template <typename TileRes, typename TileLeft, typename TileRight, int MadRows>
 PTO_INTERNAL void CheckMadValid()
 {
     CheckA6MadDType<TileRes, TileLeft, TileRight>();
     CheckA6MadFractal<TileRes, TileLeft, TileRight>();
-    CheckA6MadAccStride<TileRes>();
+    static_assert(
+        MadAccStrideCompatible<TileRes, MadRows>(),
+        "Acc tile pitch mismatch: mad writes block columns at ceil16(m) rows, where m is the Left "
+        "tile's ValidRow (1 for TGEMV), but this Acc tile's Rows differs from that. Give the Acc "
+        "tile Rows == ceil16(m), or window the columns instead of the rows.");
 }
 
 template <typename TileLeft, typename TileRight>
@@ -284,7 +298,7 @@ PTO_INTERNAL void GetA6MadShape(TileLeft& aMatrix, TileRight& bMatrix, uint16_t&
 template <bool cmatrixInitVal, AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void RunA6Matmul(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     uint16_t m;
     uint16_t k;
     uint16_t n;

@@ -127,8 +127,8 @@ TEST_F(TMOVTest, case25_bfloat16_0_0_44_39_39_param)
 }
 TEST_F(TMOVTest, case31_float_1_1_29_29_44_param) { tmov_test<31, float, float, float>(29, 29, 44, 32, 32, 48); }
 TEST_F(TMOVTest, case32_float_1_1_29_29_36_param) { tmov_test<32, float, float, float>(29, 29, 36, 32, 32, 48); }
-TEST_F(TMOVTest, case33_int8_1_1_65_66_40_param) { tmov_test<33, int32_t, int8_t, int8_t>(81, 66, 40, 96, 80, 64); }
-TEST_F(TMOVTest, case34_int8_1_1_65_82_40_param) { tmov_test<34, int32_t, int8_t, int8_t>(81, 82, 40, 96, 96, 64); }
+TEST_F(TMOVTest, case33_int8_1_1_65_66_40_param) { tmov_test<33, int32_t, int8_t, int8_t>(65, 66, 40, 96, 80, 64); }
+TEST_F(TMOVTest, case34_int8_1_1_65_82_40_param) { tmov_test<34, int32_t, int8_t, int8_t>(65, 82, 40, 96, 96, 64); }
 TEST_F(TMOVTest, case35_bfloat16_1_1_44_39_39_param)
 {
     tmov_test<35, float, uint16_t, uint16_t>(44, 39, 39, 48, 48, 48);
@@ -249,6 +249,17 @@ TEST_F(TEXTRACTTest, case32_int8_1_1_65_66_40_param)
 TEST_F(TEXTRACTTest, case33_bfloat16_1_1_44_39_39_param)
 {
     textract_test<33, float, uint16_t, uint16_t>(44, 39, 39, 32, 16, 32, 48, 48, 48);
+}
+// Regression guard for the Acc pitch rule: basing the check on TileRes::ValidRow instead of
+// the Left tile's would reject this shape.
+TEST_F(TEXTRACTTest, case39_float_0_0_32_32_32_param)
+{
+    textract_test<39, float, float, float>(46, 36, 36, 32, 32, 32, 128, 128, 128);
+}
+// Same guard with int8 and a wider valid column range.
+TEST_F(TEXTRACTTest, case40_int8_0_0_0_0_0_param)
+{
+    textract_test<40, int32_t, int8_t, int8_t>(40, 40, 40, 0, 0, 0, 64, 64, 64);
 }
 TEST_F(TEXTRACTTest, case41_dynamic_half_0_1_16_0_32_param)
 {

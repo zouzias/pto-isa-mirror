@@ -45,14 +45,18 @@ PTO_INTERNAL void CheckMadValid()
              (TileRight::SFractal == SLayout::ColMajor)) &&
             ((TileAcc::Loc == TileType::Acc) && (!TileAcc::isRowMajor) && (TileAcc::SFractal == SLayout::RowMajor)),
         "Non-conforming matrix fractal");
-    // Mirror the NPU mad guard: the CPU model could honor the parent geometry,
-    // but parity makes broken kernels fail in CPU sim too.
+    // Same pitch rule as the NPU implementations, with m taken from the Left tile. The CPU
+    // model could honor the parent geometry, but mirroring the NPU keeps a broken kernel
+    // failing in CPU sim too.
     static_assert(
         (TileAcc::Compact != CompactMode::Null) || (TileAcc::Cols <= FRACTAL_NZ_ROW) ||
-            ((TileAcc::ValidRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileAcc::Rows) ||
-            (TileAcc::ValidRow == DYNAMIC),
-        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column; "
-        "this shape is rejected on NPU (mad has no destination-stride operand) and on CPU for parity.");
+            (TileLeft::ValidRow == DYNAMIC) || (TileAcc::Rows == DYNAMIC) || (TileAcc::ValidRow == DYNAMIC) ||
+            (((TileLeft::ValidRow == 1 ? FRACTAL_NZ_ROW : TileLeft::ValidRow) + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW *
+                 FRACTAL_NZ_ROW ==
+             TileAcc::Rows),
+        "Acc tile pitch mismatch: mad writes block columns at ceil16(m) rows, where m is the Left "
+        "tile's ValidRow, but this Acc tile's Rows differs from that. Give the Acc tile "
+        "Rows == ceil16(m), or window the columns instead of the rows.");
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>

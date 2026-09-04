@@ -19,24 +19,6 @@ inline namespace TMatmulInternal {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
 constexpr const int TF32_MODE_BIT = 46;
 constexpr const int TF32_TRANS_MODE_BIT = 47;
-// mad has no destination-stride operand. Reject static multi-column Acc row
-// windows when mad's compact stride, ceil16(ValidRow), differs from Rows.
-// Dynamic ValidRow is not rejected here because the type cannot distinguish a
-// standalone compact buffer from a parent row window.
-template <typename TileRes>
-PTO_INTERNAL constexpr bool MadAccStrideCompatible()
-{
-    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
-    if constexpr (TileRes::Compact != CompactMode::Null || TileRes::Cols <= FRACTAL_NZ_ROW) {
-        return true;
-    } else if constexpr (TileRes::ValidRow == DYNAMIC) {
-        return true;
-    } else {
-        constexpr int roundedValidRow = (TileRes::ValidRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
-        return roundedValidRow == TileRes::Rows;
-    }
-}
-
 } // namespace TMatmulInternal
 
 template <
@@ -103,7 +85,28 @@ PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uin
     CheckKirinMadExtent<2>(bMatrixCol);
 }
 
-template <typename TileRes, typename TileLeft, typename TileRight>
+// mad writes Acc block columns at a pitch of ceil16(m) while readers take the pitch from
+// Rows; a mismatch corrupts every block column past the first. MadRows is the m the caller
+// passes: TileLeft::ValidRow for TMATMUL, 1 for TGEMV. One block column has no pitch.
+template <typename TileRes, int MadRows>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
+{
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (MadRows == DYNAMIC || TileRes::Rows == DYNAMIC || TileRes::ValidRow == DYNAMIC) {
+        // A dynamic valid shape means readers follow the runtime shape, not the static Rows.
+        return true;
+    } else {
+        // TMatmul promotes m == 1 to 16 outside gemv.
+        constexpr int madRows = (MadRows == 1) ? FRACTAL_NZ_ROW : MadRows;
+        return (madRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
+}
+
+template <typename TileRes, typename TileLeft, typename TileRight, int MadRows>
 PTO_INTERNAL void CheckMadValid()
 {
     using AType = typename TileLeft::DType;
@@ -134,12 +137,11 @@ PTO_INTERNAL void CheckMadValid()
     static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");
     static_assert(TileRes::Loc == TileType::Acc, "TileRes TileType must be set to TileType::Acc.");
 #endif
-    constexpr bool accStrideRepresentable = MadAccStrideCompatible<TileRes>();
     static_assert(
-        accStrideRepresentable,
-        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column, "
-        "which mad's compact write stride cannot represent. Use a full-Rows Acc tile per row window, "
-        "or window the columns instead.");
+        MadAccStrideCompatible<TileRes, MadRows>(),
+        "Acc tile pitch mismatch: mad writes block columns at ceil16(m) rows, where m is the Left "
+        "tile's ValidRow (1 for TGEMV), but this Acc tile's Rows differs from that. Give the Acc "
+        "tile Rows == ceil16(m), or window the columns instead of the rows.");
 }
 
 template <typename TileLeft, typename TileRight>
@@ -154,7 +156,7 @@ PTO_INTERNAL void GetKirinMadShape(TileLeft& aMatrix, TileRight& bMatrix, uint16
 template <bool cmatrixInitVal, AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void RunKirinMatmul(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     uint16_t m;
     uint16_t k;
     uint16_t n;
@@ -188,7 +190,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRig
 {
     // cmatrixSource control matrix source, 0: C matrix is in L0C, 1: C matrix is in C2
     // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
 #if defined(PTO_NPU_ARCH_KIRIN9030)
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
 #endif
@@ -209,7 +211,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRig
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
@@ -220,7 +222,7 @@ PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMa
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
@@ -233,7 +235,7 @@ template <
     AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias>
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
 
 #if defined(PTO_NPU_ARCH_KIRIN9030)
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
