@@ -65,26 +65,26 @@ inline void RecordMemBar(std::string name)
 
 #define PTO_TRACE_HOOK __attribute__((used)) inline
 extern "C" {
-PTO_TRACE_HOOK void __pto_trace_loop_enter(uint64_t loopId, const char* /*file*/, int /*line*/, int /*col*/)
+PTO_TRACE_HOOK void pto_trace_loop_enter(uint64_t loopId, const char* /*file*/, int /*line*/, int /*col*/)
 {
     if (!pto::mocker::vf::trace::Armed())
         return;
     pto::mocker::vf::trace::Events().push_back({pto::mocker::vf::trace::EvKind::LoopEnter, loopId, {}});
 }
-PTO_TRACE_HOOK void __pto_trace_loop_iter(uint64_t loopId)
+PTO_TRACE_HOOK void pto_trace_loop_iter(uint64_t loopId)
 {
     if (!pto::mocker::vf::trace::Armed())
         return;
     pto::mocker::vf::trace::Events().push_back({pto::mocker::vf::trace::EvKind::LoopIter, loopId, {}});
 }
-PTO_TRACE_HOOK void __pto_trace_loop_exit(uint64_t loopId)
+PTO_TRACE_HOOK void pto_trace_loop_exit(uint64_t loopId)
 {
     if (!pto::mocker::vf::trace::Armed())
         return;
     pto::mocker::vf::trace::Events().push_back({pto::mocker::vf::trace::EvKind::LoopExit, loopId, {}});
 }
-PTO_TRACE_HOOK void __pto_vf_scope_enter() {}
-PTO_TRACE_HOOK void __pto_vf_scope_exit() {}
+PTO_TRACE_HOOK void pto_vf_scope_enter() {}
+PTO_TRACE_HOOK void pto_vf_scope_exit() {}
 }
 #undef PTO_TRACE_HOOK
 
@@ -230,7 +230,8 @@ inline BuildResult BuildVfInfo(std::string_view op, std::string_view shape)
 
 inline void FormatNodes(const std::vector<VfNode>& nodes, int depth, std::string& out)
 {
-    std::string ind(depth * 2, ' ');
+    constexpr int kTraceIndentWidth = 2;
+    std::string ind(depth * kTraceIndentWidth, ' ');
     for (const VfNode& n : nodes) {
         if (IsLoop(n)) {
             const VfLoop& lp = AsLoop(n);

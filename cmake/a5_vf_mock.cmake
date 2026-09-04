@@ -115,6 +115,7 @@ function(target_enable_a5_vf_mock target)
     _pto_a5_build_vfsim()
     add_dependencies(${target} PtoLoopTracePass)
     target_link_libraries(${target} PRIVATE pto_a5_vfsim)
+    target_compile_definitions(${target} PRIVATE __simt_callee__= __simt_vf__=)
     target_compile_options(${target} PRIVATE
         -O0 -g -fpass-plugin=$<TARGET_FILE:PtoLoopTracePass>)
     message(STATUS "a5_vf_mock: ${target} enabled pass instrumentation (-O0 -g -fpass-plugin)")
