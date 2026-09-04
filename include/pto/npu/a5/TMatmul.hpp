@@ -74,7 +74,29 @@ PTO_INTERNAL void CheckMadMxValid()
         accBytes <= PTO_L0C_SIZE_BYTES, "TMatmulMX:accumulator (Rows*Cols*sizeof(out)) exceeds L0C capacity.");
 }
 
-template <typename TileRes, typename TileLeft, typename TileRight>
+// mad writes the Acc block columns at a pitch of ceil16(m), where m is the row count handed
+// to mad, and every reader of that Acc region derives its pitch from the tile's Rows. Reject
+// the shapes where the two disagree: writing at one pitch and reading at another scrambles
+// every block column past the first. MadRows is the m the caller will pass, so TMATMUL uses
+// the Left tile's ValidRow and TGEMV uses 1. A single block column needs no pitch at all.
+template <typename TileRes, int MadRows>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
+{
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (MadRows == DYNAMIC || TileRes::Rows == DYNAMIC) {
+        return true;
+    } else {
+        // TMatmul promotes m == 1 to 16 outside gemv, so a one-row Left tile writes 16 rows.
+        constexpr int madRows = (MadRows == 1) ? FRACTAL_NZ_ROW : MadRows;
+        return (madRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
+}
+
+template <typename TileRes, typename TileLeft, typename TileRight, int MadRows>
 PTO_INTERNAL void CheckMadValid()
 {
     using AType = typename TileLeft::DType;
@@ -104,17 +126,17 @@ PTO_INTERNAL void CheckMadValid()
             ((TileRes::Loc == TileType::Acc) && (!TileRes::isRowMajor) && (TileRes::SFractal == SLayout::RowMajor)),
         "Non-conforming matrix fractal.");
     static_assert(
-        MadAccStrideCompatible<TileRes>(),
-        "The Acc tile is a row window of a taller tile (ValidRow < Rows) with more than one block column, "
-        "which mad's compact write stride cannot represent. Use a full-Rows Acc tile per row window, "
-        "or window the columns instead.");
+        MadAccStrideCompatible<TileRes, MadRows>(),
+        "Acc tile pitch mismatch: mad writes block columns at ceil16(m) rows, where m is the Left "
+        "tile's ValidRow (1 for TGEMV), but this Acc tile's Rows differs from that. Give the Acc "
+        "tile Rows == ceil16(m), or window the columns instead of the rows.");
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
     // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
 
     uint16_t m = aMatrix.GetValidRow();
     uint16_t k = aMatrix.GetValidCol();
@@ -129,7 +151,7 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
     // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
 
     uint16_t m = aMatrix.GetValidRow();
     uint16_t k = aMatrix.GetValidCol();

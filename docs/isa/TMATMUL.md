@@ -56,12 +56,18 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## Constraints
 
-- **Accumulator destination constraint (CPU, A2A3, A5, A6, Kirin9030, and KirinX90)**:
-    - A static non-compact `TileRes` with `TileRes::Cols > FRACTAL_NZ_ROW` must satisfy
-      `((TileRes::ValidRow + 15) / 16) * 16 == TileRes::Rows`.
-    - `FRACTAL_NZ_ROW` is 16. This Acc-stride condition is not enforced when
-      `TileRes::ValidRow == DYNAMIC`, `TileRes::Cols <= FRACTAL_NZ_ROW`, or
-      `TileRes::Compact != CompactMode::Null`.
+- **Accumulator pitch constraint (CPU, A2A3, A5, A6, and Kirin9030)**: `mad` writes the
+  accumulator's block columns at a pitch of `ceil16(m)` rows, where `m` is the row count the
+  instruction receives, while every reader of that region takes its pitch from the tile's
+  `Rows`. The two must agree:
+    - `((m + 15) / 16) * 16 == TileRes::Rows`, where `m` is `TileLeft::ValidRow` for
+      `TMATMUL` and 1 for `TGEMV`. Outside `TGEMV`, `m == 1` is promoted to 16.
+    - Not enforced when `TileRes::Cols <= FRACTAL_NZ_ROW` (a single block column needs no
+      pitch), when `TileRes::Compact != CompactMode::Null`, or when either value is
+      `DYNAMIC`. `FRACTAL_NZ_ROW` is 16.
+    - `TileRes::ValidRow` does not enter the condition. A tile whose `ValidRow` is smaller
+      than its `Rows` is fine as long as the pitch matches: `Rows` is then just the padded
+      allocation size.
 - **Implementation checks (A2A3)**:
     - Supported `(CType, AType, BType)` triples:
     - `(int32_t, int8_t, int8_t)`
