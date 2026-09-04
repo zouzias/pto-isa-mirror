@@ -348,8 +348,13 @@ PTO_INTERNAL void PtoSetWaitFlag(event_t SetEventId = EVENT_ID0, event_t WaitEve
 {
 #ifndef __PTO_AUTO__
 #ifdef PTO_FLAG_TEST
+#ifdef __COSTMODEL
+    CceEventIdType token = pto_costmodel_auto_set_flag(SrcPipe, DstPipe);
+    pto_costmodel_auto_wait_flag(SrcPipe, DstPipe, token);
+#else
     CceEventIdType token = __pto_set_flag(SrcPipe, DstPipe);
     __pto_wait_flag(SrcPipe, DstPipe, token);
+#endif
 #else
     set_flag(SrcPipe, DstPipe, SetEventId);
     wait_flag(SrcPipe, DstPipe, WaitEventId);

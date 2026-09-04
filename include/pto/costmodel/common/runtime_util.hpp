@@ -15,8 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/costmodel/common/qualifiers.hpp>
 
-inline CceEventIdType __pto_set_flag(pipe_t, pipe_t) { return EVENT_ID0; }
-inline void __pto_wait_flag(pipe_t, pipe_t, CceEventIdType) {}
+inline CceEventIdType pto_costmodel_auto_set_flag(pipe_t, pipe_t) { return EVENT_ID0; }
+inline void pto_costmodel_auto_wait_flag(pipe_t, pipe_t, CceEventIdType) {}
 [[noreturn]] inline void trap() { std::terminate(); }
 
 inline int get_rsvd_cnt() { return 0; }

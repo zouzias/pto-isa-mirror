@@ -36,6 +36,9 @@ using namespace llvm;
 
 namespace {
 
+constexpr unsigned kInlineExitBlockCapacity = 4;
+constexpr unsigned kInlineLoopNestCapacity = 8;
+
 static bool nameStartsWith(StringRef s, const char* p)
 {
     size_t n = std::strlen(p);
@@ -50,19 +53,19 @@ static FunctionCallee getOrInsertLoopEnter(Module& M)
     auto* i8p = i8PtrTy(C);
     auto* i32 = Type::getInt32Ty(C);
     return M.getOrInsertFunction(
-        "__pto_trace_loop_enter", FunctionType::get(Type::getVoidTy(C), {i64, i8p, i32, i32}, false));
+        "pto_trace_loop_enter", FunctionType::get(Type::getVoidTy(C), {i64, i8p, i32, i32}, false));
 }
 static FunctionCallee getOrInsertLoopIter(Module& M)
 {
     LLVMContext& C = M.getContext();
     return M.getOrInsertFunction(
-        "__pto_trace_loop_iter", FunctionType::get(Type::getVoidTy(C), {Type::getInt64Ty(C)}, false));
+        "pto_trace_loop_iter", FunctionType::get(Type::getVoidTy(C), {Type::getInt64Ty(C)}, false));
 }
 static FunctionCallee getOrInsertLoopExit(Module& M)
 {
     LLVMContext& C = M.getContext();
     return M.getOrInsertFunction(
-        "__pto_trace_loop_exit", FunctionType::get(Type::getVoidTy(C), {Type::getInt64Ty(C)}, false));
+        "pto_trace_loop_exit", FunctionType::get(Type::getVoidTy(C), {Type::getInt64Ty(C)}, false));
 }
 
 static DebugLoc getLoopDebugLoc(Loop* L)
@@ -152,7 +155,7 @@ static void collectLoopInScope(Loop* L, Function& F, std::vector<LoopWork>& out,
         errs() << "[PtoLoopTrace] WARN: loop without dedicated exits skipped (" << F.getName() << ")\n";
         return;
     }
-    SmallVector<BasicBlock*, 4> exitBlks;
+    SmallVector<BasicBlock*, kInlineExitBlockCapacity> exitBlks;
     L->getUniqueExitBlocks(exitBlks);
     for (BasicBlock* eb : exitBlks)
         w.exitBlocks.push_back(eb);
@@ -164,7 +167,7 @@ static bool formDedicatedExitsForScopedLoops(LoopInfo& LI, DominatorTree& DT, In
 {
     bool cfgChanged = false;
     for (Loop* L : LI) {
-        SmallVector<Loop*, 8> nest;
+        SmallVector<Loop*, kInlineLoopNestCapacity> nest;
         nest.push_back(L);
         for (size_t i = 0; i < nest.size(); ++i)
             for (Loop* sub : nest[i]->getSubLoops())

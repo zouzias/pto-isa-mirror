@@ -21,6 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <utility>
 #include <vector>
 
+#include <pto/costmodel/common/qualifiers.hpp>
 #include <pto/common/type.hpp>
 #include <ostream>
 #include <pto/cpu/MXTypes.hpp>
@@ -46,50 +47,11 @@ template <typename T>
 struct RegTensor;
 }
 
-#ifndef __ubuf__
-#define __ubuf__
-#endif
-#ifndef __gm__
-#define __gm__
-#endif
-#ifndef __out__
-#define __out__
-#endif
-#ifndef __in__
-#define __in__
-#endif
-#ifndef __tf__
-#define __tf__
-#endif
-#ifndef __cbuf__
-#define __cbuf__
-#endif
-#ifndef __ca__
-#define __ca__
-#endif
-#ifndef __cb__
-#define __cb__
-#endif
-#ifndef __cc__
-#define __cc__
-#endif
-#ifndef __fbuf__
-#define __fbuf__
-#endif
 #ifndef set_vector_mask
 #define set_vector_mask(...)
 #endif
 #ifndef set_mask_norm
 #define set_mask_norm(...)
-#endif
-#ifndef __cce_get_tile_ptr
-#define __cce_get_tile_ptr(x) (x)
-#endif
-#ifndef __simt_callee__
-#define __simt_callee__
-#endif
-#ifndef __simt_vf__
-#define __simt_vf__
 #endif
 #ifndef LAUNCH_BOUND
 #define LAUNCH_BOUND(x)
@@ -97,8 +59,8 @@ struct RegTensor;
 #include <pto/common/fifo.hpp>
 
 #ifndef __VEC_SCOPE__
-extern "C" __attribute__((used)) void __pto_vf_scope_enter();
-extern "C" __attribute__((used)) void __pto_vf_scope_exit();
+extern "C" __attribute__((used)) void pto_vf_scope_enter();
+extern "C" __attribute__((used)) void pto_vf_scope_exit();
 namespace pto::mocker::vf::capture {
 void ResetOperands();
 }
@@ -106,13 +68,13 @@ namespace pto::mocker::vf {
 struct ScopeSentinel {
     ScopeSentinel()
     {
-        __pto_vf_scope_enter();
+        pto_vf_scope_enter();
         trace::Arm(true);
         capture::ResetOperands();
     }
     ~ScopeSentinel()
     {
-        __pto_vf_scope_exit();
+        pto_vf_scope_exit();
         trace::Arm(false);
         auto& ts = ::pto::mocker::g_trace_state;
         const std::string_view op =
@@ -127,6 +89,7 @@ struct ScopeSentinel {
     explicit operator bool() const { return true; }
 };
 } // namespace pto::mocker::vf
+// NOLINTNEXTLINE(bugprone-reserved-identifier): compatibility with existing PTO tileop vector-scope marker.
 #define __VEC_SCOPE__ if (::pto::mocker::vf::ScopeSentinel _pto_vf_scope_{}; _pto_vf_scope_)
 #endif
 

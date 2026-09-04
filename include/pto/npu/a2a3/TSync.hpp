@@ -88,7 +88,11 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
             ffts_cross_core_sync(Base::srcPipe, getFFTSMsg(FFTS_MODE_VAL, CrossCoreId));
         } else if constexpr (!Base::isSamePipe) {
 #ifdef PTO_FLAG_TEST
+#ifdef __COSTMODEL
+            Base::token = pto_costmodel_auto_set_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe);
+#else
             Base::token = __pto_set_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe);
+#endif
 #else
             set_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe, Base::token);
 #endif
@@ -110,7 +114,11 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
             pipe_barrier((pipe_t)Base::srcPipe);
         } else {
 #ifdef PTO_FLAG_TEST
+#ifdef __COSTMODEL
+            pto_costmodel_auto_wait_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe, Base::token);
+#else
             __pto_wait_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe, Base::token);
+#endif
 #else
             wait_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe, Base::token);
 #endif
