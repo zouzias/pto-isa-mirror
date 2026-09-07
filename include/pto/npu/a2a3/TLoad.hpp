@@ -11,6 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TLOAD_HPP
 #define TLOAD_HPP
 
+#include <pto/npu/a2a3/l2_cache_hint.hpp>
+
 namespace pto {
 
 template <typename TileData, typename GlobalData>
@@ -318,13 +320,13 @@ PTO_INTERNAL void CheckConvTileData(TileData& dst, GlobalData& src)
 
 #include "pto/common/arch/memory/tload_common.hpp"
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData& dst, GlobalData& src)
 {
     if constexpr (is_conv_tile_v<TileData>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<TileData, GlobalData, l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL<TileData, GlobalData>(dst, src);
+        TLOAD_TILE_IMPL<TileData, GlobalData, l2Control>(dst, src);
     }
 }
 

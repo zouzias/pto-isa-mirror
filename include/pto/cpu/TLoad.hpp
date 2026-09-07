@@ -206,7 +206,7 @@ PTO_INTERNAL void FillTLoadPadding(TileData& dst, size_t validRow, size_t validC
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
     CheckTileData<TileData, GlobalData>(dst, src);
@@ -233,7 +233,7 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     FillTLoadPadding<TileData, GlobalData>(dst, validRow, validCol);
 }
 
-template <typename ConTile, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename ConTile, typename GlobalData>
 __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
 {
     CheckConvTileData<ConTile, GlobalData>(dst, src);
@@ -264,13 +264,13 @@ __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData& dst, GlobalData& src)
 {
     if constexpr (is_conv_tile_v<TileData>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL(dst, src);
+        TLOAD_TILE_IMPL<l2Control>(dst, src);
     }
 }
 

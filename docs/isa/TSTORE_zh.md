@@ -63,6 +63,29 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 向量量化 `STPhase` 形式仅在存在对应后端实现的目标上暴露
 （A5、kirin9030、kirinDev0000 和 CPU 模拟器）。
 
+## L2 cache hint
+
+可选首模板参数 `TStoreL2Hint l2Control`（默认 `NormalFirstVictim`）：
+
+```cpp
+TSTORE(dst, src);
+TSTORE<TStoreL2Hint::NotAllocClean>(dst, src);
+TSTORE<TStoreL2Hint::NotAllocClean, AtomicType::AtomicAdd>(dst, src);
+```
+
+与 `AtomicType` / `STPhase` / `ReluPreMode` 组合时，`TStoreL2Hint` 放在最前。不要在旧重载集的 `TileData` 前插入默认 hint。
+
+支持的 `TStoreL2Hint`：
+
+| 枚举 | 值 | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | 无效果 | 支持 |
+| NormalLastVictim | 1 | 无效果 | 支持 |
+| NormalPersistent | 2 | 无效果 | 支持 |
+| NotAllocClean | 4 | 无效果 | 支持 |
+
+A2/A3 上 L2 hint **无效果**（所有取值均为 no-op；无 store L2 控制）。A5 上表内取值透传给 DMA。CPU / costmodel 忽略。
+
 ## 约束
 
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:

@@ -207,6 +207,12 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
 #define PTO_FIRST_ARG(first, ...) first
 #define PTO_SECOND_ARG(_first, second, ...) second
 #define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
+
+#if defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || defined(PTO_NPU_ARCH_KIRINDEV0000)
+#define PTO_FORWARD_L2HINT_TO_IMPL 0
+#else
+#define PTO_FORWARD_L2HINT_TO_IMPL 1
+#endif
 #define MAP_INSTR_IMPL(API, ...)                                     \
     do {                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                   \
@@ -400,7 +406,27 @@ template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(TLOAD, PTO_TEMPLATE_ARGS(TLoadL2Hint::NormalFirstVictim), dst, src);
+#else
+    // Kirin IMPLs keep pre-L2-hint signatures.
     MAP_INSTR_IMPL(TLOAD, dst, src);
+#endif
+    return RecordEvent{};
+}
+
+template <
+    TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(TLOAD, PTO_TEMPLATE_ARGS(l2Control), dst, src);
+#else
+    (void)static_cast<uint8_t>(l2Control);
+    MAP_INSTR_IMPL(TLOAD, dst, src);
+#endif
     return RecordEvent{};
 }
 
@@ -1152,6 +1178,64 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
     (void)Phase;
     RECORD_INSTR_ONLY(TSTORE, dst, src, fp);
     return RecordEvent{};
+}
+
+template <TStoreL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(
+        TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, AtomicType::AtomicNone, STPhase::Unspecified, l2Control), dst,
+        src);
+#else
+    (void)static_cast<uint8_t>(l2Control);
+    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData), dst, src);
+#endif
+    return {};
+}
+
+template <TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(
+        TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, AtomicType::AtomicNone, Phase, l2Control), dst, src);
+#else
+    (void)static_cast<uint8_t>(l2Control);
+    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, AtomicType::AtomicNone, Phase), dst, src);
+#endif
+    return {};
+}
+
+template <TStoreL2Hint l2Control, typename TileData, typename GlobalData, AtomicType atomicType, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(
+        TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, STPhase::Unspecified, l2Control), dst, src);
+#else
+    (void)static_cast<uint8_t>(l2Control);
+    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType), dst, src);
+#endif
+    return {};
+}
+
+template <
+    TStoreL2Hint l2Control, STPhase Phase, typename TileData, typename GlobalData, AtomicType atomicType,
+    typename... WaitEvents>
+PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+#if PTO_FORWARD_L2HINT_TO_IMPL
+    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, Phase, l2Control), dst, src);
+#else
+    (void)static_cast<uint8_t>(l2Control);
+    MAP_INSTR_IMPL_T(TSTORE, PTO_TEMPLATE_ARGS(TileData, GlobalData, atomicType, Phase), dst, src);
+#endif
+    return {};
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
