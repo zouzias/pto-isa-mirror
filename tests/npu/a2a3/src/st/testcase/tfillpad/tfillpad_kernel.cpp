@@ -430,6 +430,55 @@ extern "C" __global__ AICORE void launchTFILLPAD_22(
         (__gm__ int8_t*)out, (__gm__ int8_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+#if !defined(PTO_NPU_ARCH_A5)
+// ---------------------------------------------------------------------------
+// Case 23 (UB-OOB repro, GitHub #291): a FULL-width 16384-fp32 (64 KiB) tile
+// TASSIGN'd at 0x20000 ends at 0x30000 == the top of the 192 KiB AIV UB.
+// Before fix: TFILLPAD issued tail-pad vector_dup at dst + srcValidCol32B
+// = 0x30000 (one past UB) even though padCols == 0 -> AIV fault (-100).
+// After PadRightSingleRow padCols<=0 early-return: must PASS on a2a3 NPU.
+// ---------------------------------------------------------------------------
+AICORE void runTFILLPAD_UB_OOB(__gm__ float* out, __gm__ float* src, int, int, int, int, int gCols, __gm__ uint64_t*)
+{
+    constexpr int kCols = 16384; // fp32: 16384 * 4 B = 64 KiB = one full UB slot
+    using TileData =
+        Tile<TileType::Vec, float, 1, kCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
+    using ShapeDyn = Shape<1, 1, 1, 1, -1>;
+    using StrideDyn = Stride<1, 1, 1, 1, -1>;
+
+    __ubuf__ float* ub = (__ubuf__ float*)0x20000; // top slot; tile ends at 0x30000
+    TileData tile(1, kCols);
+    TASSIGN(tile, (uint64_t)ub);
+    tile.ColMaskInternal = kCols; // full width: srcValidCol == copyDstCols -> padCols == 0
+
+    ShapeDyn shape(1, 1, 1, 1, gCols);
+    StrideDyn stride(gCols, gCols, gCols, gCols, 1);
+    GlobalTensor<float, ShapeDyn, StrideDyn, Layout::ND> srcG(src, shape, stride);
+    GlobalTensor<float, ShapeDyn, StrideDyn, Layout::ND> dstG(out, shape, stride);
+
+    TLOAD(tile, srcG);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    // InPlace PadValue::Zero — matches surrounding master cases (TFillPadMode::InPlace).
+    TFILLPAD<TFillPadMode::InPlace>(tile, tile); // padCols==0 early-return; must PASS on NPU
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dstG, tile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
+}
+
+extern "C" __global__ AICORE void launchTFILLPAD_23(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTFILLPAD_UB_OOB((__gm__ float*)out, (__gm__ float*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+#endif // !PTO_NPU_ARCH_A5
+
 #if defined(PTO_NPU_ARCH_A5)
 // Low-precision PadValue::Zero/Min/Max sugar (fp8 / hif8 / fp4x2)
 extern "C" __global__ AICORE void launchTFILLPAD_23(
@@ -613,6 +662,11 @@ void launchTFILLPAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
     } else if constexpr (testKey == 22) {
         launchTFILLPAD_22<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 40, gLog);
     }
+#if !defined(PTO_NPU_ARCH_A5)
+    else if constexpr (testKey == 23) {
+        launchTFILLPAD_23<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 16384, gLog);
+    }
+#endif // !PTO_NPU_ARCH_A5
 #if defined(PTO_NPU_ARCH_A5)
     else if constexpr (testKey == 23) {
         launchTFILLPAD_23<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 15, gLog);
@@ -792,6 +846,13 @@ int get_input_golden(uint8_t* input, uint8_t* golden)
     } else if constexpr (testKey == 22) {
         return get_input_golden_case<int8_t, 1, 1, 1, 1, 40, 1, 64, PadValue::Max>(input, golden);
     }
+#if !defined(PTO_NPU_ARCH_A5)
+    else if constexpr (testKey == 23) {
+        // Pass-through (GT 1x16384 -> VT 1x16384, PadValue::Zero). On buggy pto-isa
+        // this case never reaches the compare: the kernel faults the AIV first (-100).
+        return get_input_golden_case<float, 1, 1, 1, 1, 16384, 1, 16384, PadValue::Zero>(input, golden);
+    }
+#endif // !PTO_NPU_ARCH_A5
 #if defined(PTO_NPU_ARCH_A5)
     else if constexpr (testKey == 23) {
         return get_input_golden_bits<uint8_t, 1, 1, 1, 1, 15, 1, 32, 0x00>(input, golden);
@@ -878,6 +939,11 @@ template int get_input_golden<19>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<20>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<21>(uint8_t* input, uint8_t* golden);
 template int get_input_golden<22>(uint8_t* input, uint8_t* golden);
+
+#if !defined(PTO_NPU_ARCH_A5)
+template void launchTFILLPAD<23>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template int get_input_golden<23>(uint8_t* input, uint8_t* golden);
+#endif // !PTO_NPU_ARCH_A5
 
 #if defined(PTO_NPU_ARCH_A5)
 

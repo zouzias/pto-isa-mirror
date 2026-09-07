@@ -90,7 +90,11 @@ void tfillpad_test()
 
     launchTFILLPAD<testKey>((uint8_t*)dstDevice, (uint8_t*)srcDevice, (uint64_t*)logDevice, stream);
 
-    aclrtSynchronizeStream(stream);
+    // Mirror tquant/tmov_zz: treat stream sync failure as gtest failure (do not compare
+    // missing/stale bins as a false PASS when the kernel faults on device).
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
+                                    << "): " << aclGetRecentErrMsg();
     aclrtMemcpy(dstHost, out_byteSize, dstDevice, out_byteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 #ifdef DEBUGLOG
     aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -190,6 +194,15 @@ TEST_F(TFILLPADTest, case_u8_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<20, ui
 TEST_F(TFILLPADTest, case_u8_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<21, uint8_t, 1>(); }
 
 TEST_F(TFILLPADTest, case_s8_GT_1_40_VT_1_64_BLK1_PADMIN_PADMAX) { tfillpad_test<22, int8_t, 1>(); }
+
+#if !defined(PTO_NPU_ARCH_A5)
+// Case 23 (a2a3 only; A5 reuses key 23 for e4m3): UB-OOB repro — GitHub #291.
+// Full-width 1x16384 fp32 tile TASSIGN'd at 0x20000 + InPlace TFILLPAD PadValue::Zero.
+// After PadRightSingleRow padCols<=0 early-return fix, this must PASS on NPU (sync
+// ACL_SUCCESS + golden compare). Keep ASSERT_EQ(syncRet, ACL_SUCCESS) so a future
+// regression still fails gtest instead of a false PASS via empty/zero bins.
+TEST_F(TFILLPADTest, case_fp32_GT_1_16384_VT_1_16384_UBTOP_FULLWIDTH_INPLACE) { tfillpad_test<23, float, 1>(); }
+#endif // !PTO_NPU_ARCH_A5
 
 #if defined(PTO_NPU_ARCH_A5)
 
