@@ -13,7 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
-struct LoadOpBase {
+// Templated L2-aware base for A5/A6. Kirin keeps non-template LoadOpBase (NormalFirstVictim).
+template <TLoadL2Hint l2Control>
+struct LoadOpL2Base {
     template <typename T, typename U>
     PTO_INTERNAL static void TLoadInstr(
         __ubuf__ T* dst, __gm__ U* src, uint32_t nBurst, uint32_t lenBurst, uint64_t gmStride, uint32_t ubStride,
@@ -22,8 +24,8 @@ struct LoadOpBase {
         using LoadT = LoadTypeBySize_t<T>;
         pto_copy_gm_to_ubuf_align_v2(
             reinterpret_cast<__ubuf__ LoadT*>(dst), reinterpret_cast<__gm__ LoadT*>(src), 0 /*sid*/, nBurst, lenBurst,
-            0 /*left padding count*/, 0 /*right padding count*/, enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/,
-            gmStride, ubStride);
+            0 /*left padding count*/, 0 /*right padding count*/, enableUBPad /*data select bit*/,
+            static_cast<uint8_t>(l2Control), gmStride, ubStride);
     }
 
     template <typename T>
@@ -36,8 +38,13 @@ struct LoadOpBase {
         }
         pto_copy_gm_to_cbuf_align_v2(
             dst, src, 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, padCount /*right padding count*/,
-            true /*data select bit*/, 0 /*l2 cache ctl*/, srcStride, dstStride);
+            true /*data select bit*/, static_cast<uint8_t>(l2Control), srcStride, dstStride);
     }
+};
+
+struct LoadOpBase : LoadOpL2Base<TLoadL2Hint::NormalFirstVictim> {
+    using LoadOpL2Base<TLoadL2Hint::NormalFirstVictim>::TLoadInstr;
+    using LoadOpL2Base<TLoadL2Hint::NormalFirstVictim>::TLoadCubeInstr;
 };
 
 template <typename Op, typename TileData, typename GlobalData>
