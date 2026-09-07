@@ -18,13 +18,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 
 class Hifloat8LUT {
+private:
+    static constexpr int tableSize = 256;
+    static constexpr int denormalPrefixShift = 3;
+    static constexpr double two = 2.0;
+    static constexpr int prefix2BitShift = 5;
+    static constexpr int prefix3BitShift = 4;
+    static constexpr int prefix4BitShift = 3;
+    static constexpr int exponentBitsFor2BitPrefix3 = 4;
+    static constexpr int exponentBitsFor2BitPrefix2 = 3;
+    static constexpr int exponentBitsFor2BitPrefix1 = 2;
+    static constexpr int exponentBitsFor3BitPrefix001 = 1;
+    static constexpr int exponentBitsFor4BitPrefix1 = 0;
+    static constexpr int totalExponentMantissaBits = 5;
+    static constexpr double infinityExponent = 15.0;
+
 public:
-    std::array<double, 256> toDoubleTable;
-    std::array<uint8_t, 256> sortedIndices;
+    std::array<double, tableSize> toDoubleTable;
+    std::array<uint8_t, tableSize> sortedIndices;
 
     Hifloat8LUT()
     {
-        for (int i = 0; i < 256; ++i) {
+        for (int i = 0; i < tableSize; ++i) {
             toDoubleTable[i] = decodeHiF8Mathematically(static_cast<uint8_t>(i));
             sortedIndices[i] = static_cast<uint8_t>(i);
         }
@@ -50,13 +65,13 @@ private:
 
         // --- DENORMAL MODE (DML) / ZERO / NaN ---
         // Pattern 0000xxxx
-        if ((payload >> 3) == 0) {
+        if ((payload >> denormalPrefixShift) == 0) {
             uint8_t mantissa = payload & 0x07; // 3 bits of mantissa
             if (mantissa == 0) {
                 return (byte & 0x80) ? std::numeric_limits<double>::quiet_NaN() : 0.0;
             }
             // Equation (2): X = (-1)^S * 2^(M - 23) * 1.0
-            return sign * std::pow(2.0, static_cast<double>(mantissa) - 23.0);
+            return sign * std::pow(two, static_cast<double>(mantissa) - 23.0);
         }
 
         // --- NORMAL MODES (NML) ---
@@ -64,28 +79,28 @@ private:
         int remainingBits = 0;
 
         // Check 2-bit prefixes (examine top 2 bits of prefix4bits)
-        if ((payload >> 5) == 3) {
-            exponentBits = 4;
+        if ((payload >> prefix2BitShift) == 3) {
+            exponentBits = exponentBitsFor2BitPrefix3;
             remainingBits = payload & 0x1F;
-        } else if ((payload >> 5) == 2) {
-            exponentBits = 3;
+        } else if ((payload >> prefix2BitShift) == 2) {
+            exponentBits = exponentBitsFor2BitPrefix2;
             remainingBits = payload & 0x1F;
-        } else if ((payload >> 5) == 1) {
-            exponentBits = 2;
+        } else if ((payload >> prefix2BitShift) == 1) {
+            exponentBits = exponentBitsFor2BitPrefix1;
             remainingBits = payload & 0x1F;
         }
         // Check 3-bit prefix (examine top 3 bits of prefix4bits)
-        else if ((payload >> 4) == 0b001) {
-            exponentBits = 1;
+        else if ((payload >> prefix3BitShift) == 0b001) {
+            exponentBits = exponentBitsFor3BitPrefix001;
             remainingBits = payload & 0x0F; // 4 remaining bits
         }
         // Check 4-bit prefix
-        else if ((payload >> 3) == 1) {
-            exponentBits = 0;
+        else if ((payload >> prefix4BitShift) == 1) {
+            exponentBits = exponentBitsFor4BitPrefix1;
             remainingBits = payload & 0x07; // 3 remaining bits
         }
 
-        int mantissaBits = 5 - exponentBits;
+        int mantissaBits = totalExponentMantissaBits - exponentBits;
         int rawExponent = remainingBits >> mantissaBits;
         int rawMantissa = remainingBits & ((1 << mantissaBits) - 1);
 
@@ -101,7 +116,7 @@ private:
         }
 
         // Handle Infinities mapping (Largest absolute values at D=4, where E=15 and M=1)
-        if (exponentBits == 4 && actualExponent == 15.0 && rawMantissa == 1) {
+        if (exponentBits == exponentBitsFor2BitPrefix3 && actualExponent == infinityExponent && rawMantissa == 1) {
             return sign * std::numeric_limits<double>::infinity();
         }
 
@@ -109,7 +124,7 @@ private:
         double actualMantissa = 1.0 + (static_cast<double>(rawMantissa) / (1 << mantissaBits));
 
         // Equation (1): X = (-1)^S * 2^E * 1.M
-        return sign * std::pow(2.0, actualExponent) * actualMantissa;
+        return sign * std::pow(two, actualExponent) * actualMantissa;
     }
 };
 
