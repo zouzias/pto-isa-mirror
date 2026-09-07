@@ -30,7 +30,7 @@ struct DivSOp {
     PTO_INTERNAL void BinSInstr(RegTensor<T>& dstReg, RegTensor<T>& srcReg, T scalar, MaskReg& pReg)
     {
         if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
-            DivIEEE754FloatImpl<T, RegTensor<T>>(dstReg, srcReg, scalarReg, pReg);
+            DivDiffCompensationFloatImpl<T, RegTensor<T>>(dstReg, srcReg, scalarReg, pReg);
         } else if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, half>) {
             DivIEEE754HalfImpl<T, RegTensor<T>>(dstReg, srcReg, scalarReg, pReg);
         } else {
@@ -49,7 +49,7 @@ struct DivSOpS {
     PTO_INTERNAL void BinSInstr(RegTensor<T>& dstReg, RegTensor<T>& srcReg, T scalar, MaskReg& pReg)
     {
         if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
-            DivIEEE754FloatImpl<T, RegTensor<T>>(dstReg, scalarReg, srcReg, pReg);
+            DivDiffCompensationFloatImpl<T, RegTensor<T>>(dstReg, scalarReg, srcReg, pReg);
         } else if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, half>) {
             DivIEEE754HalfImpl<T, RegTensor<T>>(dstReg, scalarReg, srcReg, pReg);
         } else {
