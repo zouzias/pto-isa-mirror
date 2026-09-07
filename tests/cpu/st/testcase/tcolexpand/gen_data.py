@@ -56,6 +56,7 @@ if __name__ == "__main__":
     case_params_list = [
         TColExpandParams(np.float32, 64, 64, 64, 64, 64, 64),
         TColExpandParams(np.float16, 16, 256, 16, 256, 16, 256),
+        TColExpandParams(np.int64, 64, 64, 64, 64, 64, 64),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TColExpandParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))

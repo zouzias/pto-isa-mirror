@@ -87,6 +87,8 @@ if __name__ == "__main__":
         TTriParams(np.float32, 128, 128, 128, 31, 0, 444),
         TTriParams(np.float32, 128, 128, 128, 31, 1, -444),
         TTriParams(np.float32, 128, 128, 128, 31, 0, -444),
+        TTriParams(np.int64, 64, 64, 64, 64, 1, 0),
+        TTriParams(np.int64, 64, 64, 64, 64, 0, 0)
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.extend([

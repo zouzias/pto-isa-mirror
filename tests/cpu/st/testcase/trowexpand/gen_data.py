@@ -16,10 +16,16 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_expand():
+def gen_expand(dtype: str = "float32"):
     H, W = 64, 64
-    x = np.random.uniform(-2.0, 2.0, size=(H, W)).astype(np.float32)
-    golden = np.zeros((H, W), dtype=np.float32)
+    if dtype == "float32":
+        x = np.random.uniform(-2.0, 2.0, size=(H, W)).astype(np.float32)
+    elif dtype == "int64":
+        x = np.random.randint(-100, 100, size=(H, W)).astype(np.int64)
+    else:
+        raise ValueError(dtype)
+
+    golden = np.zeros((H, W), dtype=x.dtype)
     golden[:, :] = x[:, [0]]
     x.tofile("input.bin")
     golden.tofile("golden.bin")
@@ -55,7 +61,8 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
     cases = [
-        ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
+        ("TROWEXPAND_Test.case_expand_float_64x64", lambda: gen_expand("float32")),
+        ("TROWEXPAND_Test.case_expand_int64_64x64", lambda: gen_expand("int64")),
     ]
 
     cwd = os.getcwd()
