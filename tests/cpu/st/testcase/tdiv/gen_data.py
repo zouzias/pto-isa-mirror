@@ -75,6 +75,7 @@ if __name__ == "__main__":
         tdivParams(np.int16, 64, 64, 64, 64, 64, 64),
         tdivParams(np.float16, 16, 256, 16, 256, 16, 256),
         tdivParams(np.int64, 64, 64, 64, 64, 64, 64),
+        tdivParams(np.uint64, 64, 64, 64, 64, 64, 64),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(tdivParams(

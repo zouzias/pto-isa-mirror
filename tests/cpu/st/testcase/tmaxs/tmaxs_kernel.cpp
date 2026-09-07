@@ -49,6 +49,8 @@ template void LaunchTMaxs<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int32_t* out, int32_t* src, int32_t* scalar, void* stream);
 template void LaunchTMaxs<int64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int64_t* out, int64_t* src, int64_t* scalar, void* stream);
+template void LaunchTMaxs<uint64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
+    uint64_t* out, uint64_t* src, uint64_t* scalar, void* stream);
 template void LaunchTMaxs<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(
     aclFloat16* out, aclFloat16* src, aclFloat16* scalar, void* stream);
 template void LaunchTMaxs<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(

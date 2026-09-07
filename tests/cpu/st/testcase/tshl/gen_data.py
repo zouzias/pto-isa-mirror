@@ -80,7 +80,8 @@ if __name__ == "__main__":
     case_params_list = [
         TSHLParams(np.int16, 64, 64, 64, 64, 64, 64),
         TSHLParams(np.int32, 16, 256, 16, 256, 16, 256),
-        TSHLParams(np.int64, 16, 256, 16, 256, 16, 256)
+        TSHLParams(np.int64, 16, 256, 16, 256, 16, 256),
+        TSHLParams(np.uint64, 16, 256, 16, 256, 16, 256)
     ]
 
     for i, param in enumerate(case_params_list):

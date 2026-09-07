@@ -54,3 +54,5 @@ template void LaunchTSHL<int32_t, NUM_16, NUM_256, NUM_16, NUM_256>(
     int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 template void LaunchTSHL<int64_t, NUM_16, NUM_256, NUM_16, NUM_256>(
     int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTSHL<uint64_t, NUM_16, NUM_256, NUM_16, NUM_256>(
+    uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
