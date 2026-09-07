@@ -191,6 +191,14 @@ TEST_F(TFILLPADTest, case_u8_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<21, ui
 
 TEST_F(TFILLPADTest, case_s8_GT_1_40_VT_1_64_BLK1_PADMIN_PADMAX) { tfillpad_test<22, int8_t, 1>(); }
 
+#if !defined(PTO_NPU_ARCH_A5)
+// Case 23 (a2a3 only; A5 reuses key 23 for e4m3): UB-OOB repro — GitHub #291.
+// Full-width 1x16384 fp32 tile TASSIGN'd at 0x20000 + InPlace TFILLPAD PadValue::Zero.
+// Expect CRASH (-100) on real a2a3 until PadRightSingleRow is guarded on padCols > 0.
+// Simulator may not fault. Do NOT treat a sim pass as evidence the HW bug is fixed.
+TEST_F(TFILLPADTest, case_fp32_GT_1_16384_VT_1_16384_UBTOP_FULLWIDTH_INPLACE) { tfillpad_test<23, float, 1>(); }
+#endif // !PTO_NPU_ARCH_A5
+
 #if defined(PTO_NPU_ARCH_A5)
 
 TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<23, uint8_t, 1>(); }
