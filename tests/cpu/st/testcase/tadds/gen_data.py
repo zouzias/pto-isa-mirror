@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+from utils import NumExt
 np.random.seed(23)
 
 
@@ -22,9 +23,10 @@ def gen_golden_data(param):
     valid_row = param.valid_row
     valid_col = param.valid_col
 
+    low_bound = 0 if  NumExt.is_unsigned_integer(data_type) else -8
     input_arr = np.random.uniform(
-        low=-8, high=8, size=(param.in_row, param.in_col)).astype(data_type)
-    divider = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(data_type)
+        low=low_bound, high=8, size=(param.in_row, param.in_col)).astype(data_type)
+    divider = np.random.uniform(low=low_bound, high=8, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((param.out_row, param.out_col), dtype=data_type)
     for i in range(valid_row):
         for j in range(valid_col):
@@ -56,7 +58,8 @@ if __name__ == "__main__":
         TAddsParams("TADDSTest.case5", np.float32, 7, 64 * 7),
         TAddsParams("TADDSTest.case6", np.float32, 256, 16),
         TAddsParams("TADDSTest.case7", np.float32, 16, 16, 32, 32, 64, 64),
-        TAddsParams("TADDSTest.case8", np.int64, 15, 128)
+        TAddsParams("TADDSTest.case8", np.int64, 15, 128),
+        TAddsParams("TADDSTest.case9", np.uint64, 15, 128)
     ]
 
     for _, case in enumerate(case_params_list):

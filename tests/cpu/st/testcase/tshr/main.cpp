@@ -95,3 +95,5 @@ void test_tshr()
 
 TEST_F(TSHRTest, case_int16_64x64_64x64_64x64) { test_tshr<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }
 TEST_F(TSHRTest, case_int32_16x256_16x256_16x256) { test_tshr<int32_t, NUM_16, NUM_256, NUM_16, NUM_256>(); }
+TEST_F(TSHRTest, case_int64_64x64_64x64_64x64) { test_tshr<int64_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }
+TEST_F(TSHRTest, case_uint64_64x64_64x64_64x64) { test_tshr<uint64_t, NUM_64, NUM_64, NUM_64, NUM_64>(); }

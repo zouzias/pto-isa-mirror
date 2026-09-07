@@ -75,6 +75,7 @@ if __name__ == "__main__":
         TminsParams(np.float32, 64, 64, 64, 64, 64, 64),
         TminsParams(np.int32, 64, 64, 64, 64, 64, 64),
         TminsParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TminsParams(np.uint64, 64, 64, 64, 64, 64, 64),
         TminsParams(np.int16, 64, 64, 64, 64, 64, 64),
         TminsParams(np.float16, 64, 64, 64, 64, 64, 64),
         TminsParams(np.float16, 16, 256, 16, 256, 16, 256),

@@ -107,3 +107,5 @@ TEST_F(TDIVSTest, case7) { TDivSTestFramework<7, int32_t, 31, 31, 128, 128>(); }
 TEST_F(TDIVSTest, case8) { TDivSTestFramework<8, int16_t, 15, 15, 192, 192>(); }
 
 TEST_F(TDIVSTest, case9) { TDivSTestFramework<9, int64_t, 32, 32, 64, 64>(); }
+
+TEST_F(TDIVSTest, case10) { TDivSTestFramework<10, uint64_t, 32, 32, 64, 64>(); }
