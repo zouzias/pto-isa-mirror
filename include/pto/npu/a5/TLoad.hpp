@@ -15,20 +15,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tload_common.hpp"
 
 namespace pto {
-struct A5LoadOp : LoadOpBase {
-    using LoadOpBase::TLoadCubeInstr;
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim>
+struct A5LoadOp : LoadOpL2Base<l2Control> {
+    using LoadOpL2Base<l2Control>::TLoadCubeInstr;
     template <Layout Layout = Layout::ND, typename T>
     PTO_INTERNAL static void TLoadCubeInstr(
         __cbuf__ T* dst, __gm__ T* src, uint64_t loop1SrcStride, uint16_t nValue, uint32_t dValue,
         uint64_t loop4SrcStride)
     {
         if constexpr (Layout == Layout::ND) {
-            pto_copy_gm_to_cbuf_multi_nd2nz(dst, src, 0 /*sid*/, loop1SrcStride, 0, nValue, dValue, loop4SrcStride);
+            pto_copy_gm_to_cbuf_multi_nd2nz(
+                dst, src, 0 /*sid*/, loop1SrcStride, static_cast<uint8_t>(l2Control), nValue, dValue, loop4SrcStride);
         } else {
             using LoadT = LoadTypeBySize_t<T>;
             copy_gm_to_cbuf_multi_dn2nz(
                 reinterpret_cast<__cbuf__ LoadT*>(dst), reinterpret_cast<__gm__ LoadT*>(src), 0 /*sid*/, loop1SrcStride,
-                0, nValue, dValue, loop4SrcStride, false);
+                static_cast<uint8_t>(l2Control), nValue, dValue, loop4SrcStride, false);
         }
     }
 };
@@ -505,12 +507,12 @@ PTO_INTERNAL void TLoadCubeDN2DN(
         validRow, validCol);
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
     StaticCheck<TileData, GlobalData>();
     if constexpr (TileData::Loc == pto::TileType::Vec) {
-        TLoad<A5LoadOp, TileData, GlobalData>(
+        TLoad<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
             src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
             src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
@@ -520,13 +522,13 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     } else if constexpr (TileData::Loc == pto::TileType::Mat) {
         if constexpr ((TileData::Rows == 1) && (TileData::SFractal == SLayout::RowMajor && TileData::isRowMajor)) {
             TLoadMxCubeCheck<TileData, GlobalData>();
-            TLoadMxCubeAVector<A5LoadOp, TileData, GlobalData>(
+            TLoadMxCubeAVector<A5LoadOp<l2Control>, TileData, GlobalData>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
                 src.GetStride(4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (!IsScale<TileData, GlobalData>()) {
             TLoadCubeCheck<TileData, GlobalData>();
-            TLoadCube<A5LoadOp, TileData, GlobalData>(
+            TLoadCube<A5LoadOp<l2Control>, TileData, GlobalData>(
                 dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
                 src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
                 src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
@@ -535,7 +537,7 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
                 src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (IsScale<TileData, GlobalData>()) {
             TLoadMxCubeCheck<TileData, GlobalData>();
-            TLoadMxCube<A5LoadOp, TileData, GlobalData>(
+            TLoadMxCube<A5LoadOp<l2Control>, TileData, GlobalData>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
                 src.GetStride(4), dst.GetValidRow(), dst.GetValidCol());
@@ -843,65 +845,65 @@ PTO_INTERNAL void CheckConvTileData(TileData& dst, GlobalData& src)
     static_assert(isSameLayout == true, "Fix: Src layout must be NC1HWC0 or FRACTAL_Z or NHWC or NCHW or NCDHW!");
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData& dst, GlobalData& src)
 {
     CheckConvTileData<TileData, GlobalData>(dst, src);
     if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) { // layout is [N,C1,H,W,C0]
-        TLoad5HD<A5LoadOp, TileData, GlobalData>(
+        TLoad5HD<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (GlobalData::layout == pto::Layout::FRACTAL_Z) {
         if constexpr (TileData::totalDimCount == 4) { // layout is [C1HW,N/16,16,C0]
-            TLoadFractalZ<A5LoadOp, TileData, GlobalData>(
+            TLoadFractalZ<A5LoadOp<l2Control>, TileData, GlobalData>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
                 src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
         } else { // layout is [C1,H,W,N,C0]
-            TLoad5HD<A5LoadOp, TileData, GlobalData>(
+            TLoad5HD<A5LoadOp<l2Control>, TileData, GlobalData>(
                 dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
                 src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4),
                 dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
         }
     } else if constexpr (GlobalData::layout == pto::Layout::NHWC) { // NHWC->NC1HWC0
-        TLoadNHWC<A5LoadOp, TileData, GlobalData>(
+        TLoadNHWC<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (
         GlobalData::layout == pto::Layout::NCHW && TileData::layout == pto::Layout::NC1HWC0) { // NCHW->NC1HWC0
-        TLoadNCHW<A5LoadOp, TileData, GlobalData>(
+        TLoadNCHW<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (
         GlobalData::layout == pto::Layout::NCHW &&
         TileData::layout == pto::Layout::FRACTAL_Z) { // NCHW->[C1HW,N/16,16,C0]
-        TLoadNCHW2FractalZ<A5LoadOp, TileData, GlobalData>(
+        TLoadNCHW2FractalZ<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     } else if constexpr (GlobalData::layout == pto::Layout::NCDHW && TileData::layout == pto::Layout::NDC1HWC0) {
-        TLoadNCDHW2NDC1HWC0<A5LoadOp, TileData, GlobalData>(
+        TLoadNCDHW2NDC1HWC0<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3), dst.GetShape(4));
     } else if constexpr (GlobalData::layout == pto::Layout::NCDHW && TileData::layout == pto::Layout::FRACTAL_Z_3D) {
-        TLoadNCDHW2FractalZ3D<A5LoadOp, TileData, GlobalData>(
+        TLoadNCDHW2FractalZ3D<A5LoadOp<l2Control>, TileData, GlobalData>(
             dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3), src.GetShape(4),
             src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
             dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData& dst, GlobalData& src)
 {
     if constexpr (is_conv_tile_v<TileData>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL(dst, src);
+        TLOAD_TILE_IMPL<l2Control>(dst, src);
     }
 }
 } // namespace pto

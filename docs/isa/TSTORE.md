@@ -74,6 +74,31 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 The vector-quantized `STPhase` form is exposed only on targets with matching backend support
 (A5, kirin9030, kirinDev0000, and CPU simulator).
 
+
+## L2 cache hint
+
+Optional first template `TStoreL2Hint l2Control` (default `NormalFirstVictim`):
+
+```cpp
+TSTORE(dst, src);
+TSTORE<TStoreL2Hint::NotAllocClean>(dst, src);
+TSTORE<TStoreL2Hint::NotAllocClean, AtomicType::AtomicAdd>(dst, src);
+```
+
+Put `TStoreL2Hint` first when combining with `AtomicType` / `STPhase` / `ReluPreMode`. Do not insert a defaulted hint before `TileData` on the legacy overload set.
+
+Supported `TStoreL2Hint` values:
+
+| Enumerator | Value | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | no-op | yes |
+| NormalLastVictim | 1 | no-op | yes |
+| NormalPersistent | 2 | no-op | yes |
+| NotAllocClean | 4 | no-op | yes |
+
+On A2/A3, L2 hints have **no effect** (all values are no-ops; no store L2 control). A5 passes listed values through to DMA. CPU / costmodel ignore it.
+
+
 ## Constraints
 
 - **Implementation checks (A2A3)**:
