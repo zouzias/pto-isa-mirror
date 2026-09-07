@@ -19,12 +19,13 @@ namespace pto {
 template <typename T, typename TileData = void>
 constexpr size_t GetC0ElemCount()
 {
+    constexpr int kPackedElementsPerByte = IsTwinType<T>() ? 2 : 1;
     if constexpr (!std::is_same_v<TileData, void>) {
         if constexpr (std::is_same_v<T, int32_t> && TileData::Loc == TileType::Acc) {
-            return static_cast<size_t>(ACC_C0_SIZE);
+            return kPackedElementsPerByte * static_cast<size_t>(ACC_C0_SIZE);
         }
     }
-    return static_cast<size_t>(C0_SIZE_BYTE) / sizeof(T);
+    return kPackedElementsPerByte * static_cast<size_t>(C0_SIZE_BYTE) / sizeof(T);
 }
 
 template <typename T, typename = void>
@@ -273,6 +274,50 @@ size_t inline MapTileIndicesToGlobalOffset(
                         i2 * globalStrides[GlobalTensorDim::DIM_2] + i3 * globalStrides[GlobalTensorDim::DIM_3] +
                         i4 * globalStrides[GlobalTensorDim::DIM_4] + c0;
     return static_cast<size_t>(offset);
+}
+
+// TSTORE takes its GM traversal from the tile layout, as the hardware does via
+// TileData::isRowMajor. Only the single-row/single-column pairing CheckStaticForVecAndMat
+// allows can disagree with the GlobalTensor layout, and there the DMA writes one
+// contiguous burst. TLOAD needs no equivalent: Vec loads only accept matching layouts.
+template <typename GlobalData, typename TileData>
+constexpr bool IsVecTransferLayoutSwapped()
+{
+    if constexpr (std::is_same_v<TileData, void>) {
+        return false;
+    } else if constexpr (!HasSFractal<TileData>::value) {
+        return false;
+    } else if constexpr (TileData::Loc != TileType::Vec || TileData::SFractal != SLayout::NoneBox) {
+        return false;
+    } else if constexpr (GlobalData::layout == pto::Layout::ND) {
+        return !TileData::isRowMajor && TileData::Cols == 1;
+    } else if constexpr (GlobalData::layout == pto::Layout::DN) {
+        return TileData::isRowMajor && TileData::Rows == 1;
+    } else {
+        return false;
+    }
+}
+
+// One row or one column, so only one index varies, every outer dimension is 1, and the
+// vector is contiguous.
+template <typename GlobalData, typename TileData>
+size_t inline MapSwappedTileIndicesToGlobalOffset(
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
+{
+    (void)globalShapes;
+    (void)globalStrides;
+    return r + c;
+}
+
+template <typename GlobalData, typename TileData = void>
+size_t inline MapTransferIndicesToGlobalOffset(
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
+{
+    if constexpr (IsVecTransferLayoutSwapped<GlobalData, TileData>()) {
+        return MapSwappedTileIndicesToGlobalOffset<GlobalData, TileData>(r, c, globalShapes, globalStrides);
+    } else {
+        return MapTileIndicesToGlobalOffset<GlobalData, TileData>(r, c, globalShapes, globalStrides);
+    }
 }
 
 template <typename DataStorage>

@@ -89,10 +89,13 @@ struct TPipe;
 - **CPU_SIM FIFO model**:
     - FIFO state is shared by host threads. `TPUSH` waits for a free slot and commits it with mutex and condition-variable synchronization.
     - TileData payloads use storage owned by the host FIFO state, including when `TPipe` is constructed with a non-null NPU GM workspace. CPU_SIM does not access that workspace for the TileData flow; this keeps payload lifetime covered by the same synchronization as the slot state.
-    - TileData producers support `DIR_C2V`, `DIR_V2C`, and `DIR_BOTH`. A `DIR_BOTH` pipe uses one shared ring and shared capacity; direction tags and separate consumer cursors distinguish C2V entries from V2C entries.
+    - TileData producers support `DIR_C2V`, `DIR_V2C`, and `DIR_BOTH`. A `DIR_BOTH` pipe uses one shared ring and shared capacity; direction tags distinguish C2V entries from V2C entries, and every commit is stamped with a producer sequence number that consumers use to pop each direction in FIFO order.
     - Split modes select the lane from the current subblock context. `TILE_NO_SPLIT` uses one producer lane. For a C2V pipe configured with `IsNoSplit`, one producer slot can be coordinated across one or two vector consumer subblocks according to the runtime subblock count.
     - The overload with an explicit `int32_t subBlockId` is not currently implemented by CPU_SIM; use the simulated subblock execution context to select a split lane.
     - The simplified overload uses `TILE_NO_SPLIT`. The `TConfig` overload also supports the CPU fixpipe path.
+    - For `TILE_NO_SPLIT`, the slot payload is laid out with the shape of the window actually transferred, that is
+      the pushed tile's valid shape, so a narrow view of a wider tile keeps its rows aligned with the tile the
+      consumer pops. The split axes lay the payload out with the producer tile's declared shape.
     - The GlobalData overload is not currently available in CPU_SIM.
 - **Tile Type Support**:
     - **TPUSH/TPOP Supported Tile Types**:
