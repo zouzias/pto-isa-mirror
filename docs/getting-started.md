@@ -427,7 +427,7 @@ ulimit -n 65536
 
 ## Next Steps
 
-- For CPU development: Explore the demos under `tests/cpu/demos/`
+- For CPU development: Explore the demos under `demos/cpu` and test cases under `tests/cpu/`
 - For NPU development: Review the test cases under `tests/npu/`
 - Check the API documentation for detailed instruction usage
 - Join the community for support and discussions
