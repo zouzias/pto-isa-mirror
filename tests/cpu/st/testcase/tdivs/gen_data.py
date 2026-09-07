@@ -59,6 +59,7 @@ if __name__ == "__main__":
         TDivsParams("TDIVSTest.case7", np.int32, 31, 128, False),
         TDivsParams("TDIVSTest.case8", np.int16, 15, 64 * 3, False),
         TDivsParams("TDIVSTest.case9", np.int64, 32, 64),
+        TDivsParams("TDIVSTest.case10", np.uint64, 32, 64),
     ]
 
     for case in case_params_list:
