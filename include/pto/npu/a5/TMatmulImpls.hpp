@@ -26,7 +26,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRig
 {
     // cmatrixSource control matrix source, 0: C matrix is in L0C, 1: C matrix is in C2
     // cmatrixInitVal Indicates the initial matrix, 1: the number in C matrix is 0, 0：use the real number in C matrix
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
     static_assert(
         (TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1) && (TileBias::isRowMajor),
@@ -44,7 +44,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRig
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
@@ -56,7 +56,7 @@ PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMa
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
@@ -69,7 +69,7 @@ template <
     AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias>
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData)
 {
-    CheckMadValid<TileRes, TileLeft, TileRight>();
+    CheckMadValid<TileRes, TileLeft, TileRight, 1>();
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TileBias must be single row.");
 

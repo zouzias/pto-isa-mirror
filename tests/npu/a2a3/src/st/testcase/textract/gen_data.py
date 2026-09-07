@@ -197,6 +197,10 @@ if __name__ == "__main__":
         "TEXTRACT_Compact_Test.case31_float_1_1_param",
         "TEXTRACT_Compact_Test.case32_int8_1_1_param",
         "TEXTRACT_Compact_Test.case33_bfloat16_1_1_param",
+
+        # Standalone Acc tile with ValidRow < Rows and more than one block column.
+        "TEXTRACTTest.case40_int8_0_0_0_0_0_param",
+        "TEXTRACTTest.case39_float_0_0_32_32_32_param",
     ]
 
     case_params_list = [
@@ -239,8 +243,8 @@ if __name__ == "__main__":
         # TMOV
         TextractParams(np.float32, np.float32, np.float32, 29, 29, 44, 0, 0, 0, 1, 1, 32, 32, 48),
         TextractParams(np.float32, np.float32, np.float32, 29, 29, 36, 0, 0, 0, 1, 1, 32, 32, 48),
-        TextractParams(np.int8, np.int8, np.int32, 81, 66, 40, 0, 0, 0, 1, 1, 96, 80, 64),
-        TextractParams(np.int8, np.int8, np.int32, 81, 82, 40, 0, 0, 0, 1, 1, 96, 96, 64),
+        TextractParams(np.int8, np.int8, np.int32, 65, 66, 40, 0, 0, 0, 1, 1, 96, 80, 64),
+        TextractParams(np.int8, np.int8, np.int32, 65, 82, 40, 0, 0, 0, 1, 1, 96, 96, 64),
         TextractParams(bfloat16, bfloat16, np.float32, 44, 39, 39, 0, 0, 0, 1, 1, 48, 48, 48),
         # TEXTRACT
         TextractParams(np.float32, np.float32, np.float32, 29, 29, 36, 16, 16, 32, 1, 1, 32, 32, 48),
@@ -271,6 +275,9 @@ if __name__ == "__main__":
         TextractParams(np.int8, np.int8, np.int32, 46, 36, 203, 32, 32, 32, 1, 1, 128, 128, 256),
         TextractParams(bfloat16, bfloat16, np.float32, 220, 25, 30, 16, 16, 16, 1, 1, 256, 128, 128),
 
+        ### Standalone Acc tile with ValidRow < Rows and more than one block column
+        TextractParams(np.int8, np.int8, np.int32, 40, 40, 40, 0, 0, 0, 0, 0, 64, 64, 64),
+        TextractParams(np.float32, np.float32, np.float32, 46, 36, 36, 32, 32, 32, 0, 0, 128, 128, 128),
     ]
 
     for i, case_name in enumerate(case_name_list):

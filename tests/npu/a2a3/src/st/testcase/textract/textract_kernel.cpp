@@ -113,7 +113,7 @@ AICORE inline void runTMOV_UNALIGN(__gm__ T* out, __gm__ U* src0, __gm__ S* src1
         isBtranspose, Tile<TileType::Mat, S, baseK, baseN, BLayout::RowMajor, baseK, baseN, SLayout::ColMajor, 512>,
         Tile<TileType::Mat, S, baseK, baseN, BLayout::ColMajor, baseK, baseN, SLayout::RowMajor, 512>>;
 
-    using LeftTile = TileLeft<U, baseM, baseK, M, K>;
+    using LeftTile = TileLeft<U, baseM, baseK, baseM, K>;
     using RightTile = TileRight<S, baseK, baseN, K, baseN>;
     using AccTile = TileAcc<T, baseM, baseN, M, N>;
 
@@ -721,7 +721,7 @@ extern "C" __global__ AICORE void launchTMOV_32(__gm__ uint8_t* out, __gm__ uint
 
 extern "C" __global__ AICORE void launchTMOV_33(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
 {
-    constexpr uint32_t M = 81;
+    constexpr uint32_t M = 65;
     constexpr uint32_t N = 66;
     constexpr uint32_t K = 40;
 
@@ -739,7 +739,7 @@ extern "C" __global__ AICORE void launchTMOV_33(__gm__ uint8_t* out, __gm__ uint
 
 extern "C" __global__ AICORE void launchTMOV_34(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
 {
-    constexpr uint32_t M = 81;
+    constexpr uint32_t M = 65;
     constexpr uint32_t N = 82;
     constexpr uint32_t K = 40;
 
@@ -1107,6 +1107,56 @@ extern "C" __global__ AICORE void launchTEXTRACT_33(__gm__ uint8_t* out, __gm__ 
         reinterpret_cast<__gm__ float*>(out), reinterpret_cast<__gm__ bfloat16_t*>(src0),
         reinterpret_cast<__gm__ bfloat16_t*>(src1));
 }
+
+// Acc ValidRow below Rows with more than one block column. Legal: the pitch follows the
+// Left tile's ValidRow, which matches Rows. Shape from a pto_test regression.
+extern "C" __global__ AICORE void launchTEXTRACT_40(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
+{
+    constexpr uint32_t M = 40;
+    constexpr uint32_t N = 40;
+    constexpr uint32_t K = 40;
+
+    constexpr uint16_t indexM = 0;
+    constexpr uint16_t indexN = 0;
+    constexpr uint16_t indexK = 0;
+
+    constexpr uint16_t baseM = 64;
+    constexpr uint16_t baseN = 64;
+    constexpr uint16_t baseK = 64;
+
+    constexpr bool isAtranspose = false;
+    constexpr bool isBtranspose = false;
+
+    runTEXTRACT_UNALIGN<
+        int32_t, int8_t, int8_t, M, N, K, indexM, indexN, indexK, isAtranspose, isBtranspose, baseM, baseN, baseK>(
+        reinterpret_cast<__gm__ int32_t*>(out), reinterpret_cast<__gm__ int8_t*>(src0),
+        reinterpret_cast<__gm__ int8_t*>(src1));
+}
+
+// Acc ValidRow and ValidCol both below Rows and Cols. Legal for the same reason as
+// case 40. Shape from a pto_test regression.
+extern "C" __global__ AICORE void launchTEXTRACT_39(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
+{
+    constexpr uint32_t M = 46;
+    constexpr uint32_t N = 36;
+    constexpr uint32_t K = 36;
+
+    constexpr uint16_t indexM = 32;
+    constexpr uint16_t indexN = 32;
+    constexpr uint16_t indexK = 32;
+
+    constexpr uint16_t baseM = 128;
+    constexpr uint16_t baseN = 128;
+    constexpr uint16_t baseK = 128;
+
+    constexpr bool isAtranspose = false;
+    constexpr bool isBtranspose = false;
+
+    runTEXTRACT_UNALIGN<
+        float, float, float, M, N, K, indexM, indexN, indexK, isAtranspose, isBtranspose, baseM, baseN, baseK, true>(
+        reinterpret_cast<__gm__ float*>(out), reinterpret_cast<__gm__ float*>(src0),
+        reinterpret_cast<__gm__ float*>(src1));
+}
 extern "C" __global__ AICORE void launchTEXTRACT_DYNAMIC_41(
     __gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
 {
@@ -1176,6 +1226,10 @@ void launchTEXTRACT(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
         launchTEXTRACT_32<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 33) {
         launchTEXTRACT_33<<<1, nullptr, stream>>>(out, src0, src1);
+    } else if constexpr (tilingKey == 40) {
+        launchTEXTRACT_40<<<1, nullptr, stream>>>(out, src0, src1);
+    } else if constexpr (tilingKey == 39) {
+        launchTEXTRACT_39<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 41) {
         launchTEXTRACT_DYNAMIC_41<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 42) {
@@ -1197,6 +1251,8 @@ template void launchTEXTRACT<23>(uint8_t* out, uint8_t* src0, uint8_t* src1, voi
 template void launchTEXTRACT<31>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<32>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<33>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTEXTRACT<40>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTEXTRACT<39>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<41>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<42>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
