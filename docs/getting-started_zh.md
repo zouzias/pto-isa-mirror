@@ -426,7 +426,7 @@ ulimit -n 65536
 
 ## 下一步
 
-- CPU 开发：探索 `tests/cpu/demos/` 下的演示
+- CPU 开发：探索 demos/cpu 下的demo演示以及 tests/cpu/ 下的测试用例
 - NPU 开发：查看 `tests/npu/` 下的测试用例
 - 查看 API 文档了解详细的指令使用方法
 - 加入社区获取支持和讨论
