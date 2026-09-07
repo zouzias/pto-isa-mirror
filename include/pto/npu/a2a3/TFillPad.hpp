@@ -110,6 +110,8 @@ template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void PadRightSingleRow(
     decltype(getCopyNullPtr<TileDataDst>()) dstPtr, uint64_t padOffset, uint64_t padCols, uint64_t dupPadValue)
 {
+    if (padCols <= 0)
+        return;
     set_mask_count(); // counter mode
     set_vector_mask(0, padCols);
     vector_dup(dstPtr + padOffset, dupPadValue, 1, 1, 1, 8, 0);
