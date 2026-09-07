@@ -428,7 +428,6 @@ PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events
     MAP_INSTR_IMPL(TLOAD, dst, src);
 #endif
     return RecordEvent{};
-
 }
 
 template <typename TileData, typename GlobalData>
