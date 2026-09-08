@@ -68,3 +68,6 @@ template void LaunchTTRI<float, 1, 2, 128, 128, 128, 111>(float* out, void* stre
 template void LaunchTTRI<float, 1, -2, 128, 128, 128, 111>(float* out, void* stream);
 template void LaunchTTRI<float, 1, 444, 128, 128, 128, 31>(float* out, void* stream);
 template void LaunchTTRI<float, 1, -444, 128, 128, 128, 31>(float* out, void* stream);
+
+template void LaunchTTRI<int64_t, 1, 0, 64, 64, 64, 64>(int64_t* out, void* stream);
+template void LaunchTTRI<int64_t, 0, 0, 64, 64, 64, 64>(int64_t* out, void* stream);

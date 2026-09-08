@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include <cstdint>
 
 using namespace pto;
 
@@ -36,10 +37,41 @@ AICORE void runTROWEXPAND(__gm__ float __out__* out, __gm__ float __in__* src)
 }
 
 template <int kRows, int kCols>
+AICORE void runTROWEXPAND(__gm__ int64_t __out__* out, __gm__ int64_t __in__* src)
+{
+    using ShapeMat = Shape<1, 1, 1, kRows, kCols>;
+    using StrideMat = Stride<1, 1, 1, kCols, 1>;
+    using GlobalMat = GlobalTensor<int64_t, ShapeMat, StrideMat>;
+
+    using TileMat = Tile<TileType::Vec, int64_t, kRows, kCols, BLayout::RowMajor, -1, -1>;
+    TileMat srcTile(kRows, kCols);
+    TileMat dstTile(kRows, kCols);
+
+    GlobalMat srcGlobal(src);
+    GlobalMat dstGlobal(out);
+
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kRows * kCols * sizeof(typename TileMat::DType));
+
+    TLOAD(srcTile, srcGlobal);
+    TROWEXPAND(dstTile, srcTile);
+    TSTORE(dstGlobal, dstTile);
+    out = dstGlobal.data();
+}
+
+template <int kRows, int kCols>
 void LaunchTROWEXPAND(float* out, float* src, void* stream)
 {
     (void)stream;
     runTROWEXPAND<kRows, kCols>(out, src);
 }
 
+template <int kRows, int kCols>
+void LaunchTROWEXPAND(int64_t* out, int64_t* src, void* stream)
+{
+    (void)stream;
+    runTROWEXPAND<kRows, kCols>(out, src);
+}
+
 template void LaunchTROWEXPAND<64, 64>(float* out, float* src, void* stream);
+template void LaunchTROWEXPAND<64, 64>(int64_t* out, int64_t* src, void* stream);

@@ -105,3 +105,5 @@ TEST_F(TTRITest, case_float_128x128_128x31_0_444) { test_ttri<float, 0, 444, 128
 TEST_F(TTRITest, case_float_128x128_128x31_1_444) { test_ttri<float, 1, 444, 128, 128, 128, 31>(); }
 TEST_F(TTRITest, case_float_128x128_128x31_0__444) { test_ttri<float, 0, -444, 128, 128, 128, 31>(); }
 TEST_F(TTRITest, case_float_128x128_128x31_1__444) { test_ttri<float, 1, -444, 128, 128, 128, 31>(); }
+TEST_F(TTRITest, case_int64_64x64_64x64_1_0) { test_ttri<int64_t, 1, 0, 64, 64, 64, 64>(); }
+TEST_F(TTRITest, case_int64_64x64_64x64_0_0) { test_ttri<int64_t, 0, 0, 64, 64, 64, 64>(); }
