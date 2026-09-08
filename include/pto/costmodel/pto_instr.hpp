@@ -1510,6 +1510,20 @@ TEXTRACT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCo
     return RecordEvent{};
 }
 
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    typename... WaitEvents>
+PTO_INST RecordEvent
+TEXTRACT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src, indexRow, indexCol);
+    return RecordEvent{};
+}
+#endif
+
 template <
     typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(
@@ -1521,6 +1535,22 @@ PTO_INST RecordEvent TEXTRACT(
         TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode), dst, src, preQuantScalar, indexRow, indexCol);
     return RecordEvent{};
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(
+    DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol,
+    WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src, preQuantScalar, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
 
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
@@ -1536,6 +1566,23 @@ PTO_INST RecordEvent TEXTRACT(
     return RecordEvent{};
 }
 
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents,
+    std::enable_if_t<
+        is_tile_data_v<FpTileData> && (FpTileData::Loc == TileType::Scaling) && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TEXTRACT(
+    DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode, Phase), dst, src, fp, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
+
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
     typename... WaitEvents, std::enable_if_t<is_tile_data_v<FpTileData> && all_events_v<WaitEvents...>, int> = 0>
@@ -1547,6 +1594,22 @@ PTO_INST RecordEvent TEXTRACT_FP(
         TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode), dst, src, fp, indexRow, indexCol);
     return RecordEvent{};
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents,
+    std::enable_if_t<is_tile_data_v<FpTileData> && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TEXTRACT_FP(
+    DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TEXTRACT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode, Phase), dst, src, fp, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
 
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
@@ -1616,6 +1679,20 @@ TINSERT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol
     return RecordEvent{};
 }
 
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    typename... WaitEvents>
+PTO_INST RecordEvent
+TINSERT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src, indexRow, indexCol);
+    return RecordEvent{};
+}
+#endif
+
 template <
     typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(
@@ -1627,6 +1704,22 @@ PTO_INST RecordEvent TINSERT(
         TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode), dst, src, preQuantScalar, indexRow, indexCol);
     return RecordEvent{};
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(
+    DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol,
+    WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src, preQuantScalar, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
 
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
@@ -1642,6 +1735,23 @@ TINSERT(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, u
     return RecordEvent{};
 }
 
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents,
+    std::enable_if_t<
+        is_tile_data_v<FpTileData> && (FpTileData::Loc == TileType::Scaling) && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent
+TINSERT(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode, Phase), dst, src, fp, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
+
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
     typename... WaitEvents, std::enable_if_t<is_tile_data_v<FpTileData> && all_events_v<WaitEvents...>, int> = 0>
@@ -1653,6 +1763,22 @@ PTO_INST RecordEvent TINSERT_FP(
         TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode), dst, src, fp, indexRow, indexCol);
     return RecordEvent{};
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents,
+    std::enable_if_t<is_tile_data_v<FpTileData> && all_events_v<WaitEvents...>, int> = 0>
+PTO_INST RecordEvent TINSERT_FP(
+    DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TINSERT, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, FpTileData, reluMode, Phase), dst, src, fp, indexRow,
+        indexCol);
+    return RecordEvent{};
+}
+#endif
 
 template <
     typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
@@ -1844,11 +1970,27 @@ PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... eve
     return RecordEvent{};
 }
 
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, ReluPreMode::NoRelu, Phase), dst, src);
+    return RecordEvent{};
+}
+
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
     MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode), dst, src);
+    return RecordEvent{};
+}
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src);
     return RecordEvent{};
 }
 
@@ -1859,6 +2001,16 @@ PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... eve
 {
     ::pto::detail::PtoWaitEvents(events...);
     MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, mode, reluMode), dst, src);
+    return RecordEvent{};
+}
+
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, AccToVecMode mode,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, mode, reluMode, Phase), dst, src);
     return RecordEvent{};
 }
 
@@ -1946,12 +2098,33 @@ PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantS
 }
 
 template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, reluMode, Phase), dst, src, preQuantScalar);
+    return RecordEvent{};
+}
+
+template <
     typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
     typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
     MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, mode, reluMode), dst, src, preQuantScalar);
+    return RecordEvent{};
+}
+
+template <
+    STPhase Phase, typename DstTileData, typename SrcTileData, AccToVecMode mode,
+    ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(
+        TMOV, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, mode, reluMode, Phase), dst, src, preQuantScalar);
     return RecordEvent{};
 }
 

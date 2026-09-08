@@ -317,6 +317,129 @@ AICORE inline void runTEXTRACTMX(__gm__ T* out, __gm__ U* src0, __gm__ S* src1, 
     out = dstGlobal.data();
 }
 
+// Acc-to-Mat TEXTRACT carrying a unit-flag phase. This testcase is cube only (pto_cube_st) and the A5 AIC has no
+// copy_cbuf_to_gm, so the L1 destination cannot be read back here; the compared output is still the accumulator, whose
+// data a unit flag never changes. The result is therefore identical to the non-phase case with the same shape.
+template <
+    typename T, typename U, typename S, int M, int K, int N, uint16_t indexM, uint16_t indexK, uint16_t indexN,
+    bool isAtranspose, bool isBtranspose, uint16_t dstIndexRow = 0, uint16_t dstIndexCol = 0,
+    STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified, bool kSplit = false>
+AICORE inline void runTEXTRACT_ACC2MAT(__gm__ T* out, __gm__ U* src0, __gm__ S* src1)
+{
+    constexpr int mValid = M - indexM;
+    constexpr int kValid = K - indexK;
+    constexpr int nValid = N - indexN;
+
+    using GlobalDataSrc0 = std::conditional_t<
+        isAtranspose,
+        GlobalTensor<U, pto::Shape<1, 1, 1, M, K>, pto::Stride<1 * M * K, 1 * M * K, M * K, 1, M>, Layout::DN>,
+        GlobalTensor<U, pto::Shape<1, 1, 1, M, K>, pto::Stride<1 * M * K, 1 * M * K, M * K, K, 1>, Layout::ND>>;
+    using GlobalDataSrc1 = std::conditional_t<
+        isBtranspose,
+        GlobalTensor<S, pto::Shape<1, 1, 1, K, N>, pto::Stride<1 * K * N, 1 * K * N, K * N, N, 1>, Layout::ND>,
+        GlobalTensor<S, pto::Shape<1, 1, 1, K, N>, pto::Stride<1 * K * N, 1 * K * N, K * N, 1, K>, Layout::DN>>;
+    using GlobalDataOut = GlobalTensor<
+        T, pto::Shape<1, 1, 1, mValid, nValid>,
+        pto::Stride<1 * mValid * nValid, 1 * mValid * nValid, mValid * nValid, nValid, 1>>;
+
+    GlobalDataSrc0 src0Global(src0);
+    GlobalDataSrc1 src1Global(src1);
+    GlobalDataOut dstGlobal(out);
+
+    using TileMatAData = std::conditional_t<
+        isAtranspose, Tile<TileType::Mat, U, M, K, BLayout::RowMajor, M, K, SLayout::ColMajor, 512>,
+        Tile<TileType::Mat, U, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>>;
+    using TileMatBData = std::conditional_t<
+        isBtranspose, Tile<TileType::Mat, S, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>,
+        Tile<TileType::Mat, S, K, N, BLayout::RowMajor, K, N, SLayout::ColMajor, 512>>;
+
+    // K 切分累加：L0A/L0B 每次只装半个 K，两步累加结果与整段 K 的 matmul 相同，
+    // 因此 golden data 与不切分的用例一致。
+    constexpr int kStep = kSplit ? kValid / 2 : kValid;
+    static_assert(!kSplit || (kValid % 32 == 0), "K split needs kValid divisible by 32.");
+    using LeftTile = TileLeft<U, mValid, kStep, mValid, kStep>;
+    using RightTile = TileRight<S, kStep, nValid, kStep, nValid>;
+    using ResTile = TileAcc<T, mValid, nValid, mValid, nValid>;
+
+    constexpr int dstRows = mValid - dstIndexRow;
+    constexpr int dstCols = nValid - dstIndexCol;
+    using DstMatTile =
+        Tile<TileType::Mat, T, dstRows, dstCols, BLayout::ColMajor, dstRows, dstCols, SLayout::RowMajor, 512>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    ResTile cTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
+
+    DstMatTile dstMatTile;
+    TASSIGN(dstMatTile, 0x20000);
+
+    /*************************************TLOAD****************************************/
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+
+    /**********************************TEXTRACT**********************************/
+    TEXTRACT(aTile, aMatTile, indexM, indexK);
+    TEXTRACT(bTile, bMatTile, indexK, indexN);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+
+    if constexpr (kSplit) {
+        // 非末次累加用 AccPhase::Partial，末次用 Final，对应 issue 564 描述的 K 切分场景
+        TMATMUL<AccPhase::Partial>(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+#endif
+        TEXTRACT(aTile, aMatTile, indexM, static_cast<uint16_t>(indexK + kStep));
+        TEXTRACT(bTile, bMatTile, static_cast<uint16_t>(indexK + kStep), indexN);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
+        TMATMUL_ACC<AccPhase::Final>(cTile, aTile, bTile);
+    } else if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
+
+    /*****************************TEXTRACT Acc to Mat*******************************/
+    if constexpr (phase == STPhase::Unspecified) {
+        TEXTRACT(dstMatTile, cTile, dstIndexRow, dstIndexCol);
+    } else if constexpr (phase == STPhase::Partial) {
+        // 多次搬出序列：Partial 那次写目的地且不释放 unit flag，
+        // Final 那次写一块不回读的 scratch，仅用于释放标志。
+        DstMatTile scratchTile;
+        TASSIGN(scratchTile, 0x30000);
+        TEXTRACT<STPhase::Partial>(dstMatTile, cTile, dstIndexRow, dstIndexCol);
+        TEXTRACT<STPhase::Final>(scratchTile, cTile, dstIndexRow, dstIndexCol);
+    } else {
+        TEXTRACT<phase>(dstMatTile, cTile, dstIndexRow, dstIndexCol);
+    }
+
+    /****************************************TSTORE*****************************************/
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
+}
+
 extern "C" __global__ AICORE void launchTEXTRACT_1(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
 {
     runTEXTRACT<float, half, half, 32, 96, 64, 0, 0, 0, false, false>(
@@ -446,6 +569,30 @@ extern "C" __global__ AICORE void launchTEXTRACT_20(
         reinterpret_cast<__gm__ fp8_e8m0_t*>(srcMx1));
 }
 
+extern "C" __global__ AICORE void launchTEXTRACT_21(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
+{
+    runTEXTRACT_ACC2MAT<float, half, half, 32, 96, 64, 0, 0, 0, false, false, 16, 16, STPhase::Final, AccPhase::Final>(
+        reinterpret_cast<__gm__ float*>(out), reinterpret_cast<__gm__ half*>(src0),
+        reinterpret_cast<__gm__ half*>(src1));
+}
+
+extern "C" __global__ AICORE void launchTEXTRACT_23(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
+{
+    // K 切分累加（Partial -> Final）配合带 unit flag 的 Acc→Mat 搬出
+    runTEXTRACT_ACC2MAT<
+        float, half, half, 32, 96, 64, 0, 0, 0, false, false, 16, 16, STPhase::Final, AccPhase::Unspecified, true>(
+        reinterpret_cast<__gm__ float*>(out), reinterpret_cast<__gm__ half*>(src0),
+        reinterpret_cast<__gm__ half*>(src1));
+}
+
+extern "C" __global__ AICORE void launchTEXTRACT_22(__gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1)
+{
+    runTEXTRACT_ACC2MAT<
+        float, half, half, 32, 96, 64, 0, 0, 0, false, false, 16, 16, STPhase::Partial, AccPhase::Final>(
+        reinterpret_cast<__gm__ float*>(out), reinterpret_cast<__gm__ half*>(src0),
+        reinterpret_cast<__gm__ half*>(src1));
+}
+
 template <int32_t tilingKey>
 void launchTEXTRACT(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
 {
@@ -481,6 +628,12 @@ void launchTEXTRACT(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)
         launchTEXTRACT_15<<<1, nullptr, stream>>>(out, src0, src1);
     } else if constexpr (tilingKey == 16) {
         launchTEXTRACT_16<<<1, nullptr, stream>>>(out, src0, src1);
+    } else if constexpr (tilingKey == 21) {
+        launchTEXTRACT_21<<<1, nullptr, stream>>>(out, src0, src1);
+    } else if constexpr (tilingKey == 22) {
+        launchTEXTRACT_22<<<1, nullptr, stream>>>(out, src0, src1);
+    } else if constexpr (tilingKey == 23) {
+        launchTEXTRACT_23<<<1, nullptr, stream>>>(out, src0, src1);
     }
 }
 
@@ -513,6 +666,9 @@ template void launchTEXTRACT<13>(uint8_t* out, uint8_t* src0, uint8_t* src1, voi
 template void launchTEXTRACT<14>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<15>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACT<16>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTEXTRACT<21>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTEXTRACT<22>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTEXTRACT<23>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTEXTRACTMX<17>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* srcMx0, uint8_t* srcMx1, void* stream);
 template void launchTEXTRACTMX<18>(

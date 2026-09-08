@@ -276,6 +276,9 @@ if __name__ == "__main__":
         "TEXTRACTTest.case18",
         "TEXTRACTTest.case19",
         "TEXTRACTTest.case20",
+        "TEXTRACTTest.case21",
+        "TEXTRACTTest.case22",
+        "TEXTRACTTest.case23",
 
         "TMOVTest.case1",
         "TMOVTest.case2",
@@ -324,6 +327,10 @@ if __name__ == "__main__":
         textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 0, 0),
         textractParams(float4_e2m1, float4_e2m1, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
         textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
+        # acc2mat unit flag
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
 
         # TMov
         # !transpose

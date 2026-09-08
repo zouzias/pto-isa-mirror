@@ -253,6 +253,15 @@ The 3-argument `tmp` overloads exclude `TileType::Scaling`; a `Scaling` third op
 - `mode` is `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
 - The fp `STPhase` overloads are exposed only on targets with backend support
   (A5, kirin9030, kirinX90, kirinDev0000, and CPU simulator).
+- On Ascend 950PR/Ascend 950DT, `STPhase` is applied to the Acc-to-Mat (L0C to L1) move-out as well as to
+  Acc-to-Vec, so a `TMOV<STPhase::Final>` into a `TileType::Mat` tile carries the unit flag and pairs with
+  `TMATMUL<AccPhase::Final>` without an explicit `set_flag`/`wait_flag`.
+- The move-out `STPhase` values are not symmetric with the accumulation side. The `TMATMUL` that produced
+  the L0C result must already be `AccPhase::Final`, that is, the data is ready. `STPhase::Final` marks the
+  last move-out and releases the unit flag. `STPhase::Partial` is only for the non-last move-outs when one
+  L0C tile is drained more than once; it does not release the flag. Pairing `STPhase::Partial` with
+  `AccPhase::Partial` makes the fixpipe wait on a flag that never arrives, which hangs; this was reproduced
+  on the Ascend 950PR simulator.
 - The vector-quantized `fp + AccToVecMode` overloads are exposed only on targets with backend support
   (A5, kirin9030, kirinDev0000, and CPU simulator).
 

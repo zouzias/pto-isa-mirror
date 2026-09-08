@@ -85,6 +85,13 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     - `FpTileData` legality is checked by the selected backend implementation.
     - The `STPhase` fp alias is exposed on targets with backend support: A5, kirin9030,
       kirinDev0000, and CPU simulator.
+    - **On Ascend 950PR/Ascend 950DT only**, `STPhase` reaches the per-channel on-the-fly quantized move-out,
+      so quantization and the unit flag run together; paired with `TMATMUL<AccPhase::Final>` no explicit
+      `set_flag`/`wait_flag` is needed. The values follow the same rule as `TSTORE`: `Final` marks the last
+      move-out and releases the unit flag, `Partial` is only for the non-last move-outs when one L0C tile is
+      drained more than once.
+    - On kirin9030 the overload is exposed but the backend does not route `STPhase` into the quantized
+      move-out, so passing it has no effect.
 
 ## Examples
 

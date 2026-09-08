@@ -179,6 +179,14 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
 - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
 - fp `STPhase` 重载仅在存在对应后端实现的目标上暴露
   （A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器）。
+- 在 Ascend 950PR/Ascend 950DT 上，`STPhase` 同时作用于 Acc-to-Mat（L0C→L1）与 Acc-to-Vec 搬出路径，
+  因此写入 `TileType::Mat` 的 `TMOV<STPhase::Final>` 会带上 unit flag，可与 `TMATMUL<AccPhase::Final>` 配对，
+  无需显式 `set_flag`/`wait_flag`。
+- 搬出侧 `STPhase` 的取值规则与累加侧不对称：产生该 L0C 结果的 `TMATMUL` 必须已经是
+  `AccPhase::Final`，即数据已就绪；`STPhase::Final` 用于最后一次搬出并释放 unit flag；
+  `STPhase::Partial` 只用于同一块 L0C 分多次搬出时的非末次那几条，它不释放 unit flag。
+  把 `STPhase::Partial` 与 `AccPhase::Partial` 配对会让 fixpipe 等待一个不会到来的标志而挂死，
+  该现象已在 Ascend 950PR 仿真器上复现。
 - 向量量化 `fp + AccToVecMode` 重载仅在存在对应后端实现的目标上暴露
   （A5、kirin9030、kirinDev0000 和 CPU 模拟器）。
 

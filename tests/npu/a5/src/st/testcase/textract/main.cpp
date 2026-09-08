@@ -214,6 +214,13 @@ TEST_F(TEXTRACTTest, case19) { textract_mx_test<19, float, int8_t, int8_t>(256, 
 
 TEST_F(TEXTRACTTest, case20) { textract_mx_test<20, float, int8_t, int8_t>(256, 128, 256, 128, 64, 128); }
 
+TEST_F(TEXTRACTTest, case21) { textract_test<21, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+TEST_F(TEXTRACTTest, case22) { textract_test<22, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+// issue 564: K 切分累加（TMATMUL<Partial> -> TMATMUL_ACC<Final>）配合带 unit flag 的 Acc→Mat 搬出
+TEST_F(TEXTRACTTest, case23) { textract_test<23, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
 class TMOVTest : public testing::Test {
 protected:
     void SetUp() override {}

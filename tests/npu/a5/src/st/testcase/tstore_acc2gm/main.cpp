@@ -497,6 +497,18 @@ TEST_F(TStoreAcc2gmTest, case37) { test_tstore_acc2gm_vector_nz2nd<4, uint16_t, 
 
 TEST_F(TStoreAcc2gmTest, case38) { test_tstore_acc2gm_vector_nz2nd<5, uint16_t, uint16_t, 15, 15, 31>(); }
 
+// issue 552: per-channel 随路量化（TSTORE_FP）与 unit flag 并行
+TEST_F(TStoreAcc2gmTest, case_vector_quant_uf_final)
+{
+    test_tstore_acc2gm_vector_nz2nd<10, uint16_t, uint16_t, 15, 15, 31>();
+}
+
+// 同一块 L0C 多次搬出：非末次 STPhase::Partial，末次 STPhase::Final
+TEST_F(TStoreAcc2gmTest, case_vector_quant_uf_multi_drain)
+{
+    test_tstore_acc2gm_vector_nz2nd<11, uint16_t, uint16_t, 15, 15, 31>();
+}
+
 TEST_F(TStoreAcc2gmTest, case39) { test_tstore_acc2gm_vector_nz2nd<6, uint16_t, uint16_t, 31, 95, 37>(); }
 
 TEST_F(TStoreAcc2gmTest, case40) { test_tstore_acc2gm_vector_nz2nd<7, int8_t, uint16_t, 33, 65, 25>(); }

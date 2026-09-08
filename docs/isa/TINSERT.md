@@ -99,6 +99,10 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src,
                                 uint16_t indexRow, uint16_t indexCol,
                                 WaitEvents &... events);
 
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -121,11 +125,38 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                              uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &... events);
 #endif
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             uint64_t preQuantScalar,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
 ```
+
+The `STPhase` overloads set the unit flag on the L0C move-out instruction so it pairs with
+`TMATMUL<AccPhase>` for Cube-to-Fixpipe hardware synchronization, removing the explicit
+`set_flag`/`wait_flag` pair. They are exposed only on targets with matching backend support
+(Ascend 950PR/Ascend 950DT and the CPU simulator); the applicable paths and the pairing rule
+are listed under the implementation checks below.
 
 `TINSERT_FP(...)` is retained for source compatibility with the legacy fp-quantized form and maps directly
 to the no-`mode` `TINSERT_IMPL(dst, src, fp, indexRow, indexCol)` path. The canonical
 `TINSERT(..., fp, ...)` overload is selected only for `FpTileData::Loc == TileType::Scaling`.
+`TINSERT_FP` also has an `STPhase` form, aligned with `TMOV_FP` / `TSTORE_FP`; the semantics match the
+canonical overload.
 
 ## Constraints
 
@@ -214,6 +245,14 @@ to the no-`mode` `TINSERT_IMPL(dst, src, fp, indexRow, indexCol)` path. The cano
     - Supported element types: `half`, `bfloat16_t`, `float`, `int32_t`, `int8_t`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`.
     - `validRow` is aligned up to `FRACTAL_NZ_ROW` (16) for burst calculation.
     - Splits the `copy_ubuf_to_cbuf` total burst into 2 or 4 sub-transfers, each handling `totalBurstNum / SplitCount` column blocks (last sub-transfer takes the remainder).
+- The `STPhase` overloads (unit flag) apply only to the `TileType::Acc -> TileType::Mat` (L0C to L1)
+  path; a `TileType::Vec` destination is rejected at compile time.
+- The move-out values do not mirror the accumulation values. The `TMATMUL` that produced the L0C result
+  must already be `AccPhase::Final`, that is, the data is ready. `STPhase::Final` marks the last move-out
+  and releases the unit flag. `STPhase::Partial` is only for the non-last move-outs when one L0C tile is
+  drained more than once; it does not release the flag. Pairing `STPhase::Partial` with
+  `AccPhase::Partial` makes the fixpipe wait on a flag that never arrives, which hangs; this was
+  reproduced on the Ascend 950PR simulator.
 
 ## Examples
 
@@ -250,6 +289,32 @@ void example_manual() {
   TASSIGN(src, 0x0);
   TASSIGN(dst, 0x0);
   TINSERT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
+}
+```
+
+Unit-flag L0C to L1 move-out (Ascend 950PR/Ascend 950DT):
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_unit_flag() {
+  TileLeft<half, 32, 32> a;
+  TileRight<half, 32, 32> b;
+  TileAcc<float, 32, 32> c;
+  Tile<TileType::Mat, float, 32, 32, BLayout::ColMajor, 32, 32, SLayout::RowMajor> l1;
+  TASSIGN(a, 0x0);
+  TASSIGN(b, 0x0);
+  TASSIGN(c, 0x0);
+  TASSIGN(l1, 0x2000);
+  // Move out once the data is ready; no explicit set_flag/wait_flag is needed between the two.
+  TMATMUL<AccPhase::Final>(c, a, b);
+  TINSERT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+
+  // Draining one L0C tile more than once: Partial on the non-last move-outs, Final on the last.
+  // TINSERT<STPhase::Partial>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+  // TINSERT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```
 

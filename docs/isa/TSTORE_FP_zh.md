@@ -72,6 +72,12 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     - `FpTileData` 的合法性由所选后端实现检查。
     - `STPhase` fp 别名仅在存在对应后端实现的目标上暴露：
       A5、kirin9030、kirinDev0000 和 CPU 模拟器。
+    - **仅在 Ascend 950PR/Ascend 950DT 上**，`STPhase` 会作用到 per-channel 随路量化的搬出指令，
+      因此量化与 unit flag 可以并行，配合 `TMATMUL<AccPhase::Final>` 使用时
+      无需显式 `set_flag`/`wait_flag`。取值规则与 `TSTORE` 相同：
+      `Final` 用于最后一次搬出并释放 unit flag，
+      `Partial` 只用于同一块 L0C 分多次搬出时的非末次。
+    - kirin9030 上该重载虽然暴露，但后端未把 `STPhase` 接到量化搬出指令上，传入不会生效。
 
 ## 示例
 
