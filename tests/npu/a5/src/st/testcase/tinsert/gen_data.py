@@ -441,6 +441,8 @@ if __name__ == "__main__":
     cases = [
         ("TInsertTest.case_acc2mat_1", gen_acc2mat, 16, 16, 16),
         ("TInsertTest.case_acc2mat_2", gen_acc2mat, 32, 32, 32),
+        ("TInsertTest.case_acc2mat_uf_final", gen_acc2mat, 16, 16, 16),
+        ("TInsertTest.case_acc2mat_uf_multi_drain", gen_acc2mat, 16, 16, 16),
         ("TInsertTest.case_nz_1", gen_nz, np.float32, 16, 32),
         ("TInsertTest.case_nz_2", gen_nz, np.float32, 16, 32),
         ("TInsertTest.case_nz_3", gen_nz, np.float32, 32, 64),

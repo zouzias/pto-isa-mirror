@@ -88,6 +88,10 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src,
                                 uint16_t indexRow, uint16_t indexCol,
                                 WaitEvents &... events);
 
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename DstTileData, typename SrcTileData, typename FpTileData,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -110,11 +114,36 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                              uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &... events);
 #endif
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             uint64_t preQuantScalar,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, FpTileData &fp,
+                             uint16_t indexRow, uint16_t indexCol,
+                             WaitEvents &... events);
 ```
+
+`STPhase` 重载把 unit flag（单元标志）写入 L0C 搬出指令，用于与 `TMATMUL<AccPhase>` 配对完成
+Cube 到 Fixpipe 的硬件同步，从而省去显式的 `set_flag`/`wait_flag`。
+仅在存在对应后端实现的目标上暴露（Ascend 950PR/Ascend 950DT 和 CPU 模拟器），
+适用范围与配对规则见下方实现检查。
 
 `TINSERT_FP(...)` 为历史 fp 量化形式保留源码兼容入口，并直接映射到无 `mode` 的
 `TINSERT_IMPL(dst, src, fp, indexRow, indexCol)` 路径。规范同名 `TINSERT(..., fp, ...)`
 重载仅在 `FpTileData::Loc == TileType::Scaling` 时参与匹配。
+`TINSERT_FP` 同样提供 `STPhase` 版本，与 `TMOV_FP` / `TSTORE_FP` 对齐，语义与规范接口一致。
 
 ## 约束
 
@@ -202,6 +231,14 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
     - 支持的元素类型：`half`、`bfloat16_t`、`float`、`int32_t`、`int8_t`、`hifloat8_t`、`float8_e4m3_t`、`float8_e5m2_t`、`float8_e8m0_t`、`float4_e2m1x2_t`、`float4_e1m2x2_t`。
     - `validRow` 对齐到 `FRACTAL_NZ_ROW`（16）用于burst计算。
     - 将 `copy_ubuf_to_cbuf` 的总burst拆分为2或4个子传输，每个处理 `totalBurstNum / SplitCount` 列块。
+- `STPhase` 重载（unit flag）仅支持 `TileType::Acc -> TileType::Mat`（L0C→L1）路径；
+  目标为 `TileType::Vec` 时编译期报错。
+- 搬出侧的取值规则与累加侧不同，不是简单对应关系：
+  产生该 L0C 结果的 `TMATMUL` 必须已经是 `AccPhase::Final`，即数据已就绪；
+  `STPhase::Final` 用于最后一次搬出并释放 unit flag；
+  `STPhase::Partial` 只用于同一块 L0C 分多次搬出时的非末次那几条，它不释放 unit flag。
+  把 `STPhase::Partial` 与 `AccPhase::Partial` 配对会让 fixpipe 等待一个不会到来的标志而挂死，
+  该现象已在 Ascend 950PR 仿真器上复现。
 
 ## 示例
 
@@ -238,6 +275,32 @@ void example_manual() {
   TASSIGN(src, 0x0);
   TASSIGN(dst, 0x0);
   TINSERT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
+}
+```
+
+带 unit flag 的 L0C→L1 搬出（Ascend 950PR/Ascend 950DT）：
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_unit_flag() {
+  TileLeft<half, 32, 32> a;
+  TileRight<half, 32, 32> b;
+  TileAcc<float, 32, 32> c;
+  Tile<TileType::Mat, float, 32, 32, BLayout::ColMajor, 32, 32, SLayout::RowMajor> l1;
+  TASSIGN(a, 0x0);
+  TASSIGN(b, 0x0);
+  TASSIGN(c, 0x0);
+  TASSIGN(l1, 0x2000);
+  // 数据就绪后再搬出：两条指令之间不需要显式 set_flag/wait_flag
+  TMATMUL<AccPhase::Final>(c, a, b);
+  TINSERT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+
+  // 同一块 L0C 分多次搬出时，非末次用 Partial 不释放 unit flag，末次用 Final 释放
+  // TINSERT<STPhase::Partial>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+  // TINSERT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```
 
