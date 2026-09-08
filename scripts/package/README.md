@@ -35,13 +35,13 @@ Install via the `.run` self-extracting package. An install type is required (cho
 
 ```bash
 # Full installation to a custom path
-./build_out/pto_isa_*.run --full --install-path=/your/install/path
+./build_out/cann-pto-isa_*.run --full --install-path=/your/install/path
 
 # Quiet install, skip interactive prompts (for CI/CD and non-interactive environments)
-./build_out/pto_isa_*.run --full --quiet --install-path=/your/install/path
+./build_out/cann-pto-isa_*.run --full --quiet --install-path=/your/install/path
 
 # Runtime-only installation
-./build_out/pto_isa_*.run --run --install-path=/your/install/path
+./build_out/cann-pto-isa_*.run --run --install-path=/your/install/path
 ```
 
 Common install options:
@@ -59,5 +59,5 @@ Common install options:
 For a full list of options:
 
 ```bash
-./build_out/pto_isa_*.run --help
+./build_out/cann-pto-isa_*.run --help
 ```
