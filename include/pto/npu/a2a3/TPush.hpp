@@ -41,7 +41,8 @@ struct TPipe {
     static_assert(SlotNum >= 1, "Fix: TPipe requires SlotNum >= 1.");
     static_assert(SyncPeriod >= 1, "Fix: TPipe requires SyncPeriod >= 1.");
     static_assert(
-        FlagIDPlusOne < 16, "Fix: With Both direction, FlagID + 1 must be less than 16 due to hardware limit.");
+        FlagIDPlusOne <= MAX_SYC_ID,
+        "Fix: With Both direction, FlagID + 1 must be less than 15 due to hardware limit.");
 
     using RingFiFo = RingFIFO<SlotSize, SlotNum, LocalSlotNum>;
 
@@ -141,8 +142,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_VEC__
                 static_assert(
-                    (FlagIDPlusThree < 16),
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    (FlagIDPlusThree <= MAX_SYC_ID),
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 wait_flag_dev(FlagIDPlusThree);
 #endif
             }
@@ -395,8 +396,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_CUBE__
                 static_assert(
-                    (FlagIDPlusThree < 16),
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    (FlagIDPlusThree <= MAX_SYC_ID),
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusThree));
 #endif
             }
@@ -610,7 +611,8 @@ struct TMPipe {
 
     using DataFiFo = DataFIFO<typename TileDataCons::DType, FiFoType, FiFoDepth, FiFoSyncT, LocalFiFoDepth>;
     static_assert(
-        FlagIDPlusOne < 16, "Fix: With single direction, FlagID + 1 must be less than 16 due to hardware limit.");
+        FlagIDPlusOne <= MAX_SYC_ID,
+        "Fix: With single direction, FlagID + 1 must be less than 15 due to hardware limit.");
 
     PTO_INTERNAL static uint64_t getFFTSMsgCfg(TSyncCVMode mode, uint16_t flagID, uint16_t base_const = 0x1)
     {
