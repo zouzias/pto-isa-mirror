@@ -24,10 +24,10 @@ AICORE constexpr bool IsNotAllocTLoadL2Hint(TLoadL2Hint hint)
 
 } // namespace pto
 
-// Match AscendC: global OpSystemRunCfg + g_opL2CacheHintCfg so runtime can fill
+// Match AscendC: global PtoOpSystemRunCfg + g_opL2CacheHintCfg so runtime can fill
 // the L2 disable GM offset for A2A3 NotAlloc TLOAD.
 #ifndef PTO_OP_SYSTEM_RUN_CFG_DEFINED
-struct OpSystemRunCfg {
+struct PtoOpSystemRunCfg {
     uint64_t l2Cacheoffset;
 };
 #define PTO_OP_SYSTEM_RUN_CFG_DEFINED
@@ -42,13 +42,13 @@ struct PtoBinaryMetaAscFeature {
     uint32_t feature; // PRINT=1, FFTS=2, L2CACHE=3
 };
 // CCE aicore may not define __NPU_DEVICE__; still emit like AscendC device path.
-inline __gm__ OpSystemRunCfg g_opL2CacheHintCfg = {0};
+inline __gm__ PtoOpSystemRunCfg g_opL2CacheHintCfg = {0};
 static const PtoBinaryMetaAscFeature __pto_asc_feature_l2cache__
     __attribute__((used, section(".ascend.meta"))) = {4, 4, 3};
 #endif
 #elif defined(PTO_NPU_ARCH_A2A3)
 // CPU/costmodel/host: zero stub so references compile; Apply ignores offset.
-inline OpSystemRunCfg g_opL2CacheHintCfg = {0};
+inline PtoOpSystemRunCfg g_opL2CacheHintCfg = {0};
 #endif
 
 namespace pto {
