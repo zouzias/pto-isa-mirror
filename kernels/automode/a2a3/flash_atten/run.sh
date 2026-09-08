@@ -104,6 +104,9 @@ echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
 python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
 
 CMAKE_EXTRA=()
+# CMake 3.27+ asks the linker to emit a dependency file (--dependency-file),
+# which cce-ld does not accept. Disable linker-based dependency tracking.
+CMAKE_EXTRA+=(-DCMAKE_LINK_DEPENDS_USE_LINKER=OFF)
 if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi

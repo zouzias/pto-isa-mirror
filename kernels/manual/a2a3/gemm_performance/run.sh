@@ -49,7 +49,10 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+# CMake 3.27+ asks the linker to emit a dependency file (--dependency-file),
+# which cce-ld does not accept. Disable linker-based dependency tracking.
+cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
+      -DCMAKE_LINK_DEPENDS_USE_LINKER=OFF ..
 make -j16
 
 ./gemm_performance
