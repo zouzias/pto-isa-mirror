@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr int MAX_SYC_ID = 15;
+
 enum TileSplitAxis : uint8_t {
     TILE_NO_SPLIT = 0,       // 1:1 mode, no split, using AIV0
     TILE_UP_DOWN = 1,        // Split along rows: AIV0=upper half, AIV1=lower half, row axis must be even number
