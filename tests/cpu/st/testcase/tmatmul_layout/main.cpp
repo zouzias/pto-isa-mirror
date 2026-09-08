@@ -9,7 +9,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include "cpu_tile_test_utils.h"
 
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace pto;
@@ -99,6 +101,87 @@ TEST(TMatmulLayoutTest, AcceptsExplicitRowMajorLeftTileEncoding)
 
     TMATMUL_ACC(accOut, accIn, lhs, rhs);
     ExpectTileEquals(accOut, ComputeExpected<AccTile>(lhs, rhs, &accIn));
+}
+
+TEST(TMatmulLayoutTest, AccumulatesFromExistingFp32Value)
+{
+    using LeftTile = TileLeft<float, 16, 16>;
+    using RightTile = TileRight<float, 16, 16>;
+    using AccTile = TileAcc<float, 16, 16>;
+
+    LeftTile lhs;
+    RightTile rhs;
+    AccTile accIn;
+    AccTile accOut;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, lhs, rhs, accIn, accOut);
+
+    FillAll(lhs, 1.0f);
+    FillAll(rhs, 1.0f);
+    FillAll(accIn, 100000000.0f);
+
+    TMATMUL_ACC(accOut, accIn, lhs, rhs);
+
+    float expected = 100000000.0f;
+    for (int k = 0; k < lhs.GetValidCol(); ++k) {
+        expected = std::fma(1.0f, 1.0f, expected);
+    }
+    // Dot-then-add would produce 100000016.0f, only 2 ULPs away from the fused
+    // result 100000000.0f — within EXPECT_FLOAT_EQ's 4-ULP tolerance — so the
+    // accumulation order is only observable through exact comparison.
+    for (int r = 0; r < accOut.GetValidRow(); ++r) {
+        for (int c = 0; c < accOut.GetValidCol(); ++c) {
+            EXPECT_EQ(GetValue(accOut, r, c), expected);
+        }
+    }
+}
+
+TEST(TMatmulLayoutTest, CoversGemvAndBiasVariants)
+{
+    using LeftTile = TileLeft<float, 16, 16>;
+    using RightTile = TileRight<float, 16, 16>;
+    using AccTile = TileAcc<float, 16, 16>;
+    using BiasTile = Tile<TileType::Bias, float, 1, 16>;
+
+    LeftTile lhs;
+    RightTile rhs;
+    AccTile accIn;
+    AccTile gemv;
+    AccTile gemvAcc;
+    AccTile gemvBias;
+    BiasTile bias;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, lhs, rhs, accIn, gemv, gemvAcc, gemvBias, bias);
+
+    FillAll(lhs, 0.0f);
+    FillAll(rhs, 0.0f);
+    FillAll(accIn, 1.0f);
+    for (int r = 0; r < lhs.GetValidRow(); ++r) {
+        for (int c = 0; c < lhs.GetValidCol(); ++c) {
+            SetValue(lhs, r, c, static_cast<float>(r + c + 1));
+            SetValue(rhs, r, c, static_cast<float>((r == c) ? 2.0f : 1.0f));
+        }
+    }
+    for (int c = 0; c < bias.GetValidCol(); ++c) {
+        SetValue(bias, 0, c, static_cast<float>(c));
+    }
+
+    TGEMV(gemv, lhs, rhs);
+    TGEMV_ACC(gemvAcc, accIn, lhs, rhs);
+    TGEMV_BIAS(gemvBias, lhs, rhs, bias);
+
+    const auto expectedGemv = CpuTileTestUtils::ComputeMatmulExpected<AccTile>(lhs, rhs);
+    const auto expectedGemvAcc = CpuTileTestUtils::ComputeMatmulExpected<AccTile>(lhs, rhs, &accIn);
+    std::vector<float> biasValues(static_cast<size_t>(bias.GetValidCol()));
+    for (int c = 0; c < bias.GetValidCol(); ++c) {
+        biasValues[static_cast<size_t>(c)] = GetValue(bias, 0, c);
+    }
+    const auto expectedGemvBias =
+        CpuTileTestUtils::ComputeMatmulExpected<AccTile>(lhs, rhs, nullptr, biasValues.data());
+
+    CpuTileTestUtils::ExpectTileEqualsVector(gemv, expectedGemv);
+    CpuTileTestUtils::ExpectTileEqualsVector(gemvAcc, expectedGemvAcc);
+    CpuTileTestUtils::ExpectTileEqualsVector(gemvBias, expectedGemvBias);
 }
 
 } // namespace

@@ -186,6 +186,7 @@ void test_insert()
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/quant.bin", quantFileSize, quantHost, quantFileSize));
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, quantFileSize, quantHost, quantFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -218,8 +219,8 @@ void test_insert()
     size_t outputSize = srcElemCount * sizeof(DT);
     WriteFile(GetGoldenDir() + "/output.bin", tile, outputSize);
 
-    std::vector<DT> golden(outputSize);
-    std::vector<DT> devFinal(outputSize);
+    std::vector<DT> golden(outputSize / sizeof(DT));
+    std::vector<DT> devFinal(outputSize / sizeof(DT));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", outputSize, golden.data(), outputSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", outputSize, devFinal.data(), outputSize));
 

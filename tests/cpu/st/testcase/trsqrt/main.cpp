@@ -51,6 +51,7 @@ void test_trsqrt()
 
     aclrtMalloc((void**)&dstDevice, fileDstSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSrcSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileDstSize, 0, fileDstSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSrcSize, srcHost, fileSrcSize);
 
@@ -71,8 +72,8 @@ void test_trsqrt()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileDstSize);
-    std::vector<T> devFinal(fileDstSize);
+    std::vector<T> golden(fileDstSize / sizeof(T));
+    std::vector<T> devFinal(fileDstSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileDstSize, golden.data(), fileDstSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileDstSize, devFinal.data(), fileDstSize);
 

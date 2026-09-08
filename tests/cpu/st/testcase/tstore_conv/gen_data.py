@@ -56,10 +56,11 @@ class GlobalTensorInfo:
 
 if __name__ == "__main__":
     # Test cases: [N, D, C1, H, W] (C0 is implicit)
-    case_name_list = ["TStoreConvTest.NDC1HWC0_1", "TStoreConvTest.NDC1HWC0_2"]
+    case_name_list = ["TStoreConvTest.NDC1HWC0_1", "TStoreConvTest.NDC1HWC0_2", "TStoreConvTest.NDC1HWC0_3"]
     case_params_list = [
         GlobalTensorInfo(np.float32, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2),
-        GlobalTensorInfo(np.float32, 2, 3, 4, 1, 7, 2, 3, 4, 1, 7)
+        GlobalTensorInfo(np.float32, 2, 3, 4, 1, 7, 2, 3, 4, 1, 7),
+        GlobalTensorInfo(np.int32, 1, 2, 4, 16, 8, 1, 2, 4, 16, 8)
     ]
 
     for i, case_name in enumerate(case_name_list):

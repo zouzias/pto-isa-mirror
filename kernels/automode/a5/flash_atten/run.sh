@@ -114,6 +114,9 @@ else
 fi
 
 CMAKE_EXTRA=()
+# CMake 3.27+ asks the linker to emit a dependency file (--dependency-file),
+# which cce-ld does not accept. Disable linker-based dependency tracking.
+CMAKE_EXTRA+=(-DCMAKE_LINK_DEPENDS_USE_LINKER=OFF)
 if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi

@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include "acl/acl.h"
 #include <gtest/gtest.h>
+#include <type_traits>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -51,6 +52,7 @@ void test_tabs()
 
     aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSize, srcHost, fileSize);
 
@@ -71,8 +73,8 @@ void test_tabs()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(fileSize / sizeof(T));
+    std::vector<T> devFinal(fileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
@@ -82,9 +84,12 @@ void test_tabs()
     } else if constexpr (std::is_same_v<T, aclFloat16>) {
         eps = 0.001f;
     }
-    bool ret = ResultCmp<T>(golden, devFinal, eps);
-
-    EXPECT_TRUE(ret);
+    if constexpr (std::is_same_v<T, int64_t>) {
+        EXPECT_TRUE(ResultCmpExact(golden, devFinal.data()));
+    } else {
+        bool ret = ResultCmp<T>(golden, devFinal, eps);
+        EXPECT_TRUE(ret);
+    }
 }
 
 TEST_F(TABSTest, case_float_64x64_64x64_64x64_InPlace) { test_tabs<float, 64, 64, 64, 64, true>(); }
@@ -97,3 +102,5 @@ TEST_F(TABSTest, case_int16_64x64_64x64_64x64_InPlace) { test_tabs<int16_t, 64, 
 TEST_F(TABSTest, case_int16_64x64_64x64_64x64) { test_tabs<int16_t, 64, 64, 64, 64, false>(); }
 TEST_F(TABSTest, case_int32_64x64_64x64_64x64_InPlace) { test_tabs<int32_t, 64, 64, 64, 64, true>(); }
 TEST_F(TABSTest, case_int32_64x64_64x64_64x64) { test_tabs<int32_t, 64, 64, 64, 64, false>(); }
+
+TEST_F(TABSTest, case_int64_64x64_64x64_64x64) { test_tabs<int64_t, 64, 64, 64, 64, false>(); }

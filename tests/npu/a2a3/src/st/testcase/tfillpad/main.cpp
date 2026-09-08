@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include "acl/acl.h"
 #include <gtest/gtest.h>
+#include <pto/common/arch_macro.hpp>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -89,7 +90,11 @@ void tfillpad_test()
 
     launchTFILLPAD<testKey>((uint8_t*)dstDevice, (uint8_t*)srcDevice, (uint64_t*)logDevice, stream);
 
-    aclrtSynchronizeStream(stream);
+    // Mirror tquant/tmov_zz: treat stream sync failure as gtest failure (do not compare
+    // missing/stale bins as a false PASS when the kernel faults on device).
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
+                                    << "): " << aclGetRecentErrMsg();
     aclrtMemcpy(dstHost, out_byteSize, dstDevice, out_byteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 #ifdef DEBUGLOG
     aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -189,3 +194,33 @@ TEST_F(TFILLPADTest, case_u8_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<20, ui
 TEST_F(TFILLPADTest, case_u8_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<21, uint8_t, 1>(); }
 
 TEST_F(TFILLPADTest, case_s8_GT_1_40_VT_1_64_BLK1_PADMIN_PADMAX) { tfillpad_test<22, int8_t, 1>(); }
+
+#if !defined(PTO_NPU_ARCH_A5)
+// Case 23 (a2a3 only; A5 reuses key 23 for e4m3): UB-OOB repro — GitHub #291.
+// Full-width 1x16384 fp32 tile TASSIGN'd at 0x20000 + InPlace TFILLPAD PadValue::Zero.
+// After PadRightSingleRow padCols<=0 early-return fix, this must PASS on NPU (sync
+// ACL_SUCCESS + golden compare). Keep ASSERT_EQ(syncRet, ACL_SUCCESS) so a future
+// regression still fails gtest instead of a false PASS via empty/zero bins.
+TEST_F(TFILLPADTest, case_fp32_GT_1_16384_VT_1_16384_UBTOP_FULLWIDTH_INPLACE) { tfillpad_test<23, float, 1>(); }
+#endif // !PTO_NPU_ARCH_A5
+
+#if defined(PTO_NPU_ARCH_A5)
+
+TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<23, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<24, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<25, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e5m2_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<26, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e5m2_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<27, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e5m2_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<28, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_hif8_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<29, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_hif8_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<30, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_hif8_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<31, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e2m1x2_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<32, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e2m1x2_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<33, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e2m1x2_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<34, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e1m2x2_GT_1_15_VT_1_32_BLK1_PADZERO) { tfillpad_test<35, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e1m2x2_GT_1_15_VT_1_32_BLK1_PADMIN) { tfillpad_test<36, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e1m2x2_GT_1_15_VT_1_32_BLK1_PADMAX) { tfillpad_test<37, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e4m3_GT_1_15_VT_1_32_BLK1_PADCUSTOM_42) { tfillpad_test<38, uint8_t, 1>(); }
+TEST_F(TFILLPADTest, case_e2m1x2_GT_1_15_VT_1_32_BLK1_PADCUSTOM_33) { tfillpad_test<39, uint8_t, 1>(); }
+#endif // PTO_NPU_ARCH_A5

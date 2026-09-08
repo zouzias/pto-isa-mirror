@@ -77,6 +77,7 @@ void tmov_test(uint32_t M, uint32_t N, uint32_t K, uint32_t baseM = 0, uint32_t 
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -98,8 +99,8 @@ void tmov_test(uint32_t M, uint32_t N, uint32_t K, uint32_t baseM = 0, uint32_t 
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(cFileSize);
-    std::vector<T> devFinal(cFileSize);
+    std::vector<T> golden(cFileSize / sizeof(T));
+    std::vector<T> devFinal(cFileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
@@ -167,6 +168,7 @@ void textract_test(
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -188,8 +190,8 @@ void textract_test(
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(cFileSize);
-    std::vector<T> devFinal(cFileSize);
+    std::vector<T> golden(cFileSize / sizeof(T));
+    std::vector<T> devFinal(cFileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
@@ -248,6 +250,17 @@ TEST_F(TEXTRACTTest, case33_bfloat16_1_1_44_39_39_param)
 {
     textract_test<33, float, uint16_t, uint16_t>(44, 39, 39, 32, 16, 32, 48, 48, 48);
 }
+// Regression guard for the Acc pitch rule: basing the check on TileRes::ValidRow instead of
+// the Left tile's would reject this shape.
+TEST_F(TEXTRACTTest, case39_float_0_0_32_32_32_param)
+{
+    textract_test<39, float, float, float>(46, 36, 36, 32, 32, 32, 128, 128, 128);
+}
+// Same guard with int8 and a wider valid column range.
+TEST_F(TEXTRACTTest, case40_int8_0_0_0_0_0_param)
+{
+    textract_test<40, int32_t, int8_t, int8_t>(40, 40, 40, 0, 0, 0, 64, 64, 64);
+}
 TEST_F(TEXTRACTTest, case41_dynamic_half_0_1_16_0_32_param)
 {
     textract_test<41, float, uint16_t, uint16_t>(64, 32, 80, 16, 0, 32);
@@ -291,6 +304,7 @@ void textract_compact_test(
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -312,8 +326,8 @@ void textract_compact_test(
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(cFileSize);
-    std::vector<T> devFinal(cFileSize);
+    std::vector<T> golden(cFileSize / sizeof(T));
+    std::vector<T> devFinal(cFileSize / sizeof(T));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 

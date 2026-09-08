@@ -58,6 +58,7 @@ void test_trem()
     aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src0Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&src1Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, dstFileSize, 0, dstFileSize);
 
     ReadFile(GetGoldenDir() + "/input1.bin", src0FileSize, src0Host, src0FileSize);
     ReadFile(GetGoldenDir() + "/input2.bin", src1FileSize, src1Host, src1FileSize);
@@ -84,8 +85,8 @@ void test_trem()
 
     using U = std::conditional_t<std::is_same_v<T, aclFloat16>, _Float16, T>;
 
-    std::vector<U> golden(dstFileSize);
-    std::vector<U> devFinal(dstFileSize);
+    std::vector<U> golden(dstFileSize / sizeof(U));
+    std::vector<U> devFinal(dstFileSize / sizeof(U));
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 

@@ -15,6 +15,27 @@ namespace pto {
 
 inline namespace TMatmulInternal {
 constexpr const int MMAD_MAX_SUPPORT_LENGTH = 4095;
+
+// mad writes Acc block columns at a pitch of ceil16(m) while readers take the pitch from
+// Rows; a mismatch corrupts every block column past the first. MadRows is the m the caller
+// passes: TileLeft::ValidRow for TMATMUL, 1 for TGEMV. One block column has no pitch.
+template <typename TileRes, int MadRows>
+PTO_INTERNAL constexpr bool MadAccStrideCompatible()
+{
+    static_assert(TileRes::Loc == TileType::Acc, "MadAccStrideCompatible expects an Acc tile.");
+    if constexpr (TileRes::Compact != CompactMode::Null) {
+        return true;
+    } else if constexpr (TileRes::Cols <= FRACTAL_NZ_ROW) {
+        return true;
+    } else if constexpr (MadRows == DYNAMIC || TileRes::Rows == DYNAMIC || TileRes::ValidRow == DYNAMIC) {
+        // A dynamic valid shape means readers follow the runtime shape, not the static Rows.
+        return true;
+    } else {
+        // TMatmul promotes m == 1 to 16 outside gemv.
+        constexpr int madRows = (MadRows == 1) ? FRACTAL_NZ_ROW : MadRows;
+        return (madRows + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW == TileRes::Rows;
+    }
+}
 } // namespace TMatmulInternal
 
 template <typename TileLeft, typename TileRight>
@@ -74,7 +95,7 @@ __tf__ AICORE void TMatmulBias(
     mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), kDirectionAlign, cmatrixSource, cmatrixInitVal);
 }
 
-template <typename TileRes, typename TileLeft, typename TileRight>
+template <typename TileRes, typename TileLeft, typename TileRight, int MadRows>
 PTO_INTERNAL void CheckStaticMad()
 {
     using AType = typename TileLeft::DType;
@@ -94,6 +115,11 @@ PTO_INTERNAL void CheckStaticMad()
     static_assert(TileLeft::Loc == TileType::Left, "TileLeft TileType must be set to TileType::Left.");
     static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");
     static_assert(TileRes::Loc == TileType::Acc, "TileRes TileType must be set to TileType::Acc.");
+    static_assert(
+        MadAccStrideCompatible<TileRes, MadRows>(),
+        "Acc tile pitch mismatch: mad writes block columns at ceil16(m) rows, where m is the Left "
+        "tile's ValidRow (1 for TGEMV), but this Acc tile's Rows differs from that. Give the Acc "
+        "tile Rows == ceil16(m), or window the columns instead of the rows.");
 }
 
 PTO_INTERNAL void CheckDynamicMad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
@@ -109,7 +135,7 @@ PTO_INTERNAL void CheckDynamicMad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     bool kDirectionAlign = GetKDirectionAlign(aMatrix, bMatrix);
@@ -123,7 +149,7 @@ PTO_INTERNAL void TGEMV_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMa
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, 1>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
     bool kDirectionAlign = GetKDirectionAlign(aMatrix, bMatrix);
@@ -138,7 +164,7 @@ template <
     AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias>
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, 1>();
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TileBias must be single row.");
 
@@ -156,7 +182,7 @@ PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     uint16_t m = aMatrix.GetValidRow();
     uint16_t k = aMatrix.GetValidCol();
     uint16_t n = bMatrix.GetValidCol();
@@ -169,7 +195,7 @@ PTO_INTERNAL void TMATMUL_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& b
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     uint16_t m = aMatrix.GetValidRow();
     uint16_t k = aMatrix.GetValidCol();
     uint16_t n = bMatrix.GetValidCol();
@@ -190,7 +216,7 @@ template <
     AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias>
 PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData)
 {
-    CheckStaticMad<TileRes, TileLeft, TileRight>();
+    CheckStaticMad<TileRes, TileLeft, TileRight, TileLeft::ValidRow>();
     static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TileBias must be single row.");
     uint16_t m = aMatrix.GetValidRow();

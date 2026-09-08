@@ -18,6 +18,77 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "TCmp.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <CmpMode Mode, typename T, unsigned DstRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64CompareScalarMode(
+    __ubuf__ uint8_t* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = 64;
+    uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat) + 1;
+    __VEC_SCOPE__
+    {
+        vector_s32 lhsLow0, lhsHigh0, lhsLow1, lhsHigh1;
+        vector_s32 rhsLow, rhsHigh;
+        vbr(rhsLow, static_cast<uint32_t>(scalar));
+        vbr(rhsHigh, static_cast<uint32_t>(static_cast<uint64_t>(scalar) >> 32));
+        uint16_t rows = validRows;
+        constexpr int32_t dstRepeatStride = 2 * elementsPerRepeat / 32;
+        for (uint16_t row = 0; row < rows; ++row) {
+            __ubuf__ uint32_t* rowDst = (__ubuf__ uint32_t*)(dst + row * DstRowBytes);
+            uint32_t sreg = validCols;
+            for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+                MaskReg preg;
+                MaskReg result0, result1, dstReg, tmpMask;
+                uint32_t colOffset0 = j * 2 * elementsPerRepeat;
+                vlds(lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src, (row * SrcCols + colOffset0) * 2, DINTLV_B32);
+                preg = plt_b32(sreg, POST_UPDATE);
+                Int64CompareRegs<Mode, T>(result0, lhsLow0, lhsHigh0, rhsLow, rhsHigh, preg);
+                uint32_t colOffset1 = (j * 2 + 1) * elementsPerRepeat;
+                vlds(lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src, (row * SrcCols + colOffset1) * 2, DINTLV_B32);
+                preg = plt_b32(sreg, POST_UPDATE);
+                Int64CompareRegs<Mode, T>(result1, lhsLow1, lhsHigh1, rhsLow, rhsHigh, preg);
+                pdintlv_b8(dstReg, tmpMask, result0, result1);
+                psts(dstReg, rowDst + j * dstRepeatStride, 0, PK);
+            }
+        }
+    }
+}
+
+template <typename T, unsigned DstRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64CompareScalar(
+    __ubuf__ uint8_t* dst, __ubuf__ T* src, T scalar, CmpMode mode, unsigned validRows, unsigned validCols)
+{
+    switch (mode) {
+        case CmpMode::NE:
+            Int64CompareScalarMode<CmpMode::NE, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+        case CmpMode::LT:
+            Int64CompareScalarMode<CmpMode::LT, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+        case CmpMode::GT:
+            Int64CompareScalarMode<CmpMode::GT, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+        case CmpMode::GE:
+            Int64CompareScalarMode<CmpMode::GE, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+        case CmpMode::LE:
+            Int64CompareScalarMode<CmpMode::LE, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+        case CmpMode::EQ:
+        default:
+            Int64CompareScalarMode<CmpMode::EQ, T, DstRowBytes, SrcCols>(dst, src, scalar, validRows, validCols);
+            break;
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstRowBytes, unsigned SrcCols>
+PTO_INTERNAL void Int64CompareScalar(
+    __ubuf__ uint8_t* dst, __ubuf__ T* src, T scalar, CmpMode mode, unsigned validRows, unsigned validCols);
+#endif
+
 constexpr const uint16_t RESULT_NUM_PER_INT32 = 32;
 template <typename T>
 AICORE void GenCmpCall(MaskReg& dst, RegTensor<T>& src0, T src1, CmpMode cmpMode, MaskReg& preg)
@@ -97,7 +168,8 @@ PTO_INTERNAL void TCmps_32B(
             sReg = validCol;
             // for odd repeat number, add 1 to include remainder
             uint16_t repeatTimes = CeilDivision(validCol, repeatElm) + 1;
-            for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+            uint16_t halfRepeatTimes = static_cast<uint16_t>(repeatTimes / 2);
+            for (uint16_t j = 0; j < halfRepeatTimes; ++j) {
                 vlds(srcReg0, src0, i * SrcStride + j * 2 * repeatElm, NORM);
                 vlds(srcReg1, src0, i * SrcStride + (j * 2 + 1) * repeatElm, NORM);
                 pReg = CreatePredicate<T>(sReg);
@@ -185,7 +257,8 @@ PTO_INTERNAL void TCmpsTileB32(
             sReg = validCol;
             // for odd repeat number, add 1 to include remainder
             uint16_t repeatTimes = CeilDivision(validCol, repeatElm) + 1;
-            for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+            uint16_t halfRepeatTimes = static_cast<uint16_t>(repeatTimes / 2);
+            for (uint16_t j = 0; j < halfRepeatTimes; ++j) {
                 vlds(src0Reg0, src0, i * SrcStride + j * 2 * repeatElm, NORM);
                 vlds(src0Reg1, src0, i * SrcStride + (j * 2 + 1) * repeatElm, NORM);
                 pReg = CreatePredicate<T>(sReg);

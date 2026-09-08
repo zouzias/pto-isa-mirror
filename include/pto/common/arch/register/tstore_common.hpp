@@ -13,6 +13,45 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+
+// Common static checks for TSTORE(Vec→GM). The arch-specific type-support
+// assertion (caps::IsTypeSupported) is intentionally NOT part of this: a5 has a
+// wider type list, so each arch shell states its own type constraint at the
+// call site.
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void CheckStaticVecCommon()
+{
+    static_assert(
+        sizeof(typename TileData::DType) == sizeof(typename GlobalData::RawDType),
+        "Source dtype must be same with dst dtype!");
+    static_assert(
+        ((GlobalData::layout == pto::Layout::ND) &&
+         (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
+            ((GlobalData::layout == pto::Layout::DN) &&
+             (!TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
+            ((GlobalData::layout == pto::Layout::NZ) &&
+             (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) ||
+            (TileData::Rows == 1) || (TileData::Cols == 1),
+        "Src and dst layout must be same, only support ND/DN/NZ or the special case of one row/one column!");
+    if constexpr (GlobalData::layout == pto::Layout::ND) {
+        static_assert(
+            (TileData::Cols * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0) ||
+                ((TileData::Cols == 1) && (TileData::Rows * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0)),
+            "Fix: TSTORE For ND layout, Cols * sizeof(DType) must be 32-byte aligned, or Rows * sizeof(DType) must be "
+            "32-byte aligned when Cols == 1.");
+    } else if constexpr (GlobalData::layout == pto::Layout::DN) {
+        static_assert(
+            (TileData::Rows * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0) ||
+                ((TileData::Rows == 1) && (TileData::Cols * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0)),
+            "Fix: TSTORE For DN layout, Rows * sizeof(DType) must be 32-byte aligned, or Cols * sizeof(DType) must be "
+            "32-byte aligned when Rows == 1.");
+    } else {
+        static_assert(
+            GlobalData::layout == pto::Layout::NZ,
+            "Fix: TSTORE Unsupported layout format, only ND/DN/NZ are supported.");
+    }
+}
+
 template <
     typename GlobalData, typename TileData, QuantMode_t quantPre = QuantMode_t::NoQuant,
     ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
@@ -278,30 +317,30 @@ __tf__ AICORE void TStoreAcc(
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <typename TileData, typename GlobalData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreInstr(
     typename GlobalData::DType* dst, __ubuf__ typename TileData::DType* src, uint32_t nBurst, uint32_t lenBurst,
     uint64_t burstDstStride, uint32_t burstSrcStride)
 {
     using LoadT = LoadTypeBySize_t<typename TileData::DType>;
     pto_copy_ubuf_to_gm_align_v2(
-        reinterpret_cast<__gm__ LoadT*>(dst), reinterpret_cast<__ubuf__ LoadT*>(src), 0, nBurst, lenBurst, 0,
-        burstDstStride, burstSrcStride);
+        reinterpret_cast<__gm__ LoadT*>(dst), reinterpret_cast<__ubuf__ LoadT*>(src), 0, nBurst, lenBurst,
+        static_cast<uint8_t>(l2Control), burstDstStride, burstSrcStride);
 }
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecND(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol);
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecDN(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol);
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecNZ(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
@@ -339,10 +378,11 @@ PTO_INTERNAL void TStoreVecNZ(
     for (uint32_t k = 0; k < gShape0; k++) {
         dstGlobalAddr = dstAddr + k * gStride0;
         srcTileAddr = srcAddr + k * tileStride;
-        TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
+        TStoreInstr<TileData, GlobalData, l2Control>(
+            dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
     }
 }
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __tf__ AICORE OP_NAME(TSTORE) OP_TYPE(memory) void TStore(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
@@ -352,15 +392,15 @@ __tf__ AICORE OP_NAME(TSTORE) OP_TYPE(memory) void TStore(
     typename GlobalData::DType* dstAddr = dst;
 
     if constexpr (TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
-        TStoreVecND<GlobalData, TileData>(
+        TStoreVecND<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
-        TStoreVecDN<GlobalData, TileData>(
+        TStoreVecDN<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
-        TStoreVecNZ<GlobalData, TileData>(
+        TStoreVecNZ<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     }

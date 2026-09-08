@@ -76,7 +76,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_A6)
 #define PTO_L0A_SIZE_BYTES (64u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
-#define PTO_L0A_SIZE_BYTES 0u
+#define PTO_L0A_SIZE_BYTES PTO_CBUF_SIZE_BYTES
 #else
 #error \
     "PTO_L0A_SIZE_BYTES: unknown NPU architecture. Define one of PTO_NPU_ARCH_{A2A3,A5,A6,KIRIN9030,KIRINX90} or set PTO_L0A_SIZE_BYTES manually."
@@ -118,7 +118,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_KIRIN9030)
 #define PTO_L0C_SIZE_BYTES (64u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
-#define PTO_L0C_SIZE_BYTES 0u
+#define PTO_L0C_SIZE_BYTES PTO_CBUF_SIZE_BYTES
 #else
 #error \
     "PTO_L0C_SIZE_BYTES: unknown NPU architecture. Define one of PTO_NPU_ARCH_{A2A3,A5,A6,KIRIN9030,KIRINX90} or set PTO_L0C_SIZE_BYTES manually."
@@ -161,7 +161,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(PTO_NPU_ARCH_A2A3)
 #define PTO_FBUF_SIZE_BYTES (2u * 1024u)
 #elif defined(PTO_NPU_ARCH_KIRINDEV0000)
-#define PTO_FBUF_SIZE_BYTES 0u
+#define PTO_FBUF_SIZE_BYTES (6u * 1024u)
 #else
 #error \
     "PTO_FBUF_SIZE_BYTES: unknown NPU architecture. Define one of PTO_NPU_ARCH_{A2A3,A5,A6,KIRIN9030,KIRINX90} or set PTO_FBUF_SIZE_BYTES manually."

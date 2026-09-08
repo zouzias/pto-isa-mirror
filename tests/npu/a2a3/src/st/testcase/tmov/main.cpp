@@ -80,6 +80,7 @@ void test_tmov()
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/bias_gm.bin", biasFileSize, src2Host, biasFileSize);
     ReadFile(GetGoldenDir() + "/scaling_gm.bin", fbFileSize, src3Host, fbFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -108,8 +109,8 @@ void test_tmov()
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
-    std::vector<float> golden(cFileSize);
-    std::vector<float> devFinal(cFileSize);
+    std::vector<float> golden(cFileSize / sizeof(float));
+    std::vector<float> devFinal(cFileSize / sizeof(float));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 

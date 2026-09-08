@@ -62,6 +62,7 @@ void test_trowsum()
 
     aclrtMalloc((void**)(&dstDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)(&srcDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize));
     init_dst<T, kGRows_ * kGCols_>(dstHost);
@@ -83,8 +84,8 @@ void test_trowsum()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(fileSize / sizeof(T));
+    std::vector<T> devFinal(fileSize / sizeof(T));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize));
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize));
 

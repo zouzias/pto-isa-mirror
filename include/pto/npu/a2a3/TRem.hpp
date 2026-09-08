@@ -38,30 +38,41 @@ struct RemOp {
 
         vsub(dst, src0, dst, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
-
         vmul(tmp, dst, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
-        
 
+        // vcmpvs_lt must run in norm mask mode with explicit repeatTimes: unlike
+        // arithmetic ops, the compare op does not auto-extend a single repeat to
+        // the whole count (CANN CompareScalarCompute passes ceil(count*sizeof(T)/256)
+        // repeats), so repeat=1 would only emit the first 64 bits of the packed
+        // mask and leave stale UB in the rest.
+        __ubuf__ uint8_t* cmpMask = reinterpret_cast<__ubuf__ uint8_t*>(tmp + dstRowStride);
         set_mask_norm();
         set_vector_mask(-1, -1);
-
-        __ubuf__ uint32_t* maskBuf = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride);
-        const uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskBuf));
-        vector_dup(maskBuf, maskAddr, 1, 1, 1, 8, 0);
+        vcmpvs_lt(cmpMask, tmp, 0.0f, repeatTimes, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
-        set_cmpmask(maskBuf);
-        pipe_barrier(PIPE_V);
-
-        vcmpvs_lt(reinterpret_cast<__ubuf__ uint8_t*>(maskBuf), tmp, 0.0f, repeatTimes, 1, 1, 8, 8);
-        pipe_barrier(PIPE_V);
-        
         set_mask_count();
         set_vector_mask(0, validCols);
 
         vadd(tmp, dst, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // VSEL_TENSOR_TENSOR_MODE (2) reads the packed bitmask from UB through a
+        // two-level address indirection: set_cmpmask must receive a buffer holding
+        // the mask's address, replicated over cmpmaskLen uint32 lanes (64-bit for
+        // B32, same convention as TSel). cmpMask occupies
+        // dstRowStride..dstRowStride+maskFloats, addrBuf follows it, aligned to 32 bytes.
+        unsigned maskBytes = CeilDivision(dstRowStride, BIT_TO_BYTE);
+        unsigned maskFloats = CeilDivision(maskBytes, BLOCK_BYTE_SIZE) * BIT_TO_BYTE;
+        constexpr unsigned cmpmaskLen = 2; // 64-bit address for B32 dtype
+        __ubuf__ uint32_t* addrBuf = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride + maskFloats);
+        uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(cmpMask));
+        set_vector_mask(0, cmpmaskLen);
+        vector_dup(addrBuf, maskAddr, 1, 1, 1, 8, 0);
+        pipe_barrier(PIPE_V);
+        set_cmpmask(addrBuf);
+        pipe_barrier(PIPE_V);
+        set_vector_mask(0, validCols);
         vsel(dst, tmp, dst, 1, 1, 1, 1, 8, 8, 8, 2);
         pipe_barrier(PIPE_V);
     }
@@ -103,24 +114,30 @@ struct RemOp {
         vmul(tmp_f, dst_f, src1_f, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        __ubuf__ uint32_t* maskBuf = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride);
-        const uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskBuf));
-        vector_dup(maskBuf, maskAddr, 1, 1, 1, 8, 0);
-        pipe_barrier(PIPE_V);
-        set_cmpmask(maskBuf);
-        pipe_barrier(PIPE_V);
+        // Same norm-mode compare with explicit repeatTimes as the f32 path.
+        __ubuf__ uint8_t* cmpMask = reinterpret_cast<__ubuf__ uint8_t*>(tmp + dstRowStride);
         set_mask_norm();
         set_vector_mask(-1, -1);
-        
-        vcmpvs_lt(reinterpret_cast<__ubuf__ uint8_t*>(maskBuf), tmp_f, 0.0f, repeatTimes, 1, 1, 8, 8);
+        vcmpvs_lt(cmpMask, tmp_f, 0.0f, repeatTimes, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
-        
         set_mask_count();
         set_vector_mask(0, validCols);
 
         vadd(tmp_f, dst_f, src1_f, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
+        // VSEL_TENSOR_TENSOR_MODE (2): same 64-bit address buffer as the f32 path.
+        unsigned maskByte = CeilDivision(dstRowStride, BIT_TO_BYTE); // shape
+        unsigned maskFloat = CeilDivision(maskByte, BLOCK_BYTE_SIZE) * BIT_TO_BYTE;
+        constexpr unsigned cmpmaskLen = 2; // 64-bit address for B32 dtype
+        __ubuf__ uint32_t* addrBufs = reinterpret_cast<__ubuf__ uint32_t*>(tmp + dstRowStride + maskFloat);
+        uint32_t maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(cmpMask));
+        set_vector_mask(0, cmpmaskLen);
+        vector_dup(addrBufs, maskAddr, 1, 1, 1, 8, 0);
+        pipe_barrier(PIPE_V);
+        set_cmpmask(addrBufs);
+        pipe_barrier(PIPE_V);
+        set_vector_mask(0, validCols);
         vsel(dst_f, tmp_f, dst_f, 1, 1, 1, 1, 8, 8, 8, 2);
         pipe_barrier(PIPE_V);
 
@@ -128,8 +145,8 @@ struct RemOp {
         pipe_barrier(PIPE_V);
     }
 
-    PTO_INTERNAL static void RemInstr(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, __ubuf__ T* tmp,
-                                      unsigned repeatTimes, unsigned validCols)
+    PTO_INTERNAL static void RemInstr(
+        __ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, __ubuf__ T* tmp, unsigned repeatTimes, unsigned validCols)
     {
         if constexpr (std::is_same_v<T, float> || std::is_same_v<T, float32_t>) {
             RemF32Instr(dst, src0, src1, tmp, repeatTimes, validCols);
@@ -157,9 +174,8 @@ __tf__ PTO_INTERNAL void TRem(
     constexpr unsigned tmpRowStride = TileDataTmp::RowStride;
     uint16_t repeatTimes = CeilDivision(validCols, elementsPerRepeat);
 
-    set_mask_norm();
-    set_vector_mask(-1, -1);
-    for (uint16_t i = 0; i < validRows; i++) {
+    uint16_t rowLimit = static_cast<uint16_t>(validRows);
+    for (uint16_t i = 0; i < rowLimit; i++) {
         __ubuf__ T* dstNext = dstPtr + i * dstRowStride;
         __ubuf__ T* s0Next = src0Ptr + i * src0RowStride;
         __ubuf__ T* s1Next = src1Ptr + i * src1RowStride;
@@ -185,16 +201,20 @@ PTO_INTERNAL void TRemCheck(
         "Fix: TREM support only row major layout.");
     unsigned validRows = dst.GetValidRow();
     unsigned validCols = dst.GetValidCol();
-    unsigned repeatBit = 64;
     PTO_ASSERT(
         src0.GetValidRow() == validRows && src0.GetValidCol() == validCols,
         "Fix: TREM input tile src0 valid shape mismatch with output tile dst shape.");
     PTO_ASSERT(
         src1.GetValidRow() == validRows && src1.GetValidCol() == validCols,
         "Fix: TREM input tile src1 valid shape mismatch with output tile dst shape.");
-    // tmp buffer needs space for two rows: row 0 for intermediate results, row 1 for comparison mask
-    PTO_ASSERT(tmp.GetValidCol() >= (TileDataDst::RowStride + CeilDivision(TileDataDst::RowStride, repeatBit) * 2),
-               "Fix: TREM tmp tile must have at least validCols columns.");
+    // Single-row tmp layout: [0, dstRowStride) candidate, [dstRowStride, dstRowStride+maskFloats)
+    // packed bitmask (32-byte aligned), then an 8-element (32-byte) address buffer.
+    unsigned maskBytes = CeilDivision(TileDataDst::RowStride, BIT_TO_BYTE);
+    unsigned maskFloats = CeilDivision(maskBytes, BLOCK_BYTE_SIZE) * BIT_TO_BYTE;
+    unsigned tmpRequiredCols = TileDataDst::RowStride + maskFloats + BIT_TO_BYTE;
+    PTO_ASSERT(
+        tmp.GetValidRow() >= 1 && tmp.GetValidCol() >= tmpRequiredCols,
+        "Fix: TREM tmp tile must have at least 1 row and enough columns for candidate, mask and address buffer.");
 }
 
 template <
@@ -214,7 +234,5 @@ PTO_INTERNAL void TREM_IMPL(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& 
         src0RowStride, src1RowStride>(
         dst.data(), src0.data(), src1.data(), tmp.data(), dst.GetValidRow(), dst.GetValidCol());
 }
-
 } // namespace pto
-
 #endif

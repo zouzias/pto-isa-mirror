@@ -24,6 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TSub.hpp"
 #include "pto/npu/a2a3/TSubS.hpp"
 #include "pto/npu/a2a3/TMul.hpp"
+#include "pto/npu/a2a3/TMAdd.hpp"
 #include "pto/npu/a2a3/TMulS.hpp"
 #include "pto/npu/a2a3/TMin.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
@@ -38,6 +39,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TStore.hpp"
 #include "pto/npu/a2a3/TMrgSort.hpp"
 #include "pto/npu/a2a3/TExtract.hpp"
+#include "pto/npu/a2a3/TInsert.hpp"
 #include "pto/npu/a2a3/TMov.hpp"
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TTrans.hpp"
@@ -66,7 +68,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowExpandAdd.hpp"
 #include "pto/npu/a2a3/TImg2col.hpp"
 #include "pto/npu/a2a3/SetFmatrix.hpp"
-#include "pto/npu/a2a3/TPairReduceSum.hpp"
 // Bitwise / axpy / leaky-relu ops: their MAP_INSTR_IMPL entries already exist in
 // pto/costmodel/pto_instr.hpp (TAND/TOR/TSHL/TSHR/TAXPY/TLRELU), but the headers
 // providing the *_IMPL were only in the real-kernel #else block. Including them
@@ -123,6 +124,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TExtract.hpp"
 #include "pto/npu/a2a3/TMov.hpp"
 #include "pto/npu/a2a3/TMul.hpp"
+#include "pto/npu/a2a3/TMAdd.hpp"
 #include "pto/npu/a2a3/TSort32.hpp"
 #include "pto/npu/a2a3/TSel.hpp"
 #include "pto/npu/a2a3/TGather.hpp"
@@ -140,7 +142,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/SetImg2colPadding.hpp"
 #include "pto/npu/a2a3/SetQuantScalar.hpp"
 #include "pto/npu/a2a3/SetQuantVector.hpp"
-#include "pto/npu/a2a3/TSubView.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
@@ -163,8 +164,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
 #include "pto/npu/a2a3/TLRelu.hpp"
-#include "pto/npu/a2a3/TAddReluConv.hpp"
-#include "pto/npu/a2a3/TSubReluConv.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
 #include "pto/npu/a2a3/TPrelu.hpp"
 #include "pto/npu/a2a3/TInsert.hpp"
@@ -180,17 +179,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpandExpdif.hpp"
 #include "pto/npu/a2a3/TQuant.hpp"
 #include "pto/npu/a2a3/TDequant.hpp"
-#include "pto/npu/a2a3/TAddDeqRelu.hpp"
 #include "pto/npu/a2a3/TPush.hpp"
 #include "pto/npu/a2a3/TPop.hpp"
 #include "pto/npu/a2a3/TAlloc.hpp"
 #include "pto/npu/a2a3/TFree.hpp"
 #include "pto/npu/a2a3/TColReduceIdx.hpp"
-#include "pto/npu/a2a3/TPairReduceSum.hpp"
-#include "pto/npu/a2a3/TFusedMulAdd.hpp"
-#include "pto/npu/a2a3/TMulAddDst.hpp"
-#include "pto/npu/a2a3/TSubRelu.hpp"
-#include "pto/npu/a2a3/TFusedMulAddRelu.hpp"
+#include "pto/npu/a2a3/TMula.hpp"
 #endif
 #endif
 
@@ -229,8 +223,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMin.hpp"
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TLoad.hpp"
-#include "pto/npu/a5/TSubView.hpp"
-#include "pto/npu/a5/TGetScaleAddr.hpp"
 #ifdef __DAV_VEC__
 #include "pto/npu/a5/TCvt.hpp"
 #endif
@@ -252,9 +244,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TFillPad.hpp"
 #include "pto/npu/a5/TTrans.hpp"
 #include "pto/npu/a5/TLRelu.hpp"
-#include "pto/npu/a5/TAddReluConv.hpp"
-#include "pto/npu/a5/TSubReluConv.hpp"
-#include "pto/npu/a5/TAddDeqRelu.hpp"
 #include "pto/npu/a5/Tci.hpp"
 #include "pto/npu/a5/TSels.hpp"
 #include "pto/npu/a5/TSel.hpp"
@@ -300,6 +289,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TBinSOp.hpp"
 #include "pto/npu/a5/TDiv.hpp"
 #include "pto/npu/a5/TMul.hpp"
+#include "pto/npu/a5/TMAdd.hpp"
 #include "pto/npu/a5/TScatter.hpp"
 #include "pto/npu/a5/MGather.hpp"
 #include "pto/npu/a5/MScatter.hpp"
@@ -320,11 +310,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColReduceIdx.hpp"
 #include "pto/npu/a5/TInterleave.hpp"
 #include "pto/npu/a5/TDeInterleave.hpp"
-#include "pto/npu/a5/TPairReduceSum.hpp"
-#include "pto/npu/a5/TFusedMulAdd.hpp"
-#include "pto/npu/a5/TMulAddDst.hpp"
-#include "pto/npu/a5/TSubRelu.hpp"
-#include "pto/npu/a5/TFusedMulAddRelu.hpp"
+#include "pto/npu/a5/TMula.hpp"
 #endif // __COSTMODEL
 #endif
 
@@ -368,7 +354,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TMatmul.hpp"
 #include "pto/cpu/TAssign.hpp"
 #include "pto/cpu/TAdd.hpp"
-#include "pto/cpu/TAddDeqRelu.hpp"
 #include "pto/cpu/TAbs.hpp"
 #include "pto/cpu/TLoad.hpp"
 #include "pto/cpu/TStore.hpp"
@@ -407,7 +392,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TPartMax.hpp"
 #include "pto/cpu/TPartArgMin.hpp"
 #include "pto/cpu/TPartMin.hpp"
-#include "pto/cpu/TPairReduceSum.hpp"
 #include "pto/cpu/TPow.hpp"
 #include "pto/cpu/TConcat.hpp"
 #include "pto/cpu/TRowExpand.hpp"
@@ -422,7 +406,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TScatter.hpp"
 #include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
-#include "pto/cpu/TGetScaleAddr.hpp"
 
 #include "pto/cpu/TPrint.hpp"
 #include "pto/cpu/TRandom.hpp"
@@ -436,7 +419,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TImg2col.hpp"
 #include "pto/cpu/THistogram.hpp"
 #include "pto/cpu/TQuant.hpp"
-#include "pto/cpu/TSubView.hpp"
 #include "pto/cpu/MGather.hpp"
 #include "pto/cpu/MScatter.hpp"
 #include "pto/cpu/TPush.hpp"

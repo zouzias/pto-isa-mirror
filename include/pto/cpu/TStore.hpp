@@ -22,7 +22,7 @@ namespace pto {
 template <typename GlobalData, typename TileData>
 PTO_INLINE void CheckTileDataStore(GlobalData& dst, TileData& src)
 {
-    constexpr size_t C0 = C0_SIZE_BYTE / sizeof(typename GlobalData::DType);
+    constexpr size_t C0 = GetC0ElemCount<typename GlobalData::DType, TileData>();
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         assert(
             src.GetValidRow() == dst.GetShape(GlobalTensorDim::DIM_2) * dst.GetShape(GlobalTensorDim::DIM_3) &&
@@ -64,11 +64,11 @@ __tf__ PTO_INLINE void TStore(GlobalData& dst, TileData& src, const std::vector<
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
             if constexpr (quantMode != QuantMode_t::NoQuant) {
-                scalar = scalars[TileData::isRowMajor ? col : row];
+                scalar = scalars[col];
             }
             ST val = src.GetElement(row, col);
             DT dstVal = ConvertStoreValue<DT, ST, quantMode, applyRelu>(val, scalar);
-            const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
+            const size_t dstOffset = MapTransferIndicesToGlobalOffset<GlobalData, TileData>(row, col, shapes, strides);
             if constexpr (atomicType == AtomicType::AtomicAdd) {
                 dst.AddToElement(dstOffset, dstVal);
             } else {
@@ -104,7 +104,7 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
     uint64_t scalar = 0;
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
-            T val = src.data()[GetConvTileElementOffset<ConTile>(row, col, tile_shapes)];
+            T val = src.GetElement(GetConvTileElementOffset<ConTile>(row, col, tile_shapes));
             const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
             if constexpr (atomicType == AtomicType::AtomicAdd) {
                 dst.AddToElement(dstOffset, val);
@@ -117,7 +117,7 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
 
 template <
     typename TileData, typename GlobalData, QuantMode_t quantMode, bool applyRelu,
-    AtomicType atomicType = AtomicType::AtomicNone>
+    AtomicType atomicType = AtomicType::AtomicNone, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars = {})
 {
     static_assert(
@@ -132,7 +132,9 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, const std::vector<
     }
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase = STPhase::Unspecified>
+template <
+    typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     (void)Phase;
@@ -141,7 +143,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     (void)Phase;
@@ -151,25 +153,19 @@ __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantScalar)
 {
     (void)Phase;
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
     constexpr bool useRelu = reluPreMode == ReluPreMode::NormalRelu;
-    size_t vector_size = 0;
-    if constexpr (TileData::isRowMajor) {
-        vector_size = src.GetValidCol();
-    } else {
-        vector_size = src.GetValidRow();
-    }
-    std::vector<uint64_t> scalars(vector_size, preQuantScalar);
+    std::vector<uint64_t> scalars(src.GetValidCol(), preQuantScalar);
     TSTORE_IMPL<TileData, GlobalData, quantPre, useRelu, atomicType>(dst, src, scalars);
 }
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     (void)Phase;

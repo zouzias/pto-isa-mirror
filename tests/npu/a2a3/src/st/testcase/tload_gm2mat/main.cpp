@@ -88,6 +88,7 @@ void TestTload()
     aclrtMalloc((void**)&dstDevice, dstDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, srcDataSize, ACL_MEM_MALLOC_HUGE_FIRST);
     ReadFile(GetGoldenDir() + "/input.bin", srcDataSize, srcHost, srcDataSize);
+    aclrtMemset(dstDevice, dstDataSize, 0, dstDataSize);
     aclrtMemcpy(srcDevice, srcDataSize, srcHost, srcDataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTLoad<
         format, DataType, gShape0, gShape1, gShape2, gShape3, gShape4, gWholeShape0, gWholeShape1, gWholeShape2,
@@ -107,8 +108,8 @@ void TestTload()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<DataType> golden(dstDataSize);
-    std::vector<DataType> devFinal(dstDataSize);
+    std::vector<DataType> golden(dstDataSize / sizeof(DataType));
+    std::vector<DataType> devFinal(dstDataSize / sizeof(DataType));
     ReadFile(GetGoldenDir() + "/golden.bin", dstDataSize, golden.data(), dstDataSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstDataSize, devFinal.data(), dstDataSize);
 

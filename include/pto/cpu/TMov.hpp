@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <algorithm>
 #include <pto/common/constants.hpp>
+#include "pto/cpu/TExtract.hpp"
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
@@ -68,8 +69,7 @@ template <
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
 {
     (void)Phase;
-    (void)fp;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, 0, 0);
 }
 
 template <
@@ -79,8 +79,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
 {
     (void)Phase;
     (void)mode;
-    (void)fp;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT_IMPL<DstTileData, SrcTileData, FpTileData, mode, reluMode>(dst, src, fp, 0, 0);
 }
 
 template <
@@ -89,8 +88,7 @@ template <
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar)
 {
     (void)Phase;
-    (void)preQuantScalar;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, 0, 0);
 }
 
 template <
@@ -100,8 +98,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuan
 {
     (void)Phase;
     (void)mode;
-    (void)preQuantScalar;
-    TMOV_IMPL<DstTileData, SrcTileData, reluMode>(dst, src);
+    TEXTRACT<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, 0, 0);
 }
 } // namespace pto
 #endif // TMOV_HPP

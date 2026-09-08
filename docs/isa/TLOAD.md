@@ -1,4 +1,5 @@
-﻿# TLOAD
+# TLOAD
+
 
 
 ## Tile Operation Diagram
@@ -42,7 +43,38 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+Existing `TLOAD(dst, src)` and `TLOAD<TileT, GTensor>(dst, src)` still work. The `TLoadL2Hint`-first form is an extra overload (no default on `l2Control`).
+
+## L2 cache hint
+
+Optional first-template overload (existing `TLOAD(dst, src)` unchanged):
+
+```cpp
+TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src);
+```
+
+Supported `TLoadL2Hint` values:
+
+| Enumerator | Value | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | default allocate (no-op) | yes |
+| NormalLastVictim | 1 | default allocate (no-op) | yes |
+| NormalPersistent | 2 | default allocate (no-op) | yes |
+| NotAllocKeep | 4 | non-allocate (GM addr += runtime `l2Cacheoffset`) | yes |
+| NotAllocClean | 5 | non-allocate (same as Keep) | yes |
+| NotAllocDrop | 6 | non-allocate (same as Keep) | yes |
+
+On A2/A3 there are effectively **two options only**:
+
+1. **Default allocate** — `NormalFirstVictim` (0), `NormalLastVictim` (1), `NormalPersistent` (2): no-ops on A2/A3 (no effect on VLU / different last/first/persist hints). They are not meaningful distinct modes; all follow the default allocate path.
+2. **Non-allocate** — `NotAllocKeep` (4), `NotAllocClean` (5), `NotAllocDrop` (6): yes, via GM addr += runtime `l2Cacheoffset` (same behavior for Keep/Clean/Drop on A2/A3).
+
+On A5 all listed values are passed through to DMA. CPU / costmodel accept the template and ignore it.
 
 ## Constraints
 
@@ -74,6 +106,9 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 
 - **Valid region**:
     - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the transfer size.
+    - On A2/A3, same-layout, block-aligned `TileType::Mat` loads write only this valid region. ND-to-NZ/DN-to-ZN loads (and the single-row/single-column Mat special paths) additionally zero-fill the final partial C0 block. Other data remains unchanged, including data owned by tile views that share the same backing storage.
+    - On A5, same-layout `TileType::Mat` ND/DN loads fill only the final partial 32-byte block according to `PadVal`; ND/DN-to-fractal loads zero-fill the final partial C0 block. Full 32-byte gaps and inactive rows or columns remain unchanged.
+    - On A2/A3 and A5, a `TileType::Vec` ND/DN load with a non-null `PadVal` fills only the sub-32-byte tail after each transferred burst. Full 32-byte gaps and inactive rows or columns remain unchanged; NZ loads and `PadValue::Null` do not add padding.
 
 ## Examples
 

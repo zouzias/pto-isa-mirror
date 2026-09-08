@@ -96,29 +96,6 @@ __tf__ AICORE void TExtractToA(
     }
 }
 
-template <typename DstTileData, typename SrcTileData>
-__tf__ AICORE void TExtractToAVector(
-    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
-    uint16_t indexCol, uint16_t dstValidCol)
-{
-    using DataType = typename SrcTileData::DType;
-    __cbuf__ DataType* srcAddr = (__cbuf__ DataType*)__cce_get_tile_ptr(src);
-    __ca__ DataType* dstAddr = (__ca__ DataType*)__cce_get_tile_ptr(dst);
-
-    constexpr int32_t srcCol = SrcTileData::Cols;
-    constexpr int32_t dstCol = DstTileData::Cols;
-    constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / sizeof(DataType);
-
-    static_assert((srcCol % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
-    static_assert((dstCol % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
-    PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol * sizeof(DataType) must be aligned to 512B");
-
-    int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
-    uint16_t baseIdx = indexCol * sizeof(DataType) >> SHIFT_FRACTAL_BYTE;
-    uint8_t repeatTimes = kAlign / fractalSize;
-    pto_load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, 1, 0);
-}
-
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
 PTO_INTERNAL void TExtractToBNonTranspose(
     __cb__ DstType* dstAddr, __cbuf__ SrcType* srcAddr, uint16_t indexRow, uint16_t indexCol)
@@ -445,6 +422,11 @@ PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData& dst, SrcTileData& src, uin
             dst.data(), src.data(), src.GetShape(3), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
     }
 }
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToAVector(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint16_t dstValidCol);
 
 template <typename DstTileData, typename SrcTileData>
 AICORE void TExtractToLeft(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)

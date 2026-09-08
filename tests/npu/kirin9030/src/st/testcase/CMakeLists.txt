@@ -114,7 +114,6 @@ endfunction()
 function(pto_test NAME)	
     if(RUN_MODE STREQUAL "npu")
         pto_st_npu(${NAME})
-        target_compile_definitions(${NAME} PRIVATE PTO_RUN_MODE_NPU)
     else()
         pto_st(${NAME})
     endif()
@@ -206,6 +205,7 @@ set(ALL_TESTCASES
     tlog
     trecip
     tstore_acc2gm
+    tstore_mat2gm
     tdivs
     tmuls
     tadds

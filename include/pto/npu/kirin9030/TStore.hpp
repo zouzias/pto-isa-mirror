@@ -94,7 +94,7 @@ PTO_INTERNAL void CheckStaticAcc()
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void CheckStaticVec()
+PTO_INTERNAL void CheckStaticMat()
 {
     static_assert(
         sizeof(typename TileData::DType) == sizeof(typename GlobalData::RawDType),
@@ -105,28 +105,114 @@ PTO_INTERNAL void CheckStaticVec()
     static_assert(
         ((GlobalData::layout == pto::Layout::ND) &&
          (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
-            ((GlobalData::layout == pto::Layout::DN) &&
-             (!TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox))) ||
             ((GlobalData::layout == pto::Layout::NZ) &&
-             (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) ||
-            (TileData::Rows == 1) || (TileData::Cols == 1),
-        "Src and dst layout must be same, only support ND/DN/NZ or the special case of one row/one column!");
-    if constexpr (GlobalData::layout == pto::Layout::ND) {
-        static_assert(
-            (TileData::Cols * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0) ||
-                ((TileData::Cols == 1) && (TileData::Rows * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0)),
-            "Fix: TSTORE For ND layout, Cols * sizeof(DType) must be 32-byte aligned, or Rows * sizeof(DType) must be "
-            "32-byte aligned when Cols == 1.");
-    } else if constexpr (GlobalData::layout == pto::Layout::DN) {
-        static_assert(
-            (TileData::Rows * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0) ||
-                ((TileData::Rows == 1) && (TileData::Cols * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0)),
-            "Fix: TSTORE For DN layout, Rows * sizeof(DType) must be 32-byte aligned, or Cols * sizeof(DType) must be "
-            "32-byte aligned when Rows == 1.");
-    } else {
-        static_assert(
-            GlobalData::layout == pto::Layout::NZ,
-            "Fix: TSTORE Unsupported layout format, only ND/DN/NZ are supported.");
+             (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))),
+        "Src and dst layout must be same, only support ND2ND/NZ2NZ!");
+}
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreMat2GmInstr(
+    typename GlobalData::DType* dstAddr, __cbuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
+    int gShape2, int gStride0, int gStride1, int gStride2, int64_t srcStride2, uint32_t nBurst, uint32_t lenBurst,
+    uint64_t dstStride, uint32_t srcStride)
+{
+    using LoadT = LoadTypeBySize_t<typename TileData::DType>;
+    typename GlobalData::DType* dstAddrP = dstAddr;
+    __cbuf__ typename TileData::DType* srcAddrP = srcAddr;
+
+    int64_t srcStride1 = gShape2 * srcStride2;
+    int64_t srcStride0 = gShape1 * srcStride1;
+    for (uint32_t i = 0; i < gShape0; i++) {
+        int64_t dstAddr0 = i * gStride0;
+        int64_t srcAddr0 = i * srcStride0;
+        for (uint32_t j = 0; j < gShape1; j++) {
+            int64_t dstAddr1 = j * gStride1;
+            int64_t srcAddr1 = j * srcStride1;
+            for (uint32_t k = 0; k < gShape2; k++) {
+                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + k * srcStride2;
+                dstAddrP = dstAddr + dstAddr0 + dstAddr1 + k * gStride2;
+                pto_copy_cbuf_to_gm_align_v2<LoadT>(
+                    reinterpret_cast<__gm__ LoadT*>(dstAddrP), reinterpret_cast<__cbuf__ LoadT*>(srcAddrP), 0, nBurst,
+                    lenBurst, dstStride, srcStride);
+            }
+        }
+    }
+}
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreMatNd2Nd(
+    typename GlobalData::DType* dstAddr, __cbuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
+    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int validRow, int validCol)
+{
+    PTO_ASSERT(
+        gShape4 * sizeof(typename TileData::DType) % BLOCK_BYTE_SIZE == 0,
+        "The 5th dim of ND shape must be 32 bytes aligned!");
+    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
+    PTO_ASSERT(
+        validRow == gShape0 * gShape1 * gShape2 * gShape3,
+        "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
+    PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096");
+    uint32_t nBurst = gShape3;
+    uint32_t lenBurst = GetByteSize<typename TileData::DType>(validCol);
+    uint64_t dstStride = GetByteSize<typename TileData::DType>(gStride3);
+    uint32_t srcStride = GetByteSize<typename TileData::DType>(TileData::Cols);
+
+    int64_t srcStride2 = gShape3 * TileData::Cols;
+    TStoreMat2GmInstr<GlobalData, TileData>(
+        dstAddr, srcAddr, gShape0, gShape1, gShape2, gStride0, gStride1, gStride2, srcStride2, nBurst, lenBurst,
+        dstStride, srcStride);
+}
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreMatNz2Nz(
+    typename GlobalData::DType* dstAddr, __cbuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
+    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int validRow, int validCol)
+{
+    static_assert(
+        GlobalData::staticShape[3] == FRACTAL_NZ_ROW &&
+            GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename TileData::DType),
+        "When TileData is NZ format, the last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+    PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096");
+    PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
+    PTO_ASSERT(
+        validCol == gShape0 * gShape1 * gShape4,
+        "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
+    uint32_t nBurst = gShape1;
+    uint32_t lenBurst = validRow * C0_SIZE_BYTE;
+    uint64_t dstStride = GetByteSize<typename TileData::DType>(gStride1);
+    uint32_t srcStride = TileData::Rows * C0_SIZE_BYTE;
+
+    using LoadT = LoadTypeBySize_t<typename TileData::DType>;
+    typename GlobalData::DType* dstAddrP = dstAddr;
+    __cbuf__ typename TileData::DType* srcAddrP = srcAddr;
+
+    int64_t tileStride = TileData::Rows * gShape1 * gShape4;
+
+    for (uint32_t i = 0; i < gShape0; i++) {
+        dstAddrP = dstAddr + i * gStride0;
+        srcAddrP = srcAddr + i * tileStride;
+        pto_copy_cbuf_to_gm_align_v2<LoadT>(
+            reinterpret_cast<__gm__ LoadT*>(dstAddrP), reinterpret_cast<__cbuf__ LoadT*>(srcAddrP), 0, nBurst, lenBurst,
+            dstStride, srcStride);
+    }
+}
+
+template <typename GlobalData, typename TileData>
+PTO_INTERNAL void TStoreMat(
+    typename GlobalData::DType* dstAddr, __cbuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
+    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int validRow, int validCol)
+{
+    if constexpr (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox)) {
+        TStoreMatNd2Nd<GlobalData, TileData>(
+            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
+            gStride4, validRow, validCol);
+    } else if constexpr (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor)) {
+        TStoreMatNz2Nz<GlobalData, TileData>(
+            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
+            gStride4, validRow, validCol);
     }
 }
 
@@ -213,8 +299,9 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
     constexpr int dim3 = pto::GlobalTensorDim::DIM_3;
     constexpr int dim4 = pto::GlobalTensorDim::DIM_4;
     static_assert(
-        TileData::Loc == pto::TileType::Vec || TileData::Loc == pto::TileType::Acc,
-        "Source TileType only support Vec/Acc!");
+        TileData::Loc == pto::TileType::Vec || TileData::Loc == pto::TileType::Acc ||
+            TileData::Loc == pto::TileType::Mat,
+        "Source TileType only support Vec/Acc/Mat!");
     static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on kirin9030.");
     if constexpr (TileData::Loc == pto::TileType::Acc) {
         using L0cT = typename TileData::DType;
@@ -227,9 +314,19 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
             dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
             dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
     } else if constexpr (TileData::Loc == pto::TileType::Vec) {
-        CheckStaticVec<TileData, GlobalData>();
+        static_assert(
+            caps::IsTypeSupported<typename TileData::DType>(),
+            "Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/int64_t/uint64_t/half/float!");
+        CheckStaticVecCommon<TileData, GlobalData>();
 
         TStore<GlobalData, TileData>(
+            dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
+            dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
+            dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
+    } else if constexpr (TileData::Loc == pto::TileType::Mat) {
+        CheckStaticMat<TileData, GlobalData>();
+
+        TStoreMat<GlobalData, TileData>(
             dst.data(), src.data(), dst.GetShape(dim0), dst.GetShape(dim1), dst.GetShape(dim2), dst.GetShape(dim3),
             dst.GetShape(dim4), dst.GetStride(dim0), dst.GetStride(dim1), dst.GetStride(dim2), dst.GetStride(dim3),
             dst.GetStride(dim4), src.GetValidRow(), src.GetValidCol());
@@ -288,6 +385,7 @@ template <
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     static_assert(TileData::Loc == pto::TileType::Acc, "Source TileType only support Acc!");
+    static_assert(FpTileData::Loc == pto::TileType::Scaling, "Fp only support Scaling.");
     static_assert(atomicType == AtomicType::AtomicNone, "Fix: AtomicAdd is not supported on kirin9030.");
     using DstT = typename GlobalData::RawDType;
     using L0cT = typename TileData::DType;

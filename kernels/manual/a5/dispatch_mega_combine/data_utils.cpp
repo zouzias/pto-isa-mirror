@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -68,6 +69,14 @@ double ParseJsonDouble(const std::string& text, const std::string& key, double d
     return std::stod(value);
 }
 
+float Bf16ToFloat(uint16_t value)
+{
+    const uint32_t bits = static_cast<uint32_t>(value) << 16U;
+    float result = 0.0f;
+    std::memcpy(&result, &bits, sizeof(result));
+    return result;
+}
+
 } // namespace
 
 std::vector<uint8_t> ReadBinaryFile(const std::string& path)
@@ -98,6 +107,7 @@ CaseConfig LoadCaseConfig(const std::string& case_json_path)
     const std::vector<uint8_t> raw = ReadBinaryFile(case_json_path);
     const std::string text(raw.begin(), raw.end());
     CaseConfig cfg;
+    cfg.data_cache_version = ParseJsonUInt(text, "data_cache_version");
     cfg.m = ParseJsonUInt(text, "m");
     cfg.k = ParseJsonUInt(text, "k");
     cfg.n = ParseJsonUInt(text, "n");
@@ -107,6 +117,14 @@ CaseConfig LoadCaseConfig(const std::string& case_json_path)
     cfg.max_output_size = ParseJsonUInt(text, "max_output_size");
     cfg.compare_atol = ParseJsonDouble(text, "compare_atol", 1e-3);
     cfg.compare_rtol = ParseJsonDouble(text, "compare_rtol", 1e-3);
+    cfg.input_tokens_all_ranks =
+        ParseJsonDouble(text, "input_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.world_size);
+    cfg.routed_tokens_all_ranks =
+        ParseJsonDouble(text, "routed_tokens_all_ranks", static_cast<double>(cfg.m) * cfg.topk * cfg.world_size);
+    cfg.remote_routed_tokens_all_ranks = ParseJsonDouble(text, "remote_routed_tokens_all_ranks", 0.0);
+    cfg.compute_flops_all_ranks =
+        ParseJsonDouble(text, "compute_flops_all_ranks", cfg.routed_tokens_all_ranks * 3.0 * cfg.k * cfg.n);
+    cfg.comm_bytes_all_ranks = ParseJsonDouble(text, "comm_bytes_all_ranks", 0.0);
     return cfg;
 }
 
@@ -119,32 +137,7 @@ RankFileSet BuildRankFileSet(const std::string& case_dir, int rank)
     };
 }
 
-namespace {
-
-float Fp16ToFloat(uint16_t value)
-{
-    const double sign = (value & 0x8000U) != 0 ? -1.0 : 1.0;
-    const uint32_t exponent = (value >> 10U) & 0x1FU;
-    const uint32_t mantissa = value & 0x03FFU;
-    if (exponent == 0U) {
-        if (mantissa == 0U) {
-            return static_cast<float>(sign * 0.0);
-        }
-        return static_cast<float>(sign * std::ldexp(static_cast<double>(mantissa), -24));
-    }
-    if (exponent == 0x1FU) {
-        if (mantissa == 0U) {
-            return static_cast<float>(sign * std::numeric_limits<float>::infinity());
-        }
-        return std::numeric_limits<float>::quiet_NaN();
-    }
-    return static_cast<float>(
-        sign * std::ldexp(static_cast<double>(1024U + mantissa), static_cast<int>(exponent) - 25));
-}
-
-} // namespace
-
-AccuracyReport CompareFp16File(
+AccuracyReport CompareBf16File(
     const std::vector<uint16_t>& expected, const std::vector<uint16_t>& actual, double atol, double rtol)
 {
     AccuracyReport report;
@@ -155,25 +148,20 @@ AccuracyReport CompareFp16File(
     }
     report.err_threshold = static_cast<size_t>(static_cast<double>(expected.size()) * rtol);
 
-    size_t invalidCount = 0;
     for (size_t i = 0; i < expected.size(); ++i) {
-        const float expected_value = Fp16ToFloat(expected[i]);
-        const float actual_value = Fp16ToFloat(actual[i]);
+        const float expected_value = Bf16ToFloat(expected[i]);
+        const float actual_value = Bf16ToFloat(actual[i]);
         const bool invalid = std::isnan(actual_value) || std::isinf(actual_value) || std::isnan(expected_value) ||
                              std::isinf(expected_value);
         const double abs_err = invalid ? std::numeric_limits<double>::infinity() :
                                          std::fabs(static_cast<double>(actual_value) - expected_value);
         const double tolerance = atol + rtol * std::fabs(static_cast<double>(expected_value));
-        double rel_err = std::numeric_limits<double>::infinity();
-        if (!invalid) {
-            const double rel_denom = std::max(std::fabs(static_cast<double>(expected_value)), 1e-7);
-            if (rel_denom > 0.0) {
-                rel_err = abs_err / rel_denom;
-            }
-        }
+        const double expectedAbs = std::fabs(static_cast<double>(expected_value));
+        const double relDenom = expectedAbs > 1e-7 ? expectedAbs : 1e-7;
+        const double rel_err = invalid ? std::numeric_limits<double>::infinity() : abs_err / relDenom;
 
         if (invalid) {
-            invalidCount += 1;
+            report.nan_or_inf_count += 1;
         }
         if (invalid || abs_err > tolerance) {
             report.mismatch_count += 1;
@@ -185,6 +173,6 @@ AccuracyReport CompareFp16File(
         }
     }
 
-    report.pass = (report.mismatch_count <= report.err_threshold) && (invalidCount == 0);
+    report.pass = (report.mismatch_count <= report.err_threshold) && (report.nan_or_inf_count == 0);
     return report;
 }

@@ -61,6 +61,7 @@ void test_tstore()
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStore<
@@ -82,8 +83,8 @@ void test_tstore()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<DataType> golden(dataSize);
-    std::vector<DataType> devFinal(dataSize);
+    std::vector<DataType> golden(dataSize / sizeof(DataType));
+    std::vector<DataType> devFinal(dataSize / sizeof(DataType));
     ReadFile(GetGoldenDir() + "/golden.bin", dataSize, golden.data(), dataSize);
     ReadFile(GetGoldenDir() + "/output.bin", dataSize, devFinal.data(), dataSize);
 
@@ -138,6 +139,7 @@ void TestTstoreB4()
     aclrtMalloc((void**)&srcDevice, dataSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", dataSize, srcHost, dataSize);
+    aclrtMemset(dstDevice, dataSize, 0, dataSize);
 
     aclrtMemcpy(srcDevice, dataSize, srcHost, dataSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTStoreB4<
@@ -159,8 +161,8 @@ void TestTstoreB4()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<DataType> golden(dataSize);
-    std::vector<DataType> devFinal(dataSize);
+    std::vector<DataType> golden(dataSize / sizeof(DataType));
+    std::vector<DataType> devFinal(dataSize / sizeof(DataType));
     ReadFile(GetGoldenDir() + "/golden.bin", dataSize, golden.data(), dataSize);
     ReadFile(GetGoldenDir() + "/output.bin", dataSize, devFinal.data(), dataSize);
 

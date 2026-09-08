@@ -16,9 +16,44 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 #include "TBinSOp.hpp"
-#include "Int64Rearrange.hpp"
 
 namespace pto {
+
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elementsPerRepeat = CCE_VL * 2 / sizeof(T);
+    __VEC_SCOPE__
+    {
+        vector_s32 lowReg, highReg, half0, half1;
+        MaskReg lowMask, highMask;
+        uint64_t bits = static_cast<uint64_t>(scalar);
+        vbr(lowReg, static_cast<int32_t>(bits));
+        vbr(highReg, static_cast<int32_t>(bits >> 32));
+        uint16_t rows = validRows;
+        uint16_t colRepeats = CeilDivision(validCols, elementsPerRepeat);
+        for (uint16_t row = 0; row < rows; ++row) {
+            uint32_t sreg = validCols;
+            for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
+                uint32_t colOffset = colRepeat * elementsPerRepeat;
+                MaskReg preg = CreatePredicate<uint32_t>(sreg);
+                pintlv_b32(lowMask, highMask, preg, preg);
+                vintlv(half0, half1, lowReg, highReg);
+                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
+                vsts(
+                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
+                    NORM_B32, highMask);
+            }
+        }
+    }
+}
+#else
+// Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
+// See TBinOp.hpp for details.
+template <typename T, unsigned DstCols>
+PTO_INTERNAL void Int64Fill(__ubuf__ T* dst, T scalar, unsigned validRows, unsigned validCols);
+#endif
 inline namespace TExpandsInternal {
 constexpr const int EXPANDS_MAX_SUPPORT_REPEAT_TIMES = 32767; // [0:14]
 } // namespace TExpandsInternal

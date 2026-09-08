@@ -30,9 +30,10 @@ inline void PrintFloatBits(double val, const char* name)
     constexpr uint32_t expShift = 52;
     uint64_t bits = *reinterpret_cast<const uint64_t*>(&val);
     std::printf(
-        "[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n", name, val, bits,
-        (unsigned long)((bits >> signShift) & 1), (unsigned long)((bits >> expShift) & 0x7FF),
-        (unsigned long)((bits >> expShift) & 0x7FF), (unsigned long)(bits & 0xFFFFFFFFFFFFF));
+        "[PTO][TCVT] %s: %.17g bits=0x%016llx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n", name, val,
+        static_cast<unsigned long long>(bits), (unsigned long)((bits >> signShift) & 1),
+        (unsigned long)((bits >> expShift) & 0x7FF), (unsigned long)((bits >> expShift) & 0x7FF),
+        (unsigned long)(bits & 0xFFFFFFFFFFFFF));
 }
 
 inline void PrintFloatBits(float val, const char* name)
@@ -148,7 +149,7 @@ template <typename T>
 inline T from_double_value(double val)
 {
     if constexpr (std::is_same_v<T, int4b_t>) {
-        int8_t ival = static_cast<int8_t>(clamp_value(val, -8.0, 7.0));
+        int8_t ival = static_cast<int8_t>(clamp_value(val, SafeLimits<int4b_t>::lowest(), SafeLimits<int4b_t>::max()));
         return int4b_t(ival);
     } else {
         return static_cast<T>(val);
@@ -170,16 +171,20 @@ inline D convert_value(S val, RoundMode mode)
         volatile double dval = static_cast<double>(val);
         if constexpr (is_float_like_v<S>)
             dval = applyRoundingToIntegral(dval, mode);
-        dval = clamp_value(dval, -8.0, 7.0);
+        dval = clamp_value(dval, SafeLimits<int4b_t>::lowest(), SafeLimits<int4b_t>::max());
         return int4b_t(static_cast<int8_t>(dval));
     } else if constexpr (
         (is_fp4_v<S> && is_float_like_v<D>) || (is_float_like_v<S> && is_fp4_v<D>) ||
         (is_float_like_v<S> && std::is_integral_v<D>)) {
-        const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
-        if constexpr (std::is_same_v<D, uint8_t>) {
-            return static_cast<D>(static_cast<int64_t>(dval));
+        if constexpr (IsTwinType<D>()) {
+            return D{val, mode};
+        } else {
+            const volatile double dval = applyRoundingToIntegral(static_cast<double>(val), mode);
+            if constexpr (std::is_same_v<D, uint8_t>) {
+                return static_cast<D>(static_cast<int64_t>(dval));
+            }
+            return static_cast<D>(dval);
         }
-        return static_cast<D>(dval);
     } else if constexpr (std::is_integral_v<S> && is_float_like_v<D>) {
         return static_cast<D>(static_cast<double>(val));
     } else {
@@ -197,7 +202,7 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
 
             S val = src.GetElement(i, j);
             if constexpr (satMode == SaturationMode::ON) {
-                if constexpr (!is_fp4_v<S>) {
+                if constexpr (!IsTwinType<S>() && !IsTwinType<D>()) {
                     double dval = to_double_value(val);
                     double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
                     double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
@@ -230,6 +235,21 @@ PTO_INTERNAL void TCVT_IMPL(
     } else {
         TCvt_Impl<TileDataD, TileDataS, SaturationMode::OFF>(dst, src, rows, cols, mode);
     }
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(
+    TileDataD& dst, TileDataS& src, TmpTileData& tmp, RoundMode mode, SaturationMode satMode, bool needSetCtrl = true)
+{
+    (void)tmp;
+    TCVT_IMPL(dst, src, mode, satMode, needSetCtrl);
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD& dst, TileDataS& src, TmpTileData& tmp, RoundMode mode, bool needSetCtrl = true)
+{
+    (void)tmp;
+    TCVT_IMPL(dst, src, mode, needSetCtrl);
 }
 
 } // namespace pto

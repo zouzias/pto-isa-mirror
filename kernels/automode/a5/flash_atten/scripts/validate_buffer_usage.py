@@ -56,7 +56,8 @@ def compute_ub_usage_nd(cube_s0: int, cube_s1: int, head_size: int, tile_s1: int
     out_o_tile_n_buffers = 2
 
     k_tile_factor = tile_s1 // cube_s1
-
+    if k_tile_factor == 0:
+        return {"total_bytes": 0, "overflow": False, "detail": "tile_s1 < cube_s1, skipped", "fits_in_ub": True}
     vec_s0 = cube_s0 // VEC_CORES // k_tile_factor
     vec_gu_rows = cube_s0 // VEC_CORES
     subblock_rows = cube_s0 // VEC_CORES

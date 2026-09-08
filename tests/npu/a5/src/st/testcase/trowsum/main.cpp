@@ -53,8 +53,8 @@ protected:
     template <typename T>
     bool CompareGolden(size_t dstByteSize, bool printAllEn = false)
     {
-        std::vector<T> golden(dstByteSize);
-        std::vector<T> result(dstByteSize);
+        std::vector<T> golden(dstByteSize / sizeof(T));
+        std::vector<T> result(dstByteSize / sizeof(T));
         float eps = sizeof(T) == 4 ? 0.001f : 0.005f;
         ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
         ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
@@ -76,6 +76,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -218,3 +219,19 @@ TEST_F(TROWSUMTest, case20)
 TEST_F(TROWSUMTest, case_int64_4x16) { EXPECT_TRUE((TRowSumTestFramework<21, int64_t, 4, 4, 16, 15, 1>())); }
 
 TEST_F(TROWSUMTest, case_uint64_4x16) { EXPECT_TRUE((TRowSumTestFramework<22, uint64_t, 4, 4, 16, 15, 1>())); }
+
+TEST_F(TROWSUMTest, case_int64_4x64) { EXPECT_TRUE((TRowSumTestFramework<23, int64_t, 4, 4, 64, 64, 1>())); }
+
+TEST_F(TROWSUMTest, case_uint64_4x64) { EXPECT_TRUE((TRowSumTestFramework<24, uint64_t, 4, 4, 64, 64, 1>())); }
+TEST_F(TROWSUMTest, case_int64_32x32) { EXPECT_TRUE((TRowSumTestFramework<25, int64_t, 32, 32, 32, 32, 1>())); }
+
+TEST_F(TROWSUMTest, case_int64_32x32_dndst) { EXPECT_TRUE((TRowSumTestFramework<26, int64_t, 32, 32, 32, 32, 1>())); }
+TEST_F(TROWSUMTest, case_uint64_32x32_dndst) { EXPECT_TRUE((TRowSumTestFramework<27, uint64_t, 32, 32, 32, 32, 1>())); }
+TEST_F(TROWSUMTest, case_int64_32x145_dndst)
+{
+    EXPECT_TRUE((TRowSumTestFramework<28, int64_t, 32, 32, 145, 145, 1>()));
+}
+TEST_F(TROWSUMTest, case_uint64_32x145_dndst)
+{
+    EXPECT_TRUE((TRowSumTestFramework<29, uint64_t, 32, 32, 145, 145, 1>()));
+}

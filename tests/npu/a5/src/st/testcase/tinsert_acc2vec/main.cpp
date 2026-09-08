@@ -73,6 +73,7 @@ void tmov_acc2vec_test(uint32_t M, uint32_t K, uint32_t N)
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/dst.bin", cFileSize, src2Host, cFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -101,8 +102,8 @@ void tmov_acc2vec_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<CType> golden(cFileSize);
-    std::vector<CType> devFinal(cFileSize);
+    std::vector<CType> golden(cFileSize / sizeof(CType));
+    std::vector<CType> devFinal(cFileSize / sizeof(CType));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
@@ -148,6 +149,7 @@ void tmov_acc2vec_fb_quant_test(uint32_t M, uint32_t K, uint32_t N)
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
     ReadFile(GetGoldenDir() + "/quant_gm.bin", FBQuantFileSize, src2Host, FBQuantFileSize);
     ReadFile(GetGoldenDir() + "/dst.bin", cFileSize, src3Host, cFileSize);
+    aclrtMemset(dstDevice, cFileSize, 0, cFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -177,8 +179,8 @@ void tmov_acc2vec_fb_quant_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<CType> golden(cFileSize);
-    std::vector<CType> devFinal(cFileSize);
+    std::vector<CType> golden(cFileSize / sizeof(CType));
+    std::vector<CType> devFinal(cFileSize / sizeof(CType));
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 

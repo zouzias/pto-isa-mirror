@@ -1,4 +1,4 @@
-﻿# TPUT
+# TPUT
 
 ## Introduction
 

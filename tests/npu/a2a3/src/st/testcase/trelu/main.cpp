@@ -36,7 +36,8 @@ void LaunchTRelu(T* out, T* input, void* stream);
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_trelu()
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+    constexpr size_t elementCount = kGRows_ * kGCols_;
+    size_t fileSize = elementCount * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -50,6 +51,7 @@ void test_trelu()
     aclrtMallocHost((void**)(&srcHost), fileSize);
     aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMemset(dstDevice, fileSize, 0, fileSize);
 
     ReadFile(GetGoldenDir() + "/input.bin", fileSize, srcHost, fileSize);
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -68,8 +70,8 @@ void test_trelu()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    std::vector<T> golden(elementCount);
+    std::vector<T> devFinal(elementCount);
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 

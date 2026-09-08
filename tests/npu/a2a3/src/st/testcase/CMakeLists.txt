@@ -111,6 +111,7 @@ textract
 timg2col
 tmov
 tload
+tload_l2hint
 ttrans
 ttrans_conv
 ttrans_3d
@@ -162,6 +163,7 @@ tmins
 tmin
 tmax
 tload_gm2mat
+tload_l2hint_mat
 tstore_acc2gm
 trsqrt
 tsqrt
@@ -193,9 +195,6 @@ tcolexpand
 ttri
 tnot
 trelu
-taddreluconv
-tadddeqrelu
-tsubreluconv
 tands
 tors
 tshls
@@ -230,12 +229,9 @@ tpushpop_vc_nosplit
 tpushpop_dir_both
 tpushpop_dir_both_concurrent
 tpushpop_subtile
-tfusedmuladd
-tmuladddst
-tsubrelu
-tfusedmuladdrelu
+tmadd
+tmula
 syncall
-tpairreducesum
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.
@@ -266,6 +262,7 @@ if (AUTO_MODE)
     tgather
     timg2col
     tload_gm2mat
+    tload_l2hint_mat
     tmov_vect
     tpartadd
     tpartmul

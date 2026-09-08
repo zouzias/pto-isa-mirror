@@ -71,18 +71,21 @@ if __name__ == "__main__":
         "TPushPopCVNoSplitTest.case1_half_single_tile",
         "TPushPopCVNoSplitTest.case2_half_two_tiles",
         "TPushPopCVNoSplitTest.case3_float_single_tile",
-        "TPushPopCVNoSplitTest.case4_float_acc_valid_shape_strip",
+        "TPushPopCVNoSplitTest.case4_float_static_acc_valid_shape_strip",
+        "TPushPopCVNoSplitTest.case5_float_dynamic_acc_valid_shape_strip",
     ]
 
     # Parameters mirror kernel instantiations.
     # key = 1 : half->float, TOTAL_M = 16, K = 32, N = 32
     # key = 2 : half->float, TOTAL_M = 32, K = 32, N = 32
     # key = 3 : float->float, TOTAL_M = 16, K = 32, N = 32
-    # key = 4 : float->float, M = 32, K = 32, N = 128, Acc ValidRow strip H = 16, no bias
+    # key = 4 : float->float, M = 32, K = 32, N = 128, static Acc ValidRow strip H = 16, no bias
+    # key = 5 : float->float, M = 32, K = 32, N = 128, dynamic Acc valid shape H = 16, no bias
     case_params_list = [
         CaseParams(np.float16, m=16, k=32, n=32),
         CaseParams(np.float16, m=32, k=32, n=32),
         CaseParams(np.float32, m=16, k=32, n=32),
+        CaseParams(np.float32, m=32, k=32, n=128, use_bias=False),
         CaseParams(np.float32, m=32, k=32, n=128, use_bias=False),
     ]
 

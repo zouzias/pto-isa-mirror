@@ -1,4 +1,5 @@
-﻿# TLOAD
+# TLOAD
+
 
 ## 指令示意图
 
@@ -43,7 +44,38 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+原有 `TLOAD(dst, src)` 与 `TLOAD<TileT, GTensor>(dst, src)` 仍可用。`TLoadL2Hint` 为首模板的形式为额外重载（`l2Control` 无默认值）。
+
+## L2 cache hint
+
+可选首模板参数重载（原有 `TLOAD(dst, src)` 不变）：
+
+```cpp
+TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src);
+```
+
+支持的 `TLoadL2Hint`：
+
+| 枚举 | 值 | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | 默认分配（无效果） | 支持 |
+| NormalLastVictim | 1 | 默认分配（无效果） | 支持 |
+| NormalPersistent | 2 | 默认分配（无效果） | 支持 |
+| NotAllocKeep | 4 | 非分配（GM 地址加上运行时 `l2Cacheoffset`） | 支持 |
+| NotAllocClean | 5 | 非分配（同 Keep） | 支持 |
+| NotAllocDrop | 6 | 非分配（同 Keep） | 支持 |
+
+A2/A3 上实际只有 **两种行为**：
+
+1. **默认分配** — `NormalFirstVictim` (0)、`NormalLastVictim` (1)、`NormalPersistent` (2)：在 A2/A3 上为无效果（对 VLU / first/last/persist 等不同提示无影响）。它们不是有意义的独立模式，均走默认分配路径。
+2. **非分配** — `NotAllocKeep` (4)、`NotAllocClean` (5)、`NotAllocDrop` (6)：生效，通过 GM 地址加上运行时 `l2Cacheoffset`（A2/A3 上 Keep/Clean/Drop 行为相同）。
+
+A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
 
 ## 约束
 
@@ -75,6 +107,9 @@ PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... event
 
 - **有效区域**:
     - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
+    - 在A2/A3上，同布局且按块对齐的 `TileType::Mat` 加载仅写入有效区域。ND到NZ、DN到ZN加载（以及单行/单列Mat特殊路径）还会将最后一个不完整C0块的尾部填零。其他数据保持不变，包括共享同一底层存储的其他tile视图所对应的数据。
+    - 在A5上，同布局 `TileType::Mat` 的ND/DN加载仅按 `PadVal` 填充最后一个不完整32B块；ND/DN到分形布局的加载将最后一个不完整C0块的尾部填零。完整32B间隔块以及未参与传输的行或列保持不变。
+    - 在A2/A3和A5上，`PadVal` 非空时，`TileType::Vec` 的ND/DN加载仅填充每个burst传输后不足32B的尾部；完整32B间隔块以及未参与传输的行或列保持不变。NZ加载和`PadValue::Null`不增加填充。
 
 ## 示例
 

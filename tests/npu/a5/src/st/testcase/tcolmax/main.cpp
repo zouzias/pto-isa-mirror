@@ -53,8 +53,8 @@ protected:
     template <typename T>
     bool CompareGolden(size_t dstByteSize, bool printAllEn = false)
     {
-        std::vector<T> golden(dstByteSize);
-        std::vector<T> result(dstByteSize);
+        std::vector<T> golden(dstByteSize / sizeof(T));
+        std::vector<T> result(dstByteSize / sizeof(T));
         float eps = sizeof(T) == 4 ? 0.001f : 0.005f;
         ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
         ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
@@ -76,6 +76,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -218,3 +219,7 @@ TEST_F(TCOLMAXTest, case73)
 }
 TEST_F(TCOLMAXTest, case_int64_4x16) { EXPECT_TRUE((TCOLMAXTestFramework<81, int64_t, 4, 4, 1, 16, 16>())); }
 TEST_F(TCOLMAXTest, case_uint64_4x16) { EXPECT_TRUE((TCOLMAXTestFramework<82, uint64_t, 4, 4, 1, 16, 16>())); }
+TEST_F(TCOLMAXTest, case_int64_4x64) { EXPECT_TRUE((TCOLMAXTestFramework<83, int64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMAXTest, case_uint64_4x64) { EXPECT_TRUE((TCOLMAXTestFramework<84, uint64_t, 4, 4, 1, 64, 64>())); }
+TEST_F(TCOLMAXTest, case_int64_1x4092) { EXPECT_TRUE((TCOLMAXTestFramework<85, int64_t, 1, 1, 1, 4092, 4092>())); }
+TEST_F(TCOLMAXTest, case_uint64_1x4092) { EXPECT_TRUE((TCOLMAXTestFramework<86, uint64_t, 1, 1, 1, 4092, 4092>())); }

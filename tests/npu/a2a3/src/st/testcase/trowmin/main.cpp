@@ -53,8 +53,8 @@ protected:
     template <typename T>
     bool CompareGolden(size_t byteSize, bool printAllEn = false)
     {
-        std::vector<T> golden(byteSize);
-        std::vector<T> result(byteSize);
+        std::vector<T> golden(byteSize / sizeof(T));
+        std::vector<T> result(byteSize / sizeof(T));
         float eps = sizeof(T) == 4 ? 0.00005f : 0.0005f;
         ReadFile(GetGoldenDir() + "/golden.bin", byteSize, golden.data(), byteSize);
         ReadFile(GetGoldenDir() + "/output.bin", byteSize, result.data(), byteSize);
@@ -73,6 +73,7 @@ protected:
         aclrtMallocHost(&srcHost, srcByteSize);
         aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemset(dstDevice, dstByteSize, 0, dstByteSize);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);

@@ -35,23 +35,16 @@ struct StandaloneHcclContext {
     PtoRemoteWindowContext* remote_window_ctx = nullptr;
     PtoRemoteWindowContext host_remote_window_ctx{};
     uint64_t raw_window_bytes = 0;
-    uint64_t raw_window_in[PTO_HCCL_MAX_RANKS] = {};
+    uint64_t raw_local_window_in = 0;
     bool owns_remote_window_ctx = false;
 
     PtoRemoteWindowContext* RemoteWindowContextPtr() const { return remote_window_ctx; }
 
     uint64_t WindowBytes() const { return host_remote_window_ctx.windowBytes; }
 
-    uint64_t WindowClearBytes() const
-    {
-        return raw_window_bytes == 0 ? host_remote_window_ctx.windowBytes : raw_window_bytes;
-    }
+    uint64_t WindowClearBytes() const { return raw_window_bytes; }
 
-    void* WindowClearBase(uint32_t rank) const
-    {
-        const uint64_t rawBase = raw_window_in[rank];
-        return reinterpret_cast<void*>(rawBase == 0 ? host_remote_window_ctx.windowIn[rank] : rawBase);
-    }
+    void* WindowClearBase() const { return reinterpret_cast<void*>(raw_local_window_in); }
 
     void AttachExternalRemoteWindowContext(PtoRemoteWindowContext* remoteWindowCtx);
     void ReleaseRemoteWindowContext();

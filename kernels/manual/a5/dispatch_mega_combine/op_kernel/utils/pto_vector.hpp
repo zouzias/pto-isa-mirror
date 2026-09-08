@@ -12,7 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define DISPATCH_MEGA_COMBINE_PTO_VECTOR_HPP
 
 #include <cstdint>
-#include <type_traits>
 
 #include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
@@ -189,23 +188,6 @@ AICORE inline void PtoMoveUb(uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetByte
 }
 
 template <typename Element, int TileElems = 1024>
-AICORE inline void PtoAddUb(
-    uint64_t dstUbOffsetBytes, uint64_t src0UbOffsetBytes, uint64_t src1UbOffsetBytes, uint32_t elemNum)
-{
-    using Tile = PtoVecTile<Element, TileElems>;
-    for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-        const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-        Tile dstTile(1, cur);
-        Tile src0Tile(1, cur);
-        Tile src1Tile(1, cur);
-        PtoAssignUbTile<Tile, Element>(dstTile, dstUbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src0Tile, src0UbOffsetBytes, offset);
-        PtoAssignUbTile<Tile, Element>(src1Tile, src1UbOffsetBytes, offset);
-        pto::TADD(dstTile, src0Tile, src1Tile);
-    }
-}
-
-template <typename Element, int TileElems = 1024>
 AICORE inline void PtoAddScalarUb(
     uint64_t dstUbOffsetBytes, uint64_t srcUbOffsetBytes, uint32_t elemNum, Element scalar)
 {
@@ -232,83 +214,6 @@ AICORE inline void PtoMulScalarUb(
         PtoAssignUbTile<Tile, Element>(dstTile, dstUbOffsetBytes, offset);
         PtoAssignUbTile<Tile, Element>(srcTile, srcUbOffsetBytes, offset);
         pto::TMULS(dstTile, srcTile, scalar);
-    }
-}
-
-template <typename Element, int TileElems = 1024>
-AICORE inline void CastDynamicQuantInputToFp32(uint64_t fp32Ub, uint64_t rawInputUb, uint32_t elemNum)
-{
-    if constexpr (!std::is_same_v<Element, float>) {
-        using DstTile = PtoVecTile<float, TileElems>;
-        using SrcTile = PtoVecTile<Element, TileElems>;
-        for (uint32_t offset = 0; offset < elemNum; offset += TileElems) {
-            const uint32_t cur = (elemNum - offset > TileElems) ? TileElems : (elemNum - offset);
-            DstTile dstTile(1, cur);
-            SrcTile srcTile(1, cur);
-            pto::TASSIGN(dstTile, fp32Ub + static_cast<uint64_t>(offset) * sizeof(float));
-            pto::TASSIGN(srcTile, rawInputUb + static_cast<uint64_t>(offset) * sizeof(Element));
-            pto::TCVT(dstTile, srcTile, pto::RoundMode::CAST_NONE);
-        }
-    }
-}
-
-AICORE inline void BuildDynamicQuantAbs(uint64_t absUb, uint64_t inputUb, uint32_t elemNum)
-{
-    using Tile = PtoVecTile<float>;
-    for (uint32_t offset = 0; offset < elemNum; offset += 1024) {
-        const uint32_t cur = (elemNum - offset > 1024) ? 1024 : (elemNum - offset);
-        const uint64_t elemOffset = static_cast<uint64_t>(offset) * sizeof(float);
-        Tile dstTile(1, cur);
-        Tile srcTile(1, cur);
-        pto::TASSIGN(dstTile, absUb + elemOffset);
-        pto::TASSIGN(srcTile, inputUb + elemOffset);
-        pto::TABS(dstTile, srcTile);
-    }
-}
-
-AICORE inline void ReduceDynamicQuantAbsMax(uint64_t maxUb, uint64_t absUb, uint32_t elemNum)
-{
-    using Tile = PtoVecTile<float>;
-    using RowMaxTile = pto::Tile<pto::TileType::Vec, float, 8, 1, pto::BLayout::ColMajor, -1, 1>;
-    using ScalarTile = pto::Tile<pto::TileType::Vec, float, 1, 8, pto::BLayout::RowMajor, -1, -1>;
-    bool firstChunk = true;
-    for (uint32_t offset = 0; offset < elemNum; offset += 1024) {
-        const uint32_t cur = (elemNum - offset > 1024) ? 1024 : (elemNum - offset);
-        Tile srcTile(1, cur);
-        Tile tmpTile(1, cur);
-        RowMaxTile rowMaxTile(1);
-        pto::TASSIGN(srcTile, absUb + static_cast<uint64_t>(offset) * sizeof(float));
-        pto::TASSIGN(tmpTile, absUb + static_cast<uint64_t>(offset) * sizeof(float));
-        pto::TASSIGN(rowMaxTile, firstChunk ? maxUb : absUb);
-        pto::TROWMAX(rowMaxTile, srcTile, tmpTile);
-        pipe_barrier(PIPE_ALL);
-        if (!firstChunk) {
-            ScalarTile accTile(1, 1);
-            ScalarTile newTile(1, 1);
-            ScalarTile dstTile(1, 1);
-            pto::TASSIGN(accTile, maxUb);
-            pto::TASSIGN(newTile, absUb);
-            pto::TASSIGN(dstTile, maxUb);
-            pto::TMAX(dstTile, accTile, newTile);
-            pipe_barrier(PIPE_ALL);
-        }
-        firstChunk = false;
-    }
-}
-
-AICORE inline void DivideDynamicQuantInputByScale(uint64_t dstUb, uint64_t inputUb, uint64_t scaleUb, uint32_t elemNum)
-{
-    using Tile = PtoVecTile<float>;
-    for (uint32_t offset = 0; offset < elemNum; offset += 1024) {
-        const uint32_t cur = (elemNum - offset > 1024) ? 1024 : (elemNum - offset);
-        const uint64_t elemOffset = static_cast<uint64_t>(offset) * sizeof(float);
-        Tile dstTile(1, cur);
-        Tile numeratorTile(1, cur);
-        Tile denominatorTile(1, cur);
-        pto::TASSIGN(dstTile, dstUb + elemOffset);
-        pto::TASSIGN(numeratorTile, inputUb + elemOffset);
-        pto::TASSIGN(denominatorTile, scaleUb + elemOffset);
-        pto::TDIV(dstTile, numeratorTile, denominatorTile);
     }
 }
 

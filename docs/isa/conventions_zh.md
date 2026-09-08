@@ -1,4 +1,4 @@
-﻿# PTO ISA 通用约定
+# PTO ISA 通用约定
 
 本页定义 `docs/isa/` 指令参考文档中使用的通用术语与写法，并与 `include/pto/common/pto_instr.hpp` 中的 C++ 内建接口保持一致。
 
@@ -37,6 +37,6 @@
 ## 事件与同步
 
 - 某些指令序列需要建立内存与向量流水线之间的顺序关系。示例中出现的事件（例如 `set_flag(...)` / `wait_flag(...)`）用于表达后端需要满足的顺序约束。
-- 在需要显式同步的场景，使用 `TSYNC` 建立阶段间的顺序关系。
+- 在需要显式同步的场景，使用 event synchronization 建立阶段间的顺序关系。
 
 事件模型可参考：`docs/coding/Event_zh.md`。
