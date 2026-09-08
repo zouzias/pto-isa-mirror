@@ -44,13 +44,14 @@ std::string makeVersionKey(const VregVersion& version)
 
 std::pair<int64_t, std::string> vregSortKey(const std::string& name)
 {
+    constexpr int64_t kDecimalBase = 10;
     if (name.size() <= 1)
         return {std::numeric_limits<int64_t>::max(), name};
     int64_t value = 0;
     for (size_t i = 1; i < name.size(); ++i) {
         if (!std::isdigit(static_cast<unsigned char>(name[i])))
             return {std::numeric_limits<int64_t>::max(), name};
-        value = value * 10 + static_cast<int64_t>(name[i] - '0');
+        value = value * kDecimalBase + static_cast<int64_t>(name[i] - '0');
     }
     return {value, name};
 }

@@ -36,6 +36,9 @@ using namespace llvm;
 
 namespace {
 
+constexpr unsigned kInlineExitBlockCapacity = 4;
+constexpr unsigned kInlineLoopNestCapacity = 8;
+
 static bool nameStartsWith(StringRef s, const char* p)
 {
     size_t n = std::strlen(p);
@@ -152,7 +155,7 @@ static void collectLoopInScope(Loop* L, Function& F, std::vector<LoopWork>& out,
         errs() << "[PtoLoopTrace] WARN: loop without dedicated exits skipped (" << F.getName() << ")\n";
         return;
     }
-    SmallVector<BasicBlock*, 4> exitBlks;
+    SmallVector<BasicBlock*, kInlineExitBlockCapacity> exitBlks;
     L->getUniqueExitBlocks(exitBlks);
     for (BasicBlock* eb : exitBlks)
         w.exitBlocks.push_back(eb);
@@ -164,7 +167,7 @@ static bool formDedicatedExitsForScopedLoops(LoopInfo& LI, DominatorTree& DT, In
 {
     bool cfgChanged = false;
     for (Loop* L : LI) {
-        SmallVector<Loop*, 8> nest;
+        SmallVector<Loop*, kInlineLoopNestCapacity> nest;
         nest.push_back(L);
         for (size_t i = 0; i < nest.size(); ++i)
             for (Loop* sub : nest[i]->getSubLoops())

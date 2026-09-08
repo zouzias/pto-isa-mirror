@@ -19,8 +19,9 @@ namespace vfsim {
 
 inline std::string jsonEscape(const std::string& text)
 {
+    constexpr size_t kEscapeReserveSlack = 8;
     std::string out;
-    out.reserve(text.size() + 8);
+    out.reserve(text.size() + kEscapeReserveSlack);
     for (char c : text) {
         switch (c) {
             case '\\':

@@ -17,6 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace vfsim {
 namespace {
 
+constexpr size_t kMaxInferredNestedLoopDepth = 3;
+
 bool isDigits(const std::string& text)
 {
     if (text.empty())
@@ -168,7 +170,7 @@ std::vector<int64_t> ProgramAnalysis::inferNestedBoundsFromLoop(const ProgramLoo
     std::vector<int64_t> bounds;
     const ProgramLoopNode* cur = &loop;
 
-    while (cur != nullptr && bounds.size() < 3) {
+    while (cur != nullptr && bounds.size() < kMaxInferredNestedLoopDepth) {
         bounds.push_back(resolveBound(cur->iters));
         const ProgramLoopNode* nextLoop = nullptr;
         for (const auto& node : cur->body) {
