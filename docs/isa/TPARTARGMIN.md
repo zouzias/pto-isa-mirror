@@ -17,8 +17,8 @@ $$
 \begin{aligned}
 (\mathrm{dstVal}_{i,j}, \mathrm{dstIdx}_{i,j}) =
 \begin{cases}
-(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if } \mathrm{src0Val}_{i,j} < \mathrm{src1Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
-(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if } \mathrm{src1Val}_{i,j} \le \mathrm{src0Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
+(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if } \mathrm{src0Val}_{i,j} \le \mathrm{src1Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
+(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if } \mathrm{src1Val}_{i,j} < \mathrm{src0Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
 (\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if only src0 is defined at } (i,j) \\
 (\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if only src1 is defined at } (i,j)
 \end{cases}
