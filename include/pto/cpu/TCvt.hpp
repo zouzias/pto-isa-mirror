@@ -23,6 +23,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 constexpr double CAST_ODD_THRESHOLD = 0.5;
+constexpr double INT4B_LOWEST = -8.0;
+constexpr double INT4B_MAX = 7.0;
+constexpr double FP4_E2M1_LOWEST = -6.0;
+constexpr double FP4_E2M1_MAX = 6.0;
+constexpr double FP4_E1M2_LOWEST = -4.0;
+constexpr double FP4_E1M2_MAX = 3.5;
 
 inline void PrintFloatBits(double val, const char* name)
 {
@@ -119,20 +125,20 @@ struct SafeLimits {
 
 template <>
 struct SafeLimits<int4b_t> {
-    static constexpr double lowest() { return -8.0; }
-    static constexpr double max() { return 7.0; }
+    static constexpr double lowest() { return INT4B_LOWEST; }
+    static constexpr double max() { return INT4B_MAX; }
 };
 
 template <>
 struct SafeLimits<float4_e2m1x2_t> {
-    static constexpr double lowest() { return -6.0; }
-    static constexpr double max() { return 6.0; }
+    static constexpr double lowest() { return FP4_E2M1_LOWEST; }
+    static constexpr double max() { return FP4_E2M1_MAX; }
 };
 
 template <>
 struct SafeLimits<float4_e1m2x2_t> {
-    static constexpr double lowest() { return -4.0; }
-    static constexpr double max() { return 3.5; }
+    static constexpr double lowest() { return FP4_E1M2_LOWEST; }
+    static constexpr double max() { return FP4_E1M2_MAX; }
 };
 
 template <typename T>

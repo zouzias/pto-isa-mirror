@@ -164,6 +164,10 @@ inline const char* LayoutToString(Layout layout)
             return "FRACTAL_Z_S16S8";
         case Layout::FRACTAL_Z_3D:
             return "FRACTAL_Z_3D";
+        case Layout::HIF4_A_ZZ:
+            return "HIF4_A_ZZ";
+        case Layout::HIF4_B_NN:
+            return "HIF4_B_NN";
         case Layout::MAX:
             return "MAX";
     }
@@ -235,7 +239,8 @@ std::string TraceDTypeName()
     } else if constexpr (std::is_enum_v<Decayed>) {
         return "enum";
     } else if constexpr (std::is_integral_v<Decayed>) {
-        return std::string(std::is_signed_v<Decayed> ? "int" : "uint") + std::to_string(sizeof(Decayed) * 8);
+        constexpr int bitsInByte = 8;
+        return std::string(std::is_signed_v<Decayed> ? "int" : "uint") + std::to_string(sizeof(Decayed) * bitsInByte);
     } else {
         return "unknown";
     }
@@ -359,10 +364,13 @@ TileOperandTrace CaptureTileOperand(TileData& tile)
     return operand;
 }
 
+// Small slack to avoid reallocation for strings containing escapable characters.
+inline constexpr std::size_t kJsonEscapeReserveSlack = 8;
+
 inline std::string JsonEscape(std::string_view text)
 {
     std::string escaped;
-    escaped.reserve(text.size() + 8);
+    escaped.reserve(text.size() + kJsonEscapeReserveSlack);
     for (char ch : text) {
         switch (ch) {
             case '\\':

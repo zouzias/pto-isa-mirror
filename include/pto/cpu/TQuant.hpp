@@ -282,7 +282,7 @@ inline float ComputeMxGroupMax(TileDataSrc& src, int axis, int group)
 {
     float maxAbsValue = 0.0f;
     uint16_t maxAbsBf16Bits = 0;
-    constexpr int groupSize = 32;
+    constexpr int groupSize = MX_BLOCK_SIZE;
     for (int inner = 0; inner < groupSize; ++inner) {
         int row = grp_axis == 1 ? axis : (group * groupSize + inner);
         int col = grp_axis == 1 ? (group * groupSize + inner) : axis;
@@ -378,7 +378,7 @@ inline void QuantizeMxGroup(
     TileDataOut& dst, TileDataSrc& src, FlatScalingTile& flatScaling, int axis, int group, int flatGroupIdx,
     float groupScaling)
 {
-    constexpr int groupSize = 32;
+    constexpr int groupSize = MX_BLOCK_SIZE;
     for (int inner = 0; inner < groupSize; ++inner) {
         int row = grp_axis == 1 ? axis : (group * groupSize + inner);
         int col = grp_axis == 1 ? (group * groupSize + inner) : axis;
@@ -407,7 +407,8 @@ inline void CheckMxQuantTypes()
             TileDataSrc::Cols == TileDataOut::Cols,
         "Src and Out tiles should have the same BFractal layout and static shape!");
     static_assert(
-        (grp_axis == 1 && (TileDataSrc::Cols % 32 == 0)) || (grp_axis == 0 && (TileDataSrc::Rows % 32 == 0)),
+        (grp_axis == 1 && (TileDataSrc::Cols % MX_BLOCK_SIZE == 0)) ||
+            (grp_axis == 0 && (TileDataSrc::Rows % MX_BLOCK_SIZE == 0)),
         "Src Rows/Cols should be multiple of 32 for ND/DN quant mode!");
 
     using SrcT = typename TileDataSrc::DType;
@@ -465,8 +466,9 @@ inline void QuantizeMxTile(
 {
     const int rows = (grp_axis == 1) ? src.GetValidRow() : TileDataSrc::Rows;
     const int cols = (grp_axis == 1) ? TileDataSrc::Cols : src.GetValidCol();
+    constexpr int groupSize = MX_BLOCK_SIZE;
 
-    const int numGroupsAlongAxis = (grp_axis == 1) ? (cols / 32) : (rows / 32);
+    const int numGroupsAlongAxis = (grp_axis == 1) ? (cols / groupSize) : (rows / groupSize);
     const int numElementsAlongAxis = (grp_axis == 1) ? rows : cols;
 
     for (int i = 0; i < numElementsAlongAxis; ++i) {
@@ -595,7 +597,8 @@ PTO_INTERNAL void TQUANT_IMPL(
 
     PTO_CPU_ASSERT(exp_zz != nullptr, "Fix: MXFP8 NZ mode requires reordered exponents.");
     const int rows = src.GetValidRow();
-    const int groupCols = src.GetValidCol() / 32;
+    constexpr int groupSize = MX_BLOCK_SIZE;
+    const int groupCols = src.GetValidCol() / groupSize;
     const int totalGroups = rows * groupCols;
     std::vector<uint8_t> expValues(totalGroups);
     for (int i = 0; i < totalGroups; ++i) {

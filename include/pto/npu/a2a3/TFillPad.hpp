@@ -110,6 +110,8 @@ template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void PadRightSingleRow(
     decltype(getCopyNullPtr<TileDataDst>()) dstPtr, uint64_t padOffset, uint64_t padCols, uint64_t dupPadValue)
 {
+    if (padCols <= 0)
+        return;
     set_mask_count(); // counter mode
     set_vector_mask(0, padCols);
     vector_dup(dstPtr + padOffset, dupPadValue, 1, 1, 1, 8, 0);
@@ -211,9 +213,11 @@ __tf__ PTO_INTERNAL void TFillPad(
     // pad right for single row
     PadRightSingleRow<TileDataDst, TileDataSrc>(dstPtr, padOffset, padCols, dupPadValue);
 
-    // pad right for remaining rows (if any)
+    // pad right for remaining rows (if any); skip when padCols==0 (mask would be unset after early-return)
     if constexpr (TileDataSrc::Rows > 1) {
-        PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
+        if (padCols > 0) {
+            PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
+        }
     }
 
     // pad bottom rows
@@ -257,7 +261,9 @@ __tf__ PTO_INTERNAL void TFillPad_Inplace(
     uint64_t dupPadValue = sizeof(T) == 1 ? ((uint64_t)padValue) << 8 | ((uint64_t)padValue) : padValue;
     PadRightSingleRow<TileDataDst, TileDataSrc>(dstPtr, padOffset, padCols, dupPadValue);
     if constexpr (TileDataSrc::Rows > 1) {
-        PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
+        if (padCols > 0) {
+            PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
+        }
     }
     PadBottomRows<TileDataDst, TileDataSrc>(dstPtr, srcValidRow, dstValidRow, copyDstCols, dupPadValue);
     set_mask_norm(); // restore to norm mode

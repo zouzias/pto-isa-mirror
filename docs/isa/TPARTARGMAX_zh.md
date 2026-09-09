@@ -16,8 +16,8 @@ $$
 \begin{aligned}
 (\mathrm{dstVal}_{i,j}, \mathrm{dstIdx}_{i,j}) =
 \begin{cases}
-(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{若 } \mathrm{src0Val}_{i,j} > \mathrm{src1Val}_{i,j} \text{ 且两个输入在 } (i,j) \text{ 处均有定义} \\
-(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{若 } \mathrm{src1Val}_{i,j} \ge \mathrm{src0Val}_{i,j} \text{ 且两个输入在 } (i,j) \text{ 处均有定义} \\
+(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{若 } \mathrm{src0Val}_{i,j} \ge \mathrm{src1Val}_{i,j} \text{ 且两个输入在 } (i,j) \text{ 处均有定义} \\
+(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{若 } \mathrm{src1Val}_{i,j} > \mathrm{src0Val}_{i,j} \text{ 且两个输入在 } (i,j) \text{ 处均有定义} \\
 (\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{若仅src0在 } (i,j) \text{ 处有定义} \\
 (\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{若仅src1在 } (i,j) \text{ 处有定义}
 \end{cases}
