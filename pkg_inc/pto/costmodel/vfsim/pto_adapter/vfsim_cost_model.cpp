@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -109,11 +108,6 @@ void updateFailureStatus(VfPredictionResult& result, VfPredictionStatus status)
 {
     if (statusPriority(status) > statusPriority(result.status))
         result.status = status;
-}
-
-bool shouldLog(VfSimLogLevel configured, VfSimLogLevel threshold)
-{
-    return static_cast<uint8_t>(configured) >= static_cast<uint8_t>(threshold);
 }
 
 bool isConfigDirectory(const std::filesystem::path& path)
@@ -217,15 +211,11 @@ const vfsim::ParamDB& getParamDb(const std::filesystem::path& configRoot)
     return *cachedDb;
 }
 
-void addDiagnostic(
-    VfPredictionResult& result, const VfPredictionOptions& options, std::size_t vfIndex, VfPredictionStatus status,
-    const std::string& reason)
+void addDiagnostic(VfPredictionResult& result, std::size_t vfIndex, VfPredictionStatus status, const std::string& reason)
 {
     std::ostringstream message;
     message << "vf[" << vfIndex << "]: " << toString(status) << ": " << reason;
     result.diagnostics.push_back(message.str());
-    if (shouldLog(options.logLevel, VfSimLogLevel::ERRORS))
-        std::cerr << "[VfSim] " << message.str() << '\n';
 }
 
 } // namespace
@@ -269,7 +259,7 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
                 ++prediction.fallbackCount;
                 updateFailureStatus(prediction, VfPredictionStatus::INVALID_TRACE);
                 addDiagnostic(
-                    prediction, options, vfIndex, VfPredictionStatus::INVALID_TRACE,
+                    prediction, vfIndex, VfPredictionStatus::INVALID_TRACE,
                     std::string("direct canonical lowering failed: ") + exception.what());
                 continue;
             }
@@ -279,15 +269,12 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
                 diagnostic << "vf[" << vfIndex << "]: approximation: ignored " << lowering.ignoredInstructionCount
                            << " predicate setup instruction(s) because predicate registers are not modeled";
                 prediction.diagnostics.push_back(diagnostic.str());
-                if (shouldLog(options.logLevel, VfSimLogLevel::DETAILED))
-                    std::cerr << "[VfSim] " << diagnostic.str() << '\n';
             }
             if (lowering.program.context.empty()) {
                 ++prediction.fallbackCount;
                 updateFailureStatus(prediction, VfPredictionStatus::EMPTY_PROGRAM);
                 addDiagnostic(
-                    prediction, options, vfIndex, VfPredictionStatus::EMPTY_PROGRAM,
-                    "lowering produced an empty program");
+                    prediction, vfIndex, VfPredictionStatus::EMPTY_PROGRAM, "lowering produced an empty program");
                 continue;
             }
 
@@ -297,8 +284,7 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
                     prediction.cycles += fallbackNodes(vf.tree, 1);
                     ++prediction.fallbackCount;
                     updateFailureStatus(prediction, VfPredictionStatus::UNSUPPORTED_FORM);
-                    addDiagnostic(
-                        prediction, options, vfIndex, VfPredictionStatus::UNSUPPORTED_FORM, unsupportedReason);
+                    addDiagnostic(prediction, vfIndex, VfPredictionStatus::UNSUPPORTED_FORM, unsupportedReason);
                     continue;
                 }
 
@@ -306,14 +292,11 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
                 const uint64_t cycles = static_cast<uint64_t>(std::max<int64_t>(0, result.vfEndCycle));
                 prediction.cycles += cycles;
                 ++prediction.vfSimHitCount;
-                if (shouldLog(options.logLevel, VfSimLogLevel::DETAILED)) {
-                    std::cerr << "[VfSim] vf[" << vfIndex << "]: VfSimHit: cycles=" << cycles << '\n';
-                }
             } catch (const std::exception& exception) {
                 prediction.cycles += fallbackNodes(vf.tree, 1);
                 ++prediction.fallbackCount;
                 updateFailureStatus(prediction, VfPredictionStatus::SIMULATOR_ERROR);
-                addDiagnostic(prediction, options, vfIndex, VfPredictionStatus::SIMULATOR_ERROR, exception.what());
+                addDiagnostic(prediction, vfIndex, VfPredictionStatus::SIMULATOR_ERROR, exception.what());
                 continue;
             }
         }
@@ -327,15 +310,10 @@ VfPredictionResult predictVfCyclesWithVfSim(const std::vector<VfInfo>& vfs, cons
         prediction.fallbackCount = static_cast<uint32_t>(vfs.size());
         prediction.status = VfPredictionStatus::SIMULATOR_ERROR;
         addDiagnostic(
-            prediction, options, 0, VfPredictionStatus::SIMULATOR_ERROR,
+            prediction, 0, VfPredictionStatus::SIMULATOR_ERROR,
             std::string("failed to initialize VfSim ParamDB: ") + exception.what());
     }
 
-    if (shouldLog(options.logLevel, VfSimLogLevel::SUMMARY)) {
-        std::cerr << "[VfSim] status=" << toString(prediction.status) << ", cycles=" << prediction.cycles
-                  << ", hits=" << prediction.vfSimHitCount << ", fallbacks=" << prediction.fallbackCount
-                  << ", ignored_instructions=" << prediction.ignoredInstructionCount << '\n';
-    }
     return prediction;
 }
 

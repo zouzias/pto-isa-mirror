@@ -27,15 +27,7 @@ enum class VfPredictionStatus : uint8_t {
     SIMULATOR_ERROR,
 };
 
-enum class VfSimLogLevel : uint8_t {
-    OFF,
-    ERRORS,
-    SUMMARY,
-    DETAILED,
-};
-
 struct VfPredictionOptions {
-    VfSimLogLevel logLevel = VfSimLogLevel::OFF;
     std::string configDir;
 };
 

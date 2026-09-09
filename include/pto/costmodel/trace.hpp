@@ -72,6 +72,17 @@ inline TraceState& GetMutableTrace() { return g_trace_state; }
 
 inline const TraceState& GetTrace() { return g_trace_state; }
 
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
+inline void RecordVfFallbackCycles(uint64_t cycles)
+{
+    auto& trace = g_trace_state;
+    if (trace.active_pto_stack.empty()) {
+        return;
+    }
+    trace.executed_pto[trace.active_pto_stack.back()].total_cycles += cycles;
+}
+#endif
+
 inline uint64_t GetLastPtoInstrCycles()
 {
     const auto& trace = g_trace_state;
