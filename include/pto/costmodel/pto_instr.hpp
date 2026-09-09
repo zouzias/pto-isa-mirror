@@ -19,6 +19,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/utils.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#if defined(PTO_NPU_ARCH_A5) && defined(__COSTMODEL)
+#include "pto/npu/a5/TRsqrt.hpp"
+#endif
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
 #include "pto/costmodel/perf_sim/recorder.hpp"
@@ -369,22 +372,6 @@ PTO_INTERNAL void TDIVS_IMPL(TileDataDst& dst, typename TileDataSrc::DType scala
     }
 }
 
-template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
-PTO_INTERNAL void TRSQRT_IMPL(DstTile& dst, SrcTile& src)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data());
-        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-            "trsqrt", operands, std::index_sequence<0>{}, std::index_sequence<1>{}));
-    }
-}
-
-template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile, typename TmpTile>
-PTO_INTERNAL void TRSQRT_IMPL(DstTile& dst, SrcTile& src, [[maybe_unused]] TmpTile& tmp)
-{
-    TRSQRT_IMPL<PrecisionType>(dst, src);
-}
 
 template <typename DstTile, typename SrcTile, typename ExpTile, typename MaxTile, typename ScalingTile>
 PTO_INTERNAL void RecordUnsupportedMxQuant(DstTile& dst, SrcTile& src, ExpTile* exp, MaxTile* max, ScalingTile* scaling)

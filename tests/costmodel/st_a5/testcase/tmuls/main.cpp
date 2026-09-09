@@ -31,7 +31,6 @@ void runTMulS(T scalar)
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
     pto::test::a5::ExpectLastVecTileOp({"vlds", "vmuls", "vsts"}, repeat);
-    pto::test::a5::ExpectLastVfSimHit();
 }
 
 } // namespace

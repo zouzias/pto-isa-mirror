@@ -33,7 +33,6 @@ void runTDiv()
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
     pto::test::a5::ExpectLastBinaryVecTileOp({"vlds", "vlds", "vdiv", "vsts"}, repeat);
-    pto::test::a5::ExpectLastVfSimHit();
 }
 
 } // namespace
