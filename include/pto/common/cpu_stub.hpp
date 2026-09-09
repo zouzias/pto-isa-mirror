@@ -45,7 +45,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __cb__
 #define __cc__
 #define __fbuf__
-#define __biasbuf__
+// #define __biasbuf__
 #define __tf__
 
 typedef void* aclrtStream;
@@ -265,10 +265,11 @@ inline bool ReadEnvBool(const char* name, bool fallback)
 
 inline void InitializeRuntime()
 {
+    constexpr int DEFAULT_CORE_NUM = 4;
     auto& config = runtime_config();
     std::scoped_lock lock(config.mutex);
     config.device_id = 0;
-    config.num_cores = ReadEnvU32("PTO_CPU_SIM_NUM_CORES", 4);
+    config.num_cores = ReadEnvU32("PTO_CPU_SIM_NUM_CORES", DEFAULT_CORE_NUM);
     config.trace_enabled = kInstructionTraceEnabled && ReadEnvBool("PTO_CPU_SIM_TRACE_ENABLE", true);
     if (const char* trace_dir = std::getenv("PTO_CPU_SIM_TRACE_DIR"); trace_dir != nullptr && *trace_dir != '\0') {
         config.trace_root = trace_dir;
