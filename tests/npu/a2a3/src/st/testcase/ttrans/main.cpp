@@ -18,6 +18,9 @@ using namespace PtoTestCommon;
 template <typename T, int tRows, int tCols, int vRows, int vCols>
 void LaunchTTRANS(T* out, T* src, void* stream);
 
+template <typename T, int D0, int D1, int tRows, int tCols, int vRows, int vCols>
+void LaunchTTRANSMultiDim(T* out, T* src, void* stream);
+
 class TTRANSTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -106,3 +109,71 @@ TEST_F(TTRANSTest, case16_float_2_16_2_16) { test_ttrans<float, 2, 16, 2, 16>();
 TEST_F(TTRANSTest, case17_int8_32_32_32_32) { test_ttrans<uint8_t, 32, 32, 32, 32>(); }
 TEST_F(TTRANSTest, case18_int8_64_64_22_63) { test_ttrans<uint8_t, 64, 64, 22, 63>(); }
 TEST_F(TTRANSTest, case19_float_8_8_8_8) { test_ttrans<float, 8, 8, 8, 8>(); }
+TEST_F(TTRANSTest, case20_half_128_128_64_64) { test_ttrans<aclFloat16, 128, 128, 64, 64>(); }
+
+template <typename T, int D0, int D1, int tRows, int tCols, int vRows, int vCols>
+void test_ttrans_multidim()
+{
+    size_t srcFileSize = static_cast<size_t>(D0) * D1 * vRows * vCols * sizeof(T);
+    size_t dstFileSize = static_cast<size_t>(D0) * D1 * vCols * vRows * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T *dstHost, *srcHost;
+    T *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void**)(&dstHost), dstFileSize);
+    aclrtMallocHost((void**)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTTRANSMultiDim<T, D0, D1, tRows, tCols, vRows, vCols>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(dstFileSize / sizeof(T));
+    std::vector<T> result(dstFileSize / sizeof(T));
+    ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, result.data(), dstFileSize);
+
+    bool ret = ResultCmp(golden, result, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
+// [1, 1, 16, 1] -> [1, 1, 1, 16]; tile width padded to 8 for float vnchwconv
+TEST_F(TTRANSTest, case21_float_multidim_1_1_16_1) { test_ttrans_multidim<float, 1, 1, 16, 8, 16, 1>(); }
+
+// [1, 1, 1, 16] -> [1, 1, 16, 1]
+TEST_F(TTRANSTest, case22_float_multidim_1_1_1_16) { test_ttrans_multidim<float, 1, 1, 1, 16, 1, 16>(); }
+
+// [1, 1, 16, 16] -> [1, 1, 16, 16]
+TEST_F(TTRANSTest, case23_float_multidim_1_1_16_16) { test_ttrans_multidim<float, 1, 1, 16, 16, 16, 16>(); }
+
+// [16, 16, 16, 1] -> [16, 16, 1, 16]; tile width padded to 8 for float vnchwconv
+TEST_F(TTRANSTest, case24_float_multidim_16_16_16_1) { test_ttrans_multidim<float, 16, 16, 16, 8, 16, 1>(); }
+
+// [16, 16, 1, 16] -> [16, 16, 16, 1]
+TEST_F(TTRANSTest, case25_float_multidim_16_16_1_16) { test_ttrans_multidim<float, 16, 16, 1, 16, 1, 16>(); }
+
+// [16, 16, 16, 16] -> [16, 16, 16, 16]
+TEST_F(TTRANSTest, case26_float_multidim_16_16_16_16) { test_ttrans_multidim<float, 16, 16, 16, 16, 16, 16>(); }
