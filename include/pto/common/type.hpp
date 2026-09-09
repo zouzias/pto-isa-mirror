@@ -223,7 +223,12 @@ enum class VecStoreMode {
     NZ = 1,
 };
 
-// UF store phase encodes unit flag behavior for accumulator stores.
+// UF store phase encodes unit flag behavior for accumulator move-outs (L0C to L1, to UB or to GM).
+// The values are NOT symmetric with AccPhase: the TMATMUL that produced the L0C result must already be
+// AccPhase::Final, i.e. the data is ready. Final marks the last move-out and releases the unit flag;
+// Partial is only for the non-last move-outs when one L0C tile is drained more than once, and does not
+// release the flag. Pairing STPhase::Partial with AccPhase::Partial makes the fixpipe wait on a flag
+// that never arrives, which hangs.
 enum class STPhase : uint8_t {
     Unspecified = 0x0,
     Partial = 0x2,

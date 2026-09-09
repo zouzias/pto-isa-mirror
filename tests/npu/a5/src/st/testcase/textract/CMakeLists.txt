@@ -9,3 +9,13 @@
 # --------------------------------------------------------------------------------
 
 pto_cube_st(textract)
+
+add_library(textract_acc2mat_kernel SHARED textract_acc2mat_kernel.cpp)
+target_compile_options(textract_acc2mat_kernel PRIVATE
+    ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310 -DREGISTER_BASE -std=c++17)
+target_include_directories(textract_acc2mat_kernel PRIVATE
+    ${ASCEND_HOME_PATH}/pkg_inc/
+    ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime)
+target_link_options(textract_acc2mat_kernel PRIVATE --cce-fatobj-link)
+target_link_libraries(textract PRIVATE textract_acc2mat_kernel)

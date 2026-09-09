@@ -153,7 +153,8 @@ AICORE inline void TMOVMat2Vec(DstTileData& dst, SrcTileData& src)
 template <
     typename OutType, typename AType, typename BType, int validM, int validK, int validN, int row, int col,
     bool isNZUnalign = false, bool isRelu = false, Layout layoutType = Layout::ND, int sfractalSize = 512,
-    int indexRow = 0, int indexCol = 0, bool isInsert = false, int dstRow = 0, int dstCol = 0>
+    int indexRow = 0, int indexCol = 0, bool isInsert = false, int dstRow = 0, int dstCol = 0,
+    STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
 __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1, __gm__ OutType* src2)
 {
     constexpr int blockAlign = std::is_same_v<AType, int8_t> ? 32 : 16;
@@ -253,24 +254,47 @@ __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ B
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 #endif
 
-    TMATMUL(cTile, aTile, bTile);
+    if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
 
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    if constexpr (phase == STPhase::Unspecified) {
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    }
 #endif
 #endif
 
     uint8_t syncId = 0;
 
 #if defined(__DAV_CUBE__)
+    // 只有 Acc→Mat 直搬这一条分支实现了 phase；relu / TEXTRACT / TINSERT 分支不看 phase，
+    // 在那些分支上传 phase 会得到"通过但什么都没测"的假阳性，故在此拦住。
+    static_assert(
+        phase == STPhase::Unspecified || (!isRelu && indexRow == 0 && indexCol == 0),
+        "STPhase is only wired into the plain Acc-to-Mat TMOV branch of this testcase.");
     SrcTileData srcTileData;
     TASSIGN(srcTileData, 0x0);
     if constexpr (isRelu) {
         TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);
     } else {
         if constexpr (indexRow == 0 && indexCol == 0) {
-            TMOV(srcTileData, cTile);
+            if constexpr (phase == STPhase::Unspecified) {
+                TMOV(srcTileData, cTile);
+            } else if constexpr (phase == STPhase::Partial) {
+                // 多次搬出序列：Partial 那次写被回读校验的目的地且不释放 unit flag，
+                // Final 那次写一块不回读的 scratch，仅用于释放标志。
+                // 这样被校验的数据来自 Partial 这一次搬出，不会被 Final 覆盖。
+                SrcTileData scratchTile;
+                TASSIGN(scratchTile, 0x30000);
+                TMOV<STPhase::Partial>(srcTileData, cTile);
+                TMOV<STPhase::Final>(scratchTile, cTile);
+            } else {
+                TMOV<phase>(srcTileData, cTile);
+            }
         } else if constexpr (!isInsert) {
             TEXTRACT(srcTileData, cTile, indexRow, indexCol);
         } else {
@@ -756,6 +780,18 @@ void LaunchTMOVAcc2MatNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, void* st
         RunTMOV<float, half, half, 6, 7, 8, 32, 32><<<1, nullptr, stream>>>(
             reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
             reinterpret_cast<float*>(out));
+    } else if constexpr (tilingKey == 5) {
+        RunTMOV<
+            float, half, half, 6, 7, 8, 32, 32, false, false, Layout::ND, 512, 0, 0, false, 0, 0, STPhase::Final,
+            AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+            reinterpret_cast<float*>(out));
+    } else if constexpr (tilingKey == 6) {
+        RunTMOV<
+            float, half, half, 6, 7, 8, 32, 32, false, false, Layout::ND, 512, 0, 0, false, 0, 0, STPhase::Partial,
+            AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+            reinterpret_cast<float*>(out));
     }
 }
 
@@ -763,6 +799,8 @@ template void LaunchTMOVAcc2MatNZ2ND<1>(uint8_t* out, uint8_t* src0, uint8_t* sr
 template void LaunchTMOVAcc2MatNZ2ND<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2MatNZ2ND<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2MatNZ2ND<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTMOVAcc2MatNZ2ND<5>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTMOVAcc2MatNZ2ND<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2MatNZ2DN(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)

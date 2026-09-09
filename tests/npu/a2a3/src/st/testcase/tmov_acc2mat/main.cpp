@@ -507,6 +507,62 @@ TEST_F(TMOVTest, case_nz2nz_insert)
     tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 6, 32, 32, true, 128, 128>(M, K, N);
 }
 
+// unit flag（A2A3）：Acc→Mat 搬出带 STPhase::Final，与 TMATMUL<AccPhase::Final> 配对
+TEST_F(TMOVTest, case_nz2nz_uf_final)
+{
+    uint32_t M = 64;
+    uint32_t K = 128;
+    uint32_t N = 128;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 7>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_extract_uf_final)
+{
+    uint32_t M = 64;
+    uint32_t K = 64;
+    uint32_t N = 64;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 8, 16, 16>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_insert_uf_final)
+{
+    uint32_t M = 32;
+    uint32_t K = 32;
+    uint32_t N = 32;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 9, 32, 32, true, 128, 128>(M, K, N);
+}
+
+// 同一块 L0C 多次搬出：非末次 STPhase::Partial，末次 STPhase::Final
+TEST_F(TMOVTest, case_nz2nz_uf_multi_drain)
+{
+    uint32_t M = 64;
+    uint32_t K = 128;
+    uint32_t N = 128;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 10>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_extract_uf_multi_drain)
+{
+    uint32_t M = 64;
+    uint32_t K = 64;
+    uint32_t N = 64;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 11, 16, 16>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_insert_uf_multi_drain)
+{
+    uint32_t M = 32;
+    uint32_t K = 32;
+    uint32_t N = 32;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 12, 32, 32, true, 128, 128>(M, K, N);
+}
+
 TEST_F(TMOVTest, case_nz2nz_sc_quant_insert)
 {
     uint32_t M = 96;
@@ -523,4 +579,32 @@ TEST_F(TMOVTest, case_nz2nz_fb_quant_insert)
     uint32_t N = 128;
 
     tmov_acc2mat_nz2nz_fb_quant_test<int8_t, uint16_t, uint16_t, uint64_t, 12, 32, 32, true, 256, 256>(M, K, N);
+}
+
+// unit flag（A2A3）：per-channel 随路量化搬出带 STPhase::Final
+TEST_F(TMOVTest, case_nz2nz_fb_quant_uf_final)
+{
+    uint32_t M = 80;
+    uint32_t K = 128;
+    uint32_t N = 64;
+
+    tmov_acc2mat_nz2nz_fb_quant_test<uint16_t, int8_t, int8_t, uint64_t, 13>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_fb_quant_extract_uf_final)
+{
+    uint32_t M = 128;
+    uint32_t K = 64;
+    uint32_t N = 128;
+
+    tmov_acc2mat_nz2nz_fb_quant_test<int8_t, uint16_t, uint16_t, uint64_t, 14, 32, 32>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_fb_quant_insert_uf_final)
+{
+    uint32_t M = 128;
+    uint32_t K = 64;
+    uint32_t N = 128;
+
+    tmov_acc2mat_nz2nz_fb_quant_test<int8_t, uint16_t, uint16_t, uint64_t, 15, 32, 32, true, 256, 256>(M, K, N);
 }

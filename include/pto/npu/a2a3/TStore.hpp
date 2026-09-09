@@ -270,7 +270,8 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantS
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType currentAtomicType = AtomicType::AtomicNone,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     static_assert(TileData::Loc == TileType::Acc, "Source TileType only support Acc!");
@@ -280,7 +281,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
         SetAtomicAdd<typename GlobalData::DType>();
     }
     constexpr QuantMode_t quantMode = GetVectorPreQuantMode<typename TileData::DType, typename GlobalData::DType>();
-    TStoreAccFp<GlobalData, TileData, FpTileData, quantMode, reluPreMode>(
+    TStoreAccFp<GlobalData, TileData, FpTileData, quantMode, reluPreMode, Phase>(
         dst.data(), src.data(), fp.data(), dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
         dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
         dst.GetShape(GlobalTensorDim::DIM_4), dst.GetStride(GlobalTensorDim::DIM_0),

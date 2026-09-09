@@ -16,6 +16,9 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <int32_t tilingKey>
+void launchTEXTRACTAcc2Mat(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+
+template <int32_t tilingKey>
 void launchTEXTRACT(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
@@ -49,7 +52,8 @@ void textract_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint16_t
     uint32_t nValid = N - indexN;
     size_t aFileSize = M * K * sizeof(U);
     size_t bFileSize = K * N * sizeof(U);
-    size_t cFileSize = mValid * nValid * sizeof(T);
+    constexpr bool accToMat = key >= 21 && key <= 26;
+    size_t cFileSize = (accToMat ? 16 * 48 * (key == 22 || key == 25 ? 2 : 1) : mValid * nValid) * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -73,7 +77,11 @@ void textract_test(uint32_t M, uint32_t K, uint32_t N, uint16_t indexM, uint16_t
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTEXTRACT<key>(dstDevice, src0Device, src1Device, stream);
+    if constexpr (accToMat) {
+        launchTEXTRACTAcc2Mat<key>(dstDevice, src0Device, src1Device, stream);
+    } else {
+        launchTEXTRACT<key>(dstDevice, src0Device, src1Device, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -213,6 +221,20 @@ TEST_F(TEXTRACTTest, case18) { textract_mx_test<18, float, int8_t, int8_t>(256, 
 TEST_F(TEXTRACTTest, case19) { textract_mx_test<19, float, int8_t, int8_t>(256, 128, 256, 128, 64, 128); }
 
 TEST_F(TEXTRACTTest, case20) { textract_mx_test<20, float, int8_t, int8_t>(256, 128, 256, 128, 64, 128); }
+
+TEST_F(TEXTRACTTest, case21) { textract_test<21, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+TEST_F(TEXTRACTTest, case22) { textract_test<22, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+// issue 564: K 切分累加（TMATMUL<Partial> -> TMATMUL_ACC<Final>）配合带 unit flag 的 Acc→Mat 搬出
+TEST_F(TEXTRACTTest, case23) { textract_test<23, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+// Acc-to-Mat float NZ512: Final, Partial/Final and Unspecified.
+TEST_F(TEXTRACTTest, case24) { textract_test<24, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+TEST_F(TEXTRACTTest, case25) { textract_test<25, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
+
+TEST_F(TEXTRACTTest, case26) { textract_test<26, float, uint16_t, uint16_t>(32, 96, 64, 0, 0, 0); }
 
 class TMOVTest : public testing::Test {
 protected:
