@@ -57,7 +57,7 @@ bisheng -v
 if [ "${GIT_TARGET_BRANCH}" == "master" ]; then
     sudo update-alternatives --set gcc /usr/bin/gcc-15
 else
-    sudo update-alternatives --set gcc /usr/bin/gcc-14
+    sudo update-alternatives --set gcc /usr/bin/gcc-14 2>/dev/null || true
 fi
 if gcc --version | head -n1 | grep -q "15\."; then
     rm -rf /home/jenkins/opensource/lib_cache
