@@ -1,15 +1,16 @@
-﻿# TSQRT
+# TSQRT
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T05:19:00.392Z pushedAt=2026-08-29T09:05:18.471Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TSQRT tile operation](../figures/isa/TSQRT.svg)
 
 ## Introduction
 
-Elementwise square root.
+Computes the element-wise square root.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,20 +48,20 @@ PTO_INST RecordEvent TSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 
 ## Constraints
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float` or `half`;
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (NPU)**:
+    - `TileData::DType` must be one of the following: `float` or `half`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`);
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-- **Domain / NaN**:
-    - Behavior is target-defined (e.g., for negative inputs).
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
+- **Domain/NaN**:
+    - The behavior is destination-defined (for example, for negative inputs).
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -88,20 +91,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tsqrt %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tsqrt %src : !pto.tile<...> -> !pto.tile<...>
@@ -114,4 +117,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

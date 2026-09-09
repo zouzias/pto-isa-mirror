@@ -1,12 +1,14 @@
 # TFREE
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:03:34.267Z pushedAt=2026-08-29T09:05:18.432Z -->
+
 ## Introduction
 
-Release FIFO slot space.
+Releases the slot space in the FIFO.
 
-For the TileData `TPOP` flow, on the A2A3 platform `TPOP` already performs the free-space notification step internally. Therefore the TileData-oriented `TFREE(Pipe &pipe)` interface is currently a no-op and exists only for API symmetry with the `GlobalData` flow. On the A5 platform, TFREE releases the FIFO slot space used by TPOP.
+For the TileData `TPOP` flow, on Atlas A2/A3 training products/Atlas A2/A3 inference products, `TPOP` already performs the free-space notification step internally. Therefore, the `TFREE(Pipe &pipe)` API for TileData is currently a null operation, and exists only to maintain API symmetry with the `GlobalData` flow. On Ascend 950PR/Ascend 950DT, TFREE releases the FIFO slot space used by TPOP.
 
-For the `GlobalData` flow, `TFREE(Pipe&, GlobalData&)` releases a FIFO slot view returned by `TPOP(Pipe&, GlobalData&)`.
+For the `GlobalData` flow, `TFREE(Pipe&, GlobalData&)` releases the FIFO slot view returned by `TPOP(Pipe&, GlobalData&)`.
 
 ## Operation Semantics
 
@@ -14,18 +16,18 @@ For the TileData flow:
 
 1. `TPUSH(Pipe&, TileData&, Split)` stores the producer tile into the current FIFO slot and records data-ready synchronization for the consumer. The producer tile index is incremented after the slot address is computed.
 2. `TPOP(Pipe&, TileData&, Split)` waits for the producer's data-ready synchronization and loads the current FIFO slot into the consumer tile. The consumer tile index is incremented after the slot address is computed.
-3. `TFREE(Pipe&, Split)` releases FIFO slot space. On the A2A3 platform this interface is a no-op (`TPOP` already performs free-space notification internally), while on the A5 platform it releases the FIFO slot space used by `TPOP`.
+3. `TFREE(Pipe&, Split)` releases the slot space in the FIFO. On Atlas A2/A3 training products/Atlas A2/A3 inference products, this API is a null operation (`TPOP` already performs the free-space notification internally). On Ascend 950PR/Ascend 950DT, it releases the FIFO slot space used by `TPOP`.
 
 For the GlobalData flow:
 
-1. `TALLOC(Pipe&, GlobalData&)` allocates a producer FIFO slot from `TPipe` and exposes it as a `GlobalTensor` view. The producer can write data to the slot using instructions such as `TSTORE`.
-2. `TPUSH(Pipe&, GlobalData&)` records data-ready synchronization for a slot already allocated by `TALLOC`, committing the FIFO slot to the consumer. It does not store tile data by itself.
-3. `TPOP(Pipe&, GlobalData&)` waits for data-ready, assigns `gmTensor` to the current FIFO slot address, and increments the consumer tile index. It does not load data into a local tile and does not release the slot. The consumer can read data from the slot using instructions such as `TLOAD`.
+1. `TALLOC(Pipe&, GlobalData&)` allocates a producer FIFO slot from `TPipe` and exposes it as a `GlobalTensor` view. The producer can write data to this slot using instructions such as `TSTORE`.
+2. `TPUSH(Pipe&, GlobalData&)` records data-ready synchronization for the slot already allocated by `TALLOC` and commits the FIFO slot to the consumer. It does not store tile data itself.
+3. `TPOP(Pipe&, GlobalData&)` waits for data readiness, assigns `gmTensor` to the current FIFO slot address, and increments the consumer tile index. It does not load data into a local tile, nor does it release the slot. The consumer can read data from the slot using instructions such as `TLOAD`.
 4. `TFREE(Pipe&, GlobalData&)` releases the FIFO slot view returned by `TPOP(Pipe&, GlobalData&)`, notifying the producer that the slot space is free.
 
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declaration location: `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename Pipe, TileSplitAxis Split, typename... WaitEvents>
@@ -36,7 +38,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
 ```
 
-The corresponding A2A3 implementation in `include/pto/npu/a2a3/TPop.hpp` is intentionally empty for this overload:
+The corresponding Atlas A2/A3 training products/Atlas A2/A3 inference products implementation in `include/pto/npu/a2a3/TPop.hpp` intentionally keeps this overload empty (on Ascend 950PR/Ascend 950DT, the implementation is located in `include/pto/npu/a5/TPop.hpp` and performs the actual free-space notification):
 
 ```cpp
 template <typename Pipe, TileSplitAxis Split>
@@ -49,13 +51,14 @@ PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 ## Constraints
 
 - **TileData flow**:
-    - Use `TFREE(Pipe&, GlobalData&)` when the data in the popped FIFO slot is no longer needed.
-    - Use TPUSH/TPOP/TFREE together for inter-core synchronization and data transfer; the size ratio between the pushed tile shape and the popped tile shape must be 1:1 or 1:2.
+    - When the data in the popped FIFO slot is no longer needed, use `TFREE(Pipe&)`.
+    - Use TPUSH/TPOP/TFREE together to implement inter-core synchronization and data transfer. During data transfer, the size ratio between the pushed tileshape and the popped tileshape is 1:1 or 1:2.
+
 - **GlobalData flow**:
-    - Use `TFREE(Pipe&, GlobalData&)` when the data in the popped FIFO slot is no longer needed.
-    - `gmTensor` is only used to select the overload; the implementation does not read or write tensor contents.
-    - Free-space notifications are sparse and controlled by `Pipe::SyncPeriod`.
-    - If the size ratio is not 1:1 or 1:2 (i.e., subtile data transfer exists), use TALLOC/TPUSH/TPOP/TFREE together for inter-core synchronization and data transfer.
+    - When the data in the popped FIFO slot is no longer needed, use `TFREE(Pipe&)`.
+    - `gmTensor` is only used to select the overload; the implementation does not read or write the tensor content.
+    - The free-space notification is sparse and is controlled by `Pipe::SyncPeriod`.
+    - If the relationship is not 1:1 or 1:2, that is, if subtile data transfer exists, TALLOC/TPUSH/TPOP/TFREE must be used together to implement inter-core synchronization and data transfer.
 
 ## Examples
 
@@ -82,7 +85,7 @@ AICORE void example_tiledata(__gm__ void *fifoMem)
 
     TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, tile);
     ...  // final use of VecTile
-    TFREE<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
+    TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(pipe);
 }
 ```
 
@@ -107,12 +110,14 @@ AICORE void example_globaldata(__gm__ void *fifoMem)
     Pipe pipe(fifoMem, 0x0, 0x0);
     SlotGlobal slot;
 
-    TPOP<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
-    // Load or otherwise consume data from slot here.
+    TPOP<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot); // TPOP reassigns slot.
+    // Load or consume data from slot here.
     TFREE<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-The current public assembly reference does not define a stable PTO-AS spelling for `TFREE`. Use the C++ intrinsic form for manual CV FIFO programming.
+The currently published assembly reference does not yet define a stable PTO-AS form for `TFREE`. When hand-writing CV FIFO programs, use the C++ intrinsic form.
+
+```text

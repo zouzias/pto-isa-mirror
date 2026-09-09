@@ -1,15 +1,16 @@
-﻿# TXOR
+# TXOR
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T05:25:06.357Z pushedAt=2026-08-29T09:05:18.475Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TXOR tile operation](../figures/isa/TXOR.svg)
 
 ## Introduction
 
-Elementwise bitwise XOR of two tiles.
+Performs element-wise bitwise XOR on two tiles.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
@@ -46,33 +49,33 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- **Implementation checks (A5)**:
-    - `dst`, `src0`, and `src1` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
+- The operation iterates over `dst.GetValidRow()`/`dst.GetValidCol()`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The element types of `dst`, `src0`, and `src1` must be consistent.
+    - The supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
     - `dst`, `src0`, and `src1` must be row-major.
-    - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
-- **Implementation checks (A2A3)**:
-    - `dst`, `src0`, `src1`, and `tmp` element types must match.
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`.
+    - `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must be consistent with `dst`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - The element types of `dst`, `src0`, `src1`, and `tmp` must be consistent.
+    - The supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
     - `dst`, `src0`, `src1`, and `tmp` must be row-major.
-    - `src0`, `src1`, and `tmp` valid shapes must match `dst`.
-    - In manual mode, `dst`, `src0`, `src1`, and `tmp` must not overlap in memory.
+    - The valid shapes of `src0`, `src1`, and `tmp` must be consistent with that of `dst`.
+    - In manual mode, the memory regions of `dst`, `src0`, `src1`, and `tmp` must not overlap.
 
 ## Temporary Space
 
-### A2A3
+### Atlas A2/A3 Training Products/Atlas A2/A3 Inference Products
 
-`tmp` **is used** as intermediate scratch storage. The A2A3 implementation computes XOR via decomposition: `XOR(a,b) = AND(NOT(AND(a,b)), OR(a,b))`, which requires `tmp` to hold the intermediate `OR(a,b)` result.
+`tmp` **is used** as intermediate scratch storage. The implementation of Atlas A2/A3 training products/Atlas A2/A3 inference products computes XOR by decomposition: `XOR(a,b) = AND(NOT(AND(a,b)), OR(a,b))`, which requires `tmp` to hold the intermediate result `OR(a,b)`.
 
 - `tmp` must have the same element type as `dst`/`src0`/`src1`.
 - `tmp` must be row-major.
-- `tmp.GetValidRow() >= dst.GetValidRow()` and `tmp.GetValidCol() >= dst.GetValidCol()`.
-- In manual mode, `tmp` must not overlap in memory with `dst`, `src0`, or `src1`.
+- The valid shape of `tmp` must be consistent with `dst` (`tmp.GetValidRow() == dst.GetValidRow()` and `tmp.GetValidCol() == dst.GetValidCol()`).
+- In manual mode, the memory region of `tmp` must not overlap with `dst`, `src0`, or `src1`.
 
-### A5
+### Ascend 950PR/Ascend 950DT
 
-`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses the `vxor` vector instruction directly and does not require scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
+`tmp` is accepted by the API but **not used** by the Ascend 950PR/Ascend 950DT implementation. The Ascend 950PR/Ascend 950DT backend directly uses the `vxor` vector instruction and does not require temporary tile storage. `tmp` is retained in the C++ built-in API signature only for API compatibility with Atlas A2/A3 training products/Atlas A2/A3 inference products.
 
 ## Examples
 
@@ -94,20 +97,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.txor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.txor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -120,4 +123,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

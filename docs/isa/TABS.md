@@ -1,15 +1,16 @@
-﻿﻿# TABS
+# TABS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:21:44.350Z pushedAt=2026-08-29T09:05:18.410Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TABS tile operation](../figures/isa/TABS.svg)
 
 ## Introduction
 
-Elementwise absolute value of a tile.
+Element-wise absolute value of a tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,24 +48,24 @@ PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## Constraints
 
-- **Implementation checks (CPU sim)**:
-    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `int8_t`, `half`, `bfloat16_t`, `float`.
-    - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- **Implementation checks (Costmodel)**:
-    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `int8_t`, `uint8_t`, `half`, `float`.
-- **Implementation checks (NPU)**:
-    - For A3, `TileData::DType` must be one of: `float` or `half`;
-    - For A5, `TileData::DType` must be one of: `float`, `half`, `int32_t`, `int16_t`, `int8_t`;
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (CPU sim)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int`, `int16_t`, `half`, `float`.
+    - The implementation iterates over `dst.GetValidRow()`/`dst.GetValidCol()`.
+- **Implementation check (Costmodel)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `int8_t`, `uint8_t`, `half`, `float`.
+- **Implementation check (NPU)**:
+    - For Atlas A3 training products/Atlas A3 inference products, `TileData::DType` must be one of the following: `float` or `half`.
+    - For Ascend 950PR/Ascend 950DT, `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `int8_t`, `half`, `float`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -92,20 +95,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>

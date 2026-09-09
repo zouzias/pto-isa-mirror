@@ -1,24 +1,25 @@
-﻿# TPARTMIN
+# TPARTMIN
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:38:56.569Z pushedAt=2026-08-29T09:05:18.451Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TPARTMIN tile operation](../figures/isa/TPARTMIN.svg)
 
 ## Introduction
 
-Performs elementwise minimum selection over the destination valid region. When both `src0` and `src1` are valid at an element, the result is `min(src0, src1)`; when only one input is valid there, the result copies that input value. Handling of other mismatched-validity cases is implementation-defined.
+Performs element-wise minimum value selection within the destination valid region. If both `src0` and `src1` are valid at a position, the result is `min(src0, src1)`; if only one input is valid at that position, the result takes the value of that input directly. Other cases where the valid regions do not match are implementation-defined.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the destination valid region:
 
 $$
 \mathrm{dst}_{i,j} =
 \begin{cases}
-\min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) & \text{if both inputs are defined at } (i,j) \\
-\mathrm{src0}_{i,j} & \text{if only src0 is defined at } (i,j) \\
-\mathrm{src1}_{i,j} & \text{if only src1 is defined at } (i,j)
+\min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) & \text{if both inputs are defined at } (i,j) \text{ } \\\\
+\mathrm{src0}_{i,j} & \text{if only src0 is defined at } (i,j) \text{ } \\\\
+\mathrm{src1}_{i,j} & \text{if only src1 is defined at } (i,j) \text{ }
 \end{cases}
 $$
 
@@ -41,9 +42,11 @@ Synchronous form:
 ```text
 pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -52,29 +55,29 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 
 ## Constraints
 
-### General constraints / checks
+### General Constraints or Checks
 
-- `dst`, `src0`, and `src1` must use the same element type.
-- The destination valid region defines the result domain.
-- For each element in the destination valid region:
-    - if both inputs are valid, the instruction applies the elementwise minimum;
-    - if only one input is valid, the result copies that input value.
-- If `dst` has a zero valid region, the instruction returns early.
-- Supported partial-validity patterns require at least one source tile to have a valid region exactly equal to `dst`, while the other source tile's valid region must not exceed `dst` in either dimension.
-- Handling of any validity pattern not explicitly listed above is implementation-defined.
+- The element types of `dst`, `src0`, and `src1` must be identical.
+- The destination valid region defines the computation range of the result.
+- For each element within the destination valid region:
+    - If both inputs are valid, the element-wise minimum value operation is performed;
+    - If only one input is valid, the result directly takes the value of that input.
+- If the valid region of `dst` is zero, the instruction returns directly.
+- The supported partial valid region modes require that the valid region of at least one source tile is exactly identical to `dst`, and the valid area of the other source tile cannot exceed `dst` in either dimension.
+- For valid region combinations outside the above range, the behavior is defined by the specific implementation.
 
-### A2A3 implementation checks
+### Implementation Check for Atlas A2/A3 Training Products/Atlas A2/A3 Inference Products
 
-- Supported element types: `int32_t`, `int16_t`, `half`, `float`.
+- Supported element types: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
 - `dst`, `src0`, and `src1` must all be row-major (`isRowMajor`).
 
-### A5 implementation checks
+### Ascend 950PR/Ascend 950DT Implementation Check
 
 - Supported element types: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -105,20 +108,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tpartmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tpartmin %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -131,4 +134,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

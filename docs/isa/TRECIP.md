@@ -1,15 +1,16 @@
-﻿# TRECIP
+# TRECIP
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:45:22.205Z pushedAt=2026-08-29T09:05:18.454Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TRECIP tile operation](../figures/isa/TRECIP.svg)
 
 ## Introduction
 
-Elementwise reciprocal of a tile.
+Performs element-wise reciprocal of a tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <auto PrecisionType = RecipAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
@@ -44,26 +47,26 @@ template <auto PrecisionType = RecipAlgorithm::DEFAULT, typename TileDataDst, ty
 PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
-`PrecisionType` has the following values available:
+`PrecisionType` can specify the following values:
 
-* `RecipAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `RecipAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
+* `RecipAlgorithm::DEFAULT`: Normal algorithm, fast but with lower precision.
+* `RecipAlgorithm::HIGH_PRECISION`: High-precision algorithm, slower.
 
 ## Constraints
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float`, `half`, `int32_t`, `int16_t` (the implementation delegates to `TDIVS(dst, 1, src)`, which also admits integer `1/x`);
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+- **Implementation check (NPU)**:
+    - `TileData::DType` must be one of the following: `float`, `half`, `int32_t`, `int16_t` (the implementation delegates to `TDIVS(dst, 1, src)`, which also allows integer `1/x`).
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`);
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+    - The TRECIP instruction on Atlas A3 training products/Atlas A3 inference products does not support setting the source tile and destination tile to the same memory.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-- **Domain / NaN**:
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
+- **Domain/NaN**:
     - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+- **High-precision algorithm**:
+    - Valid only on Ascend 950PR/Ascend 950DT. The `PrecisionType` option is ignored on Atlas A3 training products/Atlas A3 inference products.
 
 ## Examples
 
@@ -80,20 +83,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
@@ -106,4 +109,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

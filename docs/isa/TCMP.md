@@ -1,17 +1,18 @@
-﻿# TCMP
+# TCMP
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:35:00.453Z pushedAt=2026-08-29T09:05:18.416Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TCMP tile operation](../figures/isa/TCMP.svg)
 
 ## Introduction
 
-Compare two tiles and write a packed predicate mask.
+Compares two tiles and writes a packed predicate mask.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Conceptually, for each element `(i, j)` in the valid region, define a predicate:
+Conceptually, for each element `(i, j)` in the valid region, a predicate is defined:
 
 $$ p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\right) $$
 
@@ -36,9 +37,11 @@ Synchronous form:
 ```text
 pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -47,25 +50,25 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - Input type must be one of: `int32_t`, `half`, `float`.
-    - Output type must be `uint8_t`.
-    - `src0/src1/dst` tile location must be `TileType::Vec`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - The input type must be one of the following: `int32_t`, `half`, `float`.
+    - The output type must be `uint8_t`.
+    - The `src0/src1/dst` tile position must be `TileType::Vec`.
     - Static valid bounds: `TileDataSrc::ValidRow <= TileDataSrc::Rows` and `TileDataSrc::ValidCol <= TileDataSrc::Cols`.
     - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-    - Note: `src1` shape/valid is not validated by explicit runtime assertions in this implementation.
-    - For `TileDataSrc::DType == int32_t`, the implementation uses the `EQ` compare path regardless of `cmpMode`.
-- **Implementation checks (A5)**:
-    - Input type must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, `half`, `bfloat16_t`.
-    - Output type must be `uint32_t`.
+    - Note: The shape/validity of `src1` is not verified through explicit runtime assertions in this implementation.
+    - For `TileDataSrc::DType == int32_t`, the implementation uses the `EQ` comparison path regardless of `cmpMode`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The input type must be one of the following: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`, `int8_t`, `float`, `half`, `bfloat16_t`.
+    - The output type must be `uint32_t`.
     - Implemented (see `include/pto/npu/a5/TCmp.hpp`).
-    - The A5 implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain and writes a packed predicate mask into `dst` (target-defined packing).
+    - The Ascend 950PR/Ascend 950DT implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain and writes the packed predicate mask to `dst` (the destination-defined packing scheme).
 - **Mask encoding**:
-    - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+    - The mask tile is interpreted as packed predicate bits in the destination-defined layout.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -92,7 +95,7 @@ void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
   using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src0, src1;
-  MaskT mask(16, 2);
+  MaskT mask(16, 16);
   TASSIGN(src0, 0x1000);
   TASSIGN(src1, 0x2000);
   TASSIGN(mask, 0x3000);
@@ -100,20 +103,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -126,4 +129,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

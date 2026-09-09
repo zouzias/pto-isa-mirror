@@ -1,17 +1,18 @@
-﻿# TCOLEXPANDDIV
+# TCOLEXPANDDIV
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:41:31.629Z pushedAt=2026-08-29T09:05:18.421Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TCOLEXPANDDIV tile operation](../figures/isa/TCOLEXPANDDIV.svg)
 
 ## Introduction
 
-Column-wise broadcast divide: divide each element of `src0` by a per-column scalar vector `src1`.
+Column broadcast division: divides each column by a per-column scalar vector.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
+Assume `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Assume that `s_j` is the per-column scalar obtained from `src1` (one value per column).
 
 For `0 <= i < R` and `0 <= j < C`:
 
@@ -38,9 +39,11 @@ Synchronous form:
 ```text
 pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -49,29 +52,29 @@ PTO_INST RecordEvent TCOLEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDat
 
 ## Constraints
 
-- `TileDataDst::DType`, `TileDataSrc1::DType` must be one of: `half`, `float` for A2, A3 and A5, `int16`, `int32`, `uint16`, `uint32`, `bfloat16_t`, `int8`, `uint8` for A5.
-- Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
-- `src1` is expected to provide **one scalar per column** (i.e., its valid shape must cover `C` values).
-- Exact layout/fractal constraints are target-specific; see backend headers under `include/pto/npu/*/TColExpand*.hpp`.
+- `TileDataDst::DType` and `TileDataSrc1::DType` must be one of the following: `half`, `float` for Atlas A2 training products/Atlas A2 inference products, Atlas A3 training products/Atlas A3 inference products, and Ascend 950PR/Ascend 950DT; `int16`, `int32`, `uint16`, `uint32`, `bfloat16_t`, `int8`, `uint8` for Ascend 950PR/Ascend 950DT.
+- Tile shape/layout constraint (compile time): `TileDataDst::isRowMajor`.
+- `src1` is expected to provide **one scalar per column** (that is, its effective shape must cover `C` values).
+- The exact layout/fractal constraints are destination-specific; see the backend header files under `include/pto/npu/*/TColExpand*.hpp`.
 
 ## Examples
 
-See related examples in `docs/isa/` and `docs/coding/tutorials/`.
+See the relevant examples in `docs/isa/` and `docs/coding/tutorials/`.
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.tcolexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tcolexpanddiv %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
@@ -84,4 +87,3 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 # AS Level 2 (DPS)
 pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

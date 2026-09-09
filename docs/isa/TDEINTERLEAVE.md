@@ -1,27 +1,27 @@
-﻿# TDEINTERLEAVE
+# TDEINTERLEAVE
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:52:35.090Z pushedAt=2026-08-29T09:05:18.427Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TDEINTERLEAVE](../figures/isa/TDEINTERLEAVE.svg)
 
-
 ## Introduction
 
-De-interleave source tiles into two destination tiles (`dst0` and `dst1`). The operation reverses interleaving: `dst0` receives elements at even positions of the combined interleaved stream, and `dst1` receives elements at odd positions.
+Deinterleaves a source tile into two destination tiles (`dst0` and `dst1`). This operation reverses the interleaving process: `dst0` receives the even position elements of the interleaved stream, and `dst1` receives the odd position elements.
 
-`TDeInterleave` has two overload forms:
+`TDeInterleave` has two overloaded forms:
 
-- **Two-source form** (`dst1, dst0, src1, src0`): Given two source tiles that hold the first and second halves of an interleaved stream, de-interleave into the original even and odd element streams.
-- **Single-source form** (`dst1, dst0, src`): Given one source tile containing the full interleaved data, de-interleave into even-position and odd-position element streams. Each destination row holds `src.GetValidCol() / 2` valid elements.
+- **Dual-source form** (`dst1, dst0, src1, src0`): Given two source tiles that hold the first half and the second half of the interleaved stream, deinterleaves them into the original even element stream and odd element stream.
+- **Single-source form** (`dst1, dst0, src`): Given a single source tile that contains the complete interleaved data, deinterleaves it into even position and odd position element streams. Each destination row holds `src.GetValidCol() / 2` valid elements.
 
-`TDeInterleave` is the inverse of `TInterleave`.
+`TDeInterleave` is the inverse operation of `TInterleave`.
 
-## Math Interpretation
+## Mathematical Semantics
 
-### Two-source form
+### Dual-Source Form
 
-Given two source tiles `src0` (first half) and `src1` (second half) of an interleaved stream, reconstruct the full stream and de-interleave:
+Given two source tiles `src0` (first half) and `src1` (second half), reconstruct the complete interleaved stream and deinterleave it:
 
 $$ \mathrm{combined}_{j} = \begin{cases} \mathrm{src0}_{i, j} & \text{if } 0 \le j < \mathrm{validCols} \\ \mathrm{src1}_{i, j - \mathrm{validCols}} & \text{if } \mathrm{validCols} \le j < 2 \times \mathrm{validCols} \end{cases} $$
 
@@ -30,22 +30,20 @@ $$ \mathrm{dst1}_{i, k} = \mathrm{combined}_{2k+1}, \quad 0 \le k < \mathrm{vali
 
 Where `validRows = dst0.GetValidRow()` and `validCols = dst0.GetValidCol()`.
 
-### Single-source form
+### Single-Source Form
 
-Given one source tile `src` containing the interleaved data per row:
+Given a source tile `src` containing row-wise interleaved data:
 
 $$ \mathrm{dst0}_{i, k} = \mathrm{src}_{i, 2k}, \quad 0 \le k < \mathrm{halfValidCols} $$
 $$ \mathrm{dst1}_{i, k} = \mathrm{src}_{i, 2k+1}, \quad 0 \le k < \mathrm{halfValidCols} $$
 
 Where `halfValidCols = src.GetValidCol() / 2`.
 
-> **Note**: For the single-source form, the source tile width must be at least `2 × ElementsPerRepeat` (where `ElementsPerRepeat = 256 / sizeof(T)`) so that two adjacent register-sized chunks can be loaded from the same row without crossing row boundaries.
+> **Note**: The single-source form requires the source tile to have a row width of at least `2 × ElementsPerRepeat` elements (where `ElementsPerRepeat = 256 / sizeof(T)`, that is, `2 × sregLower`), to ensure that the two adjacent register-sized data blocks loaded in each repeat do not cross a row boundary.
 
 ## Assembly Syntax
 
-PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
-
-Synchronous form (two-source):
+Synchronous form (dual-source):
 
 ```text
 %dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
@@ -59,7 +57,7 @@ Synchronous form (single-source):
 
 ### AS Level 1 (SSA)
 
-Two-source form:
+Dual-source form:
 
 ```text
 %dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
@@ -73,7 +71,7 @@ Single-source form:
 
 ### AS Level 2 (DPS)
 
-Two-source form:
+Dual-source form:
 
 ```text
 pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
@@ -84,40 +82,41 @@ Single-source form:
 ```text
 pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
-// Two-source form
+// dual-source form
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TDEINTERLEAVE(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
+PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src1, TileDataSrc &src0,
                                    WaitEvents &...events);
 
-// Single-source form
+// single-source form
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TDEINTERLEAVE(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src,
+PTO_INST RecordEvent TDeInterleave(TileDataDst &dst1, TileDataDst &dst0, TileDataSrc &src,
                                    WaitEvents &...events);
 ```
 
-> **Note**: The parameter order is `(dst1, dst0, src1, src0)` for the two-source form. `dst0` receives even-position elements of the interleaved stream, `dst1` receives odd-position elements.
+> **Note**: The parameter order of the dual-source form is `(dst1, dst0, src1, src0)`. `dst0` receives the even-position elements of the interleaved stream, and `dst1` receives the odd-position elements.
 
 ## Constraints
 
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
     - All tiles must have the same `DType`.
-    - Two-source form: `src0`, `src1`, `dst0`, `dst1` must all have the same valid shape, and their `validCols` must be even.
-    - Single-source form: `src`, `dst0`, `dst1` must all have the same valid shape; `src`'s `validCols` must be even.
-    - The `validCols` of `dst0`/`dst1` tile must be half the `validCols` of `src` tile.
+    - Dual-source form: `src0`, `src1`, `dst0`, and `dst1` must have the same valid shape, and their validCols must be even.
+    - Single-source form: `src`, `dst0`, and `dst1` must have the same number of valid rows; the `validCols` of `dst0` and `dst1` must be half of the `validCols` of `src`.
 - **Valid region**:
-    - Two-source form: The op uses `dst0.GetValidRow()` / `dst0.GetValidCol()` as the iteration domain. `dst0/dst1` each hold `validCols` elements per row.
-    - Single-source form: `dst0/dst1` each hold `src.GetValidCol() / 2` valid elements per row. Elements beyond `halfValidCols` in each row are **unspecified**.
+    - Dual-source form: this operation uses `dst0.GetValidRow()`/`dst0.GetValidCol()` as the iteration domain. Each row of `dst0/dst1` holds `validCols` elements.
+    - Single-source form: each row of `dst0/dst1` holds `src.GetValidCol() / 2` valid elements. Elements beyond `halfValidCols` in each row are **unspecified**.
 
 ## Examples
 
-### Auto — Two-source form
+### Automatic — Dual-Source Form
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -129,11 +128,11 @@ void example_auto_two_src() {
     TileT src0(16, 128), src1(16, 128);
     TileT dst0(16, 128), dst1(16, 128);
 
-    TDEINTERLEAVE(dst1, dst0, src1, src0);
+    TDeInterleave(dst1, dst0, src1, src0);
 }
 ```
 
-### Auto — Single-source form
+### Automatic — Single-Source Form
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -145,11 +144,11 @@ void example_auto_single_src() {
     TileT src(16, 128);
     TileT dst0(16, 128), dst1(16, 128);
 
-    TDEINTERLEAVE(dst1, dst0, src);
+    TDeInterleave(dst1, dst0, src);
 }
 ```
 
-### Manual — Two-source form
+### Manual — Dual-Source Form
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -165,11 +164,11 @@ void example_manual_two_src() {
     TASSIGN(dst0, 0x3000);
     TASSIGN(dst1, 0x4000);
 
-    TDEINTERLEAVE(dst1, dst0, src1, src0);
+    TDeInterleave(dst1, dst0, src1, src0);
 }
 ```
 
-### Manual — Single-source form
+### Manual — Single-Source Form
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -184,17 +183,17 @@ void example_manual_single_src() {
     TASSIGN(dst0, 0x2000);
     TASSIGN(dst1, 0x3000);
 
-    TDEINTERLEAVE(dst1, dst0, src);
+    TDeInterleave(dst1, dst0, src);
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-# Two-source form:
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
+# Dual-source form:
 %dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
 # Single-source form:
 %dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
@@ -203,8 +202,8 @@ void example_manual_single_src() {
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Two-source form:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Dual-source form:
 # pto.tassign %src0, @tile(0x1000)
 # pto.tassign %src1, @tile(0x2000)
 # pto.tassign %dst0, @tile(0x3000)
@@ -220,7 +219,7 @@ void example_manual_single_src() {
 ### PTO Assembly Form
 
 ```text
-# Two-source form:
+# Dual-source form:
 %dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
 # AS Level 2 (DPS)
 pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
@@ -233,4 +232,4 @@ pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_b
 
 ## Related Instructions
 
-- [TInterleave](TINTERLEAVE.md) - Interleave two tiles into an alternating even/odd stream (inverse of TDeInterleave).
+- [TInterleave](TINTERLEAVE.md) - Interleaves two tiles into alternating even/odd streams (the inverse operation of TDeInterleave).
