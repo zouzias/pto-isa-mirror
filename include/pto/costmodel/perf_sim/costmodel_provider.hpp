@@ -12,9 +12,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_PERF_SIM_COSTMODEL_PROVIDER_HPP
 
 #include "config.hpp"
-#include "recorder.hpp"
 #include "latency.hpp"
+#include "recorder.hpp"
+
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 #include <pto/costmodel/lightweight_costmodel.hpp>
+#endif
+
 #include <string>
 
 namespace pto::perf_sim {
@@ -44,8 +48,11 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
     return ctx;
 }
 
-// ── String → lightweight::PtoOpcode mapping (X-macro, single source of truth) ──
-// Enum names in lightweight::PtoOpcode match opcode strings exactly.
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
+
+// ── String → lightweight::PtoOpcode mapping for A2/A3 ──
+// Enum names in lightweight::PtoOpcode match opcode strings exactly. A5 does not include this
+// backend: its VF fallback is supplied by a5/cce_costmodel/vec_cycle_generated.hpp.
 
 // clang-format off
 #define PTO_PERF_SIM_OPCODE_LIST                                                                                      \
@@ -120,6 +127,8 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
     return 0;
 }
 
+#endif
+
 // ── Fallback for unsupported instructions ──
 
 inline uint64_t FallbackCycles(const std::string& opcode, int rows, int cols)
@@ -141,11 +150,16 @@ inline uint64_t FallbackCycles(const std::string& opcode, int rows, int cols)
 
 inline uint64_t EstimateInstrCycles(const std::string& opcode, int rows, int cols, const std::string& dtype)
 {
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
     if (opcode == "TDIVS" && (dtype == "int16" || dtype == "int32")) {
         return 4;
     }
     uint64_t cycles = EstimateLightweightCycles(opcode, rows, cols, dtype);
     return cycles > 0 ? cycles : FallbackCycles(opcode, rows, cols);
+#else
+    (void)dtype;
+    return FallbackCycles(opcode, rows, cols);
+#endif
 }
 
 } // namespace pto::perf_sim
