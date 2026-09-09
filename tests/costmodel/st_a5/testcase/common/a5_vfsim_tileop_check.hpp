@@ -21,6 +21,31 @@ namespace pto::test::a5 {
 
 namespace vf = ::pto::mocker::vf;
 
+inline bool IsAdapterIgnoredPredicateSetup(const vf::VfInst& inst)
+{
+    return inst.opName == "plt_b8" || inst.opName == "plt_b16" || inst.opName == "plt_b32" ||
+           inst.opName == "pset_b8" || inst.opName == "pset_b16" || inst.opName == "pset_b32";
+}
+
+inline void CollectAdapterModeledInstructions(
+    const std::vector<vf::VfNode>& nodes, std::vector<const vf::VfInst*>& instructions)
+{
+    for (const vf::VfNode& node : nodes) {
+        if (vf::IsLoop(node)) {
+            CollectAdapterModeledInstructions(vf::AsLoop(node).body, instructions);
+        } else if (vf::IsInst(node) && !IsAdapterIgnoredPredicateSetup(vf::AsInst(node))) {
+            instructions.push_back(&vf::AsInst(node));
+        }
+    }
+}
+
+inline std::vector<const vf::VfInst*> AdapterModeledInstructions(const std::vector<vf::VfNode>& nodes)
+{
+    std::vector<const vf::VfInst*> instructions;
+    CollectAdapterModeledInstructions(nodes, instructions);
+    return instructions;
+}
+
 inline void ExpectLastVecTileOp(const std::vector<std::string>& expectedBody, uint64_t expectedRepeat)
 {
     const uint64_t cycles = ::pto::mocker::GetLastPtoInstrCycles();
@@ -38,8 +63,13 @@ inline void ExpectLastVecTileOp(const std::vector<std::string>& expectedBody, ui
 
     const vf::VfLoop& loop = vf::AsLoop(info.tree[0]);
     EXPECT_EQ(loop.count, expectedRepeat);
-    EXPECT_EQ(vf::FlattenLeafInstrs(loop.body), expectedBody);
-    EXPECT_EQ(loop.body.size(), expectedBody.size());
+    const auto modeledInstructions = AdapterModeledInstructions(loop.body);
+    std::vector<std::string> modeledNames;
+    modeledNames.reserve(modeledInstructions.size());
+    for (const vf::VfInst* inst : modeledInstructions)
+        modeledNames.push_back(inst->opName);
+    EXPECT_EQ(modeledNames, expectedBody);
+    EXPECT_EQ(modeledInstructions.size(), expectedBody.size());
 }
 
 inline void ExpectLastBinaryVecTileOp(const std::vector<std::string>& expectedBody, uint64_t expectedRepeat)
@@ -55,11 +85,12 @@ inline void ExpectLastBinaryVecTileOp(const std::vector<std::string>& expectedBo
     ASSERT_TRUE(vf::IsLoop(info.tree[0]));
 
     const vf::VfLoop& loop = vf::AsLoop(info.tree[0]);
-    ASSERT_GE(loop.body.size(), 4U);
-    const vf::VfInst& load0 = vf::AsInst(loop.body[0]);
-    const vf::VfInst& load1 = vf::AsInst(loop.body[1]);
-    const vf::VfInst& op = vf::AsInst(loop.body[2]);
-    const vf::VfInst& store = vf::AsInst(loop.body[3]);
+    const auto modeledInstructions = AdapterModeledInstructions(loop.body);
+    ASSERT_GE(modeledInstructions.size(), 4U);
+    const vf::VfInst& load0 = *modeledInstructions[0];
+    const vf::VfInst& load1 = *modeledInstructions[1];
+    const vf::VfInst& op = *modeledInstructions[2];
+    const vf::VfInst& store = *modeledInstructions[3];
 
     EXPECT_EQ(load0.dst.size(), 1U);
     EXPECT_EQ(load0.src.size(), 1U);

@@ -7,7 +7,7 @@ function(pto_a5_vfsim_tileop_test NAME)
     target_link_libraries(${NAME} PRIVATE
         GTest::gtest_main
         Threads::Threads)
-    target_enable_a5_vf_mock(${NAME})
+    pto_enable_costmodel(${NAME} ARCH A5)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 

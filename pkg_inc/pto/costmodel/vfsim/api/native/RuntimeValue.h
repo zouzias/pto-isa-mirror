@@ -7,10 +7,27 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#pragma once
+#ifndef VFSIM_API_NATIVE_RUNTIME_VALUE_H
+#define VFSIM_API_NATIVE_RUNTIME_VALUE_H
 
-#include "a5_vf_stub.hpp"
-#include "cce_costmodel_cube.hpp"
-#include "cce_costmodel_memory.hpp"
-#include "cce_costmodel_sync.hpp"
-#include "vf_cost.hpp"
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace vfsim {
+
+enum class ValueStorageKind { Register, UB, Scalar };
+
+struct ValueInfo {
+    std::string valueId;
+    ValueStorageKind storage = ValueStorageKind::Register;
+    std::string dtype;
+    std::vector<int64_t> shape;
+};
+
+ValueStorageKind inferValueStorage(const std::string& valueId);
+std::string valueStorageName(ValueStorageKind storage);
+
+} // namespace vfsim
+
+#endif // VFSIM_API_NATIVE_RUNTIME_VALUE_H

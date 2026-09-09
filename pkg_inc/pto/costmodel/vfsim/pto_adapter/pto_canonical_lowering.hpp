@@ -7,10 +7,24 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#pragma once
+#ifndef PTO_COSTMODEL_VFSIM_PTO_ADAPTER_PTO_CANONICAL_LOWERING_H_
+#define PTO_COSTMODEL_VFSIM_PTO_ADAPTER_PTO_CANONICAL_LOWERING_H_
 
-#include "a5_vf_stub.hpp"
-#include "cce_costmodel_cube.hpp"
-#include "cce_costmodel_memory.hpp"
-#include "cce_costmodel_sync.hpp"
-#include "vf_cost.hpp"
+#include <cstdint>
+
+#include "pto/costmodel/a5/cce_costmodel/vf_info.hpp"
+
+#include "api/native/CanonicalVfInfo.h"
+
+namespace pto::mocker::vf {
+
+struct PtoCanonicalLoweringResult {
+    vfsim::CanonicalVfInfo program;
+    uint32_t ignoredInstructionCount = 0;
+};
+
+PtoCanonicalLoweringResult lowerPtoVfToCanonical(const VfInfo& vf);
+
+} // namespace pto::mocker::vf
+
+#endif // PTO_COSTMODEL_VFSIM_PTO_ADAPTER_PTO_CANONICAL_LOWERING_H_
