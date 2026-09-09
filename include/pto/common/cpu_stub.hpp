@@ -45,7 +45,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define __cb__
 #define __cc__
 #define __fbuf__
-// #define __biasbuf__
 #define __tf__
 
 typedef void* aclrtStream;
