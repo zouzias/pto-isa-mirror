@@ -227,18 +227,251 @@ PTO_INTERNAL void TransTailTiles(
     return;
 }
 
+template <typename T>
+PTO_INTERNAL void TTransVtransposeB16(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, __ubuf__ T* tmpPtr, unsigned validRow, unsigned validCol,
+    unsigned dstStride, unsigned srcStride)
+{
+    // 块形状：16 行 x 16 列 b16 元素 = 16x16 b16 视图。
+    constexpr unsigned blk = Y_ELEM_OTHER;                   // 16 行
+    constexpr unsigned blkCol = BLOCK_BYTE_SIZE / sizeof(T); // 16 (b16)
+    unsigned numBlkRow = validRow / blk;
+    unsigned numBlkCol = validCol / blkCol;
+    // tmp 布局: [numBlkRow 块 tmpA][numBlkRow 块 tmpB]，每块 16x16
+    // 即 tmp 需 >= 2 * numBlkRow * 16 * 16 * 2B（调用方需按此分配）
+    __ubuf__ uint16_t* tmpA = (__ubuf__ uint16_t*)tmpPtr;
+    __ubuf__ uint16_t* tmpB = tmpA + numBlkRow * blk * blk;
+    // 搬入：每块 blkCol 元素 = 32B = 1 block
+    constexpr uint16_t lenBurstIn = 1;
+    // 搬出：每行 blk 元素（b16: 16x2B=32B=1 block; b32: 16x4B=64B=2 blocks）
+    constexpr uint16_t lenBurstOut = blk * sizeof(T) / BLOCK_BYTE_SIZE;
+    // srcGap: 搬入时源行间隔（blocks），stride=srcStride/blkCol
+    uint16_t srcGap = srcStride / blkCol - lenBurstIn;
+    // dstGap: 搬出时目标行间隔（blocks），stride=dstStride/blkCol
+    uint16_t dstGap = dstStride / blkCol - lenBurstOut;
+    // src/dst 侧 16x16 块连续时跳过对应搬移（微优化路径）
+    if (srcStride == blkCol && dstStride == blkCol) {
+        for (unsigned bi = 0; bi < numBlkRow; bi++) {
+            for (unsigned bj = 0; bj < numBlkCol; bj++) {
+                vtranspose(
+                    (__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk),
+                    (__ubuf__ uint16_t*)(srcPtr + bi * blk * srcStride + bj * blkCol));
+            }
+        }
+        return;
+    }
+    if (srcStride == blkCol) {
+        // src 侧整列连续：跳过搬入，逐块 vtranspose 到 tmpB
+        // （dst 列布局为双 stride，搬出须逐块进行）
+        for (unsigned bj = 0; bj < numBlkCol; bj++) {
+            for (unsigned bi = 0; bi < numBlkRow; bi++) {
+                vtranspose(tmpB + bi * blk * blk, (__ubuf__ uint16_t*)(srcPtr + bi * blk * srcStride + bj * blkCol));
+            }
+            pipe_barrier(PIPE_V);
+            for (unsigned bi = 0; bi < numBlkRow; bi++) {
+                pto_copy_ubuf_to_ubuf(
+                    (__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk), tmpB + bi * blk * blk, blkCol,
+                    lenBurstOut, 0, dstGap);
+            }
+            pipe_barrier(PIPE_V);
+        }
+        return;
+    }
+    if (dstStride == blkCol) {
+        // dst 侧整列连续：整列搬入 tmpA，逐块 vtranspose 直接写入 dst
+        for (unsigned bj = 0; bj < numBlkCol; bj++) {
+            pto_copy_ubuf_to_ubuf(
+                tmpA, (__ubuf__ uint16_t*)(srcPtr + bj * blkCol), numBlkRow * blk, lenBurstIn, srcGap, 0);
+            pipe_barrier(PIPE_V);
+            for (unsigned bi = 0; bi < numBlkRow; bi++) {
+                vtranspose((__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk), tmpA + bi * blk * blk);
+            }
+            pipe_barrier(PIPE_V);
+        }
+        return;
+    }
+    // 通用路径：按列批量搬入（src 单一 gap 可表达），逐块 vtranspose 与搬出，
+    // 每列仅 2 个 barrier（原逐块 3 barrier 在大 tile 上序列化开销明显）
+    for (unsigned bj = 0; bj < numBlkCol; bj++) {
+        pto_copy_ubuf_to_ubuf(tmpA, (__ubuf__ uint16_t*)(srcPtr + bj * blkCol), numBlkRow * blk, lenBurstIn, srcGap, 0);
+        pipe_barrier(PIPE_V);
+        for (unsigned bi = 0; bi < numBlkRow; bi++) {
+            vtranspose(tmpB + bi * blk * blk, tmpA + bi * blk * blk);
+        }
+        pipe_barrier(PIPE_V);
+        for (unsigned bi = 0; bi < numBlkRow; bi++) {
+            pto_copy_ubuf_to_ubuf(
+                (__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk), tmpB + bi * blk * blk, blkCol,
+                lenBurstOut, 0, dstGap);
+        }
+    }
+}
+
+template <typename T>
+PTO_INTERNAL void CopyRowsWithMask(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned numRow, unsigned numTail, unsigned dstStride, unsigned srcStride)
+{
+    constexpr uint16_t blockElemSize = BLOCK_BYTE_SIZE / sizeof(T);
+    const uint16_t srcRepeatSize = static_cast<uint16_t>(srcStride / blockElemSize);
+    const uint16_t dstRepeatSize = static_cast<uint16_t>(dstStride / blockElemSize);
+
+    if constexpr (sizeof(T) == 4) {
+        SetContMaskByDType<T>(numTail);
+        TransOp<T>::CopyInstr(
+            (__ubuf__ uint32_t*)dstPtr, (__ubuf__ uint32_t*)srcPtr, static_cast<uint8_t>(numRow), dstRepeatSize,
+            srcRepeatSize);
+    } else if constexpr (sizeof(T) == 2) {
+        SetContMaskByDType<T>(numTail);
+        TransOp<T>::CopyInstr(
+            (__ubuf__ uint16_t*)dstPtr, (__ubuf__ uint16_t*)srcPtr, static_cast<uint8_t>(numRow), dstRepeatSize,
+            srcRepeatSize);
+    } else if constexpr (sizeof(T) == 1) {
+        if (numTail > 1) {
+            SetContMaskByDType<T>(numTail >> 1);
+            TransOp<T>::CopyInstr(
+                (__ubuf__ uint16_t*)dstPtr, (__ubuf__ uint16_t*)srcPtr, static_cast<uint8_t>(numRow), dstRepeatSize,
+                srcRepeatSize);
+        }
+        // vcopy does not support b8 pointers; odd numTail needs a scalar copy of the last column
+        if (numTail % 2) {
+#ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+            set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
+            for (unsigned i = 0; i < numRow; ++i) {
+                dstPtr[i * dstStride + numTail - 1] = srcPtr[i * srcStride + numTail - 1];
+            }
+#ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+            set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
+        }
+    }
+    set_vector_mask(-1, -1);
+}
+
+template <typename T, unsigned blockSizeElem, unsigned yTileSizeElem>
+PTO_INTERNAL void TransTail2DTiles(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, __ubuf__ T* tmpPtr, unsigned tmpStride, unsigned validRow,
+    unsigned validCol, unsigned dstStride, unsigned srcStride)
+{
+    // block-element aligned (vcopy repeat stride is in 32B blocks).
+    const bool canVecCopy = (tmpStride % blockSizeElem == 0);
+    for (unsigned bi = 0; bi * yTileSizeElem < validRow; ++bi) {
+        const unsigned rows =
+            (validRow - bi * yTileSizeElem < yTileSizeElem) ? (validRow - bi * yTileSizeElem) : yTileSizeElem;
+        for (unsigned bj = 0; bj * blockSizeElem < validCol; ++bj) {
+            const unsigned cols =
+                (validCol - bj * blockSizeElem < blockSizeElem) ? (validCol - bj * blockSizeElem) : blockSizeElem;
+            __ubuf__ T* srcBlock = srcPtr + bi * yTileSizeElem * srcStride + bj * blockSizeElem;
+            __ubuf__ T* dstBlock = dstPtr + bj * blockSizeElem * dstStride + bi * yTileSizeElem;
+
+            if constexpr (sizeof(T) == 1) {
+                TransB8FullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+            } else {
+                TransFullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+            }
+            pipe_barrier(PIPE_V);
+
+            // After transpose: tmp is [blockSizeElem, yTileSizeElem]; valid output is cols x rows
+            if (canVecCopy) {
+                CopyRowsWithMask<T>(dstBlock, tmpPtr, cols, rows, dstStride, tmpStride);
+                pipe_barrier(PIPE_V);
+            } else {
+#ifndef __PTO_AUTO__
+                PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+                set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
+                for (unsigned i = 0; i < cols; ++i) {
+                    for (unsigned j = 0; j < rows; ++j) {
+                        dstBlock[i * dstStride + j] = tmpPtr[i * tmpStride + j];
+                    }
+                }
+#ifndef __PTO_AUTO__
+                PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+                set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
+            }
+        }
+    }
+}
+
 template <typename T, unsigned blockSizeElem>
 PTO_INTERNAL void TTransOperation(
     __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, __ubuf__ T* tmpPtr, unsigned validRow, unsigned validCol,
     unsigned dstStride, unsigned srcStride)
 {
+    // vtranspose fast path for b16: the block copy-in/copy-out already support arbitrary
+    // srcStride/dstStride, so use vtranspose for ALL 16-aligned sub-blocks of any b16 tile
+    // (>= 16x16), routing only the remaining tail rows/columns/corner to the tail path.
+    // 注意 b32 不可用：实测 vtranspose 输出下半块数据错位（硬件 VA 寄存器组布局与线性行序不一致），
+    // 需行序自适应搬移后才能复用（待后续验证），当前仅 b16。
+    if constexpr (sizeof(T) == 2) {
+        constexpr unsigned blk = Y_ELEM_OTHER; // 16 行
+        constexpr unsigned blkCol = BLOCK_BYTE_SIZE / sizeof(T);
+        unsigned numBlkRow = validRow / blk;
+        unsigned numBlkCol = validCol / blkCol;
+        if ((validRow % blk == 0) && (validCol % blkCol == 0)) {
+            TTransVtransposeB16<T>(dstPtr, srcPtr, tmpPtr, validRow, validCol, dstStride, srcStride);
+            return;
+        }
+        constexpr unsigned yTileSizeElem = Y_ELEM_OTHER;
+        unsigned tmpStride = (validRow + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
+        if (numBlkRow > 0 && numBlkCol > 0) {
+            TTransVtransposeB16<T>(dstPtr, srcPtr, tmpPtr, numBlkRow * blk, numBlkCol * blkCol, dstStride, srcStride);
+        }
+        unsigned remainRow = validRow - numBlkRow * blk;
+        unsigned remainCol = validCol - numBlkCol * blkCol;
+        if (remainRow > 0) {
+            // 尾行带 x 对齐列: src[16n:][0:8m] -> dst[0:8m][16n:]
+            TransTail2DTiles<T, blockSizeElem, yTileSizeElem>(
+                dstPtr + numBlkRow * blk, srcPtr + numBlkRow * blk * srcStride, tmpPtr, tmpStride, remainRow,
+                numBlkCol * blkCol, dstStride, srcStride);
+        }
+        if (remainCol > 0) {
+            // 对齐行 x 尾列带: src[0:16n][8m:] -> dst[8m:][0:16n]
+            TransTail2DTiles<T, blockSizeElem, yTileSizeElem>(
+                dstPtr + numBlkCol * blkCol * dstStride, srcPtr + numBlkCol * blkCol, tmpPtr, tmpStride,
+                numBlkRow * blk, remainCol, dstStride, srcStride);
+        }
+        if (remainRow > 0 && remainCol > 0) {
+            // 角区：标量
+#ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+            set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
+            for (unsigned i = 0; i < remainRow; ++i) {
+                for (unsigned j = 0; j < remainCol; ++j) {
+                    dstPtr[(numBlkCol * blkCol + j) * dstStride + numBlkRow * blk + i] =
+                        srcPtr[(numBlkRow * blk + i) * srcStride + numBlkCol * blkCol + j];
+                }
+            }
+#ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+            set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+            wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
+        }
+        return;
+    }
+
     constexpr unsigned yTileSizeElem = (sizeof(T) == 1) ? Y_ELEM_B8 : Y_ELEM_OTHER;
     // tmpStride should computed in static way
     unsigned tmpStride = (validRow + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
-    if (((dstStride % yTileSizeElem) != 0) || ((srcStride % blockSizeElem) != 0) ||
-        ((tmpStride % yTileSizeElem) != 0)) {
-        TransTailTiles<T, blockSizeElem, yTileSizeElem>(
-            dstPtr, srcPtr, tmpStride, validRow, validCol, dstStride, srcStride);
+    if (((dstStride % yTileSizeElem) != 0) || ((tmpStride % yTileSizeElem) != 0)) {
+        TransTail2DTiles<T, blockSizeElem, yTileSizeElem>(
+            dstPtr, srcPtr, tmpPtr, tmpStride, validRow, validCol, dstStride, srcStride);
         return;
     }
     // go by subtile column, a.k.a. iter in row direction
