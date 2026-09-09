@@ -37,6 +37,7 @@ struct OcpMxFp8E4M3Spec {
     static constexpr uint16_t maxExp = 0x0400u;
     static constexpr uint16_t expNan = 0x00FFu;
     static constexpr uint16_t b16Nan = 0x7F81u;
+    static constexpr int32_t f32Emax = 8;
 };
 
 struct OcpMxFp4E2M1Spec {
@@ -249,6 +250,7 @@ struct F32OcpQuantCtx {
     vector_s32 vb32_recip_min_scale, vb32_zero;
     vector_bool preg_special, preg_nan, preg_min_scale;
     static constexpr int shr = 23;
+    static constexpr int32_t f32Emax = OcpMxFp8E4M3Spec::f32Emax;
 };
 
 PTO_INTERNAL void InitF32OcpQuantCtx(F32OcpQuantCtx& ctx)
@@ -258,7 +260,7 @@ PTO_INTERNAL void InitF32OcpQuantCtx(F32OcpQuantCtx& ctx)
     vbr(ctx.vb32_b8_nan, 0xFF);
     vbr(ctx.vb32_f32_nan, 0x7FC00000);
     vbr(ctx.vb32_exp_max, 0xFE);
-    vbr(ctx.vb32_b8_emax, 8);
+    vbr(ctx.vb32_b8_emax, ctx.f32Emax);
     vbr(ctx.vb32_recip_min_scale, 0x7F000000);
     vbr(ctx.vb32_zero, 0);
 }
@@ -277,7 +279,7 @@ PTO_INTERNAL void ComputeF32OcpExpAndScaling(
     vsub((vector_u32&)vb32_shared_exp, (vector_u32&)vb32_exponent, (vector_u32&)ctx.vb32_b8_emax, preg_b32);
     vsub((vector_s32&)vb32_scaling, (vector_s32&)ctx.vb32_exp_max, (vector_s32&)vb32_shared_exp, preg_b32);
     vshls((vector_u32&)vb32_scaling, (vector_u32&)vb32_scaling, ctx.shr, preg_b32, MODE_ZEROING);
-    vcmps_le(ctx.preg_min_scale, (vector_s32&)vb32_exponent, 8, preg_b32);
+    vcmps_le(ctx.preg_min_scale, (vector_s32&)vb32_exponent, ctx.f32Emax, preg_b32);
     vsel(vb32_scaling, ctx.vb32_recip_min_scale, vb32_scaling, ctx.preg_min_scale);
     vsel(vb32_shared_exp, ctx.vb32_zero, vb32_shared_exp, ctx.preg_min_scale);
     vcmps_eq(ctx.preg_special, (vector_s32&)vb32_exponent, 0xFF, preg_b32);
@@ -1334,7 +1336,7 @@ PTO_INTERNAL void InitF32ExpScalingCtx(
         vbr(vb32_f32_min_rcp, 0x00400000);
     } else {
         vbr(vb32_f32_nan, 0x7FC00000);
-        vbr(vb32_b8_emax, 8);
+        vbr(vb32_b8_emax, OcpMxFp8E4M3Spec::f32Emax);
         vbr(vb32_exp_max, 0xFE);
         vbr(vb32_recip_min_scale, 0x7F000000);
     }
@@ -1401,7 +1403,7 @@ PTO_INTERNAL void ComputeF32ExpScalingOCP(
     vsub((vector_u32&)vb32_shared_exp, (vector_u32&)vb32_exponent, (vector_u32&)vb32_b8_emax, preg_b32);
     vsub((vector_s32&)vb32_scaling, (vector_s32&)vb32_exp_max, (vector_s32&)vb32_shared_exp, preg_b32);
     vshls((vector_u32&)vb32_scaling, (vector_u32&)vb32_scaling, shr, preg_b32, MODE_ZEROING);
-    vcmps_le(preg_min_scale, (vector_s32&)vb32_exponent, 8, preg_b32);
+    vcmps_le(preg_min_scale, (vector_s32&)vb32_exponent, OcpMxFp8E4M3Spec::f32Emax, preg_b32);
     vsel(vb32_scaling, vb32_recip_min_scale, vb32_scaling, preg_min_scale);
     vsel(vb32_shared_exp, vb32_zero, vb32_shared_exp, preg_min_scale);
     vcmps_eq(preg_special, (vector_s32&)vb32_exponent, 0xFF, preg_b32);
