@@ -42,7 +42,8 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
 ```
 
-`Pipe` is typically a `TPipe` declared in `include/pto/npu/a2a3/TPush.hpp` or `include/pto/npu/a5/TPush.hpp`:
+`Pipe` is typically a `TPipe` declared by the selected backend's `TPush.hpp`, including
+`include/pto/cpu/TPush.hpp`, `include/pto/npu/a2a3/TPush.hpp`, or `include/pto/npu/a5/TPush.hpp`:
 
 ```cpp
 template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum,
@@ -52,7 +53,7 @@ struct TPipe;
 
 ## Constraints
 
-- **A2A3 TileData consumer**:
+- **TileData consumer**:
     - `TileCons::Loc` must be `TileType::Vec`, `TileType::Mat`, or `TileType::Ctrl`.
     - `Direction::DIR_C2V`: vector consumes data produced by cube.
     - `Direction::DIR_V2C`: cube consumes data produced by vector.
@@ -64,7 +65,7 @@ struct TPipe;
     - `TileSplitAxis::TILE_NO_SPLIT`: No sub-vector offset is applied. On A2A3, this mode requires AIV0/AIV1 to participate in inter-core synchronization.
     - `TileSplitAxis::TILE_UP_DOWN`: vector subblocks consume row halves.
     - `TileSplitAxis::TILE_LEFT_RIGHT`: vector subblocks consume column halves.
-- **Synchronization**:
+- **NPU synchronization**:
     - Data-ready wait is performed for each `TPOP`.
     - Free-space notifications are sparse and controlled by `Pipe::SyncPeriod`.
 - **GlobalData slot view**:
@@ -76,9 +77,11 @@ struct TPipe;
     - TileData payloads are loaded from storage owned by the host FIFO state, even when `TPipe` carries a non-null NPU GM workspace. The workspace is not accessed by the CPU_SIM TileData flow.
     - Split modes select the lane from the current subblock context. For a C2V pipe configured with `IsNoSplit`, `TILE_NO_SPLIT` coordinates one or two vector consumer subblocks according to the runtime subblock count. In other no-split vector cases, a nonzero inactive lane is zero-filled where required.
     - The overload with an explicit `int32_t subBlockId` is not currently implemented by CPU_SIM; use the simulated subblock execution context to select a split lane.
-    - For `DIR_BOTH`, the consumer waits for a committed slot matching its direction. No-split and V2C consumers take the oldest such slot by producer commit order rather than by cursor position, which keeps each direction FIFO after the shared producer cursor and the per-consumer cursors desync. Overlapping pops reserve distinct slots.
+    - For `DIR_BOTH`, the consumer waits in its direction's independent ring. No-split and V2C consumers take the oldest committed slot by producer commit order, preserving FIFO order when delayed frees leave gaps in the ring. Overlapping pops reserve distinct slots; `TFREE` releases the calling consumer's oldest outstanding pop in the corresponding direction.
+    - CPU_SIM releases a concrete occupied slot through each enabled `TFREE`; it does not model the NPU `SyncPeriod` notification cadence.
     - TileData payloads are read back with the consumer tile's declared shape, so that shape must match the window
       the producer pushed (its valid shape under `TILE_NO_SPLIT`).
+    - CPU_SIM copies TileData by logical coordinates into the destination layout. A5 local-FIFO `TPOP` instead binds the tile to the FIFO address; it does not convert layouts. For NPU-equivalent V2C behavior, use matching producer and consumer layouts, such as NZ Vec to NZ Mat, and perform any required layout conversion before `TPUSH`.
     - The GlobalData overload is not currently available in CPU_SIM.
 
 ## Examples

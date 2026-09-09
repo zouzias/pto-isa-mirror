@@ -65,6 +65,9 @@ struct TPipe;
 - **FIFO槽位**：
     - `SlotSize` 必须足够容纳一个逻辑FIFO条目。
     - `SlotNum >= 1`。
+- **Ascend 950PR/Ascend 950DT同步标志**：
+    - `FlagID + 1` 不得超过 `MAX_SYC_ID`。
+    - `DIR_BOTH` 和 `DIR_BOTH_GM` 会使用到 `FlagID + 3`；同时使用两个方向时，`FlagID + 3` 不得超过 `MAX_SYC_ID`。
 - **Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品切分行为**：
     - `TileSplitAxis::TILE_NO_SPLIT`：不做切分。在Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品上要使能此切分模式，需要AIV0,AIV1陪跑同步操作。
     - `TileSplitAxis::TILE_UP_DOWN`：向量子块映射到上下两个行半区。
@@ -79,7 +82,7 @@ struct TPipe;
 - **TConfig接口**：
     - `TConfig` 是决定推送行为的配置类型（实现定义）。
     - `TileProd::Loc` 必须为 `TileType::Acc`、`TileType::Vec` 或 `TileType::Ctrl`。
-- **同步**：
+- **NPU同步**：
     - 空闲空间等待是稀疏的，并由 `Pipe::SyncPeriod` 控制。
     - 每次 `TPUSH` 都会发出数据就绪记录。
 - **GlobalData类型生产者**：
@@ -89,7 +92,8 @@ struct TPipe;
 - **CPU_SIM FIFO模型**：
     - FIFO状态由主机线程共享。`TPUSH` 通过互斥锁和条件变量等待空闲槽位并提交数据。
     - TileData 数据使用主机 FIFO 状态拥有的存储；即使构造 `TPipe` 时传入了非空 NPU GM workspace，CPU_SIM TileData 流程也不会访问该 workspace，从而使数据生命周期与槽位状态受同一套同步保护。
-    - TileData生产者支持 `DIR_C2V`、`DIR_V2C` 和 `DIR_BOTH`。`DIR_BOTH` 管道使用共享的环形槽位和共享容量，通过方向标签区分C2V与V2C条目；每次提交还会记录生产序号，消费者据此按FIFO顺序取出各方向的数据。
+    - TileData生产者支持 `DIR_C2V`、`DIR_V2C` 和 `DIR_BOTH`。`DIR_BOTH` 管道为 C2V 和 V2C 分别维护独立的环形队列，每个方向各有 `SlotNum` 个槽位，以及独立的数据存储、游标和同步状态。一个方向占满不会占用另一方向的容量；提交序号用于保持各方向内部的 FIFO 顺序。
+    - CPU_SIM 会等待由对应方向生产者游标选中的具体槽位变为空闲，不模拟 NPU 的 `SyncPeriod` credit 节奏。
     - 切分模式根据当前subblock上下文选择lane。`TILE_NO_SPLIT` 使用一个生产者lane。对于启用 `IsNoSplit` 的C2V管道，一个生产者槽位可根据运行时subblock数量协调一个或两个vector消费者subblock。
     - CPU_SIM 当前未实现显式传入 `int32_t subBlockId` 的重载；应通过模拟subblock执行上下文选择split lane。
     - 简化版接口使用 `TILE_NO_SPLIT`；`TConfig` 接口同样支持CPU fixpipe路径。

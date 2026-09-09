@@ -65,6 +65,9 @@ struct TPipe;
 - **FIFO slot**:
     - `SlotSize` must be large enough for one logical FIFO entry.
     - `SlotNum >= 1`.
+- **A5 synchronization flag**:
+    - `FlagID + 1` must not exceed `MAX_SYC_ID`.
+    - `DIR_BOTH` and `DIR_BOTH_GM` use flags through `FlagID + 3`, so `FlagID + 3` must not exceed `MAX_SYC_ID` when both directions are used.
 - **A2A3 split behavior**:
     - `TileSplitAxis::TILE_NO_SPLIT`: No sub-vector offset is applied. On A2A3, this mode requires AIV0 and AIV1 to participate in synchronization.
     - `TileSplitAxis::TILE_UP_DOWN`: Vector subblocks map to row halves.
@@ -79,7 +82,7 @@ struct TPipe;
 - **TConfig overload**:
     - `TConfig` is a configuration type that determines push behavior (implementation-defined).
     - `TileProd::Loc` must be `TileType::Acc`, `TileType::Vec`, or `TileType::Ctrl`.
-- **Synchronization**:
+- **NPU synchronization**:
     - Free-space waits are sparse and controlled by `Pipe::SyncPeriod`.
     - Data-ready record is emitted for each `TPUSH`.
 - **GlobalData producer**:
@@ -89,7 +92,8 @@ struct TPipe;
 - **CPU_SIM FIFO model**:
     - FIFO state is shared by host threads. `TPUSH` waits for a free slot and commits it with mutex and condition-variable synchronization.
     - TileData payloads use storage owned by the host FIFO state, including when `TPipe` is constructed with a non-null NPU GM workspace. CPU_SIM does not access that workspace for the TileData flow; this keeps payload lifetime covered by the same synchronization as the slot state.
-    - TileData producers support `DIR_C2V`, `DIR_V2C`, and `DIR_BOTH`. A `DIR_BOTH` pipe uses one shared ring and shared capacity; direction tags distinguish C2V entries from V2C entries, and every commit is stamped with a producer sequence number that consumers use to pop each direction in FIFO order.
+    - TileData producers support `DIR_C2V`, `DIR_V2C`, and `DIR_BOTH`. A `DIR_BOTH` pipe gives C2V and V2C independent rings, each with `SlotNum` slots and its own payload storage, cursors, and synchronization state. A full ring in one direction does not consume capacity in the other. Commit sequence numbers preserve FIFO order within each direction.
+    - CPU_SIM waits for the concrete slot selected by the direction's producer cursor to become free; it does not model the NPU `SyncPeriod` credit cadence.
     - Split modes select the lane from the current subblock context. `TILE_NO_SPLIT` uses one producer lane. For a C2V pipe configured with `IsNoSplit`, one producer slot can be coordinated across one or two vector consumer subblocks according to the runtime subblock count.
     - The overload with an explicit `int32_t subBlockId` is not currently implemented by CPU_SIM; use the simulated subblock execution context to select a split lane.
     - The simplified overload uses `TILE_NO_SPLIT`. The `TConfig` overload also supports the CPU fixpipe path.
