@@ -7,8 +7,9 @@
 #   ctest --test-dir tests/costmodel/st_a5/build --output-on-failure
 cmake_minimum_required(VERSION 3.18)
 
-# 探测 clang18(须与 pass 同 LLVM),在 project() 前 pin 编译器。
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/a5_vf_mock.cmake)
+# 探测主版本匹配的 Clang/LLVM（推荐 LLVM 19），在 project() 前固定编译器。
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../include/pto/costmodel/cmake/pto_costmodel.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../pkg_inc/pto/costmodel/vfsim/cmake/a5_vf_mock.cmake)
 _pto_a5_find_llvm()
 set(CMAKE_CXX_COMPILER ${PTO_A5_CLANGXX})
 
@@ -49,7 +50,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-add_definitions(-D__COSTMODEL -D__NPU_ARCH__=3101 -DPTO_COMM_NOT_SUPPORTED)
 add_compile_options(-Wno-macro-redefined -Wno-ignored-attributes
     "SHELL:-include stdint.h" "SHELL:-include stddef.h")
 

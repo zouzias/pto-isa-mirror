@@ -9,7 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
-#include "pto/costmodel/a5/VfSim/VfSimCostModel.h"
+#include "vfsim_cost_model.hpp"
 #include "vec_cycle_generated.hpp"
 #include "vf_info.hpp"
 
@@ -39,9 +39,15 @@ inline void WalkNodes(const std::vector<VfNode>& nodes, uint64_t mul, uint64_t& 
 
 } // namespace detail
 
-inline uint64_t PredictVfCycles(const VfInfo& vf) { return PredictVfCyclesWithVfSim(std::vector<VfInfo>{vf}); }
+inline uint64_t PredictVfCycles(const VfInfo& vf)
+{
+    return predictVfCyclesWithVfSim(std::vector<VfInfo>{vf}).cycles;
+}
 
-inline uint64_t PredictVfCycles(const std::vector<VfInfo>& vfs) { return PredictVfCyclesWithVfSim(vfs); }
+inline uint64_t PredictVfCycles(const std::vector<VfInfo>& vfs)
+{
+    return predictVfCyclesWithVfSim(vfs).cycles;
+}
 
 inline uint64_t LoopProduct(const std::vector<VfNode>& nodes)
 {
