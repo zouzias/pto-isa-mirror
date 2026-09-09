@@ -1,15 +1,16 @@
-﻿# TOR
+# TOR
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:33:33.903Z pushedAt=2026-08-29T09:05:18.447Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TOR tile operation](../figures/isa/TOR.svg)
 
 ## Introduction
 
-Elementwise bitwise OR of two tiles.
+Performs element-wise bitwise OR on two tiles.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
@@ -45,18 +48,18 @@ PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEven
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - The supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+    - `dst`, `src0`, and `src1` must use the same element type.
+    - `dst`, `src0`, and `src1` must be Row-Major.
+    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must be consistent with `dst`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t` (consistent with Atlas A2/A3 training products/Atlas A2/A3 inference products).
     - `dst`, `src0`, and `src1` must use the same element type.
     - `dst`, `src0`, and `src1` must be row-major.
-    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
-- **Implementation checks (A5)**:
-    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
-    - `dst`, `src0`, and `src1` must use the same element type.
-    - `dst`, `src0`, and `src1` must be row-major.
-    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must match `dst`.
+    - Runtime: `src0.GetValidRow()/GetValidCol()` and `src1.GetValidRow()/GetValidCol()` must be consistent with `dst`.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -72,20 +75,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.tor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: Explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tor %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -98,4 +101,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

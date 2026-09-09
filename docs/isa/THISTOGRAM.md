@@ -1,47 +1,50 @@
 # THISTOGRAM
 
-> **Implementation status**: THISTOGRAM is provided as a C++ intrinsic on the A5 and Kirin9030 back ends and in CPU simulation (`__CPU_SIM`), and is registered in the virtual-ISA indexes (`PTOISA`, `isa/README`, `manifest.yaml`, the `appendix-d` family matrix, and the mkdocs nav). It is available on A5 / Kirin9030 / CPU-sim only (not on A2/A3); it has no public bytecode encoding yet.
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:11:21.026Z pushedAt=2026-08-29T09:05:18.435Z -->
+
+> **Implementation status**: THISTOGRAM provides C++ built-in implementations on the Ascend 950PR/Ascend 950DT, Kirin9030 backends, and CPU simulation (`__CPU_SIM`), and has been registered in the virtual ISA index (`PTOISA`, `isa/README`, `manifest.yaml`, the instruction family matrix `appendix-d`, and the mkdocs navigation). It is available only on Ascend 950PR/Ascend 950DT/Kirin9030/CPU simulation (Atlas A2/A3 training products/Atlas A2/A3 inference products are not supported); no public bytecode encoding is available yet.
 
 ## Introduction
 
-Computes a histogram (per byte-value 0–255 occurrence count) over a selected **byte** of each source-tile element, with an optional cascaded filter that restricts the count to elements whose already-processed upper bytes equal supplied index values. It is the **byte-bucket counting primitive of radix sort**: the first pass histograms the most-significant byte (MSB); each subsequent pass histograms the next lower byte but counts only elements whose upper bytes match the previous pass's bucket index, yielding the current radix digit's distribution within a given prefix bucket.
+Computes a histogram over a specific **byte** of each source tile element (the occurrence count of each byte value 0–255), and supports cascade filtering based on "the already-processed higher-order bytes equal a given index". It is the **byte bucket counting primitive for radix sort**: the first pass counts the most significant byte (MSB); subsequent passes count lower-order bytes but only over elements whose higher-order bytes match the bucket index from the previous pass, thereby obtaining the distribution of the current radix digit within the prefix bucket.
 
-A single call produces, for each valid source row, a set of 256 `uint32` bin counts.
+A single call independently produces a set of 256 `uint32` counts (bins) for each valid row of the source tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let the source `src` have valid shape $R \times C$ with `uint16_t` or `uint32_t` elements. Let $B_k(x)$ denote byte $k$ of element $x$:
+Assume that the source `src` has valid shape $R \times C$, with elements of type `uint16_t` or `uint32_t`. Denote $B_k(x)$ as the $k$-th byte of element $x$:
 
 $$
 B_0 = \text{bits } 7\text{–}0\ (\text{LSB}),\quad B_1 = \text{bits } 15\text{–}8,\quad B_2 = \text{bits } 23\text{–}16,\quad B_3 = \text{bits } 31\text{–}24\ (\text{MSB})
 $$
 
-The template parameter `byte` selects the byte $k\in\{0,1,2,3\}$ being histogrammed. For each source row $r\in[0,R)$ and each bin value $b\in[0,256)$:
+The template parameter `byte` selects the byte $k\in\{0,1,2,3\}$ to be counted. For each source row $r\in[0,R)$ and each bucket value $b\in[0,256)$:
 
 $$
 \mathrm{dst}_{r,b} = \bigl|\{\,j\in[0,C)\ \big|\ B_k(\mathrm{src}_{r,j})=b\ \wedge\ F_{k}(r,j)\ \}\bigr|
 $$
 
-where the cascaded filter $F_k$ is defined MSB-first (process $k=3$, then $k=2,1,0$):
+Where the cascade filtering $F_k$ is defined in high-order-first order (process $k=3$ first, then $k=2,1,0$):
 
-| Source dtype | `byte` $k$ | Filter $F_k(r,j)$ | `idx` meaning |
-|--------------|-----------|-------------------|---------------|
-| `uint16` | `BYTE_1` (MSB) | always true (first pass, no filter) | unused |
-| `uint16` | `BYTE_0` (LSB) | $B_1(\mathrm{src}_{r,j})=\mathrm{idx}_{r}$ | 1 match byte per row (upper byte) |
-| `uint32` | `BYTE_3` (MSB) | always true (first pass, no filter) | unused |
-| `uint32` | `BYTE_2` | $B_3=\mathrm{idx}_{r,0}$ | 1 filter-byte row |
-| `uint32` | `BYTE_1` | $B_3=\mathrm{idx}_{r,0}\ \wedge\ B_2=\mathrm{idx}_{r,1}$ | 2 filter-byte rows |
-| `uint32` | `BYTE_0` (LSB) | $B_3=\mathrm{idx}_{r,0}\wedge B_2=\mathrm{idx}_{r,1}\wedge B_1=\mathrm{idx}_{r,2}$ | 3 filter-byte rows |
+| Source Dtype | `byte` $k$ | Filter $F_k(r,j)$ | Meaning of `idx` |
+|----------|-----------|-----------------|-----------|
+| `uint16` | `BYTE_1` (MSB) | Always true (first pass, no filtering) | Unused |
+| `uint16` | `BYTE_0` (LSB) | $B_1(\mathrm{src}_{r,j})=\mathrm{idx}_{r}$ | 1 matching byte per row (higher-order) |
+| `uint32` | `BYTE_3` (MSB) | Always true (first pass, no filtering) | Unused |
+| `uint32` | `BYTE_2` | $B_3=\mathrm{idx}_{r,0}$ | 1 filter byte per row |
+| `uint32` | `BYTE_1` | $B_3=\mathrm{idx}_{r,0}\ \wedge\ B_2=\mathrm{idx}_{r,1}$ | 2 filter bytes per row |
+| `uint32` | `BYTE_0` (LSB) | $B_3=\mathrm{idx}_{r,0}\wedge B_2=\mathrm{idx}_{r,1}\wedge B_1=\mathrm{idx}_{r,2}$ | 3 filter bytes per row |
 
-- `dst` always has 256 `uint32` bins per row (one per byte value 0–255).
-- A `uint16` source supports only `BYTE_0` / `BYTE_1` (only two bytes are extractable).
-- Unless otherwise specified, semantics are defined over the valid region; the exact in-memory interleaved layout of the bin counts (N0/N1 dual banks, even/odd split) is implementation-defined — the logical result is 256 counts per row.
+- `dst` always has 256 `uint32` buckets per row (corresponding to byte values 0–255).
+- `uint16` sources support only `BYTE_0` / `BYTE_1` (only two bytes can be extracted).
+- Unless otherwise stated, the semantics are defined within the valid region; the specific memory interleaving layout of the bucket counts (N0/N1 dual banks, even/odd split) is implementation-defined, and the logical result is 256 counts per row.
 
-> `src` and `idx` are ISA-visible tile operands (not compiler scratch).
+> `src` and `idx` are both ISA-visible tile operands (not compiler scratch).
 
-## C++ Intrinsics
+## C++ Built-in APIs
 
-Declared in `include/pto/common/pto_instr.hpp`, available under A5 / Kirin9030 / CPU simulation (`PTO_NPU_ARCH_A5 || PTO_NPU_ARCH_KIRIN9030 || __CPU_SIM`). The `HistByte` enum is defined in `include/pto/common/type.hpp`.
+Declared in `include/pto/common/pto_instr.hpp`, available on Ascend 950PR/Ascend 950DT/Kirin9030/CPU simulation (`PTO_NPU_ARCH_A5 || PTO_NPU_ARCH_KIRIN9030 || __CPU_SIM`). The `HistByte` enum is defined in `include/pto/common/type.hpp`.
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 enum class HistByte : uint8_t {
@@ -56,66 +59,66 @@ PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx 
 ```
 
 | Parameter | Direction | Meaning |
-|-----------|-----------|---------|
-| `byte` | template | The byte to histogram (`HistByte::BYTE_0`…`BYTE_3`) |
-| `dst` | output | Histogram result tile, `uint32_t`, row-major, 256 bins per row |
-| `src` | input | Source data tile, `uint16_t` or `uint32_t`, row-major |
-| `idx` | input | Cascaded filter-index tile, `uint8_t`, shape varies with `byte` and source dtype (see below) |
-| `events...` | input | Wait events (`WaitEvents`); an implicit `TSYNC` precedes the op |
+|------|------|------|
+| `byte` | Template | Byte to be counted (`HistByte::BYTE_0`…`BYTE_3`) |
+| `dst` | Output | Histogram result tile, `uint32_t`, row-major order, 256 buckets per row |
+| `src` | Input | Source data tile, `uint16_t` or `uint32_t`, row-major order |
+| `idx` | Input | Cascade filtering index tile, `uint8_t`, shape varies with `byte` and source dtype (see below) |
+| `events...` | Input | Wait events (`WaitEvents`), implicit `TSYNC` before the instruction |
 
-## Tile Sizes & Data Types
+## Tile Size and Data Types
 
-For a source valid shape $R \times C$:
+Assume that the source valid shape is $R \times C$:
 
-| Tile | dtype | Valid shape | Layout | Notes |
-|------|-------|-------------|--------|-------|
-| `dst` | `uint32_t` | $R \times 256$ | RowMajor | 256 bin counts per row |
-| `src` | `uint16_t` or `uint32_t` | $R \times C$ | RowMajor | Data being histogrammed |
-| `idx` (`uint16` src) | `uint8_t` | $R \times 1$ | ColMajor (DN) | 1 match byte per row (upper byte) |
-| `idx` (`uint32` src) | `uint8_t` | $(3-k) \times C$ | RowMajor | 1 filter byte broadcast per row; 0 rows when $k=3$ (unused) |
+| Tile | Dtype | Valid Shape | Layout | Description |
+|------|-------|---------|------|------|
+| `dst` | `uint32_t` | $R \times 256$ | RowMajor | 256 bucket counts per row |
+| `src` | `uint16_t` or `uint32_t` | $R \times C$ | RowMajor | Data to be counted |
+| `idx` (`uint16` source) | `uint8_t` | $R \times 1$ | ColMajor (DN) | 1 matching byte (high bits) per row |
+| `idx` (`uint32` source) | `uint8_t` | $(3-k) \times C$ | RowMajor | 1 filter byte broadcast per row; 0 rows when $k=3$ (unused) |
 
-> `idx` physical rows must be aligned to 32-byte blocks (`PTO_CEIL(rows · sizeof(uint8_t), 32)`); in `uint16` mode `idx` must use the DN layout (`BLayout::ColMajor` + `SLayout::NoneBox`) with exactly one column.
+> The physical row count of `idx` must be aligned to 32-byte blocks (`PTO_CEIL(rows · sizeof(uint8_t), 32)`); the `uint16` mode requires `idx` to use the DN layout (`BLayout::ColMajor` + `SLayout::NoneBox`) with exactly 1 column.
 
 ## Supported Input Dtypes
 
-| Source dtype | Destination dtype | idx dtype | Allowed `byte` | Notes |
-|--------------|-------------------|-----------|----------------|-------|
-| `U16` (`uint16_t`) | `U32` | `U8` | `BYTE_0`, `BYTE_1` | Only low/high byte extractable |
-| `U32` (`uint32_t`) | `U32` | `U8` | `BYTE_0`…`BYTE_3` | All four bytes, paired with 0–3 idx rows |
+| Source Dtype | Destination Dtype | idx Dtype | Allowed `byte` | Description |
+|----------|-----------|-----------|--------------|------|
+| `U16` (`uint16_t`) | `U32` | `U8` | `BYTE_0`, `BYTE_1` | Only the low/high byte can be extracted. |
+| `U32` (`uint32_t`) | `U32` | `U8` | `BYTE_0`…`BYTE_3` | All four bytes are available, paired with 0–3 rows of idx. |
 
-> `dst` must be `uint32_t`, `idx` must be `uint8_t`, and `src` is limited to `uint16_t` / `uint32_t`; other combinations are rejected by an in-implementation `static_assert`.
+> `dst` must be `uint32_t`, `idx` must be `uint8_t`, and `src` is restricted to `uint16_t`/`uint32_t`; other combinations are intercepted by `static_assert` in the implementation.
 
 ## Implementation Notes
 
-THISTOGRAM runs on the vector pipeline (`PIPE_V`):
+THISTOGRAM executes on the vector pipe (`PIPE_V`):
 
-1. **Byte extraction**: source elements are deinterleaved into per-byte vectors — `uint16` via `DINTLV_B8` (splits MSB/LSB), `uint32` via `DINTLV_B16` + `vdintlv` (splits into 4 bytes).
-2. **Cascaded filter**: `vcmp_eq` builds a predicate of "already-processed upper byte == idx", AND-ed across bytes (the MSB first pass has no filter).
-3. **Byte histogram**: the hardware `chistv2` op counts the selected byte under the filter predicate, accumulating internally across the N0/N1 dual banks with an even/odd split; each row finally stores 256 `uint32` bins (`INTLV_B32` interleaved store). The dual-bank / even-odd split is an implementation detail — the logical result is 256 counts per row.
+1. **Byte extraction**: Deinterleaves the source elements into per-byte vectors — `uint16` uses `DINTLV_B8` (splitting out MSB/LSB), and `uint32` uses `DINTLV_B16` + `vdintlv` (splitting out 4 bytes).
+2. **Cascade filtering**: Uses `vcmp_eq` to generate the predicate "processed high-order byte == idx", cascading AND per byte (the first pass MSB has no filtering).
+3. **Byte histogram**: Uses the hardware `chistv2` to count the selected bytes under the filtering predicate, internally using N0/N1 dual banks and odd/even split accumulation; finally writes back 256 `uint32` buckets per row (`INTLV_B32` interleaved storage). The dual banks and odd/even split are implementation details; the logical result is 256 counts per row.
 
 ## Constraints
 
-| Constraint | Applies to | Reason |
-|------------|------------|--------|
-| `dst` is `uint32_t` and row-major | all targets | 256-bin count width and store layout |
-| `src` ∈ {`uint16_t`, `uint32_t`} and row-major | all targets | byte-extraction path |
-| `idx` is `uint8_t` | all targets | filter-byte width |
-| `uint16` src: `idx` is DN (ColMajor + NoneBox) with 1 column | A5 / Kirin9030 / CPU | one match byte broadcast per row |
-| `uint32` src: `idx` row-major, rows $=3-k$, cols $=$ source cols | A5 / Kirin9030 / CPU | index rows needed for cascaded filtering |
-| `uint16` src allows only `BYTE_0` / `BYTE_1` | all targets | `uint16` has only 2 bytes |
-| `dst` has 256 bins per row | all targets | byte value space 0–255 |
+| Constraint | Scope | Reason |
+|------|---------|------|
+| `dst` is `uint32_t` and row-major order | All targets | 256-bucket count width and storage layout |
+| `src` ∈ {`uint16_t`, `uint32_t`} and row-major order | All targets | Byte extraction path |
+| `idx` is `uint8_t` | All targets | Filter byte word width |
+| `uint16` source: `idx` is DN (ColMajor + NoneBox) with 1 column | Ascend 950PR/Ascend 950DT/Kirin9030/CPU | Single byte/row broadcast match |
+| `uint32` source: `idx` row-major order, rows $=3-k$, columns $=$ source columns | Ascend 950PR/Ascend 950DT/Kirin9030/CPU | Index rows required for cascade filtering |
+| `uint16` source allows only `BYTE_0` / `BYTE_1` | All targets | `uint16` has only 2 bytes |
+| `dst` 256 buckets per row | All targets | Byte value space 0–255 |
 
 ## Examples
 
 ```cpp
-// uint16 source: histogram the high byte (MSB) of each element (radix-sort pass 1).
+// uint16 source: histogram the high-order byte (MSB) of each element (first pass of radix sort).
 THISTOGRAM<HistByte::BYTE_1>(dstTile, srcTile, idxTile);
 
-// uint16 source: histogram the low byte (LSB), counting only elements whose high byte == idx (pass 2).
+// uint16 source: histogram the low-order byte (LSB), counting only elements whose high-order byte == idx (second pass).
 THISTOGRAM<HistByte::BYTE_0>(dstTile, srcTile, idxTile);
 ```
 
-Typical tile declarations (`uint16` mode, source valid shape $R\times C$):
+Typical tile declaration (`uint16` mode, source valid shape $R\times C$):
 
 ```cpp
 using TileDataSrc = Tile<TileType::Vec, uint16_t, R, alignedC,        BLayout::RowMajor>;
@@ -123,4 +126,4 @@ using TileDataDst = Tile<TileType::Vec, uint32_t, R, 256,             BLayout::R
 using TileDataIdx = Tile<TileType::Vec, uint8_t,  alignedIdxBytes, 1, BLayout::ColMajor>;
 ```
 
-See `tests/npu/a5/src/st/testcase/thistogram/` (A5), `tests/npu/kirin9030/src/st/testcase/thistogram/` (Kirin9030), `tests/npu/kirinX90/src/st/testcase/thistogram/` (KirinX90), and `tests/cpu/st/testcase/thistogram/` (CPU reference) for complete ST examples.
+For complete ST examples, see `tests/npu/a5/src/st/testcase/thistogram/` (A5), `tests/npu/kirin9030/src/st/testcase/thistogram/` (Kirin9030), `tests/npu/kirinX90/src/st/testcase/thistogram/` (KirinX90), and `tests/cpu/st/testcase/thistogram/` (CPU reference implementation).

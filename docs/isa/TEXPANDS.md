@@ -1,15 +1,16 @@
-﻿# TEXPANDS
+# TEXPANDS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:59:51.864Z pushedAt=2026-08-29T09:05:18.430Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TEXPANDS tile operation](../figures/isa/TEXPANDS.svg)
 
 ## Introduction
 
-Broadcast a scalar into a destination tile.
+Broadcasts the scalar to the destination tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
@@ -45,34 +48,33 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - For `TileType::Vec` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - For  `TileType::Mat` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Static valid bounds: `The range of  TileData::Rows * TileData::Cols * sizeof(T) / 32 is [1, 32767]`.
-- **Implementation checks (A5)**:
-    - For `TileType::Vec` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - Tile layout must be row-major (`TileData::isRowMajor`).
-      - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - For  `TileType::Mat` :
-      - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
-      - For`TileDataDst::layout == pto::Layout::NC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z`:
-        - `The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767]`.
-      - For`TileDataDst::layout == pto::Layout::NDC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z_3D`:
-        - `The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767]`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - For a tile whose location is a vector (`TileData::Loc == TileType::Vec`):
+    - `TileData::DType` must be one of the following: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - For a tile whose location is a Mat (`TileData::Loc == TileType::Mat`):
+    - `TileData::DType` must be one of the following: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+    - Valid bounds: `TileData::Rows * TileData::Cols * sizeof(TileData::DType) / 32` must be within the range `[1, 32767]`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - For a tile whose location is a vector (`TileData::Loc == TileType::Vec`):
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - `TileData::DType` must be one of the following: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+    - For a tile whose location is Mat (`TileData::Loc == TileType::Mat`):
+    - `TileData::DType` must be one of the following: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+    - For `TileData::layout == pto::Layout::NC1HWC0 || TileData::layout == pto::Layout::FRACTAL_Z`:
+      - `TileData::shape0 * TileData::shape1 * TileData::shape2 * TileData::shape3` must be within the range `[1, 32767]`.
+    - For `TileData::layout == pto::Layout::NDC1HWC0 || TileData::layout == pto::Layout::FRACTAL_Z_3D`:
+      - `TileData::shape0 * TileData::shape1 * TileData::shape2 * TileData::shape3 * TileData::shape4` must be within the range `[1, 32767]`.
 - **Valid region**:
-    - For `TileType::Vec` :
-    - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
-    - For  `TileType::Mat` :
-    - For Tile : The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
-    - For ConvTile : The op fills `dst` over `ConvTileData`'s shape.
+    - For a tile whose location is a vector (`TileData::Loc == TileType::Vec`):
+    - The operation fills `dst` on `dst.GetValidRow()`/`dst.GetValidCol()`.
+    - For a tile whose location is Mat (`TileData::Loc == TileType::Mat`):
+    - For a tile, the operation fills `dst` on `TileData::Rows`/`TileData::Cols`.
+    - For a convTile, the operation fills `dst` within the `shape` of `ConvTileData`.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -101,22 +103,19 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.texpands %scalar : dtype -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
+# Manual mode: explicitly bind resources first, then issue the instruction.
 %dst = pto.texpands %scalar : dtype -> !pto.tile<...>
 ```
 
@@ -127,4 +126,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

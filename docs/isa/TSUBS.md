@@ -1,15 +1,16 @@
-﻿# TSUBS
+# TSUBS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T05:20:47.266Z pushedAt=2026-08-29T09:05:18.473Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TSUBS tile operation](../figures/isa/TSUBS.svg)
 
 ## Introduction
 
-Elementwise subtract a scalar from a tile.
+Subtracts a scalar from each element in the tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,20 +48,20 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
     - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
-    - Tile location must be vector (`TileDataDst::Loc == TileType::Vec` and `TileDataSrc::Loc == TileType::Vec`).
-    - Static valid bounds: `TileDataDst::ValidRow <= TileDataDst::Rows`, `TileDataDst::ValidCol <= TileDataDst::Cols`, `TileDataSrc::ValidRow <= TileDataSrc::Rows`, and `TileDataSrc::ValidCol <= TileDataSrc::Cols`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `TileData::DType` must be one of the following: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+    - The tile position must be a vector (`TileDataDst::Loc == TileType::Vec` and `TileDataSrc::Loc == TileType::Vec`).
+    - Static valid boundary: `TileDataDst::ValidRow <= TileDataDst::Rows`, `TileDataDst::ValidCol <= TileDataDst::Cols`, `TileDataSrc::ValidRow <= TileDataSrc::Rows`, and `TileDataSrc::ValidCol <= TileDataSrc::Cols`.
     - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-- **Common constraints**:
+- **General constraints**:
     - `dst` and `src0` must use the same element type.
-    - Scalar type must match `TileDataSrc::DType`.
+    - The scalar type must match `TileDataSrc::DType`.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -74,20 +77,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tsubs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tsubs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -100,4 +103,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

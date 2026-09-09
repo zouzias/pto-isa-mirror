@@ -1,15 +1,16 @@
-﻿# TREMS
+# TREMS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:50:15.689Z pushedAt=2026-08-29T09:05:18.457Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TREMS tile operation](../figures/isa/TREMS.svg)
 
 ## Introduction
 
-Elementwise remainder with a scalar: `%`.
+Element-wise remainder with a scalar: `remainder(src, scalar)`.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
@@ -45,37 +48,37 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
                            WaitEvents &...events);
 ```
 
-`PrecisionType` has the following values available:
+`PrecisionType` can specify the following values:
 
-* `RemSAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `RemSAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower, only supports `float` type.
+* `RemSAlgorithm::DEFAULT`: normal algorithm that is fast but less accurate.
+* `RemSAlgorithm::HIGH_PRECISION`: high-precision algorithm that is slower and supports only the `float` type.
 
 ## Constraints
 
-- **Implementation Checks (A2A3)**:
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
     - `dst` and `src` must use the same element type.
     - Supported element types: `float` and `int32_t`.
     - `dst` and `src` must be vector tiles.
     - `dst` and `src` must be row-major.
     - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
-    - **tmp Buffer Requirements**:
-      - `tmp.GetValidCol() >= dst.GetValidCol()` (at least as many columns as dst)
+    - **tmp buffer requirements**:
+      - `tmp.GetValidCol() >= dst.GetValidCol()` (at least the same number of columns as dst)
       - `tmp.GetValidRow() >= 1` (at least 1 row)
-      - Data type must match `TileDataDst::DType`.
-- **Implementation Checks (A5)**:
+      - The data type must match `TileDataDst::DType`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
     - `dst` and `src` must use the same element type.
     - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
     - `dst` and `src` must be vector tiles.
-    - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
+    - The static valid boundaries of both tiles must satisfy `ValidRow <= Rows` and `ValidCol <= Cols`.
     - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
-    - Note: tmp parameter is accepted but not validated or used on A5.
-- **Division by Zero**:
-    - Behavior is target-defined; the CPU simulator asserts in debug builds.
-- **Valid Region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-- **For `int32_t` Inputs (A2A3 Only)**: Both `src` elements and `scalar` must be in the range `[-2^24, 2^24]` (i.e., `[-16777216, 16777216]`) to ensure exact conversion to float32 during computation.
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+    - Note: The tmp parameter is accepted but not validated or used on Ascend 950PR/Ascend 950DT.
+- **Division by zero**:
+    - The behavior is target-defined; the CPU simulator asserts in debug builds.
+- **Valid region**:
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
+- **For `int32_t` inputs (Atlas A2/A3 training products/Atlas A2/A3 inference products only)**: The elements of `src` and `scalar` must be within the range `[-2^24, 2^24]` (that is, `[-16777216, 16777216]`) to ensure exact conversion to float32 during computation.
+- **High-precision algorithm**:
+    - Valid only on Ascend 950PR/Ascend 950DT; the `PrecisionType` option is ignored on Atlas A3 training products/Atlas A3 inference products.
 
 ## Examples
 
@@ -92,20 +95,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: bind resources explicitly first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -118,4 +121,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

@@ -1,17 +1,18 @@
-﻿# TROWEXPANDEXPDIF
+# TROWEXPANDEXPDIF
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:56:50.361Z pushedAt=2026-08-29T09:05:18.461Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TROWEXPANDEXPDIF tile operation](../figures/isa/TROWEXPANDEXPDIF.svg)
 
 ## Introduction
 
-Row-wise exp-diff: compute `exp(src0 - src1)` where `src1` provides one scalar per row.
+Row exponential difference operation: computes exp(src0 - src1), where src1 is a per-row scalar.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_i` be the per-row scalar taken from `src1` (one value per row).
+Assume `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Assume that `s_i` is the per-row scalar obtained from `src1` (one value per row).
 
 For `0 <= i < R` and `0 <= j < C`:
 
@@ -38,9 +39,11 @@ Synchronous form:
 ```text
 pto.trowexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -54,46 +57,46 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
 ## Constraints
 
 - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`
-- `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
-- Tile shape/layout constraint (compile-time): `TileDataDst::isRowMajor`.
-- Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
-- Mode 2: `src1` is expected to provide **32 bytes data per row**.
-- Exact layout/fractal constraints are target-specific; see backend headers under `include/pto/npu/*/TRowExpand*.hpp`.
+- `TileDataDst::DType`, `TileDataSrc0::DType`, and `TileDataSrc1::DType` must be one of the following: `half`, `float`.
+- Tile shape/layout constraint (compile time): `TileDataDst::isRowMajor`.
+- Mode 1: `src1` is expected to provide **one scalar per row** (that is, its effective shape must cover `R` values).
+- Mode 2: `src1` is expected to provide **32 bytes of data per row**.
+- The exact layout/fractal constraints are target-specific; see the backend headers under `include/pto/npu/*/TRowExpand*.hpp`.
 
-### Temporary tile
+### Temporary Tile
 
-The C++ API provides an overload with an explicit `TileDataTmp &tmp`. This overload only supports **Mode 1** (ColMajor expanded operand, scalar per row). Internally, `TROWEXPANDEXPDIF` is implemented as `TROWEXPANDSUB` followed by `TEXP`, so the tmp tile is used for the SUB step's broadcast buffer.
+The C++ API provides an overload that explicitly passes in `TileDataTmp &tmp`. This overload supports only **mode 1** (ColMajor expanded operand, per-row scalar). In the internal implementation, `TROWEXPANDEXPDIF` is implemented by `TROWEXPANDSUB` followed by `TEXP`, so the tmp tile is used as the broadcast buffer for the SUB step.
 
-- **A2A3**: The tmp tile is used as a broadcast buffer for the `TROWEXPANDSUB` step. The per-row scalar values from the ColMajor expanded operand are broadcast via the `vbrcb` instruction into the tmp buffer, creating a 32-byte block per row, which is then used as the expanded operand in the subtraction. The `vbrcb` instruction uses a repeat stride of 8 blocks (256 bytes) between repeat groups, processing 8 rows per repeat. Minimum tmp size calculation:
+- **Atlas A2/A3 training products/Atlas A2/A3 inference products**: The tmp tile is used as the broadcast buffer for the `TROWEXPANDSUB` step. The per-row scalar value of the ColMajor expanded operand is broadcast to the tmp buffer through the `vbrcb` instruction, creating a 32-byte block for each row, which is then used as the expanded operand in the subtraction operation. The repeat stride of the `vbrcb` instruction is 8 blocks (256 bytes), and each repeat processes 8 rows. The minimum tmp size is calculated as follows:
     - **Common parameters**:
         - `R = dst.GetValidRow()`, `T = TileDataDst::DType`.
-    - For `R < 256`:
+    - When `R < 256`:
         $$ \text{tmpSize} = \left\lceil\frac{R}{8}\right\rceil \times 256 \text{ bytes} $$
-    - For `R >= 256`:
-        - The operation is looped, with at most 30 repeats (240 rows) per loop iteration. The tmp buffer is reused across loops, so the per-loop requirement is:
+    - When `R >= 256`:
+        - The operation uses a loop approach, with at most 30 repeats (240 rows) per loop. The tmp buffer is reused across loops, and each loop requires:
         $$ \text{tmpSize} = 30 \times 256 = 7680 \text{ bytes} $$
-    - A compact shape-independent upper bound for any Mode 1 invocation is **8KB** (8192 bytes).
-    - The 3-arg overload (without `tmp`) supports both Mode 1 and Mode 2. For Mode 1, it uses an internal 8KB buffer (`TMP_UB_OFFSET`). For Mode 2, no broadcast buffer is needed.
-- **A5**: The `tmp` tile is accepted and ignored (`[[maybe_unused]]`). A5 hardware supports row-broadcast natively via the `vlds` instruction's broadcast modes, so no scratch buffer is required.
+    - For any mode 1 call, a compact shape-independent upper bound is **8 KB** (8192 bytes).
+    - The 3-parameter overload without `tmp` supports mode 1 and mode 2. For mode 1, it uses the internal 8 KB buffer (`TMP_UB_OFFSET`). For mode 2, no broadcast buffer is required.
+- **Ascend 950PR/Ascend 950DT**: The `tmp` tile is accepted but not used (`[[maybe_unused]]`). The Ascend 950PR/Ascend 950DT hardware natively supports row broadcast through the broadcast mode of the `vlds` instruction, so no temporary buffer is required.
 
 ## Examples
 
-See related examples in `docs/isa/` and `docs/coding/tutorials/`.
+See the related examples in `docs/isa/` and `docs/coding/tutorials/`.
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.trowexpandexpdif %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.trowexpandexpdif %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
@@ -106,4 +109,3 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 # AS Level 2 (DPS)
 pto.trowexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
