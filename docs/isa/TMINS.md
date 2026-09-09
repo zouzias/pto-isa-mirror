@@ -1,15 +1,16 @@
-﻿# TMINS
+# TMINS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:24:50.162Z pushedAt=2026-08-29T09:05:18.443Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TMINS tile operation](../figures/isa/TMINS.svg)
 
 ## Introduction
 
-Elementwise minimum of a tile and a scalar.
+Computes the element-wise minimum value of a tile and a scalar.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,22 +48,22 @@ PTO_INST RecordEvent TMINS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products):**
+    - `TileData::DType` must be one of the following: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
     - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+- **Implementation check (Ascend 950PR/Ascend 950DT):**
+    - `TileData::DType` must be one of the following: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
     - Runtime: `src.GetValidCol() == dst.GetValidCol()`.
-- **Common constraints**:
+- **General constraints:**
     - `dst` and `src` must use the same element type.
-    - Scalar type must match the tile data type.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - The scalar type must be consistent with the tile data type.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -90,20 +93,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -116,4 +119,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

@@ -1,26 +1,27 @@
 # TPARTARGMIN
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:37:15.913Z pushedAt=2026-08-29T09:05:18.450Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TPARTARGMIN tile operation](../figures/isa/TPARTARGMIN.svg)
 
 ## Introduction
 
-Performs elementwise minimum selection over the destination valid region and returns the corresponding index values. When both `src0Val` and `src1Val` are valid at an element, the result value is `min(src0Val, src1Val)` and the result index is the index of the minimum value; when only one input is valid there, the result copies that input's value and index. Handling of other mismatched-validity cases is implementation-defined.
+Performs element-wise minimum value selection within the target valid region and simultaneously returns the corresponding index values. If both `src0Val` and `src1Val` are valid at a position, the result value is `min(src0Val, src1Val)`, and the result index is the source index corresponding to the minimum value; if only one input is valid at that position, the result directly takes that input's value and index. Other cases where the valid regions do not match are implementation-defined.
 
-## Math Interpretation
+## Mathematical Semantics
 
-For each element `(i, j)` in the destination valid region:
+For each element `(i, j)` within the target valid region:
 
 $$
 \begin{aligned}
 (\mathrm{dstVal}_{i,j}, \mathrm{dstIdx}_{i,j}) =
 \begin{cases}
-(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if } \mathrm{src0Val}_{i,j} < \mathrm{src1Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
-(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if } \mathrm{src1Val}_{i,j} \le \mathrm{src0Val}_{i,j} \text{ and both inputs are defined at } (i,j) \\
-(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if only src0 is defined at } (i,j) \\
-(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if only src1 is defined at } (i,j)
+(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if } \mathrm{src0Val}_{i,j} < \mathrm{src1Val}_{i,j} \text{ and both inputs are defined at } (i,j) \text{ } \\
+(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if } \mathrm{src1Val}_{i,j} \le \mathrm{src0Val}_{i,j} \text{ and both inputs are defined at } (i,j) \text{ } \\
+(\mathrm{src0Val}_{i,j}, \mathrm{src0Idx}_{i,j}) & \text{if only src0 is defined at } (i,j) \text{ } \\
+(\mathrm{src1Val}_{i,j}, \mathrm{src1Idx}_{i,j}) & \text{if only src1 is defined at } (i,j) \text{ }
 \end{cases}
 \end{aligned}
 $$
@@ -45,9 +46,10 @@ Synchronous form:
 pto.tpartargmin ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
-## C++ Intrinsic
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
@@ -60,32 +62,32 @@ PTO_INST RecordEvent TPARTARGMIN(TileDataDst &dstVal, TileDataSrc0 &src0Val, Til
 
 ## Constraints
 
-### General constraints / checks
+### General Constraints or Checks
 
-- `dstVal`, `src0Val`, and `src1Val` must use the same element type.
-- `dstIdx`, `src0Idx`, and `src1Idx` must use the same element type.
-- Value type and index type combination constraints:
-    - If the value type is `half`, the index type must be `int16_t` or `uint16_t`.
+- The element types of `dstVal`, `src0Val`, and `src1Val` must be consistent.
+- The element types of `dstIdx`, `src0Idx`, and `src1Idx` must be consistent.
+- Combination constraints on value types and index types (enforced by `static_assert` on Atlas A2/A3 training products/Atlas A2/A3 inference products):
+    - If the value type is `half`, the index type must be `int16_t`, `uint16_t`, `int32_t`, or `uint32_t`.
     - If the value type is `float`, the index type must be `int32_t` or `uint32_t`.
-- Valid regions must match between value tiles and index tiles for each pair:
-    - `src0Val` and `src0Idx` must have identical valid regions.
-    - `src1Val` and `src1Idx` must have identical valid regions.
-    - `dstVal` and `dstIdx` must have identical valid regions.
-- The destination valid region must exactly match the valid region of either `src0Val` or `src1Val`.
-- If `dstVal` has a zero valid region, the instruction returns early.
-- For each element in the destination valid region:
-    - if both inputs are valid, the instruction applies the elementwise minimum and returns the index of the smaller value;
-    - if only one input is valid, the result copies that input's value and index.
-- Handling of any validity pattern not explicitly listed above is implementation-defined.
+- The valid region of each pair of value tile and index tile must be consistent:
+    - The valid regions of `src0Val` and `src0Idx` must be consistent.
+    - The valid regions of `src1Val` and `src1Idx` must be consistent.
+    - The valid regions of `dstVal` and `dstIdx` must be consistent.
+- The destination valid region must be exactly the same as the valid area of either `src0Val` or `src1Val`.
+- If the valid region of `dstVal` is zero, the instruction returns directly.
+- For each element within the destination valid region:
+    - If both inputs are valid, an element-wise minimum value operation is performed, and the index corresponding to the smaller value is returned;
+    - If only one input is valid, the result directly takes the value and index of that input.
+- For valid region combinations outside the above ranges, the behavior is implementation-defined.
 
-### A5 implementation checks
+### Ascend 950PR/Ascend 950DT Implementation Check
 
 - Supported value types: `half`, `float`.
 - Supported index types: `int16_t`, `uint16_t`, `int32_t`, `uint32_t`.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -123,20 +125,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dstVal, %dstIdx = pto.tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: bind resources explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dstVal, %dstIdx = pto.tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)

@@ -1,33 +1,34 @@
-﻿# TMATMUL_MX
+# TMATMUL_MX
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:20:56.086Z pushedAt=2026-08-29T09:05:18.440Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TMATMUL_MX tile operation](../figures/isa/TMATMUL_MX.svg)
 
 ## Introduction
 
-Matrix multiply (GEMM) with additional scaling tiles for mixed-precision / quantized matmul on supported targets.
+Matrix multiplication (GEMM) with additional scale tiles, used to support mixed-precision/quantized matrix multiplication on the target.
 
-This instruction is currently implemented on A5 (see `include/pto/npu/a5/TMatmul.hpp`).
+This instruction is currently implemented only on Ascend 950PR/Ascend 950DT (see `include/pto/npu/a5/TMatmul.hpp`).
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let:
+Assume:
 
 - `M = aMatrix.GetValidRow()`
 - `K = aMatrix.GetValidCol()`
 - `N = bMatrix.GetValidCol()`
 
-Conceptually, the result corresponds to a matrix multiply over the effective matmul domain (`0 <= i < M`, `0 <= j < N`), with the scaling tiles `aScaleMatrix` / `bScaleMatrix` configuring implementation-defined mixed-precision behavior:
+Conceptually, the result corresponds to matrix multiplication over the valid matrix multiplication domain (`0 <= i < M`, `0 <= j < N`), where the scale tiles `aScaleMatrix` / `bScaleMatrix` configure implementation-defined mixed-precision behavior:
 
 $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $$
 
-The exact role of `aScaleMatrix` / `bScaleMatrix` (and any dequant/quant semantics) is target-defined.
+The exact role of `aScaleMatrix` / `bScaleMatrix` (as well as any dequantization/quantization semantics) is defined by the target.
 
 ## Assembly Syntax
 
-Synchronous forms (conceptual):
+Synchronization form (conceptual):
 
 ```text
 %c = tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -56,9 +57,11 @@ pto.tmatmul.mx.acc ins(%c_in, %a, %a_scale, %b, %b_scale : !pto.tile_buf<...>, !
 pto.tmatmul.mx.bias ins(%a, %a_scale, %b, %b_scale, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>,
 !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
@@ -88,18 +91,18 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## Constraints
 
-- **Implementation checks (A5)**:
-    - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`.
-    - Static legality checks are enforced via `CheckMadMxValid<...>()` (types, shapes, fractals, and scaling tile legality).
-    - Supported `(C, A, B)` triples (`C` is always `float`; scale tiles are `float8_e8m0_t`):
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `m/k/n` are taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()`.
+    - Static validity check is performed through `CheckMadMxValid<...>()` (type, shape, fractal, and scale tile validity).
+    - Supported `(C, A, B)` triplets (`C` is always `float`; the scale tile is `float8_e8m0_t`):
         - FP8: `(float, float8_e4m3_t, float8_e4m3_t)`, `(float, float8_e4m3_t, float8_e5m2_t)`, `(float, float8_e5m2_t, float8_e4m3_t)`, `(float, float8_e5m2_t, float8_e5m2_t)`.
         - FP4: `(float, float4_e1m2x2_t, float4_e1m2x2_t)`, `(float, float4_e1m2x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e2m1x2_t)`, `(float, float4_e2m1x2_t, float4_e1m2x2_t)`.
 - **Bias form**:
-    - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias` with `TileBias::Rows == 1` (A5 checks via `static_assert`).
+    - `TileBias::DType` must be `float` and `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1` (checked via `static_assert` on Ascend 950PR/Ascend 950DT).
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -153,20 +156,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
@@ -179,4 +182,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tmatmul.mx ins(%a, %a_scale, %b, %b_scale : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
-

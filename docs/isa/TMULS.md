@@ -1,17 +1,18 @@
-﻿# TMULS
+# TMULS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:28:33.602Z pushedAt=2026-08-29T09:05:18.446Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TMULS tile operation](../figures/isa/TMULS.svg)
 
 ## Introduction
 
-Elementwise multiply a tile by a scalar.
+Performs element-wise multiplication of a tile by a scalar.
 
-## Math Interpretation
+## Mathematical Semantics
 
-For each element `(i, j)` in the valid region:
+For each element `(i, j)` within the valid region:
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \cdot \mathrm{scalar} $$
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,24 +48,24 @@ PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `half`, `float`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
     - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `TileData::DType` must be one of the following: `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
     - Runtime: `src0.GetValidCol() == dst.GetValidCol()`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - The tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -92,20 +95,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tmuls %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tmuls %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -118,4 +121,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

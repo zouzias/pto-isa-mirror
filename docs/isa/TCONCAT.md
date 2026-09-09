@@ -1,26 +1,28 @@
 # TCONCAT
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:51:03.110Z pushedAt=2026-08-29T09:05:18.426Z -->
+
 ## Tile Operation Diagram
 
-### Basic Form (3 arguments)
+### Basic Form (3 Parameters)
 
 ![TCONCAT basic form](../figures/isa/TCONCAT.svg)
 
-### Indexed Form (5-6 arguments)
+### Indexed Form (5-6 Parameters)
 
 ![TCONCAT indexed form](../figures/isa/TCONCAT_idx.svg)
 
 ## Introduction
 
-Concatenate two source tiles (`src0` and `src1`) horizontally into a destination tile (`dst`) along the column dimension. Each row of `dst` contains the concatenation of corresponding rows from `src0` and `src1`.
+Concatenates two source tiles (`src0` and `src1`) into the destination tile (`dst`) horizontally along the column dimension. Each row of `dst` contains the concatenated result of the corresponding rows from `src0` and `src1`.
 
-`TCONCAT` is used for:
+`TCONCAT` is used to:
 
-- Concatenating two tiles along the column axis (horizontal concatenation)
-- Joining tiles in attention and transformer architectures (e.g., concatenating KV cache entries)
-- Combining partial results from split operations
+- Concatenate two tiles along the column axis (horizontal concatenation).
+- Concatenate tiles in attention and transformer architectures (for example, concatenating KV cache entries).
+- Merge partial results from split operations.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each row `i` in the valid region:
 
@@ -42,58 +44,60 @@ Where `validCols0 = src0.GetValidCol()` and `validCols1 = src1.GetValidCol()`.
 pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## C++ Intrinsic
+## C++ Built-in APIs
 
-Declared in `include/pto/npu/a5/TConcat.hpp`:
+Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
-template <typename TileDst, typename TileSrc0, typename TileSrc1>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1);
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, WaitEvents &... events);
 
-template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileSrc0Idx, typename TileSrc1Idx, typename... WaitEvents>
+PTO_INST RecordEvent TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx, WaitEvents &... events);
 
-template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileDstIdx, typename TileSrc0Idx, typename TileSrc1Idx>
-PTO_INST void TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &dstIdx, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx);
+template <typename TileDst, typename TileSrc0, typename TileSrc1, typename TileDstIdx, typename TileSrc0Idx, typename TileSrc1Idx, typename... WaitEvents>
+PTO_INST RecordEvent TCONCAT(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1, TileDstIdx &dstIdx, TileSrc0Idx &src0Idx, TileSrc1Idx &src1Idx, WaitEvents &... events);
 ```
 
 ## Constraints
 
-### General constraints / checks
+### General Constraints/Checks
 
 - `TCONCAT` has three overload variants:
-    - basic form: `TCONCAT(dst, src0, src1)` - concatenates full valid regions
-    - indexed form (5 args): `TCONCAT(dst, src0, src1, src0Idx, src1Idx)` - uses per-row index tiles to specify dynamic column counts
-    - indexed form (6 args): `TCONCAT(dst, src0, src1, dstIdx, src0Idx, src1Idx)` - also outputs the concatenated column count per row
-- All tiles must have `TileType::Vec` (vector tiles)
-- All tiles must use row-major layout (`isRowMajor == true`)
+    - Basic form: `TCONCAT(dst, src0, src1)` - concatenates the complete valid regions
+    - Indexed form (5 parameters): `TCONCAT(dst, src0, src1, src0Idx, src1Idx)` - uses per-row index tiles to specify dynamic column counts
+    - Indexed form (6 parameters): `TCONCAT(dst, src0, src1, dstIdx, src0Idx, src1Idx)` - also outputs the concatenated column count of each row
+- All tiles must be `TileType::Vec` (vector tiles).
+- All tiles must use row-major layout (`isRowMajor == true`).
 
-### Shape constraints
+### Shape Constraints
 
 - Basic form:
     - `dst.GetValidRow() == src0.GetValidRow() == src1.GetValidRow()`
-    - `dst.GetValidCol() == src0.GetValidCol() + src1.GetValidCol()`
+    - Atlas A2/A3 training products/Atlas A2/A3 inference products: `src0.GetValidCol() + src1.GetValidCol() <= TileDataDst::Cols` (the total number of columns must not exceed the physical capacity of dst)
+    - Ascend 950PR/Ascend 950DT: `dst.GetValidCol() == src0.GetValidCol() + src1.GetValidCol()` (the total number of columns must equal the valid column count of dst)
 - Indexed form:
-    - Same row count constraints as basic form
-    - Column counts are determined dynamically from index tiles
-    - `dstIdx.GetValidRow() == 1` for 6-argument form
+    - The row count constraint is the same as the basic form.
+    - The column count is dynamically determined by the index tile.
+    - The 6-parameter form requires `dstIdx.GetValidRow() == 1` (`dstIdx` is a single-row aggregate tile that summarizes the concatenated column count of each row)
 
-### Data type constraints
+### Data Type Constraints
 
 - Supported element types: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`
-- Source and destination tiles must have identical element type
-- Index tiles must use integer types (`int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`)
+- The source tile and destination tile must have the same element type.
+- The index tile must use an integer type (`int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`).
 
-### A5 implementation checks
+### Ascend 950PR/Ascend 950DT Implementation Check
 
-- All tiles must be `TileType::Vec`
-- All tiles must be row-major layout
-- `validRows` must not exceed the physical tile rows for any operand
-- Index tiles (if provided) must satisfy type compatibility checks
+- All tiles must be `TileType::Vec`.
+- All tiles must use row-major layout.
+- `validRows` must not exceed the physical tile row count of any operand.
+- The index tile (if provided) must satisfy the type compatibility check.
 
 ## Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -154,18 +158,18 @@ void example_indexed() {
 
 ## ASM Form Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Auto mode: the compiler/runtime manages placement and scheduling.
 %dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: resources must be explicitly bound before issuing the instruction.
+# Optional binding for tile operands.
 # pto.tassign %src0, @tile(0x1000)
 # pto.tassign %src1, @tile(0x2000)
 # pto.tassign %dst, @tile(0x3000)
@@ -174,6 +178,6 @@ void example_indexed() {
 
 ## Related Instructions
 
-- [TINSERT](TINSERT.md) - Insert a sub-tile into a destination tile at specified offset
-- [TEXTRACT](TEXTRACT.md) - Extract a sub-tile from a source tile
-- [TRESHAPE](TRESHAPE.md) - Reinterpret a tile as another tile type/shape
+- [TINSERT](TINSERT.md) - Inserts a sub-tile into the destination tile at the specified offset.
+- [TEXTRACT](TEXTRACT.md) - Extracts a sub-tile from the source tile.
+- [TRESHAPE](TRESHAPE.md) - Reinterprets a tile as another tile type/shape.

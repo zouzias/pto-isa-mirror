@@ -1,17 +1,18 @@
 # TROWARGMIN
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:52:32.062Z pushedAt=2026-08-29T09:05:18.459Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TROWARGMIN tile operation](../figures/isa/TROWARGMIN.svg)
 
 ## Introduction
 
-Get the column index of the minimum element, or both value and column index of the minimum element for each row.
+Obtains the column index corresponding to the minimum value of each row, or simultaneously obtains the minimum value of each row and its corresponding column index.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
+Assume `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
 
 $$ \mathrm{dst}_{i,0} = \underset{0 \le j < C}{\operatorname{argmin}} \; \mathrm{src}_{i,j} $$
 
@@ -24,6 +25,7 @@ Synchronous form:
 ```text
 %dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
 ```
+
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ### IR Level 1 (SSA)
@@ -37,96 +39,101 @@ Lowering may introduce internal scratch tiles; the C++ intrinsic requires an exp
 ```text
 pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
-Output index only:
+Output the index only:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
 ```
 
-Output both value and index:
+Output both the value and the index:
 
 ```cpp
 template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp,
           typename... WaitEvents>
 PTO_INST RecordEvent TROWARGMIN(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp,
-                                WaitEvents &... events)
+                                WaitEvents &... events);
 ```
 
 ## Constraints
 
-### General constraints / checks
+### General Constraints or Checks
 
-- Supported source element types: `half`, `float`, `int32_t`, `int16_t` (A2A3). On A5 any 2-/4-byte source is accepted (`half`, `bfloat16_t`, `int16_t`, `uint16_t`, `float`, `int32_t`, `uint32_t`).
-- `src` must use standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
-- When output index only:
-    - `dst` and `src` must be `TileType::Vec`.
+- Supported source element types: `half`, `float`, `int32_t`, `int16_t` (A2A3). A5 accepts any 2/4-byte source (`half`, `bfloat16_t`, `int16_t`, `uint16_t`, `float`, `int32_t`, `uint32_t`).
+- `src` must use a standard ND layout: row-major and non-fractal (`BLayout::RowMajor`, `SLayout::NoneBox`).
+- When only the index is output:
+    -`dst` and `src` must be `TileType::Vec`.
     - Supported destination element types: `uint32_t`, `int32_t`.
-    - Runtime checks follow the shared row-reduce check path:
+    - Runtime checks follow the shared row reduction check path:
         - `src.GetValidRow() != 0`
         - `src.GetValidCol() != 0`
         - `src.GetValidRow() == dst.GetValidRow()`
-    - `dst` is checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
-        - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
-        - ND layout whose valid column count is 1.
-- When output both value and index:
-    - `dstVal`, `dstIdx`, `src` must be `TileType::Vec`.
-    - Supported destination element types: `uint32_t`, `int32_t`.
-    - Runtime checks follow the shared row-reduce check path:
+    - `dst` passes the shared row reduction index check path and can use any of the following non-fractal layouts:
+        - A single-column DN layout (`BLayout::ColMajor`, `Cols == 1`), or
+        - An ND layout with a valid column count of 1.
+- When outputting both the value and index:
+    - `dstVal`, `dstIdx`, and `src` must be `TileType::Vec`.
+    - The element type of `dstVal` must be consistent with the element type of `src`.
+    - Supported destination element types:
+        - When the source element type is `float`, `uint32_t` and `int32_t` are supported.
+        - When the source element type is `half`, `uint16_t` and `int16_t` are supported.
+    - Runtime checks follow the shared row reduction check path:
         - `src.GetValidRow() != 0`
         - `src.GetValidCol() != 0`
         - `src.GetValidRow() == dstIdx.GetValidRow()`
         - `src.GetValidRow() == dstVal.GetValidRow()`
-    - `dstVal`, `dstIdx` are checked through the shared row-reduce-index path and may use either of these non-fractal layouts:
-        - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), or
-        - ND layout whose valid column count is 1.
+    - `dstVal` and `dstIdx` are constrained through the shared row reduction index check path and can use any of the following non-fractal layouts:
+        - A single-column DN layout (`BLayout::ColMajor`, `Cols == 1`), or
+        - An ND layout with a valid column count of 1.
 
-### About temporary tile `tmp`
+### Notes on the `tmp` Tile
 
-- Temporary tile is only used by A2A3, A5 accepts `tmp` tile but leaves it unused.
-- The A2A3 implementation selects one of three code paths based on `srcValidCol` relative to `elementPerRepeat` (abbreviated `elemPerRpt` below):
+- Only Atlas A2/A3 training products/Atlas A2/A3 inference products use the `tmp` tile. Ascend 950PR/Ascend 950DT accept `tmp` but do not actually use it.
+- The implementation of Atlas A2/A3 training products/Atlas A2/A3 inference products selects one of three code paths based on the relationship between `srcValidCol` and `elementPerRepeat` (hereinafter abbreviated as `elemPerRpt`):
 
 #### Case 1: `srcValidCol <= elemPerRpt`
 
 - **Index-only mode**: `tmp` is **not used**. The hardware `vcmin` instruction writes directly to `dst`.
-- **Value + Index mode**: `tmp` is used as a small buffer (2 elements per row: one value + one index). `tmp` may use either of these non-fractal layouts:
-    - DN layout with one column (`BLayout::ColMajor`, `Cols == 1`), rows is twice of `src`.
-    - ND layout whose valid column count is 2, rows is the same as `src`.
+- **Value+index mode**: `tmp` is used as a small buffer (2 elements per row: one value + one index). `tmp` can use either of the following non-fractal layouts:
+    - A single-column DN layout (`BLayout::ColMajor`, `Cols == 1`) with a valid row count of `srcValidRow * 2`.
+    - An ND layout with a valid row count of `srcValidRow` and a valid column count of 2.
 
-#### Case 2: `elemPerRpt < srcValidCol <= elemPerRpt²` (Stage 1 reduction)
+#### Case 2: `elemPerRpt < srcValidCol <= elemPerRpt²` (Single-Stage Reduction)
 
-- `tmp` **is used** for a single-stage reduction.
-- Rows of `tmp` tile is equal to `src`.
-- `tmp` tile's stride per row can be calculated using:
+- `tmp` **is used** for single-stage reduction.
+- The number of rows of the `tmp` tile is the same as that of `src`.
+- The stride required for each row of the `tmp` tile is calculated using the following formula:
 
 ```text
-R1 = ceil(validCol / elemPerRpt)
+R1 = ceil(srcValidCol / elemPerRpt)
 stride = (ceil(R1 * 2 / elemPerBlock) + ceil(R1 / elemPerBlock)) * elemPerBlock
 ```
 
-#### Case 3: `srcValidCol > elemPerRpt²` (Stage 2 reduction)
+#### Case 3: `srcValidCol > elemPerRpt²` (Two-Stage Reduction)
 
-- `tmp` **is used** for a two-stage reduction, requiring more space than Stage 1.
-- Rows of `tmp` tile is equal to `src`.
-- `tmp` tile's stride per row can be calculated using:
+- `tmp` **is used** for two-stage reduction, requiring more space than single-stage.
+- The number of rows in the `tmp` tile is the same as that in `src`.
+- The stride required for each row of the `tmp` tile is calculated using the following formula:
 
 ```text
-R1 = ceil(validCol / elemPerRpt)
+R1 = ceil(srcValidCol / elemPerRpt)
 R2 = ceil(R1 / elemPerRpt)
 stage1_size = ceil(R1 * 2 / elemPerBlock) * elemPerBlock
 stage2_end  = ceil(R1 / elemPerBlock) * elemPerBlock + ceil(R2 * 2 / elemPerBlock) * elemPerBlock
 stride = max(stage1_size, stage2_end) + 2
 ```
 
-- The `+ 2` accounts for the final value + index result stored at the end of each row's tmp region.
+- `+ 2` is used to store the final value + index result at the end of each row's tmp region.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -135,15 +142,15 @@ using namespace pto;
 
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint32_t, 16, 1, BLayout::ColMajor>;
+  using DstT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
-  DstT dst;
-  DstValT dst;
+  DstT dstIdx;
+  DstValT dstVal;
   TmpT tmp;
-  TROWARGMIN(dst, src, tmp);
-  TROWARGMIN(dstVal, dst, src, tmp);
+  TROWARGMIN(dstIdx, src, tmp);
+  TROWARGMIN(dstVal, dstIdx, src, tmp);
 }
 ```
 
@@ -156,35 +163,36 @@ using namespace pto;
 
 void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint32_t, 16, 1, BLayout::ColMajor>;
+  using DstT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using DstValT = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor>;
   using TmpT = Tile<TileType::Vec, float, 16, 16>;
   SrcT src;
-  DstT dst;
+  DstT dstIdx;
+  DstValT dstVal;
   TmpT tmp;
   TASSIGN(src, 0x1000);
-  TASSIGN(dst, 0x2000);
+  TASSIGN(dstIdx, 0x2000);
   TASSIGN(dstVal, 0x3000);
   TASSIGN(tmp, 0x4000);
-  TROWARGMIN(dst, src, tmp);
-  TROWARGMIN(dstVal, dst, src, tmp);
+  TROWARGMIN(dstIdx, src, tmp);
+  TROWARGMIN(dstVal, dstIdx, src, tmp);
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -197,4 +205,3 @@ void example_manual() {
 # IR Level 2 (DPS)
 pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
