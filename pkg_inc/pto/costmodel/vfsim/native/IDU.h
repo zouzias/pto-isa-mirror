@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "native/IFU.h"
 #include "native/ParamDB.h"
 #include "native/ValueStorage.h"
-#include "api/native/RuntimeTypes.h"
 
 #include <deque>
 #include <optional>
@@ -59,7 +58,7 @@ struct VloopTraceRecord {
 
 class IDU {
 public:
-    IDU(const UarchConfig& uarch, const ParamDB& db, RuntimeParamMap params = {}, std::vector<int64_t> loopBounds = {},
+    IDU(const UarchConfig& uarch, const ParamDB& db, std::vector<int64_t> loopBounds = {},
         int64_t totalTopBlocks = 1, std::unordered_map<int, std::vector<int64_t>> topBlockLoopBounds = {},
         std::string dtype = "fp32", std::unordered_map<std::string, ValueInfo> values = {},
         std::unordered_set<int64_t> emptyTopBlocks = {});

@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "native/CanonicalProgramLowering.h"
 
 #include "api/native/InstructionCatalog.h"
-#include "api/native/UarchOverrideSchema.h"
 
 #include <algorithm>
 #include <cmath>
@@ -37,36 +36,11 @@ ValueStorageKind storageKind(CanonicalStorageKind storage)
     throw std::runtime_error("Canonical value has unknown storage");
 }
 
-int64_t integerOverride(const CanonicalScalar& value, const std::string& name)
-{
-    if (const auto* integer = std::get_if<int64_t>(&value))
-        return *integer;
-    throw std::runtime_error("Canonical uarch override " + name + " must be an integer");
-}
-
-bool booleanOverride(const CanonicalScalar& value, const std::string& name)
-{
-    if (const auto* boolean = std::get_if<bool>(&value))
-        return *boolean;
-    throw std::runtime_error("Canonical uarch override " + name + " must be a boolean");
-}
-
-std::string stringOverride(const CanonicalScalar& value, const std::string& name)
-{
-    if (const auto* text = std::get_if<std::string>(&value))
-        return *text;
-    throw std::runtime_error("Canonical uarch override " + name + " must be a string");
-}
-
-int64_t resolveInteger(
-    const CanonicalIntegerExpression& expression, const RuntimeParamMap& params, const std::string& field)
+int64_t resolveInteger(const CanonicalIntegerExpression& expression, const std::string& field)
 {
     if (const auto* value = std::get_if<int64_t>(&expression))
         return *value;
     const std::string& text = std::get<std::string>(expression);
-    const auto parameter = params.find(text);
-    if (parameter != params.end())
-        return parameter->second;
     try {
         size_t consumed = 0;
         const int64_t value = std::stoll(text, &consumed, 10);
@@ -89,7 +63,6 @@ class Expander {
 public:
     explicit Expander(const CanonicalVfInfo& vfInfo, const ParamDB* db) : vfInfo_(vfInfo), db_(db)
     {
-        runtime_.params = vfInfo.params;
         for (const auto& [definitionId, value] : vfInfo.values) {
             ValueInfo lowered;
             lowered.valueId = definitionId;
@@ -265,7 +238,7 @@ private:
 
     std::vector<int64_t> nestedBounds(const CanonicalLoop& loop) const
     {
-        std::vector<int64_t> bounds{resolveInteger(loop.count, vfInfo_.params, "loop count")};
+        std::vector<int64_t> bounds{resolveInteger(loop.count, "loop count")};
         for (const auto& node : loop.body) {
             const auto* nested = std::get_if<std::shared_ptr<const CanonicalLoop>>(&node.payload);
             if (nested != nullptr && *nested) {
@@ -279,8 +252,8 @@ private:
 
     void expandLoop(const CanonicalLoop& loop, int depth)
     {
-        const int64_t count = resolveInteger(loop.count, vfInfo_.params, "loop count");
-        int64_t unroll = resolveInteger(loop.unroll, vfInfo_.params, "loop unroll");
+        const int64_t count = resolveInteger(loop.count, "loop count");
+        int64_t unroll = resolveInteger(loop.unroll, "loop unroll");
         if (count < 0 || unroll <= 0)
             throw std::runtime_error("Invalid canonical loop count/unroll: " + loop.loopId);
         const bool innermost = !containsLoop(loop);
@@ -453,66 +426,6 @@ private:
     }
 };
 
-const std::unordered_map<std::string, int64_t UarchConfig::*>& integerUarchOverrideFields()
-{
-    static const std::unordered_map<std::string, int64_t UarchConfig::*> fields{
-        {"issue_ports", &UarchConfig::issuePorts},
-        {"load_ports", &UarchConfig::loadPorts},
-        {"store_ports", &UarchConfig::storePorts},
-        {"ub_slots", &UarchConfig::ubSlots},
-        {"lsu_store_priority_preg_threshold", &UarchConfig::lsuStorePriorityPregThreshold},
-        {"IDU_window_width", &UarchConfig::iduWindowWidth},
-        {"IDU_issue_width", &UarchConfig::iduIssueWidth},
-        {"LDQ_width", &UarchConfig::ldqWidth},
-        {"vreg_num", &UarchConfig::vregNum},
-        {"shq_depth", &UarchConfig::shqDepth},
-        {"exq_depth", &UarchConfig::exqDepth},
-        {"shq_release_delay", &UarchConfig::shqReleaseDelay},
-        {"idu_visible_preg_delay", &UarchConfig::iduVisiblePregDelay},
-        {"idu_visible_shq_delay", &UarchConfig::iduVisibleShqDelay},
-        {"idu_to_ooo_delay", &UarchConfig::iduToOooDelay},
-        {"vloop_to_dispatch_delay", &UarchConfig::vloopToDispatchDelay},
-        {"idu_dispatch_start_advance", &UarchConfig::iduDispatchStartAdvance},
-        {"initial_top_block_vloop_start_cycle", &UarchConfig::initialTopBlockVloopStartCycle},
-        {"nested_vloop_initial_start_gap", &UarchConfig::nestedVloopInitialStartGap},
-        {"loop1_min_feedback_gap", &UarchConfig::loop1MinFeedbackGap},
-        {"innermost_iter_dispatch_stride", &UarchConfig::innermostIterDispatchStride},
-        {"consumer_release_start_offset", &UarchConfig::consumerReleaseStartOffset},
-        {"ooo_to_shq_delay", &UarchConfig::oooToShqDelay},
-        {"ooo_to_lsq_delay", &UarchConfig::oooToLsqDelay},
-        {"exq_recv_delay", &UarchConfig::exqRecvDelay},
-        {"shq_to_exq_port_per_cycle", &UarchConfig::shqToExqPortPerCycle},
-        {"exu0_reserve_lookahead", &UarchConfig::exu0ReserveLookahead},
-        {"exu0_reserve_min_count", &UarchConfig::exu0ReserveMinCount},
-        {"compute_inflight_cap", &UarchConfig::computeInflightCap},
-        {"exq_issue_inflight_cap_per_port", &UarchConfig::exqIssueInflightCapPerPort},
-    };
-    return fields;
-}
-
-const std::unordered_map<std::string, bool UarchConfig::*>& booleanUarchOverrideFields()
-{
-    static const std::unordered_map<std::string, bool UarchConfig::*> fields{
-        {"three_ports_mode", &UarchConfig::threePortsMode},
-        {"enable_isu_queue_model", &UarchConfig::enableIsuQueueModel},
-        {"admit_blocked_to_exq", &UarchConfig::admitBlockedToExq},
-        {"enable_shq_credit_model", &UarchConfig::enableShqCreditModel},
-        {"enable_credit_visibility_delay", &UarchConfig::enableCreditVisibilityDelay},
-        {"global_shq_preg_gate", &UarchConfig::globalShqPregGate},
-        {"use_explicit_idu_credit_bank", &UarchConfig::useExplicitIduCreditBank},
-        {"exq_capacity_counts_inflight", &UarchConfig::exqCapacityCountsInflight},
-        {"enforce_same_cycle_src_hazard", &UarchConfig::enforceSameCycleSrcHazard},
-        {"enable_cross_fu_ii", &UarchConfig::enableCrossFuIi},
-    };
-    return fields;
-}
-
-const std::set<std::string>& stringUarchOverrideFields()
-{
-    static const std::set<std::string> fields{"shq_exq_dispatch_policy"};
-    return fields;
-}
-
 } // namespace
 
 CanonicalRuntimeProgram lowerCanonicalProgram(const CanonicalVfInfo& vfInfo, const ParamDB* db)
@@ -522,39 +435,9 @@ CanonicalRuntimeProgram lowerCanonicalProgram(const CanonicalVfInfo& vfInfo, con
 
 UarchConfig resolveCanonicalUarch(const CanonicalVfInfo& vfInfo, const UarchConfig& defaults)
 {
-    UarchConfig resolved = defaults;
-    const auto& integerFields = integerUarchOverrideFields();
-    const auto& booleanFields = booleanUarchOverrideFields();
-
-    for (const auto& [name, value] : vfInfo.uarch) {
-        if (isDeprecatedUarchOverrideField(name))
-            throw std::runtime_error("Canonical uarch override " + name + " is deprecated");
-        if (!uarchOverrideFieldSupportsTarget(name, UarchOverrideTarget::Cpp))
-            throw std::runtime_error("Canonical uarch override " + name + " is not supported by the C++ target");
-        if (const auto found = integerFields.find(name); found != integerFields.end()) {
-            resolved.*(found->second) = integerOverride(value, name);
-            continue;
-        }
-        if (const auto found = booleanFields.find(name); found != booleanFields.end()) {
-            resolved.*(found->second) = booleanOverride(value, name);
-            continue;
-        }
-        if (stringUarchOverrideFields().count(name))
-            resolved.shqExqDispatchPolicy = stringOverride(value, name);
-        else
-            throw std::runtime_error("C++ uarch schema/resolver mismatch for " + name);
-    }
-    return resolved;
-}
-
-std::set<std::string> cppResolvedUarchOverrideFields()
-{
-    std::set<std::string> result = stringUarchOverrideFields();
-    for (const auto& [name, unused] : integerUarchOverrideFields())
-        result.emplace(name);
-    for (const auto& [name, unused] : booleanUarchOverrideFields())
-        result.emplace(name);
-    return result;
+    if (!vfInfo.uarch.empty())
+        throw std::runtime_error("CanonicalVfInfo uarch override is not supported");
+    return defaults;
 }
 
 } // namespace vfsim

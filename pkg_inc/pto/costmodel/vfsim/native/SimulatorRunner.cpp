@@ -177,15 +177,15 @@ SimulationResult runCanonicalVfInfo(
     const UarchConfig uarch = resolveCanonicalUarch(vfInfo, db.uarch());
     IFU ifu(std::move(runtime.instructions), runtime.topBlockLoopBounds, runtime.totalTopBlocks);
     IDU idu(
-        uarch, db, runtime.params, {}, runtime.totalTopBlocks, runtime.topBlockLoopBounds, runtime.dtype,
-        runtime.values, runtime.emptyTopBlocks);
+        uarch, db, {}, runtime.totalTopBlocks, runtime.topBlockLoopBounds, runtime.dtype, runtime.values,
+        runtime.emptyTopBlocks);
     OoOCoreMainline ooo(uarch, db, runtime.dtype, runtime.values);
-    return runSimulation(ifu, idu, ooo, uarch, runtime.params, resultsDir, maxCycles, runtime.values);
+    return runSimulation(ifu, idu, ooo, uarch, resultsDir, maxCycles, runtime.values);
 }
 
 SimulationResult runSimulation(
-    IFU& ifu, IDU& idu, OoOCoreMainline& ooo, const UarchConfig& uarch, const RuntimeParamMap& params,
-    const std::string& resultsDir, int64_t maxCycles, const std::unordered_map<std::string, ValueInfo>& values)
+    IFU& ifu, IDU& idu, OoOCoreMainline& ooo, const UarchConfig& uarch, const std::string& resultsDir,
+    int64_t maxCycles, const std::unordered_map<std::string, ValueInfo>& values)
 {
     if (const char* envMax = std::getenv("PTOAS_VFSIM_MAX_CYCLES")) {
         try {
@@ -209,8 +209,6 @@ SimulationResult runSimulation(
     int64_t iduPendingShqQueue = 0;
     int64_t iduPendingLsq = 0;
     const std::string dtype = "fp32";
-    (void)params;
-
     int64_t cycle = 0;
     bool completed = false;
 

@@ -8,7 +8,6 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 #include "api/native/CanonicalVfInfo.h"
-#include "api/native/UarchOverrideSchema.h"
 #include "api/native/InstructionCatalog.h"
 
 #include <algorithm>
@@ -40,15 +39,11 @@ std::optional<int64_t> parseInt64(const std::string& text)
     return value;
 }
 
-std::optional<int64_t> resolveIntegerExpression(
-    const CanonicalIntegerExpression& expression, const std::unordered_map<std::string, int64_t>& params)
+std::optional<int64_t> resolveIntegerExpression(const CanonicalIntegerExpression& expression)
 {
     if (const auto* integer = std::get_if<int64_t>(&expression))
         return *integer;
     const std::string& symbol = std::get<std::string>(expression);
-    auto parameter = params.find(symbol);
-    if (parameter != params.end())
-        return parameter->second;
     return parseInt64(symbol);
 }
 
@@ -126,19 +121,6 @@ bool finiteScalar(const CanonicalScalar& value)
     return true;
 }
 
-const char* scalarTypeName(const CanonicalScalar& value)
-{
-    if (std::holds_alternative<std::monostate>(value))
-        return "NoneType";
-    if (std::holds_alternative<bool>(value))
-        return "bool";
-    if (std::holds_alternative<int64_t>(value))
-        return "int";
-    if (std::holds_alternative<double>(value))
-        return "float";
-    return "str";
-}
-
 } // namespace
 
 CanonicalNode CanonicalNode::makeInstruction(CanonicalInstruction value) { return CanonicalNode{std::move(value)}; }
@@ -185,38 +167,8 @@ CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo& vfInfo)
 
     if (vfInfo.schemaVersion != kCanonicalVfInfoSchemaVersion)
         error("unsupported_schema_version", "Unsupported schema version", "schema_version");
-    validateScalarMap(vfInfo.uarch, "uarch");
-    for (const auto& [name, value] : vfInfo.uarch) {
-        if (isDeprecatedUarchOverrideField(name)) {
-            error("deprecated_uarch_field", "Deprecated uarch field is no longer accepted", "uarch." + name);
-            continue;
-        }
-        const auto expected = uarchOverrideFieldType(name);
-        if (!expected) {
-            error(
-                "unsupported_uarch_field", "C++ canonical frontend does not support unknown uarch field",
-                "uarch." + name, std::nullopt, {{"field", name}});
-            continue;
-        }
-        if (!uarchOverrideFieldSupportsTarget(name, UarchOverrideTarget::Cpp)) {
-            error(
-                "unsupported_uarch_target", "uarch field is not supported by the C++ target", "uarch." + name,
-                std::nullopt, {{"field", name}, {"target", "cpp"}});
-            continue;
-        }
-        const bool matches =
-            (*expected == UarchOverrideFieldType::Integer && std::holds_alternative<int64_t>(value)) ||
-            (*expected == UarchOverrideFieldType::Boolean && std::holds_alternative<bool>(value)) ||
-            (*expected == UarchOverrideFieldType::String && std::holds_alternative<std::string>(value));
-        if (!matches)
-            error(
-                "uarch_field_type_mismatch",
-                "uarch." + name + " must use " + uarchOverrideFieldTypeName(*expected) + " type", "uarch." + name,
-                std::nullopt,
-                {{"field", name},
-                 {"expected_type", std::string(uarchOverrideFieldTypeName(*expected))},
-                 {"actual_type", std::string(scalarTypeName(value))}});
-    }
+    if (!vfInfo.uarch.empty())
+        error("unsupported_uarch_override", "CanonicalVfInfo uarch override is not supported", "uarch");
     validateScalarMap(vfInfo.source, "source");
 
     std::unordered_map<std::string, NodeInfo> nodeInfo;
@@ -456,7 +408,7 @@ CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo& vfInfo)
                                 error(
                                     "invalid_affine_term", "Affine variables must be unique", operandPath,
                                     inst->sourceLocation);
-                            if (!inductionVariables.count(term.variableId) && !vfInfo.params.count(term.variableId))
+                            if (!inductionVariables.count(term.variableId))
                                 error(
                                     "undeclared_affine_variable", "Affine variable is not in scope", operandPath,
                                     inst->sourceLocation);
@@ -592,10 +544,10 @@ CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo& vfInfo)
                 const CanonicalLoop& loop = **loopPtr;
                 registerNodeId(loop.loopId, nodePath, loop.sourceLocation);
                 validateLocation(loop.sourceLocation, nodePath + ".source_location");
-                const auto count = resolveIntegerExpression(loop.count, vfInfo.params);
-                const auto unroll = resolveIntegerExpression(loop.unroll, vfInfo.params);
-                const auto start = resolveIntegerExpression(loop.induction.start, vfInfo.params);
-                const auto step = resolveIntegerExpression(loop.induction.step, vfInfo.params);
+                const auto count = resolveIntegerExpression(loop.count);
+                const auto unroll = resolveIntegerExpression(loop.unroll);
+                const auto start = resolveIntegerExpression(loop.induction.start);
+                const auto step = resolveIntegerExpression(loop.induction.step);
                 if (!count)
                     error("unresolved_parameter", "Loop count cannot be resolved", nodePath + ".count");
                 else if (*count < 0)
@@ -611,7 +563,7 @@ CanonicalValidationResult validateCanonicalVfInfo(const CanonicalVfInfo& vfInfo)
                 else if (*step == 0)
                     error("invalid_induction_step", "Induction step cannot be zero", nodePath);
                 const std::string& variableId = loop.induction.variableId;
-                if (variableId.empty() || inductionVariables.count(variableId) || vfInfo.params.count(variableId))
+                if (variableId.empty() || inductionVariables.count(variableId))
                     error("invalid_induction_variable", "Induction variable is invalid", nodePath);
 
                 auto loopInfoIt = nodeInfo.find(loop.loopId);

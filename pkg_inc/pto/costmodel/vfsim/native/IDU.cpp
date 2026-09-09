@@ -33,7 +33,7 @@ std::string joinInts(const std::vector<int64_t>& values)
 } // namespace
 
 IDU::IDU(
-    const UarchConfig& uarch, const ParamDB& db, RuntimeParamMap params, std::vector<int64_t> loopBounds,
+    const UarchConfig& uarch, const ParamDB& db, std::vector<int64_t> loopBounds,
     int64_t totalTopBlocks, std::unordered_map<int, std::vector<int64_t>> topBlockLoopBounds, std::string dtype,
     std::unordered_map<std::string, ValueInfo> values, std::unordered_set<int64_t> emptyTopBlocks)
     : db_(db),
@@ -44,7 +44,6 @@ IDU::IDU(
       topBlockLoopBounds_(std::move(topBlockLoopBounds)),
       emptyTopBlocks_(std::move(emptyTopBlocks))
 {
-    (void)params;
     windowWidth_ = uarch.iduWindowWidth;
     issueWidth_ = uarch.iduIssueWidth;
     theoreticalLimitMode_ = false;

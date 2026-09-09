@@ -12,13 +12,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "api/native/CanonicalVfInfo.h"
 #include "api/native/RuntimeValue.h"
-#include "api/native/RuntimeTypes.h"
 #include "native/IFU.h"
 #include "native/ParamDB.h"
 
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
-#include <set>
 #include <vector>
 
 namespace vfsim {
@@ -26,7 +25,6 @@ namespace vfsim {
 struct CanonicalRuntimeProgram {
     std::vector<DynamicInst> instructions;
     std::unordered_map<std::string, ValueInfo> values;
-    RuntimeParamMap params;
     std::unordered_map<int, std::vector<int64_t>> topBlockLoopBounds;
     std::unordered_set<int64_t> emptyTopBlocks;
     int64_t totalTopBlocks = 1;
@@ -35,7 +33,6 @@ struct CanonicalRuntimeProgram {
 
 CanonicalRuntimeProgram lowerCanonicalProgram(const CanonicalVfInfo& vfInfo, const ParamDB* db = nullptr);
 UarchConfig resolveCanonicalUarch(const CanonicalVfInfo& vfInfo, const UarchConfig& defaults);
-std::set<std::string> cppResolvedUarchOverrideFields();
 
 } // namespace vfsim
 

@@ -146,7 +146,6 @@ struct CanonicalVfInfo {
     std::vector<CanonicalNode> context;
     std::unordered_map<std::string, CanonicalValue> values;
     std::unordered_map<std::string, CanonicalStorageObject> storageObjects;
-    std::unordered_map<std::string, int64_t> params;
     std::map<std::string, CanonicalScalar> uarch;
     std::map<std::string, CanonicalScalar> source;
 };

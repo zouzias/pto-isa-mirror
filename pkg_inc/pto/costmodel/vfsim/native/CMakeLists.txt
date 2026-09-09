@@ -12,7 +12,6 @@ project(VfSimulatorNative LANGUAGES C CXX)
 set(VFSIM_NATIVE_CORE_SOURCES
   ../api/native/CanonicalVfInfo.cpp
   ../api/native/InstructionCatalog.cpp
-  ../api/native/UarchOverrideSchema.cpp
   ../api/native/RuntimeValue.cpp
   Json.cpp
   ControlUnit.cpp

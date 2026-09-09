@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "native/IDU.h"
 #include "native/OOO.h"
 #include "api/native/CanonicalVfInfo.h"
-#include "api/native/RuntimeTypes.h"
 
 #include <string>
 
@@ -29,8 +28,8 @@ SimulationResult runCanonicalVfInfo(
     const CanonicalVfInfo& vfInfo, const ParamDB& db, const std::string& resultsDir = {}, int64_t maxCycles = 1000000);
 
 SimulationResult runSimulation(
-    IFU& ifu, IDU& idu, OoOCoreMainline& ooo, const UarchConfig& uarch, const RuntimeParamMap& params,
-    const std::string& resultsDir, int64_t maxCycles = 1000000,
+    IFU& ifu, IDU& idu, OoOCoreMainline& ooo, const UarchConfig& uarch, const std::string& resultsDir,
+    int64_t maxCycles = 1000000,
     const std::unordered_map<std::string, ValueInfo>& values = {});
 
 } // namespace vfsim
