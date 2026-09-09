@@ -83,8 +83,17 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
 - **Implementation checks (A5)**:
     - Implemented via `TSTORE_IMPL(dst, src, fp)` and validated by `CheckStaticAcc<..., true>()` for the accumulator path (ND/NZ/NHWC/NCHW/NCDHW only, `int32_t/float` source dtype, rows/cols ranges).
     - `FpTileData` legality is checked by the selected backend implementation.
-    - The `STPhase` fp alias is exposed on targets with backend support: A5, kirin9030,
+    - The `STPhase` fp alias is exposed on targets with backend support: A2A3, A5, kirin9030,
       kirinDev0000, and CPU simulator.
+    - **On A2A3 and Ascend 950PR/Ascend 950DT**, `STPhase` reaches the per-channel on-the-fly quantized move-out,
+      so quantization and the unit flag run together; paired with `TMATMUL<AccPhase::Final>` no explicit
+      `set_flag`/`wait_flag` is needed. The values follow the same rule as `TSTORE`: `Final` marks the last
+      move-out and releases the unit flag, `Partial` is only for the non-last move-outs when one L0C tile is
+      drained more than once.
+    - On kirin9030 the overload is exposed but the backend does not route `STPhase` into the quantized
+      move-out, so passing it has no effect.
+    - On Ascend 950PR hardware with CANN 9.2.0, the shared per-channel quantized backend passed
+      the 3 targeted `tstore_acc2gm` cases listed in [TSTORE](TSTORE.md), all with max diff 0.
 
 ## Examples
 

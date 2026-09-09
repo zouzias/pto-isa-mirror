@@ -80,13 +80,16 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
 - **Implementation checks (A2A3)**:
     - The fp path is only supported for accumulator conversion and is validated by internal compile-time checks in `TMOV_IMPL(dst, src, fp)`.
     - `FpTileData` legality is checked by the selected backend implementation.
-    - The `STPhase` fp alias is not exposed on A2A3 because the backend has no `TMOV_IMPL(..., fp)` phase form.
+    - The `STPhase` fp alias supports Acc-to-Mat move-out on A2A3.
 - **Implementation checks (A5)**:
     - Validated by `CheckTMovAccValid(...)` and related compile-time checks in `TMOV_IMPL(dst, src, fp)`.
     - `FpTileData` legality is checked by the selected backend implementation.
     - Destination location is target-dependent (`Vec` or `Mat` are supported in the fp path).
-    - The `STPhase` fp alias is exposed on targets with backend support: A5, kirin9030, kirinX90,
+    - The `STPhase` fp alias is exposed on targets with backend support: A2A3, A5, kirin9030, kirinX90,
       kirinDev0000, and CPU simulator.
+    - On Ascend 950PR hardware with CANN 9.2.0, the vector-quantized `TMOV_FP<STPhase::Final>`
+      cases `TMOVTest.case_nz2nd_fb_quant_uf_final_half` and
+      `TMOVTest.case_nz2nd_fb_quant_uf_final_int8` in `tmov_acc2vec` both passed with max diff 0.
 
 ## Examples
 

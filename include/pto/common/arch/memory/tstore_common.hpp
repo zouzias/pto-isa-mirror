@@ -492,7 +492,7 @@ __tf__ PTO_INTERNAL void TStore(
 
 template <
     typename GlobalData, typename TileData, typename FpTileData, QuantMode_t quantizationMode = QuantMode_t::NoQuant,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 __tf__ AICORE void TStoreAccFp(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src,
     typename FpTileData::TileDType __in__ fp, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4,
@@ -503,19 +503,19 @@ __tf__ AICORE void TStoreAccFp(
     set_fpc(deqTensorAddr);
     pipe_barrier(PIPE_FIX);
     if constexpr (GlobalData::layout == Layout::ND) {
-        TStoreAccNz2nd<GlobalData, TileData, quantizationMode, reluPreMode>(
+        TStoreAccNz2nd<GlobalData, TileData, quantizationMode, reluPreMode, Phase>(
             dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2,
             gStride3, gStride4, validRow, validCol);
     } else if constexpr (GlobalData::layout == Layout::NZ) {
-        TStoreAccNz2nz<GlobalData, TileData, quantizationMode, reluPreMode>(
+        TStoreAccNz2nz<GlobalData, TileData, quantizationMode, reluPreMode, Phase>(
             dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2,
             gStride3, gStride4, validRow, validCol);
     } else if constexpr (GlobalData::layout == Layout::NC1HWC0) {
-        TStoreAccNz2NC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode>(
+        TStoreAccNz2NC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode, Phase>(
             dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride3, validRow,
             validCol);
     } else if constexpr (GlobalData::layout == Layout::NDC1HWC0) {
-        TStoreAccNz2NDC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode>(
+        TStoreAccNz2NDC1HWC0<GlobalData, TileData, quantizationMode, reluPreMode, Phase>(
             dst, __cce_get_tile_ptr(src), gShape0, gShape1, gShape2, gShape3, gShape4, gStride2, gStride4, validRow,
             validCol);
     }

@@ -27,7 +27,9 @@ PTO_INTERNAL void CheckTExtract()
         "TExtract: Invalid data type.");
 }
 
-template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 __tf__ AICORE void TExtractAccToMat(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
@@ -43,9 +45,10 @@ __tf__ AICORE void TExtractAccToMat(
     constexpr uint32_t dstStrideD = DstTileData::Rows;
     constexpr uint16_t srcStride = SrcTileData::Rows;
     uint16_t nSize = CeilDivision(validCol, c0Size) * c0Size;
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     pto_copy_matrix_cc_to_cbuf(
-        dstAddr, srcAddr, 0, nSize, validRow, dstStrideD, srcStride, 0, QuantPre, static_cast<uint8_t>(reluMode), false,
-        false);
+        dstAddr, srcAddr, 0, nSize, validRow, dstStrideD, srcStride, unitFlagCtrl, QuantPre,
+        static_cast<uint8_t>(reluMode), false, false);
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -511,7 +514,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
 }
 
 // relu
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     PTO_ASSERT(
@@ -522,12 +525,14 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
         "The sum of indexCol and dstCol should be less than srcCol!");
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
         dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
 }
 
 // scalar quant
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(
     DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -540,12 +545,14 @@ PTO_INTERNAL void TEXTRACT_IMPL(
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
-    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
         dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
 }
 
 // vector quant
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -559,7 +566,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(
     static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPC<FpTileData>(fp.data(), indexCol);
-    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
         dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
 }
 } // namespace pto

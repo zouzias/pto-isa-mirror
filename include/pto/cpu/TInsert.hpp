@@ -47,17 +47,19 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint32_t idxR
     TInsert_Impl<DstTileData, SrcTileData, QuantMode_t::NoQuant, false>(dst, src, idxRow, idxCol);
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
+    (void)Phase;
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
     TInsert_Impl<DstTileData, SrcTileData, QuantMode_t::NoQuant, useRelu>(dst, src, indexRow, indexCol);
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
+    (void)Phase;
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
     constexpr QuantMode_t quantMode = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
 
@@ -67,10 +69,13 @@ PTO_INTERNAL void TINSERT_IMPL(
     TInsert_Impl<DstTileData, SrcTileData, quantMode, useRelu>(dst, src, indexRow, indexCol, scalars);
 }
 
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
+    (void)Phase;
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
     constexpr QuantMode_t quantMode = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
 

@@ -260,7 +260,7 @@ PTO_INTERNAL void TStoreAccNCHW(
 
 template <
     typename GlobalData, typename TileData, typename FpTileData, QuantMode_t quantPre = QuantMode_t::NoQuant,
-    ReluPreMode reluPreMode = ReluPreMode::NoRelu>
+    ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 __tf__ AICORE void TStoreAccFp(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src,
     typename FpTileData::TileDType __in__ fp, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4,
@@ -274,17 +274,17 @@ __tf__ AICORE void TStoreAccFp(
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
         __cc__ typename TileData::DType* srcTileAddr = srcAddr;
         typename GlobalData::DType* dstGlobalAddr = dstAddr;
-        TStoreAccNZ<GlobalData, TileData, quantPre, reluPreMode>(
+        TStoreAccNZ<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, dstGlobalAddr, srcTileAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
             validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::ND) {
-        TStoreAccND<GlobalData, TileData, quantPre, reluPreMode>(
+        TStoreAccND<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape3, gShape4, gStride2, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NHWC) {
-        TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode>(
+        TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
-        TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(
+        TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride2, validRow, validCol);
     }
 }

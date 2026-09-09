@@ -69,6 +69,7 @@ set(ALL_TESTCASES
     tsels
     tsort32
     tsqrt
+    tstore
     tsub
     tsubs
     ttrans

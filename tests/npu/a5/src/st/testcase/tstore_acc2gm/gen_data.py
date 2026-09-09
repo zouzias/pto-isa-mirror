@@ -186,6 +186,8 @@ def gen_golden_data(case_name, g_info):
 
     x1_gm.tofile("./x1_gm.bin")
     x2_gm.tofile("./x2_gm.bin")
+    if case_name == "TStoreAcc2gmTest.case_vector_quant_uf_multi_drain":
+        golden = np.concatenate((golden.reshape(-1), golden.reshape(-1)))
     golden.tofile("./golden.bin")
 
 
@@ -245,6 +247,8 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case36",
         "TStoreAcc2gmTest.case37",
         "TStoreAcc2gmTest.case38",
+        "TStoreAcc2gmTest.case_vector_quant_uf_final",
+        "TStoreAcc2gmTest.case_vector_quant_uf_multi_drain",
         "TStoreAcc2gmTest.case39",
         "TStoreAcc2gmTest.case40",
         "TStoreAcc2gmTest.case41",
@@ -333,6 +337,8 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.int8, np.int8, 1, 34, 85, 19, 2),
         TStoreAcc2gmParams(np.uint8, np.int8, 1, 31, 32, 29, 2),
         TStoreAcc2gmParams(bfloat16, np.int8, 1, 45, 81, 26, 2),
+        TStoreAcc2gmParams(np.float16, np.float16, 1, 15, 15, 31, 2),
+        TStoreAcc2gmParams(np.float16, np.float16, 1, 15, 15, 31, 2),
         TStoreAcc2gmParams(np.float16, np.float16, 1, 15, 15, 31, 2),
         TStoreAcc2gmParams(bfloat16, np.float16, 1, 31, 95, 17, 2),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 33, 65, 25, 2),

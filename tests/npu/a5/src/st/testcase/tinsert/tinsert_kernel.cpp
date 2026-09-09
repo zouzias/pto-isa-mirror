@@ -28,8 +28,9 @@ struct NZOutputFormat {
 };
 
 template <
-    typename TileMatAData, typename TileMatBData, typename LeftTile, typename RightTile, typename AccTile,
-    typename DstMatTile, typename GlobalDataSrc0, typename GlobalDataSrc1>
+    STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified, typename TileMatAData,
+    typename TileMatBData, typename LeftTile, typename RightTile, typename AccTile, typename DstMatTile,
+    typename GlobalDataSrc0, typename GlobalDataSrc1>
 AICORE inline void LoadMatmulInsert(
     TileMatAData& aMatTile, TileMatBData& bMatTile, LeftTile& aTile, RightTile& bTile, AccTile& cTile,
     DstMatTile& dstMatTile, GlobalDataSrc0& src0Global, GlobalDataSrc1& src1Global)
@@ -44,11 +45,28 @@ AICORE inline void LoadMatmulInsert(
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
+    if constexpr (phase == STPhase::Unspecified) {
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    }
 
-    TINSERT(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+    if constexpr (phase == STPhase::Unspecified) {
+        TINSERT(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+    } else if constexpr (phase == STPhase::Partial) {
+        // 多次搬出序列：Partial 那次写被回读校验的目的地且不释放 unit flag，
+        // Final 那次写一块不回读的 scratch，仅用于释放标志。
+        DstMatTile scratchTile;
+        TASSIGN(scratchTile, 0x30000);
+        TINSERT<STPhase::Partial>(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+        TINSERT<STPhase::Final>(scratchTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+    } else {
+        TINSERT<phase>(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+    }
 }
 
 AICORE inline void ReadbackCbufToUbuf(
@@ -74,7 +92,9 @@ AICORE inline void WaitAndStore(GlobalData& dstGlobal, VecTile& dstTile, uint8_t
     TSTORE(dstGlobal, dstTile);
 }
 
-template <typename AType, typename BType, int M, int K, int N>
+template <
+    typename AType, typename BType, int M, int K, int N, STPhase phase = STPhase::Unspecified,
+    AccPhase accPhase = AccPhase::Unspecified>
 __global__ AICORE void RunTInsertAcc2Mat(__gm__ float* out, __gm__ AType* src0, __gm__ BType* src1)
 {
     using GlobalDataSrc0 = GlobalTensor<AType, pto::Shape<1, 1, 1, M, K>, pto::Stride<M * K, M * K, M * K, K, 1>>;
@@ -116,7 +136,7 @@ __global__ AICORE void RunTInsertAcc2Mat(__gm__ float* out, __gm__ AType* src0, 
     uint8_t syncId = 0;
 
 #if defined(__DAV_CUBE__)
-    LoadMatmulInsert(aMatTile, bMatTile, aTile, bTile, cTile, dstMatTile, src0Global, src1Global);
+    LoadMatmulInsert<phase, accPhase>(aMatTile, bMatTile, aTile, bTile, cTile, dstMatTile, src0Global, src1Global);
 
     set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
@@ -150,6 +170,12 @@ void launchTInsertAcc2Mat(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stre
             reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
     } else if constexpr (testKey == 2) {
         RunTInsertAcc2Mat<half, half, 32, 32, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+    } else if constexpr (testKey == 3) {
+        RunTInsertAcc2Mat<half, half, 16, 16, 16, STPhase::Final, AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+    } else if constexpr (testKey == 4) {
+        RunTInsertAcc2Mat<half, half, 16, 16, 16, STPhase::Partial, AccPhase::Final><<<1, nullptr, stream>>>(
             reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
     }
 }
@@ -2298,6 +2324,8 @@ template void launchTInsertNZSplitCustom<3>(uint64_t* out, uint64_t* src, void* 
 template void launchTInsertNZSplitCustom<4>(uint64_t* out, uint64_t* src, void* stream);
 template void launchTInsertAcc2Mat<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTInsertAcc2Mat<2>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTInsertAcc2Mat<3>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void launchTInsertAcc2Mat<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void launchTInsertNZ<1>(uint64_t* out, uint64_t* src, void* stream);
 template void launchTInsertNZ<2>(uint64_t* out, uint64_t* src, void* stream);
 template void launchTInsertNZ<3>(uint64_t* out, uint64_t* src, void* stream);

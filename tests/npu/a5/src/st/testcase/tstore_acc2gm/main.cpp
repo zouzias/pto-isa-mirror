@@ -284,7 +284,7 @@ void test_tstore_acc2gm_vector_nz2nd()
     constexpr int alignFbN = (validN * sizeof(ScalingT) + 127) / 128 * 128 / sizeof(ScalingT);
     size_t aFileSize = validM * validK * sizeof(srcDataType);
     size_t bFileSize = validK * validN * sizeof(srcDataType);
-    size_t cFileSize = validM * validN * sizeof(dstDataType);
+    size_t cFileSize = validM * validN * sizeof(dstDataType) * (tilingKey == 11 ? 2 : 1);
     size_t fbFileSize = alignFbN * sizeof(ScalingT);
 
     aclInit(nullptr);
@@ -496,6 +496,18 @@ TEST_F(TStoreAcc2gmTest, case36) { test_tstore_acc2gm_vector_nz2nd<3, uint8_t, i
 TEST_F(TStoreAcc2gmTest, case37) { test_tstore_acc2gm_vector_nz2nd<4, uint16_t, int8_t, 45, 81, 26>(); }
 
 TEST_F(TStoreAcc2gmTest, case38) { test_tstore_acc2gm_vector_nz2nd<5, uint16_t, uint16_t, 15, 15, 31>(); }
+
+// issue 552: per-channel 随路量化（TSTORE_FP）与 unit flag 并行
+TEST_F(TStoreAcc2gmTest, case_vector_quant_uf_final)
+{
+    test_tstore_acc2gm_vector_nz2nd<10, uint16_t, uint16_t, 15, 15, 31>();
+}
+
+// 同一块 L0C 多次搬出：非末次 STPhase::Partial，末次 STPhase::Final
+TEST_F(TStoreAcc2gmTest, case_vector_quant_uf_multi_drain)
+{
+    test_tstore_acc2gm_vector_nz2nd<11, uint16_t, uint16_t, 15, 15, 31>();
+}
 
 TEST_F(TStoreAcc2gmTest, case39) { test_tstore_acc2gm_vector_nz2nd<6, uint16_t, uint16_t, 31, 95, 37>(); }
 
