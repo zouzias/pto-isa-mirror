@@ -1,15 +1,16 @@
-﻿# TMUL
+# TMUL
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:27:39.347Z pushedAt=2026-08-29T09:05:18.445Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TMUL tile operation](../figures/isa/TMUL.svg)
 
 ## Introduction
 
-Elementwise multiply of two tiles.
+Performs element-wise multiplication of two tiles.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,35 +35,37 @@ Synchronous form:
 ```text
 pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
+PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents&&... events);
 ```
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16`.
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `half`, `float`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+    - Runtime: the `src0`, `src1`, and `dst` tiles should have the same `validRow/validCol`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+    - Static valid boundary: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+    - Runtime: the `src0`, `src1`, and `dst` tiles must have the same `validRow/validCol`.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain; .
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -93,20 +96,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tmul %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tmul %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -119,4 +122,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

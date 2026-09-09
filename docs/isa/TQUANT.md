@@ -1,46 +1,49 @@
-﻿# TQUANT
+# TQUANT
 
-## Tile Operation Diagram
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:44:31.190Z pushedAt=2026-08-29T09:05:18.455Z -->
+
+## Instruction Diagram
 
 ![TQUANT tile operation](../figures/isa/TQUANT.svg)
 
 ## Introduction
 
-Quantize a higher-precision tile (`FP32` / `BF16` / `FP16`) into a lower-precision format, producing the quantized data tile plus auxiliary per-group exponent / max / scaling tiles. The destination format, scale algorithm, and group axis are compile-time template parameters.
+Quantizes a high-precision tile (`FP32`/`BF16`/`FP16`) into a low-precision format, and generates the quantized data tile together with the auxiliary per-group exponent/maximum/scaling tile. The target format, scaling algorithm, and grouping axis are all compile-time template parameters.
 
-| Destination family | Formats | Grouping | Scale algorithm |
-|--------------------|---------|----------|-----------------|
-| **Microscaling (MX)** | MXFP8 (e4m3), MXFP4 (e2m1) | 32 elements per shared-exponent group | OCP, NV |
-| **Integer** | INT8 (symmetric / asymmetric) | per-tile scale (+ optional offset) | affine |
+| Target Format Family | Format | Grouping Method | Scaling Algorithm |
+|-----------|------|---------|---------|
+| **Microscaling (MX)** | MXFP8 (e4m3), MXFP4 (e2m1) | Every 32 elements share one exponent | OCP, NV |
+| **Integer** | INT8 (symmetric/asymmetric) | One scale per tile (+ optional offset) | Affine |
 
-## Quantization Process
+## Quantization Flow
 
-### MX formats (3 stages, group size G = 32)
+### MX Format (3 Stages, Group Size G = 32)
 
-For a tile $x \in \mathbb{R}^{M \times N}$ grouped along axis `grp_axis` (ND: axis-1/columns, DN: axis-0/rows):
+For a tile $x \in \mathbb{R}^{M \times N}$, group along `grp_axis` (ND: axis-1/columns; DN: axis-0/rows):
 
 | Stage | Operation | Output |
-|-------|-----------|--------|
-| **1. Group max** | $m_g = \max_{i \in g} \|x_i\|$ | `max` (scratch, FP) |
-| **2. Exponent + scale** | $s_g = \mathrm{biasedExp}(m_g) - e_{\max}$; $\alpha_g = 2^{254 - s_g}$ | `exp` (E8M0, 1 B/group), `scaling` (scratch, FP) |
-| **3. Scale + cast** | $q_i = \mathrm{clip}_{[-V_{\max},V_{\max}]}(x_i \cdot \alpha_g) \to$ dest format | `dst` (FP8 / packed FP4) |
+|------|------|------|
+| **1. Intra-group maximum value** | $m_g = \max_{i \in g} \|x_i\|$ | `max` (scratch, FP) |
+| **2. Exponent + scaling** | $s_g = \mathrm{biasedExp}(m_g) - e_{\max}$; $\alpha_g = 2^{254 - s_g}$ | `exp` (E8M0, 1 byte per group), `scaling` (scratch, FP) |
+| **3. Scaling + type conversion** | $q_i = \mathrm{clip}_{[-V_{\max},V_{\max}]}(x_i \cdot \alpha_g) \to$ target format | `dst` (FP8/packed FP4) |
 
-- $e_{\max}$ = max destination exponent (8 for e4m3, 1 for e2m1).
-- $V_{\max}$ = destination MAX_NORM (448 for e4m3, 6 for e2m1).
-- Stages 1–2 use exact IEEE-754 bit manipulation (no FP `log`/`floor`); stage 3 uses hardware cast with stochastic rounding (`SPR.CTRL[50]=1`).
-- **ND** ("normal direction", `grp_axis=1`): groups of 32 consecutive **columns** — the default/standard grouping. **DN** (`grp_axis=0`): groups of 32 consecutive **rows** — a transposed-style grouping along axis-0; exponent tile shape `M̂×N`, `M̂ = M/32`.
+- $e_{\max}$ = maximum exponent of the target format (8 for e4m3, 1 for e2m1).
+- $V_{\max}$ = MAX_NORM of the target format (448 for e4m3, 6 for e2m1).
+- Stages 1–2 use exact IEEE-754 bit operations (no FP `log`/`floor`); stage 3 uses hardware type conversion + stochastic rounding (`SPR.CTRL[50]=1`).
+- **ND** ("normal direction", `grp_axis=1`): every 32 consecutive **columns** form a group — the default/standard grouping method. **DN** (`grp_axis=0`): every 32 consecutive **rows** form a group — transposed axis-0 grouping; the exponent tile shape is `M̂×N`, with `M̂ = M/32`.
 
-### Integer INT8 (affine, 5-stage cast)
+### Integer INT8 (Affine, 5-Stage Type Conversion)
 
 $$q_i = \mathrm{round}\!\left(\frac{x_i}{\mathrm{scale}}\right) + \mathrm{offset}, \qquad q_i \in [-128, 127]$$
 
-No group structure; `scale` (and asymmetric `offset`) are per-tile FP32 scalars/vectors. To avoid double-rounding on A2/A3, the cast chain is `FP32 → S32 → FP32 → FP16 → INT8` (5 stages, via a `tmp` tile = src size); A5 uses native broadcast + cast (no `tmp`). Input must be **FP32**.
+No grouping structure; `scale` (and the asymmetric `offset`) is an FP32 scalar/vector per tile. To avoid double rounding, the type conversion chain on Atlas A2/A3 training products/Atlas A2/A3 inference products is `FP32 → S32 → FP32 → FP16 → INT8` (5 stages, via the `tmp` tile); Ascend 950PR/Ascend 950DT uses native broadcast + type conversion (no `tmp` required). The input must be **FP32**.
 
-## C++ Intrinsics
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`.
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
-### MX — grouped (`grp_axis` + `MxQuantAlg`) — recommended
+### MX — Grouped (`grp_axis` + `MxQuantAlg`) — Recommended
 
 ```cpp
 template <int grp_axis, auto mx_alg, typename TileDataOut, typename TileDataSrc,
@@ -49,37 +52,37 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp
                             TileDataScaling *scaling, WaitEvents &...events);
 ```
 
-| Template param | Values | Meaning |
-|----------------|--------|---------|
-| `grp_axis` | `0` = DN (axis-0 groups), `1` = ND (axis-1 groups) | Quantization group axis |
-| `mx_alg` | `MxQuantAlg::OcpMxFp8E4M3`, `NvMxFp8E4M3`, `OcpMxFp4E2M1`, `NvMxFp4E2M1` | Format + scale algorithm |
+| Template Parameter | Value | Meaning |
+|---------|------|------|
+| `grp_axis` | `0` = DN (axis-0 grouping), `1` = ND (axis-1 grouping) | Quantization grouping axis |
+| `mx_alg` | `MxQuantAlg::OcpMxFp8E4M3`, `NvMxFp8E4M3`, `OcpMxFp4E2M1`, `NvMxFp4E2M1` | Format + scaling algorithm |
 
-### MX — ND legacy (`QuantType` + `QuantScaleAlg`)
+### MX — ND Legacy (`QuantType` + `QuantScaleAlg`)
 
 ```cpp
 template <auto quant_type, typename ...Tiles, auto scale_alg = QuantScaleAlg::OCP, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                             TileDataScaling *scaling, WaitEvents &...events);
 
-// with explicit ZZ exponent store-mode
+// With explicit ZZ exponent storage mode.
 template <auto quant_type, auto store_mode, typename ...Tiles, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
                             TileDataScaling *scaling, TileDataExp *exp_zz, WaitEvents &...events);
 ```
 
 | `quant_type` | Format | `scale_alg` |
-|--------------|--------|-------------|
+|--------------|------|-------------|
 | `QuantType::MXFP8` | e4m3 + E8M0 | OCP / NV |
 | `QuantType::MXFP4_E2M1` | e2m1 + E8M0 | OCP / NV |
 
 ### Integer INT8
 
 ```cpp
-// symmetric
+// Symmetric.
 template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale,
                             TileDataPara *offset = nullptr, WaitEvents &...events);
-// with explicit scratch (A2/A3)
+// With scratch (A2/A3).
 template <auto quant_type, typename ...Tiles, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataTmp &tmp,
                             TileDataPara *offset = nullptr, WaitEvents &...events);
@@ -87,19 +90,19 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
 
 | `quant_type` | `offset` | `dst` dtype | Mode |
 |--------------|----------|-----------|------|
-| `QuantType::INT8_SYM` | `nullptr` | `int8_t` | symmetric ($q = \mathrm{round}(x/\mathrm{scale})$) |
-| `QuantType::INT8_ASYM` | provided | `uint8_t` | asymmetric ($q = \mathrm{round}(x/\mathrm{scale}) + \mathrm{offset}$) |
+| `QuantType::INT8_SYM` | `nullptr` | `int8_t` | Symmetric ($q = \mathrm{round}(x/\mathrm{scale})$) |
+| `QuantType::INT8_ASYM` | Provided | `uint8_t` | Asymmetric ($q = \mathrm{round}(x/\mathrm{scale}) + \mathrm{offset}$) |
 
-> The `tmp`-aware overload (`dst, src, scale, tmp, offset`) exists for A2/A3 interface parity. On A5 `tmp` is unused; on A2/A3 it must be `M×N` FP32 (the S32 cast intermediate).
+> The overload with `tmp` (`dst, src, scale, tmp, offset`) is used for API alignment with Atlas A2/A3 training products/Atlas A2/A3 inference products. Ascend 950PR/Ascend 950DT does not use `tmp`; on Atlas A2/A3 training products/Atlas A2/A3 inference products, `tmp` must be an $M \times N$ FP32 (S32 type conversion intermediate result).
 
-## Tile Sizes & Data Types
+## Tile Size and Data Types
 
-For an input tile of shape $M \times N$ elements (dtype $T \in \{\mathrm{FP32}, \mathrm{BF16}, \mathrm{FP16}\}$), group size $G = 32$:
+For an input tile shape $M \times N$ (dtype $T \in \{\mathrm{FP32}, \mathrm{BF16}, \mathrm{FP16}\}$), the group size $G = 32$:
 
 ### MXFP8 (e4m3)
 
-| Tile | dtype | Shape (ND) | Shape (DN) | Bytes |
-|------|-------|------------|------------|-------|
+| Tile | dtype | Shape (ND) | Shape (DN) | Byte Count |
+|------|-------|-----------|-----------|--------|
 | `src` | $T$ | $M \times N$ | $M \times N$ | $M \cdot N \cdot \mathrm{sizeof}(T)$ |
 | `dst` | `int8_t` (e4m3 alias) | $M \times N$ | $M \times N$ | $M \cdot N$ |
 | `exp` | `uint8_t` (E8M0) | $M \times N/32$ | $M/32 \times N$ | $M \cdot N / 32$ |
@@ -108,63 +111,64 @@ For an input tile of shape $M \times N$ elements (dtype $T \in \{\mathrm{FP32}, 
 
 ### MXFP4 (e2m1)
 
-Same as MXFP8 except:
-| Tile | dtype | Bytes |
-|------|-------|-------|
-| `dst` | `float4_e2m1x2_t` (2 e2m1 codes packed per byte) | $M \cdot N / 2$ |
+Same as MXFP8, but:
 
-> **Input restriction:** MXFP4 accepts **FP16/BF16 only** (not FP32).
+| Tile | dtype | Byte Count |
+|------|-------|--------|
+| `dst` | `float4_e2m1x2_t` (packs 2 e2m1 per byte) | $M \cdot N / 2$ |
+
+> **Input restriction:** MXFP4 accepts only **FP16/BF16** (does not support FP32).
 
 ### INT8
 
-| Tile | dtype | Shape | Bytes |
-|------|-------|-------|-------|
+| Tile | dtype | Shape | Byte Count |
+|------|-------|-------|------------|
 | `src` | `float32_t` | $M \times N$ | $M \cdot N \cdot 4$ |
 | `dst` (SYM) | `int8_t` | $M \times N$ | $M \cdot N$ |
 | `dst` (ASYM) | `uint8_t` | $M \times N$ | $M \cdot N$ |
-| `scale` | FP32 scalar/vector | per-tile | — |
-| `offset` (ASYM) | FP32 scalar/vector | per-tile | — |
-| `tmp` (A2/A3 only) | FP32 | $M \times N$ | $M \cdot N \cdot 4$ |
+| `scale` | FP32 scalar/vector | Per tile | - |
+| `offset` (ASYM) | FP32 scalar/vector | Per tile | - |
+| `tmp` (Atlas A2/A3 training products/Atlas A2/A3 inference products only) | FP32 | $M \times N$ | $M \cdot N \cdot 4$ |
 
-> **`tmp` tile (A2/A3 only):** must be the **same size as `src`** ($M \times N$ FP32 = $4MN$ bytes). It holds the FP32→S32 intermediate (A3 has no in-place `tcvt`). A5 accepts the same `tmp` argument for interface parity but **does not use it** (A5 broadcasts scale/offset natively via `vlds BRC_B32`).
+> **`tmp` tile (Atlas A2/A3 training products/Atlas A2/A3 inference products only):** Must be the **same size** as `src` ($M \times N$ FP32 = $4MN$ bytes), and stores the FP32→S32 type conversion intermediate result (Atlas A3 training products/Atlas A3 inference products have no in-place `tcvt`). Ascend 950PR/Ascend 950DT accept the same-named `tmp` parameter to keep the API consistent, but **do not use it** (Ascend 950PR/Ascend 950DT use native `vlds BRC_B32` broadcast).
 
 ## Constraints
 
-| Constraint | Applies to | Reason |
-|------------|------------|--------|
-| $M \bmod 16 = 0$ | ND MX (ZZ layout) | 16-row ZZ blocks |
+| Constraint | Applicable Scope | Reason |
+|------------|------------------|--------|
+| $M \bmod 16 = 0$ | ND MX (ZZ layout) | 16-row ZZ block |
 | $M \bmod 32 = 0$ | DN MX | axis-0 group divisibility |
-| $M \bmod 64 = 0$ | DN MX + ZZ conversion | δ-pairing ($\hat M / 2$ integer) |
-| $N \bmod 32 = 0$ | all MX | group size $G = 32$ |
+| $M \bmod 64 = 0$ | DN MX + ZZ conversion | δ pairing ($\hat M / 2$ is an integer) |
+| $N \bmod 32 = 0$ | All MX | group size $G = 32$ |
 | $N \bmod 64 = 0$ | ND MX + ZZ conversion | even number of exponent groups |
-| $R \cdot C \le 59461$ | MX (UB 256KB) | buffer budget with reuse |
+| $M \cdot N \le 59461$ | MX (UB 256KB) | buffer budget after reuse |
 | BF16/FP16: `validCols % 32 != 0` → zero-padded to `StaticCols` | MX B16 path | group alignment |
 
-## Output Layout & Layout Conversion
+## Output Layout and Layout Conversion
 
-TQUANT writes **ND** (row-major) output by default. The Cube Unit consumes two fractal layouts, produced by separate `TMOV` instructions:
+TQUANT outputs **ND** (row-major) by default. The Cube Unit consumes two fractal layouts, which are generated by separate `TMOV` instructions:
 
-| Output | Native (TQUANT) | Cube layout | Conversion |
-|--------|-----------------|-------------|------------|
-| FP8 / FP4 data | ND | NZ (ColMajor+RowMajor fractal) | `TMOV(dstNZ, dst)` (2-arg) |
-| E8M0 exponents (ND groups) | ND | ZZ (zigzag, `[16,2]` boxes) | `TMOV(e8Zz, e8, tmp)` (3-arg) |
-| E8M0 exponents (DN groups) | DN | ZZ | `TMOV<0>(e8Zz, e8Dn, tmp)` (3-arg, `grp_axis=0`) |
+| Output | Native (TQUANT) | Cube Layout | Conversion |
+|------|---------------|-----------|------|
+| FP8/FP4 data | ND | NZ (ColMajor+RowMajor fractal) | `TMOV(dstNZ, dst)` (2 parameters) |
+| E8M0 exponent (ND grouping) | ND | ZZ (zigzag, `[16,2]` block) | `TMOV(e8Zz, e8, tmp)` (3 parameters) |
+| E8M0 exponent (DN grouping) | DN | ZZ | `TMOV<0>(e8Zz, e8Dn, tmp)` (3 parameters, `grp_axis=0`) |
 
-DN data FP8 mantissas share the same physical addresses as ND (the `(r,c)` element is identical), so the 2-arg `TMOV` ND→NZ is correct for DN data unchanged. Only the **exponent** path differs (DN→ZZ via `TMOV<0>`). See `TQUANT_DN.md` for the DN→ZZ transform.
+The FP8 mantissa of DN data shares the same physical address as ND (the `(r,c)` elements are identical), so the 2-parameter `TMOV` ND→NZ also applies to DN data. Only the **exponent** path differs (DN→ZZ via `TMOV<0>`). See `TQUANT_DN.md` for details.
 
 ## Supported Input Dtypes
 
-| Format | Accepted input dtypes | Notes |
-|--------|----------------------|-------|
-| MXFP8 *(A5 only)* | FP32, BF16, FP16 | FP32: in-place FP8 output (4:1). BF16/FP16: source zero-padded to `StaticCols`; upcast to FP32 before cast (no direct b16→e4m3). |
-| MXFP4 (e2m1) *(A5 only)* | **FP16, BF16 only** (not FP32) | output `float4_e2m1x2_t` (packed). |
-| INT8 (sym/asym) | **FP32 only** | SYM→`int8_t`, ASYM→`uint8_t`. A2/A3 need `tmp` = src size. |
+| Format | Acceptable Input Dtypes | Description |
+|------|-----------------|------|
+| MXFP8 (A5 only) | FP32, BF16, FP16 | FP32: in-place FP8 output (4:1). BF16/FP16: source zero-padded to `StaticCols`; upcast to FP32 before type conversion (no direct b16→e4m3). |
+| MXFP4 (e2m1) (A5 only) | **FP16, BF16 only** (FP32 not supported) | Outputs `float4_e2m1x2_t` (packed). |
+| INT8 (sym/asym) | **FP32 only** | SYM→`int8_t`, ASYM→`uint8_t`. Atlas A2/A3 training products/Atlas A2/A3 inference products require `tmp` = src size. |
 
-> Microscaling (MXFP8/MXFP4) is supported on **A5 only**; A2/A3 support the **INT8** path only (FP32 input).
+> Micro-scaling (MXFP8/MXFP4) is **supported only on A5**; A2/A3 supports only the **INT8** path (FP32 input).
 
-## Math Interpretation
+## Mathematical Semantics
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+Unless otherwise specified, semantics are defined within the valid region, and destination-related behavior is marked as implementation-defined.
 
 ## Assembly Syntax
 
@@ -180,20 +184,19 @@ Unless otherwise specified, semantics are defined over the valid region and targ
 pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime manages resource placement and scheduling.
 %dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources before issuing the instruction.
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tquant %src, %qp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -210,22 +213,22 @@ pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 ## Examples
 
 ```cpp
-// MXFP8, DN grouping (axis-0 groups), OCP scale
+// MXFP8, DN grouping (axis-0), OCP scaling
 TQUANT<0, MxQuantAlg::OcpMxFp8E4M3>(fp8Tile, srcTile, &e8DnTile, &maxTile, &scalingTile);
 
 // MXFP8, ND grouping (legacy)
 TQUANT<QuantType::MXFP8>(fp8Tile, srcTile, &e8NdTile, &maxTile, &scalingTile);
 
-// MXFP4 E2M1, DN, NV scale
+// MXFP4 E2M1, DN, NV scaling
 TQUANT<0, MxQuantAlg::NvMxFp4E2M1>(fp4Tile, srcTile, &e8DnTile, &maxTile, &scalingTile);
 
 // INT8 symmetric
 TQUANT<QuantType::INT8_SYM>(int8Tile, srcTile, scale);
 
-// Full MXFP8 DN pipeline: quantize + layout convert for cube
+// Complete MXFP8 DN pipeline: quantization + layout conversion for Cube
 TQUANT<0, MxQuantAlg::OcpMxFp8E4M3>(fp8Tile, srcTile, &e8DnTile, &maxTile, &scalingTile);
-TMOV(fp8NZTile, fp8Tile);                  // data  ND→NZ
-TMOV<0>(e8ZzTile, e8DnTile, tmpTile);      // exp   DN→ZZ
+TMOV(fp8NZTile, fp8Tile);                  // Data ND→NZ
+TMOV<0>(e8ZzTile, e8DnTile, tmpTile);      // Exponent DN→ZZ
 ```
 
-See `TQUANT_DN.md` for the DN→ZZ transform details and `tests/npu/a5/src/st/testcase/tquant_dn/` for a complete ST example.
+For details, see `TQUANT_DN.md` (DN→ZZ conversion) and `tests/npu/a5/src/st/testcase/tquant_dn/` (complete ST examples).

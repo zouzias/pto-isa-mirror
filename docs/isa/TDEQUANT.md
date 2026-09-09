@@ -1,28 +1,31 @@
 # TDEQUANT
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:54:17.971Z pushedAt=2026-08-29T09:05:18.427Z -->
+
 ## Introduction
 
-Dequantize a low-precision quantized tile (`S8` / `S16`) into a high-precision `FP32` tile. Each element undergoes **affine dequantization** — the inverse of `TQUANT` integer quantization (INT8 symmetric / asymmetric):
+Dequantizes a low-precision quantized tile (`S8`/`S16`) into a high-precision `FP32` tile. Performs **affine dequantization** on each element, which is the inverse operation of the integer quantization (INT8 symmetric/asymmetric) performed by `TQUANT`:
 
 $$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} - \mathrm{offset}_{i}) \cdot \mathrm{scale}_{i} $$
 
-`scale` and `offset` are **per-row** FP32 parameters (broadcast across the columns), so a single instruction performs the full "subtract zero-point + rescale" dequantization.
+`scale` and `offset` are FP32 parameters provided **per row** (broadcast along columns to the entire row), so the complete dequantization of "offset removal + inverse scaling" can be accomplished in a single instruction.
 
-## Math Interpretation
+## Mathematical Semantics
 
 Conceptually, for each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \bigl(\mathrm{src}_{i,j} - \mathrm{offset}_{i}\bigr) \cdot \mathrm{scale}_{i} $$
 
-- `src`: the quantized integer code (`S8` or `S16`).
-- `scale`, `offset`: per-row FP32 dequantization parameters (parameter group selected by row index `i`, broadcast along the column axis to the entire row); `scale` valid-column count is `paraCols = max(1, scale.GetValidCol())` with parameter column index `paraCol = min(j, paraCols - 1)` used only to clamp the read column within the parameter tile when it has multiple columns (typical usage is one scalar per row, `paraCols = 1`); the parameter group itself is determined by row `i`.
-- Inverse of `TQUANT` integer affine quantization: `TQUANT` has $q = \mathrm{round}(x / \mathrm{scale}) + \mathrm{offset}$, hence $x = (q - \mathrm{offset}) \cdot \mathrm{scale}$.
+- `src`: quantized integer code (`S8` or `S16`).
+- `scale`, `offset`: per-row FP32 dequantization parameters (the parameter group is selected by row index `i` and broadcast along columns to the entire row); the valid column count of `scale` is `paraCols = max(1, scale.GetValidCol())`, and the parameter column subscript `paraCol = min(j, paraCols - 1)` is used only to clamp the read column subscript when the parameter tile has multiple columns (typically one scalar per row, `paraCols = 1`); the parameter group itself is determined by row `i`.
+- It is the inverse of the integer affine quantization performed by `TQUANT`: in `TQUANT`, $q = \mathrm{round}(x / \mathrm{scale}) + \mathrm{offset}$, hence $x = (q - \mathrm{offset}) \cdot \mathrm{scale}$.
 
-> Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined. `scale` and `offset` are ISA-visible tile operands (not compiler scratch).
+> Unless otherwise specified, the semantics are defined within the valid region, and target-dependent behavior is marked as implementation-defined. Both `scale` and `offset` are ISA-visible tile operands (not compiler scratch).
 
-## C++ Intrinsics
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`.
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
@@ -31,48 +34,48 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
 ```
 
 | Parameter | Direction | Meaning |
-|-----------|-----------|---------|
-| `dst` | output | Dequantized result tile, `FP32`, row-major |
-| `src` | input | Quantized source tile, `S8` or `S16`, row-major, same valid shape as `dst` |
-| `scale` | input | Per-row inverse scale, `FP32`, broadcast across columns |
-| `offset` | input | Per-row zero-point, `FP32`, broadcast across columns |
-| `events...` | input | Wait events (`WaitEvents`); an implicit `TSYNC` precedes the op |
+|------|------|------|
+| `dst` | Output | Dequantization result tile, `FP32`, row-major |
+| `src` | Input | Quantization source tile, `S8` or `S16`, row-major, with the same valid shape as `dst` |
+| `scale` | Input | Per-row de-scaling coefficient, `FP32`, broadcast along columns |
+| `offset` | Input | Per-row zero-point offset, `FP32`, broadcast along columns |
+| `events...` | Input | Wait events (`WaitEvents`), implicit `TSYNC` before the instruction |
 
-`scale` and `offset` must share a type (`TileDataPara`) whose dtype matches `dst` (all `FP32`).
+`scale` and `offset` must be of the same type (`TileDataPara`), and their dtypes must be consistent with `dst` (both `FP32`).
 
-## Tile Sizes & Data Types
+## Tile Size and Data Types
 
-For a source/destination valid tile shape of $M \times N$:
+For the valid shape $M \times N$ of the source/destination tiles:
 
-| Tile | dtype | Valid shape | Layout | Notes |
-|------|-------|-------------|--------|-------|
-| `dst` | `float32_t` | $M \times N$ | RowMajor | Dequantized result |
-| `src` | `int8_t` or `int16_t` | $M \times N$ | RowMajor | Quantized integer code; dtype selects the unpack path |
-| `scale` | `float32_t` | $M \times 1$ (per row) | ColMajor / row broadcast | Broadcast across columns (`BRC_B32`) |
-| `offset` | `float32_t` | $M \times 1$ (per row) | ColMajor / row broadcast | Broadcast across columns (`BRC_B32`) |
+| Tile | Dtype | Valid Shape | Layout | Description |
+|------|-------|---------|------|------|
+| `dst` | `float32_t` | $M \times N$ | RowMajor | Dequantization result |
+| `src` | `int8_t` or `int16_t` | $M \times N$ | RowMajor | Quantization integer code; the dtype determines the unpack path |
+| `scale` | `float32_t` | $M \times 1$ (per row) | ColMajor/row broadcast | Broadcast along columns (`BRC_B32`) |
+| `offset` | `float32_t` | $M \times 1$ (per row) | ColMajor/row broadcast | Broadcast along columns (`BRC_B32`) |
 
-> `scale`/`offset` valid rows must equal `dst` valid rows; columns are broadcast in 32-byte blocks, so the typical form is one scalar per row (shape $M \times 1$).
+> The valid row count of `scale`/`offset` must equal the valid row count of `dst`; the column direction is broadcast in 32-byte blocks, so the typical usage is one scalar per row (shape $M \times 1$).
 
 ## Supported Input Dtypes
 
-| Source dtype | Destination dtype | scale/offset dtype | Notes |
-|--------------|-------------------|--------------------|-------|
-| `S8` (`int8_t`) | `FP32` | `FP32` | Unpacked via `UNPK4_B8`, then cast to FP32 |
-| `S16` (`int16_t`) | `FP32` | `FP32` | Unpacked via `UNPK_B16`, then cast to FP32 |
+| Source Dtype | Destination Dtype | Scale/Offset Dtype | Description |
+|----------|-----------|--------------------|------|
+| `S8` (`int8_t`) | `FP32` | `FP32` | Converted to FP32 after `UNPK4_B8` unpacking |
+| `S16` (`int16_t`) | `FP32` | `FP32` | Converted to FP32 after `UNPK_B16` unpacking |
 
-> `dst`, `scale`, and `offset` must share a dtype and all be `FP32`; `src` supports only `S8` / `S16`. Other dtype combinations are illegal (rejected by an in-implementation `static_assert`).
+> `dst`, `scale`, and `offset` must have the same dtype, which must be `FP32`; `src` supports only `S8`/`S16`. Other dtype combinations are invalid (intercepted by `static_assert` in the implementation).
 
 ## Implementation Notes
 
-TDEQUANT runs on the vector pipeline (`PIPE_V`) and needs no `tmp` scratch tile (unlike the 5-stage cast chain of `TQUANT` on A2/A3):
+TDEQUANT executes on the vector pipe (`PIPE_V`) and does not require a `tmp` scratch tile (unlike the 5-stage type conversion chain of `TQUANT` on Atlas A2/A3 training products/Atlas A2/A3 inference products):
 
-1. **Load and unpack `src`**: `S8` via `UNPK4_B8`, `S16` via `UNPK_B16`, then `vcvt` to FP32 (on kirinX90, `S8` uses the `US_B8` + interleave path).
-2. **Broadcast-load parameters**: `scale` and `offset` are loaded with `vlds ... BRC_B32`, broadcasting in 32-byte blocks across each row.
-3. **Compute**: `vsub(dst, src, offset)` followed by `vmul(dst, dst, scale)` — subtract zero-point, then rescale.
+1. **Load and unpack `src`**: `S8` is unpacked via `UNPK4_B8`, and `S16` via `UNPK_B16`, then converted to FP32 via `vcvt` (on KirinX90, `S8` takes the `US_B8` + interleaved path).
+2. **Broadcast load parameters**: `scale` and `offset` are broadcast to the entire row in 32-byte blocks via `vlds ... BRC_B32`.
+3. **Compute**: `vsub(dst, src, offset)` followed by `vmul(dst, dst, scale)`, that is, subtract the offset first and then de-scale.
 
 ## Encoding
 
-TDEQUANT is a TEPL (Tile Elementwise Pipeline) complex-transform instruction:
+TDEQUANT belongs to the Tile Elementwise Pipeline (TEPL) compound transform class instruction:
 
 ```text
 BSTART.TEPL TDEQUANT, DataType +
@@ -83,27 +86,27 @@ B.IOT
 ```
 
 | Field | Value |
-|-------|-------|
-| Mode | 3 (complex transform) |
+|------|------|
+| Mode | 3 (compound transform) |
 | Function | 11 |
 | TileOp | `0x6B` |
 | Operands (`B.IOT`) | `dst, src, scale, offset` |
 
 ## Constraints
 
-| Constraint | Applies to | Reason |
-|------------|------------|--------|
-| `dst` and `src` must be row-major | all targets | per-row parameter broadcast |
-| `dst` and `src` share the valid shape ($M \times N$) | all targets | one-to-one element mapping |
-| `scale` and `offset` valid rows == `dst` valid rows | all targets | one parameter group per row |
-| `dst`/`scale`/`offset` dtypes must match and be `FP32` | all targets | dequantization output precision |
-| `src` ∈ {`S8`, `S16`} | all targets | quantized integer code width |
+| Constraint | Scope | Reason |
+|------|---------|------|
+| `dst` and `src` must be row-major | All targets | Dequantization broadcasts parameters per row |
+| `dst` and `src` have the same valid shape ($M \times N$) | All targets | Element-wise one-to-one correspondence |
+| Valid row count of `scale` and `offset` == valid row count of `dst` | All targets | One set of parameters per row |
+| `dst`/`scale`/`offset` dtypes must be identical and be `FP32` | All targets | Dequantization output precision |
+| `src` ∈ {`S8`, `S16`} | All targets | Integer quantization code word width |
 
 ## Examples
 
 ```cpp
-// src: int8/int16 quantized codes; scale/offset: per-row FP32 parameters
+// src: int8/int16 quantization code; scale/offset: FP32 parameters per row
 TDEQUANT(dstTile, srcTile, scaleTile, offsetTile);
 ```
 
-See `tests/npu/a5/src/st/testcase/tdequant/` (A5), `tests/npu/a2a3/src/st/testcase/tdequant/` (A2/A3), and `tests/cpu/st/testcase/tdequant/` (CPU reference) for complete ST examples.
+For complete ST examples, see `tests/npu/a5/src/st/testcase/tdequant/` (A5), `tests/npu/a2a3/src/st/testcase/tdequant/` (A2/A3), and `tests/cpu/st/testcase/tdequant/` (CPU reference implementation).

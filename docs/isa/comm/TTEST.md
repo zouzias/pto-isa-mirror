@@ -1,24 +1,26 @@
-﻿# TTEST
+# TTEST
+
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:16:49.986Z pushedAt=2026-08-29T09:05:18.409Z -->
 
 ## Introduction
 
-Non-blocking test if signal(s) meet comparison condition. Returns `true` if condition is satisfied, `false` otherwise. Used for polling-based synchronization with timeout or interleaved work.
+Detects whether a signal satisfies a comparison condition in non-blocking mode. It returns `true` if satisfied and `false` otherwise, and is suitable for polling-based synchronization (with timeout) or scenarios interleaved with other work.
 
-Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor). For tensor, returns `true` only if ALL signals meet the condition.
+A single signal or multi-dimensional signal tensor (up to 5 dimensions, with the shape determined by GlobalSignalData) is supported. For a tensor, `true` is returned only when **all** signals satisfy the condition.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Test and return result:
+Detects and returns the result:
 
 Single signal:
 
-$$ \mathrm{result} = (\mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
+$$\mathrm{result} = (\mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue})$$
 
-Signal tensor (all must satisfy):
+Signal tensor (all elements must be satisfied):
 
-$$ \mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
+$$\mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue})$$
 
-where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
+Where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 
 ## Assembly Syntax
 
@@ -27,13 +29,13 @@ where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 %result = ttest %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32) -> i1
 ```
 
-## C++ Intrinsic
+## C++ Built-in APIs
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp);
 ```
 
 ## Constraints
@@ -41,16 +43,17 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 - **Type constraints**:
     - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-    - `signalData` must point to local address (on current NPU).
+    - `signalData` must point to a local address (on the current NPU).
 - **Return value**:
-    - Returns `true` if condition is satisfied, `false` otherwise.
-    - For signal tensor, returns `true` only if ALL signals satisfy the condition.
+    - Returns `true` when the condition is satisfied, and `false` otherwise.
+    - For a signal tensor, returns `true` only when all signals satisfy the condition.
 - **Shape semantics**:
-    - For single signal: Shape is `<1,1,1,1,1>`.
-    - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to test.
+    - Single signal: the shape is `<1,1,1,1,1>`.
+    - Signal tensor: the shape determines the multi-dimensional region to be detected (up to 5 dimensions).
 - **Comparison operators** (WaitCmp):
+
   | Value | Condition |
-  |-------|-----------|
+  |-------|--------|
   | `EQ` | `signal == cmpValue` |
   | `NE` | `signal != cmpValue` |
   | `GT` | `signal > cmpValue` |
@@ -60,7 +63,7 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 
 ## Examples
 
-### Basic Test
+### Basic Detection
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -70,28 +73,28 @@ using namespace pto;
 bool check_ready(__gm__ int32_t* local_signal) {
     comm::Signal sig(local_signal);
 
-    // Check if signal == 1
+    // Detect signal == 1.
     return comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
 
-### Test Signal Matrix
+### Signal Matrix Detection
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
 using namespace pto;
 
-// Test if all signals from a 4x8 dense grid of workers are ready
+// Check whether the signals of all workers in the 4x8 grid are ready.
 bool check_worker_grid(__gm__ int32_t* signal_matrix) {
     comm::Signal2D<4, 8> grid(signal_matrix);
 
-    // Returns true only if all 32 signals == 1
+    // Return true only when all 32 signals are 1.
     return comm::TTEST(grid, 1, comm::WaitCmp::EQ);
 }
 ```
 
-### Polling with Timeout
+### Polling With Timeout
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -103,11 +106,11 @@ bool poll_with_timeout(__gm__ int32_t* local_signal, int max_iterations) {
 
     for (int i = 0; i < max_iterations; ++i) {
         if (comm::TTEST(sig, 1, comm::WaitCmp::EQ)) {
-            return true;  // Signal received
+            return true;  // Signal received.
         }
-        // Could do other work here between polls
+        // Other work can be performed between two polls.
     }
-    return false;  // Timeout
+    return false;  // Timeout.
 }
 ```
 
@@ -122,14 +125,14 @@ void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
     comm::Signal counter(local_counter);
 
     while (!comm::TTEST(counter, expected_count, comm::WaitCmp::GE)) {
-        // Do some useful work while waiting
+        // Perform other useful work while waiting.
         // ...
     }
-    // All expected signals received
+    // All expected signals have been received.
 }
 ```
 
-### Compare TWAIT vs TTEST
+### TWAIT and TTEST Comparison
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -139,10 +142,10 @@ using namespace pto;
 void compare_wait_test(__gm__ int32_t* local_signal) {
     comm::Signal sig(local_signal);
 
-    // Blocking: spins until signal == 1
+    // Blocking: spins until signal == 1.
     comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
 
-    // Non-blocking: returns immediately with result
+    // Non-blocking: returns the result immediately.
     bool ready = comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```

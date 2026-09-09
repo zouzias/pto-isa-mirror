@@ -1,15 +1,16 @@
-﻿# TNEG
+# TNEG
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:29:16.988Z pushedAt=2026-08-29T09:05:18.446Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TNEG tile operation](../figures/isa/TNEG.svg)
 
 ## Introduction
 
-Elementwise negation of a tile.
+Element-wise negation of a tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,9 +48,9 @@ PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- **Implementation checks (A2A3)**: `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-- **Implementation checks (A5)**: `TileData::DType` must be one of: `int32_t`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float`, `bfloat16_t`.
+- The operation iterates over `dst.GetValidRow()`/`dst.GetValidCol()`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**: `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `half`, `float`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**: `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `uint32_t`, `uint16_t`, `half`, `float`, `bfloat16_t`.
 
 ## Examples
 
@@ -63,20 +66,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tneg %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources before issuing the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tneg %src : !pto.tile<...> -> !pto.tile<...>
@@ -89,4 +92,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
