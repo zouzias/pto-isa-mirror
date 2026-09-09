@@ -279,16 +279,9 @@ Other predicate, carry, or multi-output instructions that are captured completel
 model return `UnsupportedForm` and use the A5 formula fallback. `InvalidTrace` remains reserved for missing
 or contradictory capture information.
 
-Logging and configuration lookup are controllable as well:
-
-```cpp
-::pto::mocker::vf::VfPredictionOptions options;
-options.logLevel = ::pto::mocker::vf::VfSimLogLevel::Summary;
-options.configDir = "/path/to/vfsim-or-configs";
-::pto::mocker::vf::SetVfPredictionOptions(options);
-```
-
-Log levels are `Off`, `Errors`, `Summary`, and `Detailed`. Configuration lookup order is `options.configDir`, `PerfSimConfig::vfsim_config_dir`, `PTO_VFSIM_CONFIG_DIR`, and finally a relocatable installation layout near the executable or current directory.
+The standard PTO costmodel interface does not expose global VfSim logging state. Configuration lookup uses
+`PerfSimConfig::vfsim_config_dir`, `PTO_VFSIM_CONFIG_DIR`, and finally a relocatable installation layout near the
+executable or current directory.
 
 ### 4. Check the Expected Micro-op Sequence
 

@@ -276,16 +276,8 @@ predicate 数据依赖暂不计入预测。
 而是返回 `UnsupportedForm` 并使用 A5 公式 fallback。此时 `InvalidTrace` 仍专门表示 capture 信息
 缺失或相互矛盾。
 
-也可以控制日志和配置目录：
-
-```cpp
-::pto::mocker::vf::VfPredictionOptions options;
-options.logLevel = ::pto::mocker::vf::VfSimLogLevel::Summary;
-options.configDir = "/path/to/vfsim-or-configs";
-::pto::mocker::vf::SetVfPredictionOptions(options);
-```
-
-日志级别为 `Off`、`Errors`、`Summary` 和 `Detailed`。配置查找顺序为：`options.configDir`、`PerfSimConfig::vfsim_config_dir`、环境变量 `PTO_VFSIM_CONFIG_DIR`、可执行文件或当前目录附近的可搬移安装布局。
+标准 PTO costmodel 接口不提供全局 VfSim 日志状态。配置查找顺序为：`PerfSimConfig::vfsim_config_dir`、环境变量
+`PTO_VFSIM_CONFIG_DIR`、可执行文件或当前目录附近的可搬移安装布局。
 
 ### 4. 检查是否捕获到期望 micro-op
 

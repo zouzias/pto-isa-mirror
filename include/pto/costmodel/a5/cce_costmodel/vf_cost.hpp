@@ -21,12 +21,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto::mocker::vf {
 
-inline thread_local VfPredictionOptions g_vfPredictionOptions;
-
-inline void SetVfPredictionOptions(const VfPredictionOptions& options) { g_vfPredictionOptions = options; }
-
-inline const VfPredictionOptions& GetVfPredictionOptions() { return g_vfPredictionOptions; }
-
 namespace detail {
 
 inline void WalkNodes(const std::vector<VfNode>& nodes, uint64_t mul, uint64_t& total)
@@ -45,25 +39,14 @@ inline void WalkNodes(const std::vector<VfNode>& nodes, uint64_t mul, uint64_t& 
 
 } // namespace detail
 
-inline VfPredictionResult predictVfCyclesDetailed(
-    const std::vector<VfInfo>& vfs, const VfPredictionOptions& options = {})
-{
-    return predictVfCyclesWithVfSim(vfs, options);
-}
-
-inline VfPredictionResult predictVfCyclesDetailed(const VfInfo& vf, const VfPredictionOptions& options = {})
-{
-    return predictVfCyclesDetailed(std::vector<VfInfo>{vf}, options);
-}
-
 inline uint64_t PredictVfCycles(const VfInfo& vf)
 {
-    return predictVfCyclesDetailed(vf, GetVfPredictionOptions()).cycles;
+    return predictVfCyclesWithVfSim(std::vector<VfInfo>{vf}).cycles;
 }
 
 inline uint64_t PredictVfCycles(const std::vector<VfInfo>& vfs)
 {
-    return predictVfCyclesDetailed(vfs, GetVfPredictionOptions()).cycles;
+    return predictVfCyclesWithVfSim(vfs).cycles;
 }
 
 inline uint64_t LoopProduct(const std::vector<VfNode>& nodes)

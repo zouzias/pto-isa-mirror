@@ -3,8 +3,7 @@ set(_cpu_sim_test_dir "${_repo_root}/tests/cpu/st/testcase/tadd")
 
 add_executable(full_host_tadd
     "${_cpu_sim_test_dir}/main.cpp"
-    "${_cpu_sim_test_dir}/tadd_kernel.cpp"
-    vfsim_log_initializer.cpp)
+    "${_cpu_sim_test_dir}/tadd_kernel.cpp")
 target_include_directories(full_host_tadd PRIVATE
     "${_repo_root}/include"
     "${_repo_root}/tests/common")
@@ -27,5 +26,4 @@ add_test(
     COMMAND full_host_tadd --gtest_filter=TADDTest.case_float_64x64_64x64_64x64)
 set_tests_properties(full_host_tadd PROPERTIES
     FIXTURES_REQUIRED full_host_tadd_data
-    PASS_REGULAR_EXPRESSION "\\[VfSim\\] status=VfSimHit"
     WORKING_DIRECTORY "${_run_dir}")

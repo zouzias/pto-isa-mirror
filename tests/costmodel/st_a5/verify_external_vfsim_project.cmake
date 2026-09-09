@@ -72,28 +72,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(external_fixture_writer fixture_writer.cpp)
 add_executable(external_full_host_tadd
     \"\${CMAKE_CURRENT_SOURCE_DIR}/main.cpp\"
-    \"\${CMAKE_CURRENT_SOURCE_DIR}/tadd_kernel.cpp\"
-    \"\${CMAKE_CURRENT_SOURCE_DIR}/vfsim_log_initializer.cpp\")
+    \"\${CMAKE_CURRENT_SOURCE_DIR}/tadd_kernel.cpp\")
 target_include_directories(external_full_host_tadd PRIVATE
     \"${_install_root}/include\"
     \"\${CMAKE_CURRENT_SOURCE_DIR}\")
 target_link_libraries(external_full_host_tadd PRIVATE GTest::gtest_main Threads::Threads)
 include(\"${_install_root}/include/pto/costmodel/cmake/pto_costmodel.cmake\")
 pto_enable_costmodel(external_full_host_tadd ARCH A5)
-")
-
-file(WRITE "${_source_dir}/vfsim_log_initializer.cpp"
-"#include \"pto/costmodel/a5/cce_costmodel/vf_cost.hpp\"
-namespace {
-struct Initializer {
-    Initializer()
-    {
-        ::pto::mocker::vf::SetVfPredictionOptions(
-            {::pto::mocker::vf::VfSimLogLevel::SUMMARY, {}});
-    }
-};
-Initializer g_initializer;
-} // namespace
 ")
 
 execute_process(

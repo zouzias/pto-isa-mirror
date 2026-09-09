@@ -18,11 +18,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/event.hpp"
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/utils.hpp"
-// pto_instr_impl.hpp normally includes the device A5 SyncAll backend. The
-// costmodel provides its Host implementation below instead.
-#if defined(__COSTMODEL) && defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
-#define PTO_NPU_A5_SYNCALL_HPP
-#endif
 #include "pto/common/pto_instr_impl.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
