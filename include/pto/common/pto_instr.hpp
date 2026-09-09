@@ -1058,7 +1058,7 @@ template <
 PTO_INST RecordEvent
 TMATMUL_ACC(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, MatmulMacroConfig& cfg, WaitEvents&... events)
 {
-    TSYNC(events...);
+    detail::PtoWaitEvents(events...);
     TMATMUL_MACRO_ACC_IMPL<Phase, TileRes, TileLeft, TileRight, void, isClear>(cMatrix, aMatrix, bMatrix, nullptr, cfg);
     return {};
 }
@@ -1072,7 +1072,7 @@ PTO_INST RecordEvent TMATMUL_ACC(
     TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData, const MatmulMacroConfig& cfg,
     WaitEvents&... events)
 {
-    TSYNC(events...);
+    detail::PtoWaitEvents(events...);
     TMATMUL_MACRO_ACC_IMPL<Phase, TileRes, TileLeft, TileRight, TileBias>(cMatrix, aMatrix, bMatrix, &biasData, cfg);
     return {};
 }
@@ -1086,7 +1086,7 @@ template <
 PTO_INST RecordEvent
 TMATMUL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, MatmulMacroConfig& cfg, WaitEvents&... events)
 {
-    TSYNC(events...);
+    detail::PtoWaitEvents(events...);
     TMATMUL_MACRO_IMPL<Phase, TileRes, TileLeft, TileRight, isAcc>(cMatrix, aMatrix, bMatrix, cfg);
     return {};
 }
@@ -1099,7 +1099,7 @@ PTO_INST RecordEvent TMATMUL(
     TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData, MatmulMacroConfig& cfg,
     WaitEvents&... events)
 {
-    TSYNC(events...);
+    detail::PtoWaitEvents(events...);
     TMATMUL_MACRO_IMPL<Phase, TileRes, TileLeft, TileRight, TileBias, isAcc>(cMatrix, aMatrix, bMatrix, biasData, cfg);
     return {};
 }
