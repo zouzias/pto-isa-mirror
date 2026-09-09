@@ -42,7 +42,8 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TPOP(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
 ```
 
-`Pipe` 通常是 `include/pto/npu/a2a3/TPush.hpp` 或 `include/pto/npu/a5/TPush.hpp` 中声明的 `TPipe`：
+`Pipe` 通常是所选后端 `TPush.hpp` 中声明的 `TPipe`，包括 `include/pto/cpu/TPush.hpp`、
+`include/pto/npu/a2a3/TPush.hpp` 或 `include/pto/npu/a5/TPush.hpp`：
 
 ```cpp
 template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum,
@@ -52,7 +53,7 @@ struct TPipe;
 
 ## 约束
 
-- **Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品TileData消费者**：
+- **TileData消费者**：
     - `TileCons::Loc` 必须是 `TileType::Vec`、`TileType::Mat` 或 `TileType::Ctrl`。
     - `Direction::DIR_C2V`：vector消费cube生产的数据。
     - `Direction::DIR_V2C`：cube消费vector生产的数据。
@@ -64,7 +65,7 @@ struct TPipe;
     - `TileSplitAxis::TILE_NO_SPLIT`：不进行切分，Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品上需要AIV0/AIV1陪跑核间同步操作。
     - `TileSplitAxis::TILE_UP_DOWN`：消费上下两个行半区。
     - `TileSplitAxis::TILE_LEFT_RIGHT`：消费左右两个列半区。
-- **同步**：
+- **NPU同步**：
     - 每次 `TPOP` 都会执行数据就绪等待。
     - 空闲空间通知是稀疏的，并由 `Pipe::SyncPeriod` 控制。
 - **GlobalData槽位视图**：
@@ -76,8 +77,10 @@ struct TPipe;
     - TileData 数据从主机 FIFO 状态拥有的存储加载；即使 `TPipe` 带有非空 NPU GM workspace，CPU_SIM TileData 流程也不会访问该 workspace。
     - 切分模式根据当前subblock上下文选择lane。对于启用 `IsNoSplit` 的C2V管道，`TILE_NO_SPLIT` 会根据运行时subblock数量协调一个或两个vector消费者subblock；在其他no-split vector场景中，非零的未参与lane会按需填零。
     - CPU_SIM 当前未实现显式传入 `int32_t subBlockId` 的重载；应通过模拟subblock执行上下文选择split lane。
-    - 对于 `DIR_BOTH`，消费者会等待与自身方向匹配的已提交槽位；no-split和V2C消费者按生产序号取出最早的槽位，而不是按游标位置查找，因此在共享生产游标与各消费者游标失步后仍能保持各方向的FIFO顺序；并发的pop会预留不同槽位。
+    - 对于 `DIR_BOTH`，消费者在自身方向的独立环形队列中等待。no-split 和 V2C 消费者按提交序号取出最早的已提交槽位，在延迟释放导致队列出现空隙时仍保持 FIFO 顺序。重叠的 pop 会预留不同槽位；`TFREE` 在相应方向释放调用方消费者最早尚未释放的 pop。
+    - 每次启用的 `TFREE` 都会在 CPU_SIM 中释放一个已占用的具体槽位；CPU_SIM 不模拟 NPU 的 `SyncPeriod` 通知节奏。
     - TileData 数据按消费者 Tile 的声明形状读回，因此该形状必须与生产者推送的窗口一致（`TILE_NO_SPLIT` 下即其有效形状）。
+    - CPU_SIM 按逻辑坐标将 TileData 复制到目标布局。A5 本地 FIFO 的 `TPOP` 则将 Tile 绑定到 FIFO 地址，不执行布局转换。要使 V2C 行为与 NPU 一致，应使用匹配的生产者和消费者布局，例如 NZ Vec 到 NZ Mat，并在 `TPUSH` 前完成所需的布局转换。
     - CPU_SIM 当前不支持 GlobalData 重载。
 
 ## 示例

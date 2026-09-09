@@ -8,7 +8,7 @@
 
 对于 `GlobalData` 流程，`TFREE(Pipe&, GlobalData&)` 会释放由 `TPOP(Pipe&, GlobalData&)` 返回的FIFO槽位视图。
 
-CPU_SIM 中，TileData 形式会在 pipe 的 free-status 策略要求释放时参与主机侧 FIFO 释放协议，因此 CPU TileData 形式不是 A2A3 路径中的空操作。每次调用释放该消费者最早的未释放pop，因此同时持有多个pop的消费者会按pop顺序释放。CPU_SIM 当前不支持 GlobalData 重载。
+CPU_SIM 中，TileData 形式会在 pipe 的 free-status 策略要求释放时参与主机侧 FIFO 释放协议，因此 CPU TileData 形式不是 A2A3 路径中的空操作。对于 `DIR_BOTH`，它释放对应 `TPOP` 所记录方向的环形队列。当存在多个未释放 pop 时，每次调用释放该消费者最早的 pop，并保持 pop 顺序和方向。CPU_SIM 当前不支持 GlobalData 重载。
 
 ## 操作语义
 
@@ -41,7 +41,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
 ```
 
-`include/pto/npu/a2a3/TPop.hpp` 中对应的Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品实现对该重载有意保持为空（Ascend 950PR/Ascend 950DT上实现位于 `include/pto/npu/a5/TPop.hpp`，执行实际的空闲空间通知）：
+`include/pto/npu/a2a3/TFree.hpp` 中的Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品 TileData 实现有意保持为空（Ascend 950PR/Ascend 950DT上实现位于 `include/pto/npu/a5/TFree.hpp`，执行实际的空闲空间通知）：
 
 ```cpp
 template <typename Pipe, TileSplitAxis Split>

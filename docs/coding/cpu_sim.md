@@ -75,11 +75,13 @@ correctness testing and does not model a specific on-chip address.
   `[1, N]` tile stored through a DN one, lands as a contiguous vector instead of one element per the other axis'
   stride. Every other combination, including a ColMajor tile wider than one column, still takes its mapping from
   the `GlobalTensor` layout. `TLOAD` needs no such case: `TileType::Vec` loads only accept matching layouts.
-- TileData `TPUSH`/`TPOP`/`TFREE` use a host-side `TPipe` FIFO model. The model waits for free slots and ready data,
-  keeps C2V and V2C traffic separate for `Direction::DIR_BOTH`, and coordinates split lanes through the simulated
-  block/subblock context. TileData payloads stay in host-owned shared slot storage even if generated code supplies a
-  non-null NPU GM workspace; CPU_SIM does not access that workspace for this flow. `TFREE` participates in the CPU
-  FIFO release protocol; it is not the A2A3 TileData no-op. For `TileSplitAxis::TILE_NO_SPLIT`, a TileData `TPUSH`
+- TileData `TPUSH`/`TPOP`/`TFREE` use a host-side `TPipe` FIFO model. The model waits for free slots and ready data.
+  For `Direction::DIR_BOTH`, C2V and V2C have independent rings, each with `SlotNum` slots and separate payload,
+  cursor, and synchronization state. The model coordinates split lanes through the simulated block/subblock context.
+  TileData payloads stay in host-owned slot storage even if generated code supplies a non-null NPU GM workspace;
+  CPU_SIM does not access that workspace for this flow. `TFREE` participates in the CPU FIFO release protocol and
+  releases the corresponding direction; it is not the A2A3 TileData no-op. For
+  `TileSplitAxis::TILE_NO_SPLIT`, a TileData `TPUSH`
   lays the slot payload out with the shape of the window it actually transfers, that is the pushed tile's valid
   shape, so pushing a narrow view of a wider tile stays row-aligned with the tile the consumer pops it into; the
   split axes keep using the producer tile's declared shape. The public GlobalData
