@@ -104,7 +104,7 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
     uint64_t scalar = 0;
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
-            T val = src.data()[GetConvTileElementOffset<ConTile>(row, col, tile_shapes)];
+            T val = src.GetElement(GetConvTileElementOffset<ConTile>(row, col, tile_shapes));
             const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
             if constexpr (atomicType == AtomicType::AtomicAdd) {
                 dst.AddToElement(dstOffset, val);
@@ -117,7 +117,7 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
 
 template <
     typename TileData, typename GlobalData, QuantMode_t quantMode, bool applyRelu,
-    AtomicType atomicType = AtomicType::AtomicNone>
+    AtomicType atomicType = AtomicType::AtomicNone, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, const std::vector<uint64_t>& scalars = {})
 {
     static_assert(
@@ -132,7 +132,9 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src, const std::vector<
     }
 }
 
-template <typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase = STPhase::Unspecified>
+template <
+    typename TileData, typename GlobalData, AtomicType atomicType, STPhase Phase = STPhase::Unspecified,
+    TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     (void)Phase;
@@ -141,7 +143,7 @@ PTO_INTERNAL void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src)
 {
     (void)Phase;
@@ -151,7 +153,7 @@ __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src)
 
 template <
     typename TileData, typename GlobalData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantScalar)
 {
     (void)Phase;
@@ -163,7 +165,7 @@ __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, uint64_t preQuantSca
 
 template <
     typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType, ReluPreMode reluPreMode,
-    STPhase Phase = STPhase::Unspecified>
+    STPhase Phase = STPhase::Unspecified, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __aicore__ void TSTORE_IMPL(GlobalData& dst, TileData& src, FpTileData& fp)
 {
     (void)Phase;

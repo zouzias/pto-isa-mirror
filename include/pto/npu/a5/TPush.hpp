@@ -44,7 +44,8 @@ struct TPipe {
         is_c2v || is_v2c || is_both || is_both_gm, "Fix: TPipe only supports C2V or V2C or Both communication on A5.");
     static constexpr uint8_t VEC_CORE_ID_OFFSET = 16;
     static_assert(
-        FlagIDPlusOne < 16, "Fix: With Both direction, FlagID + 1 must be less than 16 due to hardware limit.");
+        FlagIDPlusOne <= MAX_SYC_ID,
+        "Fix: With Both direction, FlagID + 1 must be less than 15 due to hardware limit.");
 
     // -------------------------------------------------------------------------
     // RingFiFo
@@ -145,8 +146,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_VEC__
                 static_assert(
-                    FlagIDPlusThree < 16,
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    FlagIDPlusThree <= MAX_SYC_ID,
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 wait_intra_block(PIPE_MTE3, FlagIDPlusThree);
 #endif
             } else if constexpr (is_v2c_ctrl) {
@@ -159,8 +160,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_VEC__
                 static_assert(
-                    FlagIDPlusThree < 16,
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    FlagIDPlusThree <= MAX_SYC_ID,
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 wait_intra_block(PIPE_MTE3, FlagIDPlusThree);
 #endif
             }
@@ -543,8 +544,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_CUBE__
                 static_assert(
-                    FlagIDPlusThree < 16,
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    FlagIDPlusThree <= MAX_SYC_ID,
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 setIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusThree);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) {
@@ -561,8 +562,8 @@ struct TPipe {
 #endif
 #ifdef __DAV_CUBE__
                 static_assert(
-                    FlagIDPlusThree < 16,
-                    "Fix: With Both direction, FlagID + 3 must be less than 16 due to hardware limit.");
+                    FlagIDPlusThree <= MAX_SYC_ID,
+                    "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
                 setIntraBlockBySplit<PIPE_MTE1, Split>(FlagIDPlusThree);
 #endif
             }
@@ -825,7 +826,8 @@ struct TMPipe {
         "TPipe currently only supports Cube-to-Vec or Vec-to-Cube communication with specified tile and FIFO types.");
     static constexpr int VEC_CORE_ID_OFFSET = 16;
     static_assert(
-        FlagIDPlusOne < 16, "Fix: With single direction, FlagID + 1 must be less than 16 due to hardware limit.");
+        FlagIDPlusOne <= MAX_SYC_ID,
+        "Fix: With single direction, FlagID + 1 must be less than 15 due to hardware limit.");
 
     using DataFiFo = std::conditional_t<
         (FiFoType == FIFOType::GM_FIFO),

@@ -91,9 +91,10 @@ PTO_INTERNAL void CheckConvTileData(TileData& dst, GlobalData& src)
             std::is_same_v<typename TileData::DType, int16_t> || std::is_same_v<typename TileData::DType, uint16_t> ||
             std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
             std::is_same_v<typename TileData::DType, half> || std::is_same_v<typename TileData::DType, bfloat16_t> ||
-            std::is_same_v<typename TileData::DType, float>,
-        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
-    static_assert(TileData::Loc == pto::TileType::Mat, "Fix: Dst TileType must be Mat!");
+            std::is_same_v<typename TileData::DType, float> || IsTwinType<typename TileData::DType>(),
+        "Fix: Data type must be "
+        "int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/"
+        "float4_e1m2x2_t/float4_e2m1x2_t/half/bfloat16_t/float!");
     static_assert(
         sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
         "Fix: Source dtype must be same with dst dtype!");
@@ -205,7 +206,7 @@ PTO_INTERNAL void FillTLoadPadding(TileData& dst, size_t validRow, size_t validC
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
     CheckTileData<TileData, GlobalData>(dst, src);
@@ -232,7 +233,7 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
     FillTLoadPadding<TileData, GlobalData>(dst, validRow, validCol);
 }
 
-template <typename ConTile, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename ConTile, typename GlobalData>
 __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
 {
     CheckConvTileData<ConTile, GlobalData>(dst, src);
@@ -258,18 +259,18 @@ __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
             const size_t srcOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
-            dst.data()[GetConvTileElementOffset<ConTile>(row, col, tile_shapes)] = src.data()[srcOffset];
+            dst.SetElement(GetConvTileElementOffset<ConTile>(row, col, tile_shapes), src.GetElement(srcOffset));
         }
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData& dst, GlobalData& src)
 {
     if constexpr (is_conv_tile_v<TileData>) {
-        TLOAD_CONVTILE_IMPL(dst, src);
+        TLOAD_CONVTILE_IMPL<l2Control>(dst, src);
     } else {
-        TLOAD_TILE_IMPL(dst, src);
+        TLOAD_TILE_IMPL<l2Control>(dst, src);
     }
 }
 

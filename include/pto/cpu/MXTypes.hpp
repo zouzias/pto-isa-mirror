@@ -101,7 +101,8 @@ public:
         int upper_idx = static_cast<int>(std::distance(pos_grid.begin(), it));
         int lower_idx = upper_idx - 1;
 
-        float midpoint = (pos_grid[lower_idx] + pos_grid[upper_idx]) / 2.0f;
+        constexpr float MIDPOINT_DIVISOR = 2.0f;
+        float midpoint = (pos_grid[lower_idx] + pos_grid[upper_idx]) / MIDPOINT_DIVISOR;
         float atol = 1e-8f;
         bool is_tie = std::abs(val - midpoint) <= atol;
         bool tie_bit = mode == pto::RoundMode::CAST_ODD;
@@ -244,11 +245,15 @@ constexpr bool IsTwinType()
 #define HALF_BYTE_MASK 0xF
 #define HALF_BYTE_SHIFT 4
 
+// Two 4-bit values (nibbles) are packed into each storage byte for fp4x2 twin types
+constexpr int kPackedElementsPerByte = 2;
+
 template <typename T>
 inline T GetProperDataPart(T* buf, size_t offset)
 {
     if constexpr (IsTwinType<T>()) {
-        return T::FromRaw((buf[offset / 2].RawData() >> ((offset % 2) ? HALF_BYTE_SHIFT : 0)) & HALF_BYTE_MASK);
+        const uint16_t shiftByte = (offset % kPackedElementsPerByte) ? HALF_BYTE_SHIFT : 0;
+        return T::FromRaw((buf[offset / kPackedElementsPerByte].RawData() >> shiftByte) & HALF_BYTE_MASK);
     } else {
         return buf[offset];
     }
@@ -258,9 +263,10 @@ template <typename T>
 inline void SetProperDataPart(T* buf, size_t offset, T val)
 {
     if constexpr (IsTwinType<T>()) {
-        uint16_t shiftByte = (offset % 2) ? HALF_BYTE_SHIFT : 0;
+        uint16_t shiftByte = (offset % kPackedElementsPerByte) ? HALF_BYTE_SHIFT : 0;
         uint8_t rawVal = (val.RawData() & HALF_BYTE_MASK) << shiftByte;
-        buf[offset / 2] = T::FromRaw((buf[offset / 2].RawData() & ~(HALF_BYTE_MASK << shiftByte)) | rawVal);
+        buf[offset / kPackedElementsPerByte] =
+            T::FromRaw((buf[offset / kPackedElementsPerByte].RawData() & ~(HALF_BYTE_MASK << shiftByte)) | rawVal);
     } else {
         buf[offset] = val;
     }

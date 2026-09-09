@@ -57,11 +57,16 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## 约束
 
-- **Acc 目的 Tile 约束（CPU、Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品、Ascend 950PR/Ascend 950DT、Ascend 960、Kirin9030 和 KirinX90）**：
-    - 当静态非 compact `TileRes` 满足 `TileRes::Cols > FRACTAL_NZ_ROW` 时，必须满足
-      `((TileRes::ValidRow + 15) / 16) * 16 == TileRes::Rows`，其中 `FRACTAL_NZ_ROW` 为 16。
-    - 当 `TileRes::ValidRow == DYNAMIC`、`TileRes::Cols <= FRACTAL_NZ_ROW` 或
-      `TileRes::Compact != CompactMode::Null` 时，当前实现不强制该 Acc 步幅条件。
+- **Acc 步幅约束（CPU、Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品、Ascend 950PR/Ascend 950DT、Ascend 960 和 Kirin9030）**：
+  `mad` 写回累加器块列时的间距是 `ceil16(m)` 行，其中 `m` 是该指令收到的行数；
+  而读取该区域的一方按 Tile 的 `Rows` 推导间距。两者必须一致：
+    - `((m + 15) / 16) * 16 == TileRes::Rows`，其中 `TMATMUL` 的 `m` 为 `TileLeft::ValidRow`，
+      `TGEMV` 的 `m` 为 1。非 `TGEMV` 路径下 `m == 1` 会被提升为 16。
+    - 当 `TileRes::Cols <= FRACTAL_NZ_ROW`（只有一个块列，间距无意义）、
+      `TileRes::Compact != CompactMode::Null`，或任一值为 `DYNAMIC` 时不做校验。
+      `FRACTAL_NZ_ROW` 为 16。
+    - 条件中不涉及 `TileRes::ValidRow`。只要间距对得上，`ValidRow` 小于 `Rows` 的 Tile
+      是合法的，此时 `Rows` 只是补齐后的分配尺寸。
 - **实现检查 （Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品）**:
     - 支持的 `(CType, AType, BType)` 三元组：
     - `(int32_t, int8_t, int8_t)`

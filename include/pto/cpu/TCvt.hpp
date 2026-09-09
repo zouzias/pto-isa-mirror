@@ -23,6 +23,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 constexpr double CAST_ODD_THRESHOLD = 0.5;
+constexpr double INT4B_LOWEST = -8.0;
+constexpr double INT4B_MAX = 7.0;
+constexpr double FP4_E2M1_LOWEST = -6.0;
+constexpr double FP4_E2M1_MAX = 6.0;
+constexpr double FP4_E1M2_LOWEST = -4.0;
+constexpr double FP4_E1M2_MAX = 3.5;
 
 inline void PrintFloatBits(double val, const char* name)
 {
@@ -119,20 +125,20 @@ struct SafeLimits {
 
 template <>
 struct SafeLimits<int4b_t> {
-    static constexpr double lowest() { return -8.0; }
-    static constexpr double max() { return 7.0; }
+    static constexpr double lowest() { return INT4B_LOWEST; }
+    static constexpr double max() { return INT4B_MAX; }
 };
 
 template <>
 struct SafeLimits<float4_e2m1x2_t> {
-    static constexpr double lowest() { return -6.0; }
-    static constexpr double max() { return 6.0; }
+    static constexpr double lowest() { return FP4_E2M1_LOWEST; }
+    static constexpr double max() { return FP4_E2M1_MAX; }
 };
 
 template <>
 struct SafeLimits<float4_e1m2x2_t> {
-    static constexpr double lowest() { return -4.0; }
-    static constexpr double max() { return 3.5; }
+    static constexpr double lowest() { return FP4_E1M2_LOWEST; }
+    static constexpr double max() { return FP4_E1M2_MAX; }
 };
 
 template <typename T>
@@ -149,7 +155,7 @@ template <typename T>
 inline T from_double_value(double val)
 {
     if constexpr (std::is_same_v<T, int4b_t>) {
-        int8_t ival = static_cast<int8_t>(clamp_value(val, -8.0, 7.0));
+        int8_t ival = static_cast<int8_t>(clamp_value(val, SafeLimits<int4b_t>::lowest(), SafeLimits<int4b_t>::max()));
         return int4b_t(ival);
     } else {
         return static_cast<T>(val);
@@ -171,7 +177,7 @@ inline D convert_value(S val, RoundMode mode)
         volatile double dval = static_cast<double>(val);
         if constexpr (is_float_like_v<S>)
             dval = applyRoundingToIntegral(dval, mode);
-        dval = clamp_value(dval, -8.0, 7.0);
+        dval = clamp_value(dval, SafeLimits<int4b_t>::lowest(), SafeLimits<int4b_t>::max());
         return int4b_t(static_cast<int8_t>(dval));
     } else if constexpr (
         (is_fp4_v<S> && is_float_like_v<D>) || (is_float_like_v<S> && is_fp4_v<D>) ||

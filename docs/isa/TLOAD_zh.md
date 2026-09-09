@@ -1,5 +1,6 @@
 # TLOAD
 
+
 ## 指令示意图
 
 ![TLOAD tile operation](../figures/isa/TLOAD.svg)
@@ -43,7 +44,38 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
+
+template <TLoadL2Hint l2Control, typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
+
+原有 `TLOAD(dst, src)` 与 `TLOAD<TileT, GTensor>(dst, src)` 仍可用。`TLoadL2Hint` 为首模板的形式为额外重载（`l2Control` 无默认值）。
+
+## L2 cache hint
+
+可选首模板参数重载（原有 `TLOAD(dst, src)` 不变）：
+
+```cpp
+TLOAD<TLoadL2Hint::NotAllocKeep>(dst, src);
+```
+
+支持的 `TLoadL2Hint`：
+
+| 枚举 | 值 | A2/A3 | A5 |
+| --- | --- | --- | --- |
+| NormalFirstVictim | 0 | 默认分配（无效果） | 支持 |
+| NormalLastVictim | 1 | 默认分配（无效果） | 支持 |
+| NormalPersistent | 2 | 默认分配（无效果） | 支持 |
+| NotAllocKeep | 4 | 非分配（GM 地址加上运行时 `l2Cacheoffset`） | 支持 |
+| NotAllocClean | 5 | 非分配（同 Keep） | 支持 |
+| NotAllocDrop | 6 | 非分配（同 Keep） | 支持 |
+
+A2/A3 上实际只有 **两种行为**：
+
+1. **默认分配** — `NormalFirstVictim` (0)、`NormalLastVictim` (1)、`NormalPersistent` (2)：在 A2/A3 上为无效果（对 VLU / first/last/persist 等不同提示无影响）。它们不是有意义的独立模式，均走默认分配路径。
+2. **非分配** — `NotAllocKeep` (4)、`NotAllocClean` (5)、`NotAllocDrop` (6)：生效，通过 GM 地址加上运行时 `l2Cacheoffset`（A2/A3 上 Keep/Clean/Drop 行为相同）。
+
+A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
 
 ## 约束
 

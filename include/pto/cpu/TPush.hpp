@@ -25,6 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include <algorithm>
 #include <pto/common/fifo.hpp>
 #include <pto/common/fixpipe.hpp>
 
@@ -375,7 +376,7 @@ PTO_INTERNAL T LoadByteStorageElement(
     const std::size_t byteOffset =
         GetCheckedByteStorageOffset<T>(storage, slotIndex, baseByteOffset, regionByteEnd, elementIndex, operation);
     T value;
-    std::memcpy(&value, storage.data() + byteOffset, sizeof(T));
+    std::copy(storage.data() + byteOffset, storage.data() + byteOffset + sizeof(T), reinterpret_cast<uint8_t*>(&value));
     return value;
 }
 
@@ -386,7 +387,8 @@ PTO_INTERNAL void StoreByteStorageElement(
 {
     const std::size_t byteOffset =
         GetCheckedByteStorageOffset<T>(storage, slotIndex, baseByteOffset, regionByteEnd, elementIndex, operation);
-    std::memcpy(storage.data() + byteOffset, &value, sizeof(T));
+    const auto* src = reinterpret_cast<const uint8_t*>(&value);
+    std::copy(src, src + sizeof(T), storage.data() + byteOffset);
 }
 
 template <typename T, std::size_t StorageSize>
@@ -535,17 +537,18 @@ struct TPipe {
     static constexpr uint32_t LOCAL_SLOT_STORAGE_SIZE = SlotSize * LOCAL_SPLIT_COPIES;
 
     struct SharedState {
+        static constexpr int LANE_NUM = 2;
         std::mutex mutex;
         std::condition_variable cv;
         int next_producer_slot = 0;
         // Separate cursors keep DIR_BOTH traffic from blocking across directions.
         int next_c2v_consumer_slot = 0;
         int next_v2c_consumer_slot = 0;
-        std::array<int, 2> next_consumer_slots_by_lane{};
+        std::array<int, LANE_NUM> next_consumer_slots_by_lane{};
         int occupied = 0;
         int popped_not_freed = 0;
-        std::array<int, 2> popped_not_freed_by_lane{};
-        std::array<std::array<int, SlotNum>, 2> popped_slots_by_lane{};
+        std::array<int, LANE_NUM> popped_not_freed_by_lane{};
+        std::array<std::array<int, SlotNum>, LANE_NUM> popped_slots_by_lane{};
         std::array<int, SlotNum> popped_slots{};
         std::array<std::array<uint8_t, LOCAL_SLOT_STORAGE_SIZE>, SlotNum> local_slot_storage{};
         std::array<cpu_pipe::TransferDir, SlotNum> transfer_dirs{};

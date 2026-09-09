@@ -317,30 +317,30 @@ __tf__ AICORE void TStoreAcc(
     }
 }
 
-template <typename TileData, typename GlobalData>
+template <typename TileData, typename GlobalData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreInstr(
     typename GlobalData::DType* dst, __ubuf__ typename TileData::DType* src, uint32_t nBurst, uint32_t lenBurst,
     uint64_t burstDstStride, uint32_t burstSrcStride)
 {
     using LoadT = LoadTypeBySize_t<typename TileData::DType>;
     pto_copy_ubuf_to_gm_align_v2(
-        reinterpret_cast<__gm__ LoadT*>(dst), reinterpret_cast<__ubuf__ LoadT*>(src), 0, nBurst, lenBurst, 0,
-        burstDstStride, burstSrcStride);
+        reinterpret_cast<__gm__ LoadT*>(dst), reinterpret_cast<__ubuf__ LoadT*>(src), 0, nBurst, lenBurst,
+        static_cast<uint8_t>(l2Control), burstDstStride, burstSrcStride);
 }
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecND(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol);
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecDN(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int validRow, int validCol);
 
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 PTO_INTERNAL void TStoreVecNZ(
     typename GlobalData::DType* dstAddr, __ubuf__ typename TileData::DType* srcAddr, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
@@ -378,10 +378,11 @@ PTO_INTERNAL void TStoreVecNZ(
     for (uint32_t k = 0; k < gShape0; k++) {
         dstGlobalAddr = dstAddr + k * gStride0;
         srcTileAddr = srcAddr + k * tileStride;
-        TStoreInstr<TileData, GlobalData>(dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
+        TStoreInstr<TileData, GlobalData, l2Control>(
+            dstGlobalAddr, srcTileAddr, nBurst, lenBurst, burstDstStride, burstSrcStride);
     }
 }
-template <typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData, TStoreL2Hint l2Control = TStoreL2Hint::NormalFirstVictim>
 __tf__ AICORE OP_NAME(TSTORE) OP_TYPE(memory) void TStore(
     typename GlobalData::DType __out__* dst, typename TileData::TileDType __in__ src, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
@@ -391,15 +392,15 @@ __tf__ AICORE OP_NAME(TSTORE) OP_TYPE(memory) void TStore(
     typename GlobalData::DType* dstAddr = dst;
 
     if constexpr (TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
-        TStoreVecND<GlobalData, TileData>(
+        TStoreVecND<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::NoneBox)) {
-        TStoreVecDN<GlobalData, TileData>(
+        TStoreVecDN<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     } else if constexpr (!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
-        TStoreVecNZ<GlobalData, TileData>(
+        TStoreVecNZ<GlobalData, TileData, l2Control>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3,
             gStride4, validRow, validCol);
     }
