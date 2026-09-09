@@ -1,17 +1,18 @@
 # TSTORE
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T05:19:12.809Z pushedAt=2026-08-29T09:05:18.472Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TSTORE tile operation](../figures/isa/TSTORE.svg)
 
 ## Introduction
 
-Store data from a Tile into a GlobalTensor (GM), optionally using atomic write or quantization parameters.
+Stores data in a tile to a GlobalTensor (GM), optionally using atomic write or quantization parameters.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Notation depends on the `GlobalTensor` shape/stride and the `Tile` layout. Conceptually (2D view, with a base offset):
+The symbolic representation depends on the shape/stride of the `GlobalTensor` and the layout of the `Tile`. Conceptually (two-dimensional view, with base offset):
 
 $$ \mathrm{dst}_{r_0 + i,\; c_0 + j} = \mathrm{src}_{i,j} $$
 
@@ -35,20 +36,10 @@ pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) 
 pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 
-### IR Level 1 (SSA)
-
-```text
-pto.tstore %t1, %sv_out[%c0, %c0]
-```
-
-### IR Level 2 (DPS)
-
-```text
-pto.tstore ins(%t1, %sv_out[%c0, %c0]) outs()
-```
-## C++ Intrinsic
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileData, typename GlobalData, AtomicType atomicType = AtomicType::AtomicNone,
@@ -60,106 +51,65 @@ template <typename TileData, typename GlobalData, AtomicType atomicType = Atomic
 PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, uint64_t preQuantScalar, WaitEvents&... events);
 
 template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events);
-
-template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
-          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+          typename... WaitEvents>
 PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events);
 ```
 
-`TSTORE_FP(...)` is retained for source compatibility with the legacy fp-quantized form and maps directly to
-`TSTORE_IMPL(dst, src, fp)`. The canonical `TSTORE(..., fp, ...)` overload is selected only for
-`FpTileData::Loc == TileType::Scaling`; backend implementations may apply additional legality checks.
-The vector-quantized `STPhase` form is exposed only on targets with matching backend support
-(A5, kirin9030, kirinDev0000, and CPU simulator).
-
-
-## L2 cache hint
-
-Optional first template `TStoreL2Hint l2Control` (default `NormalFirstVictim`):
-
-```cpp
-TSTORE(dst, src);
-TSTORE<TStoreL2Hint::NotAllocClean>(dst, src);
-TSTORE<TStoreL2Hint::NotAllocClean, AtomicType::AtomicAdd>(dst, src);
-```
-
-Put `TStoreL2Hint` first when combining with `AtomicType` / `STPhase` / `ReluPreMode`. Do not insert a defaulted hint before `TileData` on the legacy overload set.
-
-Supported `TStoreL2Hint` values:
-
-| Enumerator | Value | A2/A3 | A5 |
-| --- | --- | --- | --- |
-| NormalFirstVictim | 0 | no-op | yes |
-| NormalLastVictim | 1 | no-op | yes |
-| NormalPersistent | 2 | no-op | yes |
-| NotAllocClean | 4 | no-op | yes |
-
-On A2/A3, L2 hints have **no effect** (all values are no-ops; no store L2 control). A5 passes listed values through to DMA. CPU / costmodel ignore it.
-
-
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - Source tile location must be one of: `TileType::Vec`, `TileType::Mat`, `TileType::Acc`.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - The source tile position must be one of the following: `TileType::Vec`, `TileType::Mat`, `TileType::Acc`.
     - Runtime: all `dst.GetShape(dim)` values and `src.GetValidRow()/GetValidCol()` must be `> 0`.
-    - For `TileType::Vec` / `TileType::Mat`:
-    - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
-    - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
-    - Layouts must match ND/DN/NZ (or a special case where `TileData::Rows == 1` or `TileData::Cols == 1`).
-      In that special case the traversal follows the tile layout, not the `GlobalTensor` layout: the vector is
-      written as one contiguous burst and the other axis' stride is not used. A ColMajor `[N, 1]` tile stored
-      through an ND `GlobalTensor` therefore occupies `N` consecutive elements, not one element per row stride.
-    - For `int64_t/uint64_t`, only ND->ND or DN->DN are supported.
-    - For `TileType::Acc`:
-      - Supported layout conversions: NZ2ND, NZ2NZ, NZ2NC1HWC0, NZ2NDC1HWC0. NZ2DN is **not** supported.
-      - Destination layout must be ND, NZ, NC1HWC0, or NDC1HWC0.
-      - Source dtype must be `int32_t` or `float`.
-      - When not using quantization, destination dtype must be `int32_t/float/half/bfloat16_t`.
-      - ACC-to-GM dtype support:
+    - For source tile position `TileType::Vec` / `TileType::Mat`:
+        - `TileData::DType` must be one of the following: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`.
+        - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
+        - The layout must match ND/DN/NZ (or special case: `TileData::Rows == 1` or `TileData::Cols == 1`).
+        - For `int64_t/uint64_t`, only ND->ND or DN->DN is supported.
+    - For the source tile position being `TileType::Acc` (including call forms with quantization parameters and atomic write variants):
+        - The destination layout must be ND, NZ, NC1HWC0, or NDC1HWC0.
+        - The source data type must be `int32_t` or `float`.
+        - When quantization is not used, the destination data type must be `int32_t/float/half/bfloat16_t`.
+        - The data type support for ACC-to-GM depends on the call form:
 
-        | Calling convention | Source dtype | Supported destination dtype |
-        | --- | --- | --- |
-        | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
-        | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
-        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t` |
-        | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half` |
+          | Call Form | Source Data Type | Supported Target Data Types |
+          | --- | --- | --- |
+          | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
+          | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
+          | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t` |
+          | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half` |
 
-        Other cross-type combinations are not supported.
-    - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND then `1 <= TileData::Rows <= 8192`; if NZ, NC1HWC0, or NDC1HWC0 then `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`.
-    - Runtime: `1 <= src.GetValidCol() <= 4095`.
-- **Implementation checks (A5)**:
-    - Source tile location must be `TileType::Vec` or `TileType::Acc` (no `Mat` store on this target).
-    - For `TileType::Vec`:
-    - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
-    - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`, `float8_e4m3_t`, `float8_e5m2_t`, `hifloat8_t`, `float8_e8m0_t`, `float4_e1m2x2_t`, `float4_e2m1x2_t`.
-    - Layouts must match ND/DN/NZ (or a special case where `TileData::Rows == 1` or `TileData::Cols == 1`).
-      In that special case the traversal follows the tile layout, not the `GlobalTensor` layout: the vector is
-      written as one contiguous burst and the other axis' stride is not used. A ColMajor `[N, 1]` tile stored
-      through an ND `GlobalTensor` therefore occupies `N` consecutive elements, not one element per row stride.
-    - Additional alignment constraints are enforced (e.g., for ND the row-major width in bytes must be a multiple of 32; for DN the column-major height in bytes must be a multiple of 32, with special-case exceptions).
-    - For `TileType::Acc` / ACC source tiles:
-      - Supported layout conversions: NZ2ND, NZ2NZ, NZ2NHWC, NZ2NCHW, NZ2NCDHW. NZ2DN is **not** supported.
-      - Destination layout must be ND, NZ, NHWC, NCHW, or NCDHW; source dtype must be `int32_t` or `float`.
-    - When not using quantization, destination dtype must be `int32_t/float/half/bfloat16_t`.
-    - ACC-to-GM dtype support:
+          Other cross-type combinations not listed are not within the supported scope.
 
-      | Calling convention | Source dtype | Supported destination dtype |
-      | --- | --- | --- |
-      | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
-      | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
-      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t`, `half`, `bfloat16_t`, `hifloat8_t`, `float8_e4m3_t`, `float` |
-      | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE(dst, acc, fp)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half`, `bfloat16_t` |
+        - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND, `1 <= TileData::Rows <= 8192`; if NZ, NC1HWC0, or NDC1HWC0, `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`.
+        - Runtime: `1 <= src.GetValidCol() <= 4095`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The source tile position must be `TileType::Vec` or `TileType::Acc` (`Mat` storage is not supported on this target).
+    - For source tile position `TileType::Vec`:
+        - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`.
+        - `TileData::DType` must be one of the following: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `half`, `bfloat16_t`, `float`, `float8_e4m3_t`, `float8_e5m2_t`, `hifloat8_t`, `float8_e8m0_t`, `float4_e1m2x2_t`, `float4_e2m1x2_t`.
+        - The layout must match ND/DN/NZ (or in special cases: `TileData::Rows == 1` or `TileData::Cols == 1`).
+        - Additional alignment constraints are enforced (for example, for ND, the row-major width in bytes must be a multiple of 32; for DN, the column-major height in bytes must be a multiple of 32, with exceptions in special cases).
+    - For source tile position `TileType::Acc` (including call forms with quantization parameters and atomic write variants):
+        - The target layout must be ND, NZ, NHWC, NCHW, or NCDHW; the source data type must be `int32_t` or `float`.
+        - When quantization is not used, the target data type must be `int32_t/float/half/bfloat16_t`.
+        - Data type support from ACC to GM depends on the call form:
 
-      Other cross-type combinations are not supported.
-    - Static shape constraints match A2A3 for rows/cols; `AtomicAdd` additionally restricts destination dtype to supported atomic types.
+          | Call Form | Source Data Type | Supported Target Data Types |
+          | --- | --- | --- |
+          | `TSTORE(dst, acc)` | `float` | `float`, `half`, `bfloat16_t` |
+          | `TSTORE(dst, acc)` | `int32_t` | `int32_t` |
+          | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `float` | `int8_t`, `uint8_t`, `half`, `bfloat16_t`, `hifloat8_t`, `float8_e4m3_t`, `float` |
+          | `TSTORE(dst, acc, preQuantScalar)` / `TSTORE_FP(dst, acc, fp)` | `int32_t` | `int8_t`, `uint8_t`, `half`, `bfloat16_t` |
+
+          Other cross-type combinations not listed are not supported.
+
+        - The static shape constraints are the same as the row/column constraints of Atlas A2/A3 training products/Atlas A2/A3 inference products; `AtomicAdd` additionally restricts the target data type to supported atomic types.
 - **Valid region**:
-    - The implementation uses `src.GetValidRow()` / `src.GetValidCol()` as the transfer size.
+    - The implementation uses `src.GetValidRow()`/`src.GetValidCol()` as the transfer size.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -200,20 +150,20 @@ void example_manual(__gm__ T* out) {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 pto.tstore %src, %mem : (!pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()

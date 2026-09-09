@@ -1,15 +1,16 @@
 # TADD
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:22:46.877Z pushedAt=2026-08-29T09:05:18.412Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TADD tile operation](../figures/isa/TADD.svg)
 
 ## Introduction
 
-Elementwise add of two tiles.
+Element-wise addition of two tiles.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -23,20 +24,22 @@ Synchronous form:
 %dst = tadd %src0, %src1 : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -45,26 +48,18 @@ PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - The dtypes of `dst`, `src0`, and `src1` must be identical and one of: `int32_t`, `int16_t`, `half`, `float`.
-    - The layouts of `dst`, `src0`, and `src1` must all be row-major (`TileData::isRowMajor`).
-- **Implementation checks (A5)**:
-    - The dtypes of `dst`, `src0`, and `src1` must be identical and one of: `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
-    - The layouts of `dst`, `src0`, and `src1` must all be row-major (`TileData::isRowMajor`).
-- **Implementation checks (CPU_SIM)**:
-    - The three operand dtypes must be identical. CPU_SIM has no additional row-major-only restriction; row-major,
-      column-major, and other supported Tile layouts use their corresponding per-operand offset calculation.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `int16_t`, `half`, `float`.
+    - The Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `TileData::DType` must be one of the following: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
+    - The Tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-    - `dst`, `src0`, and `src1` may have distinct C++ Tile types, including different static or dynamic
-      `ValidRow`/`ValidCol` template arguments, provided that their element types are identical.
-    - A2A3, A5, and CPU_SIM require `src0`, `src1`, and `dst` to have identical runtime valid row and column counts and
-      trigger an assertion failure on mismatch. CPU_SIM computes each operand's address from that operand's own Tile
-      layout and physical shape.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain; `src0/src1` are assumed to be compatible (not verified through explicit runtime checks in this operation).
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -74,22 +69,6 @@ using namespace pto;
 void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT src0, src1, dst;
-  TADD(dst, src0, src1);
-}
-```
-
-### Auto (mixed static and dynamic valid shapes)
-
-```cpp
-#include <pto/pto-inst.hpp>
-
-using namespace pto;
-
-void example_mixed_valid_shape() {
-  using DynamicTile = Tile<TileType::Vec, int32_t, 16, 16, BLayout::RowMajor, -1, -1>;
-  using StaticTile = Tile<TileType::Vec, int32_t, 16, 16, BLayout::RowMajor, 16, 16>;
-  DynamicTile dst(16, 16), src1(16, 16);
-  StaticTile src0;
   TADD(dst, src0, src1);
 }
 ```
@@ -111,20 +90,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -134,6 +113,6 @@ void example_manual() {
 
 ```text
 %dst = tadd %src0, %src1 : !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

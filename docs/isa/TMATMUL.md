@@ -1,27 +1,28 @@
 # TMATMUL
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:21:41.350Z pushedAt=2026-08-29T09:05:18.441Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TMATMUL tile operation](../figures/isa/TMATMUL.svg)
 
 ## Introduction
 
-Matrix multiply (GEMM) producing an accumulator/output tile.
+Matrix multiplication (GEMM), which generates an accumulator/output tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let:
+Assume:
 
 - `M = aMatrix.GetValidRow()`
 - `K = aMatrix.GetValidCol()`
 - `N = bMatrix.GetValidCol()`
 
-For `0 <= i < M` and `0 <= j < N` (output elements in the effective matmul domain):
+For `0 <= i < M` and `0 <= j < N` (output elements in the valid matrix multiplication domain):
 
 $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} $$
 
-Exact accumulator behavior and datatype promotion are target/implementation-defined.
+The exact accumulator behavior and data type promotion are defined by the target/implementation.
 
 ## Assembly Syntax
 
@@ -42,9 +43,11 @@ Synchronous form:
 ```text
 pto.tmatmul ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -56,41 +59,29 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
 
 ## Constraints
 
-- **Accumulator pitch constraint (CPU, A2A3, A5, A6, and Kirin9030)**: `mad` writes the
-  accumulator's block columns at a pitch of `ceil16(m)` rows, where `m` is the row count the
-  instruction receives, while every reader of that region takes its pitch from the tile's
-  `Rows`. The two must agree:
-    - `((m + 15) / 16) * 16 == TileRes::Rows`, where `m` is `TileLeft::ValidRow` for
-      `TMATMUL` and 1 for `TGEMV`. Outside `TGEMV`, `m == 1` is promoted to 16.
-    - Not enforced when `TileRes::Cols <= FRACTAL_NZ_ROW` (a single block column needs no
-      pitch), when `TileRes::Compact != CompactMode::Null`, or when either value is
-      `DYNAMIC`. `FRACTAL_NZ_ROW` is 16.
-    - `TileRes::ValidRow` does not enter the condition. A tile whose `ValidRow` is smaller
-      than its `Rows` is fine as long as the pitch matches: `Rows` is then just the padded
-      allocation size.
-- **Implementation checks (A2A3)**:
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
     - Supported `(CType, AType, BType)` triples:
     - `(int32_t, int8_t, int8_t)`
     - `(float, half, half)`
     - `(float, float, float)`
     - `(float, bfloat16_t, bfloat16_t)`
     - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-    - Tile locations: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
-    - Runtime: `m/k/n` (taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-- **Implementation checks (A5)**:
-    - Accumulator type must be `int32_t` or `float`.
-    - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-    - If `float`: supports `half/bfloat16_t/float`, selected fp8 pairs, and `hifloat8_t/hifloat8_t` (target-defined).
+    - Tile positions: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
+    - Runtime: `m/k/n` (obtained from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be within the range `[1, 4095]`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The accumulator type must be `int32_t` or `float`.
+    - If it is `int32_t`: `AType == int8_t` and `BType == int8_t`.
+    - If it is `float`: supports `half/bfloat16_t/float`, selected fp8 pairs, and `hifloat8_t/hifloat8_t` (target-defined).
     - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-    - Fractal/layout constraints are enforced:
+    - Enforce fractal/layout constraints:
     - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
     - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
     - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
-    - Runtime: `m/k/n` (taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
+    - Runtime: `m/k/n` (obtained from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be within the range `[1, 4095]`.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -129,20 +120,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %c = pto.tmatmul %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %c = pto.tmatmul %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
