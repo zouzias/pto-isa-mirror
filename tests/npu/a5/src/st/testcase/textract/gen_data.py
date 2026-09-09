@@ -232,6 +232,13 @@ def gen_golden_data(case_name, param):
 
     x1_gm.tofile("./x1_gm.bin")
     x2_gm.tofile("./x2_gm.bin")
+    if case_name in tuple(f"TEXTRACTTest.case{key}" for key in range(21, 27)):
+        c0 = 8 if case_name in ("TEXTRACTTest.case24", "TEXTRACTTest.case25", "TEXTRACTTest.case26") else 16
+        extracted = golden[16:, 16:].reshape(16, 48 // c0, c0).transpose(1, 0, 2).reshape(-1)
+        if case_name in ("TEXTRACTTest.case22", "TEXTRACTTest.case25"):
+            final = golden[:16, :48].reshape(16, 48 // c0, c0).transpose(1, 0, 2).reshape(-1)
+            extracted = np.concatenate((extracted, final))
+        golden = extracted
     golden.tofile("./golden.bin")
 
 
@@ -276,6 +283,12 @@ if __name__ == "__main__":
         "TEXTRACTTest.case18",
         "TEXTRACTTest.case19",
         "TEXTRACTTest.case20",
+        "TEXTRACTTest.case21",
+        "TEXTRACTTest.case22",
+        "TEXTRACTTest.case23",
+        "TEXTRACTTest.case24",
+        "TEXTRACTTest.case25",
+        "TEXTRACTTest.case26",
 
         "TMOVTest.case1",
         "TMOVTest.case2",
@@ -324,6 +337,15 @@ if __name__ == "__main__":
         textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 0, 0),
         textractParams(float4_e2m1, float4_e2m1, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
         textractParams(float4_e1m2, float4_e1m2, np.float32, 256, 128, 256, 128, 64, 128, 1, 1),
+        # acc2mat unit flag
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+
+        # acc2mat float NZ512
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
+        textractParams(np.float16, np.float16, np.float32, 32, 96, 64, 0, 0, 0, 0, 0),
 
         # TMov
         # !transpose

@@ -67,13 +67,16 @@ PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
 - **实现检查 (A2A3)**:
     - fp 路径仅支持累加器转换，并通过 `TMOV_IMPL(dst, src, fp)` 中的内部编译时检查进行验证。
     - `FpTileData` 的合法性由所选后端实现检查。
-    - A2A3 后端没有 `TMOV_IMPL(..., fp)` phase 形态，因此不暴露 `STPhase` fp 别名。
+    - A2A3 的 `STPhase` fp 别名支持 Acc-to-Mat 搬出。
 - **实现检查 (A5)**:
     - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
     - `FpTileData` 的合法性由所选后端实现检查。
     - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
     - `STPhase` fp 别名仅在存在对应后端实现的目标上暴露：
-      A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器。
+      A2A3、A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器。
+    - 在 Ascend 950PR 板机、CANN 9.2.0 环境下，`tmov_acc2vec` 中向量量化的
+      `TMOV_FP<STPhase::Final>` 用例 `TMOVTest.case_nz2nd_fb_quant_uf_final_half` 和
+      `TMOVTest.case_nz2nd_fb_quant_uf_final_int8` 均已通过，max diff 均为 0。
 
 ## 示例
 

@@ -383,7 +383,8 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
 template <
     int atomicType, typename accDataType, typename dstDataType, typename srcDataType, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3,
-    int gWholeShape4, int validM, int validN, int validK, int reluMode = 0, int format = 0>
+    int gWholeShape4, int validM, int validN, int validK, int reluMode = 0, int format = 0,
+    STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
 __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     __gm__ dstDataType* out, __gm__ srcDataType* src0, __gm__ srcDataType* src1, __gm__ uint64_t* quantTensor)
 {
@@ -466,17 +467,40 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 #endif
-    TMATMUL(cTile, aTile, bTile);
+    if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    if constexpr (phase == STPhase::Unspecified) {
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    }
 #endif
+    if constexpr (phase != STPhase::Unspecified) {
+        set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+    }
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
+        if constexpr (phase == STPhase::Unspecified) {
+            TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
+        } else if constexpr (phase == STPhase::Partial) {
+            static_assert(format == 0 && gShape0 == 1 && gShape1 == 1 && gShape2 == 1);
+            GlobalDataOut finalGlobal(out + validM * validN);
+            TSTORE_FP<STPhase::Partial, AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(
+                dstGlobal, cTile, scalingTile);
+            TSTORE_FP<STPhase::Final, AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(
+                finalGlobal, cTile, scalingTile);
+        } else {
+            // per-channel 随路量化与 unit flag 并行（issue 552）
+            TSTORE_FP<phase, AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
+        }
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
+        static_assert(phase == STPhase::Unspecified, "relu branch of this testcase does not wire STPhase.");
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
     }
 #ifndef __PTO_AUTO__
@@ -893,6 +917,18 @@ void LaunchTStoreAcc2gmVectorNz2nd(uint8_t* out, uint8_t* src0, uint8_t* src1, u
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<hifloat8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
                 reinterpret_cast<uint64_t*>(quantTensor));
+    } else if constexpr (tilingKey == 10) {
+        TStoreAcc2gmVectorNz2nd<
+            0, float, half, half, 1, 1, 1, 15, 15, 1, 1, 1, 15, 15, 15, 15, 31, 0, 0, STPhase::Final, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<uint64_t*>(quantTensor));
+    } else if constexpr (tilingKey == 11) {
+        TStoreAcc2gmVectorNz2nd<
+            0, float, half, half, 1, 1, 1, 15, 15, 1, 1, 1, 15, 15, 15, 15, 31, 0, 0, STPhase::Partial, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<uint64_t*>(quantTensor));
     } else if constexpr (tilingKey == 21) {
         TStoreAcc2gmVectorNz2nd<0, float, int8_t, half, 1, 1, 1, 85, 77, 1, 1, 1, 85, 77, 85, 77, 66, 1>
             <<<1, nullptr, stream>>>(
@@ -1058,6 +1094,10 @@ template void LaunchTStoreAcc2gmVectorNz2nd<6>(
 template void LaunchTStoreAcc2gmVectorNz2nd<7>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
 template void LaunchTStoreAcc2gmVectorNz2nd<8>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
+template void LaunchTStoreAcc2gmVectorNz2nd<11>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
+template void LaunchTStoreAcc2gmVectorNz2nd<10>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
 template void LaunchTStoreAcc2gmVectorNz2nd<9>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);

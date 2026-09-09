@@ -425,7 +425,9 @@ __tf__ PTO_INTERNAL void TExtractVecToMat(
     }
 }
 
-template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 __tf__ PTO_INTERNAL void TExtractAccToMat(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
@@ -444,10 +446,12 @@ __tf__ PTO_INTERNAL void TExtractAccToMat(
                          (indexRow * ACC_C0_SIZE + (indexCol % ACC_C0_SIZE));
     __cbuf__ dstType* dstAddr = (__cbuf__ dstType*)__cce_get_tile_ptr(dst);
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src) + srcOffset;
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
 
     pto_copy_matrix_cc_to_cbuf(
-        dstAddr, srcData, 0, nSize, validRow, dstStride, SrcTileData::Rows, 0, 0, 0, QuantPre,
-        static_cast<uint8_t>(reluMode), false, false, 0, 0, false, false, 0, false, false, false, false, false, false);
+        dstAddr, srcData, 0, nSize, validRow, dstStride, SrcTileData::Rows, 0, 0, unitFlagCtrl, QuantPre,
+        static_cast<uint8_t>(reluMode), channelSplitEnable, false, 0, 0, false, false, 0, false, false, false, false,
+        false, false);
 }
 
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre, ReluPreMode reluMode>

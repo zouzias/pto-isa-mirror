@@ -120,8 +120,10 @@ AICORE inline void RunMATMUL(__gm__ AType* src0, __gm__ BType* src1, __gm__ fbTy
     }
 
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    if constexpr (phase == AccPhase::Unspecified) {
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    }
 #endif
 #endif
 }
@@ -288,11 +290,23 @@ __global__ AICORE void RunTMOV(__gm__ OutType* out, __gm__ AType* src0, __gm__ B
     TASSIGN(dstTileData, 0x0);
 
 #if defined(__DAV_CUBE__)
+    // 只有 subBlockId==0 且 isRelu 的分支实现了 Partial 所需的成对多次搬出序列；
+    // 其余分支直接透传 phase，传入 Partial 会让 fixpipe 等一个不会到来的标志而挂死。
+    static_assert(
+        phase != STPhase::Partial || (subBlockId == 0 && isRelu),
+        "STPhase::Partial needs the paired multi-drain sequence, wired only in the subBlockId==0 relu branch.");
     constexpr uint8_t mode = getMode<subBlockId, 0>();
     if constexpr (subBlockId == 0) {
         if constexpr (isRelu) {
             if constexpr (phase == STPhase::Unspecified) {
                 TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
+            } else if constexpr (phase == STPhase::Partial) {
+                // 多次搬出序列：Partial 那次写被回读校验的目的地且不释放 unit flag，
+                // Final 那次写一块不回读的 scratch，仅用于释放标志。
+                DstTileData scratchTile;
+                TASSIGN(scratchTile, 0x8000);
+                TMOV<STPhase::Partial, DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
+                TMOV<STPhase::Final, DstTileData, AccTile, ReluPreMode::NormalRelu>(scratchTile, cTile);
             } else {
                 TMOV<phase, DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
             }
@@ -354,6 +368,9 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType* out, __gm__ AType* src0, _
     }
 
 #if defined(__DAV_CUBE__)
+    // 本函数直接透传 phase，未实现 Partial 所需的成对多次搬出序列；传入 Partial 会挂死。
+    static_assert(
+        phase != STPhase::Partial, "STPhase::Partial is not wired into this testcase path; use Unspecified or Final.");
     using TileMatFbData = Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     TileMatFbData fbMatTile;
     TASSIGN(fbMatTile, 0x0);
@@ -473,6 +490,9 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType* out, __gm__ AType* src0, _
     TASSIGN(dstTileData, 0x0);
 
 #if defined(__DAV_CUBE__)
+    // 本函数直接透传 phase，未实现 Partial 所需的成对多次搬出序列；传入 Partial 会挂死。
+    static_assert(
+        phase != STPhase::Partial, "STPhase::Partial is not wired into this testcase path; use Unspecified or Final.");
     uint64_t preScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t*>(&scalar));
     if (sizeof(OutType) == 1) {
         constexpr bool sign = (std::is_same_v<typename DstTileData::DType, int8_t>) ? true : false;
@@ -756,6 +776,10 @@ void LaunchTMOVAcc2VecNZ2ND(uint8_t* out, uint8_t* src0, uint8_t* src1, void* st
         RunTMOV<float, half, half, 6, 7, 8, 32, 32, 1, false, false, Layout::ND, 512, STPhase::Final, AccPhase::Final>
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
+    } else if constexpr (tilingKey == 9) {
+        RunTMOV<float, half, half, 6, 7, 8, 32, 32, 0, false, true, Layout::ND, 512, STPhase::Partial, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<float*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1));
     }
 }
 
@@ -767,6 +791,7 @@ template void LaunchTMOVAcc2VecNZ2ND<5>(uint8_t* out, uint8_t* src0, uint8_t* sr
 template void LaunchTMOVAcc2VecNZ2ND<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2ND<7>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 template void LaunchTMOVAcc2VecNZ2ND<8>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+template void LaunchTMOVAcc2VecNZ2ND<9>(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2VecNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream)

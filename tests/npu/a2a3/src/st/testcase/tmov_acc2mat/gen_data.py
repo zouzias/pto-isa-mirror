@@ -271,6 +271,15 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nz_insert",
         "TMOVTest.case_nz2nz_sc_quant_insert", 
         "TMOVTest.case_nz2nz_fb_quant_insert",
+        "TMOVTest.case_nz2nz_uf_final",
+        "TMOVTest.case_nz2nz_extract_uf_final",
+        "TMOVTest.case_nz2nz_insert_uf_final",
+        "TMOVTest.case_nz2nz_uf_multi_drain",
+        "TMOVTest.case_nz2nz_extract_uf_multi_drain",
+        "TMOVTest.case_nz2nz_insert_uf_multi_drain",
+        "TMOVTest.case_nz2nz_fb_quant_uf_final",
+        "TMOVTest.case_nz2nz_fb_quant_extract_uf_final",
+        "TMOVTest.case_nz2nz_fb_quant_insert_uf_final",
     ]
 
     case_params_list = [
@@ -324,7 +333,20 @@ if __name__ == "__main__":
         TmovParams(np.int8, np.int8, np.float16, 96, 128, 64, 96, 128, 64, False, True, False, None, 2, 48, 48,
             True, 256, 256),
         TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
-            1, 32, 32, True, 256, 256), 
+            1, 32, 32, True, 256, 256),
+        TmovParams(np.float16, np.float16, np.float16, 64, 128, 128),
+        TmovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, False, False, False, None, 1, 16, 16),
+        TmovParams(np.float16, np.float16, np.float16, 32, 32, 32, 32, 32, 32, False, False, False, None, 1, 32, 32,
+            True, 128, 128),
+        TmovParams(np.float16, np.float16, np.float16, 64, 128, 128),
+        TmovParams(np.float16, np.float16, np.float16, 64, 64, 64, 64, 64, 64, False, False, False, None, 1, 16, 16),
+        TmovParams(np.float16, np.float16, np.float16, 32, 32, 32, 32, 32, 32, False, False, False, None, 1, 32, 32,
+            True, 128, 128),
+        TmovParams(np.int8, np.int8, np.float16, 80, 128, 64, 80, 128, 64, True, False, False, np.uint64),
+        TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
+            1, 32, 32),
+        TmovParams(np.float16, np.float16, np.int8, 128, 64, 128, 128, 64, 128, True, False, False, np.uint64,
+            1, 32, 32, True, 256, 256),
     ]
 
     for i, case_name in enumerate(case_name_list):

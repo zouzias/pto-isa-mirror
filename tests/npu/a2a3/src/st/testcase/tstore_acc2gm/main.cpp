@@ -753,3 +753,8 @@ TEST_F(TStoreAcc2gmTest, case_ndc1hwc0_vector_relu_1)
 {
     test_tstore_acc2gm_vector_nz2ndc1hwc0<21, int8_t, int8_t, 52, 64, 19, 1, 1, 2, 13, 4>();
 }
+
+TEST_F(TStoreAcc2gmTest, case_vector_quant_l2hint)
+{
+    test_tstore_acc2gm_vector_nz2nd<22, uint16_t, int8_t, 55, 88, 32>();
+}

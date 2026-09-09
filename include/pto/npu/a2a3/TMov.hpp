@@ -15,7 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 __tf__ AICORE void TMovCcToCb(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol)
@@ -29,8 +31,9 @@ __tf__ AICORE void TMovCcToCb(
     constexpr uint32_t dstStride_dst_D = DstTileData::Rows;
     constexpr uint16_t srcStride = SrcTileData::Rows;
     validCol = CeilDivision(validCol, c0Size) * c0Size;
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     pto_copy_matrix_cc_to_cbuf(
-        dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, 0, QuantPre,
+        dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, unitFlagCtrl, QuantPre,
         static_cast<uint8_t>(reluMode), false, false);
 }
 
@@ -195,18 +198,20 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
     }
 }
 // relu
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
 {
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     uint16_t m = src.GetValidRow();
     uint16_t n = src.GetValidCol();
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
 }
 
 // scalar quant
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar)
 {
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
@@ -214,11 +219,13 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuan
     uint16_t n = src.GetValidCol();
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
-    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
 }
 
 // vector quant
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
 {
     CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
@@ -227,7 +234,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
     uint16_t m = src.GetValidRow();
     uint16_t n = src.GetValidCol();
     SetFPC<FpTileData>(fp.data());
-    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+    TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
 }
 } // namespace pto
 #endif // TMOV_HPP

@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 // relu
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     static_assert(
@@ -26,9 +26,10 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
         "SFractal: NoneBox).");
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     if constexpr ((DstTileData::Loc == TileType::Mat)) {
-        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
     } else {
+        static_assert(Phase == STPhase::Unspecified, "STPhase is only supported for Acc-to-Mat TEXTRACT");
         TExtractAccToVec<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, ReluPreMode::NoRelu>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(), src.GetValidCol(),
             indexRow, indexCol);
@@ -50,7 +51,9 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
 }
 
 // scalar quant
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(
     DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -66,9 +69,10 @@ PTO_INTERNAL void TEXTRACT_IMPL(
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
     if constexpr ((DstTileData::Loc == TileType::Mat)) {
-        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
     } else {
+        static_assert(Phase == STPhase::Unspecified, "STPhase is only supported for Acc-to-Mat TEXTRACT");
         TExtractAccToVec<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(), src.GetValidCol(),
             indexRow, indexCol);
@@ -92,7 +96,9 @@ PTO_INTERNAL void TEXTRACT_IMPL(
 }
 
 // fp
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -109,9 +115,10 @@ PTO_INTERNAL void TEXTRACT_IMPL(
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPC<FpTileData>(fp.data(), indexCol);
     if constexpr ((DstTileData::Loc == TileType::Mat)) {
-        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
     } else {
+        static_assert(Phase == STPhase::Unspecified, "STPhase is only supported for Acc-to-Mat TEXTRACT");
         TExtractAccToVec<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(), src.GetValidCol(),
             indexRow, indexCol);
