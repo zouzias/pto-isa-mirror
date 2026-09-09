@@ -1,1 +1,0 @@
-pto_a5_vfsim_adapter_test(adapter_golden)

@@ -560,13 +560,7 @@ inline void vsts(A&&... args)
     ::pto::mocker::vf::capture::RecordStore("vsts", std::forward<A>(args)...);
 }
 
-template <class Dst, class Src, class Index, class Mask>
-inline void vgather2(Dst&& dst, Src&& src, Index&& index, Mask&& mask)
-{
-    auto operands = std::forward_as_tuple(dst, src, index, mask);
-    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-        "vgather2", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
-}
+PTO_VF_RECORD_VOID(vgather2)
 
 template <class Src, class Dst, class Index, class Mask>
 inline void vscatter(Src&& src, Dst&& dst, Index&& index, Mask&& mask)
@@ -731,21 +725,9 @@ PTO_VF_RECORD_VOID(pand)
 PTO_VF_RECORD_VOID(por)
 PTO_VF_RECORD_VOID(pnot)
 
-template <class Dst, class Src0, class Src1, class Mask>
-inline void pxor(Dst&& dst, Src0&& src0, Src1&& src1, Mask&& mask)
-{
-    auto operands = std::forward_as_tuple(dst, src0, src1, mask);
-    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-        "pxor", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
-}
+PTO_VF_RECORD_VOID(pxor)
 
-template <class Dst, class Src0, class Src1, class Src2>
-inline void psel(Dst&& dst, Src0&& src0, Src1&& src1, Src2&& src2)
-{
-    auto operands = std::forward_as_tuple(dst, src0, src1, src2);
-    ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-        "psel", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
-}
+PTO_VF_RECORD_VOID(psel)
 
 template <class Dst, class Src, class Offset, class Mode>
 inline void plds(Dst&& dst, Src&& src, Offset&& offset, Mode&& mode)
@@ -903,29 +885,6 @@ PTO_VF_RECORD_MASK(pset_b32)
 
 // A5 instruction-header compatibility types.
 namespace pto {
-enum QuantMode_t {
-    NoQuant = 0,
-    F322F16 = 1,
-    F322BF16 = 16,
-    DEQF16 = 5,
-    VDEQF16 = 4,
-    QF322B8_PRE = 24,
-    QF322HIF8_PRE = 25,
-    QF322FP8_PRE = 26,
-    QF322F32_PRE = 27,
-    QF322F16_PRE = 32,
-    QF322BF16_PRE = 34,
-    QS322BF16_PRE = 35,
-    VQF322B8_PRE = 23,
-    VQF322HIF8_PRE = 28,
-    VQF322F16_PRE = 33,
-    VQF322BF16_PRE = 36,
-    VQF322FP8_PRE = 37,
-    VQF322F32_PRE = 38,
-    REQ8 = 3,
-    VREQ8 = 2,
-    VQS322BF16_PRE = 39
-};
 enum class atomic_type_t { ATOMIC_NONE };
 } // namespace pto
 

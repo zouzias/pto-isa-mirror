@@ -12,6 +12,32 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/costmodel/arch_config.hpp>
 #include <pto/costmodel/trace.hpp>
 
+namespace pto {
+enum QuantMode_t {
+    NoQuant = 0,
+    F322F16 = 1,
+    F322BF16 = 16,
+    DEQF16 = 5,
+    VDEQF16 = 4,
+    QF322B8_PRE = 24,
+    QF322HIF8_PRE = 25,
+    QF322FP8_PRE = 26,
+    QF322F32_PRE = 27,
+    QF322F16_PRE = 32,
+    QF322BF16_PRE = 34,
+    QS322BF16_PRE = 35,
+    VQF322B8_PRE = 23,
+    VQF322HIF8_PRE = 28,
+    VQF322F16_PRE = 33,
+    VQF322BF16_PRE = 36,
+    VQF322FP8_PRE = 37,
+    VQF322F32_PRE = 38,
+    REQ8 = 3,
+    VREQ8 = 2,
+    VQS322BF16_PRE = 39
+};
+} // namespace pto
+
 inline void set_loop1_stride_outtol1(auto config)
 {
     ::pto::mocker::RecordCceCall("set_loop1_stride_outtol1", 0, config);
