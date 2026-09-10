@@ -1,15 +1,16 @@
-﻿# TDIV
+# TDIV
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:55:38.168Z pushedAt=2026-08-29T09:05:18.429Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TDIV tile operation](../figures/isa/TDIV.svg)
 
 ## Introduction
 
-Elementwise division of two tiles.
+Element-wise division of two tiles.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
@@ -44,35 +47,55 @@ template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, type
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
-`PrecisionType` has the following values available:
+`PrecisionType` can specify the following values:
 
-* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
+* `DivAlgorithm::DEFAULT`: normal algorithm, fast but with lower precision.
+
+* `DivAlgorithm::HIGH_PRECISION`: high-precision algorithm, slower.
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `half`, `float`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+
+    - `TileData::DType` must be one of the following: `half`, `float`.
+
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
-- **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+
+    - Runtime: the `src0`, `src1`, and `dst` tiles should have the same `validRow/validCol`.
+
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+
+    - `TileData::DType` must be one of the following: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
+
+    - The tile layout must be row-major (`TileData::isRowMajor`).
+
+
+
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`).
+
     - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+
+    - Runtime: `src0`, `src1`, and `dst` tiles must have the same `validRow/validCol`.
+
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain;.
-- **Division-by-zero**:
-    - Behavior is target-defined.
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
+
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
+
+- **Division by zero**:
+
+    - The behavior is defined by the target.
+
+- **High-precision algorithm**:
+
+    - Valid only on Ascend 950PR/Ascend 950DT. The `PrecisionType` option will be ignored on Atlas A3 training products/Atlas A3 inference products.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -83,6 +106,7 @@ void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT src0, src1, dst;
   TDIV(dst, src0, src1);
+  TDIV<DivAlgorithm::HIGH_PRECISION>(dst, src0, src1);  // A5 Only
 }
 ```
 
@@ -100,23 +124,24 @@ void example_manual() {
   TASSIGN(src1, 0x2000);
   TASSIGN(dst,  0x3000);
   TDIV(dst, src0, src1);
+  TDIV<DivAlgorithm::HIGH_PRECISION>(dst, src0, src1);  // A5 Only
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -129,4 +154,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

@@ -1,15 +1,16 @@
-﻿# TEXP
+# TEXP
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T03:57:57.444Z pushedAt=2026-08-29T09:05:18.430Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TEXP tile operation](../figures/isa/TEXP.svg)
 
 ## Introduction
 
-Elementwise exponential.
+Performs element-wise exponential operation.
 
-## Math Interpretation
+## Mathematical Semantics
 
 For each element `(i, j)` in the valid region:
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <auto PrecisionType = ExpAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
@@ -44,29 +47,27 @@ template <auto PrecisionType = ExpAlgorithm::DEFAULT, typename TileDataDst, type
 PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
-`PrecisionType` has the following values available:
+`PrecisionType` can specify the following values:
 
-* `ExpAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `ExpAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
-
+* `ExpAlgorithm::DEFAULT`: normal algorithm, fast but with lower precision.
+* `ExpAlgorithm::HIGH_PRECISION`: high-precision algorithm, slower.
 
 ## Constraints
 
-- **Implementation checks (NPU)**:
-    - `TileData::DType` must be one of: `float` or `half`;
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation check (NPU)**:
+    - `TileData::DType` must be one of the following: `float` or `half`.
+    - The tile position must be a vector (`TileData::Loc == TileType::Vec`);
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - The tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
-- **High Precision Algorithm**
-    - Only available on A5, `PrecisionType` option is ignored on A3.
-
+    - The operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
+- **High-precision algorithm**:
+    - Valid only on Ascend 950PR/Ascend 950DT. The `PrecisionType` option is ignored on Atlas A3 training products/Atlas A3 inference products.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -97,20 +98,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.texp %src : !pto.tile<...> -> !pto.tile<...>
@@ -123,4 +124,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

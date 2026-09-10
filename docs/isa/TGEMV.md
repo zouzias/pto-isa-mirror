@@ -1,41 +1,42 @@
-﻿# TGEMV
+# TGEMV
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:10:54.910Z pushedAt=2026-08-29T09:05:18.436Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TGEMV tile operation](../figures/isa/TGEMV.svg)
 
 ## Introduction
 
-General Matrix-Vector multiplication (GEMV) producing an accumulator/output tile.
+General matrix-vector multiplication that generates an accumulator/output tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let:
+Assume:
 
 - `M = 1`
 - `K = bMatrix.GetValidRow()`
 - `N = bMatrix.GetValidCol()`
 
-### 1. TGEMV (Tile-based GEMV)
+### 1. TGEMV (Tile-Based GEMV)
 
-For `0 <= j < N` (output elements in the effective matmul domain):
+For `0 <= j < N` (output elements in the valid matrix multiplication domain):
 
 $$ \mathrm{C}_{0,j} = \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
-### 2. TGEMV_ACC (Tile-based GEMV with Accumulation)
+### 2. TGEMV_ACC (Tile-Based GEMV with Accumulation)
 
-For `0 <= j < N` (accumulates into existing tile):
+For `0 <= j < N` (accumulate into the existing tile):
 
 $$ \mathrm{C}_{0,j} \gets \mathrm{C}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
-### 3. TGEMV_BIAS (Tile-based GEMV with Bias)
+### 3. TGEMV_BIAS (Tile-Based GEMV with Bias)
 
-For `0 <= j < N` (adds bias term to matrix product):
+For `0 <= j < N` (adds the bias term to the matrix product):
 
 $$ \mathrm{C}_{0,j} = \mathrm{Bias}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
-**Note:** Exact accumulator behavior and datatype promotion are target/implementation-defined.
+**Note:** The exact accumulator behavior and data type promotion are defined by the target/implementation.
 
 ## Assembly Syntax
 
@@ -64,9 +65,11 @@ pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.ti
 pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
 pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -81,50 +84,50 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 
 ## Constraints
 
-### Common shape and location constraints
+### General Shape and Position Constraints
 
-These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwise noted.
+Unless otherwise specified, the following constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS`.
 
 - Static shape constraints:
     - `TileLeft::Rows == TileRes::Rows`
     - `TileLeft::Cols == TileRight::Rows`
     - `TileRight::Cols == TileRes::Cols`
-- Tile locations:
+- Tile position constraints:
     - `TileLeft::Loc == Left`
     - `TileRight::Loc == Right`
     - `TileRes::Loc == Acc`
-- Runtime valid-size constraints:
+- Runtime valid size constraints:
     - `m` must be `1`
-    - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+    - `k` and `n` (obtained from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be within `[1, 4095]`
 
-### TGEMV / TGEMV_ACC datatype constraints
+### TGEMV/TGEMV_ACC Data Type Constraints
 
-- **Implementation checks (A2A3)**:
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
     - Supported `(CType, AType, BType)` triples:
         - `(int32_t, int8_t, int8_t)`
         - `(float, half, half)`
         - `(float, float, float)`
         - `(float, bfloat16_t, bfloat16_t)`
-- **Implementation checks (A5)**:
-    - Accumulator type must be `int32_t` or `float`.
-    - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-    - If `float`: supports `half`, `bfloat16_t`, `float`, and selected fp8 pairs (target-defined).
-    - Fractal/layout constraints are enforced:
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - The accumulator type must be `int32_t` or `float`.
+    - If it is `int32_t`: `AType == int8_t` and `BType == int8_t`.
+    - If it is `float`: supports `half`, `bfloat16_t`, `float`, selected fp8 combinations, and `hifloat8_t/hifloat8_t` (target-defined).
+    - The following fractal/layout constraints are enforced:
         - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
         - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
         - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
 
-### TGEMV_BIAS additional constraints
+### Additional Constraints for TGEMV_BIAS
 
-- Bias tile datatype must exactly match `TileRes::DType`.
-- Bias tile must be configured as a single row.
-- Bias tile location must be `TileType::Bias`.
-- **Additional A5 note**:
-    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
+- The bias tile data type must be exactly the same as `TileRes::DType`.
+- The bias tile must be configured as a single row.
+- The bias tile position must be `TileType::Bias`.
+- **Additional notes for Ascend 950PR/Ascend 950DT**:
+    - In addition to the GEMV conventions above, the underlying Ascend 950PR/Ascend 950DT matmul implementation does not add a separate set of explicit `m/k/n` runtime assertions.
 
 ## Examples
 
-### Auto
+### Automatic
 
 #### 1. TGEMV
 
@@ -172,7 +175,7 @@ using namespace pto;
 void example_auto() {
   using A = TileLeft<half, 1, 16>;
   using B = TileRight<half, 16, 16>;
-  using Bias = Tile<TileType::Bias, half, 1, 16>;
+  using Bias = Tile<TileType::Bias, float, 1, 16>;
   using C = TileAcc<float, 1, 16>;
   A a;
   B b;
@@ -237,7 +240,7 @@ using namespace pto;
 void example_manual() {
   using A = TileLeft<half, 1, 16>;
   using B = TileRight<half, 16, 16>;
-  using Bias = Tile<TileType::Bias, half, 1, 16>;
+  using Bias = Tile<TileType::Bias, float, 1, 16>;
   using C = TileAcc<float, 1, 16>;
   A a;
   B b;
@@ -251,20 +254,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -277,4 +280,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
-

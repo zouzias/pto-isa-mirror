@@ -1,17 +1,18 @@
-﻿# TORS
+# TORS
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:35:15.141Z pushedAt=2026-08-29T09:05:18.448Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TORS tile operation](../figures/isa/TORS.svg)
 
 ## Introduction
 
-Elementwise bitwise OR of a tile and a scalar.
+Performs element-wise bitwise OR between a tile and a scalar.
 
-## Math Interpretation
+## Mathematical Semantics
 
-For each element `(i, j)` in the valid region:
+For each element `(i, j)` within the valid region:
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;|\; \mathrm{scalar} $$
 
@@ -34,9 +35,11 @@ Synchronous form:
 ```text
 pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -45,19 +48,20 @@ PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataD
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-    - Intended for integral element types.
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+    - Applicable to integer element types.
     - `dst` and `src` must use the same element type.
     - `dst` and `src` must be vector tiles.
     - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
-    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
-- **Implementation checks (A5)**:
-    - Intended for integral element types supported by `TEXPANDS` and `TOR`.
+    - In manual mode, setting the source tile and destination tile to the same memory is not supported.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - Applicable to the integer element types supported by `TORS`.
     - `dst` and `src` must use the same element type.
     - `dst` and `src` must be vector tiles.
-    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+    - At runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - In manual mode, setting the source tile and the destination tile to the same memory is not supported.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -75,20 +79,20 @@ void example() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime is responsible for resource placement and scheduling.
 %dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains a tile operand):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -101,4 +105,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

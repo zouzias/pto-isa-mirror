@@ -1,22 +1,25 @@
-﻿# TGEMV_ACC
+# TGEMV_ACC
 
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T04:07:34.862Z pushedAt=2026-08-29T09:05:18.434Z -->
 
-## Tile Operation Diagram
+## Instruction Diagram
 
 ![TGEMV_ACC tile operation](../figures/isa/TGEMV_ACC.svg)
 
 ## Introduction
 
-Tile-based GEMV with explicit accumulator input tile (`cInMatrix`) and output tile (`cOutMatrix`).
+GEMV with an explicit accumulator input tile (`cInMatrix`) and output tile (`cOutMatrix`).
 
-## See also
+## See Also
 
-- Base GEMV instruction: `docs/isa/TGEMV.md`.
+- Basic GEMV instruction: `docs/isa/TGEMV.md`.
+
 - Bias variant: `docs/isa/TGEMV_BIAS.md`.
 
-## C++ Intrinsic
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -26,19 +29,21 @@ template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRigh
 PTO_INST RecordEvent TGEMV_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
 ```
 
-## Math Interpretation
+## Mathematical Semantics
 
-Let:
+Assume:
 
 - `M = 1`
+
 - `K = bMatrix.GetValidRow()`
+
 - `N = bMatrix.GetValidCol()`
 
-For `0 <= j < N` (accumulates into the existing output tile):
+For `0 <= j < N` (accumulate into the existing output tile):
 
 $$ \mathrm{C}_{0,j} \gets \mathrm{C}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j} $$
 
-**Note:** Exact accumulator behavior and datatype promotion are target/implementation-defined.
+**Note:** The exact accumulator behavior and data type promotion are target/implementation-defined.
 
 ## Assembly Syntax
 
@@ -62,41 +67,65 @@ pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.t
 
 ## Constraints
 
-### Common shape and location constraints
+### General Shape and Position Constraints
 
 - Static shape constraints:
+
     - `TileLeft::Rows == TileRes::Rows`
+
     - `TileLeft::Cols == TileRight::Rows`
+
     - `TileRight::Cols == TileRes::Cols`
-- Tile locations:
+
+- Tile position constraints:
+
     - `TileLeft::Loc == Left`
+
     - `TileRight::Loc == Right`
+
     - `TileRes::Loc == Acc`
-- Runtime valid-size constraints:
+
+- Runtime valid size constraints:
+
     - `m` must be `1`
-    - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
 
-### Datatype constraints
+    - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be within `[1, 4095]`
 
-- **Implementation checks (A2A3)**:
-    - Supported `(CType, AType, BType)` triples:
+### Data Type Constraints
+
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
+
+    - Supported `(CType, AType, BType)` triplets:
+
         - `(int32_t, int8_t, int8_t)`
+
         - `(float, half, half)`
+
         - `(float, float, float)`
+
         - `(float, bfloat16_t, bfloat16_t)`
-- **Implementation checks (A5)**:
-    - Accumulator type must be `int32_t` or `float`.
-    - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-    - If `float`: supports `half`, `bfloat16_t`, `float`, and selected fp8 pairs (target-defined).
-    - Fractal/layout constraints are enforced:
+
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+
+    - The accumulator type must be `int32_t` or `float`.
+
+    - If it is `int32_t`: `AType == int8_t` and `BType == int8_t`.
+
+    - If it is `float`: supports `half`, `bfloat16_t`, `float`, selected fp8 combinations, and `hifloat8_t/hifloat8_t` (destination-defined).
+
+    - The following fractal/layout constraints are enforced:
+
         - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
+
         - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
+
         - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
-    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
+
+    - In addition to the GEMV conventions above, the underlying Ascend 950PR/Ascend 950DT matmul implementation does not add a separate set of explicit `m/k/n` runtime assertions.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -136,20 +165,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>

@@ -1,16 +1,18 @@
-﻿# TSELS
+# TSELS
 
-## Tile Operation Diagram
+<!-- md-trans-meta sourceCommit=unknown translatedAt=2026-08-26T05:11:19.460Z pushedAt=2026-08-29T09:05:18.467Z -->
+
+## Instruction Diagram
 
 ![TSELS tile operation](../figures/isa/TSELS.svg)
 
 ## Introduction
 
-Select between source tile and scalar using a mask tile (per-element selection for source tile).
+Performs element-wise selection between the source tile and a scalar using a mask tile.
 
-## Math Interpretation
+## Mathematical Semantics
 
-For each element `(i, j)` in the valid region:
+For each element `(i, j)` within the valid region:
 
 $$
 \mathrm{dst}_{i,j} =
@@ -39,9 +41,11 @@ Synchronous form:
 ```text
 pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-## C++ Intrinsic
+
+## C++ Built-in APIs
 
 Declared in `include/pto/common/pto_instr.hpp`:
+> The public include header is `<pto/pto-inst.hpp>`, and the internal declaration is located in `pto/common/pto_instr.hpp`.
 
 ```cpp
 template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
@@ -50,39 +54,39 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
+- **Implementation check (Atlas A2/A3 training products/Atlas A2/A3 inference products)**:
     - `sizeof(TileDataDst::DType)` must be `2` or `4` bytes.
-    - Supported data types are 2- or 4-byte types: `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
+    - The supported data types are 2-byte or 4-byte types: `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
     - `dst` and `src` must use the same element type.
     - `dst` and `src` must be row-major.
-    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
-- **Implementation checks (A5)**:
-    - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
-    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
+    - Runtime: `src.GetValidRow()/GetValidCol()` must be consistent with `dst.GetValidRow()/GetValidCol()`.
+- **Implementation check (Ascend 950PR/Ascend 950DT)**:
+    - `sizeof(TileDataDst::DType)` can be `1`, `2`, or `4` bytes.
+    - The supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
     - `dst` and `src` must use the same element type.
     - `dst`, `mask`, and `src` must be row-major.
-    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
+    - Runtime: `src.GetValidRow()/GetValidCol()` must be consistent with `dst.GetValidRow()/GetValidCol()`.
 - **Valid region**:
-    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - This operation uses `dst.GetValidRow()`/`dst.GetValidCol()` as the iteration domain.
 - **Mask encoding**:
-    - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+    - The mask tile is interpreted as packed predicate bits in the destination-defined layout.
 
 ## Temporary Space
 
-### A2A3
+### Atlas A2/A3 Training Products/Atlas A2/A3 Inference Products
 
-`tmp` **is used** as a small buffer to store the scalar value for the `set_cmpmask` operation and to hold the comparison mask. The scalar is written to `tmp[0]` before the select loop.
+`tmp` **is used** as a small buffer to store the scalar value required by the `set_cmpmask` operation and to save the comparison mask. Before the selection loop, the scalar is written to `tmp[0]`.
 
-- `tmp` element type must match `TileDataSrc::DType`.
-- `tmp` size requirement: at least 1 element (to hold the scalar). A typical declaration: `Tile<TileType::Vec, float, 1, 16>` or similar.
+- The element type of `tmp` must be consistent with `TileDataSrc::DType`.
+- `tmp` size requirement: at least 1 element (for storing the scalar). Typical declaration: `Tile<TileType::Vec, float, 1, 16>` or similar.
 
-### A5
+### Ascend 950PR/Ascend 950DT
 
-`tmp` is accepted by the interface but **not used** by the A5 implementation. The A5 backend uses `vdup` to broadcast the scalar into a vector register and `vsel` for selection, requiring no scratch tile storage. `tmp` is retained in the C++ intrinsic signature solely for API compatibility with A2A3.
+`tmp` is accepted by the API but is **not used** by the Ascend 950PR/Ascend 950DT implementation. The Ascend 950PR/Ascend 950DT backend uses `vdup` to broadcast the scalar to a vector register and `vsel` for selection, requiring no temporary tile storage. `tmp` is retained in the C++ built-in API signature only for API compatibility with Atlas A2/A3 training products/Atlas A2/A3 inference products.
 
 ## Examples
 
-### Auto
+### Automatic
 
 ```cpp
 #include <pto/pto-inst.hpp>
@@ -128,20 +132,20 @@ void example_manual() {
 }
 ```
 
-## ASM Form Examples
+## ASM Examples
 
-### Auto Mode
+### Automatic Mode
 
 ```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
+# Automatic mode: the compiler/runtime handles resource placement and scheduling.
 %dst = pto.tsels %mask, %src, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### Manual Mode
 
 ```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
+# Manual mode: explicitly bind resources first, then issue the instruction.
+# Optional (when the instruction contains tile operands):
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
 %dst = pto.tsels %mask, %src, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
@@ -154,4 +158,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-
