@@ -47,9 +47,22 @@ PTO_INTERNAL void ReduceThenGroupValIdx(
 {
     constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(TVal);
     constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(TVal);
-    set_vector_mask(0, count);
+    constexpr uint32_t maxCountPerPass = REPEAT_MAX * elemPerRpt;
+    uint32_t processed = 0;
+    uint32_t remaining = count;
+    while (remaining > maxCountPerPass) {
+        set_vector_mask(0, maxCountPerPass);
+        InstrOp::ReduceValIdxInstrImpl(
+            reinterpret_cast<__ubuf__ TVal*>(dstIdx) + processed / elemPerRpt * 2, src + processed, 0, 1, 1,
+            REPEAT_BYTE / BLOCK_BYTE_SIZE);
+        pipe_barrier(PIPE_V);
+        processed += maxCountPerPass;
+        remaining -= maxCountPerPass;
+    }
+    set_vector_mask(0, remaining);
     InstrOp::ReduceValIdxInstrImpl(
-        reinterpret_cast<__ubuf__ TVal*>(dstIdx), src, 0, 1, 1, REPEAT_BYTE / BLOCK_BYTE_SIZE);
+        reinterpret_cast<__ubuf__ TVal*>(dstIdx) + processed / elemPerRpt * 2, src + processed, 0, 1, 1,
+        REPEAT_BYTE / BLOCK_BYTE_SIZE);
     pipe_barrier(PIPE_V);
     set_vector_mask(0, CeilDivision(count, elemPerRpt) * 2);
     vreducev2(reinterpret_cast<__ubuf__ TIdx*>(dstVal), dstIdx, dstIdx, 1, 1, 1, elemPerBlock, elemPerBlock);
@@ -197,27 +210,24 @@ PTO_INTERNAL void OneRepeatProcIdx(
         }
         pipe_barrier(PIPE_V);
     } else {
-        if (validCol == elemPerRpt) {
-            set_mask_count();
-            set_vector_mask(0, (uint32_t)validRow * elemPerRpt);
-            InstrOp::ReduceIdxInstrImpl(reinterpret_cast<__ubuf__ T*>(dst), src, 0, TileDataOut::Cols, 1, srcRptStride);
-            pipe_barrier(PIPE_V);
+        int remain = validCol % elemPerRpt;
+        int rowRptTimes = validRow / REPEAT_MAX;
+        unsigned rptTimes;
+        set_mask_norm();
+        if (remain == 0) {
+            set_vector_mask(-1, -1);
         } else {
-            int remain = validCol % elemPerRpt;
-            int rowRptTimes = validRow / REPEAT_MAX;
-            unsigned rptTimes;
-            set_mask_norm();
             SetContinuousMask(remain);
-            do {
-                rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
-                InstrOp::ReduceIdxInstrImpl(
-                    reinterpret_cast<__ubuf__ T*>(dst), src, rptTimes, TileDataOut::Cols, 1, srcRptStride);
-                pipe_barrier(PIPE_V);
-                rowRptTimes -= 1;
-                dst += rptTimes * TileDataOut::Cols;
-                src += rptTimes * TileDataIn::Cols;
-            } while (rowRptTimes >= 0);
         }
+        do {
+            rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
+            InstrOp::ReduceIdxInstrImpl(
+                reinterpret_cast<__ubuf__ T*>(dst), src, rptTimes, TileDataOut::Cols, 1, srcRptStride);
+            pipe_barrier(PIPE_V);
+            rowRptTimes -= 1;
+            dst += rptTimes * TileDataOut::Cols;
+            src += rptTimes * TileDataIn::Cols;
+        } while (rowRptTimes >= 0);
     }
     set_mask_norm();
     set_vector_mask(-1, -1);
@@ -242,13 +252,15 @@ PTO_INTERNAL void ExtractValIdxFromTmpColMajor(
     }
     if constexpr (TileDataOutIdx::Cols == 1) {
         if constexpr (sizeof(TIdx) != sizeof(T)) {
+            __ubuf__ U* idxScratch =
+                reinterpret_cast<__ubuf__ U*>(tmp) + CeilDivision(2 * validRow, elemPerBlock) * elemPerBlock;
             vreducev2(
-                reinterpret_cast<__ubuf__ U*>(dstIdx), reinterpret_cast<__ubuf__ U*>(tmp),
-                reinterpret_cast<__ubuf__ U*>(tmp), 1, 1, 2, elemPerBlock * 2, elemPerBlock);
+                idxScratch, reinterpret_cast<__ubuf__ U*>(tmp), reinterpret_cast<__ubuf__ U*>(tmp), 1, 1, 2,
+                elemPerBlock, elemPerBlock);
             pipe_barrier(PIPE_V);
             set_vector_mask(0, validRow);
             vconv_s162f32(
-                reinterpret_cast<__ubuf__ float*>(dstIdx), reinterpret_cast<__ubuf__ int16_t*>(dstIdx), 0, 1, 1,
+                reinterpret_cast<__ubuf__ float*>(dstIdx), reinterpret_cast<__ubuf__ int16_t*>(idxScratch), 0, 1, 1,
                 BLOCK_MAX_PER_REPEAT, BLOCK_MAX_PER_REPEAT / sizeof(float) * sizeof(int16_t));
             pipe_barrier(PIPE_V);
             vconv_f322s32z(
@@ -308,26 +320,24 @@ PTO_INTERNAL void OneRepeatProcValIdx(
     constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataIn::DType);
     constexpr uint32_t srcRptStride = TileDataIn::Cols / elemPerBlock;
 
-    if (validCol == elemPerRpt) {
-        set_mask_count();
-        set_vector_mask(0, (uint32_t)validRow * elemPerRpt);
-        InstrOp::ReduceValIdxInstrImpl(reinterpret_cast<__ubuf__ T*>(tmp), src, 0, 1, 1, srcRptStride);
-        pipe_barrier(PIPE_V);
+    int remain = validCol % elemPerRpt;
+    int rowRptTimes = validRow / REPEAT_MAX;
+    __ubuf__ T* tmpPtr = reinterpret_cast<__ubuf__ T*>(tmp);
+    unsigned rptTimes;
+    set_mask_norm();
+    if (remain == 0) {
+        set_vector_mask(-1, -1);
     } else {
-        int remain = validCol % elemPerRpt;
-        int rowRptTimes = validRow / REPEAT_MAX;
-        __ubuf__ T* tmpPtr = reinterpret_cast<__ubuf__ T*>(tmp);
-        unsigned rptTimes;
         SetContinuousMask(remain);
-        do {
-            rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
-            InstrOp::ReduceValIdxInstrImpl(tmpPtr, src, rptTimes, 1, 1, srcRptStride);
-            pipe_barrier(PIPE_V);
-            rowRptTimes -= 1;
-            tmpPtr += rptTimes * 2;
-            src += rptTimes * TileDataIn::Cols;
-        } while (rowRptTimes >= 0);
     }
+    do {
+        rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
+        InstrOp::ReduceValIdxInstrImpl(tmpPtr, src, rptTimes, 1, 1, srcRptStride);
+        pipe_barrier(PIPE_V);
+        rowRptTimes -= 1;
+        tmpPtr += rptTimes * 2;
+        src += rptTimes * TileDataIn::Cols;
+    } while (rowRptTimes >= 0);
     ExtractValIdxFromTmp<TileDataOutVal, TileDataOutIdx, TileDataTmp>(dstVal, dstIdx, tmp, validRow);
 }
 
