@@ -73,19 +73,24 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
         - RowStride: b8类型为32，b16/b32类型为16（对应Y_ELEM_B8和Y_ELEM_OTHER）
         - ElemPerBlock: 32/sizeof(T)，即每个32字节块的元素数量
         - 其中b8为uint8_t/int8_t，b16为uint16_t/int16_t/half/bfloat16_t，b32为uint32_t/int32_t/float
-    - **对齐条件**:
-        - 当stride满足对齐要求（dstStride % RowStride == 0, srcStride % ElemPerBlock == 0, srcStride/ElemPerBlock <= 255）时，使用tmp进行高效转置；否则使用scalar copy，不需要tmp。
+        - `tmpStride = ceil(H / RowStride) × RowStride`（将H向上对齐到RowStride）
     - **二维Tile转置 [H, W] -> [W, H]**:
-        $$ \text{tmpSize} = W \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
-        其中W为列数（validCol），H为行数（validRow）。tmpStride需要对齐到RowStride。仅当stride满足对齐条件时需要tmp。
-    - **NCHW <-> NC1HWC0双向转换**:
+        - **b16 vtranspose快路径**：当 `validRow % 16 == 0` 且 `validCol % 16 == 0` 时，按16×16块调用 `vtranspose`。用户 `tmp` 需容纳两个16×16区域：
+        $$ \text{tmpSize} \ge 2 \times 16 \times 16 \times \text{sizeof(DType)} = 1024 \text{ bytes} $$
+        - **对齐 vnchwconv 路径**：当 `dstStride % RowStride == 0` 时，整块转置到用户 `tmp`，再 `copy_ubuf_to_ubuf` 到 dst：
+        $$ \text{tmpSize} = W \times \text{tmpStride} \times \text{sizeof(DType)} = W \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
+        其中W为列数（validCol），H为行数（validRow）。
+        - **非对齐路径（`TransTail2DTiles`）**：当 `dstStride % RowStride != 0` 时，每个子块转置到用户 `tmp`，再通过带 mask 的 `vcopy`（或标量）写回 dst。子块复用同一块tmp，因此：
+        $$ \text{tmpSize} = \text{ElemPerBlock} \times \text{tmpStride} \times \text{sizeof(DType)} = \text{ElemPerBlock} \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
+        - 若不确定走哪条路径，按上述适用公式取最大值分配（b16还需保证 `tmpSize ≥ 1024` 字节）。
+    - **NCHW <-> NC1HWC0双向转换**（对齐路径的tmp大小）:
         - **正向 [N, C, H, W] -> [N, C1, H, W, C0]**:
         $$ \text{tmpSize} = H \times W \times \lceil\frac{C0}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         其中C1 = (C + C0 - 1) / C0，转置域为C0行、H*W列。
         - **反向 [N, C1, H, W, C0] -> [N, C, H, W]**:
         $$ \text{tmpSize} = C0 \times \lceil\frac{H \times W}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         转置域为H*W行、C0列。
-    - **GNCHW <-> GNC1HWC0双向转换**:
+    - **GNCHW <-> GNC1HWC0双向转换**（对齐路径的tmp大小）:
         - **正向 [G, N, C, H, W] -> [G, N, C1, H, W, C0]**:
         $$ \text{tmpSize} = H \times W \times \lceil\frac{C0}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         其中C1 = (C + C0 - 1) / C0，转置域为C0行、H*W列。

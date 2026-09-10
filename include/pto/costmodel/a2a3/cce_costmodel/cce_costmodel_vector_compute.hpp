@@ -152,6 +152,14 @@ inline void vcopy(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vcopy", cycles, dst, src, repeat, dstBlockStride, srcBlockStride,
         dstRepeatStride, srcRepeatStride);
 }
+// vtranspose: single VECTOR instruction transposing a 16x16 b16 block (dst, src are __ubuf__ uint16_t*).
+// Cycles are a coarse uncalibrated estimate; kept consistent with the per-repeat cost of
+// scatter_vnchwconv_b16 (one instruction per 16-row block).
+inline void vtranspose(auto dst, auto src)
+{
+    const uint64_t cycles = EstimateLinearCycles(1);
+    ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vtranspose", cycles, dst, src);
+}
 inline void vdiv(
     auto dst, auto src0, auto src1, auto repeat, auto dstBlockStride, auto src0BlockStride, auto src1BlockStride,
     auto dstRepeatStride, auto src0RepeatStride, auto src1RepeatStride)
