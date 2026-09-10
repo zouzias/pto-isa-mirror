@@ -65,6 +65,12 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
+        trowsumParams(np.int64, 64, 64, 64, 64, 64, 64),
+        trowsumParams(np.uint64, 64, 64, 64, 64, 64, 64),
+        trowsumParams(np.int32, 64, 64, 64, 64, 64, 64),
+         trowsumParams(np.uint32, 64, 64, 64, 64, 64, 64),
+         trowsumParams(np.int16, 64, 64, 64, 64, 64, 64),
+         trowsumParams(np.uint16, 64, 64, 64, 64, 64, 64),
         trowsumParams(np.float32, 64, 64, 64, 64, 64, 64),
         trowsumParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
