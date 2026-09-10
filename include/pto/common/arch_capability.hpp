@@ -352,7 +352,7 @@ PTO_INTERNAL constexpr bool IsUInteger()
 template <typename T>
 PTO_INTERNAL constexpr bool IsInteger()
 {
-    return IsSInteger<T>() || IsUInteger<T>();
+    return IsSInteger<T>() || IsUInteger<T>() || IsInt4<T>();
 }
 
 // True when ND2NZ may map GlobalTensor DIM_2 onto the hardware ndNum loop, moving
