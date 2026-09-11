@@ -372,14 +372,17 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 // - A2/A3 SDMA submits payload and signal to one SQ.
 // - A5 SDMA-named path uses synchronous MTE followed by Scalar SET/AtomicAdd
 //   and returns an already-completed event with handle 0.
-// - A5 URMA and RDMA use peer to select the target queue and registered memory.
+// - A5 URMA posts every payload WQE and the signal on the session's first jetty
+//   (qpIdxBase). Cross-jetty placeOrder does not exist, so a prior TPUT_ASYNC
+//   that spread across the run must be Wait-ed before this call; there is no
+//   TGET_ASYNC_NOTIFY.
 // ============================================================================
 /**
  * @brief Asynchronous remote write and signal update with explicit peer.
  *
  * SDMA obtains the remote VA from GlobalTensor and ignores peer. URMA and RDMA
  * use peer to select the per-peer queue and memory metadata; URMA additionally
- * selects its notify resource region.
+ * selects its notify resource region and keeps payload plus signal on one jetty.
  */
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)
 template <

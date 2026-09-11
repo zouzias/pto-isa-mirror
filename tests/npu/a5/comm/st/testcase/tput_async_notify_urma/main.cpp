@@ -55,6 +55,42 @@ TEST(TPutAsyncNotifyUrma, MixedPutSetGetAddFinalWaitOnly)
     ASSERT_TRUE(RunTPutAsyncNotifyUrma(2, 2, 0, 0, UrmaNotifyStMode::MixedPutSetGetAdd));
 }
 
+// SharedPool notify: one AIV owning one jetty SET-notifies every peer.
+TEST(TPutAsyncNotifyUrma, Pool_OneJettyManyPeers_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 256, 1, 1>(4, 4, 0, 0)));
+}
+
+// SharedPool notify: two AIVs on disjoint one-jetty runs notify every peer.
+TEST(TPutAsyncNotifyUrma, Pool_MultiAivDisjointRuns_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 256, 2, 1>(4, 4, 0, 0)));
+}
+
+// SharedPool notify against 4-jetty runs. Notify always stays on the run's first
+// jetty (placeOrder is per-SQ); the receiver's on-device signal-then-read check
+// is what proves payload and signal shared one SQ.
+TEST(TPutAsyncNotifyUrma, Pool_WideRunNotifyStaysOnOneJetty_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 262144, 2, 4>(4, 4, 0, 0)));
+}
+
+// >256MB SET notify: the 257MB payload is auto-split by UrmaPostNotify into
+// 256MB + 1MB WQEs with the SET signal still posted last, all on the run's first
+// jetty even though the run is 4 wide. The receiver waits on the signal on-device
+// and then reads the payload (sampling the last chunk past the 256MB boundary), so a
+// signal that overtook the last chunk — or a chunk that leaked onto another jetty,
+// where placeOrder could not hold it back — fails here rather than being masked by
+// host-side timing.
+TEST(TPutAsyncNotifyUrma, Pool_SetOver256MB_Chunked)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 67371008, 1, 4>(2, 2, 0, 0)));
+}
+
 int main(int argc, char** argv)
 {
     CommMpiInit(&argc, &argv);

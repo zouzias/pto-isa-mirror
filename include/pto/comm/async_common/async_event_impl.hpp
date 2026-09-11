@@ -43,6 +43,13 @@ PTO_INTERNAL bool BuildAsyncSession(
 }
 
 #ifdef PTO_URMA_SUPPORTED
+// URMA session builder. The jetties are not a caller argument: the host registers
+// jettyCount == aivCount * jettiesPerCore of them and this hands block k the
+// exclusive run [k * jettiesPerCore, (k + 1) * jettiesPerCore). Two AIVs sharing a
+// jetty would corrupt its producer index, since read-head / fill-WQE / store-head
+// is not atomic, so ownership is derived rather than requested. jettiesPerCore is
+// read back from the workspace so the device placement cannot drift from what the
+// host built.
 template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& session)
 {
@@ -50,9 +57,31 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& ses
     session = AsyncSession{};
     session.engine = engine;
     session.contextGm = workspace;
-    session.qpIdx = 0;
     session.destRankId = 0;
-    session.valid = (workspace != nullptr);
+    session.qpIdxBase = 0;
+    session.qpCount = 1;
+    if (workspace == nullptr) {
+        return false;
+    }
+    __gm__ urma::UrmaInfo* info = reinterpret_cast<__gm__ urma::UrmaInfo*>(workspace);
+    if (info->layout != urma::UrmaLayout::SHARED_POOL) {
+        // PER_PEER: the destination rank is the queue, so there is no run to place.
+        // The caller must keep at most one AIV per peer — two blocks posting to the
+        // same peer land on the same SQ and corrupt its producer index. Blocks that
+        // each own a distinct peer are fine and are the point of this layout. The
+        // rule cannot be checked here: this sees only get_block_idx() and the peer,
+        // never what the other blocks chose. Many AIVs onto one peer needs
+        // SHARED_POOL.
+        session.valid = true;
+        return session.valid;
+    }
+    const uint32_t perCore = info->jettiesPerCore;
+    if (perCore == 0U || perCore > kUrmaMaxJettiesPerCore) {
+        return false;
+    }
+    session.qpIdxBase = static_cast<uint32_t>(get_block_idx()) * perCore;
+    session.qpCount = perCore;
+    session.valid = (session.qpIdxBase + perCore <= urma::detail::UrmaJettyIdxBound(info));
     return session.valid;
 }
 
@@ -105,6 +134,22 @@ PTO_INTERNAL bool BuildAsyncSession(
 // AsyncEvent::Wait / Test — AsyncSession overloads (primary user API)
 // ============================================================================
 
+#ifdef PTO_URMA_SUPPORTED
+// Shared by Wait/Test so the two cannot drift apart on which jetties they drain.
+PTO_INTERNAL bool UrmaEventComplete(const AsyncEvent& event, const AsyncSession& session, bool blocking)
+{
+    if (event.urmaJettyCount == 0U) {
+        return urma::detail::UrmaWaitEvent(event.handle, event.urmaTargetCqe, session, blocking);
+    }
+    uint32_t peer = 0U;
+    uint32_t unusedBb = 0U;
+    urma::detail::DecodeHandle(event.handle, peer, unusedBb);
+    return urma::detail::UrmaWaitEventMultiJetty(
+        peer, event.urmaJettyBase, event.urmaJettyCount, event.urmaTargetBbPerJetty, event.urmaTargetCqePerJetty,
+        blocking, session);
+}
+#endif
+
 PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession& session) const
 {
     if (handle == 0) {
@@ -115,7 +160,7 @@ PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession& session) const
             return sdma::detail::SdmaWaitEvent(handle, session);
 #ifdef PTO_URMA_SUPPORTED
         case DmaEngine::URMA:
-            return urma::detail::UrmaWaitEvent(handle, urmaTargetCqe, session);
+            return UrmaEventComplete(*this, session, true);
 #endif
 #ifdef PTO_RDMA_SUPPORTED
         case DmaEngine::RDMA:
@@ -136,7 +181,7 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession& session) const
             return sdma::detail::SdmaTestEvent(handle, session);
 #ifdef PTO_URMA_SUPPORTED
         case DmaEngine::URMA:
-            return urma::detail::UrmaTestEvent(handle, urmaTargetCqe, session);
+            return UrmaEventComplete(*this, session, false);
 #endif
 #ifdef PTO_RDMA_SUPPORTED
         case DmaEngine::RDMA:

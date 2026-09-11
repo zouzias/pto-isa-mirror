@@ -246,10 +246,18 @@ inline bool BuildAsyncSessionSdma(const CommContext& ctx, AsyncSession& out)
 }
 
 #ifdef PTO_DOMAIN_URMA_HOST
+// Only PER_PEER can be prefilled here. A SHARED_POOL session owns a run of jetties
+// placed by get_block_idx(), which the host cannot evaluate, so those callers build
+// their session inside the kernel with comm::BuildAsyncSession<DmaEngine::URMA>().
 inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
 {
     if (ctx.urmaWs == nullptr) {
         std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): workspace missing\n";
+        return false;
+    }
+    if (ctx.urmaMgr != nullptr && ctx.urmaMgr->Layout() == urma::UrmaLayout::SHARED_POOL) {
+        std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): a shared jetty pool assigns each AIV its own jetties, "
+                     "so the session must be built on device\n";
         return false;
     }
     out = AsyncSession{};
@@ -257,7 +265,8 @@ inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
     out.valid = true;
     out.contextGm = ctx.urmaWs;
     out.destRankId = 0; // unused by new API; kept for compatibility.
-    out.qpIdx = 0;
+    out.qpIdxBase = 0;
+    out.qpCount = 1;
     return true;
 }
 #endif
@@ -267,6 +276,9 @@ inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
 // Fills engine-agnostic / host-known fields (workspace, defaults).
 // URMA sessions typically need no device Modify; peer is passed at the call.
 // Returns false if the engine is not enabled or workspace is missing.
+//
+// Runs on the host, so it cannot place a URMA shared-pool run and rejects that
+// layout; those kernels build their session on device instead.
 // ============================================================================
 inline bool BuildAsyncSession(const CommContext& ctx, DmaEngine engine, AsyncSession& out)
 {

@@ -478,6 +478,265 @@ bool RunTPutAsyncNotifyUrmaEntry(int rankId, int nRanks, int nDevices, int first
         rankId, nRanks, nDevices, firstDeviceId, firstRankId, rootRank, gUrmaNotifyStMode);
 }
 
+// ============================================================================
+// SharedPool notify (shared jetty). Layout per rank:
+//   [status:int32][signals: nAiv int32][pad to kNotifyPoolDataOffset]
+//   [send: nAiv*count][recv: nAiv*count]
+// Root AIV i SET-notifies send[i] -> peer recv[i] and sets peer signals[i] on the
+// jetty named by the policy; a host barrier then lets every peer verify both the
+// payload slot and the signal value. A large count drives the >256MB payload
+// through UrmaPostNotify's chunking with the SET signal still posted last.
+// ============================================================================
+constexpr size_t kNotifyPoolStatusOffset = 0U;
+constexpr size_t kNotifyPoolSignalOffset = sizeof(int32_t); // signals[] sit right after status
+// Per-AIV receiver verdict (1=ok, negative=fail). Each AIV owns its own cacheline
+// because StoreStatus writes back a full 64B line from that core's cache; if two
+// AIVs shared a line, one core's writeback would clobber the other's verdict with
+// its stale copy (false sharing). Stride one cacheline per AIV to keep them apart.
+constexpr size_t kUrmaCachelineBytes = 64U;
+constexpr size_t kNotifyPoolResultOffset = 4U * kUrmaCachelineBytes; // 256B; leaves status+signals below it
+constexpr size_t kNotifyPoolResultStride = kUrmaCachelineBytes;
+// Data starts after the per-AIV result cachelines (sized for the tests' max nAiv).
+constexpr size_t kNotifyPoolDataOffset = kNotifyPoolResultOffset + 8U * kNotifyPoolResultStride;
+constexpr int32_t kNotifyPoolSignalBase = 0x5100;
+// Receiver spin bound while proving signal-last ordering. Large enough to cover a
+// multi-hundred-MB transfer; exhaustion is reported as failure rather than hanging
+// (task timeout is the final backstop).
+constexpr uint64_t kNotifyConsumePollLimit = 1000000000ULL;
+
+template <typename T>
+T NotifyPoolSent(size_t elem, int rankId, int aivId)
+{
+    return static_cast<T>(elem + static_cast<size_t>(rankId) * 10000U + static_cast<size_t>(aivId) * 100000U);
+}
+
+template <typename T>
+T NotifyPoolExpected(size_t elem, int rootRank, int aivId)
+{
+    return static_cast<T>(elem + static_cast<size_t>(rootRank) * 10000U + static_cast<size_t>(aivId) * 100000U);
+}
+
+template <typename T, size_t count, int nAiv, int jettiesPerCore>
+__global__ AICORE void NotifyUrmaPoolKernelImpl(
+    __gm__ T* localBuf, int nranks, int my_rank, int first_rank_id, int root_rank, __gm__ uint8_t* urmaWorkspace)
+{
+#ifdef PTO_URMA_SUPPORTED
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+    const int aivId = static_cast<int>(get_block_idx());
+    if (aivId < 0 || aivId >= nAiv) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+
+    ShapeDyn shape(1, 1, 1, 1, static_cast<int>(count));
+    StrideDyn stride(
+        static_cast<int>(count), static_cast<int>(count), static_cast<int>(count), static_cast<int>(count), 1);
+
+    __gm__ uint8_t* localBytes = reinterpret_cast<__gm__ uint8_t*>(localBuf);
+    __gm__ T* sendBase = reinterpret_cast<__gm__ T*>(localBytes + kNotifyPoolDataOffset);
+    __gm__ T* sendSlot = sendBase + static_cast<size_t>(aivId) * count;
+    Global sendG(sendSlot, shape, stride);
+
+    pipe_barrier(PIPE_ALL);
+
+    if (my_rank == root_rank) {
+        const int my_peer = my_rank - first_rank_id;
+        __gm__ int32_t* status = reinterpret_cast<__gm__ int32_t*>(localBytes + kNotifyPoolStatusOffset);
+        for (int target_peer = 0; target_peer < nranks; ++target_peer) {
+            if (target_peer == my_peer) {
+                continue;
+            }
+            pto::comm::AsyncSession session;
+            if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, session)) {
+                status[0] = -1;
+                continue;
+            }
+            const uint64_t peerBase =
+                pto::comm::urma::UrmaPeerMrBaseAddr(urmaWorkspace, static_cast<uint32_t>(target_peer));
+            __gm__ T* remoteRecvBase =
+                reinterpret_cast<__gm__ T*>(peerBase + kNotifyPoolDataOffset) + static_cast<size_t>(nAiv) * count;
+            __gm__ T* remoteRecvSlot = remoteRecvBase + static_cast<size_t>(aivId) * count;
+            Global remoteRecvG(remoteRecvSlot, shape, stride);
+            __gm__ int32_t* remoteSignalPtr =
+                reinterpret_cast<__gm__ int32_t*>(peerBase + kNotifyPoolSignalOffset) + aivId;
+            pto::comm::Signal remoteSignal(remoteSignalPtr);
+            const int32_t signalValue = kNotifyPoolSignalBase + aivId;
+            auto event = pto::comm::TPUT_ASYNC_NOTIFY<pto::comm::DmaEngine::URMA>(
+                remoteRecvG, sendG, remoteSignal, signalValue, pto::comm::NotifyOp::Set, session,
+                static_cast<uint32_t>(target_peer));
+            event.Wait(session);
+        }
+    } else {
+        // A notify receiver must observe the signal before touching the payload.
+        // Each AIV waits on its own signal slot and, the instant it lands, reads its
+        // payload slot straight from DDR (DCCI first). If any chunk had not landed
+        // when the signal arrived — in particular the last chunk past the 256MB WQE
+        // boundary — the sampled elements still hold poison and the check fails,
+        // catching a signal that overtook the payload as well as a mis-routed jetty.
+        __gm__ int32_t* result = reinterpret_cast<__gm__ int32_t*>(
+            localBytes + kNotifyPoolResultOffset + static_cast<size_t>(aivId) * kNotifyPoolResultStride);
+        pto::comm::Signal signal(reinterpret_cast<__gm__ int32_t*>(localBytes + kNotifyPoolSignalOffset) + aivId);
+        const int32_t expectedSignal = kNotifyPoolSignalBase + aivId;
+        bool signaled = false;
+        for (uint64_t poll = 0U; poll < kNotifyConsumePollLimit; ++poll) {
+            if (pto::comm::TTEST(signal, expectedSignal, pto::comm::WaitCmp::GE)) {
+                signaled = true;
+                break;
+            }
+        }
+        if (!signaled) {
+            StoreStatus(result, -8);
+        } else {
+            __gm__ T* recvSlot = reinterpret_cast<__gm__ T*>(localBytes + kNotifyPoolDataOffset) +
+                                 static_cast<size_t>(nAiv) * count + static_cast<size_t>(aivId) * count;
+            const size_t boundary = (256UL * 1024UL * 1024UL) / sizeof(T); // first index of the 2nd WQE chunk
+            size_t sampled[5];
+            int ns = 0;
+            sampled[ns++] = 0U;
+            if (count > 1U) {
+                sampled[ns++] = count - 1U;
+            }
+            if (count > 2U) {
+                sampled[ns++] = count / 2U;
+            }
+            if (boundary > 0U && boundary < count) {
+                sampled[ns++] = boundary - 1U;
+                sampled[ns++] = boundary;
+            }
+            int32_t rc = 1;
+            for (int k = 0; k < ns; ++k) {
+                const size_t idx = sampled[k];
+                __gm__ uint8_t* p = reinterpret_cast<__gm__ uint8_t*>(recvSlot + idx);
+                pto::comm::urma::DcciCachelines(p, sizeof(T));
+                dsb(DSB_DDR);
+                // NotifyPoolExpected is host-only; inline the same formula here so
+                // the receiver can validate on-device.
+                const T expected = static_cast<T>(
+                    idx + static_cast<size_t>(root_rank) * 10000U + static_cast<size_t>(aivId) * 100000U);
+                volatile __gm__ T* fresh = recvSlot + idx;
+                if (*fresh != expected) {
+                    rc = -(k + 1);
+                    break;
+                }
+            }
+            StoreStatus(result, rc);
+        }
+    }
+
+    pipe_barrier(PIPE_ALL);
+#else
+    (void)localBuf;
+    (void)nranks;
+    (void)my_rank;
+    (void)first_rank_id;
+    (void)root_rank;
+    (void)urmaWorkspace;
+#endif
+}
+
+template <typename T, size_t count, int nAiv, int jettiesPerCore>
+bool RunNotifyUrmaPoolKernel(
+    int rank_id, int n_ranks, int n_devices, int first_device_id, int first_rank_id, int root_rank)
+{
+    const size_t slotElems = static_cast<size_t>(nAiv) * count;
+    const size_t commBytesNeeded = kNotifyPoolDataOffset + 2U * slotElems * sizeof(T);
+
+    UrmaTestContext ctx;
+    if (!ctx.Setup(
+            rank_id, n_ranks, n_devices, first_device_id, root_rank, commBytesNeeded, UrmaLayout::SHARED_POOL,
+            static_cast<uint32_t>(nAiv), static_cast<uint32_t>(jettiesPerCore))) {
+        return false;
+    }
+
+    uint8_t* input_host = nullptr;
+    uint8_t* output_host = nullptr;
+    aclrtMallocHost(reinterpret_cast<void**>(&input_host), slotElems * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void**>(&output_host), slotElems * sizeof(T));
+    if (!input_host || !output_host) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        ctx.Cleanup();
+        return false;
+    }
+
+    for (int aiv = 0; aiv < nAiv; ++aiv) {
+        for (size_t i = 0; i < count; ++i) {
+            reinterpret_cast<T*>(input_host)[static_cast<size_t>(aiv) * count + i] = NotifyPoolSent<T>(i, rank_id, aiv);
+            reinterpret_cast<T*>(output_host)[static_cast<size_t>(aiv) * count + i] = static_cast<T>(-1);
+        }
+    }
+
+    uint8_t* base = reinterpret_cast<uint8_t*>(ctx.devBuf);
+    uint8_t header[kNotifyPoolDataOffset] = {0}; // clears status + signals + per-AIV result cachelines
+    aclrtMemcpy(base, sizeof(header), header, sizeof(header), ACL_MEMCPY_HOST_TO_DEVICE);
+    T* sendBuf = reinterpret_cast<T*>(base + kNotifyPoolDataOffset);
+    T* recvBuf = sendBuf + slotElems;
+    aclrtMemcpy(sendBuf, slotElems * sizeof(T), input_host, slotElems * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recvBuf, slotElems * sizeof(T), output_host, slotElems * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    CommMpiBarrier();
+
+    NotifyUrmaPoolKernelImpl<T, count, nAiv, jettiesPerCore><<<nAiv, nullptr, ctx.stream>>>(
+        reinterpret_cast<T*>(ctx.devBuf), n_ranks, rank_id, first_rank_id, root_rank,
+        reinterpret_cast<uint8_t*>(ctx.urmaMgr.GetWorkspaceAddr()));
+    const int syncRet = aclrtSynchronizeStream(ctx.stream);
+
+    CommMpiBarrier();
+
+    int32_t status = 0;
+    aclrtMemcpy(&status, sizeof(status), base + kNotifyPoolStatusOffset, sizeof(status), ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(output_host, slotElems * sizeof(T), recvBuf, slotElems * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+
+    bool is_ok = true;
+    if (rank_id == root_rank) {
+        // Root only sends; its status stays 0 unless BuildAsyncSession failed (-1).
+        if (status == -1) {
+            std::cerr << "Rank " << rank_id << " Device " << ctx.deviceId
+                      << " BuildAsyncSession failed, syncRet=" << syncRet << std::endl;
+            is_ok = false;
+        }
+    } else {
+        // Receiver AIVs each proved "signal seen -> payload landed" on-device; a
+        // negative verdict means the signal overtook the payload or the jetty routed
+        // the wrong slot. Then a full host compare backstops overall data integrity.
+        // Each verdict lives on its own cacheline, so read them one at a time.
+        int32_t results[nAiv] = {};
+        for (int aiv = 0; aiv < nAiv; ++aiv) {
+            aclrtMemcpy(
+                &results[aiv], sizeof(int32_t),
+                base + kNotifyPoolResultOffset + static_cast<size_t>(aiv) * kNotifyPoolResultStride, sizeof(int32_t),
+                ACL_MEMCPY_DEVICE_TO_HOST);
+        }
+        for (int aiv = 0; aiv < nAiv && is_ok; ++aiv) {
+            if (results[aiv] != 1) {
+                std::cerr << "Rank " << rank_id << " Device " << ctx.deviceId << " aiv " << aiv
+                          << " receiver ordering check failed, result=" << results[aiv] << " syncRet=" << syncRet
+                          << std::endl;
+                is_ok = false;
+                break;
+            }
+            for (size_t i = 0; i < count; ++i) {
+                T value = reinterpret_cast<T*>(output_host)[static_cast<size_t>(aiv) * count + i];
+                T expected = NotifyPoolExpected<T>(i, root_rank, aiv);
+                if (value != expected) {
+                    std::cerr << "Rank " << rank_id << " Device " << ctx.deviceId << " SyncRet " << syncRet << " aiv "
+                              << aiv << " elem " << i << " Expected " << static_cast<float>(expected) << " Actual "
+                              << static_cast<float>(value) << std::endl;
+                    is_ok = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    aclrtFreeHost(input_host);
+    aclrtFreeHost(output_host);
+    ctx.Cleanup();
+    return is_ok;
+}
+
 } // namespace
 
 bool RunTPutAsyncNotifyUrma(int nRanks, int nDevices, int firstRankId, int firstDeviceId, UrmaNotifyStMode mode)
@@ -493,3 +752,19 @@ void FinalizeTPutAsyncNotifyUrma()
         gUrmaTestContextInitialized = false;
     }
 }
+
+template <typename T, size_t count, int nAiv, int jettiesPerCore>
+bool RunNotifyUrmaPool(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+{
+    return RunUrmaTestMpiLaunch(
+        nRanks, nDevices, firstRankId, firstDeviceId, RunNotifyUrmaPoolKernel<T, count, nAiv, jettiesPerCore>);
+}
+
+template bool RunNotifyUrmaPool<int32_t, 256, 1, 1>(int, int, int, int);
+template bool RunNotifyUrmaPool<int32_t, 256, 2, 1>(int, int, int, int);
+// 1MB payload against a 4-jetty run. Notify stays on the first jetty regardless.
+template bool RunNotifyUrmaPool<int32_t, 262144, 2, 4>(int, int, int, int);
+// 67,371,008 int32 = 257MB payload > 256MB: UrmaPostNotify splits the payload into
+// 256MB + 1MB WQEs, both on the run's first jetty, and still posts the SET signal
+// last. Run of 4 so the split has somewhere else it could wrongly go.
+template bool RunNotifyUrmaPool<int32_t, 67371008, 1, 4>(int, int, int, int);

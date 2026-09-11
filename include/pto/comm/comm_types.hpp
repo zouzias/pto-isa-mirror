@@ -178,10 +178,24 @@ struct CcuTriggerContext {
 
 struct AsyncSession;
 
+// Upper bound on the jetties one AIV may own, i.e. on AsyncSession::qpCount. It
+// sizes the per-jetty completion arrays below, so raising it grows AsyncEvent.
+constexpr uint32_t kUrmaMaxJettiesPerCore = 8U;
+
 struct AsyncEvent {
     uint64_t handle{0};
     DmaEngine engine{DmaEngine::SDMA};
     uint32_t urmaTargetCqe{0};
+
+    // A URMA put/get spreads its WQEs over the jetties the AIV owns, so one
+    // operation completes on several queues and each needs its own target pair.
+    // urmaJettyCount == 0 means the single-queue form: only `handle` (which
+    // carries the peer and the target BB) and urmaTargetCqe are meaningful, which
+    // is what notify and every non-URMA engine use.
+    uint32_t urmaTargetBbPerJetty[kUrmaMaxJettiesPerCore]{};
+    uint32_t urmaTargetCqePerJetty[kUrmaMaxJettiesPerCore]{};
+    uint16_t urmaJettyBase{0};
+    uint16_t urmaJettyCount{0};
 
     AICORE constexpr AsyncEvent() = default;
     AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e, uint32_t targetCqe = 0U)

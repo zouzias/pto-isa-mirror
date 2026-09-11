@@ -41,6 +41,22 @@ enum class AddrFamily : uint32_t {
 enum class Bootstrap { Mpi, External };
 
 // ============================================================================
+// UrmaJettyLayout: mirrors urma::UrmaLayout so this header stays free of the
+// URMA includes, which only host-side URMA builds pull in. The values match.
+//
+// PerPeer:    one jetty per peer. Many AIVs are fine while each owns a distinct
+//             peer; two AIVs aimed at one peer share an SQ and corrupt it.
+// SharedPool: one run of jetties per AIV, every jetty reaching every peer. Needed
+//             when several AIVs must reach the same peer, or when the AIV-to-peer
+//             split is not known when the domain is built.
+// ============================================================================
+enum class UrmaJettyLayout : uint32_t { PerPeer = 0, SharedPool = 1 };
+
+// urmaAivCount sentinel: size the pool from the device AIV count. Mirrors
+// urma::kUrmaAutoAivCount.
+inline constexpr uint32_t kUrmaAutoAivCount = 0xFFFFFFFFu;
+
+// ============================================================================
 // CommConfig: host-facing build config.
 // Hccl handles are opaque void* so this header stays free of HCCL includes
 // (cast to HcclComm / HcclRootInfo* in host-only code).
@@ -55,6 +71,14 @@ struct CommConfig {
 
     void* existingComm = nullptr;   // HcclComm when External
     const void* rootInfo = nullptr; // const HcclRootInfo* when External
+
+    // URMA backend only. Under SharedPool, leaving urmaAivCount at
+    // kUrmaAutoAivCount sizes the pool from the device AIV count, which is what a
+    // domain built before the operator's launch shape is known should do. Ignored
+    // when CommBackend::URMA is not requested, and under PerPeer.
+    UrmaJettyLayout urmaLayout = UrmaJettyLayout::PerPeer;
+    uint32_t urmaAivCount = kUrmaAutoAivCount;
+    uint32_t urmaJettiesPerCore = 1;
 };
 
 inline constexpr uint32_t kSignalPrefixBytes = 64u * sizeof(int32_t);

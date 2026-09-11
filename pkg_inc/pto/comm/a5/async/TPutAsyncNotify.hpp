@@ -55,6 +55,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_URMA(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, GlobalSignalData& dstSignalData, int32_t signalValue,
     NotifyOp notifyOp, const AsyncSession& session, uint32_t peer)
 {
+    // Payload WQEs and the signal share session.qpIdxBase; UrmaPostNotify does
+    // not spread across the run.
     const uint64_t transferSize = TPutAsyncCheckUrmaPayload(dstGlobalData, srcGlobalData, session, peer);
     TPutAsyncValidateNotifySignal(dstSignalData, notifyOp);
 

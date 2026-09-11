@@ -118,7 +118,16 @@ struct AsyncSession {
     mutable sdma::detail::SdmaRuntimeContext sdmaRuntimeCtx{};
 
     uint32_t destRankId{0};
-    uint32_t qpIdx{0};
+
+    // The queues this session may post on, [qpIdxBase, qpIdxBase + qpCount).
+    // RDMA keeps qpCount at 1, so qpIdxBase is simply its QP index. URMA under
+    // SHARED_POOL uses the run of jetties the AIV owns, which BuildAsyncSession
+    // derives from get_block_idx() and the workspace's jettiesPerCore rather than
+    // taking from the caller: put/get may spread across the run once the payload
+    // needs a second 256MB WQE, notify stays on qpIdxBase alone so placeOrder can
+    // still order payload before signal.
+    uint32_t qpIdxBase{0};
+    uint32_t qpCount{1};
 
     RdmaBackend rdmaBackend{RdmaBackend::NONE};
     uint32_t myPe{0};
