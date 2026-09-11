@@ -50,6 +50,14 @@ TEST(TGetAsyncUrma, Vec_Int32_MR_Over512MB)
     ASSERT_TRUE((RunGetAsyncUrmaRootGet<int32_t, 67108864>(2, 2, 0, 0)));
 }
 
+// >256MB single GET: one TGET_ASYNC whose payload exceeds a single WQE's 256MB
+// cap must split into 256MB + 1MB on the same jetty.
+TEST(TGetAsyncUrma, Vec_Int32_Over256MB_Chunked)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<int32_t, 67371008>(2, 2, 0, 0)));
+}
+
 int main(int argc, char** argv)
 {
     CommMpiInit(&argc, &argv);

@@ -78,10 +78,18 @@ inline bool BackfillUrmaWindows(const CommConfig& cfg, CommContext& ctx)
 
 inline bool SetupUrmaTransport(const CommConfig& cfg, CommContext& ctx)
 {
+    // CommConfig mirrors the URMA layout enum so comm_domain_types.hpp does not
+    // have to include the URMA headers; keep the two in step.
+    static_assert(
+        static_cast<uint32_t>(UrmaJettyLayout::PerPeer) == static_cast<uint32_t>(urma::UrmaLayout::PER_PEER) &&
+            static_cast<uint32_t>(UrmaJettyLayout::SharedPool) == static_cast<uint32_t>(urma::UrmaLayout::SHARED_POOL),
+        "UrmaJettyLayout must mirror urma::UrmaLayout");
+    static_assert(kUrmaAutoAivCount == urma::kUrmaAutoAivCount, "auto AIV sentinel must mirror urma::");
+
     ctx.urmaMgr = std::make_unique<urma::UrmaWorkspaceManager>();
     if (!ctx.urmaMgr->Init(
             ctx.comm, static_cast<uint32_t>(cfg.rankId), static_cast<uint32_t>(cfg.rankNum), ctx.urmaDevBuf,
-            cfg.symBytes)) {
+            cfg.symBytes, static_cast<urma::UrmaLayout>(cfg.urmaLayout), cfg.urmaAivCount, cfg.urmaJettiesPerCore)) {
         std::cerr << "[PTO-DOMAIN] UrmaWorkspaceManager::Init failed\n";
         ctx.urmaMgr.reset();
         return false;

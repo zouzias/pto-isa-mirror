@@ -118,7 +118,8 @@ struct AsyncSession {
     mutable sdma::detail::SdmaRuntimeContext sdmaRuntimeCtx{};
 
     uint32_t destRankId{0};
-    uint32_t qpIdx{0};
+    uint32_t qpIdxBase{0};
+    uint32_t qpCount{1};
 
     RdmaBackend rdmaBackend{RdmaBackend::NONE};
     uint32_t myPe{0};

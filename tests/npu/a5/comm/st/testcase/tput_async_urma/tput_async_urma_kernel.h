@@ -15,3 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 template <typename T, size_t count>
 bool RunPutAsyncUrmaRootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+template <typename T, size_t count, int nAiv, int jettiesPerCore>
+bool RunPutAsyncUrmaPool(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunPutAsyncUrmaPoolAutoAivCount(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
