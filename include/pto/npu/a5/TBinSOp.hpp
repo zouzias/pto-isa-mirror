@@ -66,7 +66,7 @@ PTO_INTERNAL void Int64ScalarRepeat(
     MaskReg lowMask, highMask;
     uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
-    vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(srcLow, srcHigh, (__ubuf__ int32_t*)src + srcOffset, colOffset);
     Int64ScalarCalcRegs<Op, T>(dstLow, dstHigh, srcLow, srcHigh, scalarLow, scalarHigh, scalarBits, mask);
     pintlv_b32(lowMask, highMask, mask, mask);
     vintlv(half0, half1, dstLow, dstHigh);

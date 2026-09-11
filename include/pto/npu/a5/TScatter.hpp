@@ -20,7 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
-template <typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols>
+template <typename T, typename I, unsigned DstNumel, unsigned SrcRowStride, unsigned IdxRowStride>
 PTO_INTERNAL void Int64ScatterZeroInit(__ubuf__ T* dst)
 {
     vector_u32 zero;
@@ -33,22 +33,46 @@ PTO_INTERNAL void Int64ScatterZeroInit(__ubuf__ T* dst)
         MaskReg initMask = plt_b32(remainingWords, POST_UPDATE);
         vsts(zero, (__ubuf__ uint32_t*)dst + repeat * wordsPerRepeat, 0, NORM_B32, initMask);
     }
+    mem_bar(VST_VST);
 }
 
-template <typename T, typename I, unsigned SrcCols, unsigned IdxCols>
+template <
+    typename T, typename I, unsigned SrcRowStride, unsigned IdxRowStride, unsigned SrcColStride = 1,
+    unsigned IdxColStride = 1>
 PTO_INTERNAL void Int64ScatterRepeat(
     __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, uint16_t row, uint32_t colOffset, MaskReg& mask)
 {
     vector_u32 idx, wordIdx, highIdx, low, high;
-    vlds(low, high, (__ubuf__ uint32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
-    vlds(idx, (__ubuf__ uint32_t*)index + row * IdxCols + colOffset, 0, NORM);
+    if constexpr (SrcColStride == 1) {
+        Int64LoadBounded<SrcRowStride>(
+            (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcRowStride + colOffset) * 2,
+            colOffset);
+    } else {
+        vci((vector_s32&)wordIdx, 0, INC_ORDER);
+        vmuls(wordIdx, wordIdx, SrcColStride * 2, mask, MODE_ZEROING);
+        vadds(wordIdx, wordIdx, (row * SrcRowStride + colOffset * SrcColStride) * 2, mask, MODE_ZEROING);
+        vadds(highIdx, wordIdx, 1u, mask, MODE_ZEROING);
+        vgather2(low, (__ubuf__ uint32_t*)src, wordIdx, mask);
+        vgather2(high, (__ubuf__ uint32_t*)src, highIdx, mask);
+    }
+    if constexpr (IdxColStride == 1) {
+        Int64LoadIndices<IdxRowStride>(
+            idx, (__ubuf__ uint32_t*)index + row * IdxRowStride + colOffset, colOffset, mask);
+    } else {
+        vci((vector_s32&)wordIdx, 0, INC_ORDER);
+        vmuls(wordIdx, wordIdx, IdxColStride, mask, MODE_ZEROING);
+        vadds(wordIdx, wordIdx, row * IdxRowStride + colOffset * IdxColStride, mask, MODE_ZEROING);
+        vgather2(idx, (__ubuf__ uint32_t*)index, wordIdx, mask);
+    }
     vadd(wordIdx, idx, idx, mask, MODE_ZEROING);
     vadds(highIdx, wordIdx, 1u, mask, MODE_ZEROING);
     vscatter(low, (__ubuf__ uint32_t*)dst, wordIdx, mask);
     vscatter(high, (__ubuf__ uint32_t*)dst, highIdx, mask);
 }
 
-template <typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols>
+template <
+    typename T, typename I, unsigned DstNumel, unsigned SrcRowStride, unsigned IdxRowStride, unsigned SrcColStride = 1,
+    unsigned IdxColStride = 1>
 PTO_INTERNAL void Int64Scatter(
     __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols)
 {
@@ -56,7 +80,7 @@ PTO_INTERNAL void Int64Scatter(
     constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
     __VEC_SCOPE__
     {
-        Int64ScatterZeroInit<T, I, DstNumel, SrcCols, IdxCols>(dst);
+        Int64ScatterZeroInit<T, I, DstNumel, SrcRowStride, IdxRowStride>(dst);
         uint16_t rows = validRows;
         uint16_t colRepeats = CeilDivision(validCols, elementsPerRepeat);
         uint32_t fullMaskCols = elementsPerRepeat;
@@ -68,7 +92,8 @@ PTO_INTERNAL void Int64Scatter(
                 MaskReg validMask = plt_b32(remainingCols, POST_UPDATE);
                 MaskReg repeatMask;
                 pand(repeatMask, validMask, allMask, allMask);
-                Int64ScatterRepeat<T, I, SrcCols, IdxCols>(dst, src, index, row, colOffset, repeatMask);
+                Int64ScatterRepeat<T, I, SrcRowStride, IdxRowStride, SrcColStride, IdxColStride>(
+                    dst, src, index, row, colOffset, repeatMask);
             }
         }
     }
@@ -82,9 +107,9 @@ PTO_INTERNAL void Int64ScatterPatternRepeat(
     constexpr unsigned offset = Int64MaskPatternOffset<Pattern>();
     vector_s32 l0, h0;
     vector_u32 elemIndex, lowIndex, highIndex;
-    vlds(l0, h0, (__ubuf__ int32_t*)src + (i * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(l0, h0, (__ubuf__ int32_t*)src + (i * SrcCols + colOffset) * 2, colOffset);
     if constexpr (Axis == ScatterAxis::SCATTER_COL) {
-        vsts(l0, h0, (__ubuf__ int32_t*)dst + ((i * times + offset) * DstCols + colOffset) * 2, 0, INTLV_B32, mask);
+        Int64StoreMasked(l0, h0, (__ubuf__ int32_t*)dst + ((i * times + offset) * DstCols + colOffset) * 2, mask);
     } else {
         vadds(elemIndex, lane, static_cast<uint32_t>(colOffset), mask, MODE_ZEROING);
         vmuls(elemIndex, elemIndex, static_cast<uint32_t>(times), mask, MODE_ZEROING);
@@ -110,6 +135,7 @@ PTO_INTERNAL void Int64ScatterPatternZeroInit(__ubuf__ T* dst)
         MaskReg initMask = plt_b32(remainingWords, POST_UPDATE);
         vsts(z, (__ubuf__ int32_t*)dst + r * vl, 0, NORM_B32, initMask);
     }
+    mem_bar(VST_VST);
 }
 
 template <MaskPattern Pattern, ScatterAxis Axis, typename T, unsigned DstNumel, unsigned DstCols, unsigned SrcCols>
@@ -141,7 +167,9 @@ PTO_INTERNAL void Int64ScatterPattern(__ubuf__ T* dst, __ubuf__ T* src, unsigned
 #else
 // Declaration-only stubs for kirin9030/kirinX90 (no 64-bit intrinsics).
 // See TBinOp.hpp for details.
-template <typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols>
+template <
+    typename T, typename I, unsigned DstNumel, unsigned SrcCols, unsigned IdxCols, unsigned SrcColStride = 1,
+    unsigned IdxColStride = 1>
 PTO_INTERNAL void Int64Scatter(
     __ubuf__ T* dst, __ubuf__ T* src, __ubuf__ I* index, unsigned validRows, unsigned validCols);
 
@@ -236,7 +264,8 @@ PTO_INTERNAL void TSCATTER_IMPL(DstTile& dst, SrcTile& src, IdxTile& idx)
         "Fix: TSCATTER: Number of valid rows must not be greater than number of tile rows.");
 
     if constexpr (sizeof(TD) == 8) {
-        Int64Scatter<TD, TI, DstTile::Numel, SrcTile::Cols, IdxTile::Cols>(
+        Int64Scatter<
+            TD, TI, DstTile::Numel, SrcTile::RowStride, IdxTile::RowStride, SrcTile::ColStride, IdxTile::ColStride>(
             (__ubuf__ TD*)dst.data(), (__ubuf__ TD*)src.data(), (__ubuf__ TI*)idx.data(), idx.GetValidRow(),
             idx.GetValidCol());
     } else {

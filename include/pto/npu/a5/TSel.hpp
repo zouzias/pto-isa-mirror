@@ -36,8 +36,8 @@ PTO_INTERNAL void Int64SelectStore(
     uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
     uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
-    vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
-    vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
+    Int64LoadBounded<Src0Cols>(src0Low, src0High, (__ubuf__ int32_t*)src0 + src0Offset, colOffset);
+    Int64LoadBounded<Src1Cols>(src1Low, src1High, (__ubuf__ int32_t*)src1 + src1Offset, colOffset);
     vsel(dstLow, src0Low, src1Low, selectMask);
     vsel(dstHigh, src0High, src1High, selectMask);
     MaskReg lowMask, highMask;
@@ -56,7 +56,7 @@ PTO_INTERNAL void Int64SelectScalarStore(
 {
     uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
-    vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(srcLow, srcHigh, (__ubuf__ int32_t*)src + srcOffset, colOffset);
     vsel(dstLow, srcLow, scalarLow, selectMask);
     vsel(dstHigh, srcHigh, scalarHigh, selectMask);
     MaskReg lowMask, highMask;

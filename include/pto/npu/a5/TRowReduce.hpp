@@ -26,7 +26,8 @@ PTO_INTERNAL void Int64RowSumRepeat(
     MaskReg& mask)
 {
     vector_u32 low, high, low16, mid16, tmp;
-    vlds((vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(
+        (vector_s32&)low, (vector_s32&)high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, colOffset);
     vand(low16, low, mask16, mask, MODE_ZEROING);
     vcadd(low16, low16, mask, MODE_ZEROING);
     vshrs(mid16, low, 16, mask, MODE_ZEROING);
@@ -84,9 +85,8 @@ PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRo
             for (uint16_t row = 0; row < rows; ++row) {
                 Int64RowSumAccumulate<T, SrcCols>(
                     accLow, accHigh, src, row, validCols, repeatTimes, mask16, oneMask, allMask, allMask);
-                vsts(
-                    (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32,
-                    oneMask);
+                Int64StoreMasked(
+                    (vector_s32&)accLow, (vector_s32&)accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, oneMask);
             }
         } else {
             static_assert(DstCols == 1, "Unaligned int64 row reduction output must be compact scalar rows.");
@@ -136,9 +136,9 @@ PTO_INTERNAL void Int64RowSum(__ubuf__ T* dst, __ubuf__ T* src, unsigned validRo
                 vintlv((vector_s32&)rh0, (vector_s32&)rh1, (vector_s32&)ph0, (vector_s32&)qh0);
                 uint32_t groupMaskElems = row0Valid + row1Valid + row2Valid + row3Valid;
                 MaskReg groupMask = plt_b32(groupMaskElems, POST_UPDATE);
-                vsts(
-                    (vector_s32&)r0, (vector_s32&)rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2, 0,
-                    INTLV_B32, groupMask);
+                Int64StoreMasked(
+                    (vector_s32&)r0, (vector_s32&)rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2,
+                    groupMask);
             }
         }
     }
@@ -205,7 +205,7 @@ PTO_INTERNAL void Int64RowMinMaxRepeat(
 {
     vector_s32 low, high, reducedHigh, highDup, selectedHigh, lowDup;
     vector_u32 reducedLow;
-    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, colOffset);
     Int64RowReduceHigh<Op, T>(reducedHigh, high, mask);
     vdup(highDup, reducedHigh, allMask, POS_LOWEST, MODE_ZEROING);
     MaskReg equalHigh;
@@ -263,7 +263,7 @@ PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
                 Int64RowMinMaxAccumulate<Op, T, SrcCols>(
                     accLow, accHigh, src, row, validCols, repeatTimes, dupMask, fullMask, fullMask);
                 MaskReg oneMask = pset_b32(PAT_VL1);
-                vsts(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, 0, INTLV_B32, oneMask);
+                Int64StoreMasked(accLow, accHigh, (__ubuf__ int32_t*)dst + row * DstCols * 2, oneMask);
             }
         } else {
             static_assert(DstCols == 1, "Unaligned int64 row reduction output must be compact scalar rows.");
@@ -313,7 +313,7 @@ PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
                 vintlv(rh0, rh1, ph0, qh0);
                 uint32_t groupMaskElems = row0Valid + row1Valid + row2Valid + row3Valid;
                 MaskReg groupMask = plt_b32(groupMaskElems, POST_UPDATE);
-                vsts(r0, rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2, 0, INTLV_B32, groupMask);
+                Int64StoreMasked(r0, rh0, (__ubuf__ int32_t*)dst + g * rowsPerStore * DstCols * 2, groupMask);
             }
         }
     }

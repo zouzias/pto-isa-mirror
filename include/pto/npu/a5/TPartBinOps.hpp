@@ -31,8 +31,8 @@ PTO_INTERNAL void Int64PartSameStrideRepeat(
 {
     vector_s32 dl, dh, al, ah, bl, bh, half0, half1;
     MaskReg lowMask, highMask;
-    vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
-    vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<Src0Cols>(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, colOffset);
+    Int64LoadBounded<Src1Cols>(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, colOffset);
     Int64PartCalcRegs<Op, T>(dl, dh, al, ah, bl, bh, mask);
     pintlv_b32(lowMask, highMask, mask, mask);
     vintlv(half0, half1, dl, dh);
@@ -46,7 +46,7 @@ PTO_INTERNAL void Int64PartCopyRow(__ubuf__ T* dst, __ubuf__ T* src, uint16_t ro
 {
     vector_s32 low, high, half0, half1;
     MaskReg lowMask, highMask;
-    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcRowStride + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<SrcRowStride>(low, high, (__ubuf__ int32_t*)src + (row * SrcRowStride + colOffset) * 2, colOffset);
     pintlv_b32(lowMask, highMask, mask, mask);
     vintlv(half0, half1, low, high);
     vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
@@ -130,7 +130,7 @@ template <typename T, unsigned SrcCols>
 PTO_INTERNAL void Int64PartLoadRegs(
     vector_s32& low, vector_s32& high, __ubuf__ T* src, unsigned row, unsigned colOffset)
 {
-    vlds(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(low, high, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, colOffset);
 }
 
 template <Int64Op Op, typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols>

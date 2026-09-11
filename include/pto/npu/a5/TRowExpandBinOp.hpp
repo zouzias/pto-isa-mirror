@@ -192,7 +192,8 @@ PTO_INTERNAL void Int64RowExpandBinary(
             for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
                 MaskReg preg = CreatePredicate<uint32_t>(sreg);
-                vlds(src0Low, src0High, (__ubuf__ int32_t*)src0Ptr, (row * src0RowStride + colOffset) * 2, DINTLV_B32);
+                Int64LoadBounded<TileDataSrc0::Cols>(
+                    src0Low, src0High, (__ubuf__ int32_t*)src0Ptr + (row * src0RowStride + colOffset) * 2, colOffset);
                 Op::Int64RowExpandBinaryInstr(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, preg);
                 pintlv_b32(lowMask, highMask, preg, preg);
                 vintlv(half0, half1, dstLow, dstHigh);

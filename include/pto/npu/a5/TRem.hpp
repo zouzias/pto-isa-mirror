@@ -67,8 +67,10 @@ PTO_INTERNAL void Int64Rem(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
             uint32_t sreg = validCols;
             for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, 0, DINTLV_B32);
-                vlds(bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, 0, DINTLV_B32);
+                Int64LoadBounded<Src0Cols>(
+                    al, ah, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset) * 2, colOffset);
+                Int64LoadBounded<Src1Cols>(
+                    bl, bh, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset) * 2, colOffset);
                 MaskReg preg = CreatePredicate<uint32_t>(sreg);
                 Int64RemRegs<T>(dl, dh, al, ah, bl, bh, preg);
                 pintlv_b32(lowMask, highMask, preg, preg);
@@ -131,7 +133,7 @@ PTO_INTERNAL void Int64RemScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, uns
             uint32_t sreg = validCols;
             for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
                 uint32_t colOffset = colRepeat * elementsPerRepeat;
-                vlds(al, ah, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                Int64LoadBounded<SrcCols>(al, ah, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, colOffset);
                 MaskReg preg = CreatePredicate<uint32_t>(sreg);
                 Int64RemRegs<T>(dl, dh, al, ah, bl, bh, preg);
                 pintlv_b32(lowMask, highMask, preg, preg);

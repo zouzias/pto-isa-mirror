@@ -34,10 +34,10 @@ PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
             MaskReg validMask = plt_b32(remainingCols, POST_UPDATE);
             MaskReg repeatMask;
             pand(repeatMask, validMask, allMask, allMask);
-            vlds(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, 0, DINTLV_B32);
+            Int64LoadBounded<SrcCols>(dl, dh, (__ubuf__ int32_t*)src + colOffset * 2, colOffset);
             uint16_t rows = validRows;
             for (uint16_t row = 1; row < rows; ++row) {
-                vlds(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, 0, DINTLV_B32);
+                Int64LoadBounded<SrcCols>(sl, sh, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset) * 2, colOffset);
                 if constexpr (Op == Int64Op::Add) {
                     MaskReg carry, carryOut;
                     vaddc(carry, nl, dl, sl, repeatMask);
@@ -48,7 +48,7 @@ PTO_INTERNAL void Int64ColReduce(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
                 dl = nl;
                 dh = nh;
             }
-            vsts(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, 0, INTLV_B32, repeatMask);
+            Int64StoreMasked(dl, dh, (__ubuf__ int32_t*)dst + colOffset * 2, repeatMask);
         }
     }
 }

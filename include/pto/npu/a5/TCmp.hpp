@@ -100,15 +100,19 @@ PTO_INTERNAL void Int64CompareMode(
                 MaskReg result0, result1, dstReg, tmpMask;
                 // batch 0
                 uint32_t colOffset0 = j * 2 * elementsPerRepeat;
-                vlds(lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src0, (row * Src0Cols + colOffset0) * 2, DINTLV_B32);
-                vlds(rhsLow0, rhsHigh0, (__ubuf__ int32_t*)src1, (row * Src1Cols + colOffset0) * 2, DINTLV_B32);
+                Int64LoadBounded<Src0Cols>(
+                    lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset0) * 2, colOffset0);
+                Int64LoadBounded<Src1Cols>(
+                    rhsLow0, rhsHigh0, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset0) * 2, colOffset0);
                 preg = plt_b32(sreg, POST_UPDATE);
 
                 Int64CompareRegs<Mode, T>(result0, lhsLow0, lhsHigh0, rhsLow0, rhsHigh0, preg);
                 // batch 1
                 uint32_t colOffset1 = (j * 2 + 1) * elementsPerRepeat;
-                vlds(lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src0, (row * Src0Cols + colOffset1) * 2, DINTLV_B32);
-                vlds(rhsLow1, rhsHigh1, (__ubuf__ int32_t*)src1, (row * Src1Cols + colOffset1) * 2, DINTLV_B32);
+                Int64LoadBounded<Src0Cols>(
+                    lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src0 + (row * Src0Cols + colOffset1) * 2, colOffset1);
+                Int64LoadBounded<Src1Cols>(
+                    rhsLow1, rhsHigh1, (__ubuf__ int32_t*)src1 + (row * Src1Cols + colOffset1) * 2, colOffset1);
                 preg = plt_b32(sreg, POST_UPDATE);
                 Int64CompareRegs<Mode, T>(result1, lhsLow1, lhsHigh1, rhsLow1, rhsHigh1, preg);
                 // Same pattern as TCmp_32B: pdintlv_b8 + PK

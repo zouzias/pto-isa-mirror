@@ -40,6 +40,48 @@ PTO_INTERNAL MaskReg Int64TailMask(uint32_t cols, MaskReg& fullMask)
     return plt_b32(cols, POST_UPDATE);
 }
 
+// DINTLV_B32 reads 512 bytes without a predicate; bound tail loads to the physical row.
+template <unsigned SrcCols>
+PTO_INTERNAL void Int64LoadBounded(vector_s32& low, vector_s32& high, __ubuf__ int32_t* src, unsigned colOffset)
+{
+    constexpr unsigned elementsPerLoad = CCE_VL / sizeof(int32_t);
+    if (colOffset + elementsPerLoad <= SrcCols) {
+        vlds(low, high, src, 0, DINTLV_B32);
+    } else {
+        uint32_t remaining = colOffset < SrcCols ? SrcCols - colOffset : 0;
+        MaskReg mask = plt_b32(remaining, POST_UPDATE);
+        vector_u32 lowIndex, highIndex;
+        vci((vector_s32&)lowIndex, 0, INC_ORDER);
+        vadd(lowIndex, lowIndex, lowIndex, mask, MODE_ZEROING);
+        vadds(highIndex, lowIndex, 1u, mask, MODE_ZEROING);
+        vgather2((vector_u32&)low, (__ubuf__ uint32_t*)src, lowIndex, mask);
+        vgather2((vector_u32&)high, (__ubuf__ uint32_t*)src, highIndex, mask);
+    }
+}
+
+template <unsigned IdxCols>
+PTO_INTERNAL void Int64LoadIndices(vector_u32& index, __ubuf__ uint32_t* src, unsigned colOffset, MaskReg& mask)
+{
+    if (colOffset + CCE_VL / sizeof(uint32_t) <= IdxCols) {
+        vlds(index, src, 0, NORM);
+    } else {
+        vector_u32 lane;
+        vci((vector_s32&)lane, 0, INC_ORDER);
+        vgather2(index, src, lane, mask);
+    }
+}
+
+// Each predicate lane selects one int64; both 32-bit halves must share its mask.
+PTO_INTERNAL void Int64StoreMasked(vector_s32& low, vector_s32& high, __ubuf__ int32_t* dst, MaskReg& mask)
+{
+    vector_s32 packedLow, packedHigh;
+    MaskReg lowMask, highMask;
+    pintlv_b32(lowMask, highMask, mask, mask);
+    vintlv(packedLow, packedHigh, low, high);
+    vsts(packedLow, dst, 0, NORM_B32, lowMask);
+    vsts(packedHigh, dst, CCE_VL / sizeof(int32_t), NORM_B32, highMask);
+}
+
 PTO_INTERNAL void Int64AddRegs(
     vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
     vector_s32& rhsHigh, MaskReg& mask)
@@ -470,8 +512,8 @@ PTO_INTERNAL void Int64BinaryRepeat(
     uint32_t src0Offset = (row * Src0Cols + colOffset) * 2;
     uint32_t src1Offset = (row * Src1Cols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
-    vlds(src0Low, src0High, (__ubuf__ int32_t*)src0, src0Offset, DINTLV_B32);
-    vlds(src1Low, src1High, (__ubuf__ int32_t*)src1, src1Offset, DINTLV_B32);
+    Int64LoadBounded<Src0Cols>(src0Low, src0High, (__ubuf__ int32_t*)src0 + src0Offset, colOffset);
+    Int64LoadBounded<Src1Cols>(src1Low, src1High, (__ubuf__ int32_t*)src1 + src1Offset, colOffset);
     Int64BinaryCalcRegs<Op, T>(dstLow, dstHigh, src0Low, src0High, src1Low, src1High, mask);
     pintlv_b32(lowMask, highMask, mask, mask);
     vintlv(half0, half1, dstLow, dstHigh);

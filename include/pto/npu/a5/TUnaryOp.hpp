@@ -162,7 +162,7 @@ PTO_INTERNAL void Int64UnaryRepeat(__ubuf__ T* dst, __ubuf__ T* src, uint16_t ro
     MaskReg lowMask, highMask;
     uint32_t srcOffset = (row * SrcCols + colOffset) * 2;
     uint32_t dstOffset = (row * DstCols + colOffset) * 2;
-    vlds(srcLow, srcHigh, (__ubuf__ int32_t*)src, srcOffset, DINTLV_B32);
+    Int64LoadBounded<SrcCols>(srcLow, srcHigh, (__ubuf__ int32_t*)src + srcOffset, colOffset);
     if constexpr (Op == Int64Op::Not) {
         vnot((vector_u32&)dstLow, (vector_u32&)srcLow, mask, MODE_ZEROING);
         vnot((vector_u32&)dstHigh, (vector_u32&)srcHigh, mask, MODE_ZEROING);

@@ -41,11 +41,13 @@ PTO_INTERNAL void Int64CompareScalarMode(
                 MaskReg preg;
                 MaskReg result0, result1, dstReg, tmpMask;
                 uint32_t colOffset0 = j * 2 * elementsPerRepeat;
-                vlds(lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src, (row * SrcCols + colOffset0) * 2, DINTLV_B32);
+                Int64LoadBounded<SrcCols>(
+                    lhsLow0, lhsHigh0, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset0) * 2, colOffset0);
                 preg = plt_b32(sreg, POST_UPDATE);
                 Int64CompareRegs<Mode, T>(result0, lhsLow0, lhsHigh0, rhsLow, rhsHigh, preg);
                 uint32_t colOffset1 = (j * 2 + 1) * elementsPerRepeat;
-                vlds(lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src, (row * SrcCols + colOffset1) * 2, DINTLV_B32);
+                Int64LoadBounded<SrcCols>(
+                    lhsLow1, lhsHigh1, (__ubuf__ int32_t*)src + (row * SrcCols + colOffset1) * 2, colOffset1);
                 preg = plt_b32(sreg, POST_UPDATE);
                 Int64CompareRegs<Mode, T>(result1, lhsLow1, lhsHigh1, rhsLow, rhsHigh, preg);
                 pdintlv_b8(dstReg, tmpMask, result0, result1);
