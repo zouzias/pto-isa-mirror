@@ -35,6 +35,10 @@ def gen_golden_data(case_name, param):
         M = np.random.randint(-30_000, 30_000, size=[1, 1]).astype(dtype)
     elif dtype == np.int32:
         M = np.random.randint(-2_000_000_000, 2_000_000_000, size=[1, 1]).astype(dtype)
+    elif dtype == np.int64:
+        M = np.random.randint(-2_000_000_000, 2_000_000_000, size=[1, 1]).astype(dtype)
+    elif dtype == np.uint64:
+        M = np.random.randint(0, 2_000_000_000, size=[1, 1]).astype(dtype)
     elif dtype == np.float16:
         M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
     elif dtype == np.float32:
@@ -95,11 +99,15 @@ if __name__ == "__main__":
     case_params_list = [
         TestParams(np.float32, 64, 64, 64, 64, 64, 64),
         TestParams(np.int32, 64, 64, 64, 64, 64, 64),
+        TestParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TestParams(np.uint64, 64, 64, 64, 64, 64, 64),
         TestParams(np.int16, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64),
 
         TestParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
         TestParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
+        TestParams(np.int64, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
+        TestParams(np.uint64, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
 
         TestParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
