@@ -66,11 +66,15 @@ void LaunchTExpandS(void* out, float scalar, void* stream)
 
 template void LaunchTExpandS<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
+template void LaunchTExpandS<int64_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
+template void LaunchTExpandS<uint64_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<int16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>(void* out, float scalar, void* stream);
 
 template void LaunchTExpandS<float, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
+template void LaunchTExpandS<int64_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
+template void LaunchTExpandS<uint64_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<aclFloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>(
     void* out, float scalar, void* stream);
 template void LaunchTExpandS<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
