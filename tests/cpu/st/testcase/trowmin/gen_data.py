@@ -22,8 +22,14 @@ def gen_golden_data_trowmin(param):
     row, col = [param.tile_row, param.tile_col]
     h_valid, w_valid = [min(row, param.valid_row), min(col, param.valid_col)]
 
-    input1 = NumExt.astype(np.random.uniform(
-        low=-16, high=16, size=[row, col]), dtype)
+    if dtype in [np.int64, np.uint64]:
+        if dtype == np.uint64:
+            input1 = np.random.randint(low=0, high=1000, size=[row, col]).astype(dtype)
+        else:
+            input1 = np.random.randint(low=-1000, high=1000, size=[row, col]).astype(dtype)
+    else:
+        input1 = NumExt.astype(np.random.uniform(
+            low=-16, high=16, size=[row, col]), dtype)
 
     golden = NumExt.astype(np.full((h_valid,), 0, dtype=np.float32), dtype)
     for i in range(h_valid):
@@ -66,6 +72,8 @@ if __name__ == "__main__":
         TRowminParams(np.float32, 32, 32, 32, 16, 32, 32),
         TRowminParams(np.int8, 64, 64, 64, 64, 64, 64),
         TRowminParams(np.uint8, 64, 64, 64, 64, 64, 64),
+        TRowminParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TRowminParams(np.uint64, 64, 64, 64, 64, 64, 64),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TRowminParams(

@@ -56,6 +56,8 @@ template void LaunchTCOLMIN<aclFloat16, 64, 64, 64, 64>(aclFloat16* out, aclFloa
 template void LaunchTCOLMIN<float, 32, 32, 32, 16>(float* out, float* src, void* stream);
 template void LaunchTCOLMIN<int8_t, 64, 64, 64, 64>(int8_t* out, int8_t* src, void* stream);
 template void LaunchTCOLMIN<uint8_t, 64, 64, 64, 64>(uint8_t* out, uint8_t* src, void* stream);
+template void LaunchTCOLMIN<int64_t, 64, 64, 64, 64>(int64_t* out, int64_t* src, void* stream);
+template void LaunchTCOLMIN<uint64_t, 64, 64, 64, 64>(uint64_t* out, uint64_t* src, void* stream);
 #ifdef CPU_SIM_BFLOAT_ENABLED
 template void LaunchTCOLMIN<bfloat16_t, 64, 64, 64, 64>(bfloat16_t* out, bfloat16_t* src, void* stream);
 #endif
