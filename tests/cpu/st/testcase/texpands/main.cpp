@@ -87,6 +87,14 @@ TEST_F(TEXPANDSTest, case_int32_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
     test_texpands<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
+TEST_F(TEXPANDSTest, case_int64_64x64_64x64_64x64_PAD_VALUE_NULL)
+{
+    test_texpands<int64_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+}
+TEST_F(TEXPANDSTest, case_uint64_64x64_64x64_64x64_PAD_VALUE_NULL)
+{
+    test_texpands<uint64_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+}
 TEST_F(TEXPANDSTest, case_half_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
     test_texpands<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
@@ -109,6 +117,14 @@ TEST_F(TEXPANDSTest, case_float_60x60_64x64_60x60_PAD_VALUE_MAX)
 TEST_F(TEXPANDSTest, case_int32_60x60_64x64_60x60_PAD_VALUE_MAX)
 {
     test_texpands<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
+}
+TEST_F(TEXPANDSTest, case_int64_60x60_64x64_60x60_PAD_VALUE_MAX)
+{
+    test_texpands<int64_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
+}
+TEST_F(TEXPANDSTest, case_uint64_60x60_64x64_60x60_PAD_VALUE_MAX)
+{
+    test_texpands<uint64_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
 }
 TEST_F(TEXPANDSTest, case_half_1x3600_2x4096_1x3600_PAD_VALUE_MAX)
 {
