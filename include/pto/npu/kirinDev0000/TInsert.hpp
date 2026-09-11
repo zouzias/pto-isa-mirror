@@ -235,6 +235,11 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t inde
 {
     if constexpr (SrcTileData::Loc == TileType::Acc || SrcTileData::Loc == TileType::Mat) {
         if constexpr (DstTileData::Loc == TileType::Mat) {
+            // on KirinDev0000, L0C is unified with CBuf. the matmul writes to the L0C
+            // rigion. fix_cbuf_to_cbuf (loop_enhance) cannot read from the L0C rigion,
+            // but fix_cbuf_to_ubuf (normal_dma)  can. TMovCbufToCbufAcc handles both
+            // cases: for Acc source (L0c), it uses a UB relay (CBuf -> UB -> Cbuf);
+            // for mat source (L1 region), it uses fix_cbuf_to_cbuf.
             TMovCbufToCbufAcc<DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
         } else {
             if (indexRow == 0 && indexCol == 0) {
