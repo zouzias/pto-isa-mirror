@@ -27,6 +27,9 @@ def gen_case(dtype=np.float32, low=-1.0, high=1.0):
     if dtype in [np.int8, np.uint8]:
         src0 = rng.integers(low, high, size=(H, W), dtype=dtype)
         src1 = rng.integers(low, high, size=(H, W), dtype=dtype)
+    elif dtype in [np.int64, np.uint64]:
+        src0 = rng.integers(low, high, size=(H, W), dtype=dtype)
+        src1 = rng.integers(low, high, size=(H, W), dtype=dtype)
     else:
         src0 = rng.uniform(low, high, size=(H, W)).astype(dtype)
         src1 = rng.uniform(low, high, size=(H, W)).astype(dtype)
@@ -47,6 +50,8 @@ if __name__ == "__main__":
         (np.float32, -1.0, 1.0, "float"),
         (np.int8, -128, 127, "int8"),
         (np.uint8, 0, 255, "uint8"),
+        (np.int64, -1000, 1000, "int64"),
+        (np.uint64, 0, 1000, "uint64"),
     ]
 
     for dtype, low, high, dtype_name in test_cases:
