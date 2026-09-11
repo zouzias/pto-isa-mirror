@@ -64,17 +64,53 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
+
+`STPhase` 重载把 unit flag（单元标志）写入 L0C 搬出指令，用于与 `TMATMUL<AccPhase>` 配对完成
+Cube 到 Fixpipe 的硬件同步，从而省去显式的 `set_flag`/`wait_flag`。
+仅在存在对应后端实现的目标上暴露（Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品、
+Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见下方实现检查。
 
 `TEXTRACT_FP(...)` 为历史 fp 量化形式保留源码兼容入口，并直接映射到无 `mode` 的
 `TEXTRACT_IMPL(dst, src, fp, indexRow, indexCol)` 路径。规范同名 `TEXTRACT(..., fp, ...)`
 重载仅在 `FpTileData::Loc == TileType::Scaling` 时参与匹配。
 规范接口还提供显式 `AccToVecMode` 形式，用于目标支持的 Acc-to-Vec 路由。
+`TEXTRACT_FP` 同样提供 `STPhase` 版本，与 `TMOV_FP` / `TSTORE_FP` 对齐，语义与规范接口一致。
 
 ## 约束
 
 ### 通用约束或检查
 
+- `STPhase` 重载（unit flag）仅支持 `TileType::Acc -> TileType::Mat`（L0C→L1）路径；
+  目标为 `TileType::Vec` 时编译期报错。该重载在
+  Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品、Ascend 950PR/Ascend 950DT 与 CPU 模拟器上暴露。
+- 搬出侧的取值规则与累加侧不同，不是简单对应关系：
+  产生该 L0C 结果的 `TMATMUL` 必须已经是 `AccPhase::Final`，即数据已就绪；
+  `STPhase::Final` 用于最后一次搬出并释放 unit flag；
+  `STPhase::Partial` 只用于同一块 L0C 分多次搬出时的非末次那几条，它不释放 unit flag。
+  把 `STPhase::Partial` 与 `AccPhase::Partial` 配对会让 fixpipe 等待一个不会到来的标志而挂死，
+  该现象已在 Ascend 950PR 仿真器上复现。
+- Acc→Mat 搬出已通过 A3 上板测试，`tmov_acc2mat` 覆盖了 `STPhase::Final` 和
+  `STPhase::Partial` 后接 `STPhase::Final` 的场景。
+  Ascend 950PR 仿真测试已通过；在 Ascend 950PR 板机、CANN 9.2.0 环境下，
+  `textract` 的 7 个定向用例（`case1`、`case21`–`case26`）全部通过，max diff 均为 0，
+  覆盖 NZ512/NZ1024、`Final`、`Partial` 后接 `Final`、`Unspecified` 和 K 切分累加。
 - 对于同 dtype 抽取/布局路径，`DstTileData::DType` 必须等于 `SrcTileData::DType`。
   Acc 转换和量化路径使用下述后端特定 dtype 组合。
 - 运行时边界检查：
@@ -147,6 +183,32 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TEXTRACT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
+}
+```
+
+带 unit flag 的 L0C→L1 搬出（Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品、Ascend 950PR/Ascend 950DT）：
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_unit_flag() {
+  TileLeft<half, 32, 32> a;
+  TileRight<half, 32, 32> b;
+  TileAcc<float, 32, 32> c;
+  Tile<TileType::Mat, float, 32, 32, BLayout::ColMajor, 32, 32, SLayout::RowMajor> l1;
+  TASSIGN(a, 0x0);
+  TASSIGN(b, 0x0);
+  TASSIGN(c, 0x0);
+  TASSIGN(l1, 0x2000);
+  // 数据就绪后再搬出：两条指令之间不需要显式 set_flag/wait_flag
+  TMATMUL<AccPhase::Final>(c, a, b);
+  TEXTRACT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+
+  // 同一块 L0C 分多次搬出时，非末次用 Partial 不释放 unit flag，末次用 Final 释放
+  // TEXTRACT<STPhase::Partial>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+  // TEXTRACT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```
 

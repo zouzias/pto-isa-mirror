@@ -60,8 +60,24 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 `TSTORE_FP(...)` 为历史 fp 量化形式保留源码兼容入口，并直接映射到 `TSTORE_IMPL(dst, src, fp)`。
 规范同名 `TSTORE(..., fp, ...)` 重载仅在 `FpTileData::Loc == TileType::Scaling` 时参与匹配；
 后端实现仍可继续检查额外合法性。
+
+搬出侧 `STPhase` 的取值规则与累加侧不对称：产生该 L0C 结果的 `TMATMUL` 必须已经是
+`AccPhase::Final`，即数据已就绪；`STPhase::Final` 用于最后一次搬出并释放 unit flag；
+`STPhase::Partial` 只用于同一块 L0C 分多次搬出时的非末次那几条，它不释放 unit flag。
+把 `STPhase::Partial` 与 `AccPhase::Partial` 配对会让 fixpipe 等待一个不会到来的标志而挂死。
+
+该规则已在 L0C→L1、L0C→UB、L0C→GM 三条搬出路径上于 Ascend 950PR 仿真测试确认，
+其中 `TSTORE` 走的是 L0C→GM 的 `copy_matrix_cc_to_gm`（unit flag 写在 Xt 寄存器而非位置参数），
+由 `tstore_acc2gm` 的 `case_vector_quant_uf_multi_drain` 覆盖。
+
+在 Ascend 950PR 板机、CANN 9.2.0 环境下，`tstore_acc2gm` 的 3 个定向用例
+（`case38`、`case_vector_quant_uf_final`、`case_vector_quant_uf_multi_drain`）全部通过，max diff 均为 0，
+覆盖 per-channel 量化基线、`Final` 和 `Partial` 后接 `Final`。
+连同 TEXTRACT、TINSERT 和 TMOV，本轮 24 个定向搬出用例全部上板通过；
+该结果仅覆盖所选用例，不代表完整 A5 ST 测试集。
+
 向量量化 `STPhase` 形式仅在存在对应后端实现的目标上暴露
-（A5、kirin9030、kirinDev0000 和 CPU 模拟器）。
+（A2A3、A5、kirin9030、kirinDev0000 和 CPU 模拟器）。
 
 ## L2 cache hint
 

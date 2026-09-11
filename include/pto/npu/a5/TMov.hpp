@@ -130,7 +130,9 @@ PTO_INTERNAL uint32_t GetTmovAccSrcStride(uint16_t validRow)
     }
 }
 
-template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 __tf__ AICORE void TMovCcToCb(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol)
@@ -160,6 +162,7 @@ __tf__ AICORE void TMovCcToCb(
 
     constexpr bool enableNz2Nd = (DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox);
     constexpr bool enableNz2Dn = (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox);
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     if constexpr (enableNz2Nd || enableNz2Dn) {
         SetLoop3Para();
     }
@@ -172,7 +175,7 @@ __tf__ AICORE void TMovCcToCb(
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src);
 
     pto_copy_matrix_cc_to_cbuf(
-        dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, 0, QuantPre,
+        dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, unitFlagCtrl, QuantPre,
         static_cast<uint8_t>(reluMode), channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false, false,
         false, false, enableNz2Dn);
 }
@@ -841,7 +844,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
         TMovCcToUb<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
             dst.data(), src.data(), m, n);
     } else if constexpr (DstTileData::Loc == TileType::Mat) {
-        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
     }
 }
 
@@ -872,7 +875,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuan
         TMovCcToUb<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
             dst.data(), src.data(), m, n);
     } else if constexpr (DstTileData::Loc == TileType::Mat) {
-        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
     }
 }
 
@@ -916,7 +919,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
         TMovCcToUb<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
             dst.data(), src.data(), m, n);
     } else if constexpr (DstTileData::Loc == TileType::Mat) {
-        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), m, n);
+        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
     }
 }
 

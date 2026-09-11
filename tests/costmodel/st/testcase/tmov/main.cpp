@@ -92,3 +92,73 @@ TMOV_CASE(
 TMOV_CASE(
     c16_f_64_128_63_125_CM_RM_CM_N, float, 64, 128, 63, 125, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox, 1323.0f,
     0.0f)
+
+namespace {
+struct FpWaitEvent : EventBaseTag {
+    int waits = 0;
+    void Wait() { ++waits; }
+};
+
+template <STPhase phase, bool useAlias = false, bool explicitPhase = true>
+void CheckFpPhaseMove()
+{
+    using Acc = Tile<TileType::Acc, int32_t, 16, 16, BLayout::ColMajor, 16, 16, SLayout::RowMajor>;
+    using Mat = Tile<TileType::Mat, half, 16, 16, BLayout::ColMajor, 16, 16, SLayout::RowMajor>;
+    using Fp = Tile<TileType::Scaling, uint64_t, 1, 16, BLayout::RowMajor, 1, 16>;
+    Acc acc;
+    Mat mat;
+    Fp fp;
+    TASSIGN(acc, 0);
+    TASSIGN(mat, 0x20000);
+    TASSIGN(fp, 0);
+    FpWaitEvent dependency;
+    mocker::ResetTrace();
+    auto move = [&](auto&... events) {
+        if constexpr (useAlias) {
+            if constexpr (explicitPhase) {
+                TMOV_FP<phase>(mat, acc, fp, events...);
+            } else {
+                TMOV_FP(mat, acc, fp, events...);
+            }
+        } else {
+            if constexpr (explicitPhase) {
+                TMOV<phase>(mat, acc, fp, events...);
+            } else {
+                TMOV(mat, acc, fp, events...);
+            }
+        }
+    };
+    move();
+    move(dependency);
+    EXPECT_EQ(dependency.waits, 1);
+    const auto& trace = mocker::GetTrace();
+    ASSERT_EQ(trace.executed_pto.size(), 2);
+    for (const auto& instruction : trace.executed_pto) {
+        EXPECT_EQ(instruction.name, "TMOV");
+        int copies = 0;
+        int fpConfigs = 0;
+        for (const auto& call : instruction.cce_calls) {
+            if (call.name == "set_fpc") {
+                ++fpConfigs;
+            }
+            if (call.name == "copy_matrix_cc_to_cbuf") {
+                ++copies;
+                ASSERT_EQ(call.args.size(), 12);
+                EXPECT_EQ(call.args[7], static_cast<uint8_t>(phase));
+                EXPECT_EQ(call.args[8], static_cast<uint64_t>(QuantMode_t::VDEQF16));
+            }
+        }
+        EXPECT_EQ(copies, 1);
+        EXPECT_EQ(fpConfigs, 1);
+    }
+}
+} // namespace
+
+TEST(TMov, fp_default_phase) { CheckFpPhaseMove<STPhase::Unspecified, false, false>(); }
+TEST(TMov, fp_unspecified) { CheckFpPhaseMove<STPhase::Unspecified, false>(); }
+TEST(TMov, fp_partial) { CheckFpPhaseMove<STPhase::Partial, false>(); }
+TEST(TMov, fp_final) { CheckFpPhaseMove<STPhase::Final, false>(); }
+TEST(TMov, fp_alias_default_phase) { CheckFpPhaseMove<STPhase::Unspecified, true, false>(); }
+TEST(TMov, fp_alias_unspecified) { CheckFpPhaseMove<STPhase::Unspecified, true>(); }
+TEST(TMov, fp_alias_partial) { CheckFpPhaseMove<STPhase::Partial, true>(); }
+TEST(TMov, fp_alias_final) { CheckFpPhaseMove<STPhase::Final, true>(); }

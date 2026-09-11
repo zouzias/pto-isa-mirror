@@ -178,7 +178,21 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, TmpTileData &tmp, 
 - `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
 - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
 - fp `STPhase` 重载仅在存在对应后端实现的目标上暴露
-  （A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器）。
+  （A2A3、A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器）。
+- 在 Ascend 950PR/Ascend 950DT 上，`STPhase` 同时作用于 Acc-to-Mat（L0C→L1）与 Acc-to-Vec 搬出路径；
+  在 Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品上只作用于 Acc-to-Mat，该平台没有 Acc-to-Vec 搬出路径。
+  两者写入 `TileType::Mat` 的 `TMOV<STPhase::Final>` 都会带上 unit flag，可与 `TMATMUL<AccPhase::Final>` 配对，
+  无需显式 `set_flag`/`wait_flag`。Acc→Mat 搬出已通过 A3 上板测试，
+  覆盖了 `STPhase::Final` 和 `STPhase::Partial` 后接 `STPhase::Final` 的场景。
+  Ascend 950PR 仿真测试已通过；在 Ascend 950PR 板机、CANN 9.2.0 环境下，
+  `tmov_acc2mat` 的 3 个定向用例和 `tmov_acc2vec` 的 7 个定向用例全部通过，max diff 均为 0。
+  覆盖 Acc→Mat 基线、unit flag 的 `Final` 与多次搬出，以及 Acc→Vec 的 ReLU、
+  向量核选择、标量量化和向量量化。
+- 搬出侧 `STPhase` 的取值规则与累加侧不对称：产生该 L0C 结果的 `TMATMUL` 必须已经是
+  `AccPhase::Final`，即数据已就绪；`STPhase::Final` 用于最后一次搬出并释放 unit flag；
+  `STPhase::Partial` 只用于同一块 L0C 分多次搬出时的非末次那几条，它不释放 unit flag。
+  把 `STPhase::Partial` 与 `AccPhase::Partial` 配对会让 fixpipe 等待一个不会到来的标志而挂死，
+  该现象已在 Ascend 950PR 仿真器上复现。
 - 向量量化 `fp + AccToVecMode` 重载仅在存在对应后端实现的目标上暴露
   （A5、kirin9030、kirinDev0000 和 CPU 模拟器）。
 

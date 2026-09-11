@@ -71,8 +71,26 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 `TSTORE_FP(...)` is retained for source compatibility with the legacy fp-quantized form and maps directly to
 `TSTORE_IMPL(dst, src, fp)`. The canonical `TSTORE(..., fp, ...)` overload is selected only for
 `FpTileData::Loc == TileType::Scaling`; backend implementations may apply additional legality checks.
+
+The move-out `STPhase` values are not symmetric with the accumulation side. The `TMATMUL` that produced
+the L0C result must already be `AccPhase::Final`, that is, the data is ready. `STPhase::Final` marks the
+last move-out and releases the unit flag. `STPhase::Partial` is only for the non-last move-outs when one
+L0C tile is drained more than once; it does not release the flag. Pairing `STPhase::Partial` with
+`AccPhase::Partial` makes the fixpipe wait on a flag that never arrives, which hangs.
+
+This rule is confirmed by simulator tests on Ascend 950PR for all three move-out paths: L0C to L1, L0C to UB
+and L0C to GM. `TSTORE` uses the L0C-to-GM `copy_matrix_cc_to_gm`, where the unit flag goes into an Xt
+register rather than a positional argument; it is covered by `tstore_acc2gm`'s
+`case_vector_quant_uf_multi_drain`.
+
+On Ascend 950PR hardware with CANN 9.2.0, all 3 targeted `tstore_acc2gm` tests
+(`case38`, `case_vector_quant_uf_final`, and `case_vector_quant_uf_multi_drain`) passed with max diff 0.
+They cover the per-channel quantized baseline, `Final`, and `Partial` followed by `Final`.
+Together with TEXTRACT, TINSERT, and TMOV, all 24 targeted move-out tests passed on hardware;
+this result covers the selected cases, not the full A5 ST suite.
+
 The vector-quantized `STPhase` form is exposed only on targets with matching backend support
-(A5, kirin9030, kirinDev0000, and CPU simulator).
+(A2A3, A5, kirin9030, kirinDev0000, and CPU simulator).
 
 
 ## L2 cache hint

@@ -76,21 +76,59 @@ template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluP
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
 template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(Dst0TileData &dst0, Dst1TileData &dst1, SrcTileData &src,
                               uint16_t indexRow0 = 0, uint16_t indexCol0 = 0,
                               uint16_t indexRow1 = 0, uint16_t indexCol1 = 0, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <STPhase Phase, typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
+
+The `STPhase` overloads set the unit flag on the L0C move-out instruction so it pairs with
+`TMATMUL<AccPhase>` for Cube-to-Fixpipe hardware synchronization, removing the explicit
+`set_flag`/`wait_flag` pair. They are exposed only on targets with matching backend support
+(A2A3, Ascend 950PR/Ascend 950DT and the CPU simulator); the applicable paths and the pairing rule
+are listed under the implementation checks below.
 
 `TEXTRACT_FP(...)` is retained for source compatibility with the legacy fp-quantized form and maps directly
 to the no-`mode` `TEXTRACT_IMPL(dst, src, fp, indexRow, indexCol)` path. The canonical
 `TEXTRACT(..., fp, ...)` overload is selected only for `FpTileData::Loc == TileType::Scaling`.
 The canonical interface also provides an explicit `AccToVecMode` form for target-supported Acc-to-Vec routing.
+`TEXTRACT_FP` also has an `STPhase` form, aligned with `TMOV_FP` / `TSTORE_FP`; the semantics match the
+canonical overload.
 
 ## Constraints
 
 ### General constraints / checks
 
+- The `STPhase` overloads (unit flag) apply only to the `TileType::Acc -> TileType::Mat` (L0C to L1)
+  path; a `TileType::Vec` destination is rejected at compile time. They are exposed on A2A3,
+  Ascend 950PR/Ascend 950DT and the CPU simulator.
+- The move-out values do not mirror the accumulation values. The `TMATMUL` that produced the L0C result
+  must already be `AccPhase::Final`, that is, the data is ready. `STPhase::Final` marks the last move-out
+  and releases the unit flag. `STPhase::Partial` is only for the non-last move-outs when one L0C tile is
+  drained more than once; it does not release the flag. Pairing `STPhase::Partial` with
+  `AccPhase::Partial` makes the fixpipe wait on a flag that never arrives, which hangs; this was
+  reproduced on the Ascend 950PR simulator.
+- Acc-to-Mat move-out has passed A3 hardware tests covering `STPhase::Final` and
+  `STPhase::Partial` followed by `STPhase::Final` in `tmov_acc2mat`.
+  Ascend 950PR simulator tests have passed. On Ascend 950PR hardware with CANN 9.2.0, all 7 targeted
+  `textract` tests (`case1` and `case21`–`case26`) passed with max diff 0, covering NZ512/NZ1024,
+  `Final`, `Partial` followed by `Final`, `Unspecified`, and K-split accumulation.
 - For same-dtype extraction/layout paths, `DstTileData::DType` must equal `SrcTileData::DType`.
   Acc conversion and quantized paths use the target-specific dtype pairs below.
 - Runtime bounds checks:
@@ -208,6 +246,32 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TEXTRACT(dst, src, /*indexRow=*/0, /*indexCol=*/0);
+}
+```
+
+Unit-flag L0C to L1 move-out (A2A3, Ascend 950PR/Ascend 950DT):
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_unit_flag() {
+  TileLeft<half, 32, 32> a;
+  TileRight<half, 32, 32> b;
+  TileAcc<float, 32, 32> c;
+  Tile<TileType::Mat, float, 32, 32, BLayout::ColMajor, 32, 32, SLayout::RowMajor> l1;
+  TASSIGN(a, 0x0);
+  TASSIGN(b, 0x0);
+  TASSIGN(c, 0x0);
+  TASSIGN(l1, 0x2000);
+  // Move out once the data is ready; no explicit set_flag/wait_flag is needed between the two.
+  TMATMUL<AccPhase::Final>(c, a, b);
+  TEXTRACT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+
+  // Draining one L0C tile more than once: Partial on the non-last move-outs, Final on the last.
+  // TEXTRACT<STPhase::Partial>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
+  // TEXTRACT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
 }
 ```
 

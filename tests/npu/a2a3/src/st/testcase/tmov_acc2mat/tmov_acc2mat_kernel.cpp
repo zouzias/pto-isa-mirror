@@ -26,7 +26,9 @@ AICORE constexpr inline T CeilDiv(T num_1, T num_2)
 template <typename T>
 using CType = typename std::conditional<std::is_same<T, int8_t>::value, int32_t, float>::type;
 
-template <typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN>
+template <
+    typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN,
+    AccPhase accPhase = AccPhase::Unspecified>
 AICORE inline void runMATMUL(__gm__ aType* src0, __gm__ bType* src1, TileAcc<CType<aType>, M, N, -1, -1>& cTile)
 {
     using GlobalDataSrc0 =
@@ -71,7 +73,11 @@ AICORE inline void runMATMUL(__gm__ aType* src0, __gm__ bType* src1, TileAcc<CTy
 #endif
 
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
+    if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -79,7 +85,9 @@ AICORE inline void runMATMUL(__gm__ aType* src0, __gm__ bType* src1, TileAcc<CTy
 #endif
 }
 
-template <typename aType, typename bType, typename fbType, int M, int K, int N, int validM, int validK, int validN>
+template <
+    typename aType, typename bType, typename fbType, int M, int K, int N, int validM, int validK, int validN,
+    AccPhase accPhase = AccPhase::Unspecified>
 AICORE inline void runMATMULFB(
     __gm__ aType* src0, __gm__ bType* src1, __gm__ fbType* src2, TileAcc<CType<aType>, M, N, -1, -1>& cTile,
     Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>& fbMatTile)
@@ -132,7 +140,11 @@ AICORE inline void runMATMULFB(
 #endif
 
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
+    if constexpr (accPhase == AccPhase::Unspecified) {
+        TMATMUL(cTile, aTile, bTile);
+    } else {
+        TMATMUL<accPhase>(cTile, aTile, bTile);
+    }
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -142,7 +154,8 @@ AICORE inline void runMATMULFB(
 
 template <
     typename outType, typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN,
-    bool isRelu = false, int indexRow = 0, int indexCol = 0, bool isInsert = false, int dstRow = 0, int dstCol = 0>
+    bool isRelu = false, int indexRow = 0, int indexCol = 0, bool isInsert = false, int dstRow = 0, int dstCol = 0,
+    STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
 __global__ AICORE void runTMOV_nz2nz(__gm__ outType* out, __gm__ aType* src0, __gm__ bType* src1, __gm__ outType* src2)
 {
     constexpr uint16_t sGRows_ = 16;
@@ -163,7 +176,7 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType* out, __gm__ aType* src0, __
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
 
-    runMATMUL<aType, bType, M, K, N, validM, validK, validN>(src0, src1, cTile);
+    runMATMUL<aType, bType, M, K, N, validM, validK, validN, accPhase>(src0, src1, cTile);
 
     constexpr int staticRow = isInsert ? dstRow : (M - indexRow);
     constexpr int staticCol = isInsert ? dstCol : (N - indexCol);
@@ -171,13 +184,34 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType* out, __gm__ aType* src0, __
         TileType::Mat, outType, staticRow, staticCol, BLayout::ColMajor, staticRow, staticCol, SLayout::RowMajor, 512>;
     DstTileData dstTileData;
     TASSIGN(dstTileData, 0x0);
+    static_assert(phase == STPhase::Unspecified || !isRelu, "STPhase is not wired into the relu branch here.");
     if constexpr (isRelu) {
         TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
     } else {
         if constexpr (indexRow == 0 && indexCol == 0) {
-            TMOV(dstTileData, cTile);
+            if constexpr (phase == STPhase::Unspecified) {
+                TMOV(dstTileData, cTile);
+            } else if constexpr (phase == STPhase::Partial) {
+                // 多次搬出序列：Partial 写被回读校验的目的地且不释放 unit flag，
+                // Final 写一块不回读的 scratch，仅用于释放标志。
+                DstTileData scratchTile;
+                TASSIGN(scratchTile, 0x30000);
+                TMOV<STPhase::Partial>(dstTileData, cTile);
+                TMOV<STPhase::Final>(scratchTile, cTile);
+            } else {
+                TMOV<phase>(dstTileData, cTile);
+            }
         } else if constexpr (!isInsert) {
-            TEXTRACT(dstTileData, cTile, indexRow, indexCol);
+            if constexpr (phase == STPhase::Unspecified) {
+                TEXTRACT(dstTileData, cTile, indexRow, indexCol);
+            } else if constexpr (phase == STPhase::Partial) {
+                DstTileData scratchTile;
+                TASSIGN(scratchTile, 0x30000);
+                TEXTRACT<STPhase::Partial>(dstTileData, cTile, indexRow, indexCol);
+                TEXTRACT<STPhase::Final>(scratchTile, cTile, indexRow, indexCol);
+            } else {
+                TEXTRACT<phase>(dstTileData, cTile, indexRow, indexCol);
+            }
         } else {
             using GlobalDataSrc2 = GlobalTensor<
                 outType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
@@ -192,7 +226,16 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType* out, __gm__ aType* src0, __
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
 #endif
-            TINSERT(dstTileData, cTile, indexRow, indexCol);
+            if constexpr (phase == STPhase::Unspecified) {
+                TINSERT(dstTileData, cTile, indexRow, indexCol);
+            } else if constexpr (phase == STPhase::Partial) {
+                DstTileData scratchTile;
+                TASSIGN(scratchTile, 0x30000);
+                TINSERT<STPhase::Partial>(dstTileData, cTile, indexRow, indexCol);
+                TINSERT<STPhase::Final>(scratchTile, cTile, indexRow, indexCol);
+            } else {
+                TINSERT<phase>(dstTileData, cTile, indexRow, indexCol);
+            }
         }
     }
 #ifndef __PTO_AUTO__
@@ -206,7 +249,7 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType* out, __gm__ aType* src0, __
 template <
     typename outType, typename aType, typename bType, typename fbType, int M, int K, int N, int validM, int validK,
     int validN, bool isRelu = false, int indexRow = 0, int indexCol = 0, bool isInsert = false, int dstRow = 0,
-    int dstCol = 0>
+    int dstCol = 0, STPhase phase = STPhase::Unspecified, AccPhase accPhase = AccPhase::Unspecified>
 __global__ AICORE void runVectorQuantTMOV_nz2nz(
     __gm__ outType* out, __gm__ aType* src0, __gm__ bType* src1, __gm__ fbType* src2, __gm__ outType* src3)
 {
@@ -231,7 +274,7 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
 
-    runMATMULFB<aType, bType, fbType, M, K, N, validM, validK, validN>(src0, src1, src2, cTile, fbMatTile);
+    runMATMULFB<aType, bType, fbType, M, K, N, validM, validK, validN, accPhase>(src0, src1, src2, cTile, fbMatTile);
 
     using FbTile = Tile<TileType::Scaling, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     FbTile fbTile;
@@ -249,9 +292,17 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
         TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
     } else {
         if constexpr (indexRow == 0 && indexCol == 0) {
-            TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+            if constexpr (phase == STPhase::Unspecified) {
+                TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+            } else {
+                TMOV_FP<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+            }
         } else if constexpr (!isInsert) {
-            TEXTRACT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            if constexpr (phase == STPhase::Unspecified) {
+                TEXTRACT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            } else {
+                TEXTRACT_FP<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            }
         } else {
             using GlobalDataSrc3 = GlobalTensor<
                 outType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
@@ -266,7 +317,11 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
 #endif
-            TINSERT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            if constexpr (phase == STPhase::Unspecified) {
+                TINSERT_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            } else {
+                TINSERT_FP<phase, DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile, indexRow, indexCol);
+            }
         }
     }
 #ifndef __PTO_AUTO_
@@ -382,6 +437,48 @@ void launchTMOVAcc2MatNZ2NZ(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t*
         runTMOV_nz2nz<half, half, half, 32, 32, 32, 32, 32, 32, false, 32, 32, true, 128, 128><<<1, nullptr, stream>>>(
             reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
             reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 7) {
+        // unit flag: TMOV Acc→Mat（复用 key 1 形状）
+        runTMOV_nz2nz<
+            half, half, half, 64, 128, 128, 64, 128, 128, false, 0, 0, false, 0, 0, STPhase::Final, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 8) {
+        // unit flag: TEXTRACT Acc→Mat（复用 key 5 形状）
+        runTMOV_nz2nz<
+            half, half, half, 64, 64, 64, 64, 64, 64, false, 16, 16, false, 0, 0, STPhase::Final, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 9) {
+        // unit flag: TINSERT Acc→Mat（复用 key 6 形状）
+        runTMOV_nz2nz<
+            half, half, half, 32, 32, 32, 32, 32, 32, false, 32, 32, true, 128, 128, STPhase::Final, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 10) {
+        // unit flag: TMOV 多次搬出 Partial -> Final
+        runTMOV_nz2nz<
+            half, half, half, 64, 128, 128, 64, 128, 128, false, 0, 0, false, 0, 0, STPhase::Partial, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 11) {
+        // unit flag: TEXTRACT 多次搬出 Partial -> Final
+        runTMOV_nz2nz<
+            half, half, half, 64, 64, 64, 64, 64, 64, false, 16, 16, false, 0, 0, STPhase::Partial, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
+    } else if constexpr (tilingKey == 12) {
+        // unit flag: TINSERT 多次搬出 Partial -> Final
+        runTMOV_nz2nz<
+            half, half, half, 32, 32, 32, 32, 32, 32, false, 32, 32, true, 128, 128, STPhase::Partial, AccPhase::Final>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+                reinterpret_cast<half*>(src2));
     }
 }
 template void launchTMOVAcc2MatNZ2NZ<1>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
@@ -390,6 +487,12 @@ template void launchTMOVAcc2MatNZ2NZ<3>(uint8_t* out, uint8_t* src0, uint8_t* sr
 template void launchTMOVAcc2MatNZ2NZ<4>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 template void launchTMOVAcc2MatNZ2NZ<5>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 template void launchTMOVAcc2MatNZ2NZ<6>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<7>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<8>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<9>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<10>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<11>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
+template void launchTMOVAcc2MatNZ2NZ<12>(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream);
 
 template <int32_t tilingKey>
 void launchTMOVAcc2MatSCQuantNz(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, void* stream)
@@ -517,6 +620,27 @@ void launchTMOVAcc2MatFBQuantNz(uint8_t* out, uint8_t* src0, uint8_t* src1, uint
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
                 reinterpret_cast<uint64_t*>(src2), reinterpret_cast<int8_t*>(src3));
+    } else if constexpr (tilingKey == 13) {
+        // unit flag: TMOV_FP（per-channel 随路量化）Acc→Mat，复用 key 1 形状
+        runVectorQuantTMOV_nz2nz<
+            half, int8_t, int8_t, uint64_t, 80, 128, 64, 80, 128, 64, false, 0, 0, false, 0, 0, STPhase::Final,
+            AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<half*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
+            reinterpret_cast<uint64_t*>(src2), reinterpret_cast<half*>(src3));
+    } else if constexpr (tilingKey == 14) {
+        // unit flag: TEXTRACT_FP Acc→Mat，复用 key 11 形状
+        runVectorQuantTMOV_nz2nz<
+            int8_t, half, half, uint64_t, 128, 64, 128, 128, 64, 128, false, 32, 32, false, 0, 0, STPhase::Final,
+            AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+            reinterpret_cast<uint64_t*>(src2), reinterpret_cast<int8_t*>(src3));
+    } else if constexpr (tilingKey == 15) {
+        // unit flag: TINSERT_FP Acc→Mat，复用 key 12 形状
+        runVectorQuantTMOV_nz2nz<
+            int8_t, half, half, uint64_t, 128, 64, 128, 128, 64, 128, false, 32, 32, true, 256, 256, STPhase::Final,
+            AccPhase::Final><<<1, nullptr, stream>>>(
+            reinterpret_cast<int8_t*>(out), reinterpret_cast<half*>(src0), reinterpret_cast<half*>(src1),
+            reinterpret_cast<uint64_t*>(src2), reinterpret_cast<int8_t*>(src3));
     }
 }
 
@@ -543,4 +667,10 @@ template void launchTMOVAcc2MatFBQuantNz<10>(
 template void launchTMOVAcc2MatFBQuantNz<11>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream);
 template void launchTMOVAcc2MatFBQuantNz<12>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream);
+template void launchTMOVAcc2MatFBQuantNz<13>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream);
+template void launchTMOVAcc2MatFBQuantNz<14>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream);
+template void launchTMOVAcc2MatFBQuantNz<15>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream);

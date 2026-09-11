@@ -129,9 +129,12 @@ PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData& dst, SrcTileData& src, uin
     }
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t idxRow, uint16_t idxCol)
 {
+    (void)Phase;
     if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, idxRow, idxCol);
     } else {
@@ -147,10 +150,11 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint32_t idx
     TExtract_Impl<DstTileData, SrcTileData, QuantMode_t::NoQuant, useRelu>(dst, src, idxRow, idxCol);
 }
 
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(
     DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint32_t idxRow, uint32_t idxCol)
 {
+    (void)Phase;
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
     std::vector<uint64_t> scalars(dst.GetValidCol(), preQuantScalar);
@@ -169,9 +173,12 @@ PTO_INTERNAL void TEXTRACT_IMPL(
     TExtract_Impl<DstTileData, SrcTileData, quantPre, useRelu>(dst, src, idxRow, idxCol, scalars);
 }
 
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint32_t idxRow, uint32_t idxCol)
 {
+    (void)Phase;
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
 

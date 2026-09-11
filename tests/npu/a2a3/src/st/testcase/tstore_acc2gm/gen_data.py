@@ -235,6 +235,7 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case24",
         "TStoreAcc2gmTest.case25",
         "TStoreAcc2gmTest.case26",
+        "TStoreAcc2gmTest.case_vector_quant_l2hint",
         "TStoreAcc2gmTest.case27",
         "TStoreAcc2gmTest.case28",
         "TStoreAcc2gmTest.case29",
@@ -290,6 +291,7 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.uint8, bfloat16, 2, 32, 64, 16, 1, 2),
         
 
+        TStoreAcc2gmParams(np.float16, np.int8, 1, 55, 88, 32, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.float16, np.int8, 1, 55, 88, 32, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 34, 85, 19, 2, quant_type=np.uint64),
         TStoreAcc2gmParams(np.uint8, np.int8, 1, 31, 32, 29, 2, quant_type=np.uint64),

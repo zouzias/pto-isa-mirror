@@ -15,7 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/arch/register/tinsert_common.hpp"
 
 namespace pto {
-template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 __tf__ PTO_INTERNAL void TInsertAccToMat(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t validRow,
     uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
@@ -32,9 +34,10 @@ __tf__ PTO_INTERNAL void TInsertAccToMat(
     uint16_t nSize = CeilDivision(validCol, c0Size) * c0Size;
     __cbuf__ dstType* dstAddr = (__cbuf__ dstType*)__cce_get_tile_ptr(dst) + dstOffset;
     __cc__ typename SrcTileData::DType* srcData = (__cc__ typename SrcTileData::DType*)__cce_get_tile_ptr(src);
+    constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
 
     pto_copy_matrix_cc_to_cbuf(
-        dstAddr, srcData, 0, nSize, SrcTileData::Rows, dstStride, SrcTileData::Rows, 0, 0, 0, QuantPre,
+        dstAddr, srcData, 0, nSize, SrcTileData::Rows, dstStride, SrcTileData::Rows, 0, 0, unitFlagCtrl, QuantPre,
         static_cast<uint8_t>(reluMode), channelSplitEnable, false, 0, 0, false, false, 0, false, false, false, false,
         false, false);
 }
@@ -115,16 +118,19 @@ __tf__ PTO_INTERNAL void SetFPCInsert(typename FpTileData::TileDType __in__ fp)
     set_fpc(deqTensorAddr);
 }
 
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre, ReluPreMode reluMode>
+template <
+    typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre, ReluPreMode reluMode,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TInsertAccDispatch(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
     if constexpr (DstTileData::Loc == TileType::Mat) {
         static_assert(
             (!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
             "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
-        TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(
+        TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode, Phase>(
             dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), indexRow, indexCol);
     } else if constexpr (DstTileData::Loc == TileType::Vec) {
+        static_assert(Phase == STPhase::Unspecified, "STPhase is only supported for Acc-to-Mat TINSERT");
         TInsertAccToVec<DstTileData, SrcTileData, mode, quantPre, reluMode>(
             dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), indexRow, indexCol);
     } else {
@@ -135,12 +141,12 @@ PTO_INTERNAL void TInsertAccDispatch(DstTileData& dst, SrcTileData& src, uint16_
 }
 
 // relu (Acc→Mat or Acc→Vec, default AccToVecMode::SingleModeVec0)
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode>(
+    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
         dst, src, indexRow, indexCol);
 }
 
@@ -156,14 +162,16 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t inde
 }
 
 // scalar quant (Acc→Mat or Acc→Vec, default AccToVecMode::SingleModeVec0)
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
-    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode>(
+    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
         dst, src, indexRow, indexCol);
 }
 
@@ -181,7 +189,9 @@ PTO_INTERNAL void TINSERT_IMPL(
 }
 
 // vector quant (Acc→Mat or Acc→Vec, default AccToVecMode::SingleModeVec0)
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <
+    typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+    STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TINSERT_IMPL(
     DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -189,7 +199,7 @@ PTO_INTERNAL void TINSERT_IMPL(
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPCInsert<FpTileData>(fp.data());
-    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode>(
+    TInsertAccDispatch<DstTileData, SrcTileData, AccToVecMode::SingleModeVec0, quantPre, reluMode, Phase>(
         dst, src, indexRow, indexCol);
 }
 

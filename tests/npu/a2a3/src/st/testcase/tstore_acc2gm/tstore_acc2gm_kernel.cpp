@@ -648,7 +648,7 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
 template <
     int atomicType, typename accDataType, typename dstDataType, typename srcDataType, int gShape0, int gShape1,
     int gShape2, int gShape3, int gShape4, int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3,
-    int gWholeShape4, int validM, int validN, int validK, int reluMode = 0>
+    int gWholeShape4, int validM, int validN, int validK, int reluMode = 0, bool useL2Hint = false>
 __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     __gm__ dstDataType* out, __gm__ srcDataType* src0, __gm__ srcDataType* src1, __gm__ uint64_t* quantTensor)
 {
@@ -731,7 +731,9 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
 #endif
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
-    if constexpr (reluMode == 0) {
+    if constexpr (useL2Hint) {
+        TSTORE<TStoreL2Hint::NormalFirstVictim>(dstGlobal, cTile, scalingTile);
+    } else if constexpr (reluMode == 0) {
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
@@ -1053,7 +1055,12 @@ void LaunchTStoreAcc2gmScalarNz2nz(uint8_t* out, uint8_t* src0, uint8_t* src1, v
 template <int tilingKey>
 void LaunchTStoreAcc2gmVectorNz2nd(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream)
 {
-    if constexpr (tilingKey == 1) {
+    if constexpr (tilingKey == 22) {
+        TStoreAcc2gmVectorNz2nd<0, int32_t, half, int8_t, 1, 1, 1, 55, 88, 1, 1, 1, 55, 88, 55, 88, 32, 0, true>
+            <<<1, nullptr, stream>>>(
+                reinterpret_cast<half*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
+                reinterpret_cast<uint64_t*>(quantTensor));
+    } else if constexpr (tilingKey == 1) {
         TStoreAcc2gmVectorNz2nd<0, int32_t, half, int8_t, 1, 1, 1, 55, 88, 1, 1, 1, 55, 88, 55, 88, 32>
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<half*>(out), reinterpret_cast<int8_t*>(src0), reinterpret_cast<int8_t*>(src1),
@@ -1198,3 +1205,5 @@ template void LaunchTStoreAcc2gmVectorNz2nz<21>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
 template void LaunchTStoreAcc2gmVectorNz2NDC1HWC0<21>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* quantTensor, void* stream);
+
+template void LaunchTStoreAcc2gmVectorNz2nd<22>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);

@@ -98,3 +98,111 @@ template void LaunchTTRANS<float, 2, 16, 2, 16>(float* out, float* src, void* st
 template void LaunchTTRANS<uint8_t, 32, 32, 32, 32>(uint8_t* out, uint8_t* src, void* stream);
 template void LaunchTTRANS<uint8_t, 64, 64, 22, 63>(uint8_t* out, uint8_t* src, void* stream);
 template void LaunchTTRANS<float, 8, 8, 8, 8>(float* out, float* src, void* stream);
+template void LaunchTTRANS<aclFloat16, 128, 128, 64, 64>(aclFloat16* out, aclFloat16* src, void* stream);
+
+// Multi-dim transpose: [D0, D1, H, W] -> [D0, D1, W, H].
+// TLOAD/TSTORE one D0 plane at a time (fits UB for [16,16,16,16]); TTRANS runs in the D1 loop.
+template <typename T, int D0, int D1, int tRows, int tCols, int vRows, int vCols>
+__global__ AICORE void runTTRANSMultiDim(__gm__ T __out__* out, __gm__ T __in__* src)
+{
+    using DynShape = pto::Shape<-1, -1, -1, -1, -1>;
+    using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
+    using GlobalDataSrc = GlobalTensor<T, DynShape, DynStride>;
+    using GlobalDataDst = GlobalTensor<T, DynShape, DynStride>;
+
+    constexpr int srcTileH = tRows;
+    constexpr int srcTileW = tCols;
+    constexpr int dstTileW = (tRows * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE / sizeof(T);
+    // dst only stores the valid transposed rows; tmp holds the full vnchwconv footprint
+    constexpr int dstTileH = vCols;
+    constexpr unsigned yTileSizeElem = (sizeof(T) == 1) ? 32 : 16;
+    constexpr int tmpTileH = tCols;
+    constexpr int tmpTileW = (dstTileW + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
+
+    // One D0 plane: [D1, H, W] / [D1, W, H]
+    constexpr int planeSrcRows = D1 * vRows;
+    constexpr int planeSrcCols = tCols;
+    constexpr int planeDstRows = D1 * vCols;
+    constexpr int planeDstCols = dstTileW;
+
+    using PlaneSrcTile = Tile<TileType::Vec, T, planeSrcRows, planeSrcCols, BLayout::RowMajor, -1, -1>;
+    using PlaneDstTile = Tile<TileType::Vec, T, planeDstRows, planeDstCols, BLayout::RowMajor, -1, -1>;
+    using TileDataSrc = Tile<TileType::Vec, T, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
+    using TileDataDst = Tile<TileType::Vec, T, dstTileH, dstTileW, BLayout::RowMajor, -1, -1>;
+    using TileDataTmp = Tile<TileType::Vec, T, tmpTileH, tmpTileW, BLayout::RowMajor, tmpTileH, tmpTileW>;
+
+    PlaneSrcTile planeSrcTile(planeSrcRows, vCols);
+    PlaneDstTile planeDstTile(planeDstRows, vRows);
+    TileDataSrc srcTile(vRows, vCols);
+    TileDataDst dstTile(vCols, vRows);
+    TileDataTmp tmpTile;
+
+    constexpr unsigned planeSrcBytes = planeSrcRows * planeSrcCols * sizeof(T);
+    constexpr unsigned planeDstBytes = planeDstRows * planeDstCols * sizeof(T);
+    constexpr unsigned tmpBytes = tmpTileH * tmpTileW * sizeof(T);
+    static_assert((planeSrcBytes + planeDstBytes + tmpBytes) <= 192 * 1024, "UB overflow");
+
+    constexpr unsigned srcBase = 0x0;
+    constexpr unsigned dstBase = planeSrcBytes;
+    constexpr unsigned tmpBase = planeSrcBytes + planeDstBytes;
+    TASSIGN(planeSrcTile, srcBase);
+    TASSIGN(planeDstTile, dstBase);
+    TASSIGN(tmpTile, tmpBase);
+
+    constexpr unsigned srcSliceBytes = vRows * tCols * sizeof(T);
+    constexpr unsigned dstSliceBytes = vCols * dstTileW * sizeof(T);
+    constexpr int srcPlaneElems = D1 * vRows * vCols;
+    constexpr int dstPlaneElems = D1 * vCols * vRows;
+
+    for (int i = 0; i < D0; ++i) {
+        GlobalDataSrc srcGlobal(
+            src + i * srcPlaneElems, pto::Shape(1, 1, 1, planeSrcRows, vCols), pto::Stride(1, 1, 1, vCols, 1));
+        GlobalDataDst dstGlobal(
+            out + i * dstPlaneElems, pto::Shape(1, 1, 1, planeDstRows, vRows), pto::Stride(1, 1, 1, vRows, 1));
+
+        TLOAD(planeSrcTile, srcGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+        for (int j = 0; j < D1; ++j) {
+            unsigned sliceIdx = static_cast<unsigned>(j);
+            TASSIGN(srcTile, srcBase + sliceIdx * srcSliceBytes);
+            TASSIGN(dstTile, dstBase + sliceIdx * dstSliceBytes);
+            TTRANS(dstTile, srcTile, tmpTile);
+        }
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+        TSTORE(dstGlobal, planeDstTile);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+#endif
+    }
+}
+
+template <typename T, int D0, int D1, int tRows, int tCols, int vRows, int vCols>
+void LaunchTTRANSMultiDim(T* out, T* src, void* stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>) {
+        runTTRANSMultiDim<half, D0, D1, tRows, tCols, vRows, vCols><<<1, nullptr, stream>>>((half*)(out), (half*)(src));
+    } else {
+        runTTRANSMultiDim<T, D0, D1, tRows, tCols, vRows, vCols><<<1, nullptr, stream>>>(out, src);
+    }
+}
+
+// [1, 1, 16, 1] -> [1, 1, 1, 16]; src tile cols padded to 8 (float ElemPerBlock)
+template void LaunchTTRANSMultiDim<float, 1, 1, 16, 8, 16, 1>(float* out, float* src, void* stream);
+// [1, 1, 1, 16] -> [1, 1, 16, 1]
+template void LaunchTTRANSMultiDim<float, 1, 1, 1, 16, 1, 16>(float* out, float* src, void* stream);
+// [1, 1, 16, 16] -> [1, 1, 16, 16]
+template void LaunchTTRANSMultiDim<float, 1, 1, 16, 16, 16, 16>(float* out, float* src, void* stream);
+
+// [16, 16, 16, 1] -> [16, 16, 1, 16]; src tile cols padded to 8 (float ElemPerBlock)
+template void LaunchTTRANSMultiDim<float, 16, 16, 16, 8, 16, 1>(float* out, float* src, void* stream);
+// [16, 16, 1, 16] -> [16, 16, 16, 1]
+template void LaunchTTRANSMultiDim<float, 16, 16, 1, 16, 1, 16>(float* out, float* src, void* stream);
+// [16, 16, 16, 16] -> [16, 16, 16, 16]
+template void LaunchTTRANSMultiDim<float, 16, 16, 16, 16, 16, 16>(float* out, float* src, void* stream);

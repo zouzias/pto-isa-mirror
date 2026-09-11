@@ -72,19 +72,24 @@ PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp
         - RowStride: 32 for b8 types, 16 for b16/b32 types (corresponding to Y_ELEM_B8 and Y_ELEM_OTHER)
         - ElemPerBlock: 32/sizeof(T), i.e., number of elements per 32-byte block
         - b8: uint8_t/int8_t, b16: uint16_t/int16_t/half/bfloat16_t, b32: uint32_t/int32_t/float
-    - **Alignment conditions**:
-        - When stride meets alignment requirements (dstStride % RowStride == 0, srcStride % ElemPerBlock == 0, srcStride/ElemPerBlock <= 255), tmp is used for efficient transpose; otherwise, scalar copy is used without needing tmp.
-    - **2D Tile transpose [H, W] -> [W, H]**:
-        $$ \text{tmpSize} = W \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
-        where W is the column count (validCol), H is the row count (validRow). tmpStride must be aligned to RowStride. tmp is needed only when stride meets alignment conditions.
-    - **NCHW <-> NC1HWC0 bidirectional conversion**:
+        - `tmpStride = ceil(H / RowStride) × RowStride` (H padded up to RowStride)
+    - **2D Tile [H, W] -> [W, H]**:
+        - **b16 vtranspose fast path**: when `validRow % 16 == 0` and `validCol % 16 == 0`, uses `vtranspose` on 16×16 blocks. User `tmp` hold two 16×16 regions:
+        $$ \text{tmpSize} \ge 2 \times 16 \times 16 \times \text{sizeof(DType)} = 1024 \text{ bytes} $$
+        - **Aligned vnchwconv path**: when `dstStride % RowStride == 0`, transpose the full tile into user `tmp` then `copy_ubuf_to_ubuf` to dst:
+        $$ \text{tmpSize} = W \times \text{tmpStride} \times \text{sizeof(DType)} = W \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
+        where W is `validCol`, H is `validRow`.
+        - **Unaligned path (`TransTail2DTiles`)**: when `dstStride % RowStride != 0`, each subtile is transposed into user `tmp` then masked-copied (`vcopy` / scalar) to dst. Subtiles reuse the same tmp buffer, so:
+        $$ \text{tmpSize} = \text{ElemPerBlock} \times \text{tmpStride} \times \text{sizeof(DType)} = \text{ElemPerBlock} \times \lceil\frac{H}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
+        - To cover all 2D paths without knowing which one runs, allocate at least the maximum of the applicable formulas above (for b16 also ensure `tmpSize ≥ 1024` bytes).
+    - **NCHW <-> NC1HWC0 bidirectional conversion** (aligned path tmp size):
         - **Forward [N, C, H, W] -> [N, C1, H, W, C0]**:
         $$ \text{tmpSize} = H \times W \times \lceil\frac{C0}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         where C1 = (C + C0 - 1) / C0, transpose domain is C0 rows and H*W columns.
         - **Reverse [N, C1, H, W, C0] -> [N, C, H, W]**:
         $$ \text{tmpSize} = C0 \times \lceil\frac{H \times W}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         transpose domain is H*W rows and C0 columns.
-    - **GNCHW <-> GNC1HWC0 bidirectional conversion**:
+    - **GNCHW <-> GNC1HWC0 bidirectional conversion** (aligned path tmp size):
         - **Forward [G, N, C, H, W] -> [G, N, C1, H, W, C0]**:
         $$ \text{tmpSize} = H \times W \times \lceil\frac{C0}{\text{RowStride}}\rceil \times \text{RowStride} \times \text{sizeof(DType)} $$
         where C1 = (C + C0 - 1) / C0, transpose domain is C0 rows and H*W columns.

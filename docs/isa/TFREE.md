@@ -9,9 +9,10 @@ For the TileData `TPOP` flow, on the A2A3 platform `TPOP` already performs the f
 For the `GlobalData` flow, `TFREE(Pipe&, GlobalData&)` releases a FIFO slot view returned by `TPOP(Pipe&, GlobalData&)`.
 
 In CPU_SIM, the TileData form participates in the host-side FIFO release protocol when the pipe's free-status policy
-requires a release. Therefore the CPU TileData form is not the A2A3 no-op. Each call releases the calling consumer's
-oldest outstanding pop, so a consumer holding several pops releases them in pop order. The GlobalData overload is not
-currently available in CPU_SIM.
+requires a release. Therefore the CPU TileData form is not the A2A3 no-op. For `DIR_BOTH`, it releases the ring for the
+direction recorded by the corresponding `TPOP`. When several pops are outstanding, each call releases the
+calling consumer's oldest pop, preserving pop order and direction. The GlobalData overload is not currently available
+in CPU_SIM.
 
 ## Operation Semantics
 
@@ -44,7 +45,7 @@ template <typename Pipe, typename GlobalData, TileSplitAxis Split,
 PTO_INST RecordEvent TFREE(Pipe &pipe, GlobalData &gmTensor, WaitEvents &... events);
 ```
 
-The corresponding A2A3 implementation in `include/pto/npu/a2a3/TPop.hpp` is intentionally empty for this overload (on A5, the implementation in `include/pto/npu/a5/TPop.hpp` performs the actual free-space notification):
+The A2A3 TileData implementation in `include/pto/npu/a2a3/TFree.hpp` is intentionally empty (on A5, the implementation in `include/pto/npu/a5/TFree.hpp` performs the actual free-space notification):
 
 ```cpp
 template <typename Pipe, TileSplitAxis Split>

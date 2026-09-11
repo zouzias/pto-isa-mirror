@@ -128,6 +128,8 @@ void testTInsertAcc2Mat(int32_t m, int32_t k, int32_t n)
 
 TEST_F(TInsertTest, case_acc2mat_1) { testTInsertAcc2Mat<1, uint16_t, float>(16, 16, 16); }
 TEST_F(TInsertTest, case_acc2mat_2) { testTInsertAcc2Mat<2, uint16_t, float>(32, 32, 32); }
+TEST_F(TInsertTest, case_acc2mat_uf_final) { testTInsertAcc2Mat<3, uint16_t, float>(16, 16, 16); }
+TEST_F(TInsertTest, case_acc2mat_uf_multi_drain) { testTInsertAcc2Mat<4, uint16_t, float>(16, 16, 16); }
 
 using LaunchFn2 = void (*)(uint64_t*, uint64_t*, void*);
 

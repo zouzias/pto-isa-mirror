@@ -803,6 +803,75 @@ TEST_F(TPushPopTest, a5_style_c2v_dual_subblock_split_push_pop)
     run_iteration(1);
 }
 
+TEST_F(TPushPopTest, c2v_split_delayed_free_releases_each_popped_slot)
+{
+    using AccTile = TileAcc<float, 16, 16>;
+    using VecTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
+    using Pipe = TPipe<4, Direction::DIR_C2V, sizeof(float) * VecTile::Numel, 2>;
+
+    Pipe::reset_for_cpu_sim();
+    Pipe producer((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer0((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer1((__gm__ void*)nullptr, 0x0, 0x0);
+    AccTile src0;
+    AccTile src1;
+    VecTile top0;
+    VecTile top1;
+    VecTile bottom0;
+    VecTile bottom1;
+    TASSIGN(src0, 0);
+    TASSIGN(src1, AccTile::GetSizeInBytes());
+    TASSIGN(top0, 2 * AccTile::GetSizeInBytes());
+    TASSIGN(top1, 2 * AccTile::GetSizeInBytes() + VecTile::GetSizeInBytes());
+    TASSIGN(bottom0, 2 * AccTile::GetSizeInBytes() + 2 * VecTile::GetSizeInBytes());
+    TASSIGN(bottom1, 2 * AccTile::GetSizeInBytes() + 3 * VecTile::GetSizeInBytes());
+    fillTileSequence(src0, 1.0f);
+    fillTileSequence(src1, 1001.0f);
+
+    {
+        cpu_sim::ScopedExecutionContext producerCtx(0, 0, 1);
+        TPUSH<Pipe, AccTile, TileSplitAxis::TILE_UP_DOWN>(producer, src0);
+        TPUSH<Pipe, AccTile, TileSplitAxis::TILE_UP_DOWN>(producer, src1);
+    }
+    {
+        cpu_sim::ScopedExecutionContext consumerCtx(0, 0, 2);
+        TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(consumer0, top0);
+        TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(consumer0, top1);
+    }
+    {
+        cpu_sim::ScopedExecutionContext consumerCtx(0, 1, 2);
+        TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(consumer1, bottom0);
+        TPOP<Pipe, VecTile, TileSplitAxis::TILE_UP_DOWN>(consumer1, bottom1);
+    }
+
+    for (int r = 0; r < VecTile::Rows; ++r) {
+        for (int c = 0; c < VecTile::Cols; ++c) {
+            EXPECT_FLOAT_EQ(top0.GetElement(r, c), src0.GetElement(r, c));
+            EXPECT_FLOAT_EQ(top1.GetElement(r, c), src1.GetElement(r, c));
+            EXPECT_FLOAT_EQ(bottom0.GetElement(r, c), src0.GetElement(r + VecTile::Rows, c));
+            EXPECT_FLOAT_EQ(bottom1.GetElement(r, c), src1.GetElement(r + VecTile::Rows, c));
+        }
+    }
+
+    {
+        cpu_sim::ScopedExecutionContext consumerCtx(0, 0, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(consumer0);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(consumer0);
+    }
+    {
+        cpu_sim::ScopedExecutionContext consumerCtx(0, 1, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(consumer1);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN>(consumer1);
+    }
+
+    auto& state = Pipe::GetSharedState(cpu_pipe::TransferDir::C2V);
+    EXPECT_EQ(state.occupied, 0);
+    EXPECT_EQ(state.popped_not_freed_by_lane[0], 0);
+    EXPECT_EQ(state.popped_not_freed_by_lane[1], 0);
+    EXPECT_EQ(state.slot_busy[0], 0);
+    EXPECT_EQ(state.slot_busy[1], 0);
+}
+
 TEST_F(TPushPopTest, cpu_stub_prefers_injected_hooks_for_subblock_and_pipe_state)
 {
     HookTestPipe::SharedStateStorage storage{};
@@ -1138,3 +1207,157 @@ TEST_F(TPushPopTest, host_slot_byte_storage_reports_logical_slot_overflow)
 
     Pipe::reset_for_cpu_sim();
 }
+
+TEST_F(TPushPopTest, dir_both_full_capacity_and_delayed_free)
+{
+    using AccTile = TileAcc<float, 16, 16>;
+    using VecTile = Tile<TileType::Vec, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using Pipe = TPipe<0, Direction::DIR_BOTH, sizeof(float) * 256, 2, 2, true>;
+    constexpr auto split = TileSplitAxis::TILE_NO_SPLIT;
+    cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+    Pipe::reset_for_cpu_sim();
+    Pipe producer(nullptr, 0, 0);
+    Pipe consumer(nullptr, 0, 0);
+    AccTile acc;
+    VecTile vec;
+    VecTile forward;
+    MatTile backward;
+    TASSIGN(acc, 0);
+    TASSIGN(vec, 0x1000);
+    TASSIGN(forward, 0x2000);
+    TASSIGN(backward, 0x3000);
+
+    for (int round = 0; round < 8; ++round) {
+        for (int i = 0; i < 2; ++i) {
+            fillTileSequence(acc, float(round * 10000 + i * 1000));
+            TPUSH<Pipe, AccTile, split>(producer, acc);
+            fillTileSequence(vec, float(round * 10000 + i * 1000 + 500));
+            TPUSH<Pipe, VecTile, split>(producer, vec);
+        }
+        // Both directions must retain two tiles without either consumer freeing a slot.
+        for (int i = 0; i < 2; ++i) {
+            TPOP<Pipe, VecTile, split>(consumer, forward);
+            TPOP<Pipe, MatTile, split>(consumer, backward);
+            for (int r = 0; r < 16; ++r) {
+                for (int c = 0; c < 16; ++c) {
+                    const float expected = float(round * 10000 + i * 1000);
+                    EXPECT_FLOAT_EQ(forward.GetElement(r, c), expected + GetTileElementOffset<AccTile>(r, c));
+                    EXPECT_FLOAT_EQ(backward.GetElement(r, c), expected + 500 + r * 16 + c);
+                }
+            }
+        }
+        for (int i = 0; i < 4; ++i) {
+            TFREE<Pipe, split>(consumer);
+        }
+        EXPECT_EQ(Pipe::GetSharedState(cpu_pipe::TransferDir::C2V).occupied, 0);
+        EXPECT_EQ(Pipe::GetSharedState(cpu_pipe::TransferDir::V2C).occupied, 0);
+    }
+}
+
+TEST_F(TPushPopTest, dir_both_four_push_pipeline_round_trip)
+{
+    using AccTile = TileAcc<float, 16, 16>;
+    using VecTile = Tile<TileType::Vec, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16>;
+    using Pipe = TPipe<1, Direction::DIR_BOTH, sizeof(float) * 256, 2, 2, true>;
+    constexpr auto split = TileSplitAxis::TILE_NO_SPLIT;
+    Pipe::reset_for_cpu_sim();
+    std::thread cube([] {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        Pipe pipe(nullptr, 0, 0);
+        AccTile input;
+        MatTile output;
+        TASSIGN(input, 0);
+        TASSIGN(output, 0x1000);
+        for (int round = 0; round < 8; ++round) {
+            for (int i = 0; i < 4; ++i) {
+                std::fill_n(input.data(), input.Numel, float(round * 4 + i + 1));
+                TPUSH<Pipe, AccTile, split>(pipe, input);
+            }
+            for (int i = 0; i < 4; ++i) {
+                TPOP<Pipe, MatTile, split>(pipe, output);
+                for (int j = 0; j < output.Numel; ++j) {
+                    EXPECT_FLOAT_EQ(output.data()[j], float(round * 4 + i + 1) * 0.5f);
+                }
+                TFREE<Pipe, split>(pipe);
+            }
+        }
+    });
+    std::thread vector([] {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        Pipe pipe(nullptr, 0, 0);
+        VecTile tile;
+        TASSIGN(tile, 0x2000);
+        for (int i = 0; i < 32; ++i) {
+            TPOP<Pipe, VecTile, split>(pipe, tile);
+            for (int j = 0; j < tile.Numel; ++j) {
+                tile.data()[j] *= 0.5f;
+            }
+            TFREE<Pipe, split>(pipe);
+            TPUSH<Pipe, VecTile, split>(pipe, tile);
+        }
+    });
+    cube.join();
+    vector.join();
+    EXPECT_EQ(Pipe::GetSharedState(cpu_pipe::TransferDir::C2V).occupied, 0);
+    EXPECT_EQ(Pipe::GetSharedState(cpu_pipe::TransferDir::V2C).occupied, 0);
+}
+
+TEST_F(TPushPopTest, dir_both_hook_storage_initializes_and_resets_both_directions)
+{
+    using Pipe = TPipe<2, Direction::DIR_BOTH, sizeof(float) * 256, 2, 2, true>;
+    Pipe::SharedStateStorage storage{};
+    g_pipe_hook_storage = &storage;
+    ScopedCpuStubHooks hooks(nullptr, reinterpret_cast<void*>(&MockPipeSharedStateHook));
+    auto& reverse = Pipe::GetSharedState(cpu_pipe::TransferDir::V2C);
+    auto& forward = Pipe::GetSharedState(cpu_pipe::TransferDir::C2V);
+    EXPECT_NE(&forward, &reverse);
+    EXPECT_EQ(g_pipe_hook_size, sizeof(storage));
+    forward.occupied = 1;
+    reverse.occupied = 2;
+    Pipe::reset_for_cpu_sim();
+    EXPECT_EQ(forward.occupied, 0);
+    EXPECT_EQ(reverse.occupied, 0);
+    EXPECT_EQ(&reverse, &Pipe::GetSharedState(cpu_pipe::TransferDir::V2C));
+}
+
+namespace {
+void testDirBothV2CNZLayout(uint32_t destinationBase)
+{
+    using VecTile = Tile<TileType::Vec, float, 16, 128, BLayout::ColMajor, 16, 128, SLayout::RowMajor, 512>;
+    using MatTile = Tile<TileType::Mat, float, 16, 128, BLayout::ColMajor, 16, 128, SLayout::RowMajor, 512>;
+    using Pipe = TPipe<3, Direction::DIR_BOTH, sizeof(float) * 16 * 128, 2, 2, true>;
+    constexpr auto split = TileSplitAxis::TILE_NO_SPLIT;
+    cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+    Pipe::reset_for_cpu_sim();
+    Pipe pipe(nullptr, 0, 0);
+    VecTile input;
+    MatTile output;
+    TASSIGN(input, 0x4000);
+    TASSIGN(output, destinationBase);
+
+    // NZ producer and consumer match the A5 V2C layout. Reuse both FIFO slots.
+    for (int round = 0; round < 8; ++round) {
+        SCOPED_TRACE(round);
+        for (int r = 0; r < 16; ++r) {
+            for (int c = 0; c < 128; ++c) {
+                input.SetElement(r, c, float(round * 10000 + r * 128 + c + 1));
+            }
+        }
+        TPUSH<Pipe, VecTile, split>(pipe, input);
+        TPOP<Pipe, MatTile, split>(pipe, output);
+        for (int r = 0; r < 16; ++r) {
+            for (int c = 0; c < 128; ++c) {
+                EXPECT_FLOAT_EQ(output.GetElement(r, c), float(round * 10000 + r * 128 + c + 1));
+            }
+        }
+        TFREE<Pipe, split>(pipe);
+    }
+    EXPECT_EQ(Pipe::GetSharedState(cpu_pipe::TransferDir::V2C).occupied, 0);
+}
+} // namespace
+
+TEST_F(TPushPopTest, dir_both_v2c_nz_layout_with_aliased_fifo_destination) { testDirBothV2CNZLayout(0); }
+
+TEST_F(TPushPopTest, dir_both_v2c_nz_layout_with_separate_destination) { testDirBothV2CNZLayout(0x10000); }
