@@ -55,6 +55,8 @@ def generate_case_name(param):
 if __name__ == "__main__":
     case_params_list = [
         TColExpandParams(np.float32, 64, 64, 64, 64, 64, 64),
+        TColExpandParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TColExpandParams(np.uint64, 64, 64, 64, 64, 64, 64),
         TColExpandParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
