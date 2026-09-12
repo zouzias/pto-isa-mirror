@@ -84,7 +84,29 @@ PTO_INLINE void CheckTileData(TileData& dst, GlobalData& src)
         // An ND source always merges DIM_0..DIM_3 into rows, including ND2NZ into a Mat tile that is
         // not row major: there DIM_2 is the nd-matrix count, so the tile has DIM_2 * DIM_3 rows.
         [[maybe_unused]] const bool ndIntoNzTile = GlobalData::layout == pto::Layout::ND && rowsMerged;
-        assert((rowsMerged && TileData::isRowMajor) || (colsMerged && !TileData::isRowMajor) || ndIntoNzTile);
+        [[maybe_unused]] bool partialMultiNd = false;
+        constexpr bool ndToNz =
+            GlobalData::layout == Layout::ND && GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ;
+        constexpr bool dnToZn =
+            GlobalData::layout == Layout::DN && GetTileLayoutCustom<TileData>() == TileLayoutCustom::ZN;
+        if constexpr (
+            (ndToNz || dnToZn) && GlobalData::staticShape[2] != 1 && TileData::Loc == TileType::Mat &&
+            sizeof(typename TileData::DType) <= 4) {
+            const int64_t matrixRows = src.GetShape(dnToZn ? GlobalTensorDim::DIM_4 : GlobalTensorDim::DIM_3);
+            const int64_t matrixCols = src.GetShape(dnToZn ? GlobalTensorDim::DIM_3 : GlobalTensorDim::DIM_4);
+            const int validRows = dnToZn ? dst.GetValidCol() : dst.GetValidRow();
+            const int validCols = dnToZn ? dst.GetValidRow() : dst.GetValidCol();
+            partialMultiNd = NPUMemoryModel::Instance().GetArch() == NPUArch::A5 &&
+                             src.GetShape(GlobalTensorDim::DIM_0) == 1 && src.GetShape(GlobalTensorDim::DIM_1) == 1 &&
+                             src.GetShape(GlobalTensorDim::DIM_2) > 0 &&
+                             src.GetShape(GlobalTensorDim::DIM_2) <= 65535 && matrixRows > 0 && matrixRows <= 16384 &&
+                             validRows > 0 && validRows <= (dnToZn ? TileData::Cols : TileData::Rows) &&
+                             validRows <= src.GetShape(GlobalTensorDim::DIM_2) * matrixRows && validCols > 0 &&
+                             validCols <= (dnToZn ? TileData::Rows : TileData::Cols) && validCols <= matrixCols;
+        }
+        assert(
+            (rowsMerged && TileData::isRowMajor) || (colsMerged && !TileData::isRowMajor) || ndIntoNzTile ||
+            partialMultiNd);
     }
 }
 
