@@ -717,3 +717,74 @@ TEST_F(TLOADTest, A5MatNdToNzMultiNdPartialRowsInt16) { CheckA5MultiNdPartialRow
 TEST_F(TLOADTest, A5MatNdToNzMultiNdPartialRowsFloat) { CheckA5MultiNdPartialRows<float, false>(); }
 
 TEST_F(TLOADTest, A5MatNdToNzMultiNdPartialRowsDynamic) { CheckA5MultiNdPartialRows<int16_t, true>(); }
+
+// DN matrices merge along ZN columns; check both the valid values and untouched storage.
+template <typename T, bool DynamicShape>
+void CheckA5MultiNdZnPartialCols()
+{
+    pto::NPU_MEMORY_INIT(pto::NPUArch::A5);
+    pto::NPU_MEMORY_CLEAR();
+    constexpr int kC0 = 32 / sizeof(T);
+    constexpr int kRows = 3 * kC0;
+    constexpr int kCols = 32;
+    constexpr int kD = kC0 + 3;
+    constexpr int kColumnStride = 2 * kC0;
+    constexpr int kMatrixStride = 9 * kColumnStride;
+    using SrcShape = pto::Shape<1, 1, DynamicShape ? -1 : 16, kD, DynamicShape ? -1 : 3>;
+    using SrcGlobal = pto::GlobalTensor<
+        T, SrcShape, pto::Stride<16 * kMatrixStride, 16 * kMatrixStride, kMatrixStride, 1, kColumnStride>,
+        pto::Layout::DN>;
+    using MatTile =
+        pto::Tile<pto::TileType::Mat, T, kRows, kCols, pto::BLayout::RowMajor, -1, -1, pto::SLayout::ColMajor, 512>;
+    std::vector<T> src(16 * kMatrixStride);
+    for (size_t i = 0; i < src.size(); ++i) {
+        src[i] = static_cast<T>(i % 97 + 1);
+    }
+    for (int matrices : {1, 16}) {
+        if (!DynamicShape && matrices == 1) {
+            continue;
+        }
+        SrcGlobal srcGlobal(src.data(), SrcShape(1, 1, matrices, kD, 3));
+        for (int validCols : {1, 2, 3, 4, 8, 15, 16, 31, 32}) {
+            if (validCols > matrices * 3) {
+                continue;
+            }
+            for (int validRows : {kC0 - 1, kD}) {
+                SCOPED_TRACE(
+                    testing::Message() << "matrices=" << matrices << " validRows=" << validRows
+                                       << " validCols=" << validCols);
+                MatTile dst(validRows, validCols);
+                pto::TASSIGN(dst, 4096);
+                for (int row = 0; row < kRows; ++row) {
+                    for (int col = 0; col < kCols; ++col) {
+                        dst.SetElement(row, col, static_cast<T>(-7));
+                    }
+                }
+                pto::TLOAD(dst, srcGlobal);
+                for (int row = 0; row < kRows; ++row) {
+                    for (int col = 0; col < kCols; ++col) {
+                        T expected = static_cast<T>(-7);
+                        if (col < validCols && row < validRows) {
+                            expected = src[(col / 3) * kMatrixStride + (col % 3) * kColumnStride + row];
+                        } else if (col < validCols && row < ((validRows + kC0 - 1) / kC0) * kC0) {
+                            expected = static_cast<T>(0);
+                        }
+                        EXPECT_EQ(dst.GetElement(row, col), expected) << "row=" << row << " col=" << col;
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsInt8) { CheckA5MultiNdZnPartialCols<int8_t, false>(); }
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsInt16) { CheckA5MultiNdZnPartialCols<int16_t, false>(); }
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsFloat) { CheckA5MultiNdZnPartialCols<float, false>(); }
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsDynamicInt8) { CheckA5MultiNdZnPartialCols<int8_t, true>(); }
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsDynamicInt16) { CheckA5MultiNdZnPartialCols<int16_t, true>(); }
+
+TEST_F(TLOADTest, A5MatDnToZnMultiNdPartialColsDynamicFloat) { CheckA5MultiNdZnPartialCols<float, true>(); }
