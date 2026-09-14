@@ -232,6 +232,7 @@ tpushpop_subtile
 tmadd
 tmula
 syncall
+init_core
 )
 
 # Opt-in testcases: built ONLY when TEST_CASE=<name> is explicitly supplied.

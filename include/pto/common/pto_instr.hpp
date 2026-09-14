@@ -130,6 +130,13 @@ PTO_INST void SYNCALL()
 #endif
 }
 
+PTO_INST void INIT_CORE()
+{
+#if ((defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)) && !defined(__COSTMODEL)) || defined(__CPU_SIM)
+    MAP_INSTR_IMPL(INIT_CORE);
+#endif
+}
+
 // Soft SYNCALL: GM shared-counter barrier. CoreType selects AIV-only / AIC-only / MIX.
 // Hard Mode with a workspace argument is accepted but ignores gmWorkspace (same as SYNCALL()).
 template <
