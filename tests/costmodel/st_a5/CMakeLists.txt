@@ -20,7 +20,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-add_compile_options(-Wno-macro-redefined -Wno-ignored-attributes
-    "SHELL:-include stdint.h" "SHELL:-include stddef.h")
+add_compile_options(-Wno-macro-redefined -Wno-ignored-attributes)
 
 add_subdirectory(testcase)
