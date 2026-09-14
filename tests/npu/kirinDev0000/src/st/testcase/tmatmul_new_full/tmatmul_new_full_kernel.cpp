@@ -111,31 +111,89 @@ __global__ AICORE void RunTMATMUL(
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-    if constexpr (isQuant) {
-        TMOV(quantFbTile, quantMatTile);
-    }
+    if constexpr (isQuant && N > 256) {
+        // FBUF on KirinDev0000 can only hold 2KB
+        // For N > 256 with DeqF16Vector, split the matmul along N into chunks
+        // of 256, reloading FBUF and L0B each chunk
+        static_assert(!isBias, "N > 256 with bias and quant is not yet supported.");
+        constexpr int QUANT_MAX = 256;
+        constexpr int nChunks = N / QUANT_MAX;
+        constexpr int chunkN = QUANT_MAX;
 
-    TMOV(bTile, bMatTile);
-    if constexpr (isBias) {
-        TMOV(biasTile, biasDataTile);
-    }
+        using RightTileChunk = TileRight<BType, K, chunkN, K, chunkN>;
+        using AccTileChunk =
+            Tile<TileType::Mat, OutType, M, chunkN, BLayout::ColMajor, M, chunkN, SLayout::RowMajor, 1024>;
+        using QuantMatTileChunk = Tile<TileType::Mat, uint64_t, 1, chunkN, BLayout::RowMajor, 1, chunkN>;
+        using QuantFbTileChunk = Tile<TileType::Scaling, uint64_t, 1, chunkN, BLayout::RowMajor, 1, chunkN>;
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        RightTileChunk bTileChunk;
+        TASSIGN<0x0>(bTileChunk);
 
-    MatmulMacroConfig cfg;
-    if constexpr (isQuant) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
-    }
+        QuantFbTileChunk quantFbTileChunk;
+        TASSIGN<0x0>(quantFbTileChunk);
 
-    if constexpr (isBias) {
-        TMATMUL(cMatTile, aMatTile, bTile, biasTile, cfg);
+        AccTileChunk cMatTileChunk;
+        QuantMatTileChunk quantMatTileChunk;
+
+        // Each NZ Block in CBUF: 16 rows * c0 cols * sizeof(OutType) bytes
+        constexpr uint32_t cBlockBytes = 16 * c0 * sizeof(OutType);
+        constexpr uint32_t cChunkOffset = (chunkN / c0) * cBlockBytes;
+
+        for (int chunk = 0; chunk < nChunks; chunk++) {
+            // Point quantMatTileChunk to the correct offset in CBUF
+            TASSIGN(
+                quantMatTileChunk,
+                (uint64_t)__cce_get_tile_ptr(quantMatTile.data()) + chunk * chunkN * sizeof(uint64_t));
+            TMOV(quantFbTileChunk, quantMatTileChunk);
+
+            // Extract B columns [chunk*chunkN, (chunk+1)*chunkN] from cbuf to l0b
+            TEXTRACT(bTileChunk, bMatTile, 0, chunk * chunkN);
+
+            set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+            wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+            // Point cMatTileChunk to the correct CBUF offset within the full C Tile
+            TASSIGN(cMatTileChunk, (uint64_t)__cce_get_tile_ptr(cMatTile.data()) + chunk * cChunkOffset);
+
+            MatmulMacroConfig chunkCfg;
+            chunkCfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTileChunk.data());
+            TMATMUL(cMatTileChunk, aMatTile, bTileChunk, chunkCfg);
+
+            if (chunk < nChunks - 1) {
+                set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+                wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+            }
+        }
+
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     } else {
-        TMATMUL(cMatTile, aMatTile, bTile, cfg);
-    }
+        if constexpr (isQuant) {
+            TMOV(quantFbTile, quantMatTile);
+        }
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        TMOV(bTile, bMatTile);
+        if constexpr (isBias) {
+            TMOV(biasTile, biasDataTile);
+        }
+
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+        MatmulMacroConfig cfg;
+        if constexpr (isQuant) {
+            cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        }
+
+        if constexpr (isBias) {
+            TMATMUL(cMatTile, aMatTile, bTile, biasTile, cfg);
+        } else {
+            TMATMUL(cMatTile, aMatTile, bTile, cfg);
+        }
+
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    }
 
     TMOV(cVecTile, cMatTile);
 

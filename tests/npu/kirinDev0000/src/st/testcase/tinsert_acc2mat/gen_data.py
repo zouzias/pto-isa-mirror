@@ -54,6 +54,11 @@ if __name__ == "__main__":
         ("TInsertAcc2MatTest.case_cbuf2cbuf_nofixp_16", gen_cbuf2cbuf, 16, 16),
         ("TInsertAcc2MatTest.case_mat2mat_load_16", gen_cbuf2cbuf, 16, 16),
         ("TInsertAcc2MatTest.case_mat2mat_ctrl_16", gen_cbuf2cbuf, 16, 16),
+        ("TInsertAcc2MatTest.case_cbuf2cbuf_sdk_16", gen_cbuf2cbuf, 16, 16),
+        ("TInsertAcc2MatTest.case_cbuf2cbuf_sdk_32", gen_cbuf2cbuf, 32, 32),
+        ("TInsertAcc2MatTest.case_mat2mat_ctrl_32", gen_cbuf2cbuf, 32, 32),
+        ("TInsertAcc2MatTest.case_acc2ub_direct_16", gen_acc2mat, 16, 16, 16),
+        ("TInsertAcc2MatTest.case_acc_via_ub_16", gen_acc2mat, 16, 16, 16),
     ]
 
     for name, gen_fn, *args in cases:

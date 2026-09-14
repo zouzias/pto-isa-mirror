@@ -128,3 +128,8 @@ TEST_F(TInsertAcc2MatTest, case_cbuf2cbuf_fixp_16) { testCbufToCbuf<5, uint16_t>
 TEST_F(TInsertAcc2MatTest, case_cbuf2cbuf_nofixp_16) { testCbufToCbuf<6, uint16_t>(16, 16); }
 TEST_F(TInsertAcc2MatTest, case_mat2mat_load_16) { testCbufToCbuf<7, uint16_t>(16, 16); }
 TEST_F(TInsertAcc2MatTest, case_mat2mat_ctrl_16) { testCbufToCbuf<8, uint16_t>(16, 16); }
+TEST_F(TInsertAcc2MatTest, case_cbuf2cbuf_sdk_16) { testCbufToCbuf<9, uint16_t>(16, 16); }
+TEST_F(TInsertAcc2MatTest, case_cbuf2cbuf_sdk_32) { testCbufToCbuf<10, uint16_t>(32, 32); }
+TEST_F(TInsertAcc2MatTest, case_mat2mat_ctrl_32) { testCbufToCbuf<11, uint16_t>(32, 32); }
+TEST_F(TInsertAcc2MatTest, case_acc2ub_direct_16) { testTInsertAcc2Mat<12, uint16_t, uint16_t>(16, 16, 16); }
+TEST_F(TInsertAcc2MatTest, case_acc_via_ub_16) { testTInsertAcc2Mat<13, uint16_t, uint16_t>(16, 16, 16); }

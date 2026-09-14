@@ -35,6 +35,59 @@ PTO_INTERNAL void SetLoop3Para()
 __tf__ PTO_INTERNAL void SetFixpNzPara(
     uint16_t loop4Size, uint16_t loop2SrcStride, uint16_t loop3SrcStride, uint16_t loop4SrcStride);
 
+// L1 -> L1 flat byte copy using the LOOP_ENHANCE pattern
+// on KirinDev0000 fix_cbuf_to_cbuf with NORMAL_DMA silently fails; the
+// FIX L1 to L1 uses LOOP_ENHANCE mode with set_loopenhance_para
+// and the 2-param config form is the only working approach
+// copies in 512-byte (1 NZ block) chunks to stay within proven limits.
+PTO_INTERNAL inline void L1CopyL1Sdk(__cbuf__ void* dst, __cbuf__ void* src, uint32_t totalBytes)
+{
+    constexpr uint64_t C0_BYTE_SIZE = 32;
+    constexpr uint64_t BLOCK_BYTES = 512; // one NZ block = 16 * 32 bytes
+
+    __cbuf__ int16_t* srcBase = reinterpret_cast<__cbuf__ int16_t*>(src);
+    __cbuf__ int16_t* dstBase = reinterpret_cast<__cbuf__ int16_t*>(dst);
+
+    pipe_barrier(PIPE_ALL);
+    uint32_t offset = 0;
+    while (offset < totalBytes) {
+        uint32_t chunkBytes = (totalBytes - offset < BLOCK_BYTES) ? (totalBytes - offset) : BLOCK_BYTES;
+        uint64_t copyTimes = chunkBytes / C0_BYTE_SIZE;
+
+        // FixpL1ToL1 with: loop1=1, loop2=1, loop3=1, loop4=copyTimes,
+        // all srcStride=1, all dstStrides=C0_BYTE_SIZE, padEn=0, splitEn=0
+        uint64_t xm = C0_BYTE_SIZE | (1ULL << 40) | (static_cast<uint64_t>(fixp_trans_mode_t::LOOP_ENHANCE) << 61);
+        uint64_t xt = C0_BYTE_SIZE | (1ULL << 40);
+        uint64_t config = C0_BYTE_SIZE | (1ULL << 40);
+        uint64_t nzPara = copyTimes | (1ULL << 16) | (1ULL << 32) | (1ULL << 48);
+
+        set_loopenhance_para(config);
+        set_fixp_nz_para(nzPara);
+        fix_cbuf_to_cbuf(dstBase + offset / sizeof(int16_t), srcBase + offset / sizeof(int16_t), xm, xt);
+        set_fixp_nz_para(0);
+
+        offset += chunkBytes;
+    }
+    pipe_barrier(PIPE_ALL);
+}
+
+// Single 32-byte L1 -> L1 copy without pipe_barrier wrapping (for batch use).
+PTO_INTERNAL inline void L1CopyL1Raw(__cbuf__ void* dst, __cbuf__ void* src, uint32_t copyBytes)
+{
+    constexpr uint64_t C0_BYTE_SIZE = 32;
+    uint64_t copyTimes = copyBytes / C0_BYTE_SIZE;
+
+    uint64_t xm = C0_BYTE_SIZE | (1ULL << 40) | (static_cast<uint64_t>(fixp_trans_mode_t::LOOP_ENHANCE) << 61);
+    uint64_t xt = C0_BYTE_SIZE | (1ULL << 40);
+    uint64_t config = C0_BYTE_SIZE | (1ULL << 40);
+    uint64_t nzPara = copyTimes | (1ULL << 16) | (1ULL << 32) | (1ULL << 48);
+
+    set_loopenhance_para(config);
+    set_fixp_nz_para(nzPara);
+    fix_cbuf_to_cbuf(reinterpret_cast<__cbuf__ int16_t*>(dst), reinterpret_cast<__cbuf__ int16_t*>(src), xm, xt);
+    set_fixp_nz_para(0);
+}
+
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL constexpr uint32_t GetTmovAccDstStride()
 {
@@ -220,9 +273,7 @@ __tf__ PTO_INTERNAL void TMovCbufToCbuf(typename DstTile::TileDType __out__ dst,
     __cbuf__ T* srcAddr = (__cbuf__ T*)__cce_get_tile_ptr(src);
     __cbuf__ T* dstAddr = (__cbuf__ T*)__cce_get_tile_ptr(dst);
     uint32_t totalBytes = SrcTile::Rows * SrcTile::Cols * sizeof(T);
-    uint64_t loop2DstStride = static_cast<uint64_t>(totalBytes);
-    uint32_t loop3Size = totalBytes;
-    fix_cbuf_to_cbuf(dstAddr, srcAddr, loop2DstStride, loop3Size, fixp_trans_mode_t::NORMAL_DMA, 0, 1);
+    L1CopyL1Sdk((__cbuf__ void*)dstAddr, (__cbuf__ void*)srcAddr, totalBytes);
 }
 
 template <typename DstTile, typename SrcTile, typename DstPtr, typename SrcPtr>
@@ -254,12 +305,74 @@ PTO_INTERNAL void TMovCbufToCbufAccDispatch(
         fix_cbuf_to_cbuf(dstAddr, srcData, loop2DstStride, loop3Size, fixp_trans_mode_t::NZ2DN, 0, loop2Size);
         SetFixpNzPara(0, 0, 0, 0);
     } else {
-        uint32_t totalBytes = static_cast<uint32_t>(SrcTile::Rows * SrcTile::Cols * sizeof(srcType));
-        uint32_t totalBlocks = totalBytes / BLOCK_BYTE_SIZE;
-        SetFixpNzPara(1, static_cast<uint16_t>(totalBlocks), 1, 0);
-        fix_cbuf_to_cbuf(
-            dstAddr, srcData, static_cast<uint64_t>(totalBytes), totalBytes, fixp_trans_mode_t::NORMAL_DMA, 0, 1);
-        SetFixpNzPara(0, 0, 0, 0);
+        if constexpr (SrcTile::InnerCols == DstTile::InnerCols && SrcTile::InnerRows == DstTile::InnerRows) {
+            // Same inner box layout: flat byte copy
+            uint32_t totalBytes = static_cast<uint32_t>(SrcTile::Rows * SrcTile::Cols * sizeof(srcType));
+            L1CopyL1Sdk((__cbuf__ void*)dstAddr, (__cbuf__ void*)srcData, totalBytes);
+        } else {
+            // Different inner box sizes (e.g., Acc SFractalSize=1024 -> Mat SFractalSize=512).
+            // Use LOOP_ENHANCE with strided copy: loop3 iterates over rows within a block,
+            // loop4 iterates over c0-sized chunks within a row.
+            // Src strides are in units of C0_BYTE_SIZE (32 bytes); dst strides are in bytes
+            constexpr uint64_t C0_BYTE_SIZE = 32;
+            constexpr uint32_t srcInnerRows = SrcTile::InnerRows;
+            constexpr uint32_t srcInnerCols = SrcTile::InnerCols;
+            constexpr uint32_t srcInnerNumel = SrcTile::InnerNumel;
+            constexpr uint32_t srcBlockNumRow = SrcTile::Rows / srcInnerRows;
+            constexpr uint32_t dstInnerRows = DstTile::InnerRows;
+            constexpr uint32_t dstInnerCols = DstTile::InnerCols;
+            constexpr uint32_t dstInnerNumel = DstTile::InnerNumel;
+            constexpr uint32_t dstBlockNumRow = DstTile::Rows / dstInnerRows;
+
+            __cbuf__ uint8_t* srcBytes = reinterpret_cast<__cbuf__ uint8_t*>(srcData);
+            __cbuf__ uint8_t* dstBytes = reinterpret_cast<__cbuf__ uint8_t*>(dstAddr);
+            uint16_t alignedValidCol = CeilAlignment(validCol, c0Size);
+            uint32_t chunksPerRow = static_cast<uint32_t>(alignedValidCol) / c0Size;
+            uint32_t numRowsPerBlock = static_cast<uint32_t>(validRow) / dstBlockNumRow;
+            // Number of Mat block-columns per Acc block-column
+            uint32_t srcBlockColPerDst = srcInnerCols / dstInnerCols;
+
+            pipe_barrier(PIPE_ALL);
+            for (uint32_t srcBlkCol = 0; srcBlkCol < srcBlockNumRow; ++srcBlkCol) {
+                // Each source block-column maps to srcBlockColPerDst destination block-columns
+                for (uint32_t dstBlkColOff = 0; dstBlkColOff < srcBlockColPerDst; ++dstBlkColOff) {
+                    for (uint32_t blkRow = 0; blkRow < dstBlockNumRow; ++blkRow) {
+                        // source block offset
+                        uint32_t srcBlkIdx = srcBlockNumRow * srcBlkCol + blkRow;
+                        uint32_t srcBlkOff = srcBlkIdx * srcInnerNumel * sizeof(srcType);
+                        // Column offset within source block for this dst block-column
+                        uint32_t srcColOff = dstBlkColOff * dstInnerCols * sizeof(srcType);
+                        // Destination block offset
+                        uint32_t dstBlkCol = srcBlkCol * srcBlockColPerDst + dstBlkColOff;
+                        uint32_t dstBlkIdx = dstBlockNumRow * dstBlkCol + blkRow;
+                        uint32_t dstBlkOff = dstBlkIdx * dstInnerNumel * sizeof(dstType);
+
+                        // Stride copy: numRowsPerBlock rows, chunksPerRow chunks per row
+                        uint64_t loop4Size = chunksPerRow;
+                        uint64_t loop4SrcStride = 1; // units of C0_BYTE_SIZE
+                        uint64_t loop4DstStride = C0_BYTE_SIZE;
+                        uint64_t loop3Size = numRowsPerBlock;
+                        uint64_t loop3SrcStride =
+                            (srcInnerCols * sizeof(srcType)) / C0_BYTE_SIZE; // unit of C0_BYTE_SIZE
+                        uint64_t loop3DstStride = dstInnerCols * sizeof(dstType);
+
+                        uint64_t xm = loop4DstStride | (loop3Size << 40) |
+                                      (static_cast<uint64_t>(fixp_trans_mode_t::LOOP_ENHANCE) << 61);
+                        uint64_t xt = loop4DstStride | (1ULL << 40);     // loop2Size=1
+                        uint64_t config = loop3DstStride | (1ULL << 40); // loop1Size=1, padEn=0, splitEn=0
+                        uint64_t nzPara = loop4Size | (1ULL << 16) | (loop3SrcStride << 32) | (loop4SrcStride << 48);
+
+                        set_loopenhance_para(config);
+                        set_fixp_nz_para(nzPara);
+                        fix_cbuf_to_cbuf(
+                            reinterpret_cast<__cbuf__ int16_t*>(dstBytes + dstBlkOff),
+                            reinterpret_cast<__cbuf__ int16_t*>(srcBytes + srcBlkOff + srcColOff), xm, xt);
+                        set_fixp_nz_para(0);
+                    }
+                }
+            }
+            pipe_barrier(PIPE_ALL);
+        }
     }
 }
 
@@ -277,13 +390,59 @@ __tf__ PTO_INTERNAL void TMovCbufToCbufAcc(
     __cbuf__ dstType* dstAddr = (__cbuf__ dstType*)__cce_get_tile_ptr(dst);
     __cbuf__ srcType* srcData = (__cbuf__ srcType*)__cce_get_tile_ptr(src);
 
-    if constexpr (sizeof(dstType) == 4) {
-        using b16Type = uint16_t;
-        constexpr uint16_t sizeMul = sizeof(dstType) / sizeof(b16Type);
-        TMovCbufToCbufAccDispatch<DstTile, SrcTile>(
-            (__cbuf__ b16Type*)dstAddr, (__cbuf__ b16Type*)srcData, validRow, validCol, sizeMul);
+    if constexpr (SrcTile::Loc == TileType::Acc) {
+        // UB relay Acc Cbuf (L0C region) -> ubuf -> mat cbuf (l1 region).
+        // on KirinDev0000, fix_cbuf_to_cbuf
+        //
+        //
+        //
+        //
+        constexpr uint32_t totalBytes = static_cast<uint32_t>(SrcTile::Rows) * SrcTile::Cols * sizeof(srcType);
+        constexpr uint32_t totalBlocks = totalBytes / BLOCK_BYTE_SIZE;
+        static_assert(
+            totalBytes <= 8 * 1024, "TMovCbufToCbufAcc: Acc->Mat UB relay currently supports tiles up to 8 KB."
+                                    "For larger tiles, split the TINSERT into smaller tiles.");
+
+        constexpr uint32_t scratchOffset = PTO_UBUF_SIZE_BYTES - 8 * 1024;
+        __ubuf__ uint8_t* scratch = reinterpret_cast<__ubuf__ uint8_t*>(scratchOffset);
+        __cbuf__ uint8_t* srcBytes = reinterpret_cast<__cbuf__ uint8_t*>(srcData);
+        __cbuf__ uint8_t* dstBytes = reinterpret_cast<__cbuf__ uint8_t*>(dstAddr);
+
+        // Acc Cbuf -> Ubuf (fix_cbuf_to_cbuf NORMAL_DMA, flat copy)
+        SetFixpNzPara(1, static_cast<uint16_t>(totalBlocks), 1, 0);
+        fix_cbuf_to_ubuf(
+            scratch, srcBytes, static_cast<uint64_t>(totalBytes), totalBytes, fixp_trans_mode_t::NORMAL_DMA,
+            static_cast<uint64_t>(0), 1);
+        SetFixpNzPara(0, 0, 0, 0);
+
+        // ubuf -> mat cbuf
+        set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
+
+        constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
+        constexpr uint16_t burstLen = static_cast<uint16_t>(DstTile::Rows * c0Size * sizeof(dstType) / BLOCK_BYTE_SIZE);
+        constexpr uint16_t burstNum = static_cast<uint16_t>(DstTile::Cols / c0Size);
+        constexpr uint32_t CBUF_UB_BURST_UNIT = 32;
+        constexpr uint32_t srcStep = burstLen * CBUF_UB_BURST_UNIT;
+        constexpr uint32_t dstStep = DstTile::Rows * c0Size * sizeof(dstType);
+        for (uint16_t i = 0; i < burstNum; ++i) {
+            copy_ubuf_to_cbuf(
+                reinterpret_cast<__cbuf__ void*>(dstBytes + i * dstStep),
+                reinterpret_cast<__ubuf__ void*>(scratch + i * srcStep), 0, 1, burstLen, 0, 0);
+        }
+
+        set_flag(PIPE_MTE3, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_FIX, EVENT_ID0);
     } else {
-        TMovCbufToCbufAccDispatch<DstTile, SrcTile>(dstAddr, srcData, validRow, validCol, 1);
+        // mat -> mat
+        if constexpr (sizeof(dstType) == 4) {
+            using b16Type = uint16_t;
+            constexpr uint16_t sizeMul = sizeof(dstType) / sizeof(b16Type);
+            TMovCbufToCbufAccDispatch<DstTile, SrcTile>(
+                (__cbuf__ b16Type*)dstAddr, (__cbuf__ b16Type*)srcData, validRow, validCol, sizeMul);
+        } else {
+            TMovCbufToCbufAccDispatch<DstTile, SrcTile>(dstAddr, srcData, validRow, validCol, 1);
+        }
     }
 }
 
