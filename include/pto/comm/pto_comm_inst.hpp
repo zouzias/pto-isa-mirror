@@ -373,6 +373,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 // - A5 SDMA-named path uses synchronous MTE followed by Scalar SET/AtomicAdd
 //   and returns an already-completed event with handle 0.
 // - A5 URMA and RDMA use peer to select the target queue and registered memory.
+// - CPU stub delegates the payload to TPUT_ASYNC and updates the signal via TNOTIFY.
 // ============================================================================
 /**
  * @brief Asynchronous remote write and signal update with explicit peer.
@@ -380,8 +381,9 @@ PTO_INST AsyncEvent TPUT_ASYNC(
  * SDMA obtains the remote VA from GlobalTensor and ignores peer. URMA and RDMA
  * use peer to select the per-peer queue and memory metadata; URMA additionally
  * selects its notify resource region.
+ * For CPU: @p peer is ignored; the payload delegates to TPUT_ASYNC.
  */
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)
+#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <
     DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData,
     typename... WaitEvents>
