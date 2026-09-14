@@ -328,3 +328,63 @@ TEST_F(TROWMINTest, case_int64_8x16_dndst_valid7_guard)
 {
     EXPECT_TRUE((TRowMinTestFramework<46, int64_t, 8, 7, 16, 16, 1, true>()));
 }
+
+TEST_F(TROWMINTest, case47)
+{
+    bool ret = TRowMinTestFramework<47, uint32_t, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case48)
+{
+    bool ret = TRowMinTestFramework<48, uint32_t, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case49)
+{
+    bool ret = TRowMinTestFramework<49, uint32_t, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case50)
+{
+    bool ret = TRowMinTestFramework<50, uint32_t, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case51)
+{
+    bool ret = TRowMinTestFramework<51, uint32_t, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case52)
+{
+    bool ret = TRowMinTestFramework<52, uint16_t, 128, 128, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case53)
+{
+    bool ret = TRowMinTestFramework<53, uint16_t, 64, 64, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case54)
+{
+    bool ret = TRowMinTestFramework<54, uint16_t, 32, 32, 128, 128, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case55)
+{
+    bool ret = TRowMinTestFramework<55, uint16_t, 16, 16, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case56)
+{
+    bool ret = TRowMinTestFramework<56, uint16_t, 8, 8, 448, 448, 1>();
+    EXPECT_TRUE(ret);
+}
