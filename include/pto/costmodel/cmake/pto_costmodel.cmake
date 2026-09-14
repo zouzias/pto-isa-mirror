@@ -28,6 +28,12 @@ function(pto_enable_costmodel target)
     string(TOUPPER "${PTO_COSTMODEL_ARCH}" _pto_costmodel_arch)
     target_include_directories("${target}" PRIVATE "${_pto_costmodel_root}/include")
     target_compile_definitions("${target}" PRIVATE __COSTMODEL PTO_COMM_NOT_SUPPORTED)
+    # Match the CPU_SIM and existing A2/A3 host-build environment: PTO device
+    # headers use the C fixed-width and size types without including them.
+    target_compile_options("${target}" PRIVATE
+        "SHELL:-include stdint.h"
+        "SHELL:-include stddef.h"
+    )
 
     if(_pto_costmodel_arch STREQUAL "A2A3")
         target_compile_definitions("${target}" PRIVATE __NPU_ARCH__=2201)
