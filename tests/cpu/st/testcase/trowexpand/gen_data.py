@@ -16,10 +16,15 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_expand():
+def gen_expand(dtype):
     H, W = 64, 64
-    x = np.random.uniform(-2.0, 2.0, size=(H, W)).astype(np.float32)
-    golden = np.zeros((H, W), dtype=np.float32)
+    if dtype == np.int64:
+        x = np.random.randint(-2_000_000_000, 2_000_000_000, size=(H, W)).astype(dtype)
+    elif dtype == np.uint64:
+        x = np.random.randint(0, 2_000_000_000, size=(H, W)).astype(dtype)
+    else:
+        x = np.random.uniform(-2.0, 2.0, size=(H, W)).astype(dtype)
+    golden = np.zeros((H, W), dtype=dtype)
     golden[:, :] = x[:, [0]]
     x.tofile("input.bin")
     golden.tofile("golden.bin")
@@ -55,12 +60,14 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
     cases = [
-        ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
+        ("TROWEXPAND_Test.case_expand_float_64x64", np.float32),
+        ("TROWEXPAND_Test.case_expand_int64_64x64", np.int64),
+        ("TROWEXPAND_Test.case_expand_uint64_64x64", np.uint64),
     ]
 
     cwd = os.getcwd()
-    for name, fn in cases:
+    for name, dtype in cases:
         os.makedirs(name, exist_ok=True)
         os.chdir(name)
-        fn()
+        gen_expand(dtype)
         os.chdir(cwd)

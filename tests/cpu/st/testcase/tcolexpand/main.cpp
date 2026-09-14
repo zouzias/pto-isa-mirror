@@ -80,6 +80,8 @@ void test_tcolexpand()
 }
 
 TEST_F(TCOLEXPANDTest, case_float_64x64_64x64_64x64) { test_tcolexpand<float, 64, 64, 64, 64>(); }
+TEST_F(TCOLEXPANDTest, case_int64_64x64_64x64_64x64) { test_tcolexpand<int64_t, 64, 64, 64, 64>(); }
+TEST_F(TCOLEXPANDTest, case_uint64_64x64_64x64_64x64) { test_tcolexpand<uint64_t, 64, 64, 64, 64>(); }
 TEST_F(TCOLEXPANDTest, case_half_16x256_16x256_16x256) { test_tcolexpand<aclFloat16, 16, 256, 16, 256>(); }
 #ifdef CPU_SIM_BFLOAT_ENABLED
 TEST_F(TCOLEXPANDTest, case_bf16_16x256_16x256_16x256) { test_tcolexpand<bfloat16_t, 16, 256, 16, 256>(); }
