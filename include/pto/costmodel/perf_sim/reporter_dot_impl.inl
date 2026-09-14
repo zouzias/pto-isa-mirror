@@ -8,6 +8,34 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+static std::string EscapeCsvField(const std::string &value)
+{
+    if (value.find_first_of(",\"\r\n") == std::string::npos) {
+        return value;
+    }
+    std::string escaped = "\"";
+    for (const char ch : value) {
+        escaped += ch;
+        if (ch == '"') {
+            escaped += '"';
+        }
+    }
+    escaped += '"';
+    return escaped;
+}
+
+static std::string JoinCostModelDiagnostics(const SimReport &report)
+{
+    std::string result;
+    for (size_t i = 0; i < report.costmodel_diagnostics.size(); ++i) {
+        if (i > 0) {
+            result += "; ";
+        }
+        result += report.costmodel_diagnostics[i];
+    }
+    return result;
+}
+
 static void WritePipelineSummaryCSV(const std::string &path, const SimReport &report)
 {
     if (!EnsureParentDir(path)) {
@@ -22,14 +50,23 @@ static void WritePipelineSummaryCSV(const std::string &path, const SimReport &re
 
     out << "op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,"
         << "scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,"
-        << "mte3_cycles\n";
+        << "mte3_cycles,costmodel_status,diagnostic\n";
+
+    if (report.costmodel_status == CostModelStatus::Unsupported) {
+        out << EscapeCsvField(report.op_name);
+        for (int field = 1; field < 16; ++field) {
+            out << ",";
+        }
+        out << ",Unsupported," << EscapeCsvField(JoinCostModelDiagnostics(report)) << "\n";
+        return;
+    }
 
     for (const auto &row : BuildPipelineSummary(report)) {
-        out << report.op_name << "," << row.core_id << "," << row.unit << "," << row.total_cycles << ","
+        out << EscapeCsvField(report.op_name) << "," << row.core_id << "," << row.unit << "," << row.total_cycles << ","
             << row.active_start_cycle << "," << row.active_end_cycle << "," << row.active_cycles << ","
             << row.busy_cycles << "," << row.scalar_cycles << "," << row.mte2_aic_cycles << "," << row.mte2_aiv_cycles
             << "," << row.mte1_cycles << "," << row.cube_cycles << "," << row.fixp_cycles << "," << row.vec_cycles
-            << "," << row.mte3_cycles << "\n";
+            << "," << row.mte3_cycles << ",Supported,\n";
     }
     out.close();
 }
@@ -117,6 +154,9 @@ static void AddDotEvents(const SimReport &report, int pid, const std::vector<Pip
 static std::vector<DotNodeInfo> BuildDotNodes(const SimReport &report, std::unordered_map<event_t, int> &signal_to_node)
 {
     std::vector<DotNodeInfo> nodes;
+    if (report.costmodel_status == CostModelStatus::Unsupported) {
+        return nodes;
+    }
     int dot_id = 0;
     if (report.num_cores == 1) {
         AddDotEvents(report, 0, report.timeline.events, nodes, signal_to_node, dot_id);
@@ -212,6 +252,12 @@ static void WriteDependencyDOT(const std::string &path, const SimReport &report)
     out << "  node [shape=box, style=filled, fontsize=8, "
         << "fontname=\"Courier\"];\n";
     out << "  edge [color=\"#888888\", arrowsize=0.6];\n\n";
+
+    if (report.costmodel_status == CostModelStatus::Unsupported) {
+        out << "  status [label=\"Costmodel Unsupported\", fillcolor=\"#FF4444\", fontcolor=\"white\"];\n";
+        out << "}\n";
+        return;
+    }
 
     std::unordered_map<event_t, int> signal_to_node;
     auto nodes = BuildDotNodes(report, signal_to_node);

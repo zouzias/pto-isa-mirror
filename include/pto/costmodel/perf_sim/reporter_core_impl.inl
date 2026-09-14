@@ -119,6 +119,9 @@ public:
     static std::vector<PipelineSummaryRow> BuildPipelineSummary(const SimReport &report)
     {
         std::vector<PipelineSummaryRow> rows;
+        if (report.costmodel_status == CostModelStatus::Unsupported) {
+            return rows;
+        }
         rows.reserve(report.num_cores * 3);
         auto append_core = [&](const PipeTimeline &timeline, uint32_t core_id) {
             rows.push_back(
