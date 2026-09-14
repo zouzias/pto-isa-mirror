@@ -136,6 +136,22 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     uint64_t estimatedCycles = 0;
     bool useEstimatedCycles = (cycles == 0);
 
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+    // Phase 1 deliberately has no A5 VF estimator. Keep the record, but expose unsupported
+    // explicitly instead of silently substituting the generic fallback formula.
+    if (stage == perf_sim::PipeStage::Vector) {
+        cycles = 0;
+        estimatedCycles = 0;
+        useEstimatedCycles = false;
+        r.costmodel_status = perf_sim::CostModelStatus::Unsupported;
+        r.costmodel_diagnostic = std::string("A5 VF formula costmodel does not support ") + opcode + " yet";
+        auto& trace = ::pto::mocker::GetMutableTrace();
+        if (!trace.executed_pto.empty()) {
+            trace.executed_pto.back().total_cycles = 0;
+        }
+    }
+#endif
+
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
     const bool compareWithEstimate =
         std::string_view(opcode) == "TROWEXPAND" ||
@@ -308,150 +324,63 @@ namespace pto {
 
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
 template <typename DstTile, typename SrcTile>
-PTO_INTERNAL void TMOV_IMPL(DstTile& dst, SrcTile& src)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data());
-        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-            "tmov", operands, std::index_sequence<0>{}, std::index_sequence<1>{}));
-    }
-}
+PTO_INTERNAL void TMOV_IMPL(DstTile&, SrcTile&)
+{}
 
 template <typename DstTile, typename SrcTile, typename IndexTile>
-PTO_INTERNAL void TSCATTER_IMPL(DstTile& dst, SrcTile& src, IndexTile& index)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data(), index.data());
-        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-            "tscatter", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{}));
-    }
-}
+PTO_INTERNAL void TSCATTER_IMPL(DstTile&, SrcTile&, IndexTile&)
+{}
 
 template <MaskPattern mask, auto scatterType = ScatterAxis::SCATTER_ROW, typename DstTile, typename SrcTile>
-PTO_INTERNAL void TSCATTER_IMPL(DstTile& dst, SrcTile& src)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data());
-        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
-            "tscatter", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
-        ::pto::mocker::vf::capture::AddArgument(instruction, 2, ::pto::mocker::vf::VfArgKind::Config, "mask", mask);
-        ::pto::mocker::vf::capture::AddArgument(
-            instruction, 3, ::pto::mocker::vf::VfArgKind::Config, "axis", scatterType);
-        ::pto::mocker::vf::capture::rec(std::move(instruction));
-    }
-}
+PTO_INTERNAL void TSCATTER_IMPL(DstTile&, SrcTile&)
+{}
 
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data());
-        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
-            "vdivs", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
-        ::pto::mocker::vf::capture::AddArgument(
-            instruction, 2, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", scalar);
-        ::pto::mocker::vf::capture::rec(std::move(instruction));
-    }
-}
+PTO_INTERNAL void TDIVS_IMPL(TileDataDst&, TileDataSrc&, typename TileDataSrc::DType)
+{}
 
 template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst& dst, typename TileDataSrc::DType scalar, TileDataSrc& src)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data());
-        auto instruction = ::pto::mocker::vf::capture::MakeInstruction(
-            "vsdiv", operands, std::index_sequence<0>{}, std::index_sequence<1>{});
-        ::pto::mocker::vf::capture::AddArgument(
-            instruction, 1, ::pto::mocker::vf::VfArgKind::Immediate, "scalar", scalar);
-        ::pto::mocker::vf::capture::rec(std::move(instruction));
-    }
-}
-
-
-template <typename DstTile, typename SrcTile, typename ExpTile, typename MaxTile, typename ScalingTile>
-PTO_INTERNAL void RecordUnsupportedMxQuant(DstTile& dst, SrcTile& src, ExpTile* exp, MaxTile* max, ScalingTile* scaling)
-{
-    __VEC_SCOPE__
-    {
-        auto operands = std::forward_as_tuple(dst.data(), src.data(), exp->data(), max->data(), scaling->data());
-        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-            "tquant", operands, std::index_sequence<0, 2, 3, 4>{}, std::index_sequence<1>{}));
-    }
-}
+PTO_INTERNAL void TDIVS_IMPL(TileDataDst&, typename TileDataSrc::DType, TileDataSrc&)
+{}
 
 template <
     QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
     typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
-{
-    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
-}
+    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
+{}
 
 template <
     QuantType quantType, QuantScaleAlg scaleAlg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
     typename TileDataMax, typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
-{
-    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
-}
+    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
+{}
 
 template <
     QuantType quantType, VecStoreMode storeMode, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
     typename TileDataMax, typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling,
-    TileDataExp* expZz)
-{
-    __VEC_SCOPE__
-    {
-        auto operands =
-            std::forward_as_tuple(dst.data(), src.data(), exp->data(), max->data(), scaling->data(), expZz->data());
-        ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-            "tquant", operands, std::index_sequence<0, 2, 3, 4, 5>{}, std::index_sequence<1>{}));
-    }
-}
+    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*, TileDataExp*)
+{}
 
 template <
     int groupAxis, MxQuantAlg mxAlgorithm, bool interleave, typename TileDataOut, typename TileDataSrc,
     typename TileDataExp, typename TileDataMax, typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
-{
-    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
-}
+    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
+{}
 
 template <
     int groupAxis, MxQuantAlg mxAlgorithm, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
     typename TileDataMax, typename TileDataScaling>
 PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataExp* exp, TileDataMax* max, TileDataScaling* scaling)
-{
-    RecordUnsupportedMxQuant(dst, src, exp, max, scaling);
-}
+    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
+{}
 
 template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara>
-PTO_INTERNAL void TQUANT_IMPL(TileDataOut& dst, TileDataSrc& src, TileDataPara& scale, TileDataPara* offset = nullptr)
-{
-    __VEC_SCOPE__
-    {
-        if (offset == nullptr) {
-            auto operands = std::forward_as_tuple(dst.data(), src.data(), scale.data());
-            ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-                "tquant", operands, std::index_sequence<0>{}, std::index_sequence<1, 2>{}));
-        } else {
-            auto operands = std::forward_as_tuple(dst.data(), src.data(), scale.data(), offset->data());
-            ::pto::mocker::vf::capture::rec(::pto::mocker::vf::capture::MakeInstruction(
-                "tquant", operands, std::index_sequence<0>{}, std::index_sequence<1, 2, 3>{}));
-        }
-    }
-}
+PTO_INTERNAL void TQUANT_IMPL(TileDataOut&, TileDataSrc&, TileDataPara&, TileDataPara* = nullptr)
+{}
 
 template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp>
 PTO_INTERNAL void TQUANT_IMPL(

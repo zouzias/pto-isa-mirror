@@ -9,7 +9,7 @@ The costmodel build is a host-side build path. User code still includes PTO-ISA 
 | Target | `ARCH` value | `__NPU_ARCH__` | Cycle source |
 | --- | --- | --- | --- |
 | A2/A3 | `A2A3` | `2201` | lightweight costmodel and perf_sim fallback |
-| A5 | `A5` | `3101` | A5 VfSim for VF scopes, plus perf_sim/fallback for other instructions |
+| A5 | `A5` | `3101` | Existing memory, synchronization, and cube models; VF formulas are being added incrementally |
 
 ## CMake integration
 
@@ -39,7 +39,7 @@ PTO_COMM_NOT_SUPPORTED
 __NPU_ARCH__=<target arch>
 ```
 
-For A5 it also enables the VfSim build support and links the required VfSim components.
+A5 uses only the headers shipped with PTO-ISA. It does not require simulator sources, an LLVM pass, or an extra library.
 
 ## A2/A3 behavior
 
@@ -63,21 +63,20 @@ pto/pto-inst.hpp
   -> costmodel/runtime_stub.hpp
   -> costmodel/pto_instr.hpp
   -> a5/cce_costmodel/*
-  -> pkg_inc/pto/costmodel/vfsim/*
 ```
 
-A5 vector instructions inside a VF scope are captured as `VfInfo` and passed to VfSim. VfSim returns cycle counts, and the PTO costmodel records those cycles as part of the current PTO instruction.
+A lightweight host mock supplies declarations and no-op implementations for device intrinsics used by A5 implementation headers. VF cycles will be predicted directly by per-tileop formulas; the host path no longer captures a VF instruction stream or builds an intermediate representation.
 
-Memory, synchronization, cube, and unsupported VF forms are handled by host mocks and fallback estimates. Fallback is intended to keep cycle prediction available when a detailed VfSim result cannot be produced.
+Phase 1 does not yet provide concrete VF formulas. A VF instruction is therefore recorded as `Unsupported`, its cycle value remains zero, and a diagnostic is attached. The generic fallback is not used to fabricate a valid VF estimate. Memory, synchronization, and cube instructions continue to use their existing models.
 
 ## Reading cycle results
 
 The costmodel records PTO instructions through perf_sim. Typical users should consume the recorded cycle values from the costmodel/perf_sim result path used by their test or integration.
 
-For A5, the public cycle path is intentionally cycle-oriented. Fallback may be used internally, but packaging users are expected to rely on the returned cycle count rather than detailed fallback logs.
+For A5, check `costmodel_status` before consuming a cycle value. A cycle is a valid prediction only when the status is `Supported`; an `Unsupported` record contains a diagnostic naming the VF instruction that is not covered yet.
 
 ## Notes
 
 - The costmodel path is for host-side estimation and validation. It does not execute real NPU kernels.
-- A5 costmodel builds require the VfSim CMake helper to be available under `pkg_inc/pto/costmodel/vfsim/cmake`.
+- The A5 host mock only lets a standard C++ compiler parse device intrinsics; it does not execute device operations.
 - Use the same PTO APIs as the normal NPU path; select the costmodel path through CMake definitions instead of changing user kernel code.

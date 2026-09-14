@@ -1,1 +1,1 @@
-pto_a5_vfsim_tileop_test(tmax)
+pto_a5_host_tileop_test(tmax)

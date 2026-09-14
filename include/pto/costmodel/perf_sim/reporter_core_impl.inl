@@ -137,8 +137,18 @@ public:
     static void AccumulateLogicalCoreStats(SimReport &report, uint32_t logical_cores)
     {
         for (uint32_t lc = 0; lc < logical_cores; ++lc) {
-            report.instr_count += PtoRecorder::GetForCore(lc).size();
+            const auto &records = PtoRecorder::GetForCore(lc);
+            report.instr_count += records.size();
             report.sync_count += SyncRecorder::GetForCore(lc).size();
+            for (const auto &record : records) {
+                if (record.costmodel_status != CostModelStatus::Unsupported) {
+                    continue;
+                }
+                report.costmodel_status = CostModelStatus::Unsupported;
+                report.costmodel_diagnostics.push_back(
+                    "logical core " + std::to_string(lc) + ", " + record.opcode + ": " +
+                    record.costmodel_diagnostic);
+            }
         }
     }
 
@@ -160,6 +170,9 @@ public:
     {
         report.num_cores = 1;
         AccumulateLogicalCoreStats(report, VEC_CORES_PER_AIC);
+        if (report.costmodel_status == CostModelStatus::Unsupported) {
+            return;
+        }
 
         auto merged = MergeRecordsForPhysicalCore(0);
         DropCrossCoreSync(merged);
@@ -200,6 +213,9 @@ public:
     {
         report.num_cores = num_cores;
         AccumulateLogicalCoreStats(report, num_cores * VEC_CORES_PER_AIC);
+        if (report.costmodel_status == CostModelStatus::Unsupported) {
+            return;
+        }
 
         auto per_core_merged = MergeRecordsPerCore(num_cores);
         auto core_pipelines = BuildCorePipelines(num_cores);
@@ -281,6 +297,16 @@ public:
         os << "Cores        : " << report.num_cores << "\n";
         os << "Instructions : " << report.instr_count << "\n";
         os << "Sync events  : " << report.sync_count << "\n";
+
+        if (report.costmodel_status == CostModelStatus::Unsupported) {
+            os << "Costmodel    : Unsupported\n";
+            os << "Total cycles : N/A (unsupported)\n";
+            for (const auto &diagnostic : report.costmodel_diagnostics) {
+                os << "Diagnostic   : " << diagnostic << "\n";
+            }
+            os << "===== End Report =====\n";
+            return;
+        }
 
         uint64_t total_cycles =
             (report.num_cores == 1) ? report.timeline.total_cycles : report.multi_timeline.total_cycles;
