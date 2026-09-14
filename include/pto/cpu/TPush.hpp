@@ -428,8 +428,8 @@ PTO_INTERNAL void InsertTileWindow(DstTileData& dst, SrcTileData& src, uint32_t 
 template <typename DstT, typename SrcTileData, QuantMode_t quantMode, ReluPreMode reluPreMode, std::size_t StorageSize>
 PTO_INTERNAL void CopyTileWindowToLinear(
     std::array<uint8_t, StorageSize>& dst, std::size_t slotIndex, std::size_t baseByteOffset, std::size_t regionByteEnd,
-    uint32_t dstRows, uint32_t dstCols, SrcTileData& src, uint32_t srcRowOffset, uint32_t srcColOffset,
-    const std::vector<uint64_t>& scalars = {})
+    uint32_t dstRows, uint32_t dstCols, uint32_t dstStrideCols, SrcTileData& src, uint32_t srcRowOffset,
+    uint32_t srcColOffset, const std::vector<uint64_t>& scalars = {})
 {
     using SrcT = typename SrcTileData::DType;
     constexpr bool use_relu = reluPreMode == ReluPreMode::NormalRelu;
@@ -437,7 +437,7 @@ PTO_INTERNAL void CopyTileWindowToLinear(
         for (uint32_t c = 0; c < dstCols; ++c) {
             SrcT val = src.data()[GetTileElementOffset<SrcTileData>(r + srcRowOffset, c + srcColOffset)];
             StoreByteStorageElement(
-                dst, slotIndex, baseByteOffset, regionByteEnd, static_cast<std::size_t>(r) * dstCols + c,
+                dst, slotIndex, baseByteOffset, regionByteEnd, static_cast<std::size_t>(r) * dstStrideCols + c,
                 ConvertStoreValue<DstT, SrcT, quantMode, use_relu>(val, scalars[c]), "CopyTileWindowToLinear");
         }
     }
@@ -500,11 +500,33 @@ PTO_INTERNAL void EnsureTileStorage(TileData& tile)
 }
 #endif
 
+// A lane's slice along one split axis: lane 0 takes the first half, lane 1 the second.
+struct SplitAxisWindow {
+    uint32_t start;
+    uint32_t extent;
+};
+
+// Even splits keep the historical padded static half, so both lanes are symmetric. Odd splits
+// follow the hardware TILE_*_ODD definition: lane 0 gets ceil(valid/2), lane 1 gets floor(valid/2).
+template <bool Odd>
+PTO_INTERNAL SplitAxisWindow GetSplitAxisWindow(uint32_t lane, uint32_t staticExtent, uint32_t validExtent)
+{
+    if constexpr (Odd) {
+        const uint32_t first = (validExtent + 1) / 2;
+        return (lane == 0) ? SplitAxisWindow{0, first} : SplitAxisWindow{first, validExtent - first};
+    } else {
+        const uint32_t half = staticExtent / 2;
+        return SplitAxisWindow{lane * half, half};
+    }
+}
+
 template <TileSplitAxis Split, typename TileData>
 PTO_INTERNAL uint32_t GetSplitRowOffset()
 {
     if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-        return static_cast<uint32_t>(get_subblockid()) * (TileData::Rows / 2);
+        return GetSplitAxisWindow<false>(static_cast<uint32_t>(get_subblockid()), TileData::Rows, TileData::Rows).start;
+    } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN_ODD) {
+        return GetSplitAxisWindow<true>(static_cast<uint32_t>(get_subblockid()), TileData::Rows, TileData::Rows).start;
     }
     return 0;
 }
@@ -513,7 +535,9 @@ template <TileSplitAxis Split, typename TileData>
 PTO_INTERNAL uint32_t GetSplitColOffset()
 {
     if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-        return static_cast<uint32_t>(get_subblockid()) * (TileData::Cols / 2);
+        return GetSplitAxisWindow<false>(static_cast<uint32_t>(get_subblockid()), TileData::Cols, TileData::Cols).start;
+    } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT_ODD) {
+        return GetSplitAxisWindow<true>(static_cast<uint32_t>(get_subblockid()), TileData::Cols, TileData::Cols).start;
     }
     return 0;
 }
@@ -1077,42 +1101,43 @@ PTO_INTERNAL void TPush_c2v(Pipe& pipe, TileProd& tile, size_t slotIndex)
     using TileCons = FixpipeVecTile<TileProd, DstT, TConfig::LayoutMode>;
     constexpr QuantMode_t QuantPre = TConfig::QuantPre;
     constexpr ReluPreMode ReluMode = TConfig::ReluMode;
+    constexpr bool splitRows = (Split == TileSplitAxis::TILE_UP_DOWN) || (Split == TileSplitAxis::TILE_UP_DOWN_ODD);
+    constexpr bool splitCols =
+        (Split == TileSplitAxis::TILE_LEFT_RIGHT) || (Split == TileSplitAxis::TILE_LEFT_RIGHT_ODD);
+    constexpr bool oddRows = (Split == TileSplitAxis::TILE_UP_DOWN_ODD);
+    constexpr bool oddCols = (Split == TileSplitAxis::TILE_LEFT_RIGHT_ODD);
+    constexpr uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
 
-    const uint32_t consRows = [&tile]() -> uint32_t {
-        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-            return static_cast<uint32_t>(tile.GetValidRow());
-        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-            return static_cast<uint32_t>(TileProd::Rows / 2);
-        } else {
-            return static_cast<uint32_t>(TileProd::Rows);
-        }
-    }();
-    const uint32_t consCols = [&tile]() -> uint32_t {
-        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-            return static_cast<uint32_t>(tile.GetValidCol());
-        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-            return static_cast<uint32_t>(TileProd::Cols / 2);
-        } else {
-            return static_cast<uint32_t>(TileProd::Cols);
-        }
-    }();
+    const uint32_t vRows = static_cast<uint32_t>(tile.GetValidRow());
+    const uint32_t vCols = static_cast<uint32_t>(tile.GetValidCol());
+    const uint32_t fullCols = static_cast<uint32_t>(TileProd::Cols);
 
-    std::vector<uint64_t> scalars(static_cast<std::size_t>(consCols), 0);
+    // The cube writes every lane's window in one call: lane i goes into the i-th local region.
+    // The region row stride is the padded lane width (half for a column split, full otherwise),
+    // so the consuming lane tile can read the region in place even when the odd lane is one short.
+    const uint32_t dstStrideCols = splitCols ? fullCols / 2 : (splitRows ? fullCols : vCols);
+
+    std::vector<uint64_t> scalars(static_cast<std::size_t>(dstStrideCols), 0);
     if constexpr (QuantPre != QuantMode_t::NoQuant) {
         InitializeQuantScalars<QuantPre>(scalars);
     }
 
     auto& slotStorage =
         Pipe::GetSharedState(cpu_pipe::GetProducerTransferDir<Pipe, TileProd>()).local_slot_storage[slotIndex];
-    for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
-        const std::size_t baseByteOffset = static_cast<std::size_t>(splitIndex) * Pipe::RingFiFo::SLOT_SIZE +
+    for (uint32_t lane = 0; lane < splitCount; ++lane) {
+        cpu_pipe::SplitAxisWindow rows{0, vRows};
+        cpu_pipe::SplitAxisWindow cols{0, splitRows ? fullCols : vCols};
+        if constexpr (splitRows) {
+            rows = cpu_pipe::GetSplitAxisWindow<oddRows>(lane, static_cast<uint32_t>(TileProd::Rows), vRows);
+        }
+        if constexpr (splitCols) {
+            cols = cpu_pipe::GetSplitAxisWindow<oddCols>(lane, fullCols, vCols);
+        }
+        const std::size_t baseByteOffset = static_cast<std::size_t>(lane) * Pipe::RingFiFo::SLOT_SIZE +
                                            static_cast<std::size_t>(pipe.prod.entryOffset);
-        const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
-        const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
         cpu_pipe::CopyTileWindowToLinear<DstT, TileProd, QuantPre, ReluMode>(
-            slotStorage, slotIndex, baseByteOffset,
-            (static_cast<std::size_t>(splitIndex) + 1) * Pipe::RingFiFo::SLOT_SIZE, consRows, consCols, tile, rowOffset,
-            colOffset, scalars);
+            slotStorage, slotIndex, baseByteOffset, (static_cast<std::size_t>(lane) + 1) * Pipe::RingFiFo::SLOT_SIZE,
+            rows.extent, cols.extent, dstStrideCols, tile, rows.start, cols.start, scalars);
     }
 }
 
@@ -1121,32 +1146,20 @@ PTO_INTERNAL void TPush_v2c(Pipe& pipe, TileProd& tile, size_t slotIndex)
 {
     using DstT = FixpipeConsType<TileProd, TConfig>;
 
-    constexpr int slotRows =
-        (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
-    constexpr int slotCols =
-        (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
+    constexpr bool splitRows = (Split == TileSplitAxis::TILE_UP_DOWN) || (Split == TileSplitAxis::TILE_UP_DOWN_ODD);
+    constexpr bool splitCols =
+        (Split == TileSplitAxis::TILE_LEFT_RIGHT) || (Split == TileSplitAxis::TILE_LEFT_RIGHT_ODD);
+
+    constexpr int slotRows = splitRows ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
+    constexpr int slotCols = splitCols ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
     using SlotTile = Tile<TileType::Mat, DstT, slotRows, slotCols, BLayout::RowMajor, slotRows, slotCols>;
 
     // Lay the payload out with the pushed window, that is the valid shape. TileProd::Cols
     // would stride it by the parent width when a narrower view is pushed. Mirrors TPush_c2v.
-    const uint32_t consRows = [&tile]() -> uint32_t {
-        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-            return static_cast<uint32_t>(tile.GetValidRow());
-        } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
-            return static_cast<uint32_t>(TileProd::Rows * 2);
-        } else {
-            return static_cast<uint32_t>(TileProd::Rows);
-        }
-    }();
-    const uint32_t consCols = [&tile]() -> uint32_t {
-        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-            return static_cast<uint32_t>(tile.GetValidCol());
-        } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-            return static_cast<uint32_t>(TileProd::Cols * 2);
-        } else {
-            return static_cast<uint32_t>(TileProd::Cols);
-        }
-    }();
+    const uint32_t consRows = (Split == TileSplitAxis::TILE_NO_SPLIT) ? static_cast<uint32_t>(tile.GetValidRow()) :
+                                                                        static_cast<uint32_t>(slotRows);
+    const uint32_t consCols = (Split == TileSplitAxis::TILE_NO_SPLIT) ? static_cast<uint32_t>(tile.GetValidCol()) :
+                                                                        static_cast<uint32_t>(slotCols);
 
     auto& slotStorage =
         Pipe::GetSharedState(cpu_pipe::GetProducerTransferDir<Pipe, TileProd>()).local_slot_storage[slotIndex];
