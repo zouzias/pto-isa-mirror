@@ -30,8 +30,12 @@ def gen_golden_data(param):
             input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
         elif data_type == np.int32:
             input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
+        elif data_type == np.uint32:
+            input_arr = np.random.randint(low=0, high=1000, size=(row, col)).astype(data_type)
         elif data_type == np.int16:
             input_arr = np.random.randint(low=-1000, high=1000, size=(row, col)).astype(data_type)
+        elif data_type == np.uint16:
+            input_arr = np.random.randint(low=0, high=1000, size=(row, col)).astype(data_type)
         else:
             input_arr = np.random.randint(low=-100, high=100, size=(row, col)).astype(data_type)
         output_arr = np.full((valid_row), np.iinfo(data_type).max, dtype=data_type)
@@ -96,6 +100,16 @@ if __name__ == "__main__":
         TRowMinParams("TROWMINTest.case_uint64_32x32_dndst", np.uint64, 32, 32, 32, 32),
         TRowMinParams("TROWMINTest.case_int64_32x145_dndst", np.int64, 32, 32, 145, 145),
         TRowMinParams("TROWMINTest.case_uint64_32x145_dndst", np.uint64, 32, 32, 145, 145),
+        TRowMinParams("TROWMINTest.case39", np.uint32, 127, 127, 64, 64 - 1),
+        TRowMinParams("TROWMINTest.case40", np.uint32, 63, 63, 64, 64),
+        TRowMinParams("TROWMINTest.case41", np.uint32, 31, 31, 64 * 2, 64 * 2 - 1),
+        TRowMinParams("TROWMINTest.case42", np.uint32, 15, 15, 64 * 3, 64 * 3),
+        TRowMinParams("TROWMINTest.case43", np.uint32, 7, 7, 64 * 7, 64 * 7 - 1),
+        TRowMinParams("TROWMINTest.case44", np.uint16, 128, 128, 64, 64),
+        TRowMinParams("TROWMINTest.case45", np.uint16, 64, 64, 64, 64),
+        TRowMinParams("TROWMINTest.case46", np.uint16, 32, 32, 128, 128),
+        TRowMinParams("TROWMINTest.case47", np.uint16, 16, 16, 192, 192),
+        TRowMinParams("TROWMINTest.case48", np.uint16, 8, 8, 448, 448),
     ]
 
     for _, case in enumerate(case_params_list):
