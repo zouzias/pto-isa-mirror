@@ -247,6 +247,7 @@ set(ALL_TESTCASES
     tmov_nd2zn
     textract_acc2vec
     syncall
+    init_core
     tpushpop_cv
     tpushpop_cv_nosplit
     tpushpop_fixpipe

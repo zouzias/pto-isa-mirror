@@ -273,6 +273,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t init_core -g INITCORETest.case_float_64x64_64x64
+    fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tand -g TANDTest.case1
     fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
@@ -784,6 +787,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tload
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tadd
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t init_core
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tand
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tor
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels
@@ -868,6 +872,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trems -g TREMSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tlrelu -g TLRELUTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd -g TADDTest.case_float_64x64_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t init_core -g INITCORETest.case_float_64x64_64x64_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadds -g TADDSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tand -g TANDTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tands -g TANDSTest.case1
@@ -1083,6 +1088,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trems
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tlrelu
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t init_core
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadds
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tand
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tands

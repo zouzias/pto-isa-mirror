@@ -72,7 +72,7 @@ def get_simulator_info(ascend_home, soc_version):
     if soc_version == "Ascend950PR_9599":
         soc_candidates.extend(["Ascend910_9599"])
     for candidate in soc_candidates:
-        camodel_path = os.path.join(simulator_home, candidate, "camodel")
+        camodel_path = os.path.join(simulator_home, candidate, "lib")
         lib_path = os.path.join(simulator_home, candidate, "lib")
         if os.path.isdir(camodel_path):
             return candidate, camodel_path
