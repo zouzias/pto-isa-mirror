@@ -38,10 +38,12 @@ AICORE inline void runTEXTRACT(__gm__ DT* out, __gm__ ST* src)
     GlobalDataSrc srcGlobal(src);
     GlobalDataDst dstGlobal(out);
 
-    constexpr BLayout srcBL = srcLayout > 0 ? BLayout::ColMajor : BLayout::RowMajor;
-    constexpr SLayout srcSL = srcLayout < 2 ? SLayout::NoneBox : SLayout::RowMajor;
-    constexpr BLayout dstBL = dstLayout > 0 ? BLayout::ColMajor : BLayout::RowMajor;
-    constexpr SLayout dstSL = dstLayout < 2 ? SLayout::NoneBox : SLayout::RowMajor;
+    constexpr BLayout srcBL = (srcLayout == 1 || srcLayout == 2) ? BLayout::ColMajor : BLayout::RowMajor;
+    constexpr SLayout srcSL =
+        srcLayout == 2 ? SLayout::RowMajor : (srcLayout == 3 ? SLayout::ColMajor : SLayout::NoneBox);
+    constexpr BLayout dstBL = (dstLayout == 1 || dstLayout == 2) ? BLayout::ColMajor : BLayout::RowMajor;
+    constexpr SLayout dstSL =
+        dstLayout == 2 ? SLayout::RowMajor : (dstLayout == 3 ? SLayout::ColMajor : SLayout::NoneBox);
 
     Tile<TileType::Mat, ST, rows, cols, srcBL, validRows, validCols, srcSL, 512> srcTile;
     Tile<TileType::Mat, DT, rows, cols, dstBL, validRowsDst, validColsDst, dstSL, 512> dstTile;
@@ -250,6 +252,46 @@ TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_2)
     textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 2>();
 }
 
+TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_3)
+{
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_float_float_128_96_128_96_IDX_0_0_L_0_3)
+{
+    textract_test<float, float, 128, 96, 128, 96, 0, 0, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_half_half_32_32_32_32_IDX_0_0_L_0_3)
+{
+    textract_test<half, half, 32, 32, 32, 32, 0, 0, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_half_half_32_32_31_31_IDX_8_16_L_0_3)
+{
+    textract_test<half, half, 32, 32, 31, 31, 8, 16, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_half_float_32_32_32_32_IDX_0_0_L_0_3)
+{
+    textract_test<half, float, 32, 32, 32, 32, 0, 0, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_int32_t_float_128_96_128_96_IDX_0_0_L_0_3)
+{
+    textract_test<int32_t, float, 128, 96, 128, 96, 0, 0, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_125_61_IDX_8_16_L_0_3)
+{
+    textract_test<int8_t, int32_t, 128, 64, 125, 61, 8, 16, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_int8_t_int8_t_128_64_128_64_IDX_0_0_L_0_3)
+{
+    textract_test<int8_t, int8_t, 128, 64, 128, 64, 0, 0, 0, 3>();
+}
+
 #ifdef CPU_SIM_BFLOAT_ENABLED
 TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_32_32_IDX_0_0_L_0_0)
 {
@@ -264,6 +306,16 @@ TEST_F(TEXTRACTTest, case_bfloat16_t_float_32_32_32_32_IDX_8_16_L_0_0)
 TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_31_31_IDX_8_16_L_0_0)
 {
     textract_test<bfloat16_t, bfloat16_t, 32, 32, 31, 31, 8, 16, 0, 0>();
+}
+
+TEST_F(TEXTRACTTest, case_bfloat16_t_bfloat16_t_32_32_32_32_IDX_0_0_L_0_3)
+{
+    textract_test<bfloat16_t, bfloat16_t, 32, 32, 32, 32, 0, 0, 0, 3>();
+}
+
+TEST_F(TEXTRACTTest, case_bfloat16_t_float_32_32_32_32_IDX_8_16_L_0_3)
+{
+    textract_test<bfloat16_t, float, 32, 32, 32, 32, 8, 16, 0, 3>();
 }
 #endif
 
@@ -288,6 +340,44 @@ TEST_F(TEXTRACTTest, FpVariantSlicesSourceTile)
         for (int c = 0; c < dst.GetValidCol(); ++c) {
             CpuTileTestUtils::ExpectValueEquals(
                 CpuTileTestUtils::GetValue(dst, r, c), CpuTileTestUtils::GetValue(src, r + 1, c + 2));
+        }
+    }
+}
+
+TEST_F(TEXTRACTTest, ZNPlacementMatchesFractalOrder)
+{
+    using SrcTile = Tile<TileType::Mat, float, 24, 16>;
+    using DstTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 16, SLayout::ColMajor, 512>;
+
+    SrcTile src;
+    DstTile dst;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst);
+
+    CpuTileTestUtils::FillLinear(src, 1.0f);
+
+    TEXTRACT(dst, src, 4, 0);
+
+    for (int r = 0; r < dst.GetValidRow(); ++r) {
+        for (int c = 0; c < dst.GetValidCol(); ++c) {
+            CpuTileTestUtils::ExpectValueEquals(
+                CpuTileTestUtils::GetValue(dst, r, c), CpuTileTestUtils::GetValue(src, r + 4, c));
+        }
+    }
+
+    for (int br = 0; br < DstTile::Rows / DstTile::InnerRows; ++br) {
+        for (int bc = 0; bc < DstTile::Cols / DstTile::InnerCols; ++bc) {
+            for (int ic = 0; ic < DstTile::InnerCols; ++ic) {
+                for (int ir = 0; ir < DstTile::InnerRows; ++ir) {
+                    const int r = br * DstTile::InnerRows + ir;
+                    const int c = bc * DstTile::InnerCols + ic;
+                    const size_t rawIdx = static_cast<size_t>(br) * DstTile::InnerRows * DstTile::Cols +
+                                          static_cast<size_t>(bc) * DstTile::InnerNumel +
+                                          static_cast<size_t>(ic) * DstTile::InnerRows + static_cast<size_t>(ir);
+                    const float expected = 1.0f + static_cast<float>((r + 4) * SrcTile::Cols + c);
+                    CpuTileTestUtils::ExpectValueEquals(dst.data()[rawIdx], expected);
+                }
+            }
         }
     }
 }

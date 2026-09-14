@@ -95,6 +95,15 @@ if __name__ == "__main__":
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 0),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 1),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 2),
+
+        textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 0, 3),
+        textractParams(np.float32, np.float32, 128, 96, 128, 96, 0, 0, 0, 3),
+        textractParams(np.float16, np.float16, 32, 32, 32, 32, 0, 0, 0, 3),
+        textractParams(np.float16, np.float16, 32, 32, 31, 31, 8, 16, 0, 3),
+        textractParams(np.float16, np.float32, 32, 32, 32, 32, 0, 0, 0, 3),
+        textractParams(np.int32, np.float32, 128, 96, 128, 96, 0, 0, 0, 3),
+        textractParams(np.int8, np.int32, 128, 64, 125, 61, 8, 16, 0, 3),
+        textractParams(np.int8, np.int8, 128, 64, 128, 64, 0, 0, 0, 3),
     ]
     if ENABLE_BF16:
         case_params_list.extend(
@@ -105,6 +114,11 @@ if __name__ == "__main__":
                                32, 32, 32, 8, 16, 0, 0),
                 textractParams(NumExt.bf16, NumExt.bf16,
                                32, 32, 31, 31, 8, 16, 0, 0),
+
+                textractParams(NumExt.bf16, NumExt.bf16,
+                               32, 32, 32, 32, 0, 0, 0, 3),
+                textractParams(NumExt.bf16, np.float32,
+                               32, 32, 32, 32, 8, 16, 0, 3),
             ]
         )
 
