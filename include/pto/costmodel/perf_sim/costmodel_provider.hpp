@@ -15,9 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "latency.hpp"
 #include "recorder.hpp"
 
-#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 #include <pto/costmodel/lightweight_costmodel.hpp>
-#endif
 
 #include <string>
 
@@ -48,11 +46,7 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
     return ctx;
 }
 
-#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
-
-// ── String → lightweight::PtoOpcode mapping for A2/A3 ──
-// Enum names in lightweight::PtoOpcode match opcode strings exactly. A5 does not include this
-// backend; its vector instructions are handled by the dedicated A5 formula costmodel.
+// ── String → lightweight costmodel mappings ──
 
 // clang-format off
 #define PTO_PERF_SIM_OPCODE_LIST                                                                                      \
@@ -60,6 +54,7 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
     X(TSUB)                                                                                                           \
     X(TMUL)                                                                                                           \
     X(TDIV)                                                                                                           \
+    X(TRECIP)                                                                                                         \
     X(TADDS)                                                                                                          \
     X(TSUBS)                                                                                                          \
     X(TMULS)                                                                                                          \
@@ -87,19 +82,31 @@ inline bool TryMapOpcode(const std::string& opcode, ::pto::mocker::lightweight::
     X("fp32", Float)            \
     X("fp16", Half)             \
     X("int8", Int8)             \
-    X("int16", Int16) X("int32", Int32) X("uint8", Uint8) X("uint16", Uint16) X("uint32", Uint32) X("bf16", BFloat16)
+    X("int16", Int16)           \
+    X("int32", Int32)           \
+    X("uint8", Uint8)           \
+    X("uint16", Uint16)         \
+    X("uint32", Uint32)         \
+    X("bf16", BFloat16)         \
+    X("fp8_e4m3", Float8E4M3)   \
+    X("fp8_e5m2", Float8E5M2)   \
+    X("hif8", HFloat8)          \
+    X("fp4_e1m2", Float4E1M2)   \
+    X("fp4_e2m1", Float4E2M1)
 
-inline ::pto::mocker::lightweight::DType MapDType(const std::string& dtype)
+inline bool TryMapDType(const std::string& dtype, ::pto::mocker::lightweight::DType& out)
 {
-#define X(str, enum_val)                                    \
+#define X(str, enum_val)                                     \
     if (dtype == str) {                                     \
-        return ::pto::mocker::lightweight::DType::enum_val; \
+        out = ::pto::mocker::lightweight::DType::enum_val;  \
+        return true;                                        \
     }
     PTO_PERF_SIM_DTYPE_LIST
 #undef X
-    return ::pto::mocker::lightweight::DType::Half;
+    return false;
 }
 
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 // ── LightweightFormula backend ──
 
 inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, int cols, const std::string& dtype)
@@ -112,7 +119,8 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
 
     CostModelInput input{};
     input.op = pto_op;
-    input.dtype = MapDType(dtype);
+    if (!TryMapDType(dtype, input.dtype))
+        return 0;
     input.rows = rows;
     input.cols = cols;
     input.data_size = static_cast<int64_t>(rows) * cols;
@@ -128,6 +136,55 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
 }
 
 #endif
+
+struct A5VfTileOpInput {
+    std::string opcode;
+    std::string src_dtype;
+    std::string dst_dtype;
+    int64_t rows = 0;
+    int64_t cols = 0;
+    int64_t valid_rows = 0;
+    int64_t valid_cols = 0;
+    ::pto::VFImplKind vf_impl_kind = ::pto::VFImplKind::VFIMPL_DEFAULT;
+    ::pto::RoundMode round_mode = ::pto::RoundMode::CAST_NONE;
+    ::pto::SaturationMode saturation_mode = ::pto::SaturationMode::ON;
+    std::string_view op_params{};
+    ::pto::mocker::lightweight::A5VfShapePathHint shape_path_hint =
+        ::pto::mocker::lightweight::A5VfShapePathHint::Infer;
+};
+
+inline bool TryEstimateA5VfTileOpCycles(const A5VfTileOpInput& tile_op, uint64_t& cycles)
+{
+    using namespace ::pto::mocker::lightweight;
+
+    PtoOpcode op;
+    DType src_dtype;
+    DType dst_dtype;
+    if (!TryMapOpcode(tile_op.opcode, op) || !TryMapDType(tile_op.src_dtype, src_dtype)) {
+        return false;
+    }
+    if (!tile_op.dst_dtype.empty() && !TryMapDType(tile_op.dst_dtype, dst_dtype)) {
+        return false;
+    }
+
+    CostModelInput input{};
+    input.op = op;
+    input.dtype = src_dtype;
+    input.rows = tile_op.rows;
+    input.cols = tile_op.cols;
+    input.arch = CostModelArch::A5;
+    input.valid_rows = tile_op.valid_rows;
+    input.valid_cols = tile_op.valid_cols;
+    input.vf_impl_kind = tile_op.vf_impl_kind;
+    input.round_mode = tile_op.round_mode;
+    input.saturation_mode = tile_op.saturation_mode;
+    input.a5_op_params = tile_op.op_params;
+    input.a5_shape_path_hint = tile_op.shape_path_hint;
+    if (!tile_op.dst_dtype.empty()) {
+        input.dst_dtype = dst_dtype;
+    }
+    return a5::TryEstimateA5VfCycles(input, cycles);
+}
 
 // ── Fallback for unsupported instructions ──
 

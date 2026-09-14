@@ -13,7 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#if !defined(PTO_NPU_ARCH_A5) || !defined(__COSTMODEL)
 #include <pto/common/arch_cce_intrinsic.hpp>
+#endif
 
 #ifdef PTO_NPU_ARCH_A2A3
 #ifdef __COSTMODEL
@@ -192,36 +194,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __COSTMODEL
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
-#include "pto/npu/a5/datatype.hpp"
-#include "pto/npu/a5/common.hpp"
-#include "pto/npu/a5/utils.hpp"
-using DistVST = ::pto::DistVST;
-#include "pto/npu/a5/TAdd.hpp"
-#include "pto/npu/a5/TAddS.hpp"
-#include "pto/npu/a5/TAnd.hpp"
-#include "pto/npu/a5/TColExpandDiv.hpp"
-#include "pto/npu/a5/TDiv.hpp"
-#include "pto/npu/a5/TFMod.hpp"
-#include "pto/npu/a5/TFModS.hpp"
-#include "pto/npu/a5/TGather.hpp"
-#include "pto/npu/a5/TLoad.hpp"
-#include "pto/npu/a5/TMax.hpp"
-#include "pto/npu/a5/TMin.hpp"
-#include "pto/npu/a5/TMins.hpp"
-#include "pto/npu/a5/TMul.hpp"
-#include "pto/npu/a5/TMulS.hpp"
-#include "pto/npu/a5/TPow.hpp"
-#include "pto/npu/a5/TPrefetch.hpp"
-#include "pto/npu/a5/TRem.hpp"
-#include "pto/npu/a5/TRemS.hpp"
-#include "pto/npu/a5/TRowExpandDiv.hpp"
-#include "pto/npu/a5/TShlS.hpp"
-#include "pto/npu/a5/TShrS.hpp"
-#include "pto/npu/a5/TStore.hpp"
-#include "pto/npu/a5/TSub.hpp"
-#include "pto/npu/a5/TSubS.hpp"
-#include "pto/npu/a5/TUnaryOp.hpp"
-#include "pto/npu/a5/TMatmul.hpp"
 #else
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"

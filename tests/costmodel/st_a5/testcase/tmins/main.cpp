@@ -30,7 +30,8 @@ void runTMinS(T scalar)
     TMINS(dstTile, srcTile, scalar);
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
-    pto::test::a5::ExpectLastVecTileOp({"vlds", "vmins", "vsts"}, repeat);
+    constexpr uint64_t expectedCycles = static_cast<uint64_t>(1.0589255 * repeat + 53.140381 + 0.5);
+    pto::test::a5::ExpectSupportedVfTileOp("TMINS", expectedCycles);
 }
 
 } // namespace

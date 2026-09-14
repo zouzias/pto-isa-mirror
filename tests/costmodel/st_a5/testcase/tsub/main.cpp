@@ -32,7 +32,8 @@ void runTSub()
     TSUB(dstTile, src0Tile, src1Tile);
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
-    pto::test::a5::ExpectLastBinaryVecTileOp({"vlds", "vlds", "vsub", "vsts"}, repeat);
+    constexpr uint64_t expectedCycles = static_cast<uint64_t>(1.2469671 * repeat + 55.073657 + 0.5);
+    pto::test::a5::ExpectSupportedVfTileOp("TSUB", expectedCycles);
 }
 
 } // namespace

@@ -9,19 +9,23 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #ifndef PTO_INSTR_HPP
 #define PTO_INSTR_HPP
+#include <cstdint>
+#include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 // Intentionally reuse the common PTO include guard so this header can act as a
 // drop-in replacement when <pto/pto-inst.hpp> selects it for __COSTMODEL.
 
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
+#include "pto/common/fifo.hpp"
 #include "pto/common/tassign_check.hpp"
+#if !defined(PTO_NPU_ARCH_A5)
 #include "pto/common/utils.hpp"
-#include "pto/common/pto_instr_impl.hpp"
-#if defined(PTO_NPU_ARCH_A5) && defined(__COSTMODEL)
-#include "pto/npu/a5/TRsqrt.hpp"
 #endif
+#include "pto/common/pto_instr_impl.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
 #include "pto/costmodel/perf_sim/recorder.hpp"
@@ -67,8 +71,101 @@ inline void InjectTileCycles(T& obj)
     }
 }
 
-// Record one PTO instruction to the pipeline simulator.
-// Called from MAP_INSTR_IMPL after the _IMPL call and InjectTileCycles.
+struct A5TileOpOptions {
+    std::string_view op_params{};
+};
+
+struct A5TileOpMetadata {
+    std::string first_tile_dtype;
+    std::string second_tile_dtype;
+    int64_t rows = 0;
+    int64_t cols = 0;
+    int64_t valid_rows = 0;
+    int64_t valid_cols = 0;
+    uint32_t tile_count = 0;
+    uint32_t static_full_cols_mask = 0;
+    uint32_t single_row_mask = 0;
+    VFImplKind vf_impl_kind = VFImplKind::VFIMPL_DEFAULT;
+    RoundMode round_mode = RoundMode::CAST_NONE;
+    SaturationMode saturation_mode = SaturationMode::ON;
+};
+
+template <typename T>
+inline void CollectA5TileOpMetadata(A5TileOpMetadata& metadata, T&& arg)
+{
+    using Arg = std::remove_cv_t<std::remove_reference_t<T>>;
+    if constexpr (requires {
+                      Arg::Rows;
+                      Arg::Cols;
+                      Arg::ValidCol;
+                      arg.GetValidRow();
+                      arg.GetValidCol();
+                      perf_sim::TileTraits<Arg>::dtype_str();
+                  }) {
+        const std::string dtype = perf_sim::TileTraits<Arg>::dtype_str();
+        const uint32_t tile_index = metadata.tile_count;
+        if (tile_index < 32 && Arg::ValidCol == Arg::Cols) {
+            metadata.static_full_cols_mask |= 1U << tile_index;
+        }
+        if (tile_index < 32 && Arg::Rows == 1) {
+            metadata.single_row_mask |= 1U << tile_index;
+        }
+        if (tile_index == 0) {
+            metadata.first_tile_dtype = dtype;
+            metadata.rows = static_cast<int64_t>(Arg::Rows);
+            metadata.cols = static_cast<int64_t>(Arg::Cols);
+            metadata.valid_rows = static_cast<int64_t>(arg.GetValidRow());
+            metadata.valid_cols = static_cast<int64_t>(arg.GetValidCol());
+        } else if (tile_index == 1) {
+            metadata.second_tile_dtype = dtype;
+        }
+        ++metadata.tile_count;
+    } else if constexpr (std::is_same_v<Arg, VFImplKind>) {
+        metadata.vf_impl_kind = arg;
+    } else if constexpr (std::is_same_v<Arg, RoundMode>) {
+        metadata.round_mode = arg;
+    } else if constexpr (std::is_same_v<Arg, SaturationMode>) {
+        metadata.saturation_mode = arg;
+    }
+}
+
+inline bool FirstA5TilesUseContiguousPath(const A5TileOpMetadata& metadata, uint32_t required_tiles)
+{
+    if (required_tiles == 0 || required_tiles > metadata.tile_count || required_tiles >= 32) {
+        return false;
+    }
+    const uint32_t required_mask = (1U << required_tiles) - 1U;
+    return (metadata.static_full_cols_mask & required_mask) == required_mask ||
+           (metadata.single_row_mask & required_mask) == required_mask;
+}
+
+inline ::pto::mocker::lightweight::A5VfShapePathHint ResolveA5VfShapePathHint(
+    std::string_view opcode, const A5TileOpMetadata& metadata)
+{
+    using ShapePathHint = ::pto::mocker::lightweight::A5VfShapePathHint;
+    uint32_t required_tiles = 0;
+    if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
+        required_tiles = 3;
+    } else if (
+        opcode == "TDIVS" || opcode == "TMINS" || opcode == "TNEG" || opcode == "TEXP" || opcode == "TSQRT" ||
+        opcode == "TRSQRT" || opcode == "TRECIP" || opcode == "TCVT") {
+        required_tiles = 2;
+    } else {
+        return ShapePathHint::Infer;
+    }
+    return FirstA5TilesUseContiguousPath(metadata, required_tiles) ? ShapePathHint::Path1D : ShapePathHint::Path2D;
+}
+
+template <typename... Args>
+inline A5TileOpMetadata BuildA5TileOpMetadata(Args&&... args)
+{
+    A5TileOpMetadata metadata;
+    (CollectA5TileOpMetadata(metadata, std::forward<Args>(args)), ...);
+    return metadata;
+}
+
+// Record one PTO instruction to the pipeline simulator. A2/A3 calls this after
+// running _IMPL; A5 calls it directly at the TileOp boundary.
 
 // Helper: try to extract dimensions + dtype from a single tile; returns true if successful.
 template <typename T>
@@ -109,7 +206,8 @@ inline void ExtractFirstTileInfo(int& rows, int& cols, std::string& dtype, T&& f
     }
 }
 
-inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_tiles)
+inline void RecordInstrWithOptions(
+    const char* opcode, const A5TileOpOptions& a5_options, auto&& first_tile, auto&&... rest_tiles)
 {
     // Look up pipeline stage from opcode name and tile types (TLOAD/TSTORE need tile routing)
     perf_sim::PipeStage stage = perf_sim::ResolvePipeStageArgs(opcode, first_tile, rest_tiles...);
@@ -137,17 +235,42 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     bool useEstimatedCycles = (cycles == 0);
 
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
-    // Phase 1 deliberately has no A5 VF estimator. Keep the record, but expose unsupported
-    // explicitly instead of silently substituting the generic fallback formula.
     if (stage == perf_sim::PipeStage::Vector) {
-        cycles = 0;
-        estimatedCycles = 0;
+        const A5TileOpMetadata metadata =
+            BuildA5TileOpMetadata(first_tile, rest_tiles...);
+        perf_sim::A5VfTileOpInput input;
+        input.opcode = opcode;
+        input.src_dtype = metadata.first_tile_dtype;
+        if (input.opcode == "TCVT") {
+            input.src_dtype = metadata.second_tile_dtype;
+            input.dst_dtype = metadata.first_tile_dtype;
+        }
+        input.rows = metadata.rows;
+        input.cols = metadata.cols;
+        input.valid_rows = metadata.valid_rows;
+        input.valid_cols = metadata.valid_cols;
+        input.vf_impl_kind = metadata.vf_impl_kind;
+        input.round_mode = metadata.round_mode;
+        input.saturation_mode = metadata.saturation_mode;
+        input.op_params = a5_options.op_params;
+        input.shape_path_hint = ResolveA5VfShapePathHint(opcode, metadata);
+
         useEstimatedCycles = false;
-        r.costmodel_status = perf_sim::CostModelStatus::Unsupported;
-        r.costmodel_diagnostic = std::string("A5 VF formula costmodel does not support ") + opcode + " yet";
         auto& trace = ::pto::mocker::GetMutableTrace();
-        if (!trace.executed_pto.empty()) {
-            trace.executed_pto.back().total_cycles = 0;
+        if (perf_sim::TryEstimateA5VfTileOpCycles(input, cycles)) {
+            estimatedCycles = cycles;
+            if (!trace.executed_pto.empty()) {
+                trace.executed_pto.back().total_cycles = cycles;
+            }
+        } else {
+            cycles = 0;
+            estimatedCycles = 0;
+            r.costmodel_status = perf_sim::CostModelStatus::Unsupported;
+            r.costmodel_diagnostic = std::string("A5 VF formula costmodel does not support ") + opcode +
+                                     " for the supplied TileOp parameters";
+            if (!trace.executed_pto.empty()) {
+                trace.executed_pto.back().total_cycles = 0;
+            }
         }
     }
 #endif
@@ -182,6 +305,13 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     perf_sim::PtoRecorder::Record(std::move(r));
 }
 
+inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_tiles)
+{
+    RecordInstrWithOptions(
+        opcode, A5TileOpOptions{}, std::forward<decltype(first_tile)>(first_tile),
+        std::forward<decltype(rest_tiles)>(rest_tiles)...);
+}
+
 // Scalar-stage overload for instructions with no tile arguments
 // Scalar-stage ops don't register as data producers (per TileDepTracker design),
 // so we skip TrackByAddr and use signal_event=-1.
@@ -206,6 +336,14 @@ inline void RecordInstrFromFirst(OpcodeStr&& opcode_str, Args&&... args)
 {
     // Forward only tile-type arguments to RecordInstr
     ::pto::mocker::RecordInstr(std::forward<OpcodeStr>(opcode_str), std::forward<Args>(args)...);
+}
+
+template <typename OpcodeStr, typename... Args>
+inline void RecordA5TileOpFromFirst(
+    OpcodeStr&& opcode_str, ::pto::mocker::A5TileOpOptions options, Args&&... args)
+{
+    ::pto::mocker::RecordInstrWithOptions(
+        std::forward<OpcodeStr>(opcode_str), options, std::forward<Args>(args)...);
 }
 
 //
@@ -247,6 +385,27 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
 #else
 #define PTO_FORWARD_L2HINT_TO_IMPL 1
 #endif
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+#define MAP_INSTR_IMPL(API, ...)                                      \
+    do {                                                              \
+        ::pto::mocker::PtoInstrScope _scope(#API);                    \
+        _scope.Finish();                                              \
+        ::RecordA5TileOpFromFirst(#API, {}, __VA_ARGS__);             \
+        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));  \
+    } while (0)
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
+#define RECORD_INSTR_ONLY(API, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
+#define RECORD_A5_VF_INSTR(API, OP_PARAMS, ...)                                      \
+    do {                                                                             \
+        ::pto::mocker::PtoInstrScope _scope(#API);                                   \
+        _scope.Finish();                                                             \
+        ::RecordA5TileOpFromFirst(                                                    \
+            #API, ::pto::mocker::A5TileOpOptions{OP_PARAMS}, __VA_ARGS__);            \
+        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                 \
+    } while (0)
+#define MAP_A5_VF_PRECISION_IMPL(API, TEMPLATE_ARGS, IS_HIGH_PRECISION, ...) \
+    RECORD_A5_VF_INSTR(API, (IS_HIGH_PRECISION) ? "high_precision" : "", __VA_ARGS__)
+#else
 #define MAP_INSTR_IMPL(API, ...)                                     \
     do {                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                   \
@@ -272,9 +431,47 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
     } while (0)
+#define RECORD_A5_VF_INSTR(API, OP_PARAMS, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
+#define MAP_A5_VF_PRECISION_IMPL(API, TEMPLATE_ARGS, IS_HIGH_PRECISION, ...) \
+    MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, __VA_ARGS__)
+#endif
 
-// TPUSH/TPOP special macro: records FFTS sync events for ring buffer
-// First arg is Pipe, second is Tile, third is tile index
+// TPUSH/TPOP special macros record the high-level FIFO synchronization. A5
+// costmodel builds do not instantiate the NPU implementation just to discover
+// that event.
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+#define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...)                                  \
+    do {                                                                                             \
+        ::pto::mocker::PtoInstrScope _scope(#API);                                                   \
+        _scope.Finish();                                                                             \
+        if constexpr (IS_TPUSH) {                                                                    \
+            ::RecordTPushSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_NTH_ARG(__VA_ARGS__, 2), 0);           \
+        } else {                                                                                     \
+            ::RecordTPopSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_NTH_ARG(__VA_ARGS__, 2), 0);            \
+        }                                                                                            \
+        ::RecordA5TileOpFromFirst(#API, {}, __VA_ARGS__);                                            \
+        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                 \
+    } while (0)
+
+#define MAP_INSTR_IMPL_T_TPUSH(API, TEMPLATE_ARGS, ...)                                              \
+    do {                                                                                             \
+        ::pto::mocker::PtoInstrScope _scope(#API);                                                   \
+        _scope.Finish();                                                                             \
+        ::RecordTPushSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), 0);               \
+        ::RecordA5TileOpFromFirst(#API, {}, __VA_ARGS__);                                            \
+        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                 \
+    } while (0)
+
+#define MAP_INSTR_IMPL_T_TPOP(API, TEMPLATE_ARGS, ...)                                               \
+    do {                                                                                             \
+        ::pto::mocker::PtoInstrScope _scope(#API);                                                   \
+        _scope.Finish();                                                                             \
+        ::RecordTPopSync(PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), 0);                \
+        ::RecordA5TileOpFromFirst(#API, {}, __VA_ARGS__);                                            \
+        ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__));                                 \
+    } while (0)
+#else
+// First arg is Pipe, second is Tile, third is tile index.
 #define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...)                                                  \
     do {                                                                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                                                                   \
@@ -314,6 +511,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
             PTO_FIRST_ARG(__VA_ARGS__), PTO_SECOND_ARG(__VA_ARGS__), PTO_FIRST_ARG(__VA_ARGS__).cons.tileIndex); \
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                                                               \
     } while (0)
+#endif
 
 #define PTO_FIRST_ARG(first, ...) first
 #define PTO_SECOND_ARG(_first, second, ...) second
@@ -321,75 +519,6 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
 #endif
 
 namespace pto {
-
-#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
-template <typename DstTile, typename SrcTile>
-PTO_INTERNAL void TMOV_IMPL(DstTile&, SrcTile&)
-{}
-
-template <typename DstTile, typename SrcTile, typename IndexTile>
-PTO_INTERNAL void TSCATTER_IMPL(DstTile&, SrcTile&, IndexTile&)
-{}
-
-template <MaskPattern mask, auto scatterType = ScatterAxis::SCATTER_ROW, typename DstTile, typename SrcTile>
-PTO_INTERNAL void TSCATTER_IMPL(DstTile&, SrcTile&)
-{}
-
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst&, TileDataSrc&, typename TileDataSrc::DType)
-{}
-
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst&, typename TileDataSrc::DType, TileDataSrc&)
-{}
-
-template <
-    QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
-    typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
-{}
-
-template <
-    QuantType quantType, QuantScaleAlg scaleAlg, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
-    typename TileDataMax, typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
-{}
-
-template <
-    QuantType quantType, VecStoreMode storeMode, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
-    typename TileDataMax, typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*, TileDataExp*)
-{}
-
-template <
-    int groupAxis, MxQuantAlg mxAlgorithm, bool interleave, typename TileDataOut, typename TileDataSrc,
-    typename TileDataExp, typename TileDataMax, typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
-{}
-
-template <
-    int groupAxis, MxQuantAlg mxAlgorithm, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
-    typename TileDataMax, typename TileDataScaling>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut&, TileDataSrc&, TileDataExp*, TileDataMax*, TileDataScaling*)
-{}
-
-template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara>
-PTO_INTERNAL void TQUANT_IMPL(TileDataOut&, TileDataSrc&, TileDataPara&, TileDataPara* = nullptr)
-{}
-
-template <QuantType quantType, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename TileDataTmp>
-PTO_INTERNAL void TQUANT_IMPL(
-    TileDataOut& dst, TileDataSrc& src, TileDataPara& scale, [[maybe_unused]] TileDataTmp& tmp,
-    TileDataPara* offset = nullptr)
-{
-    TQUANT_IMPL<quantType>(dst, src, scale, offset);
-}
-#endif
 
 inline uint16_t CostmodelFftsMessage(uint16_t eventId) { return static_cast<uint16_t>(1U + ((eventId & 0xfU) << 8U)); }
 
@@ -494,6 +623,9 @@ PTO_INST void SYNCALL(GlobalData& gmWorkspace, int32_t usedCores = 0)
 template <typename T, typename AddrType>
 PTO_INST void TASSIGN(T& obj, AddrType addr)
 {
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+    TASSIGN_IMPL(obj, addr);
+#endif
     MAP_INSTR_IMPL(TASSIGN, obj, addr);
 }
 
@@ -893,7 +1025,8 @@ template <
 PTO_INST RecordEvent TRSQRT(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
+    MAP_A5_VF_PRECISION_IMPL(
+        TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == RsqrtAlgorithm::HIGH_PRECISION, dst, src);
     return RecordEvent{};
 }
 
@@ -903,7 +1036,8 @@ template <
 PTO_INST RecordEvent TRSQRT(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, tmp);
+    MAP_A5_VF_PRECISION_IMPL(
+        TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == RsqrtAlgorithm::HIGH_PRECISION, dst, src, tmp);
     return RecordEvent{};
 }
 
@@ -912,7 +1046,8 @@ template <
 PTO_INST RecordEvent TSQRT(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
+    MAP_A5_VF_PRECISION_IMPL(
+        TSQRT, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == SqrtAlgorithm::HIGH_PRECISION, dst, src);
     return RecordEvent{};
 }
 
@@ -921,7 +1056,8 @@ template <
 PTO_INST RecordEvent TEXP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TEXP, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
+    MAP_A5_VF_PRECISION_IMPL(
+        TEXP, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == ExpAlgorithm::HIGH_PRECISION, dst, src);
     return RecordEvent{};
 }
 
@@ -1003,7 +1139,8 @@ PTO_INST RecordEvent
 TDIVS(TileDataDst& dst, TileDataSrc& src0, typename TileDataSrc::DType scalar, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, scalar);
+    MAP_A5_VF_PRECISION_IMPL(
+        TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == DivAlgorithm::HIGH_PRECISION, dst, src0, scalar);
     return RecordEvent{};
 }
 
@@ -1022,7 +1159,8 @@ PTO_INST RecordEvent
 TDIVS(TileDataDst& dst, typename TileDataDst::DType scalar, TileDataSrc& src0, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), dst, scalar, src0);
+    MAP_A5_VF_PRECISION_IMPL(
+        TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), PrecisionType == DivAlgorithm::HIGH_PRECISION, dst, scalar, src0);
     return RecordEvent{};
 }
 
@@ -1610,7 +1748,12 @@ template <
 PTO_INST RecordEvent TRECIP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+    RECORD_A5_VF_INSTR(
+        TRECIP, PrecisionType == RecipAlgorithm::HIGH_PRECISION ? "high_precision" : "default", dst, src);
+#else
     MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(static_cast<DivAlgorithm>(PrecisionType)), dst, 1, src);
+#endif
     return RecordEvent{};
 }
 

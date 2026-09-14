@@ -11,18 +11,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/costmodel/perf_sim/recorder.hpp>
 
-#include "a5_vf_stub.hpp"
-
-#ifndef VST_VLD
-#define VST_VLD 0
-#endif
-#ifndef VLD_VST
-#define VLD_VST 1
-#endif
-#ifndef VST_VST
-#define VST_VST 2
-#endif
-
 namespace pto::mocker::a5::sync {
 inline void RecordPerfBarrier(int pipe)
 {
@@ -36,21 +24,9 @@ inline void RecordPerfBarrier(int pipe)
 
 } // namespace pto::mocker::a5::sync
 
-template <typename BarrierType>
-inline void mem_bar(BarrierType)
-{
-    if (::pto::mocker::a5::host::InVfScope()) {
-        return;
-    }
-    ::pto::mocker::a5::sync::RecordPerfBarrier(PIPE_V);
-}
-
 template <typename Pipe>
 inline void pto_costmodel_pipe_barrier(Pipe pipe)
 {
-    if (::pto::mocker::a5::host::InVfScope()) {
-        return;
-    }
     ::pto::mocker::a5::sync::RecordPerfBarrier(static_cast<int>(pipe));
 }
 
@@ -68,68 +44,51 @@ inline void set_quant_pre(auto mode) { ::pto::mocker::RecordCceCall("set_quant_p
 template <typename SrcPipe, typename DstPipe, typename Token>
 inline void set_flag(SrcPipe srcPipe, DstPipe dstPipe, Token token)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Signal(
-            static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
-    }
+    ::pto::perf_sim::SyncRecorder::Signal(
+        static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
 }
 
 template <typename SrcPipe, typename DstPipe, typename Token>
 inline void wait_flag(SrcPipe srcPipe, DstPipe dstPipe, Token token)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Wait(
-            static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
-        ::pto::mocker::FlushPendingTail(::pto::mocker::evaluator::PipeKey::VECTOR);
-    }
+    ::pto::perf_sim::SyncRecorder::Wait(
+        static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
+    ::pto::mocker::FlushPendingTail(::pto::mocker::evaluator::PipeKey::VECTOR);
 }
 
 template <typename SrcPipe, typename Message>
 inline void ffts_cross_core_sync(SrcPipe srcPipe, Message message)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        const int flagId = (static_cast<int>(message) >> 8) & 0xf;
-        ::pto::perf_sim::SyncRecorder::Signal(flagId, static_cast<int>(srcPipe), -1, true);
-    }
+    const int flagId = (static_cast<int>(message) >> 8) & 0xf;
+    ::pto::perf_sim::SyncRecorder::Signal(flagId, static_cast<int>(srcPipe), -1, true);
 }
 
 template <typename FlagId>
 inline void wait_flag_dev(FlagId flagId)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), -1, -1, true);
-    }
+    ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), -1, -1, true);
 }
 
 template <typename SrcPipe, typename FlagId>
 inline void wait_flag_dev(SrcPipe srcPipe, FlagId flagId)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
-    }
+    ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
 }
 
 template <typename SrcPipe, typename FlagId>
 inline void set_intra_block(SrcPipe srcPipe, FlagId flagId)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Signal(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
-    }
+    ::pto::perf_sim::SyncRecorder::Signal(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
 }
 
 template <typename SrcPipe, typename FlagId>
 inline void wait_intra_block(SrcPipe srcPipe, FlagId flagId)
 {
-    if (!::pto::mocker::a5::host::InVfScope()) {
-        ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
-    }
+    ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(flagId), static_cast<int>(srcPipe), -1, true);
 }
 
 template <typename BarrierType>
 inline void dsb(BarrierType)
 {
-    if (::pto::mocker::a5::host::InVfScope()) {
-        return;
-    }
     ::pto::mocker::a5::sync::RecordPerfBarrier(PIPE_ALL);
 }

@@ -335,8 +335,22 @@ struct TileTraits<T> {
             return "int8";
         else if constexpr (std::is_same_v<DType, uint8_t>)
             return "uint8";
-        else
+        else if constexpr (std::is_same_v<DType, float8_e4m3_t>)
+            return "fp8_e4m3";
+        else if constexpr (std::is_same_v<DType, float8_e5m2_t>)
+            return "fp8_e5m2";
+        else if constexpr (std::is_same_v<DType, hifloat8_t>)
+            return "hif8";
+        else if constexpr (std::is_same_v<DType, float4_e1m2x2_t>)
+            return "fp4_e1m2";
+        else if constexpr (std::is_same_v<DType, float4_e2m1x2_t>)
+            return "fp4_e2m1";
+        else if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half>)
+            return "bf16";
+        else if constexpr (std::is_same_v<DType, half>)
             return "fp16";
+        else
+            return "unknown";
     }
 };
 
