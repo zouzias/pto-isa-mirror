@@ -42,6 +42,8 @@ void LaunchTTRI(T* out, void* stream)
 template void LaunchTTRI<float, 1, 0, 4, 8, 4, 4>(float* out, void* stream);
 template void LaunchTTRI<float, 1, 0, 64, 64, 64, 64>(float* out, void* stream);
 template void LaunchTTRI<int32_t, 1, 0, 64, 64, 64, 64>(int32_t* out, void* stream);
+template void LaunchTTRI<int64_t, 1, 0, 64, 64, 64, 64>(int64_t* out, void* stream);
+template void LaunchTTRI<uint64_t, 1, 0, 64, 64, 64, 64>(uint64_t* out, void* stream);
 template void LaunchTTRI<int16_t, 1, 0, 64, 64, 64, 64>(int16_t* out, void* stream);
 template void LaunchTTRI<aclFloat16, 1, 0, 16, 256, 16, 256>(aclFloat16* out, void* stream);
 #ifdef CPU_SIM_BFLOAT_ENABLED
@@ -50,6 +52,8 @@ template void LaunchTTRI<bfloat16_t, 1, 0, 16, 256, 16, 256>(bfloat16_t* out, vo
 template void LaunchTTRI<float, 1, 0, 128, 128, 128, 128>(float* out, void* stream);
 template void LaunchTTRI<float, 0, 0, 64, 64, 64, 64>(float* out, void* stream);
 template void LaunchTTRI<int32_t, 0, 0, 64, 64, 64, 64>(int32_t* out, void* stream);
+template void LaunchTTRI<int64_t, 0, 0, 64, 64, 64, 64>(int64_t* out, void* stream);
+template void LaunchTTRI<uint64_t, 0, 0, 64, 64, 64, 64>(uint64_t* out, void* stream);
 template void LaunchTTRI<int16_t, 0, 0, 64, 64, 64, 64>(int16_t* out, void* stream);
 template void LaunchTTRI<aclFloat16, 0, 0, 16, 256, 16, 256>(aclFloat16* out, void* stream);
 #ifdef CPU_SIM_BFLOAT_ENABLED
