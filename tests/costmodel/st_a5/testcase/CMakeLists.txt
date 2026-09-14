@@ -1,4 +1,4 @@
-function(pto_a5_vfsim_tileop_test NAME)
+function(pto_a5_host_tileop_test NAME)
     get_filename_component(_repo_inc "${CMAKE_SOURCE_DIR}/../../../include" ABSOLUTE)
     add_executable(${NAME} main.cpp)
     target_include_directories(${NAME} PRIVATE

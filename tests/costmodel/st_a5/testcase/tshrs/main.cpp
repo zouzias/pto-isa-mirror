@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-#include "a5_vfsim_tileop_check.hpp"
+#include "a5_host_tileop_check.hpp"
 
 using namespace pto;
 

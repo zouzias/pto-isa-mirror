@@ -12,7 +12,7 @@ get_filename_component(_pto_costmodel_public_dir "${CMAKE_CURRENT_LIST_DIR}" REA
 get_filename_component(_pto_costmodel_root "${_pto_costmodel_public_dir}/../../../.." REALPATH)
 
 # Enable PTO Host costmodel for a consumer target. The consumer uses this same
-# entry point for both architectures; A5's VfSim dependencies stay internal.
+# entry point for both architectures.
 #
 #   include(<pto-root>/include/pto/costmodel/cmake/pto_costmodel.cmake)
 #   pto_enable_costmodel(my_target ARCH A2A3) # or A5
@@ -36,8 +36,6 @@ function(pto_enable_costmodel target)
 
     if(_pto_costmodel_arch STREQUAL "A5")
         target_compile_definitions("${target}" PRIVATE __NPU_ARCH__=3101)
-        include("${_pto_costmodel_root}/pkg_inc/pto/costmodel/vfsim/cmake/a5_vf_mock.cmake")
-        target_enable_a5_vf_mock("${target}")
         return()
     endif()
 

@@ -9,7 +9,7 @@ costmodel 是 host 侧编译路径。用户代码仍然包含 PTO-ISA 头文件�
 | 目标 | `ARCH` 参数 | `__NPU_ARCH__` | cycle 来源 |
 | --- | --- | --- | --- |
 | A2/A3 | `A2A3` | `2201` | lightweight costmodel 和 perf_sim fallback |
-| A5 | `A5` | `3101` | VF scope 由 A5 VfSim 预测，其它指令由 perf_sim/fallback 处理 |
+| A5 | `A5` | `3101` | memory、sync 和 cube 沿用现有模型；VF 公式模型正在逐项接入 |
 
 ## CMake 接入
 
@@ -39,7 +39,7 @@ PTO_COMM_NOT_SUPPORTED
 __NPU_ARCH__=<目标架构>
 ```
 
-对于 A5，它还会启用 VfSim 构建支持，并链接需要的 VfSim 组件。
+A5 仅使用 PTO-ISA 自带的头文件，不需要额外的模拟器源码、LLVM pass 或链接库。
 
 ## A2/A3 行为
 
@@ -63,21 +63,20 @@ pto/pto-inst.hpp
   -> costmodel/runtime_stub.hpp
   -> costmodel/pto_instr.hpp
   -> a5/cce_costmodel/*
-  -> pkg_inc/pto/costmodel/vfsim/*
 ```
 
-A5 的 VF scope 内指令会被捕获并组装成 `VfInfo`，再交给 VfSim 预测 cycles。预测结果会作为当前 PTO 指令 cycles 的一部分记录下来。
+A5 设备实现中的 intrinsic 在 host 编译时由轻量 mock 提供声明和空实现。VF 周期将由 tileop 的公式模型直接预测，不再捕获 VF 指令流或构造中间表示。
 
-memory、sync、cube 以及 VfSim 不支持或信息不足的 VF 形态，会由 host mock 和 fallback 估算处理。fallback 的目标是保证详细 VfSim 结果不可用时，仍然能够返回可用的 cycle 数值。
+第一阶段尚未接入具体 VF 公式。此时 VF 指令会记录为 `Unsupported`，cycles 保持为 0，并提供诊断信息；不会使用通用 fallback 伪造一个可用预测值。memory、sync 和 cube 仍按各自现有模型处理。
 
 ## 获取 cycle 结果
 
 costmodel 会通过 perf_sim 记录 PTO 指令。通常用户只需要从测试或集成侧已有的 costmodel/perf_sim 结果路径读取 cycle 数值。
 
-对于 A5，公开使用方式以 cycle 结果为主。fallback 可能在内部发生，但打包使用时不要求用户依赖 fallback 日志或诊断信息。
+对于 A5，读取 cycle 前应先检查记录中的 `costmodel_status`。只有 `Supported` 状态下的 cycle 才是有效预测；`Unsupported` 的诊断信息会指出尚未覆盖的 VF 指令。
 
 ## 注意事项
 
 - costmodel 路径用于 host 侧估算和验证，不会执行真实 NPU kernel。
-- A5 costmodel 需要 `pkg_inc/pto/costmodel/vfsim/cmake` 下的 VfSim CMake helper。
+- A5 host mock 只解决普通 C++ 编译器无法识别设备 intrinsic 的问题，不执行设备侧运算。
 - 用户 kernel 代码保持正常 PTO API 写法，通过 CMake 选择 costmodel 路径，不需要为了 costmodel 改写 kernel API。

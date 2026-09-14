@@ -52,7 +52,7 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
 
 // ── String → lightweight::PtoOpcode mapping for A2/A3 ──
 // Enum names in lightweight::PtoOpcode match opcode strings exactly. A5 does not include this
-// backend: its VF fallback is supplied by a5/cce_costmodel/vec_cycle_generated.hpp.
+// backend; its vector instructions are handled by the dedicated A5 formula costmodel.
 
 // clang-format off
 #define PTO_PERF_SIM_OPCODE_LIST                                                                                      \
