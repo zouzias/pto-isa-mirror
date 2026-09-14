@@ -358,7 +358,8 @@ PTO_INTERNAL void Int64RowMinMax(__ubuf__ T* dst, __ubuf__ T* src, unsigned vali
 template <typename T>
 struct ROWSUM {
     using TIN = T;
-    using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>;
+    using TOUT = std::conditional_t<
+        std::is_same_v<T, int16_t>, int32_t, std::conditional_t<std::is_same_v<T, uint16_t>, uint32_t, T>>;
     static constexpr auto InitVal = Padding<TOUT>::Zero;
     static PTO_INTERNAL void Accumulate(
         RegTensor<TOUT>& dst, RegTensor<TOUT>& src0, RegTensor<TOUT>& src1, MaskReg& pred)
@@ -367,7 +368,16 @@ struct ROWSUM {
     }
     static PTO_INTERNAL void Reduce(RegTensor<TOUT>& dst, RegTensor<TIN>& src, MaskReg& pred, MaskReg& pregdst)
     {
-        vcadd(dst, src, pred, MODE_ZEROING);
+        if constexpr (std::is_same_v<TIN, uint16_t> || std::is_same_v<TIN, int16_t>) {
+            RegTensor<TOUT> srcEven, srcOdd, dstEven, dstOdd;
+            vcvt(srcEven, src, pred, PART_EVEN);
+            vcvt(srcOdd, src, pred, PART_ODD);
+            vcadd(dstEven, srcEven, pred, MODE_ZEROING);
+            vcadd(dstOdd, srcOdd, pred, MODE_ZEROING);
+            vadd(dst, dstEven, dstOdd, pregdst, MODE_ZEROING);
+        } else {
+            vcadd(dst, src, pred, MODE_ZEROING);
+        }
     }
 };
 
@@ -523,7 +533,8 @@ PTO_INTERNAL void TRowReduceImpl(
     using TDST = typename TileDataOut::DType;
     constexpr int SAT_MODE_BIT_60 = 60;
     constexpr int SAT_MODE_BIT_59 = 59;
-    constexpr bool needsNonSatMode = std::is_same_v<TOUT, int32_t> && std::is_same_v<TDST, int16_t>;
+    constexpr bool needsNonSatMode = (std::is_same_v<TOUT, int32_t> && std::is_same_v<TDST, int16_t>) ||
+                                     (std::is_same_v<TOUT, uint32_t> && std::is_same_v<TDST, uint16_t>);
     bool originalCtrl60 = false;
     bool originalCtrl59 = false;
     uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
@@ -616,7 +627,8 @@ PTO_INTERNAL void TROWREDUCE_IMPL_COMMON(TileDataOut& dst, TileDataIn& src)
     using T = typename TileDataIn::DType;
     constexpr bool is64Bit = std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>;
     constexpr bool supported = is64Bit || std::is_same_v<T, half> || std::is_same_v<T, float> ||
-                               std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> ||
+                               std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t> ||
+                               std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
                                (!isSum && (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>));
     static_assert(supported, "Unsupported row reduction dtype.");
     TRowReduceCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
