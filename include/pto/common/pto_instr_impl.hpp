@@ -185,6 +185,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TFree.hpp"
 #include "pto/npu/a2a3/TColReduceIdx.hpp"
 #include "pto/npu/a2a3/TMula.hpp"
+#include "pto/npu/a2a3/InitCore.hpp"
 #endif
 #endif
 
@@ -311,6 +312,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TInterleave.hpp"
 #include "pto/npu/a5/TDeInterleave.hpp"
 #include "pto/npu/a5/TMula.hpp"
+#include "pto/npu/a5/InitCore.hpp"
 #endif // __COSTMODEL
 #endif
 
@@ -431,6 +433,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Async L2 cache prefetch (no-op on CPU sim - kept for API surface compatibility).
 #include "pto/cpu/TPrefetchAsync.hpp"
+#include "pto/cpu/InitCore.hpp"
 
 #endif
 
