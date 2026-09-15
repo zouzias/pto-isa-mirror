@@ -17,17 +17,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 enum QuantMode_t {
-    NoQuant = 0,        // 不使能量化功能
-    F322F16 = 1,        // float量化成half, scalar量化
-    F322BF16 = 16,      // float量化成bfloat16_t, scalar量化
-    DEQF16 = 5,         // int32_t量化成half, scalar量化
-    VDEQF16 = 4,        // int32_t量化成half，tensor量化
-    QF322B8_PRE = 24,   // float量化成int8_t/uint8_t，scalar量化
-    QF322F16_PRE = 32,  // float量化成half，scalar量化
-    QF322BF16_PRE = 34, // float量化成bfloat16_t，scalar量化
-    VQF322B8_PRE = 23,  // float量化成int8_t/uint8_t，tensor量化
+    NoQuant = 0,         // 不使能量化功能
+    F322F16 = 1,         // float量化成half, scalar量化
+    F322BF16 = 16,       // float量化成bfloat16_t, scalar量化
+    DEQF16 = 5,          // int32_t量化成half, scalar量化
+    VDEQF16 = 4,         // int32_t量化成half，tensor量化
+    QF322B8_PRE = 24,    // float量化成int8_t/uint8_t，scalar量化
+    QF322F16_PRE = 32,   // float量化成half，scalar量化
+    QF322BF16_PRE = 34,  // float量化成bfloat16_t，scalar量化
+    VQF322B8_PRE = 23,   // float量化成int8_t/uint8_t，tensor量化
+    VQF322F16_PRE = 33,  // float量化成half，tensor量化
+    VQF322BF16_PRE = 36, // float量化成bfloat16_t，tensor量化
     QS322BF16_PRE = 35,
-    VQS322BF16_PRE = 36,
+    VQS322BF16_PRE = 39,
     REQ8 = 3,  // int32_t量化成int8_t/uint8_t，scalar量化
     VREQ8 = 2, // int32_t量化成int8_t/uint8_t，tensor量化
     VSHIFTS322S16 = 12,
@@ -36,7 +38,8 @@ enum QuantMode_t {
 
 template <QuantMode_t Mode>
 inline constexpr bool is_vector_quant_v =
-    Mode == QuantMode_t::VQF322B8_PRE || Mode == QuantMode_t::VREQ8 || Mode == QuantMode_t::VDEQF16;
+    Mode == QuantMode_t::VQF322B8_PRE || Mode == QuantMode_t::VREQ8 || Mode == QuantMode_t::VDEQF16 ||
+    Mode == QuantMode_t::VQF322F16_PRE || Mode == QuantMode_t::VQF322BF16_PRE || Mode == QuantMode_t::VQS322BF16_PRE;
 
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
@@ -69,6 +72,8 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
             quantPre = QuantMode_t::REQ8;
         } else if constexpr (std::is_same<DstType, half>::value) {
             quantPre = QuantMode_t::DEQF16;
+        } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
+            quantPre = QuantMode_t::QS322BF16_PRE;
         } else if constexpr (std::is_same<DstType, int16_t>::value) {
             quantPre = QuantMode_t::SHIFTS322S16;
         }
@@ -83,12 +88,18 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantMode()
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::VQF322B8_PRE;
+        } else if constexpr (std::is_same<DstType, half>::value) {
+            quantPre = QuantMode_t::VQF322F16_PRE;
+        } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
+            quantPre = QuantMode_t::VQF322BF16_PRE;
         }
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::VREQ8;
         } else if constexpr (std::is_same<DstType, half>::value) {
             quantPre = QuantMode_t::VDEQF16;
+        } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
+            quantPre = QuantMode_t::VQS322BF16_PRE;
         } else if constexpr (std::is_same<DstType, int16_t>::value) {
             quantPre = QuantMode_t::VSHIFTS322S16;
         }
@@ -145,13 +156,15 @@ DstType quantize_element(SrcType src_val, uint64_t scalar)
         result_f = std::clamp(rounded, min, max);
     } else if constexpr (mode == QuantMode_t::DEQF16 || mode == QuantMode_t::VDEQF16) {
         result_f = std::clamp(result_f, -F16_MAX, F16_MAX);
-    } else if constexpr (mode == QuantMode_t::QF322F16_PRE) {
+    } else if constexpr (mode == QuantMode_t::QF322F16_PRE || mode == QuantMode_t::VQF322F16_PRE) {
         if (std::isnan(result_f) && saturate_inf == 1) {
             result_f = 0.0f;
         } else if (std::isfinite(result_f) || saturate_inf == 1) {
             result_f = std::clamp(result_f, -F16_MAX, F16_MAX);
         }
-    } else if constexpr (mode == QuantMode_t::QF322BF16_PRE || mode == QuantMode_t::F322BF16) {
+    } else if constexpr (
+        mode == QuantMode_t::QF322BF16_PRE || mode == QuantMode_t::VQF322BF16_PRE || mode == QuantMode_t::F322BF16 ||
+        mode == QuantMode_t::QS322BF16_PRE || mode == QuantMode_t::VQS322BF16_PRE) {
         if (std::isnan(result_f) && saturate_inf == 1) {
             result_f = 0.0f;
         } else if (std::isfinite(result_f) || saturate_inf == 1) {

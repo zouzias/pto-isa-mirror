@@ -125,6 +125,7 @@ tput
 tput_async
 tquant
 tquant_dn
+tquantmode
 trandom
 trecip
 treduce
