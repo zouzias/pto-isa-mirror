@@ -47,3 +47,4 @@ PROF*/
 .opencode/
 oat_reports/
 log/
+include/pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles_generated.hpp
