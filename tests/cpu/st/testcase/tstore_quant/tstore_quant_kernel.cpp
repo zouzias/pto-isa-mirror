@@ -227,3 +227,5 @@ template void LaunchTStoreQuant<1, int16_t, int32_t, 2, 2, 2, 16, 16, false, fal
     int16_t* out, int32_t* src, uint64_t* fbQuant, void* stream);
 template void LaunchTStoreQuant<1, int8_t, int32_t, 1, 2, 1, 16, 32, true, true, true>(
     int8_t* out, int32_t* src, uint64_t* fbQuant, void* stream);
+template void LaunchTStoreQuant<0, aclFloat16, float, 1, 1, 1, 16, 16, true, false, false>(
+    aclFloat16* out, float* src, uint64_t* fbQuant, void* stream);

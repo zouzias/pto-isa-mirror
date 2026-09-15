@@ -126,3 +126,5 @@ TEST_F(TStoreQuantTest, DN_7) { test_tstore_quant<1, float, aclFloat16, 1, 1, 1,
 TEST_F(TStoreQuantTest, DN_8) { test_tstore_quant<1, int32_t, int16_t, 2, 2, 2, 16, 16, false, false, false>(); }
 
 TEST_F(TStoreQuantTest, DN_9) { test_tstore_quant<1, int32_t, int8_t, 1, 2, 1, 16, 32, true, true, true>(); }
+
+TEST_F(TStoreQuantTest, ND_10) { test_tstore_quant<0, float, aclFloat16, 1, 1, 1, 16, 16, true, false, false>(); }

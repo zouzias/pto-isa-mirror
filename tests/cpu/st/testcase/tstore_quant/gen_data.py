@@ -224,6 +224,7 @@ if __name__ == "__main__":
         "TStoreQuantTest.DN_7",
         "TStoreQuantTest.DN_8",
         "TStoreQuantTest.DN_9",
+        "TStoreQuantTest.ND_10",
     ]
 
     case_params_list = [
@@ -236,6 +237,8 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.float32, np.float16, "DN", False, False, True, 1, 1, 1, 16, 8),
         GlobalTensorInfo(np.int32, np.int16, "DN", False, False, False, 2, 2, 2, 16, 16),
         GlobalTensorInfo(np.int32, np.int8, "DN", True, True, True, 1, 2, 1, 16, 32),
+        # float32 -> float16 tensor (vector) quant
+        GlobalTensorInfo(np.float32, np.float16, "ND", True, False, False, 1, 1, 1, 16, 16),
     ]
 
     for i, case_name  in enumerate(case_name_list):
