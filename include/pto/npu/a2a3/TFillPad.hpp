@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TFILLPAD_HPP
 #define TFILLPAD_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "TLoad.hpp"
@@ -333,7 +334,7 @@ __tf__ PTO_INTERNAL void TFillPad(typename TileData::TileDType __out__ dst, uint
     constexpr uint32_t elementsPerBlock = C0_SIZE_BYTE / sizeof(U);
     uint32_t alignedValidCol = CeilAlignment(dstValidCol, elementsPerBlock);
 
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     if constexpr (TileData::Compact == CompactMode::RowAlignedPadding) {
         constexpr const uint32_t fractalNzRow = 16;
         uint16_t alignedValidRow = CeilAlignment(dstValidRow, fractalNzRow); // unit is 16

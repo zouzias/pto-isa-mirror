@@ -132,8 +132,11 @@ The normal `<pto/pto-inst.hpp>` CPU include path exposes `pto::getFFTSMsg`,
 `__builtin_cce_ffts_cross_core_sync` / `ffts_cross_core_sync`, and
 `__builtin_cce_wait_flag_dev` / `wait_flag_dev` through [ffts.hpp](../../include/pto/cpu/ffts.hpp).
 Compile AIC kernels with `__DAV_CUBE__` and AIV kernels with `__DAV_VEC__`, in addition to `__CPU_SIM`.
-Exactly one role must be selected. Generic CPU headers enable both role macros by default;
-that ambiguous combination is rejected when an FFTS signal/wait is executed.
+Exactly one role must be selected. When neither role is specified, generic CPU headers enable both
+`PTO_COMPILE_CUBE` and `PTO_COMPILE_VEC` for library code.
+FFTS signal/wait rejects a missing or ambiguous explicit kernel role.
+Generic CPU simulation code can check `PTO_COMPILE_CUBE` / `PTO_COMPILE_VEC` after including
+`<pto/common/arch_macro.hpp>`.
 The CPU include structure follows the NPU A2/A3 `TSync.hpp`, which also provides FFTS helpers. `TSYNC` is no longer a
 public instruction; the internal CPU `TSYNC_IMPL()` remains empty, while the NPU implementation
 uses `pipe_barrier` in manual mode.
