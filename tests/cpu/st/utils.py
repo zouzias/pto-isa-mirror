@@ -27,6 +27,18 @@ class NumExt:
         return str(dtype) == NumExt.bf16
 
     @staticmethod
+    def is_integer(dtype: object) -> bool:
+        return dtype != NumExt.bf16 and np.issubdtype(dtype, np.integer)
+
+    @staticmethod
+    def is_unsigned_integer(dtype: object) -> bool:
+        return NumExt.is_integer(dtype) and np.dtype(dtype).kind == 'u'
+
+    @staticmethod
+    def is_signed_integer(dtype: object) -> bool:
+        return NumExt.is_integer(dtype) and np.dtype(dtype).kind != 'u'
+
+    @staticmethod
     def astype(values: np.ndarray, dtype: object) -> np.ndarray:
         if NumExt.is_bf16(dtype):
             return NumExt._bfloat16_bits_to_float32(NumExt._float32_to_bfloat16_bits(values))
@@ -70,9 +82,9 @@ class NumExt:
                     np.int8: 'int8',
                     np.int16: 'int16',
                     np.int32: 'int32',
+                    np.int64: 'int64',
                     np.uint8: 'uint8',
                     np.uint16: 'uint16',
                     np.uint32: 'uint32',
-                    np.int64: 'int64',
                     np.uint64: 'uint64'
                     }[dtype]

@@ -23,6 +23,19 @@ def gen_golden_data(param):
     col = param.col
     valid_col = param.valid_col
 
+    if param.check_guard:
+        values = np.arange(row * col, dtype=np.uint64).reshape(row, col)
+        input_arr = ((1 << 54) + values * 1009 + 3).astype(data_type)
+        if data_type == np.int64:
+            input_arr[values % 3 == 0] *= -1
+        output_arr = np.full(row * param.dst_col + 64, 0x5A5A5A5A5A5A5A5A, dtype=data_type)
+        output_arr[: valid_row * param.dst_col : param.dst_col] = input_arr[:valid_row, :valid_col].sum(
+            axis=1, dtype=data_type
+        )
+        input_arr.tofile("input.bin")
+        output_arr.tofile("golden.bin")
+        return
+
     # Bound integer inputs to prevent overflow during row reduction.
     if np.issubdtype(data_type, np.integer):
         if data_type == np.int64:
@@ -31,12 +44,23 @@ def gen_golden_data(param):
             input_arr = np.random.randint(low=0, high=100, size=(row, col)).astype(data_type)
         elif data_type == np.int32:
             input_arr = np.random.randint(low=-100, high=100, size=(row, col)).astype(data_type)
+        elif data_type == np.uint32:
+            input_arr = np.random.randint(low=0, high=1000, size=(row, col)).astype(data_type)
         elif data_type == np.int16:
             input_arr = np.random.randint(low=-50, high=50, size=(row, col)).astype(data_type)
+        elif data_type == np.uint16:
+            input_arr = np.random.randint(low=0, high=1000, size=(row, col)).astype(data_type)
         else:
             input_arr = np.random.randint(low=-10, high=10, size=(row, col)).astype(data_type)
     else:
         input_arr = np.random.uniform(low=-1, high=1, size=(row, col)).astype(data_type)
+
+    if data_type in (np.int64, np.uint64):
+        output_arr = np.zeros(row, dtype=data_type)
+        output_arr[:valid_row] = input_arr[:valid_row, :valid_col].sum(axis=1, dtype=data_type)
+        input_arr.tofile("input.bin")
+        output_arr.tofile("golden.bin")
+        return
 
     output_arr = np.zeros((row))
     for i in range(valid_row):
@@ -50,7 +74,9 @@ def gen_golden_data(param):
 
 
 class TRowSumParams:
-    def __init__(self, name, data_type, row, valid_row, col, valid_col):
+    def __init__(self, name, data_type, row, valid_row, col, valid_col, check_guard=False, dst_col=1):
+        self.check_guard = check_guard
+        self.dst_col = dst_col
         self.name = name
         self.data_type = data_type
         self.row = row
@@ -90,6 +116,40 @@ if __name__ == "__main__":
         TRowSumParams("TROWSUMTest.case_uint64_32x32_dndst", np.uint64, 32, 32, 32, 32),
         TRowSumParams("TROWSUMTest.case_int64_32x145_dndst", np.int64, 32, 32, 145, 145),
         TRowSumParams("TROWSUMTest.case_uint64_32x145_dndst", np.uint64, 32, 32, 145, 145),
+        TRowSumParams(
+            "TROWSUMTest.case_int64_64x16_nddst4_guard", np.int64, 64, 64, 16, 16, check_guard=True, dst_col=4
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_int64_8x16_dndst_valid5_guard", np.int64, 8, 5, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_int64_8x16_dndst_valid6_guard", np.int64, 8, 6, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_int64_8x16_dndst_valid7_guard", np.int64, 8, 7, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_uint64_64x16_nddst4_guard", np.uint64, 64, 64, 16, 16, check_guard=True, dst_col=4
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_uint64_8x16_dndst_valid5_guard", np.uint64, 8, 5, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_uint64_8x16_dndst_valid6_guard", np.uint64, 8, 6, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams(
+            "TROWSUMTest.case_uint64_8x16_dndst_valid7_guard", np.uint64, 8, 7, 16, 16, check_guard=True, dst_col=1
+        ),
+        TRowSumParams("TROWSUMTest.case47", np.uint32, 127, 127, 64, 64 - 1),
+        TRowSumParams("TROWSUMTest.case48", np.uint32, 63, 63, 64, 64),
+        TRowSumParams("TROWSUMTest.case49", np.uint32, 31, 31, 64 * 2, 64 * 2 - 1),
+        TRowSumParams("TROWSUMTest.case50", np.uint32, 15, 15, 64 * 3, 64 * 3),
+        TRowSumParams("TROWSUMTest.case51", np.uint32, 7, 7, 64 * 7, 64 * 7 - 1),
+        TRowSumParams("TROWSUMTest.case52", np.uint16, 128, 128, 64, 64),
+        TRowSumParams("TROWSUMTest.case53", np.uint16, 64, 64, 64, 64),
+        TRowSumParams("TROWSUMTest.case54", np.uint16, 32, 32, 128, 128),
+        TRowSumParams("TROWSUMTest.case55", np.uint16, 16, 16, 192, 192),
+        TRowSumParams("TROWSUMTest.case56", np.uint16, 8, 8, 448, 448),
     ]
 
     for _, case in enumerate(case_params_list):

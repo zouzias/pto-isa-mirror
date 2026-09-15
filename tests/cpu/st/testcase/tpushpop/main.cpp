@@ -1361,3 +1361,233 @@ void testDirBothV2CNZLayout(uint32_t destinationBase)
 TEST_F(TPushPopTest, dir_both_v2c_nz_layout_with_aliased_fifo_destination) { testDirBothV2CNZLayout(0); }
 
 TEST_F(TPushPopTest, dir_both_v2c_nz_layout_with_separate_destination) { testDirBothV2CNZLayout(0x10000); }
+
+namespace {
+template <typename TileData>
+void fillTileLogical(TileData& tile, int valueStride)
+{
+    for (int r = 0; r < tile.GetValidRow(); ++r) {
+        for (int c = 0; c < tile.GetValidCol(); ++c) {
+            tile.SetElement(r, c, static_cast<typename TileData::DType>(r * valueStride + c + 1));
+        }
+    }
+}
+} // namespace
+
+// C2V: the cube produces an odd number of rows, so AIV0 takes ceil(rows/2) and AIV1 takes
+// floor(rows/2). Each lane's window lives in its own local region.
+TEST_F(TPushPopTest, c2v_updown_odd_split_push_pop)
+{
+    using AccTile = TileAcc<float, 16, 16, 15, 16>;
+    using TopTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
+    using BottomTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 7, 16>;
+    using Pipe = TPipe<20, Direction::DIR_C2V, sizeof(float) * TopTile::Numel, 1>;
+
+    Pipe::reset_for_cpu_sim();
+    Pipe producer((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer0((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer1((__gm__ void*)nullptr, 0x0, 0x0);
+
+    AccTile src;
+    TopTile top;
+    BottomTile bottom;
+    TASSIGN(src, 0);
+    TASSIGN(top, AccTile::GetSizeInBytes());
+    TASSIGN(bottom, AccTile::GetSizeInBytes() + TopTile::GetSizeInBytes());
+    fillTileLogical(src, 16);
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPUSH<Pipe, AccTile, TileSplitAxis::TILE_UP_DOWN_ODD>(producer, src);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TPOP<Pipe, TopTile, TileSplitAxis::TILE_UP_DOWN_ODD>(consumer0, top);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TPOP<Pipe, BottomTile, TileSplitAxis::TILE_UP_DOWN_ODD>(consumer1, bottom);
+    }
+
+    for (int r = 0; r < 8; ++r) {
+        for (int c = 0; c < 16; ++c) {
+            EXPECT_FLOAT_EQ(top.GetElement(r, c), static_cast<float>(r * 16 + c + 1));
+        }
+    }
+    for (int r = 0; r < 7; ++r) {
+        for (int c = 0; c < 16; ++c) {
+            EXPECT_FLOAT_EQ(bottom.GetElement(r, c), static_cast<float>((r + 8) * 16 + c + 1));
+        }
+    }
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN_ODD>(consumer0);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_UP_DOWN_ODD>(consumer1);
+    }
+}
+
+// C2V: odd number of columns, so AIV0 takes ceil(cols/2) and AIV1 takes floor(cols/2).
+TEST_F(TPushPopTest, c2v_leftright_odd_split_push_pop)
+{
+    using AccTile = TileAcc<float, 16, 16, 16, 15>;
+    using LeftTile = Tile<TileType::Vec, float, 16, 8, BLayout::RowMajor, 16, 8>;
+    using RightTile = Tile<TileType::Vec, float, 16, 8, BLayout::RowMajor, 16, 7>;
+    using Pipe = TPipe<21, Direction::DIR_C2V, sizeof(float) * LeftTile::Numel, 1>;
+
+    Pipe::reset_for_cpu_sim();
+    Pipe producer((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer0((__gm__ void*)nullptr, 0x0, 0x0);
+    Pipe consumer1((__gm__ void*)nullptr, 0x0, 0x0);
+
+    AccTile src;
+    LeftTile left;
+    RightTile right;
+    TASSIGN(src, 0);
+    TASSIGN(left, AccTile::GetSizeInBytes());
+    TASSIGN(right, AccTile::GetSizeInBytes() + LeftTile::GetSizeInBytes());
+    fillTileLogical(src, 16);
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPUSH<Pipe, AccTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(producer, src);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TPOP<Pipe, LeftTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(consumer0, left);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TPOP<Pipe, RightTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(consumer1, right);
+    }
+
+    for (int r = 0; r < 16; ++r) {
+        for (int c = 0; c < 8; ++c) {
+            EXPECT_FLOAT_EQ(left.GetElement(r, c), static_cast<float>(r * 16 + c + 1));
+        }
+        for (int c = 0; c < 7; ++c) {
+            EXPECT_FLOAT_EQ(right.GetElement(r, c), static_cast<float>(r * 16 + c + 8 + 1));
+        }
+    }
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(consumer0);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TFREE<Pipe, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(consumer1);
+    }
+}
+
+// V2C: two vector lanes each write their odd-split half into one combined L1 slot.
+TEST_F(TPushPopTest, v2c_updown_odd_split_layout)
+{
+    using TopTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 8, 16>;
+    using BottomTile = Tile<TileType::Vec, float, 8, 16, BLayout::RowMajor, 7, 16>;
+    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 15, 16>;
+    using Pipe = TPipe<22, Direction::DIR_V2C, sizeof(float) * MatTile::Numel, 2>;
+
+    std::vector<float> fifoStorage(MatTile::Numel * Pipe::RingFiFo::SLOT_NUM, 0.0f);
+    Pipe::reset_for_cpu_sim();
+    Pipe producer0(fifoStorage.data(), 0x0, 0x10000);
+    Pipe producer1(fifoStorage.data(), 0x0, 0x10000);
+    Pipe consumer(fifoStorage.data(), 0x0, 0x10000);
+    producer0.prod.setAllocateStatus(false);
+    producer0.prod.setRecordStatus(false);
+    producer1.prod.setAllocateStatus(false);
+    producer1.prod.setRecordStatus(false);
+    consumer.cons.setWaitStatus(false);
+    consumer.cons.setFreeStatus(false);
+
+    TopTile top;
+    BottomTile bottom;
+    MatTile dst;
+    TASSIGN(top, 0);
+    TASSIGN(bottom, TopTile::GetSizeInBytes());
+    TASSIGN(dst, MatTile::GetSizeInBytes());
+    fillTileLogical(top, 16);
+    for (int r = 0; r < bottom.GetValidRow(); ++r) {
+        for (int c = 0; c < bottom.GetValidCol(); ++c) {
+            bottom.SetElement(r, c, static_cast<float>((r + 8) * 16 + c + 1));
+        }
+    }
+    std::fill(dst.data(), dst.data() + dst.Numel, 0.0f);
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TPUSH<Pipe, TopTile, TileSplitAxis::TILE_UP_DOWN_ODD>(producer0, top);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TPUSH<Pipe, BottomTile, TileSplitAxis::TILE_UP_DOWN_ODD>(producer1, bottom);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPOP<Pipe, MatTile, TileSplitAxis::TILE_UP_DOWN_ODD>(consumer, dst);
+    }
+
+    for (int r = 0; r < 15; ++r) {
+        for (int c = 0; c < 16; ++c) {
+            ASSERT_FLOAT_EQ(dst.GetElement(r, c), static_cast<float>(r * 16 + c + 1))
+                << "updown-odd v2c at (" << r << "," << c << ")";
+        }
+    }
+}
+
+TEST_F(TPushPopTest, v2c_leftright_odd_split_layout)
+{
+    using LeftTile = Tile<TileType::Vec, float, 16, 8, BLayout::RowMajor, 16, 8>;
+    using RightTile = Tile<TileType::Vec, float, 16, 8, BLayout::RowMajor, 16, 7>;
+    using MatTile = Tile<TileType::Mat, float, 16, 16, BLayout::RowMajor, 16, 15>;
+    using Pipe = TPipe<23, Direction::DIR_V2C, sizeof(float) * MatTile::Numel, 2>;
+
+    std::vector<float> fifoStorage(MatTile::Numel * Pipe::RingFiFo::SLOT_NUM, 0.0f);
+    Pipe::reset_for_cpu_sim();
+    Pipe producer0(fifoStorage.data(), 0x0, 0x10000);
+    Pipe producer1(fifoStorage.data(), 0x0, 0x10000);
+    Pipe consumer(fifoStorage.data(), 0x0, 0x10000);
+    producer0.prod.setAllocateStatus(false);
+    producer0.prod.setRecordStatus(false);
+    producer1.prod.setAllocateStatus(false);
+    producer1.prod.setRecordStatus(false);
+    consumer.cons.setWaitStatus(false);
+    consumer.cons.setFreeStatus(false);
+
+    LeftTile left;
+    RightTile right;
+    MatTile dst;
+    TASSIGN(left, 0);
+    TASSIGN(right, LeftTile::GetSizeInBytes());
+    TASSIGN(dst, MatTile::GetSizeInBytes());
+    fillTileLogical(left, 16);
+    for (int r = 0; r < right.GetValidRow(); ++r) {
+        for (int c = 0; c < right.GetValidCol(); ++c) {
+            right.SetElement(r, c, static_cast<float>(r * 16 + c + 8 + 1));
+        }
+    }
+    std::fill(dst.data(), dst.data() + dst.Numel, 0.0f);
+
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 2);
+        TPUSH<Pipe, LeftTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(producer0, left);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 1, 2);
+        TPUSH<Pipe, RightTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(producer1, right);
+    }
+    {
+        cpu_sim::ScopedExecutionContext ctx(0, 0, 1);
+        TPOP<Pipe, MatTile, TileSplitAxis::TILE_LEFT_RIGHT_ODD>(consumer, dst);
+    }
+
+    for (int r = 0; r < 16; ++r) {
+        for (int c = 0; c < 15; ++c) {
+            ASSERT_FLOAT_EQ(dst.GetElement(r, c), static_cast<float>(r * 16 + c + 1))
+                << "leftright-odd v2c at (" << r << "," << c << ")";
+        }
+    }
+}

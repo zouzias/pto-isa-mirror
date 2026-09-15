@@ -287,6 +287,10 @@ if __name__ == "__main__":
 
         TExtractParams(np.int32, np.uint8, 128, 128, 96, 96, 16, 8, True, True, False),
         TExtractParams(np.int32, np.uint8, 256, 64, 128, 32, 16, 8, True, True, True),
+
+        # float32 -> float16 tensor (vector) quant (2 combos)
+        TExtractParams(np.float32, np.float16, 128, 64, 128, 64, 0, 0, True, False, False),
+        TExtractParams(np.float32, np.float16, 128, 64, 96, 32, 0, 0, True, True, True),
     ]
 
     for idx, case_param in enumerate(case_params_list):
