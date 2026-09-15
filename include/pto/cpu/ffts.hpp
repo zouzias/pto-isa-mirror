@@ -51,12 +51,17 @@ struct EventStorage {
 
 inline EventState& getEventState(int eventId)
 {
+    constexpr uint64_t KEY_PREFIX = 0xff46465453000000ULL; // outside TPipe flag/direction namespace
+    constexpr uint32_t INIT_UNINIT = 0;                    // storage has never been touched
+    constexpr uint32_t INIT_IN_PROGRESS = 1;               // constructor is running
+    constexpr uint32_t INIT_DONE = 2;                      // storage is ready to use
+
     if (eventId < 0 || eventId > FFTS_EVENT_ID_WIDTH) {
         throw std::invalid_argument("CPU FFTS requires an event ID in [0, 15]");
     }
-    // This key is outside the TPipe flag/direction namespace. The runtime owns
-    // device/group isolation and clears storage between runs, with all workers stopped.
-    constexpr uint64_t KEY_PREFIX = 0xff46465453000000ULL;
+
+    // The runtime owns device/group isolation and clears storage between runs,
+    // with all workers stopped.
     auto pipeHook = injected_pipe_shared_state_hook;
     if (pipeHook == nullptr) {
         pipeHook = ResolvePipeSharedStateHook();
@@ -74,12 +79,12 @@ inline EventState& getEventState(int eventId)
     }
     auto& storage = *static_cast<EventStorage*>(raw);
     std::atomic_ref<uint32_t> initialized(storage.initialized);
-    uint32_t expected = 0;
-    if (initialized.compare_exchange_strong(expected, 1, std::memory_order_acq_rel)) {
+    uint32_t expected = INIT_UNINIT;
+    if (initialized.compare_exchange_strong(expected, INIT_IN_PROGRESS, std::memory_order_acq_rel)) {
         new (storage.payload) EventState{};
-        initialized.store(2, std::memory_order_release);
+        initialized.store(INIT_DONE, std::memory_order_release);
     } else {
-        while (initialized.load(std::memory_order_acquire) != 2) {
+        while (initialized.load(std::memory_order_acquire) != INIT_DONE) {
             std::this_thread::yield();
         }
     }
@@ -88,8 +93,9 @@ inline EventState& getEventState(int eventId)
 
 inline uint32_t vectorLane()
 {
+    constexpr uint32_t MAX_VECTOR_LANES = 2;
     const auto lane = get_subblockid();
-    if (lane >= 2) {
+    if (lane >= MAX_VECTOR_LANES) {
         throw std::invalid_argument("CPU FFTS mode 2 requires AIV subblock 0 or 1");
     }
     return lane;
