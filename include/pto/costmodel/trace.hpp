@@ -58,8 +58,8 @@ struct TraceState {
     std::vector<PtoInstrRecord> executed_pto;
     std::vector<std::size_t> active_pto_stack;
     std::array<CcePipeTraceState, kPipeKeyCount> cce_pipe_traces;
-    // True while the vector mask register holds a partial/count mask (set by
-    // set_vector_mask / set_mask_count, cleared by full-mask restore / set_mask_norm).
+    // True while the vector unit is in count mode. Mask register contents are
+    // tracked independently and do not select the mode.
     // Vector ALU ops pay a one-time dispatch floor while this is active.
     bool vector_count_mode = false;
 };

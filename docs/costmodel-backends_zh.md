@@ -44,13 +44,23 @@ CostModel 路径通过 `__COSTMODEL` 使能，当前后端分为：
 
 ## 公式参数生成
 
-执行拟合后端（`st_fit` 套件）时，运行脚本会从 CSV 生成公式参数头文件：
+构建任一 costmodel 测试套件前，运行脚本都会从 CSV 生成公式参数头文件：
 
 - 生成脚本：`include/pto/costmodel/a2a3/formula_costmodel/gen_formula_params_header.py`
 - 输入文件：`include/pto/costmodel/a2a3/formula_costmodel/formula_params.csv`
 - 输出文件：`include/pto/costmodel/a2a3/formula_costmodel/formula_params_generated.hpp`
 
-打桩后端（`st`）不需要该生成步骤。
+共享的 lightweight backend 会同时包含 A2/A3 和 A5 定义，因此运行脚本会生成两侧的公式参数头文件。
+
+## CCE Cycle Profile 生成
+
+A2/A3 CCE vector cycle profile 使用提交到仓库的生成头文件，确保下游仅使用头文件时不依赖 Python：
+
+- 生成脚本：`include/pto/costmodel/a2a3/cce_costmodel/gen_cce_cycle_profiles_header.py`
+- 输入文件：`include/pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles.csv`
+- 输出文件：`include/pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles_generated.hpp`
+
+修改 CSV 后，需要运行生成脚本并同时提交 CSV 和生成头文件。costmodel 测试入口会使用 `--check` 检查两者是否一致，生成头文件过期时测试会直接失败。
 
 ## 运行命令
 

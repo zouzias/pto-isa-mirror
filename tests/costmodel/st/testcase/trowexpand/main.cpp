@@ -44,5 +44,5 @@ void runTRowExpand()
 
 TEST(TRowExpand, float_64x64) { runTRowExpand<float, 64, 64, 933.0f, 0.075026f>(); }
 TEST(TRowExpand, half_64x64) { runTRowExpand<half, 64, 64, 933.0f, 0.075026f>(); }
-TEST(TRowExpand, int16_64x64) { runTRowExpand<int16_t, 64, 64, 0.0f, 0.0f>(); }
-TEST(TRowExpand, half_16x256) { runTRowExpand<half, 16, 256, 0.0f, 0.0f>(); }
+TEST(TRowExpand, int16_64x64) { runTRowExpand<int16_t, 64, 64, 933.0f, 0.90f>(); }
+TEST(TRowExpand, half_16x256) { runTRowExpand<half, 16, 256, 277.0f, 0.90f>(); }

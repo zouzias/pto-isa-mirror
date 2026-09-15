@@ -44,4 +44,6 @@ void runTTrans()
 
 } // namespace
 
-TEST(TTrans, float_128x128) { runTTrans<float, 128, 128, 501.0f, 0.872255f>(); }
+// Fixed CCE completion baseline derived from the native 910B1
+// SCATTER_VNCHWCONV_B32 (9.025814 + 24.001344 * repeat) plus PTO's copy stages.
+TEST(TTrans, float_128x128) { runTTrans<float, 128, 128, 3271.0f, 0.99f>(); }
