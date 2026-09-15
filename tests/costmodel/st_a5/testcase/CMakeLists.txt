@@ -13,18 +13,11 @@ endfunction()
 
 set(ALL_TESTCASES
     tadd
-    tadds
     tsub
-    tsubs
     tmul
-    tmuls
-    tdiv
-    tmax
-    tmin
     tmins
-    tand
-    tshls
-    tshrs
+    trecip
+    tcvt
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

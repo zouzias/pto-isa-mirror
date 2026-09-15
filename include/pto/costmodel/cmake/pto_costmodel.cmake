@@ -7,9 +7,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 
 include_guard(GLOBAL)
-
-get_filename_component(_pto_costmodel_public_dir "${CMAKE_CURRENT_LIST_DIR}" REALPATH)
-get_filename_component(_pto_costmodel_root "${_pto_costmodel_public_dir}/../../../.." REALPATH)
+include("${CMAKE_CURRENT_LIST_DIR}/pto_formula_params.cmake")
 
 # Enable PTO Host costmodel for a consumer target. The consumer uses this same
 # entry point for both architectures.
@@ -25,6 +23,10 @@ function(pto_enable_costmodel target)
         message(FATAL_ERROR "pto_enable_costmodel: ARCH must be A2A3 or A5")
     endif()
 
+    pto_prepare_formula_params(_formula_target)
+    target_link_libraries("${target}" PRIVATE "${_formula_target}")
+    get_property(_formula_source GLOBAL PROPERTY PTO_FORMULA_SOURCE)
+    get_filename_component(_pto_costmodel_root "${_formula_source}/../../.." REALPATH)
     string(TOUPPER "${PTO_COSTMODEL_ARCH}" _pto_costmodel_arch)
     target_include_directories("${target}" PRIVATE "${_pto_costmodel_root}/include")
     target_compile_definitions("${target}" PRIVATE __COSTMODEL PTO_COMM_NOT_SUPPORTED)

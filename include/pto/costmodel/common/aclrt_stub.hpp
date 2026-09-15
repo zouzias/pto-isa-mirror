@@ -34,8 +34,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto::costmodel::aclrt_stub {
 
-inline constexpr aclError kInvalidParameter = 145000;
-inline constexpr aclError kAllocationFailed = 207001;
+// ACL interface argument validation and runtime memory-allocation errors.
+inline constexpr aclError kInvalidParameter = ACL_ERROR_INVALID_PARAM;
+inline constexpr aclError kAllocationFailed = ACL_ERROR_RT_MEMORY_ALLOCATION;
 
 inline int& CurrentDevice()
 {

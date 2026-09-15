@@ -1,5 +1,5 @@
 # st_a5 — A5 host mock single-instruction tests (__NPU_ARCH__=3101).
-# Verify that A5 headers compile without device intrinsics and that unsupported VF operations are reported.
+# Verify supported A5 TileOp formula predictions without device intrinsics.
 #
 # Standalone CMake project. Build and run with:
 #   cmake -S tests/costmodel/st_a5 -B tests/costmodel/st_a5/build -DCMAKE_BUILD_TYPE=Debug

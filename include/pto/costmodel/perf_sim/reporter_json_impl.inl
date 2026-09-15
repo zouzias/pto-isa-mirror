@@ -19,58 +19,6 @@ struct FlowSrc {
 
 using SignalMap = std::unordered_map<int64_t, std::vector<FlowSrc>>;
 
-static std::string EscapeJsonString(const std::string &value)
-{
-    std::ostringstream escaped;
-    for (const unsigned char ch : value) {
-        switch (ch) {
-            case '"':
-                escaped << "\\\"";
-                break;
-            case '\\':
-                escaped << "\\\\";
-                break;
-            case '\b':
-                escaped << "\\b";
-                break;
-            case '\f':
-                escaped << "\\f";
-                break;
-            case '\n':
-                escaped << "\\n";
-                break;
-            case '\r':
-                escaped << "\\r";
-                break;
-            case '\t':
-                escaped << "\\t";
-                break;
-            default:
-                if (ch < 0x20) {
-                    constexpr char hex[] = "0123456789abcdef";
-                    escaped << "\\u00" << hex[(ch >> 4) & 0x0f] << hex[ch & 0x0f];
-                } else {
-                    escaped << static_cast<char>(ch);
-                }
-        }
-    }
-    return escaped.str();
-}
-
-static void WriteUnsupportedJson(std::ostream &out, const SimReport &report)
-{
-    out << "  {\"name\":\"costmodel_status\",\"cat\":\"costmodel\",\"ph\":\"i\",\"s\":\"g\","
-        << "\"ts\":0,\"pid\":0,\"tid\":\"costmodel\",\"args\":{\"status\":\"Unsupported\","
-        << "\"diagnostics\":[";
-    for (size_t i = 0; i < report.costmodel_diagnostics.size(); ++i) {
-        if (i > 0) {
-            out << ",";
-        }
-        out << "\"" << EscapeJsonString(report.costmodel_diagnostics[i]) << "\"";
-    }
-    out << "]}}";
-}
-
 static int64_t JsonFlowKey(int pid, event_t ev)
 {
     return static_cast<int64_t>(pid) * 1000000LL + ev;
@@ -118,9 +66,6 @@ static void CollectJsonSignals(const LabelMap &label_maps, SignalMap &signal_map
 static SignalMap BuildJsonSignalMap(const SimReport &report, const LabelMap &label_maps)
 {
     SignalMap signal_map;
-    if (report.costmodel_status == CostModelStatus::Unsupported) {
-        return signal_map;
-    }
     if (report.num_cores == 1) {
         CollectJsonSignals(label_maps, signal_map, 0, report.timeline.events);
         return signal_map;
@@ -233,9 +178,6 @@ static void WriteSortedJsonEvents(std::ostream &out, const LabelMap &label_maps,
 static void WriteJsonEvents(std::ostream &out, const SimReport &report, const LabelMap &label_maps,
                             const SignalMap &signal_map)
 {
-    if (report.costmodel_status == CostModelStatus::Unsupported) {
-        return;
-    }
     bool first = false;
     int64_t flow_id = 1;
     if (report.num_cores == 1) {
@@ -302,11 +244,6 @@ static void WriteSwimlaneJson(const std::string &path, const SimReport &report)
     }
 
     out << "[\n";
-    if (report.costmodel_status == CostModelStatus::Unsupported) {
-        WriteUnsupportedJson(out, report);
-        out << "\n]\n";
-        return;
-    }
     auto label_maps = BuildLabelMaps(report.num_cores);
     auto signal_map = BuildJsonSignalMap(report, label_maps);
     WriteJsonMetadata(out, report);

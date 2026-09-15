@@ -30,8 +30,6 @@ namespace pto::perf_sim {
 
 struct SimReport {
     std::string op_name;
-    CostModelStatus costmodel_status = CostModelStatus::Supported;
-    std::vector<std::string> costmodel_diagnostics;
     uint32_t num_cores = 1;
     PipeTimeline timeline;            // single-core path
     MultiCoreTimeline multi_timeline; // multi-core path

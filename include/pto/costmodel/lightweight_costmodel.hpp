@@ -381,7 +381,11 @@ inline bool TryEstimateA5Cycles(
 {
     uint64_t cycles = 0;
     if (!a5::TryEstimateA5VfCycles(input, cycles)) {
-        return WarnAndFallbackToZero(input, result, "unsupported A5 VF curve key");
+        result = {};
+        std::cerr << "[costmodel][A5] Unsupported formula key: op=" << PtoOpcodeToString(input.op)
+                  << ", dtype=" << DTypeToString(input.dtype) << ", rows=" << input.rows
+                  << ", cols=" << input.cols << '\n';
+        return false;
     }
     result.cycles = static_cast<double>(cycles);
     result.latency_us = evaluator::CyclesToUs(cycles, predict_config.frequency_mhz);

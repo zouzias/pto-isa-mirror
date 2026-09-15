@@ -32,6 +32,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/perf_sim/tile_dep_tracker.hpp"
 #include "pto/costmodel/perf_sim/latency.hpp"
 #include "pto/costmodel/perf_sim/costmodel_provider.hpp"
+#include "pto/costmodel/a5/tileop_costmodel_selector.hpp"
 namespace perf_sim = ::pto::perf_sim;
 #endif
 #if !defined(PTO_COMM_NOT_SUPPORTED)
@@ -69,99 +70,6 @@ inline void InjectTileCycles(T& obj)
     if constexpr (requires { obj.SetLastCycle(0.0f); }) {
         obj.SetLastCycle(static_cast<float>(GetCurrentPtoInstrCycles()));
     }
-}
-
-struct A5TileOpOptions {
-    std::string_view op_params{};
-};
-
-struct A5TileOpMetadata {
-    std::string first_tile_dtype;
-    std::string second_tile_dtype;
-    int64_t rows = 0;
-    int64_t cols = 0;
-    int64_t valid_rows = 0;
-    int64_t valid_cols = 0;
-    uint32_t tile_count = 0;
-    uint32_t static_full_cols_mask = 0;
-    uint32_t single_row_mask = 0;
-    VFImplKind vf_impl_kind = VFImplKind::VFIMPL_DEFAULT;
-    RoundMode round_mode = RoundMode::CAST_NONE;
-    SaturationMode saturation_mode = SaturationMode::ON;
-};
-
-template <typename T>
-inline void CollectA5TileOpMetadata(A5TileOpMetadata& metadata, T&& arg)
-{
-    using Arg = std::remove_cv_t<std::remove_reference_t<T>>;
-    if constexpr (requires {
-                      Arg::Rows;
-                      Arg::Cols;
-                      Arg::ValidCol;
-                      arg.GetValidRow();
-                      arg.GetValidCol();
-                      perf_sim::TileTraits<Arg>::dtype_str();
-                  }) {
-        const std::string dtype = perf_sim::TileTraits<Arg>::dtype_str();
-        const uint32_t tile_index = metadata.tile_count;
-        if (tile_index < 32 && Arg::ValidCol == Arg::Cols) {
-            metadata.static_full_cols_mask |= 1U << tile_index;
-        }
-        if (tile_index < 32 && Arg::Rows == 1) {
-            metadata.single_row_mask |= 1U << tile_index;
-        }
-        if (tile_index == 0) {
-            metadata.first_tile_dtype = dtype;
-            metadata.rows = static_cast<int64_t>(Arg::Rows);
-            metadata.cols = static_cast<int64_t>(Arg::Cols);
-            metadata.valid_rows = static_cast<int64_t>(arg.GetValidRow());
-            metadata.valid_cols = static_cast<int64_t>(arg.GetValidCol());
-        } else if (tile_index == 1) {
-            metadata.second_tile_dtype = dtype;
-        }
-        ++metadata.tile_count;
-    } else if constexpr (std::is_same_v<Arg, VFImplKind>) {
-        metadata.vf_impl_kind = arg;
-    } else if constexpr (std::is_same_v<Arg, RoundMode>) {
-        metadata.round_mode = arg;
-    } else if constexpr (std::is_same_v<Arg, SaturationMode>) {
-        metadata.saturation_mode = arg;
-    }
-}
-
-inline bool FirstA5TilesUseContiguousPath(const A5TileOpMetadata& metadata, uint32_t required_tiles)
-{
-    if (required_tiles == 0 || required_tiles > metadata.tile_count || required_tiles >= 32) {
-        return false;
-    }
-    const uint32_t required_mask = (1U << required_tiles) - 1U;
-    return (metadata.static_full_cols_mask & required_mask) == required_mask ||
-           (metadata.single_row_mask & required_mask) == required_mask;
-}
-
-inline ::pto::mocker::lightweight::A5VfShapePathHint ResolveA5VfShapePathHint(
-    std::string_view opcode, const A5TileOpMetadata& metadata)
-{
-    using ShapePathHint = ::pto::mocker::lightweight::A5VfShapePathHint;
-    uint32_t required_tiles = 0;
-    if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
-        required_tiles = 3;
-    } else if (
-        opcode == "TDIVS" || opcode == "TMINS" || opcode == "TNEG" || opcode == "TEXP" || opcode == "TSQRT" ||
-        opcode == "TRSQRT" || opcode == "TRECIP" || opcode == "TCVT") {
-        required_tiles = 2;
-    } else {
-        return ShapePathHint::Infer;
-    }
-    return FirstA5TilesUseContiguousPath(metadata, required_tiles) ? ShapePathHint::Path1D : ShapePathHint::Path2D;
-}
-
-template <typename... Args>
-inline A5TileOpMetadata BuildA5TileOpMetadata(Args&&... args)
-{
-    A5TileOpMetadata metadata;
-    (CollectA5TileOpMetadata(metadata, std::forward<Args>(args)), ...);
-    return metadata;
 }
 
 // Record one PTO instruction to the pipeline simulator. A2/A3 calls this after
@@ -236,41 +144,12 @@ inline void RecordInstrWithOptions(
 
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
     if (stage == perf_sim::PipeStage::Vector) {
-        const A5TileOpMetadata metadata =
-            BuildA5TileOpMetadata(first_tile, rest_tiles...);
-        perf_sim::A5VfTileOpInput input;
-        input.opcode = opcode;
-        input.src_dtype = metadata.first_tile_dtype;
-        if (input.opcode == "TCVT") {
-            input.src_dtype = metadata.second_tile_dtype;
-            input.dst_dtype = metadata.first_tile_dtype;
-        }
-        input.rows = metadata.rows;
-        input.cols = metadata.cols;
-        input.valid_rows = metadata.valid_rows;
-        input.valid_cols = metadata.valid_cols;
-        input.vf_impl_kind = metadata.vf_impl_kind;
-        input.round_mode = metadata.round_mode;
-        input.saturation_mode = metadata.saturation_mode;
-        input.op_params = a5_options.op_params;
-        input.shape_path_hint = ResolveA5VfShapePathHint(opcode, metadata);
-
+        cycles = EstimateA5TileOpCycles(opcode, a5_options, first_tile, rest_tiles...);
+        estimatedCycles = cycles;
         useEstimatedCycles = false;
         auto& trace = ::pto::mocker::GetMutableTrace();
-        if (perf_sim::TryEstimateA5VfTileOpCycles(input, cycles)) {
-            estimatedCycles = cycles;
-            if (!trace.executed_pto.empty()) {
-                trace.executed_pto.back().total_cycles = cycles;
-            }
-        } else {
-            cycles = 0;
-            estimatedCycles = 0;
-            r.costmodel_status = perf_sim::CostModelStatus::Unsupported;
-            r.costmodel_diagnostic = std::string("A5 VF formula costmodel does not support ") + opcode +
-                                     " for the supplied TileOp parameters";
-            if (!trace.executed_pto.empty()) {
-                trace.executed_pto.back().total_cycles = 0;
-            }
+        if (!trace.executed_pto.empty()) {
+            trace.executed_pto.back().total_cycles = cycles;
         }
     }
 #endif

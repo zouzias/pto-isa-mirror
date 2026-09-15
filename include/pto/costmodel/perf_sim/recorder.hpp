@@ -32,11 +32,6 @@ enum class CvSyncKind : uint8_t {
     Alloc,
 };
 
-enum class CostModelStatus : uint8_t {
-    Supported,
-    Unsupported,
-};
-
 // ── PipeStage: NPU pipeline stages ──
 
 enum class PipeStage : uint8_t {
@@ -85,8 +80,6 @@ struct InstrRecord {
     int cols = 0;
     uint64_t estimated_cycles = 0;
     PipeStage stage = PipeStage::Vector;
-    CostModelStatus costmodel_status = CostModelStatus::Supported;
-    std::string costmodel_diagnostic;
     static constexpr int MAX_WAIT_EVENTS = 8;
     event_t signal_event = -1;
     event_t wait_events[MAX_WAIT_EVENTS] = {-1, -1, -1, -1, -1, -1, -1, -1};
