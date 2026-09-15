@@ -10,8 +10,6 @@ cmake_minimum_required(VERSION 3.18)
 
 project(pto_test_costmodel_a5 CXX)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../../include/pto/costmodel/cmake/pto_costmodel.cmake)
-
 find_package(GTest REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -21,6 +19,13 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-add_compile_options(-Wno-macro-redefined -Wno-ignored-attributes)
+add_compile_definitions(__COSTMODEL __NPU_ARCH__=3101 PTO_COMM_NOT_SUPPORTED)
+
+# Match the A2/A3 host-build environment for PTO device headers.
+add_compile_options(
+    -Wno-macro-redefined -Wno-ignored-attributes
+    "SHELL:-include stdint.h"
+    "SHELL:-include stddef.h"
+)
 
 add_subdirectory(testcase)

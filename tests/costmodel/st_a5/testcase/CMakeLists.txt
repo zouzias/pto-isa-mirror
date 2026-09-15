@@ -7,7 +7,6 @@ function(pto_a5_host_tileop_test NAME)
     target_link_libraries(${NAME} PRIVATE
         GTest::gtest_main
         Threads::Threads)
-    pto_enable_costmodel(${NAME} ARCH A5)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
