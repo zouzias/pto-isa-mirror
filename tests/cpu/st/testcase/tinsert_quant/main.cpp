@@ -420,6 +420,14 @@ TEST_F(TINSERTTest, case_44_float_half)
 {
     test_insert<Params<float, half, 256, 128, 256, 128, 128, 64, 128, 64, 0, 0, false, true, true>>();
 }
+TEST_F(TINSERTTest, case_49_float_half)
+{
+    test_insert<Params<float, half, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, true, false>>();
+}
+TEST_F(TINSERTTest, case_50_float_half)
+{
+    test_insert<Params<float, half, 128, 64, 128, 64, 96, 32, 96, 32, 0, 0, true, true, true>>();
+}
 
 #ifdef CPU_SIM_BFLOAT_ENABLED
 TEST_F(TINSERTTest, case_45_float_bfloat16_t)

@@ -462,3 +462,12 @@ TEST_F(TEXTRACTTest, case_52_int32_t_uint8_t)
 {
     test_textract<Params<int32_t, uint8_t, 256, 64, 256, 64, 128, 32, 128, 32, 16, 8, true, true, true>>();
 }
+
+TEST_F(TEXTRACTTest, case_53_float_half)
+{
+    test_textract<Params<float, half, 128, 64, 128, 64, 128, 64, 128, 64, 0, 0, true, false>>();
+}
+TEST_F(TEXTRACTTest, case_54_float_half)
+{
+    test_textract<Params<float, half, 128, 64, 128, 64, 96, 32, 96, 32, 0, 0, true, true, true>>();
+}

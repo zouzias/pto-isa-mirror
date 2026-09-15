@@ -276,6 +276,9 @@ if __name__ == "__main__":
         TInsertParams(np.float32, bfloat16, 128, 64, 96, 32, 0, 0, False, False, True),
         TInsertParams(np.float32, bfloat16, 128, 128, 64, 64, 0, 0, False, True, False),
         TInsertParams(np.float32, bfloat16, 256, 128, 128, 64, 0, 0, False, True, True),
+        # float32 -> float16 tensor (vector) quant (2 combos)
+        TInsertParams(np.float32, np.float16, 128, 64, 128, 64, 0, 0, True, False, False),
+        TInsertParams(np.float32, np.float16, 128, 64, 96, 32, 0, 0, True, True, True),
     ]
 
     for idx, case_param in enumerate(case_params_list):
