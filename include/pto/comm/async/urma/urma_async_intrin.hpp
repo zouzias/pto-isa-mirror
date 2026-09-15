@@ -124,7 +124,11 @@ AICORE inline bool GetUrmaCompletionRecord(
     }
 
     record.addr = reinterpret_cast<__gm__ uint8_t*>(cqeAddr);
-    record.expected = static_cast<uint64_t>((cqeIndex / cq->depth) & 1U);
+    // A slot is complete once its owner bit has flipped away from the value the
+    // round started with — the same predicate WaitForUrmaCqe spins on. Publishing
+    // the un-inverted round parity would tell a consumer to treat a still-old
+    // slot as done.
+    record.expected = static_cast<uint64_t>(((cqeIndex / cq->depth) & 1U) ^ 1U);
     record.kind = CompletionKind::URMA_CQE_DW0;
     return true;
 }

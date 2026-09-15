@@ -168,35 +168,6 @@ public:
         return true;
     }
 
-    static bool SelectSymmetricLocalBuffer(
-        uint64_t symmetricSize, const ChannelEntity& entity, uint32_t peer, RegedBufferEntity& selected)
-    {
-        if (entity.localBufferAddr == nullptr || entity.localBufferNum == 0) {
-            return false;
-        }
-        for (uint32_t i = 0; i < entity.localBufferNum; ++i) {
-            RegedBufferEntity buf{};
-            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, peer, buf)) {
-                continue;
-            }
-            if (buf.type == REGED_BUFFER_RMA && buf.bufferInfo.rma.size == symmetricSize) {
-                selected = buf;
-                return true;
-            }
-        }
-        for (uint32_t i = 0; i < entity.localBufferNum; ++i) {
-            RegedBufferEntity buf{};
-            if (!ReadRegedBufferEntityAt(entity.localBufferAddr, entity.localBufferNum, i, peer, buf)) {
-                continue;
-            }
-            if (buf.type == REGED_BUFFER_RMA) {
-                selected = buf;
-                return true;
-            }
-        }
-        return false;
-    }
-
     static bool FindLocalRmaRegistration(
         uint64_t address, uint64_t size, const ChannelEntity& entity, uint32_t peer, RegedBufferEntity& selected)
     {

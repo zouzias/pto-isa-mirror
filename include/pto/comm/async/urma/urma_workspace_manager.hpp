@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 #include "securec.h"
@@ -69,6 +70,10 @@ public:
         symmetricAddr_ = symmetricAddr;
         symmetricSize_ = symmetricSize;
 
+        if (!AllocateNotifyPool()) {
+            Finalize();
+            return false;
+        }
         if (!RegisterMemory()) {
             Finalize();
             return false;
@@ -90,6 +95,10 @@ public:
     {
         FreeDeviceAddr(urmaInfoDevice_);
         FreeDeviceAddr(eidDevice_);
+        FreeDeviceAddr(notifyPoolDevice_);
+        notifyPoolSize_ = 0;
+        notifyPoolTokenId_ = 0;
+        notifyPoolTokenInitialized_ = false;
         channelHandles_.clear();
         peerBaseAddrs_.clear();
         initialized_ = false;
@@ -119,6 +128,28 @@ public:
     }
 
 private:
+    bool AllocateNotifyPool()
+    {
+        const uint64_t regionCount = static_cast<uint64_t>(rankCount_) * kUrmaQpNum;
+        if (regionCount == 0U ||
+            regionCount > std::numeric_limits<uint64_t>::max() / sizeof(UrmaNotifyResourceRegion)) {
+            std::cerr << "[URMA] invalid notify pool region count=" << regionCount << std::endl;
+            return false;
+        }
+        notifyPoolSize_ = regionCount * sizeof(UrmaNotifyResourceRegion);
+        aclError err = aclrtMalloc(&notifyPoolDevice_, notifyPoolSize_, ACL_MEM_MALLOC_HUGE_FIRST);
+        if (err != ACL_SUCCESS) {
+            std::cerr << "[URMA] aclrtMalloc(notifyPool) failed: " << err << " size=" << notifyPoolSize_ << std::endl;
+            return false;
+        }
+        err = aclrtMemset(notifyPoolDevice_, notifyPoolSize_, 0, notifyPoolSize_);
+        if (err != ACL_SUCCESS) {
+            std::cerr << "[URMA] aclrtMemset(notifyPool) failed: " << err << std::endl;
+            return false;
+        }
+        return true;
+    }
+
     bool RegisterMemory()
     {
         CommMem mem{};
@@ -129,6 +160,16 @@ private:
         HcclResult ret = HcclCommMemReg(comm_, kUrmaSymMemTag, &mem, &memHandle_);
         if (ret != HCCL_SUCCESS) {
             std::cerr << "[URMA] HcclCommMemReg failed: " << static_cast<int>(ret) << std::endl;
+            return false;
+        }
+
+        CommMem notifyMem{};
+        notifyMem.type = COMM_MEM_TYPE_DEVICE;
+        notifyMem.addr = notifyPoolDevice_;
+        notifyMem.size = notifyPoolSize_;
+        ret = HcclCommMemReg(comm_, kUrmaNotifyMemTag, &notifyMem, &notifyMemHandle_);
+        if (ret != HCCL_SUCCESS) {
+            std::cerr << "[URMA] HcclCommMemReg(notifyPool) failed: " << static_cast<int>(ret) << std::endl;
             return false;
         }
         return true;
@@ -274,10 +315,27 @@ private:
             return false;
         }
         RegedBufferEntity symLocalBuf{};
-        if (UrmaChannelHelper::SelectSymmetricLocalBuffer(symmetricSize_, hostEntity, peer, symLocalBuf) &&
-            symLocalBuf.type == REGED_BUFFER_RMA) {
-            localTokenId = symLocalBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
+        if (!UrmaChannelHelper::FindLocalRmaRegistration(
+                reinterpret_cast<uint64_t>(symmetricAddr_), symmetricSize_, hostEntity, peer, symLocalBuf)) {
+            std::cerr << "[URMA] peer=" << peer << " no local symmetric registration found" << std::endl;
+            return false;
         }
+        localTokenId = symLocalBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
+
+        RegedBufferEntity notifyLocalBuf{};
+        if (!UrmaChannelHelper::FindLocalRmaRegistration(
+                reinterpret_cast<uint64_t>(notifyPoolDevice_), notifyPoolSize_, hostEntity, peer, notifyLocalBuf)) {
+            std::cerr << "[URMA] peer=" << peer << " no local notify pool registration found" << std::endl;
+            return false;
+        }
+        const uint32_t peerNotifyTokenId = notifyLocalBuf.bufferInfo.rma.protectionInfo.memInfo.ub.tokenId;
+        if (notifyPoolTokenInitialized_ && notifyPoolTokenId_ != peerNotifyTokenId) {
+            std::cerr << "[URMA] inconsistent notify pool token peer=" << peer << " expected=0x" << std::hex
+                      << notifyPoolTokenId_ << " actual=0x" << peerNotifyTokenId << std::dec << std::endl;
+            return false;
+        }
+        notifyPoolTokenId_ = peerNotifyTokenId;
+        notifyPoolTokenInitialized_ = true;
 
         FillWqCtx(wqList[peer], sq);
         if (!FillCqCtx(cqList[peer], cq)) {
@@ -394,6 +452,8 @@ private:
         info->qpNum = qpNum;
         info->localTokenId = localTokenId;
         info->rankCount = rankCount_;
+        info->notifyPoolTokenId = notifyPoolTokenId_;
+        info->notifyPoolPtr = reinterpret_cast<uint64_t>(notifyPoolDevice_);
 
         uint8_t* devAddr = static_cast<uint8_t*>(urmaInfoDevice_) + sizeof(UrmaInfo);
         info->sqPtr = reinterpret_cast<uint64_t>(devAddr);
@@ -437,6 +497,8 @@ private:
     }
 
     static constexpr const char* kUrmaSymMemTag = "pto_urma_sym";
+    static constexpr const char* kUrmaNotifyMemTag = "pto_urma_notify";
+    static constexpr uint32_t kUrmaQpNum = 1U;
     static constexpr uint64_t kDeviceVaThreshold = 0x100000000000ULL;
     static constexpr CommProtocol kCommProtocolUbcCtp = static_cast<CommProtocol>(4);
     static constexpr CommProtocol kCommProtocolUbcTp = static_cast<CommProtocol>(5);
@@ -447,6 +509,15 @@ private:
     void* symmetricAddr_{nullptr};
     uint64_t symmetricSize_{0};
     HcclMemHandle memHandle_{nullptr};
+
+    // The notify pool is a locally registered symmetric region, so every peer
+    // resolves it back to the same token; the first peer's token is the one
+    // published to the device table.
+    void* notifyPoolDevice_{nullptr};
+    uint64_t notifyPoolSize_{0};
+    HcclMemHandle notifyMemHandle_{nullptr};
+    uint32_t notifyPoolTokenId_{0};
+    bool notifyPoolTokenInitialized_{false};
 
     std::vector<ChannelHandle> channelHandles_;
 
