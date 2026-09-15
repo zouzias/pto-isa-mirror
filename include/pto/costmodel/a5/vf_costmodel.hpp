@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 #include <utility>
 
-#include <pto/costmodel/common/tile_traits.hpp>
+#include <pto/costmodel/perf_sim/recorder.hpp>
 #include <pto/costmodel/a5/formula_costmodel/formula_backend_vf.hpp>
 
 namespace pto::mocker {
@@ -101,9 +101,9 @@ inline void CollectA5TileOpMetadata(A5TileOpMetadata& metadata, T&& arg)
                       Arg::ValidCol;
                       arg.GetValidRow();
                       arg.GetValidCol();
-                      ::pto::mocker::TileTraits<Arg>::dtype_str();
+                      ::pto::perf_sim::TileTraits<Arg>::dtype_str();
                   }) {
-        const std::string dtype = ::pto::mocker::TileTraits<Arg>::dtype_str();
+        const std::string dtype = ::pto::perf_sim::TileTraits<Arg>::dtype_str();
         const uint32_t tile_index = metadata.tile_count;
         if (tile_index < 32 && Arg::ValidCol == Arg::Cols) {
             metadata.static_full_cols_mask |= 1U << tile_index;

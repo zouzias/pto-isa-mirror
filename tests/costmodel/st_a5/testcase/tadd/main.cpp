@@ -10,10 +10,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <gtest/gtest.h>
 
-// The selector must be usable before any perf_sim or runtime headers.
+// Prediction may reuse recorder TileTraits, but must not depend on the provider.
 #include <pto/costmodel/a5/vf_costmodel.hpp>
-#if defined(PTO_PERF_SIM_COSTMODEL_PROVIDER_HPP) || defined(PTO_PERF_SIM_RECORDER_HPP)
-#error "A5 selector must not include perf_sim"
+#if defined(PTO_PERF_SIM_COSTMODEL_PROVIDER_HPP)
+#error "A5 prediction must not include costmodel_provider.hpp"
 #endif
 
 #include <pto/pto-inst.hpp>
