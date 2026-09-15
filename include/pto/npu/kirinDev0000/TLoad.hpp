@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TLOAD_HPP
 #define TLOAD_HPP
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/utils.hpp>
 #include "pto/npu/kirin9030/common.hpp"
 #include "pto/common/arch/register/tload_common.hpp"
@@ -268,7 +269,7 @@ __tf__ PTO_INTERNAL void TLoad5HD(
     uint64_t gmStride = GetByteSize<typename TileData::DType>(gStride2);
     uint32_t dstStride = lenBurst;
 
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     for (uint32_t i = 0; i < dstShape0; i++) {
         for (uint32_t j = 0; j < dstShape1; j++) {
             int64_t dstAddr0 =

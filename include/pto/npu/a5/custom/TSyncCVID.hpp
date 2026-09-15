@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TSYNC_CVID_HPP
 #define TSYNC_CVID_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
 
@@ -50,18 +51,18 @@ template <int CV_COMM_SLOT_BYTES = kCvCommSlotBytes, int CV_MAX_CORES = kCvMaxCo
 AICORE inline int TSYNC_CVID(int blk_idx, __gm__ uint8_t* cv_comm_buf)
 {
     int comm_slot = blk_idx;
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
     int die_id = get_coreid() / AIC_AIV_PER_DIE;
     comm_slot = die_id * CORE_PER_DIE + get_coreid() % AIC_AIV_PER_DIE;
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     int die_id = get_coreid() / AIC_AIV_PER_DIE;
     comm_slot =
         die_id * CORE_PER_DIE + (((get_coreid() % AIC_AIV_PER_DIE) - CORE_PER_DIE - get_subblockid()) / AIV_RATIO);
 #endif
 #ifdef _DEBUG
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
     cce::printf("Core %d Cube Block %d, comm_slot %d\n", get_coreid(), blk_idx, comm_slot);
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     cce::printf(
         "Core %d Vec Block %d, SubBlock %d, comm_slot %d\n", get_coreid(), blk_idx, int(get_subblockid()), comm_slot);
 #endif

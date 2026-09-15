@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef MGATHER_HPP
 #define MGATHER_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/utils.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/common/pto_tile.hpp>
@@ -296,7 +297,7 @@ __tf__ AICORE void MGatherGm2L1RowImpl(
     typename DstTile::TileDType __out__ dst, __gm__ T* tablePtr, __gm__ TIdx* idxPtr, uint32_t validRow,
     uint32_t validCol, uint32_t tableRows, uint32_t tableRowStride)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     __cbuf__ T* dstPtr = (__cbuf__ T*)__cce_get_tile_ptr(dst);
     constexpr uint32_t kTileRows = DstTile::Rows;
@@ -329,7 +330,7 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(
     typename DstTile::TileDType __out__ dst, __gm__ T* tablePtr, __gm__ TIdx* idxPtr, __gm__ T* scratchPtr,
     uint32_t validRow, uint32_t validCol, uint32_t tableSize, uint32_t idxRowStride)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileRows = DstTile::Rows;

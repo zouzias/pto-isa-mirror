@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TLOAD_A6_HPP
 #define TLOAD_A6_HPP
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/utils.hpp>
 #include "pto/npu/a5/common.hpp"
 #include "pto/common/arch/register/tload_common.hpp"
@@ -628,7 +629,7 @@ __tf__ PTO_INTERNAL void TLoadNHWC(
     int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
 
@@ -675,7 +676,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW(
     int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
 
     typename GlobalData::DType* srcAddrP = src;
@@ -728,7 +729,7 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(
     int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
 
@@ -770,7 +771,7 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2NDC1HWC0(
     int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
 
@@ -825,7 +826,7 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2FractalZ3D(
     int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
     int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
 
