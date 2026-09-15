@@ -478,7 +478,7 @@ def parse_arguments():
     parser.add_argument("-t", "--testcase", help="Run a single testcase (e.g. tadd). Default: run all built bin.",)
     parser.add_argument(
         "--suite",
-        choices=["st", "st_fit", "st_a5_fit"],
+        choices=["st", "st_fit", "st_a5", "st_a5_fit"],
         default="st",
         help="Test suite to run.",
     )
@@ -541,7 +541,7 @@ def run_demo_mode(args, repo_root, cxx, cc) -> int:
 
 
 def maybe_generate_formula_params(source_dir: Path, repo_root: Path, verbose: bool) -> None:
-    if source_dir.name not in {"st", "st_fit", "st_a5_fit", "perf_sim_st"}:
+    if source_dir.name not in {"st", "st_fit", "st_a5", "st_a5_fit", "perf_sim_st"}:
         return
 
     # lightweight_costmodel.hpp includes both backends, so clean builds need both

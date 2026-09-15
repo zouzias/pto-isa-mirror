@@ -20,11 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <utility>
 #include <vector>
 
-#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
-#include "pto/costmodel/a5/cce_costmodel/vf_info.hpp"
-#include "pto/costmodel/a5/cce_costmodel/vf_cost.hpp"
-#endif
-
 #include <pto/costmodel/arch_config.hpp>
 
 namespace pto::mocker {
@@ -49,9 +44,6 @@ struct PtoInstrRecord {
     std::string name;
     std::vector<CceCallRecord> cce_calls;
     uint64_t total_cycles = 0;
-#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
-    std::vector<vf::VfInfo> vf_infos;
-#endif
 };
 
 struct TraceState {
@@ -218,12 +210,6 @@ inline void EndPtoInstr()
     if (!stack.empty()) {
         if (stack.size() == 1) {
             FlushAllPendingTailsExceptVector();
-#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 3101 || __NPU_ARCH__ == 3510)
-            auto& pto = g_trace_state.executed_pto[stack.back()];
-            if (!pto.vf_infos.empty()) {
-                pto.total_cycles += vf::PredictVfCycles(pto.vf_infos);
-            }
-#endif
         }
         stack.pop_back();
     }

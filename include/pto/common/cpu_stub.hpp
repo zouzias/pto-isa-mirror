@@ -121,8 +121,10 @@ inline int aclrtResetDevice(int) { return 0; }
 inline int aclFinalize() { return 0; }
 #endif
 
+#if !defined(__COSTMODEL)
 inline void set_flag(pipe_t, pipe_t, int) {}
 inline void wait_flag(pipe_t, pipe_t, int) {}
+#endif
 #if !defined(__COSTMODEL)
 using mem_dsb_t = int;
 struct cache_line_t {

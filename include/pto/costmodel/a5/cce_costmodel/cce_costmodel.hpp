@@ -9,5 +9,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
-#include "a5_vf_stub.hpp"
-#include "vf_cost.hpp"
+#include "cce_costmodel_cube.hpp"
+#include "cce_costmodel_memory.hpp"
+#include "cce_costmodel_sync.hpp"

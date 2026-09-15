@@ -199,12 +199,21 @@ inline bool IsA5ScalarVfOp(PtoOpcode op)
     }
 }
 
-inline fit::ShapePath ResolveShapePath(PtoOpcode op, int64_t rows, int64_t cols, int64_t valid_cols)
+inline fit::ShapePath ResolveShapePath(const CostModelInput& input, int64_t valid_cols)
 {
-    if (IsA5ScalarVfOp(op)) {
-        return valid_cols == cols ? fit::ShapePath::Path1D : fit::ShapePath::Path2D;
+    if (input.a5_shape_path_hint == A5VfShapePathHint::Path1D) {
+        return fit::ShapePath::Path1D;
     }
-    if (rows == 1 || valid_cols == cols) {
+    if (input.a5_shape_path_hint == A5VfShapePathHint::Path2D) {
+        return fit::ShapePath::Path2D;
+    }
+
+    // Standalone formula callers do not carry Tile template metadata. Preserve
+    // the historical inference used by the fit tests in that case.
+    if (IsA5ScalarVfOp(input.op)) {
+        return valid_cols == input.cols ? fit::ShapePath::Path1D : fit::ShapePath::Path2D;
+    }
+    if (input.rows == 1 || valid_cols == input.cols) {
         return fit::ShapePath::Path1D;
     }
     return fit::ShapePath::Path2D;
@@ -261,7 +270,7 @@ inline bool TryInitVfCurveContext(const CostModelInput& input, VfCurveContext& c
     if (context.op_key.empty()) {
         return false;
     }
-    context.shape_path = ResolveShapePath(input.op, input.rows, input.cols, context.valid_cols_i);
+    context.shape_path = ResolveShapePath(input, context.valid_cols_i);
     context.src_dtype = DTypeToKey(input.dtype);
     context.op_params = input.a5_op_params;
     return !context.src_dtype.empty();
