@@ -9,7 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_core.hpp>
+#include <pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles_generated.hpp>
 
 inline void vconv_f322f32a(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
@@ -132,7 +132,8 @@ inline void vconv_f322s32r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvF322s32rProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322s32r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -258,7 +259,8 @@ inline void vconv_s322f32(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32Profile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -267,7 +269,8 @@ inline void vconv_s322f32a(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32aProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32a", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -276,7 +279,8 @@ inline void vconv_s322f32c(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32cProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32c", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -285,7 +289,8 @@ inline void vconv_s322f32f(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32fProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32f", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -294,7 +299,8 @@ inline void vconv_s322f32r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32rProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -303,7 +309,8 @@ inline void vconv_s322f32z(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        cce_costmodel_detail::EstimateLinearCycles(repeat, src, cce_cycle_profiles::kVconvS322f32zProfile);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_s322f32z", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
