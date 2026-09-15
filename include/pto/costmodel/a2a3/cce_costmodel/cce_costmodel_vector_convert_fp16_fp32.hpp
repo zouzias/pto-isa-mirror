@@ -15,7 +15,8 @@ inline void vconv_bf162f32(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 6.0, 2.0, 6.0, 2.0);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_bf162f32", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -69,7 +70,8 @@ inline void vconv_deq(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 7.0, 1.0, 7.0, 1.0);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_deq", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -78,7 +80,8 @@ inline void vconv_f162f32(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.0, 2.0, 6.0, 1.0);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162f32", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -132,7 +135,8 @@ inline void vconv_f162s32a(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.010874, 1.000947, 5.010874, 1.000947);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s32a", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -141,7 +145,8 @@ inline void vconv_f162s32c(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.010874, 1.000947, 5.010874, 1.000947);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s32c", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -150,7 +155,8 @@ inline void vconv_f162s32f(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.010874, 1.000947, 5.010874, 1.000947);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s32f", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -159,7 +165,8 @@ inline void vconv_f162s32r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.010874, 1.000947, 5.010874, 1.000947);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s32r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -168,7 +175,8 @@ inline void vconv_f162s32z(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 5.010874, 1.000947, 5.010874, 1.000947);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s32z", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -204,7 +212,8 @@ inline void vconv_f162s8r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1ExpFillCycles(repeat, src, 26.75, 1.5139, 6.55, 4.76, 128);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f162s8r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -321,7 +330,8 @@ inline void vconv_f322bf16a(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, 3.18969629639, 1.5323996238, 7.29569981045, 7.84302159992);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322bf16a", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -330,7 +340,8 @@ inline void vconv_f322bf16c(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, 3.03019185592, 1.53319991498, 7.34550694743, 8.27164169992);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322bf16c", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -339,7 +350,8 @@ inline void vconv_f322bf16f(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, 3.03019185592, 1.53319991498, 7.34550694743, 8.27164169992);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322bf16f", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -348,7 +360,8 @@ inline void vconv_f322bf16r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, 3.03019185592, 1.53319991498, 7.34550694743, 8.27164169992);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322bf16r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -357,7 +370,8 @@ inline void vconv_f322bf16z(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, 3.03019185592, 1.53319991498, 7.34550694743, 8.27164169992);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322bf16z", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -366,7 +380,8 @@ inline void vconv_f322f16(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -9.83278980605, 1.0, 14.3148137545, 20.7763498993, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -375,7 +390,8 @@ inline void vconv_f322f16a(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -10.04731634734, 1.0, 14.5320682728, 20.9559502406, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16a", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -384,7 +400,8 @@ inline void vconv_f322f16c(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -9.83278980605, 1.0, 14.3148137545, 20.7763498993, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16c", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -393,7 +410,8 @@ inline void vconv_f322f16f(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -9.83278980605, 1.0, 14.3148137545, 20.7763498993, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16f", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -402,7 +420,8 @@ inline void vconv_f322f16o(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles =
+        pto_costmodel_detail::Estimate910B1LinearCycles(repeat, src, 4.0, 1.0, 4.0, 1.0);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16o", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -411,7 +430,8 @@ inline void vconv_f322f16r(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -9.83278980605, 1.0, 14.3148137545, 20.7763498993, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16r", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -420,7 +440,8 @@ inline void vconv_f322f16z(
     auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
     auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateVconvCycles(repeat);
+    const uint64_t cycles = pto_costmodel_detail::Estimate910B1ExpFillCycles(
+        repeat, src, -9.83278980605, 1.0, 14.3148137545, 20.7763498993, 0, true);
     ::pto::mocker::RecordCceCall(
         ::pto::mocker::evaluator::PipeKey::VECTOR, "vconv_f322f16z", cycles, dst, src, repeat, dstBlockStride,
         srcBlockStride, dstRepeatStride, srcRepeatStride);

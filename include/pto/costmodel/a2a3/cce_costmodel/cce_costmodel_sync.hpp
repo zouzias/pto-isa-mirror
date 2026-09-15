@@ -27,8 +27,20 @@ inline void ffts_cross_core_sync(auto srcPipe, auto msg)
 inline void pto_costmodel_pipe_barrier(auto pipe)
 {
     ::pto::perf_sim::SyncRecorder::Barrier(pipe);
+    const bool drainsVector =
+        pipe == PIPE_V &&
+        (!::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::VECTOR) ||
+         !::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::UB_TO_UB));
+    if (pipe == PIPE_V) {
+        // COPY_UBUF_TO_UBUF is executed by the vector-side datapath in the
+        // tilesim CCE scheduler, so PIPE_V also closes this queue.
+        FlushPipeTail(::pto::mocker::evaluator::PipeKey::UB_TO_UB);
+    }
     FlushTailsForPipe(pipe);
-    const uint64_t cycles = EstimateConstCycles();
+    // tilesim 910B1 charges the 16-cycle drain only when PIPE_V has
+    // outstanding vector work. Empty and non-vector barriers are ordering
+    // operations and do not consume a standalone vector drain.
+    const uint64_t cycles = drainsVector ? 16 : 0;
     ::pto::mocker::RecordCceCall("pipe_barrier", cycles, pipe);
 }
 inline void set_atomic_add()

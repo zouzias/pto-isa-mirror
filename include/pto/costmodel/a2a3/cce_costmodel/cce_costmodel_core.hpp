@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
+#include <cmath>
 #include <pto/costmodel/arch_config.hpp>
 #include <pto/costmodel/trace.hpp>
 
@@ -171,6 +172,130 @@ inline uint64_t CeilDiv(uint64_t x, uint64_t y)
         return 0; // 或返回 UINT64_MAX，根据业务逻辑决定
     return (x + y - 1) / y;
 }
+
+namespace pto_costmodel_detail {
+
+template <typename Ptr>
+inline constexpr bool IsFp16Pointer =
+    std::is_same_v<std::remove_cv_t<std::remove_pointer_t<std::decay_t<Ptr>>>, half>;
+
+template <typename Ptr>
+using PointerElement = std::remove_cv_t<std::remove_pointer_t<std::decay_t<Ptr>>>;
+
+template <typename Ptr>
+inline constexpr bool IsIntegralPointer = std::is_integral_v<PointerElement<Ptr>>;
+
+// Count-mask vector instructions encode their effective element count in the
+// most recent set_vector_mask(0, count), while their CCE repeat argument is 0.
+// This mirrors tilesim's auto_mask_inference without changing the trace/stub
+// mechanism itself.
+template <typename Ptr>
+inline uint64_t EffectiveVectorRepeat(uint64_t repeat, Ptr /*dst*/)
+{
+    if (repeat != 0 || !::pto::mocker::IsVectorCountMode()) {
+        return repeat;
+    }
+
+    const auto& trace = ::pto::mocker::GetTrace();
+    if (trace.active_pto_stack.empty()) {
+        return repeat;
+    }
+    const auto& calls = trace.executed_pto[trace.active_pto_stack.back()].cce_calls;
+    for (auto it = calls.rbegin(); it != calls.rend(); ++it) {
+        if (it->name != "set_vector_mask") {
+            continue;
+        }
+        if (it->args.size() < 2 || it->args[0] != 0 || it->args[1] == 0 || it->args[1] == ~0ULL) {
+            return repeat;
+        }
+        constexpr uint64_t elemBytes = sizeof(std::remove_pointer_t<std::decay_t<Ptr>>);
+        return CeilDiv(it->args[1] * elemBytes, 256);
+    }
+    return repeat;
+}
+
+inline uint64_t RoundPositiveCycles(double cycles)
+{
+    return cycles <= 0.0 ? 0 : static_cast<uint64_t>(cycles + 0.5);
+}
+
+template <typename Ptr>
+inline uint64_t Estimate910B1LinearCycles(
+    uint64_t repeat, Ptr dst, double fp16Startup, double fp16Slope, double fp32Startup, double fp32Slope)
+{
+    const uint64_t effectiveRepeat = EffectiveVectorRepeat(repeat, dst);
+    const bool streamStart = ::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::VECTOR);
+    double cycles;
+    if constexpr (IsFp16Pointer<Ptr>) {
+        cycles = fp16Slope * static_cast<double>(effectiveRepeat) + (streamStart ? fp16Startup : 0.0);
+    } else {
+        cycles = fp32Slope * static_cast<double>(effectiveRepeat) + (streamStart ? fp32Startup : 0.0);
+    }
+    ::pto::mocker::SetLastCceTail(::pto::mocker::evaluator::PipeKey::VECTOR, 0);
+    return RoundPositiveCycles(cycles);
+}
+
+// Native 910B1 integer profiles are no longer approximated with FP32 timing.
+// tilesim's 2026-09-11 sweep reports a shared INT16/INT32 completion curve for
+// the vector ALU families currently using this helper.
+template <typename Ptr>
+inline uint64_t Estimate910B1LinearCyclesWithInteger(
+    uint64_t repeat, Ptr dst, double fp16Startup, double fp16Slope, double fp32Startup, double fp32Slope,
+    double integerStartup, double integerSlope)
+{
+    const uint64_t effectiveRepeat = EffectiveVectorRepeat(repeat, dst);
+    const bool streamStart = ::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::VECTOR);
+    double startup;
+    double slope;
+    if constexpr (IsIntegralPointer<Ptr>) {
+        startup = integerStartup;
+        slope = integerSlope;
+    } else if constexpr (IsFp16Pointer<Ptr>) {
+        startup = fp16Startup;
+        slope = fp16Slope;
+    } else {
+        startup = fp32Startup;
+        slope = fp32Slope;
+    }
+    const double cycles = slope * static_cast<double>(effectiveRepeat) + (streamStart ? startup : 0.0);
+    ::pto::mocker::SetLastCceTail(::pto::mocker::evaluator::PipeKey::VECTOR, 0);
+    return RoundPositiveCycles(cycles);
+}
+
+// VCMPV/VCMPVS write a packed predicate. A partial output block carries an
+// additional ~6-cycle completion penalty: two repeats per FP16 block and four
+// per FP32/INT32 block. This is completion timing; PTO target-pipe projection
+// may intentionally remove the predicate packing tail.
+template <typename Ptr>
+inline uint64_t Estimate910B1PredicateCompletion(uint64_t repeat, Ptr src, bool scalar)
+{
+    const uint64_t effectiveRepeat = EffectiveVectorRepeat(repeat, src);
+    const uint64_t outputBlockRepeats = IsFp16Pointer<Ptr> ? 2 : 4;
+    const double startup = 5.0 + (effectiveRepeat % outputBlockRepeats == 0 ? 0.0 : 6.0);
+    const double slope = scalar ? 1.0 : 2.0;
+    return Estimate910B1LinearCycles(
+        effectiveRepeat, src, startup, slope, startup, slope);
+}
+
+template <typename Ptr>
+inline uint64_t Estimate910B1ExpFillCycles(
+    uint64_t repeat, Ptr dst, double c0, double cs, double cf, double tau, uint64_t validRepeatMax = 0,
+    bool serializeEveryCall = false)
+{
+    uint64_t effectiveRepeat = EffectiveVectorRepeat(repeat, dst);
+    if (validRepeatMax != 0 && effectiveRepeat > validRepeatMax) {
+        effectiveRepeat = validRepeatMax;
+    }
+    const bool streamStart = ::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::VECTOR);
+    double cycles = cs * static_cast<double>(effectiveRepeat);
+    if (streamStart || serializeEveryCall) {
+        cycles += c0 + cf * std::exp(-static_cast<double>(effectiveRepeat) / tau);
+    }
+    ::pto::mocker::SetLastCceTail(::pto::mocker::evaluator::PipeKey::VECTOR, 0);
+    return RoundPositiveCycles(cycles);
+}
+
+} // namespace pto_costmodel_detail
 
 inline uint64_t ExtractBits(uint64_t value, uint32_t shift, uint64_t mask) { return (value >> shift) & mask; }
 
