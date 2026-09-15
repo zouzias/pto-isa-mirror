@@ -34,8 +34,8 @@ void runTMins(T scalar)
 
 } // namespace
 
-TEST(TMins, float_64x64) { runTMins<float, 64, 64, 87.0f, 0.919540f>(0.0f); }
-TEST(TMins, int32_64x64) { runTMins<int32_t, 64, 64, 68.0f, 0.617647f>(1); }
-TEST(TMins, int16_64x64) { runTMins<int16_t, 64, 64, 70.0f, 0.628571f>(1); }
-TEST(TMins, half_64x64) { runTMins<half, 64, 64, 55.0f, 0.254545f>(half{0.0f}); }
-TEST(TMins, half_16x256) { runTMins<half, 16, 256, 40.0f, 0.450000f>(half{1.0f}); }
+TEST(TMins, float_64x64) { runTMins<float, 64, 64, 68.0f, 0.94f>(0.0f); }
+TEST(TMins, int32_64x64) { runTMins<int32_t, 64, 64, 69.0f, 0.94f>(1); }
+TEST(TMins, int16_64x64) { runTMins<int16_t, 64, 64, 76.0f, 0.94f>(1); }
+TEST(TMins, half_64x64) { runTMins<half, 64, 64, 74.0f, 0.94f>(half{0.0f}); }
+TEST(TMins, half_16x256) { runTMins<half, 16, 256, 65.0f, 0.94f>(half{1.0f}); }
