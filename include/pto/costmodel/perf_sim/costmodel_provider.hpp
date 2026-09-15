@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "latency.hpp"
 #include "recorder.hpp"
 
-#include <pto/costmodel/lightweight_costmodel.hpp>
+#include <pto/costmodel/common/input_mapping.hpp>
 
 #include <string>
 
@@ -48,63 +48,8 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
 
 // ── String → lightweight costmodel mappings ──
 
-// clang-format off
-#define PTO_PERF_SIM_OPCODE_LIST                                                                                      \
-    X(TADD)                                                                                                           \
-    X(TSUB)                                                                                                           \
-    X(TMUL)                                                                                                           \
-    X(TDIV)                                                                                                           \
-    X(TRECIP)                                                                                                         \
-    X(TADDS)                                                                                                          \
-    X(TSUBS)                                                                                                          \
-    X(TMULS)                                                                                                          \
-    X(TDIVS) X(TMINS) X(TMAXS) X(TABS) X(TNEG) X(TEXP) X(TSQRT) X(TRSQRT) X(TLOG) X(TRELU) X(TLRELU) X(TNOT)          \
-        X(TROWSUM) X(TROWMAX) X(TROWMIN) X(TROWPROD) X(TCOLSUM) X(TCOLMAX) X(TCOLMIN) X(TCOLPROD) X(TMATMUL) X(TGEMV) \
-            X(TCVT) X(TMOV) X(TLOAD) X(TSTORE) X(TTRANS) X(TPREFETCH) X(TSORT32) X(TMRGSORT) X(TSEL) X(TSCATTER)      \
-                X(TEXTRACT) X(TINSERT) X(TROWEXPAND) X(TCOLEXPAND) X(TLOADCONV)
-// clang-format on
-
-inline bool TryMapOpcode(const std::string& opcode, ::pto::mocker::lightweight::PtoOpcode& out)
-{
-#define X(name)                                            \
-    if (opcode == #name) {                                 \
-        out = ::pto::mocker::lightweight::PtoOpcode::name; \
-        return true;                                       \
-    }
-    PTO_PERF_SIM_OPCODE_LIST
-#undef X
-    return false;
-}
-
-// ── String → lightweight::DType mapping (X-macro, paired str↔enum) ──
-
-#define PTO_PERF_SIM_DTYPE_LIST \
-    X("fp32", Float)            \
-    X("fp16", Half)             \
-    X("int8", Int8)             \
-    X("int16", Int16)           \
-    X("int32", Int32)           \
-    X("uint8", Uint8)           \
-    X("uint16", Uint16)         \
-    X("uint32", Uint32)         \
-    X("bf16", BFloat16)         \
-    X("fp8_e4m3", Float8E4M3)   \
-    X("fp8_e5m2", Float8E5M2)   \
-    X("hif8", HFloat8)          \
-    X("fp4_e1m2", Float4E1M2)   \
-    X("fp4_e2m1", Float4E2M1)
-
-inline bool TryMapDType(const std::string& dtype, ::pto::mocker::lightweight::DType& out)
-{
-#define X(str, enum_val)                                     \
-    if (dtype == str) {                                     \
-        out = ::pto::mocker::lightweight::DType::enum_val;  \
-        return true;                                        \
-    }
-    PTO_PERF_SIM_DTYPE_LIST
-#undef X
-    return false;
-}
+using ::pto::mocker::lightweight::TryMapOpcode;
+using ::pto::mocker::lightweight::TryMapDType;
 
 #if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 // ── LightweightFormula backend ──
@@ -136,55 +81,6 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
 }
 
 #endif
-
-struct A5VfTileOpInput {
-    std::string opcode;
-    std::string src_dtype;
-    std::string dst_dtype;
-    int64_t rows = 0;
-    int64_t cols = 0;
-    int64_t valid_rows = 0;
-    int64_t valid_cols = 0;
-    ::pto::VFImplKind vf_impl_kind = ::pto::VFImplKind::VFIMPL_DEFAULT;
-    ::pto::RoundMode round_mode = ::pto::RoundMode::CAST_NONE;
-    ::pto::SaturationMode saturation_mode = ::pto::SaturationMode::ON;
-    std::string_view op_params{};
-    ::pto::mocker::lightweight::A5VfShapePathHint shape_path_hint =
-        ::pto::mocker::lightweight::A5VfShapePathHint::Infer;
-};
-
-inline bool TryEstimateA5VfTileOpCycles(const A5VfTileOpInput& tile_op, uint64_t& cycles)
-{
-    using namespace ::pto::mocker::lightweight;
-
-    PtoOpcode op;
-    DType src_dtype;
-    DType dst_dtype;
-    if (!TryMapOpcode(tile_op.opcode, op) || !TryMapDType(tile_op.src_dtype, src_dtype)) {
-        return false;
-    }
-    if (!tile_op.dst_dtype.empty() && !TryMapDType(tile_op.dst_dtype, dst_dtype)) {
-        return false;
-    }
-
-    CostModelInput input{};
-    input.op = op;
-    input.dtype = src_dtype;
-    input.rows = tile_op.rows;
-    input.cols = tile_op.cols;
-    input.arch = CostModelArch::A5;
-    input.valid_rows = tile_op.valid_rows;
-    input.valid_cols = tile_op.valid_cols;
-    input.vf_impl_kind = tile_op.vf_impl_kind;
-    input.round_mode = tile_op.round_mode;
-    input.saturation_mode = tile_op.saturation_mode;
-    input.a5_op_params = tile_op.op_params;
-    input.a5_shape_path_hint = tile_op.shape_path_hint;
-    if (!tile_op.dst_dtype.empty()) {
-        input.dst_dtype = dst_dtype;
-    }
-    return a5::TryEstimateA5VfCycles(input, cycles);
-}
 
 // ── Fallback for unsupported instructions ──
 

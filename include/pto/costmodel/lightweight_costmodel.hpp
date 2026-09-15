@@ -22,6 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/costmodel/a2a3/formula_costmodel/formula_backend_compute.hpp>
 #endif
 #include <pto/costmodel/arch_config.hpp>
+#include <pto/costmodel/a5/vf_costmodel.hpp>
 
 namespace pto::mocker::lightweight {
 
@@ -479,6 +480,81 @@ inline CostModelResult EstimateCycles(const CostModelInput& input)
 
 } // namespace pto::mocker::lightweight
 
-#include <pto/costmodel/a5/vf_costmodel.hpp>
+// Adapter for existing numeric CostModelInput callers; TileOp wrappers bypass this path.
+namespace pto::mocker::lightweight::a5 {
+
+inline std::string_view DTypeToKey(DType dtype)
+{
+    switch (dtype) {
+        case DType::Float:
+            return "fp32";
+        case DType::Half:
+            return "fp16";
+        case DType::Float8E4M3:
+            return "fp8_e4m3";
+        case DType::Float8E5M2:
+            return "fp8_e5m2";
+        case DType::HFloat8:
+            return "hif8";
+        case DType::Float4E1M2:
+            return "fp4_e1m2";
+        case DType::Float4E2M1:
+            return "fp4_e2m1";
+        case DType::Int8:
+            return "int8";
+        case DType::Int16:
+            return "int16";
+        case DType::Int32:
+            return "int32";
+        case DType::Uint8:
+            return "uint8";
+        case DType::Uint16:
+            return "uint16";
+        case DType::Uint32:
+            return "uint32";
+        case DType::BFloat16:
+            return "bf16";
+        default:
+            return "";
+    }
+}
+
+
+// Compatibility for direct CostModelInput callers (including fit datasets).
+// Real TileOp wrappers bypass this adapter and provide compile-time Tile metadata.
+inline bool TryEstimateA5VfCycles(const CostModelInput& input, uint64_t& cycles)
+{
+    const std::string_view opcode = PtoOpcodeToString(input.op);
+    if (opcode.empty()) {
+        return false;
+    }
+    A5TileOpMetadata metadata;
+    metadata.first_tile_dtype = DTypeToKey(input.op == PtoOpcode::TCVT ? input.dst_dtype : input.dtype);
+    metadata.second_tile_dtype = DTypeToKey(input.dtype);
+    metadata.rows = input.rows;
+    metadata.cols = input.cols;
+    metadata.valid_rows = input.valid_rows > 0 ? input.valid_rows : input.rows;
+    metadata.valid_cols = input.valid_cols > 0 ? input.valid_cols : input.cols;
+    metadata.vf_impl_kind = input.vf_impl_kind;
+    metadata.round_mode = input.round_mode;
+    metadata.saturation_mode = input.saturation_mode;
+    metadata.tile_count = (input.op == PtoOpcode::TADD || input.op == PtoOpcode::TSUB ||
+                           input.op == PtoOpcode::TMUL || input.op == PtoOpcode::TSEL) ? 3 : 2;
+    bool contiguous = input.a5_shape_path_hint == A5VfShapePathHint::Path1D;
+    if (input.a5_shape_path_hint == A5VfShapePathHint::Infer) {
+        // Preserve the fit-data convention when Tile template metadata is absent.
+        const bool scalar = input.op == PtoOpcode::TDIVS || input.op == PtoOpcode::TMINS ||
+                            input.op == PtoOpcode::TNEG;
+        contiguous = metadata.valid_cols == input.cols || (!scalar && input.rows == 1);
+    }
+    if (contiguous) {
+        metadata.static_full_cols_mask = (1U << metadata.tile_count) - 1;
+    }
+    A5VfExecutionPath path;
+    return SelectA5TileOpPath(opcode, A5TileOpOptions{input.a5_op_params}, metadata, path) &&
+           fit::TryEstimateSelectedVfCycles(path, cycles);
+}
+
+} // namespace pto::mocker::lightweight::a5
 
 #endif

@@ -16,6 +16,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string_view>
 #include <vector>
 
+#include <pto/costmodel/common/tile_traits.hpp>
+
 namespace pto::perf_sim {
 
 // Thread-local subblock ID, set by LAUNCH_KERNEL before kernel execution.
@@ -292,60 +294,8 @@ uint64_t MakeCvFifoKey()
 
 // ── Compile-time tile traits (duck typing for pto::Tile<...>) ──
 
-template <typename T>
-struct TileTraits {
-    static constexpr int rows = 0;
-    static constexpr int cols = 0;
-    static constexpr const char* dtype_str() { return "unknown"; }
-};
-
-template <typename T>
-concept HasTileDims = requires {
-    typename T::DType;
-    { T::Rows } -> std::convertible_to<int>;
-    { T::Cols } -> std::convertible_to<int>;
-};
-
-template <HasTileDims T>
-struct TileTraits<T> {
-    using DType = typename T::DType;
-    static constexpr int rows = T::Rows;
-    static constexpr int cols = T::Cols;
-
-    static constexpr const char* dtype_str()
-    {
-        if constexpr (std::is_same_v<DType, float>)
-            return "fp32";
-        else if constexpr (std::is_same_v<DType, int32_t>)
-            return "int32";
-        else if constexpr (std::is_same_v<DType, uint32_t>)
-            return "uint32";
-        else if constexpr (std::is_same_v<DType, int16_t>)
-            return "int16";
-        else if constexpr (std::is_same_v<DType, uint16_t>)
-            return "uint16";
-        else if constexpr (std::is_same_v<DType, int8_t>)
-            return "int8";
-        else if constexpr (std::is_same_v<DType, uint8_t>)
-            return "uint8";
-        else if constexpr (std::is_same_v<DType, float8_e4m3_t>)
-            return "fp8_e4m3";
-        else if constexpr (std::is_same_v<DType, float8_e5m2_t>)
-            return "fp8_e5m2";
-        else if constexpr (std::is_same_v<DType, hifloat8_t>)
-            return "hif8";
-        else if constexpr (std::is_same_v<DType, float4_e1m2x2_t>)
-            return "fp4_e1m2";
-        else if constexpr (std::is_same_v<DType, float4_e2m1x2_t>)
-            return "fp4_e2m1";
-        else if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half>)
-            return "bf16";
-        else if constexpr (std::is_same_v<DType, half>)
-            return "fp16";
-        else
-            return "unknown";
-    }
-};
+using ::pto::mocker::HasTileDims;
+using ::pto::mocker::TileTraits;
 
 } // namespace pto::perf_sim
 

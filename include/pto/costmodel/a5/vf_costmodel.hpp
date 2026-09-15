@@ -7,92 +7,150 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#pragma once
 
-#ifndef PTO_MOCKER_A5_VF_COSTMODEL_HPP
-#define PTO_MOCKER_A5_VF_COSTMODEL_HPP
-
-#include <array>
+#include <cstdio>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
+#include <pto/costmodel/common/tile_traits.hpp>
 #include <pto/costmodel/a5/formula_costmodel/formula_backend_vf.hpp>
 
-namespace pto::mocker::lightweight::a5 {
+namespace pto::mocker {
 
-inline constexpr uint64_t kEvenModulo = 2;
+struct A5TileOpOptions {
+    std::string_view op_params{};
+};
+
+// Interpret template values here, not in wrapper macros or the recorder.
+template <auto Value>
+inline void CollectA5TemplateOption(A5TileOpOptions& options)
+{
+    using T = std::remove_cv_t<decltype(Value)>;
+    if constexpr (
+        std::is_same_v<T, RecipAlgorithm> || std::is_same_v<T, DivAlgorithm> ||
+        std::is_same_v<T, SqrtAlgorithm> || std::is_same_v<T, RsqrtAlgorithm> ||
+        std::is_same_v<T, ExpAlgorithm> || std::is_same_v<T, LogAlgorithm> ||
+        std::is_same_v<T, PowAlgorithm>) {
+        if constexpr (Value == T::HIGH_PRECISION) {
+            options.op_params = "high_precision";
+        }
+    }
+}
+
+// Wrapper template lists contain either values or a prefix of Tile types
+// followed by values. Tile metadata is read from the actual operands.
+template <auto... Values>
+inline A5TileOpOptions A5OptionsFromTemplate()
+{
+    A5TileOpOptions options;
+    (CollectA5TemplateOption<Values>(options), ...);
+    return options;
+}
+
+template <typename T0, auto... Values>
+inline A5TileOpOptions A5OptionsFromTemplate()
+{
+    return A5OptionsFromTemplate<Values...>();
+}
+
+template <typename T0, typename T1, auto... Values>
+inline A5TileOpOptions A5OptionsFromTemplate()
+{
+    return A5OptionsFromTemplate<Values...>();
+}
+
+template <typename T0, typename T1, typename T2, auto... Values>
+inline A5TileOpOptions A5OptionsFromTemplate()
+{
+    return A5OptionsFromTemplate<Values...>();
+}
+
+template <typename T0, typename T1, typename T2, typename T3, auto... Values>
+inline A5TileOpOptions A5OptionsFromTemplate()
+{
+    return A5OptionsFromTemplate<Values...>();
+}
+
+struct A5TileOpMetadata {
+    std::string first_tile_dtype;
+    std::string second_tile_dtype;
+    int64_t rows = 0;
+    int64_t cols = 0;
+    int64_t valid_rows = 0;
+    int64_t valid_cols = 0;
+    uint32_t tile_count = 0;
+    uint32_t static_full_cols_mask = 0;
+    uint32_t single_row_mask = 0;
+    VFImplKind vf_impl_kind = VFImplKind::VFIMPL_DEFAULT;
+    RoundMode round_mode = RoundMode::CAST_NONE;
+    SaturationMode saturation_mode = SaturationMode::ON;
+};
+
+template <typename T>
+inline void CollectA5TileOpMetadata(A5TileOpMetadata& metadata, T&& arg)
+{
+    using Arg = std::remove_cv_t<std::remove_reference_t<T>>;
+    if constexpr (requires {
+                      Arg::Rows;
+                      Arg::Cols;
+                      Arg::ValidCol;
+                      arg.GetValidRow();
+                      arg.GetValidCol();
+                      ::pto::mocker::TileTraits<Arg>::dtype_str();
+                  }) {
+        const std::string dtype = ::pto::mocker::TileTraits<Arg>::dtype_str();
+        const uint32_t tile_index = metadata.tile_count;
+        if (tile_index < 32 && Arg::ValidCol == Arg::Cols) {
+            metadata.static_full_cols_mask |= 1U << tile_index;
+        }
+        if (tile_index < 32 && Arg::Rows == 1) {
+            metadata.single_row_mask |= 1U << tile_index;
+        }
+        if (tile_index == 0) {
+            metadata.first_tile_dtype = dtype;
+            metadata.rows = static_cast<int64_t>(Arg::Rows);
+            metadata.cols = static_cast<int64_t>(Arg::Cols);
+            metadata.valid_rows = static_cast<int64_t>(arg.GetValidRow());
+            metadata.valid_cols = static_cast<int64_t>(arg.GetValidCol());
+        } else if (tile_index == 1) {
+            metadata.second_tile_dtype = dtype;
+        }
+        ++metadata.tile_count;
+    } else if constexpr (std::is_same_v<Arg, VFImplKind>) {
+        metadata.vf_impl_kind = arg;
+    } else if constexpr (std::is_same_v<Arg, RoundMode>) {
+        metadata.round_mode = arg;
+    } else if constexpr (std::is_same_v<Arg, SaturationMode>) {
+        metadata.saturation_mode = arg;
+    }
+}
+
+inline bool FirstA5TilesUseContiguousPath(const A5TileOpMetadata& metadata, uint32_t required_tiles)
+{
+    if (required_tiles == 0 || required_tiles > metadata.tile_count || required_tiles >= 32) {
+        return false;
+    }
+    const uint32_t required_mask = (1U << required_tiles) - 1U;
+    return (metadata.static_full_cols_mask & required_mask) == required_mask ||
+           (metadata.single_row_mask & required_mask) == required_mask;
+}
+
+template <typename... Args>
+inline A5TileOpMetadata BuildA5TileOpMetadata(Args&&... args)
+{
+    A5TileOpMetadata metadata;
+    (CollectA5TileOpMetadata(metadata, std::forward<Args>(args)), ...);
+    return metadata;
+}
+
 inline constexpr uint64_t kElementsPerRepeatB32 = 64;
 inline constexpr uint64_t kElementsPerRepeatB16 = 128;
 inline constexpr uint64_t kElementsPerRepeatB8 = 256;
-
-inline uint64_t CeilDivU64(uint64_t x, uint64_t y) { return y == 0 ? 0 : (x + y - 1) / y; }
-
-inline std::string_view PtoOpcodeToKey(PtoOpcode op)
-{
-    constexpr std::array kOpcodeKeys = {
-        std::pair{PtoOpcode::TADD, std::string_view("TADD")},
-        std::pair{PtoOpcode::TSUB, std::string_view("TSUB")},
-        std::pair{PtoOpcode::TMUL, std::string_view("TMUL")},
-        std::pair{PtoOpcode::TDIV, std::string_view("TDIV")},
-        std::pair{PtoOpcode::TRECIP, std::string_view("TRECIP")},
-        std::pair{PtoOpcode::TADDS, std::string_view("TADDS")},
-        std::pair{PtoOpcode::TSUBS, std::string_view("TSUBS")},
-        std::pair{PtoOpcode::TMULS, std::string_view("TMULS")},
-        std::pair{PtoOpcode::TDIVS, std::string_view("TDIVS")},
-        std::pair{PtoOpcode::TMINS, std::string_view("TMINS")},
-        std::pair{PtoOpcode::TNEG, std::string_view("TNEG")},
-        std::pair{PtoOpcode::TEXP, std::string_view("TEXP")},
-        std::pair{PtoOpcode::TSQRT, std::string_view("TSQRT")},
-        std::pair{PtoOpcode::TRSQRT, std::string_view("TRSQRT")},
-        std::pair{PtoOpcode::TLOG, std::string_view("TLOG")},
-        std::pair{PtoOpcode::TRELU, std::string_view("TRELU")},
-        std::pair{PtoOpcode::TNOT, std::string_view("TNOT")},
-        std::pair{PtoOpcode::TCVT, std::string_view("TCVT")},
-        std::pair{PtoOpcode::TSEL, std::string_view("TSEL")},
-    };
-    for (const auto& [opcode, key] : kOpcodeKeys) {
-        if (opcode == op) {
-            return key;
-        }
-    }
-    return "";
-}
-
-inline std::string_view DTypeToKey(DType dtype)
-{
-    switch (dtype) {
-        case DType::Float:
-            return "fp32";
-        case DType::Half:
-            return "fp16";
-        case DType::Float8E4M3:
-            return "fp8_e4m3";
-        case DType::Float8E5M2:
-            return "fp8_e5m2";
-        case DType::HFloat8:
-            return "hif8";
-        case DType::Float4E1M2:
-            return "fp4_e1m2";
-        case DType::Float4E2M1:
-            return "fp4_e2m1";
-        case DType::Int8:
-            return "int8";
-        case DType::Int16:
-            return "int16";
-        case DType::Int32:
-            return "int32";
-        case DType::Uint8:
-            return "uint8";
-        case DType::Uint16:
-            return "uint16";
-        case DType::Uint32:
-            return "uint32";
-        case DType::BFloat16:
-            return "bf16";
-        default:
-            return "";
-    }
-}
 
 inline bool TryGetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint64_t& elements_per_repeat)
 {
@@ -120,19 +178,14 @@ inline bool TryGetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint
     return false;
 }
 
-inline bool TryGetA5ElementsPerRepeat(DType dtype, uint64_t& elements_per_repeat)
-{
-    return TryGetA5ElementsPerRepeatByDTypeKey(DTypeToKey(dtype), elements_per_repeat);
-}
-
 inline bool TryGetA5CvtElementsPerRepeat(
-    std::string_view src_dtype, std::string_view dst_dtype, fit::ShapePath shape_path, uint64_t& elements_per_repeat)
+    std::string_view src_dtype, std::string_view dst_dtype, lightweight::a5::fit::ShapePath shape_path, uint64_t& elements_per_repeat)
 {
     if ((src_dtype == "fp16" || src_dtype == "bf16") && dst_dtype == "fp32") {
         elements_per_repeat = kElementsPerRepeatB32;
         return true;
     }
-    if (shape_path == fit::ShapePath::Path1D) {
+    if (shape_path == lightweight::a5::fit::ShapePath::Path1D) {
         return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
     }
     if ((src_dtype == "fp32" && (dst_dtype == "fp16" || dst_dtype == "bf16" || dst_dtype == "fp8_e4m3" ||
@@ -145,240 +198,197 @@ inline bool TryGetA5CvtElementsPerRepeat(
     return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
 }
 
-inline std::string_view TselOpParams(DType dtype, fit::ShapePath shape_path, uint64_t inner_iter)
+// Shared by Binary and Scalar: an explicit 2D version can force a contiguous
+// Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
+inline A5VfTemplate SelectA5BinaryTemplate(bool contiguous, VFImplKind version)
 {
-    if (dtype == DType::Float) {
-        if (shape_path == fit::ShapePath::Path1D) {
-            return (inner_iter % kEvenModulo == 0) ? "TSel_b32_even" : "TSel_b32_odd";
-        }
-        return "TSel_b32";
+    const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
+                         version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
+    const bool noPost = version == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
+                        version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
+    if (contiguous && !force2D) {
+        return noPost ? A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::OneDPostUpdate;
     }
-    if (dtype == DType::Half || dtype == DType::Int8) {
-        return "TSel_b16_8";
-    }
-    return "";
+    const bool post = version == VFImplKind::VFIMPL_1D_POST_UPDATE ||
+                      version == VFImplKind::VFIMPL_2D_POST_UPDATE;
+    return post ? A5VfTemplate::TwoDPostUpdate : A5VfTemplate::TwoDNoPostUpdate;
 }
 
-inline std::string_view DefaultOpParams(PtoOpcode op)
+inline bool InitA5ExecutionPath(
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
+    A5VfExecutionPath& path)
 {
-    switch (op) {
-        case PtoOpcode::TRECIP:
-            return "default";
-        default:
-            return "";
+    if (metadata.valid_rows <= 0 || metadata.valid_cols <= 0) {
+        return false;
     }
+    path = {};
+    path.opcode = opcode;
+    path.src_dtype = metadata.first_tile_dtype;
+    path.op_params = options.op_params;
+    path.valid_rows = static_cast<uint64_t>(metadata.valid_rows);
+    path.valid_cols = static_cast<uint64_t>(metadata.valid_cols);
+    return true;
 }
 
-inline std::string_view CvtOpParams(RoundMode round_mode, SaturationMode saturation_mode)
+// Three Tile operands; NPU TBinOp.hpp, BinaryInstr/TBinOp{1D,2D}Switch.
+inline bool SelectA5BinaryCostmodelPath(
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
+    A5VfExecutionPath& path)
 {
-    if (round_mode == RoundMode::CAST_NONE && saturation_mode == SaturationMode::ON) {
-        return "CAST_NONE_SAT_ON_normal";
+    if ((opcode != "TADD" && opcode != "TSUB" && opcode != "TMUL") || metadata.tile_count < 3 ||
+        !InitA5ExecutionPath(opcode, options, metadata, path)) {
+        return false;
     }
-    if (round_mode == RoundMode::CAST_RINT && saturation_mode == SaturationMode::ON) {
-        return "CAST_RINT_SAT_ON_normal";
-    }
-    if (round_mode == RoundMode::CAST_TRUNC && saturation_mode == SaturationMode::OFF) {
-        return "CAST_TRUNC_SAT_OFF_normal";
-    }
-    return "";
+    path.implementation = SelectA5BinaryTemplate(
+        FirstA5TilesUseContiguousPath(metadata, 3), metadata.vf_impl_kind);
+    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
-inline bool IsA5ScalarVfOp(PtoOpcode op)
+// Tile/scalar family: two Tile operands, using the TBinSOp.hpp path switches.
+inline bool SelectA5ScalarCostmodelPath(
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
+    A5VfExecutionPath& path)
 {
-    switch (op) {
-        case PtoOpcode::TADDS:
-        case PtoOpcode::TSUBS:
-        case PtoOpcode::TMULS:
-        case PtoOpcode::TDIVS:
-        case PtoOpcode::TMINS:
-        case PtoOpcode::TMAXS:
-        case PtoOpcode::TNEG:
-            return true;
-        default:
+    if ((opcode != "TDIVS" && opcode != "TMINS" && opcode != "TNEG") || metadata.tile_count < 2 ||
+        !InitA5ExecutionPath(opcode, options, metadata, path)) {
+        return false;
+    }
+    path.implementation = SelectA5BinaryTemplate(
+        FirstA5TilesUseContiguousPath(metadata, 2), metadata.vf_impl_kind);
+    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
+}
+
+// Unary family: shape and precision are selected here, never in the formula backend.
+// TRECIP retains its own default/high_precision parameter family.
+inline bool SelectA5UnaryCostmodelPath(
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
+    A5VfExecutionPath& path)
+{
+    if ((opcode != "TEXP" && opcode != "TSQRT" && opcode != "TRSQRT" && opcode != "TRECIP") ||
+        metadata.tile_count < 2 || !InitA5ExecutionPath(opcode, options, metadata, path)) {
+        return false;
+    }
+    const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
+    if (opcode == "TRECIP") {
+        // Reciprocal follows the scalar-division implementation family.
+        path.implementation = SelectA5BinaryTemplate(contiguous, metadata.vf_impl_kind);
+    } else if (!contiguous || metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_POST_UPDATE ||
+               metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE) {
+        // TUnaryOp/TRsqrt have one strided implementation, not two update variants.
+        path.implementation = A5VfTemplate::TwoDNoPostUpdate;
+    } else {
+        path.implementation = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ?
+                                  A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::OneDPostUpdate;
+    }
+    if (opcode == "TRECIP" && path.op_params.empty()) {
+        path.op_params = "default";
+    }
+    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
+}
+
+// Conversion has separate dtype-pair, rounding/saturation and repeat-width rules.
+inline bool SelectA5ConvertCostmodelPath(
+    const A5TileOpOptions& options, const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+{
+    if (metadata.tile_count < 2 || !InitA5ExecutionPath("TCVT", options, metadata, path)) {
+        return false;
+    }
+    path.src_dtype = metadata.second_tile_dtype;
+    path.dst_dtype = metadata.first_tile_dtype;
+    const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
+    if (contiguous) {
+        path.implementation = metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE ?
+                                  A5VfTemplate::TwoDNoPostUpdate : A5VfTemplate::OneDNoPostUpdate;
+    } else {
+        const bool noPost = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
+                            metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
+        path.implementation = noPost ? A5VfTemplate::TwoDNoPostUpdate : A5VfTemplate::TwoDPostUpdate;
+    }
+    if (path.op_params.empty()) {
+        if ((metadata.round_mode == RoundMode::CAST_NONE || metadata.round_mode == RoundMode::CAST_RINT) &&
+            metadata.saturation_mode == SaturationMode::ON) {
+            path.op_params = "CAST_RINT_SAT_ON_normal";
+        } else if (metadata.round_mode == RoundMode::CAST_TRUNC && metadata.saturation_mode == SaturationMode::OFF) {
+            path.op_params = "CAST_TRUNC_SAT_OFF_normal";
+        } else {
             return false;
-    }
-}
-
-inline fit::ShapePath ResolveShapePath(const CostModelInput& input, int64_t valid_cols)
-{
-    if (input.a5_shape_path_hint == A5VfShapePathHint::Path1D) {
-        return fit::ShapePath::Path1D;
-    }
-    if (input.a5_shape_path_hint == A5VfShapePathHint::Path2D) {
-        return fit::ShapePath::Path2D;
-    }
-
-    // Standalone formula callers do not carry Tile template metadata. Preserve
-    // the historical inference used by the fit tests in that case.
-    if (IsA5ScalarVfOp(input.op)) {
-        return valid_cols == input.cols ? fit::ShapePath::Path1D : fit::ShapePath::Path2D;
-    }
-    if (input.rows == 1 || valid_cols == input.cols) {
-        return fit::ShapePath::Path1D;
-    }
-    return fit::ShapePath::Path2D;
-}
-
-inline std::string_view ResolveDefaultVfImplKind(PtoOpcode op, fit::ShapePath shape_path)
-{
-    if (op == PtoOpcode::TCVT) {
-        return (shape_path == fit::ShapePath::Path1D) ? "NO_POST_UPDATE" : "POST_UPDATE";
-    }
-    if (op == PtoOpcode::TSEL) {
-        return (shape_path == fit::ShapePath::Path1D) ? "NO_POST_UPDATE" : "DEFAULT";
-    }
-    return (shape_path == fit::ShapePath::Path1D) ? "POST_UPDATE" : "NO_POST_UPDATE";
-}
-
-inline std::string_view ResolveVfImplKind(PtoOpcode op, VFImplKind vf_impl_kind, fit::ShapePath shape_path)
-{
-    switch (vf_impl_kind) {
-        case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
-            return "NO_POST_UPDATE";
-        case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            return "NO_POST_UPDATE";
-        case VFImplKind::VFIMPL_1D_POST_UPDATE:
-            return "POST_UPDATE";
-        case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            return "POST_UPDATE";
-        case VFImplKind::VFIMPL_DEFAULT:
-        default:
-            return ResolveDefaultVfImplKind(op, shape_path);
-    }
-}
-
-struct VfCurveContext {
-    int64_t valid_rows_i = 0;
-    int64_t valid_cols_i = 0;
-    std::string_view op_key;
-    fit::ShapePath shape_path = fit::ShapePath::Path1D;
-    std::string_view src_dtype;
-    std::string_view dst_dtype = "none";
-    std::string_view op_params;
-    uint64_t elements_per_repeat = 0;
-};
-
-inline bool TryInitVfCurveContext(const CostModelInput& input, VfCurveContext& context)
-{
-    context.valid_rows_i = input.valid_rows > 0 ? input.valid_rows : input.rows;
-    context.valid_cols_i = input.valid_cols > 0 ? input.valid_cols : input.cols;
-    if (context.valid_rows_i <= 0 || context.valid_cols_i <= 0) {
-        return false;
-    }
-
-    context.op_key = PtoOpcodeToKey(input.op);
-    if (context.op_key.empty()) {
-        return false;
-    }
-    context.shape_path = ResolveShapePath(input, context.valid_cols_i);
-    context.src_dtype = DTypeToKey(input.dtype);
-    context.op_params = input.a5_op_params;
-    return !context.src_dtype.empty();
-}
-
-inline bool TryResolveVfOpParams(const CostModelInput& input, VfCurveContext& context)
-{
-    if (input.op == PtoOpcode::TCVT) {
-        context.dst_dtype = DTypeToKey(input.dst_dtype);
-        if (context.op_params.empty()) {
-            context.op_params =
-                (input.round_mode == RoundMode::CAST_NONE && input.saturation_mode == SaturationMode::ON) ?
-                    std::string_view("CAST_RINT_SAT_ON_normal") :
-                    CvtOpParams(input.round_mode, input.saturation_mode);
         }
-    } else if (context.op_params.empty()) {
-        context.op_params = DefaultOpParams(input.op);
     }
-    return !context.dst_dtype.empty();
+    const bool oneD = path.implementation == A5VfTemplate::OneDPostUpdate ||
+                      path.implementation == A5VfTemplate::OneDNoPostUpdate;
+    return TryGetA5CvtElementsPerRepeat(
+        path.src_dtype, path.dst_dtype,
+        oneD ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D,
+        path.elements_per_repeat);
 }
 
-inline bool TryResolveElementsPerRepeat(const CostModelInput& input, VfCurveContext& context)
+// TSEL is not ordinary Binary: its fitted variant also depends on repeat parity.
+inline bool SelectA5SelectCostmodelPath(
+    const A5TileOpOptions& options, const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
 {
-    if (input.op == PtoOpcode::TCVT) {
-        return TryGetA5CvtElementsPerRepeat(
-            context.src_dtype, context.dst_dtype, context.shape_path, context.elements_per_repeat);
-    }
-    return TryGetA5ElementsPerRepeat(input.dtype, context.elements_per_repeat);
-}
-
-inline void ResolveLoopCounts(
-    const VfCurveContext& context, uint64_t& loop_count, uint64_t& outer_iter, uint64_t& inner_iter,
-    uint64_t& tail_count)
-{
-    const uint64_t valid_rows = static_cast<uint64_t>(context.valid_rows_i);
-    const uint64_t valid_cols = static_cast<uint64_t>(context.valid_cols_i);
-    if (context.shape_path == fit::ShapePath::Path1D) {
-        inner_iter = CeilDivU64(valid_rows * valid_cols, context.elements_per_repeat);
-        outer_iter = 1;
-        loop_count = inner_iter;
-        tail_count = (valid_rows * valid_cols) % context.elements_per_repeat;
-        return;
-    }
-    inner_iter = CeilDivU64(valid_cols, context.elements_per_repeat);
-    outer_iter = valid_rows;
-    loop_count = outer_iter * inner_iter;
-    tail_count = valid_cols % context.elements_per_repeat;
-}
-
-inline bool TryResolveTselOpParams(const CostModelInput& input, uint64_t inner_iter, VfCurveContext& context)
-{
-    if (input.op != PtoOpcode::TSEL) {
-        return true;
-    }
-    if (context.op_params.empty()) {
-        context.op_params = TselOpParams(input.dtype, context.shape_path, inner_iter);
-    }
-    return !context.op_params.empty();
-}
-
-inline bool BuildVfCurveKeyAndLoopCount(
-    const CostModelInput& input, fit::VfCurveKey& key, uint64_t& loop_count, uint64_t& outer_iter, uint64_t& inner_iter,
-    uint64_t& tail_count)
-{
-    VfCurveContext context;
-    if (!TryInitVfCurveContext(input, context) || !TryResolveVfOpParams(input, context) ||
-        !TryResolveElementsPerRepeat(input, context) || context.elements_per_repeat == 0) {
+    if (metadata.tile_count < 3 || !InitA5ExecutionPath("TSEL", options, metadata, path) ||
+        !TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
         return false;
     }
-
-    ResolveLoopCounts(context, loop_count, outer_iter, inner_iter, tail_count);
-    const auto tail_kind = tail_count == 0 ? fit::TailKind::Full : fit::TailKind::Tail;
-    if (!TryResolveTselOpParams(input, inner_iter, context)) {
-        return false;
+    const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 3);
+    path.implementation = contiguous ? A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::TwoDDefault;
+    if (metadata.vf_impl_kind != VFImplKind::VFIMPL_DEFAULT) {
+        path.implementation = SelectA5BinaryTemplate(contiguous, metadata.vf_impl_kind);
     }
-
-    key = fit::VfCurveKey{
-        context.op_key,
-        context.src_dtype,
-        context.dst_dtype,
-        context.shape_path,
-        ResolveVfImplKind(input.op, input.vf_impl_kind, context.shape_path),
-        tail_kind,
-        context.op_params,
-    };
+    if (path.op_params.empty()) {
+        if (path.src_dtype == "fp32") {
+            const uint64_t elems = contiguous ? path.valid_rows * path.valid_cols : path.valid_cols;
+            const uint64_t repeats = (elems + path.elements_per_repeat - 1) / path.elements_per_repeat;
+            path.op_params = contiguous ? (repeats % 2 == 0 ? "TSel_b32_even" : "TSel_b32_odd") : "TSel_b32";
+        } else if (path.src_dtype == "fp16" || path.src_dtype == "int8") {
+            path.op_params = "TSel_b16_8";
+        } else {
+            return false;
+        }
+    }
     return true;
 }
 
-inline bool TryEstimateA5VfCycles(const CostModelInput& input, uint64_t& cycles)
+// Routing only. Each family owns all implementation-selection decisions.
+inline bool SelectA5TileOpPath(
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
+    A5VfExecutionPath& path)
 {
-    fit::VfCurveKey key{};
-    uint64_t loop_count = 0;
-    uint64_t outer_iter = 0;
-    uint64_t inner_iter = 0;
-    uint64_t tail_count = 0;
-    if (!BuildVfCurveKeyAndLoopCount(input, key, loop_count, outer_iter, inner_iter, tail_count)) {
-        return false;
+    if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
+        return SelectA5BinaryCostmodelPath(opcode, options, metadata, path);
     }
-
-    const fit::VfFormulaParam* param = nullptr;
-    if (!fit::TryLookupVfFormulaParam(key, param)) {
-        return false;
+    if (opcode == "TDIVS" || opcode == "TMINS" || opcode == "TNEG") {
+        return SelectA5ScalarCostmodelPath(opcode, options, metadata, path);
     }
-
-    cycles = fit::EvalVfFormula(*param, loop_count, outer_iter, inner_iter, tail_count);
-    return true;
+    if (opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT" || opcode == "TRECIP") {
+        return SelectA5UnaryCostmodelPath(opcode, options, metadata, path);
+    }
+    if (opcode == "TCVT") {
+        return SelectA5ConvertCostmodelPath(options, metadata, path);
+    }
+    if (opcode == "TSEL") {
+        return SelectA5SelectCostmodelPath(options, metadata, path);
+    }
+    return false;
 }
 
-} // namespace pto::mocker::lightweight::a5
+// Thin wrapper bridge: collect metadata, select once, evaluate the selected path.
+inline uint64_t EstimateA5TileOpCycles(
+    const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
+{
+    const A5TileOpMetadata metadata = BuildA5TileOpMetadata(first_tile, rest_tiles...);
+    A5VfExecutionPath path;
+    uint64_t cycles = 0;
+    if (!SelectA5TileOpPath(opcode, options, metadata, path) ||
+        !lightweight::a5::fit::TryEstimateSelectedVfCycles(path, cycles)) {
+        std::fprintf(stderr,
+                     "[costmodel][A5] Unsupported TileOp %s: dtype=%s, valid=%lldx%lld, options=%.*s\n",
+                     opcode, metadata.first_tile_dtype.c_str(),
+                     static_cast<long long>(metadata.valid_rows), static_cast<long long>(metadata.valid_cols),
+                     static_cast<int>(options.op_params.size()), options.op_params.empty() ? "" : options.op_params.data());
+        throw std::runtime_error("Unsupported A5 Vector costmodel prediction");
+    }
+    return cycles;
+}
 
-#endif
+} // namespace pto::mocker

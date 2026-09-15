@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
+#include <pto/costmodel/trace.hpp>
 #include <pto/costmodel/perf_sim/recorder.hpp>
 
 namespace pto::mocker::a5::sync {
