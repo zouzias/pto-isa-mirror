@@ -26,9 +26,21 @@ inline void ffts_cross_core_sync(auto srcPipe, auto msg)
 }
 inline void pto_costmodel_pipe_barrier(auto pipe)
 {
+    constexpr uint64_t kVectorDrainCycles = 16;
     ::pto::perf_sim::SyncRecorder::Barrier(pipe);
+    const bool drainsVector =
+        pipe == PIPE_V && (!::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::VECTOR) ||
+                           !::pto::mocker::IsPipeQueueEmpty(::pto::mocker::evaluator::PipeKey::UB_TO_UB));
+    if (pipe == PIPE_V) {
+        // COPY_UBUF_TO_UBUF is executed by the vector-side datapath in the
+        // tilesim CCE scheduler, so PIPE_V also closes this queue.
+        FlushPipeTail(::pto::mocker::evaluator::PipeKey::UB_TO_UB);
+    }
     FlushTailsForPipe(pipe);
-    const uint64_t cycles = EstimateConstCycles();
+    // tilesim 910B1 charges the 16-cycle drain only when PIPE_V has
+    // outstanding vector work. Empty and non-vector barriers are ordering
+    // operations and do not consume a standalone vector drain.
+    const uint64_t cycles = drainsVector ? kVectorDrainCycles : 0;
     ::pto::mocker::RecordCceCall("pipe_barrier", cycles, pipe);
 }
 inline void set_atomic_add()
@@ -151,12 +163,9 @@ inline void set_va_reg_sb(auto vaReg, auto addrArray)
 }
 inline void set_vector_mask(auto mask0, auto mask1)
 {
-    // A full-mask restore (SetFullVecMaskByDType -> -1,-1) signals norm mode; any
-    // partial/count mask (SetVectorCount -> 0,n; SetContinuousMask for cols<epr ->
-    // 0,(1<<n)-1) signals count-mode dispatch. Signed -1 normalizes to all-ones
-    // under uint64 conversion, so this matches regardless of the literal's type.
-    const bool full_mask = (static_cast<uint64_t>(mask0) == ~0ULL) && (static_cast<uint64_t>(mask1) == ~0ULL);
-    ::pto::mocker::SetVectorCountMode(!full_mask);
+    // Mask register contents do not select count/normal mode. That state is
+    // controlled exclusively by set_mask_count/set_mask_norm. In particular,
+    // SetContinuousMask writes a bit mask while remaining in normal mode.
     const uint64_t cycles = EstimateConstCycles();
     ::pto::mocker::RecordCceCall("set_vector_mask", cycles, mask0, mask1);
 }

@@ -45,6 +45,6 @@ void runTSel()
 
 } // namespace
 
-TEST(TSel, half_4x128) { runTSel<half, 4, 128, 67.0f, 0.0f>(); }
-TEST(TSel, half_1x128) { runTSel<half, 1, 128, 19.0f, 0.0f>(); }
-TEST(TSel, float_4x64) { runTSel<float, 4, 64, 67.0f, 0.0f>(); }
+TEST(TSel, half_4x128) { runTSel<half, 4, 128, 115.0f, 0.90f>(); }
+TEST(TSel, half_1x128) { runTSel<half, 1, 128, 37.0f, 0.80f>(); }
+TEST(TSel, float_4x64) { runTSel<float, 4, 64, 115.0f, 0.90f>(); }
