@@ -13,13 +13,12 @@
 
 from __future__ import annotations
 
-import argparse
 import csv
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CSV_PATH = SCRIPT_DIR / "formula_params.csv"
-
+OUT_PATH = SCRIPT_DIR / "formula_params_generated.hpp"
 EXPECTED_HEADER = ["op", "dtype", "cols", "slope", "bias"]
 
 DTYPE_MAP = {"fp32": "FormulaParamDType::Fp32", "fp16": "FormulaParamDType::Fp16", "any": "FormulaParamDType::Any"}
@@ -132,13 +131,9 @@ def _render_generated_header(rows: list[tuple[str, str, str, str, str]]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True, help="Generated header in the build directory")
-    output = parser.parse_args().output
-    output.parent.mkdir(parents=True, exist_ok=True)
     rows = _load_formula_rows()
     content = _render_generated_header(rows)
-    output.write_text(content, encoding="utf-8")
+    OUT_PATH.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":

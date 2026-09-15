@@ -72,9 +72,6 @@ function(pack_built_in)
       COMPONENT pto-isa
   )
 
-  include("${CMAKE_CURRENT_SOURCE_DIR}/include/pto/costmodel/cmake/pto_formula_params.cmake")
-  pto_install_formula_params("${CMAKE_SYSTEM_PROCESSOR}-linux/include")
-
   set(pto_source ${CMAKE_CURRENT_SOURCE_DIR}/include)
   install(DIRECTORY ${pto_source}/
       DESTINATION ${CMAKE_SYSTEM_PROCESSOR}-linux/include
@@ -82,8 +79,6 @@ function(pack_built_in)
       FILE_PERMISSIONS
       OWNER_READ OWNER_WRITE
       GROUP_READ GROUP_EXECUTE
-      REGEX "/costmodel/(a2a3|a5)/formula_costmodel/.*\\.(csv|py)$" EXCLUDE
-      REGEX "/formula_costmodel/formula_params_generated.hpp$" EXCLUDE
       REGEX "include/README\\.md$" EXCLUDE
       REGEX "include/README_zh\\.md$" EXCLUDE
       REGEX "include/pto/README\\.md$" EXCLUDE

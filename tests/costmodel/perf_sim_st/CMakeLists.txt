@@ -124,8 +124,4 @@ if (APPLE)
     endif()
 endif()
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/../../../include/pto/costmodel/cmake/pto_formula_params.cmake")
-pto_prepare_formula_params(_formula_target)
-link_libraries("${_formula_target}")
-
 add_subdirectory(testcase)

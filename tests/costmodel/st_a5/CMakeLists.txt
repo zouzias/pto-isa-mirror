@@ -2,6 +2,7 @@
 # Verify supported A5 TileOp formula predictions without device intrinsics.
 #
 # Standalone CMake project. Build and run with:
+#   python3 include/pto/costmodel/a5/formula_costmodel/gen_formula_params_header.py
 #   cmake -S tests/costmodel/st_a5 -B tests/costmodel/st_a5/build -DCMAKE_BUILD_TYPE=Debug
 #   cmake --build tests/costmodel/st_a5/build -j 4
 #   ctest --test-dir tests/costmodel/st_a5/build --output-on-failure

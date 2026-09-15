@@ -478,7 +478,7 @@ def parse_arguments():
     parser.add_argument("-t", "--testcase", help="Run a single testcase (e.g. tadd). Default: run all built bin.",)
     parser.add_argument(
         "--suite",
-        choices=["st", "st_fit", "st_a5_fit"],
+        choices=["st", "st_fit", "st_a5", "st_a5_fit"],
         default="st",
         help="Test suite to run.",
     )
@@ -540,11 +540,40 @@ def run_demo_mode(args, repo_root, cxx, cc) -> int:
     return 0
 
 
+def maybe_generate_formula_params(source_dir: Path, repo_root: Path, verbose: bool) -> None:
+    if source_dir.name not in {"st", "st_fit", "st_a5", "st_a5_fit", "perf_sim_st"}:
+        return
+
+    # lightweight_costmodel.hpp includes both backends, so clean builds need both
+    # generated headers even when the selected suite only exercises one backend.
+    for costmodel_dir in ("a2a3", "a5"):
+        gen_script = (
+            repo_root.parent
+            / "include"
+            / "pto"
+            / "costmodel"
+            / costmodel_dir
+            / "formula_costmodel"
+            / "gen_formula_params_header.py"
+        )
+        if not gen_script.exists():
+            raise RuntimeError(f"formula params generator not found: {gen_script}")
+
+        run_command(
+            [sys.executable, str(gen_script)],
+            cwd=repo_root.parent,
+            title=f"[STEP] {source_dir.name}: generate {costmodel_dir} formula_params_generated.hpp",
+            verbose=verbose,
+        )
+
+
 def run_test_mode(args, repo_root, cxx, cc) -> int:
     source_dir = repo_root / "costmodel" / args.suite
     if not source_dir.exists():
         logging.error(f"error: not found costmodel dir: {source_dir}")
         return 2
+
+    maybe_generate_formula_params(source_dir, repo_root, args.verbose)
 
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")
     if not build_dir.is_absolute():
