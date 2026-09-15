@@ -381,3 +381,73 @@ TEST_F(TEXTRACTTest, ZNPlacementMatchesFractalOrder)
         }
     }
 }
+
+template <typename T, bool Compact, bool Dynamic>
+void TestMatToLeftSmallM()
+{
+    using Src = Tile<TileType::Mat, T, 32, 96, BLayout::ColMajor, 32, 80, SLayout::RowMajor, 512>;
+    using Dst = Tile<
+        TileType::Left, T, 16, 64, BLayout::RowMajor, Dynamic ? DYNAMIC : 4, Dynamic ? DYNAMIC : 64, SLayout::RowMajor,
+        512, PadValue::Null, Compact ? CompactMode::Normal : CompactMode::Null>;
+    Src src;
+    Dst dst;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst);
+    CpuTileTestUtils::FillAll(src, T(-7));
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::SetValue(src, r, c, T(r * 3 + c % 23));
+        }
+    }
+    for (int m : {1, 2, 4, 8, 15, 16}) {
+        for (int k : {1, 15, 16, 17, 63, 64}) {
+            if constexpr (Dynamic) {
+                dst.SetValidShape(m, k);
+            } else if (m != 4 || k != 64) {
+                continue;
+            }
+            for (int r : {0, 1, 4, 8, 12, 15, 16, 28}) {
+                if (r + m > src.GetValidRow()) {
+                    continue;
+                }
+                for (int c : {0, 16}) {
+                    SCOPED_TRACE(testing::Message() << "M=" << m << " K=" << k << " row=" << r << " col=" << c);
+                    TEXTRACT(dst, src, r, c);
+                    for (int i = 0; i < m; ++i) {
+                        for (int j = 0; j < k; ++j) {
+                            EXPECT_FLOAT_EQ(
+                                static_cast<float>(CpuTileTestUtils::GetValue(dst, i, j)),
+                                static_cast<float>(CpuTileTestUtils::GetValue(src, r + i, c + j)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_F(TEXTRACTTest, MatToLeftSmallMHalfStatic)
+{
+    TestMatToLeftSmallM<half, false, false>();
+    TestMatToLeftSmallM<half, true, false>();
+}
+
+TEST_F(TEXTRACTTest, MatToLeftSmallMHalfDynamic)
+{
+    TestMatToLeftSmallM<half, false, true>();
+    TestMatToLeftSmallM<half, true, true>();
+}
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TEXTRACTTest, MatToLeftSmallMBfloatStatic)
+{
+    TestMatToLeftSmallM<bfloat16_t, false, false>();
+    TestMatToLeftSmallM<bfloat16_t, true, false>();
+}
+
+TEST_F(TEXTRACTTest, MatToLeftSmallMBfloatDynamic)
+{
+    TestMatToLeftSmallM<bfloat16_t, false, true>();
+    TestMatToLeftSmallM<bfloat16_t, true, true>();
+}
+#endif

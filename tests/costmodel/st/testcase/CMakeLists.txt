@@ -45,6 +45,7 @@ set(ALL_TESTCASES
     tdivs
     texp
     textract
+    textract_small_m
     tgather
     tload
     tloadconv

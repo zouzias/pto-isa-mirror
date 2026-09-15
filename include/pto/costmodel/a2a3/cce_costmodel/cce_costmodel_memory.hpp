@@ -205,6 +205,16 @@ inline void load_cbuf_to_ca(auto dst, auto src, auto baseIdx, auto repeat, auto 
         ::pto::mocker::evaluator::PipeKey::L1_TO_L0A, "load_cbuf_to_ca", cycles, dst, src, baseIdx, repeat, srcStride,
         sid, transpose);
 }
+inline void load_cbuf_to_ca(
+    auto dst, auto src, auto baseIdx, auto repeat, auto srcStride, auto dstStride, auto sid, auto transpose,
+    auto addrCalMode)
+{
+    const uint64_t cycles = EstimateBandwidthCycles(
+        repeat * 16 * ::pto::mocker::evaluator::kBlockBytes, ::pto::mocker::evaluator::PipeKey::L1_TO_L0A);
+    ::pto::mocker::RecordCceCall(
+        ::pto::mocker::evaluator::PipeKey::L1_TO_L0A, "load_cbuf_to_ca", cycles, dst, src, baseIdx, repeat, srcStride,
+        dstStride, sid, transpose, addrCalMode);
+}
 inline void load_cbuf_to_ca_transpose(
     auto dst, auto src, auto baseIdx, auto repeat, auto srcStride, auto dstStride, auto addrCalMode, auto dstFracStride)
 {
