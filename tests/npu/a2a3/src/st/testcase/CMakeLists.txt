@@ -151,6 +151,7 @@ tpartargmin
 tpow
 tpows
 tsel
+tpartsel
 tsub
 tsubs
 trem
