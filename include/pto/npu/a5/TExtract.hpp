@@ -22,6 +22,78 @@ constexpr bool is_textract_supported_type = std::disjunction_v<
     std::is_same<T, float4_e2m1x2_t>, std::is_same<T, float4_e1m2x2_t>, std::is_same<T, float8_e8m0_t>>;
 
 template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL constexpr bool IsTExtractMatToLeftSmallM()
+{
+    using T = typename SrcTileData::DType;
+    return SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left &&
+           (std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t>) &&
+           std::is_same_v<T, typename DstTileData::DType> && !SrcTileData::isRowMajor &&
+           SrcTileData::SFractal == SLayout::RowMajor && SrcTileData::SFractalSize == CUBE_BLOCK_SIZE &&
+           !DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor &&
+           DstTileData::SFractalSize == CUBE_BLOCK_SIZE && SrcTileData::Rows % FRACTAL_NZ_ROW == 0 &&
+           DstTileData::Rows == FRACTAL_NZ_ROW &&
+           (DstTileData::Compact == CompactMode::Null || DstTileData::Compact == CompactMode::Normal) &&
+           (DstTileData::ValidRow == DYNAMIC || (DstTileData::ValidRow > 0 && DstTileData::ValidRow < FRACTAL_NZ_ROW));
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractMatToLeftSmallM(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint32_t validRow, uint32_t validCol, uint32_t srcValidRow, uint32_t srcValidCol)
+{
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(half);
+    constexpr uint32_t fractalElements = CUBE_BLOCK_SIZE / sizeof(half);
+    constexpr uint16_t srcStride = SrcTileData::Rows / FRACTAL_NZ_ROW;
+    static_assert(SrcTileData::Cols % c0Size == 0, "srcCol must be aligned to C0Size");
+    static_assert(DstTileData::Cols % c0Size == 0, "dstCol must be aligned to C0Size");
+    using T = typename SrcTileData::DType;
+    __cbuf__ T* srcAddr = (__cbuf__ T*)__cce_get_tile_ptr(src);
+    __ca__ T* dstAddr = (__ca__ T*)__cce_get_tile_ptr(dst);
+    // Keep dynamic selection within one tile function so auto mode sees one write to Left.
+    if constexpr (DstTileData::ValidRow == DYNAMIC) {
+        if (validRow == 0 || validRow >= FRACTAL_NZ_ROW) {
+            uint8_t mStep = DstTileData::Compact == CompactMode::Normal ? CeilDivision(validRow, FRACTAL_NZ_ROW) :
+                                                                          DstTileData::Rows / FRACTAL_NZ_ROW;
+            uint8_t kStep = DstTileData::Compact == CompactMode::Normal ? CeilDivision(validCol, c0Size) :
+                                                                          DstTileData::Cols / c0Size;
+            load_cbuf_to_ca(
+                dstAddr, srcAddr, indexRow / FRACTAL_NZ_ROW, indexCol / c0Size, mStep, kStep, srcStride, mStep, 0);
+            return;
+        }
+    }
+    PTO_ASSERT(validRow > 0 && validRow < FRACTAL_NZ_ROW, "TEXTRACT Mat->Left: valid rows must be in [1, 15].");
+    PTO_ASSERT(validCol > 0 && validCol <= DstTileData::Cols, "TEXTRACT Mat->Left: invalid valid columns.");
+    PTO_ASSERT(indexRow + validRow <= srcValidRow, "TEXTRACT Mat->Left: window exceeds source valid rows.");
+    PTO_ASSERT(indexCol + validCol <= srcValidCol, "TEXTRACT Mat->Left: window exceeds source valid columns.");
+    PTO_ASSERT(indexCol % c0Size == 0, "TEXTRACT Mat->Left: indexCol must be C0-aligned.");
+    uint32_t copyCols =
+        DstTileData::Compact == CompactMode::Normal ? CeilDivision(validCol, c0Size) * c0Size : DstTileData::Cols;
+    PTO_ASSERT(indexCol + copyCols <= SrcTileData::Cols, "TEXTRACT Mat->Left: copy exceeds source physical columns.");
+    // load2d reads a full 512B fractal even when only its first few rows are valid.
+    uint64_t srcEndBytes = static_cast<uint64_t>(indexCol + copyCols - c0Size) * SrcTileData::Rows * sizeof(half) +
+                           static_cast<uint64_t>(indexRow) * BLOCK_BYTE_SIZE + CUBE_BLOCK_SIZE;
+    PTO_ASSERT(
+        srcEndBytes <= static_cast<uint64_t>(SrcTileData::Numel) * sizeof(half),
+        "TEXTRACT Mat->Left: full-fractal read exceeds source storage; reserve physical column padding.");
+    PTO_ASSERT(copyCols <= DstTileData::Cols, "TEXTRACT Mat->Left: copy exceeds destination storage.");
+    uint32_t srcOffset = static_cast<uint32_t>(indexCol / c0Size) * SrcTileData::Rows * c0Size +
+                         static_cast<uint32_t>(indexRow) * c0Size;
+    srcAddr += srcOffset;
+    uint32_t remaining = copyCols / c0Size;
+    if constexpr (DstTileData::Cols / c0Size <= REPEAT_MAX) {
+        load_cbuf_to_ca(dstAddr, srcAddr, 0, 0, 1, static_cast<uint8_t>(remaining), srcStride, 1, 0);
+        return;
+    }
+    while (remaining > 0) {
+        uint8_t repeat = remaining > REPEAT_MAX ? static_cast<uint8_t>(REPEAT_MAX) : static_cast<uint8_t>(remaining);
+        load_cbuf_to_ca(dstAddr, srcAddr, 0, 0, 1, repeat, srcStride, 1, 0);
+        srcAddr += static_cast<uint32_t>(repeat) * srcStride * fractalElements;
+        dstAddr += static_cast<uint32_t>(repeat) * fractalElements;
+        remaining -= repeat;
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TExtractToLeft(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(
@@ -93,7 +165,11 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_
             std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
         "TExtract: Destination and Source tile data types must be the same");
 
-    if constexpr (DstTileData::Loc == TileType::Left) {
+    if constexpr (IsTExtractMatToLeftSmallM<DstTileData, SrcTileData>()) {
+        TExtractMatToLeftSmallM<DstTileData, SrcTileData>(
+            dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(),
+            src.GetValidCol());
+    } else if constexpr (DstTileData::Loc == TileType::Left) {
         TExtractToLeft(dst, src, indexRow, indexCol);
     } else if constexpr (DstTileData::Loc == TileType::Right) {
         TExtractToRight(dst, src, indexRow, indexCol);

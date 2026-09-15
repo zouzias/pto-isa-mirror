@@ -75,9 +75,97 @@ __tf__ AICORE void TExtractToAVector(
 }
 
 template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL constexpr bool IsTExtractMatToLeftSmallM()
+{
+    using T = typename SrcTileData::DType;
+    return SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left &&
+           (std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t>) &&
+           std::is_same_v<T, typename DstTileData::DType> && !SrcTileData::isRowMajor &&
+           SrcTileData::SFractal == SLayout::RowMajor && SrcTileData::SFractalSize == CUBE_BLOCK_SIZE &&
+           DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor &&
+           DstTileData::SFractalSize == CUBE_BLOCK_SIZE && SrcTileData::Rows % FRACTAL_NZ_ROW == 0 &&
+           DstTileData::Rows == FRACTAL_NZ_ROW &&
+           (DstTileData::Compact == CompactMode::Null || DstTileData::Compact == CompactMode::Normal) &&
+           (DstTileData::ValidRow == DYNAMIC || (DstTileData::ValidRow > 0 && DstTileData::ValidRow < FRACTAL_NZ_ROW));
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractMatToLeftSmallM(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t indexRow,
+    uint16_t indexCol, uint32_t validRow, uint32_t validCol, uint32_t srcValidRow, uint32_t srcValidCol)
+{
+    constexpr uint32_t c0Size = BLOCK_BYTE_SIZE / sizeof(half);
+    constexpr uint32_t fractalElements = CUBE_BLOCK_SIZE / sizeof(half);
+    constexpr uint16_t srcStride = SrcTileData::Rows / FRACTAL_NZ_ROW;
+    static_assert(SrcTileData::Cols % c0Size == 0, "srcCol must be aligned to C0Size");
+    static_assert(DstTileData::Cols % c0Size == 0, "dstCol must be aligned to C0Size");
+    __cbuf__ half* srcAddr = (__cbuf__ half*)__cce_get_tile_ptr(src);
+    __ca__ half* dstAddr = (__ca__ half*)__cce_get_tile_ptr(dst);
+    // Keep dynamic selection within one tile function so auto mode sees one write to Left.
+    if constexpr (DstTileData::ValidRow == DYNAMIC) {
+        if (validRow == 0 || validRow >= FRACTAL_NZ_ROW) {
+            PTO_ASSERT(
+                indexRow + DstTileData::Rows <= SrcTileData::Rows,
+                "The sum of indexRow and dstRow should be less than srcRow!");
+            PTO_ASSERT(
+                indexCol + DstTileData::Cols <= SrcTileData::Cols,
+                "The sum of indexCol and dstCol should be less than srcCol!");
+            PTO_ASSERT(indexRow % FRACTAL_NZ_ROW == 0, "indexRow must be aligned to 16");
+            PTO_ASSERT(indexCol % c0Size == 0, "indexCol must be aligned to C0Size");
+            if constexpr (DstTileData::Compact == CompactMode::Normal) {
+                TExtractToANonTransposeCompact<half, half, SrcTileData::Rows, SrcTileData::Cols>(
+                    dstAddr, srcAddr, indexRow, indexCol, CeilDivision(validRow, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW,
+                    CeilDivision(validCol, c0Size) * c0Size);
+            } else {
+                TExtractToANonTranspose<
+                    half, half, SrcTileData::Rows, SrcTileData::Cols, DstTileData::Rows, DstTileData::Cols>(
+                    dstAddr, srcAddr, indexRow, indexCol);
+            }
+            return;
+        }
+    }
+    PTO_ASSERT(validRow > 0 && validRow < FRACTAL_NZ_ROW, "TEXTRACT Mat->Left: valid rows must be in [1, 15].");
+    PTO_ASSERT(validCol > 0 && validCol <= DstTileData::Cols, "TEXTRACT Mat->Left: invalid valid columns.");
+    PTO_ASSERT(indexRow + validRow <= srcValidRow, "TEXTRACT Mat->Left: window exceeds source valid rows.");
+    PTO_ASSERT(indexCol + validCol <= srcValidCol, "TEXTRACT Mat->Left: window exceeds source valid columns.");
+    PTO_ASSERT(indexCol % c0Size == 0, "TEXTRACT Mat->Left: indexCol must be C0-aligned.");
+    uint32_t copyCols =
+        DstTileData::Compact == CompactMode::Normal ? CeilDivision(validCol, c0Size) * c0Size : DstTileData::Cols;
+    PTO_ASSERT(indexCol + copyCols <= SrcTileData::Cols, "TEXTRACT Mat->Left: copy exceeds source physical columns.");
+    // load2d reads a full 512B fractal even when only its first few rows are valid.
+    uint64_t srcEndBytes = static_cast<uint64_t>(indexCol + copyCols - c0Size) * SrcTileData::Rows * sizeof(half) +
+                           static_cast<uint64_t>(indexRow) * BLOCK_BYTE_SIZE + CUBE_BLOCK_SIZE;
+    PTO_ASSERT(
+        srcEndBytes <= static_cast<uint64_t>(SrcTileData::Numel) * sizeof(half),
+        "TEXTRACT Mat->Left: full-fractal read exceeds source storage; reserve physical column padding.");
+    PTO_ASSERT(copyCols <= DstTileData::Cols, "TEXTRACT Mat->Left: copy exceeds destination storage.");
+    uint32_t srcOffset = static_cast<uint32_t>(indexCol / c0Size) * SrcTileData::Rows * c0Size +
+                         static_cast<uint32_t>(indexRow) * c0Size;
+    srcAddr += srcOffset;
+    uint32_t remaining = copyCols / c0Size;
+    if constexpr (DstTileData::Cols / c0Size <= REPEAT_MAX) {
+        pto_load_cbuf_to_ca(dstAddr, srcAddr, 0, static_cast<uint8_t>(remaining), srcStride, 0);
+        return;
+    }
+    while (remaining > 0) {
+        uint8_t repeat = remaining > REPEAT_MAX ? static_cast<uint8_t>(REPEAT_MAX) : static_cast<uint8_t>(remaining);
+        pto_load_cbuf_to_ca(dstAddr, srcAddr, 0, repeat, srcStride, 0);
+        srcAddr += static_cast<uint32_t>(repeat) * srcStride * fractalElements;
+        dstAddr += static_cast<uint32_t>(repeat) * fractalElements;
+        remaining -= repeat;
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
+    if constexpr (IsTExtractMatToLeftSmallM<DstTileData, SrcTileData>()) {
+        TExtractMatToLeftSmallM<DstTileData, SrcTileData>(
+            dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow(),
+            src.GetValidCol());
+        return;
+    }
     PTO_ASSERT(
         indexRow + DstTileData::Rows <= SrcTileData::Rows,
         "The sum of indexRow and dstRow should be less than srcRow!");
