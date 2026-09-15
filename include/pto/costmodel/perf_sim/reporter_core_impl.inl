@@ -137,8 +137,7 @@ public:
     static void AccumulateLogicalCoreStats(SimReport &report, uint32_t logical_cores)
     {
         for (uint32_t lc = 0; lc < logical_cores; ++lc) {
-            const auto &records = PtoRecorder::GetForCore(lc);
-            report.instr_count += records.size();
+            report.instr_count += PtoRecorder::GetForCore(lc).size();
             report.sync_count += SyncRecorder::GetForCore(lc).size();
         }
     }
@@ -282,7 +281,6 @@ public:
         os << "Cores        : " << report.num_cores << "\n";
         os << "Instructions : " << report.instr_count << "\n";
         os << "Sync events  : " << report.sync_count << "\n";
-
 
         uint64_t total_cycles =
             (report.num_cores == 1) ? report.timeline.total_cycles : report.multi_timeline.total_cycles;

@@ -8,22 +8,6 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-static std::string EscapeCsvField(const std::string &value)
-{
-    if (value.find_first_of(",\"\r\n") == std::string::npos) {
-        return value;
-    }
-    std::string escaped = "\"";
-    for (const char ch : value) {
-        escaped += ch;
-        if (ch == '"') {
-            escaped += '"';
-        }
-    }
-    escaped += '"';
-    return escaped;
-}
-
 static void WritePipelineSummaryCSV(const std::string &path, const SimReport &report)
 {
     if (!EnsureParentDir(path)) {
@@ -40,9 +24,8 @@ static void WritePipelineSummaryCSV(const std::string &path, const SimReport &re
         << "scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,"
         << "mte3_cycles\n";
 
-
     for (const auto &row : BuildPipelineSummary(report)) {
-        out << EscapeCsvField(report.op_name) << "," << row.core_id << "," << row.unit << "," << row.total_cycles << ","
+        out << report.op_name << "," << row.core_id << "," << row.unit << "," << row.total_cycles << ","
             << row.active_start_cycle << "," << row.active_end_cycle << "," << row.active_cycles << ","
             << row.busy_cycles << "," << row.scalar_cycles << "," << row.mte2_aic_cycles << "," << row.mte2_aiv_cycles
             << "," << row.mte1_cycles << "," << row.cube_cycles << "," << row.fixp_cycles << "," << row.vec_cycles
@@ -229,7 +212,6 @@ static void WriteDependencyDOT(const std::string &path, const SimReport &report)
     out << "  node [shape=box, style=filled, fontsize=8, "
         << "fontname=\"Courier\"];\n";
     out << "  edge [color=\"#888888\", arrowsize=0.6];\n\n";
-
 
     std::unordered_map<event_t, int> signal_to_node;
     auto nodes = BuildDotNodes(report, signal_to_node);
