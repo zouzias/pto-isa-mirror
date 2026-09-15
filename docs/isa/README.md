@@ -69,6 +69,7 @@ Migration guidance:
 - [TPRELU](TPRELU.md) - Elementwise PReLU (parametric ReLU) with a per-element slope tile.
 - [TCVT](TCVT.md) - Elementwise type conversion with a specified rounding mode.
 - [TSEL](TSEL.md) - Select between two tiles using a mask tile (per-element selection).
+- [TPARTSEL](TPARTSEL.md) - Masked selection with independent data tile types.
 - [TRSQRT](TRSQRT.md) - Elementwise reciprocal square root.
 - [TSQRT](TSQRT.md) - Elementwise square root.
 - [TEXP](TEXP.md) - Elementwise exponential.

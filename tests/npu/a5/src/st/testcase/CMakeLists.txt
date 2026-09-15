@@ -175,6 +175,7 @@ set(ALL_TESTCASES
     tcmps
     tmov_acc2vec
     tsel
+    tpartsel
     tsels
     trsqrt
     tsqrt

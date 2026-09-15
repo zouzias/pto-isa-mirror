@@ -290,6 +290,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "1" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsel -g TSELTest.case1
     fi
+    if [ -z "$ST_PART" ] || [ "$ST_PART" = "3" ]; then
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartsel -g TPARTSELTest.float_tail
+    fi
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "1" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmins
     fi
@@ -787,6 +790,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tand
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tor
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartsel
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmins
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsub
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tgatherb
@@ -1000,6 +1004,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowprod -g TROWPRODTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trsqrt -g TRSQRTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsel -g TSELTest.case1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartsel -g TPARTSELTest.float_tail
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsels -g TSELSTest.case_uint8_uint8_2x32_2x32_2x32_2x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsels -g TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tshl -g TSHLTest.case1
@@ -1177,6 +1182,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trsqrt
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsel
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsels
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tpartsel
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tshl
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tshr
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsort32
