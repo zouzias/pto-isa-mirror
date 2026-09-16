@@ -9,15 +9,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #ifndef PTO_INSTR_HPP
 #define PTO_INSTR_HPP
+#include <cstdint>
+#include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 // Intentionally reuse the common PTO include guard so this header can act as a
 // drop-in replacement when <pto/pto-inst.hpp> selects it for __COSTMODEL.
 
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
+#include "pto/common/fifo.hpp"
 #include "pto/common/tassign_check.hpp"
+#if !defined(PTO_NPU_ARCH_A5)
 #include "pto/common/utils.hpp"
+#endif
 #include "pto/common/pto_instr_impl.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
@@ -25,6 +32,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/perf_sim/tile_dep_tracker.hpp"
 #include "pto/costmodel/perf_sim/latency.hpp"
 #include "pto/costmodel/perf_sim/costmodel_provider.hpp"
+#include "pto/costmodel/a5/vf_costmodel.hpp"
 namespace perf_sim = ::pto::perf_sim;
 #endif
 #if !defined(PTO_COMM_NOT_SUPPORTED)
@@ -64,8 +72,8 @@ inline void InjectTileCycles(T& obj)
     }
 }
 
-// Record one PTO instruction to the pipeline simulator.
-// Called from MAP_INSTR_IMPL after the _IMPL call and InjectTileCycles.
+// Record one PTO instruction to the pipeline simulator. A2/A3 calls this after
+// running _IMPL; A5 calls it directly at the TileOp boundary.
 
 // Helper: try to extract dimensions + dtype from a single tile; returns true if successful.
 template <typename T>
@@ -106,7 +114,8 @@ inline void ExtractFirstTileInfo(int& rows, int& cols, std::string& dtype, T&& f
     }
 }
 
-inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_tiles)
+// Shared record format: no A5 selection options enter this function.
+inline void RecordInstrWithCycles(const char* opcode, uint64_t cycles, auto&& first_tile, auto&&... rest_tiles)
 {
     // Look up pipeline stage from opcode name and tile types (TLOAD/TSTORE need tile routing)
     perf_sim::PipeStage stage = perf_sim::ResolvePipeStageArgs(opcode, first_tile, rest_tiles...);
@@ -128,13 +137,38 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     // For TSTORE(dst=GlobalData, src=TileData), this skips GlobalData and uses TileData.
     ExtractFirstTileInfo(r.rows, r.cols, r.dtype, first_tile, rest_tiles...);
 
+    r.estimated_cycles = cycles;
+
+    perf_sim::CvSyncRecorder::ApplyPending(opcode, r);
+    perf_sim::PtoRecorder::Record(std::move(r));
+}
+
+inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_tiles)
+{
+    int rows = 0;
+    int cols = 0;
+    std::string dtype;
+    ExtractFirstTileInfo(rows, cols, dtype, first_tile, rest_tiles...);
     const uint64_t measured_cycles = GetLastPtoInstrCycles();
-    const uint64_t estimated_cycles =
-        perf_sim::EstimateInstrCycles(opcode, r.rows, r.cols, r.dtype.empty() ? "unknown" : r.dtype.c_str());
     uint64_t cycles = measured_cycles;
-    const bool useEstimatedCycles = cycles == 0 ||
-                                    (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles) ||
-                                    (std::string_view(opcode) == "TDIVS" && (r.dtype == "int16" || r.dtype == "int32"));
+    uint64_t estimated_cycles = 0;
+    bool useEstimatedCycles = (cycles == 0);
+
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
+    const bool compareWithEstimate = std::string_view(opcode) == "TROWEXPAND" ||
+                                     (std::string_view(opcode) == "TDIVS" && (dtype == "int16" || dtype == "int32"));
+#else
+    const bool compareWithEstimate = false;
+#endif
+
+    if (useEstimatedCycles || compareWithEstimate) {
+        estimated_cycles = perf_sim::EstimateInstrCycles(opcode, rows, cols, dtype.empty() ? "unknown" : dtype.c_str());
+#if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
+        useEstimatedCycles = useEstimatedCycles ||
+                             (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles) ||
+                             (std::string_view(opcode) == "TDIVS" && (dtype == "int16" || dtype == "int32"));
+#endif
+    }
     if (useEstimatedCycles) {
         cycles = estimated_cycles;
         auto& trace = ::pto::mocker::GetMutableTrace();
@@ -142,11 +176,37 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
             trace.executed_pto.back().total_cycles = cycles;
         }
     }
-    r.estimated_cycles = cycles;
-
-    perf_sim::CvSyncRecorder::ApplyPending(opcode, r);
-    perf_sim::PtoRecorder::Record(std::move(r));
+    RecordInstrWithCycles(opcode, cycles, first_tile, rest_tiles...);
 }
+
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+// A5 predicts before recording; the recorder only consumes the resulting cycles.
+inline void ExecuteA5TileOp(const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
+{
+    const auto stage = perf_sim::ResolvePipeStageArgs(opcode, first_tile, rest_tiles...);
+    // Auxiliary TileOps have no timing model; do not invent scalar cycles or records.
+    if (stage == perf_sim::PipeStage::Scalar) {
+        return;
+    }
+    uint64_t cycles;
+    if (stage == perf_sim::PipeStage::Vector) {
+        cycles = EstimateA5TileOpCycles(opcode, options, first_tile, rest_tiles...);
+    } else {
+        int rows = 0;
+        int cols = 0;
+        std::string dtype;
+        ExtractFirstTileInfo(rows, cols, dtype, first_tile, rest_tiles...);
+        // Keep the existing non-vector approximation without invoking A2/A3 formulas.
+        cycles = perf_sim::FallbackCycles(opcode, rows, cols);
+    }
+    PtoInstrScope scope(opcode);
+    scope.Finish();
+    auto& trace = GetMutableTrace();
+    trace.executed_pto.back().total_cycles = cycles;
+    RecordInstrWithCycles(opcode, cycles, first_tile, rest_tiles...);
+    InjectTileCycles(first_tile);
+}
+#endif
 
 // Scalar-stage overload for instructions with no tile arguments
 // Scalar-stage ops don't register as data producers (per TileDepTracker design),
@@ -173,8 +233,6 @@ inline void RecordInstrFromFirst(OpcodeStr&& opcode_str, Args&&... args)
     // Forward only tile-type arguments to RecordInstr
     ::pto::mocker::RecordInstr(std::forward<OpcodeStr>(opcode_str), std::forward<Args>(args)...);
 }
-
-//
 
 // TPUSH: Record push event to CV ring buffer
 // pipe: TPipe<FlagID, DirType, ...> or TMPipe<FlagID, ...> instance
@@ -213,6 +271,12 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
 #else
 #define PTO_FORWARD_L2HINT_TO_IMPL 1
 #endif
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+#define MAP_INSTR_IMPL(API, ...) ::pto::mocker::ExecuteA5TileOp(#API, {}, __VA_ARGS__)
+#define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) \
+    ::pto::mocker::ExecuteA5TileOp(#API, ::pto::mocker::A5OptionsFromTemplate TEMPLATE_ARGS(), __VA_ARGS__)
+#define RECORD_INSTR_ONLY(API, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
+#else
 #define MAP_INSTR_IMPL(API, ...)                                     \
     do {                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                   \
@@ -238,9 +302,15 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
         ::pto::mocker::InjectTileCycles(PTO_FIRST_ARG(__VA_ARGS__)); \
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                   \
     } while (0)
+#endif
 
-// TPUSH/TPOP special macro: records FFTS sync events for ring buffer
-// First arg is Pipe, second is Tile, third is tile index
+// A5 does not model FIFO operations; preserve the original A2/A3 path below.
+#if defined(PTO_NPU_ARCH_A5)
+#define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...) ((void)0)
+#define MAP_INSTR_IMPL_T_TPUSH(API, TEMPLATE_ARGS, ...) ((void)0)
+#define MAP_INSTR_IMPL_T_TPOP(API, TEMPLATE_ARGS, ...) ((void)0)
+#else
+// First arg is Pipe, second is Tile, third is tile index.
 #define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...)                                                  \
     do {                                                                                                             \
         ::pto::mocker::PtoInstrScope _scope(#API);                                                                   \
@@ -281,9 +351,7 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                                                               \
     } while (0)
 
-#define PTO_FIRST_ARG(first, ...) first
-#define PTO_SECOND_ARG(_first, second, ...) second
-#define PTO_TEMPLATE_ARGS(...) <__VA_ARGS__>
+#endif // A5 FIFO stubs / A2/A3 implementation
 #endif
 
 namespace pto {
@@ -292,21 +360,53 @@ namespace detail {
 template <Op OpCode>
 PTO_INTERNAL void PtoSyncOp()
 {
+#if !defined(PTO_NPU_ARCH_A5)
     TSYNC_IMPL<OpCode>();
+#endif
 }
 
 template <typename... WaitEvents>
 PTO_INTERNAL void PtoWaitEvents(WaitEvents&... events)
 {
+#if !defined(PTO_NPU_ARCH_A5)
     WaitAllEvents(events...);
+#else
+    ((void)events, ...);
+#endif
 }
 
 } // namespace detail
 
+// A5 formula prediction does not model synchronization.
+#if defined(PTO_NPU_ARCH_A5)
+template <Op OpCode>
+PTO_INST void TSYNC()
+{}
+
+template <typename... WaitEvents>
+PTO_INST void TSYNC(WaitEvents&...)
+{}
+
+template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
+PTO_INST void SYNCALL()
+{}
+
+template <
+    SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
+    std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
+PTO_INST void SYNCALL(GlobalData&, int32_t = 0)
+{}
+#endif
+
 template <typename T, typename AddrType>
 PTO_INST void TASSIGN(T& obj, AddrType addr)
 {
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+    // Preserve address identity without predicting or recording a setup operation.
+    TASSIGN_IMPL(obj, addr);
+#else
     MAP_INSTR_IMPL(TASSIGN, obj, addr);
+#endif
 }
 
 // Compile-time address overload: TASSIGN<Addr>(tile)
@@ -570,21 +670,24 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&.
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TROWEXPANDDIV, dst, src0, src1);
+    MAP_INSTR_IMPL_T(TROWEXPANDDIV, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1);
     return RecordEvent{};
 }
 
 template <
-    typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp, typename... WaitEvents>
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent
 TROWEXPANDDIV(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileDataTmp& tmp, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TROWEXPANDDIV, dst, src0, src1, tmp);
+    MAP_INSTR_IMPL_T(TROWEXPANDDIV, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1, tmp);
     return RecordEvent{};
 }
 
@@ -696,37 +799,62 @@ TROWEXPANDEXPDIF(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileD
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents,
+    std::enable_if_t<all_events_v<WaitEvents...>, int> = 0>
 PTO_INST RecordEvent TRSQRT(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TRSQRT, dst, src);
+    MAP_INSTR_IMPL_T(TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
     return RecordEvent{};
 }
 
 template <
-    typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents,
-    typename = std::void_t<typename TileDataTmp::DType>>
+    auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
+    typename... WaitEvents, std::enable_if_t<is_tile_data_v<TileDataTmp> && all_events_v<WaitEvents...>, int> = 0>
 PTO_INST RecordEvent TRSQRT(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TRSQRT, dst, src, tmp);
+    MAP_INSTR_IMPL_T(TRSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, tmp);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = SqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TSQRT(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TSQRT, dst, src);
+    MAP_INSTR_IMPL_T(TSQRT, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = ExpAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TEXP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TEXP, dst, src);
+    MAP_INSTR_IMPL_T(TEXP, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
+    return RecordEvent{};
+}
+
+template <
+    auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename ExpTile, typename TmpTile,
+    typename... WaitEvents>
+PTO_INST RecordEvent TPOW(DstTile& dst, BaseTile& base, ExpTile& exp, TmpTile& tmp, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TPOW, PTO_TEMPLATE_ARGS(PrecisionType), dst, base, exp, tmp);
+    return RecordEvent{};
+}
+
+template <
+    auto PrecisionType = PowAlgorithm::DEFAULT, typename DstTile, typename BaseTile, typename TmpTile,
+    typename... WaitEvents>
+PTO_INST RecordEvent
+TPOWS(DstTile& dst, BaseTile& base, typename DstTile::DType exp, TmpTile& tmp, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TPOWS, PTO_TEMPLATE_ARGS(PrecisionType), dst, base, exp, tmp);
     return RecordEvent{};
 }
 
@@ -781,12 +909,13 @@ TSUBS(TileDataDst& dst, TileDataSrc& src0, typename TileDataSrc::DType scalar, W
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent
 TDIVS(TileDataDst& dst, TileDataSrc& src0, typename TileDataSrc::DType scalar, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, src0, scalar);
+    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, scalar);
     return RecordEvent{};
 }
 
@@ -799,30 +928,34 @@ TMULS(TileDataDst& dst, TileDataSrc& src0, typename TileDataSrc::DType scalar, W
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent
 TDIVS(TileDataDst& dst, typename TileDataDst::DType scalar, TileDataSrc& src0, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, scalar, src0);
+    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(PrecisionType), dst, scalar, src0);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = FmodSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent
 TFMODS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TFMODS, dst, src, scalar);
+    MAP_INSTR_IMPL_T(TFMODS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, scalar);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = RemSAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename TileDataTmp,
+    typename... WaitEvents>
 PTO_INST RecordEvent
-TREMS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events)
+TREMS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, TileDataTmp& tmp, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TREMS, dst, src, scalar);
+    MAP_INSTR_IMPL_T(TREMS, PTO_TEMPLATE_ARGS(PrecisionType), dst, src, scalar, tmp);
     return RecordEvent{};
 }
 
@@ -936,11 +1069,13 @@ PTO_INST RecordEvent TNEG(TileDataDst& dst, TileDataSrc& src, WaitEvents&... eve
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPANDDIV(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TCOLEXPANDDIV, dst, src0, src1);
+    MAP_INSTR_IMPL_T(TCOLEXPANDDIV, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1);
     return RecordEvent{};
 }
 
@@ -1001,19 +1136,24 @@ TDEQUANT(TileDataDst& dst, TileDataSrc& src, TileDataPara& scale, TileDataPara& 
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TREM(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
+template <
+    auto PrecisionType = RemAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent
+TREM(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileDataTmp& tmp, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TREM, dst, src0, src1);
+    MAP_INSTR_IMPL_T(TREM, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1, tmp);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <
+    auto PrecisionType = FmodAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename... WaitEvents>
 PTO_INST RecordEvent TFMOD(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TFMOD, dst, src0, src1);
+    MAP_INSTR_IMPL_T(TFMOD, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1);
     return RecordEvent{};
 }
 
@@ -1299,11 +1439,13 @@ PTO_INST RecordEvent TSTORE(GlobalData& dst, TileData& src, FpTileData& fp, Wait
 }
 #endif
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <
+    auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+    typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TDIV, dst, src0, src1);
+    MAP_INSTR_IMPL_T(TDIV, PTO_TEMPLATE_ARGS(PrecisionType), dst, src0, src1);
     return RecordEvent{};
 }
 
@@ -1349,19 +1491,21 @@ TXOR(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, TileDataTmp& tmp,
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = LogAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TLOG(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TLOG, dst, src);
+    MAP_INSTR_IMPL_T(TLOG, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
     return RecordEvent{};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <
+    auto PrecisionType = RecipAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TRECIP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, 1, src);
+    MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(static_cast<DivAlgorithm>(PrecisionType)), dst, 1, src);
     return RecordEvent{};
 }
 
@@ -1950,11 +2094,13 @@ PTO_INST RecordEvent TTRI(TileData& dst, int diagonal, WaitEvents&... events)
     return RecordEvent{};
 }
 
-template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, typename... WaitEvents>
+template <
+    typename DstTileData, typename SrcTileData, MaskPattern maskPattern = MaskPattern::P1111,
+    auto gatherType = GatherAxis::GATHER_ROW, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-    MAP_INSTR_IMPL_T(TGATHER, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, maskPattern), dst, src);
+    MAP_INSTR_IMPL_T(TGATHER, PTO_TEMPLATE_ARGS(DstTileData, SrcTileData, maskPattern, gatherType), dst, src);
     return RecordEvent{};
 }
 

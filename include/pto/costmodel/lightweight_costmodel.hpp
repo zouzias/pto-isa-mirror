@@ -18,7 +18,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/type.hpp>
 #include <pto/costmodel/a2a3/formula_costmodel/formula_backend_transfer.hpp>
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 #include <pto/costmodel/a2a3/formula_costmodel/formula_backend_compute.hpp>
+#endif
 #include <pto/costmodel/arch_config.hpp>
 
 namespace pto::mocker::lightweight {
@@ -90,21 +92,13 @@ enum class DType : uint8_t {
 
 using MemLayout = ::pto::Layout;
 using RoundMode = ::pto::RoundMode;
-using SaturationMode = ::pto::SaturationMode;
 using TransferTileType = fit::TransferTileType;
-using VFImplKind = ::pto::VFImplKind;
-
-enum class CostModelArch : uint8_t {
-    A2A3,
-    A5,
-};
 
 struct CostModelInput {
     PtoOpcode op;
     DType dtype;
     int64_t rows;
     int64_t cols;
-    CostModelArch arch = CostModelArch::A2A3;
 
     DType dtype2 = DType::Float;
     int64_t k = 0;
@@ -126,12 +120,6 @@ struct CostModelInput {
 
     TransferTileType tile_type = TransferTileType::Unknown;
     int64_t data_size = 0;
-
-    int64_t valid_rows = 0;
-    int64_t valid_cols = 0;
-    VFImplKind vf_impl_kind = VFImplKind::VFIMPL_DEFAULT;
-    SaturationMode saturation_mode = SaturationMode::ON;
-    std::string_view a5_op_params{};
 };
 
 struct CostModelResult {
@@ -143,10 +131,6 @@ struct PredictRuntimeConfig {
     long double frequency_mhz = 0.0L;
     evaluator::BandwidthTable bandwidth_bytes_per_us{};
 };
-
-namespace a5 {
-inline bool TryEstimateA5VfCycles(const CostModelInput& input, uint64_t& cycles);
-}
 
 inline constexpr const char* DTypeToString(DType dtype)
 {
@@ -228,7 +212,7 @@ inline bool WarnAndFallbackToZero(const CostModelInput& input, CostModelResult& 
 {
     result.cycles = 0.0;
     result.latency_us = 0.0L;
-    std::cerr << "[WARN] lightweight::EstimateCycles fallback to 0 cycles: " << reason
+    std::cerr << "[costmodel][WARN] lightweight::EstimateCycles fallback to 0 cycles: " << reason
               << ", op=" << PtoOpcodeToString(input.op) << ", dtype=" << DTypeToString(input.dtype)
               << ", rows=" << input.rows << ", cols=" << input.cols
               << ", tile_type=" << TransferTileTypeToString(input.tile_type) << ", data_size=" << input.data_size
@@ -245,6 +229,7 @@ inline PredictRuntimeConfig GetDefaultPredictRuntimeConfig()
     };
 }
 
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 template <typename FpType>
 inline bool TryEstimateSupportedCycles(PtoOpcode op, uint64_t rows, uint64_t cols, uint64_t& cycles)
 {
@@ -298,6 +283,7 @@ inline bool TryEstimateMatmulCycles(const CostModelInput& input, uint64_t& cycle
             return false;
     }
 }
+#endif
 
 inline bool TryGetDTypeSizeBytes(DType dtype, uint64_t& bytes)
 {
@@ -363,18 +349,6 @@ inline bool TryEstimateTransferLatency(
     return true;
 }
 
-inline bool TryEstimateA5Cycles(
-    const CostModelInput& input, const PredictRuntimeConfig& predict_config, CostModelResult& result)
-{
-    uint64_t cycles = 0;
-    if (!a5::TryEstimateA5VfCycles(input, cycles)) {
-        return WarnAndFallbackToZero(input, result, "unsupported A5 VF curve key");
-    }
-    result.cycles = static_cast<double>(cycles);
-    result.latency_us = evaluator::CyclesToUs(cycles, predict_config.frequency_mhz);
-    return true;
-}
-
 inline bool TryEstimateTransferCycles(
     const CostModelInput& input, const PredictRuntimeConfig& predict_config, CostModelResult& result)
 {
@@ -384,6 +358,7 @@ inline bool TryEstimateTransferCycles(
     return WarnAndFallbackToZero(input, result, "unsupported transfer op/tile_type/data_size/dtype");
 }
 
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 inline bool TryEstimateMatmulCyclesWithResult(
     const CostModelInput& input, const PredictRuntimeConfig& predict_config, CostModelResult& result)
 {
@@ -425,13 +400,12 @@ inline bool TryEstimateElementwiseCycles(
     result.latency_us = evaluator::CyclesToUs(cycles, predict_config.frequency_mhz);
     return true;
 }
+#endif
 
 inline bool EstimateCycles(
     const CostModelInput& input, const PredictRuntimeConfig& predict_config, CostModelResult& result)
 {
-    if (input.arch == CostModelArch::A5) {
-        return TryEstimateA5Cycles(input, predict_config, result);
-    }
+#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
     if (input.op == PtoOpcode::TLOAD || input.op == PtoOpcode::TSTORE || input.op == PtoOpcode::TMOV) {
         return TryEstimateTransferCycles(input, predict_config, result);
     }
@@ -439,6 +413,9 @@ inline bool EstimateCycles(
         return TryEstimateMatmulCyclesWithResult(input, predict_config, result);
     }
     return TryEstimateElementwiseCycles(input, predict_config, result);
+#else
+    return WarnAndFallbackToZero(input, result, "A2/A3 formula backend is unavailable in an A5 build");
+#endif
 }
 
 inline bool EstimateCycles(const CostModelInput& input, CostModelResult& result)
@@ -455,7 +432,5 @@ inline CostModelResult EstimateCycles(const CostModelInput& input)
 }
 
 } // namespace pto::mocker::lightweight
-
-#include <pto/costmodel/a5/vf_costmodel.hpp>
 
 #endif

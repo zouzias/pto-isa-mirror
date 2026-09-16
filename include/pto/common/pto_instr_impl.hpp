@@ -13,7 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#if !defined(PTO_NPU_ARCH_A5) || !defined(__COSTMODEL)
 #include <pto/common/arch_cce_intrinsic.hpp>
+#endif
 
 #ifdef PTO_NPU_ARCH_A2A3
 #ifdef __COSTMODEL
@@ -192,8 +194,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __COSTMODEL
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
-#include "pto/npu/a5/SyncAll.hpp"
-#include "pto/npu/a5/TAdd.hpp"
 #else
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"

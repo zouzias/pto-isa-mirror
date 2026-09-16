@@ -12,16 +12,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TARGET_DIR="${SCRIPT_DIR}/.."
 
-# ST/ST_FIT/ST_A5_FIT 测试用例目录
+# ST/ST_FIT/ST_A5 测试用例目录
 ST_TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st/testcase"
 ST_FIT_TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st_fit/testcase"
-ST_A5_FIT_TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st_a5_fit/testcase"
+ST_A5_TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st_a5/testcase"
 
 # perf_sim_st 测试用例目录（独立二进制，不走 Python runner）
 PERF_SIM_ST_DIR="${SCRIPT_DIR}/costmodel/perf_sim_st/build/bin"
 
-# 需要执行的测试用例列表（留空则自动发现 ST/ST_FIT/ST_A5_FIT 下所有子目录）
-# 用法：TESTCASES=("tsub" "time_predict" "st_a5_fit:tadd_fit")
+# 需要执行的测试用例列表（留空则自动发现 ST/ST_FIT/ST_A5 下所有子目录）
+# 用法：TESTCASES=("tsub" "time_predict" "st_a5:tadd")
 TESTCASES=()
 
 # 测试命令的固定参数
@@ -81,8 +81,8 @@ is_case_in_suite() {
         base_dir="${ST_TESTCASE_DIR}"
     elif [ "${suite}" = "st_fit" ]; then
         base_dir="${ST_FIT_TESTCASE_DIR}"
-    elif [ "${suite}" = "st_a5_fit" ]; then
-        base_dir="${ST_A5_FIT_TESTCASE_DIR}"
+    elif [ "${suite}" = "st_a5" ]; then
+        base_dir="${ST_A5_TESTCASE_DIR}"
     else
         return 1
     fi
@@ -101,7 +101,7 @@ resolve_suite_for_case() {
     local matches=()
     local suite=""
 
-    for suite in "st" "st_fit" "st_a5_fit" "perf_sim_st"; do
+    for suite in "st" "st_fit" "st_a5" "perf_sim_st"; do
         if is_case_in_suite "${suite}" "${testcase}"; then
             matches+=("${suite}")
         fi
@@ -116,20 +116,20 @@ resolve_suite_for_case() {
         error_exit "Testcase '${testcase}' exists in multiple suites: ${matches[*]}. Please use '<suite>:${testcase}'"
     fi
 
-    error_exit "Unknown testcase '${testcase}', not found in st/st_fit/st_a5_fit/perf_sim_st"
+    error_exit "Unknown testcase '${testcase}', not found in st/st_fit/st_a5/perf_sim_st"
 }
 
 auto_discover_testcases() {
     local dir=""
     local suite=""
 
-    for suite in "st" "st_fit" "st_a5_fit"; do
+    for suite in "st" "st_fit" "st_a5"; do
         if [ "${suite}" = "st" ]; then
             dir="${ST_TESTCASE_DIR}"
         elif [ "${suite}" = "st_fit" ]; then
             dir="${ST_FIT_TESTCASE_DIR}"
         else
-            dir="${ST_A5_FIT_TESTCASE_DIR}"
+            dir="${ST_A5_TESTCASE_DIR}"
         fi
 
         if [ ! -d "${dir}" ]; then
@@ -137,6 +137,7 @@ auto_discover_testcases() {
         fi
 
         while IFS= read -r -d '' subdir; do
+            [ -f "${subdir}/CMakeLists.txt" ] || continue
             append_run_item "${suite}" "$(basename "${subdir}")"
         done < <(find "${dir}" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -print0 | sort -z)
     done
@@ -162,7 +163,7 @@ normalize_manual_testcases() {
     done
 }
 
-# 若 TESTCASES 为空，自动发现 st/st_fit/st_a5_fit 三个目录下所有子目录
+# 若 TESTCASES 为空，自动发现 st/st_fit/st_a5 三个目录下所有子目录
 if [ ${#TESTCASES[@]} -eq 0 ]; then
     auto_discover_testcases
     echo -e "${YELLOW}[INFO] Auto-discovered run items: ${RUN_ITEMS[*]}${NC}"
