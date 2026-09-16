@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TSYNC_CVID_HPP
 #define TSYNC_CVID_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
 
@@ -46,7 +47,7 @@ template <int CV_COMM_SLOT_BYTES = kCvCommSlotBytes, int CV_MAX_CORES = kCvMaxCo
 AICORE inline int TSYNC_CVID(int block_idx, __gm__ uint8_t* cv_comm_buf)
 {
     int comm_slot = block_idx;
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
     PTO_ASSERT(cv_comm_buf != nullptr, "cv_comm_buf must be non-null when CV comm is enabled on cube cores");
     comm_slot = static_cast<int>(get_coreid() & 0x7f);
     comm_slot %= CV_MAX_CORES;
@@ -56,7 +57,7 @@ AICORE inline int TSYNC_CVID(int block_idx, __gm__ uint8_t* cv_comm_buf)
     dcci(comm_slot_ptr, cache_line_t::SINGLE_CACHE_LINE);
     dsb(DSB_DDR);
     ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, CV_COMM_CTRL));
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     static_assert(CV_MAX_CORES > 0, "MAX_CORES must be positive");
     PTO_ASSERT(cv_comm_buf != nullptr, "cv_comm_buf must be non-null when CV comm is enabled on vector cores");
     __gm__ volatile uint32_t* comm_slot_ptr = reinterpret_cast<__gm__ volatile uint32_t*>(
@@ -66,9 +67,9 @@ AICORE inline int TSYNC_CVID(int block_idx, __gm__ uint8_t* cv_comm_buf)
     comm_slot = static_cast<int>(comm_slot_ptr[0]);
 #endif
 #ifdef _DEBUG
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
     cce::printf("Core %d Cube Block %d, comm_slot %d\n", get_coreid(), block_idx, comm_slot);
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     cce::printf(
         "Core %d Vec Block %d, SubBlock %d, comm_slot %d\n", get_coreid(), block_idx, int(get_subblockid()), comm_slot);
 #endif

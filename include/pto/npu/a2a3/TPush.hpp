@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TPUSH_HPP
 #define TPUSH_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/fifo.hpp>
 #include <pto/common/fixpipe.hpp>
 #include <pto/npu/a2a3/TStore.hpp>
@@ -128,19 +129,19 @@ struct TPipe {
         {
             // Cube waits for Vector to free buffer
             if constexpr (is_c2v) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 wait_flag_dev(FlagIDPlusOne);
 #endif
             } else if constexpr (is_v2c) {
                 // Vector waits for Cube to free buffer
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 wait_flag_dev(FlagIDPlusOne);
 #endif
             } else if constexpr (is_both) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 wait_flag_dev(FlagIDPlusOne);
 #endif
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 static_assert(
                     (FlagIDPlusThree <= MAX_SYC_ID),
                     "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
@@ -153,19 +154,19 @@ struct TPipe {
         {
             if constexpr (is_c2v) {
                 // Cube produces, Vector consumes
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 ffts_cross_core_sync(PIPE_FIX, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID));
 #endif
             } else if constexpr (is_v2c) {
                 // Vector produces, Cube consumes
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 ffts_cross_core_sync(PIPE_MTE3, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID));
 #endif
             } else if constexpr (is_both) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 ffts_cross_core_sync(PIPE_FIX, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagID));
 #endif
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 ffts_cross_core_sync(PIPE_MTE3, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusTwo));
 #endif
             }
@@ -245,18 +246,18 @@ struct TPipe {
                 TileProd::Loc == TileType::Acc || TileProd::Loc == TileType::Vec || TileProd::Loc == TileType::Ctrl,
                 "Fix: TPUSH has unsupported tile type!");
             if constexpr (is_c2v) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 pushAcc2GMFiFo<TileProd>(fifo, tile);
 #endif
             } else if constexpr (is_v2c) {
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 pushVec2GMFiFo<TileProd, Split>(fifo, tile, subBlockId);
 #endif
             } else if constexpr (is_both) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 pushAcc2GMFiFo<TileProd>(fifo, tile);
 #endif
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 pushVec2GMFiFo<TileProd, Split>(fifo, tile, subBlockId);
 #endif
             } else if constexpr (is_v2c_ctrl) {
@@ -312,11 +313,11 @@ struct TPipe {
                 TileProd::Loc == TileType::Acc,
                 "Fix: the push interface with cast quant mode only support Acc tile type!");
             if constexpr (is_c2v) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 pushAcc2GMFiFo<TileProd, TConfig>(fifo, tile);
 #endif
             } else if constexpr (is_both) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 pushAcc2GMFiFo<TileProd, TConfig>(fifo, tile);
 #endif
             }
@@ -361,10 +362,10 @@ struct TPipe {
             // Vector waits for Cube
             // Or Cube waits for Vector
             if constexpr (is_both) {
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 wait_flag_dev(FlagID);
 #endif
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 wait_flag_dev(FlagIDPlusTwo);
 #endif
             } else {
@@ -383,18 +384,18 @@ struct TPipe {
             // Vector frees buffer for Cube
             // Or Cube frees buffer for Vector
             if constexpr (is_c2v) { // Vec consumer frees buffer for Cube
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             } else if constexpr (is_v2c) { // cube consumer frees buffer for vec
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             } else if constexpr (is_both) {
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 static_assert(
                     (FlagIDPlusThree <= MAX_SYC_ID),
                     "Fix: With Both direction, FlagID + 3 must be less than 15 due to hardware limit.");
@@ -503,10 +504,10 @@ struct TPipe {
         // (`v2c_ring_buf = GM_SLOT_BUFFER + SLOT_NUM * SLOT_SIZE`).
         if constexpr (is_both) {
             constexpr int V2C_ENTRY_OFFSET = static_cast<int>(SlotNum) * static_cast<int>(SlotSize);
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
             cons.setEntryOffset(V2C_ENTRY_OFFSET); // Cube consumes V2C
 #endif
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
             prod.setEntryOffset(V2C_ENTRY_OFFSET); // Vector produces V2C
 #endif
         }
@@ -660,12 +661,12 @@ struct TMPipe {
         {
             // Cube waits for Vector to free buffer
             if constexpr (is_c2v) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 wait_flag_dev(FlagIDPlusOne);
 #endif
             } else {
                 // Vector waits for Cube to free buffer
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 wait_flag_dev(FlagIDPlusOne);
 #endif
             }
@@ -808,13 +809,13 @@ struct TMPipe {
         {
             // Vector frees buffer for Cube Or Cube frees buffer for Vector
             if constexpr (is_c2v) {
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
                 // Vec consumer frees buffer for Cube
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             } else { // is_v2c
                      // cube consumer frees buffer for vec
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
                 ffts_cross_core_sync(PIPE_MTE2, getFFTSMsgCfg(TSyncCVMode::CV_CORES_SYNC, FlagIDPlusOne));
 #endif
             }

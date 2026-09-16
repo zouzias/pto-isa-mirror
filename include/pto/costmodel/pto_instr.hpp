@@ -545,6 +545,17 @@ TSEL(TileData& dst, MaskTile& selMask, TileData& src0, TileData& src1, TmpTile& 
     return RecordEvent{};
 }
 
+template <
+    typename TileDataDst, typename MaskTile, typename TileDataSrc0, typename TileDataSrc1, typename TmpTile,
+    typename... WaitEvents>
+PTO_INST RecordEvent TPARTSEL(
+    TileDataDst& dst, MaskTile& selMask, TileDataSrc0& src0, TileDataSrc1& src1, TmpTile& tmp, WaitEvents&... events)
+{
+    ::pto::detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL(TSEL, dst, selMask, src0, src1, tmp);
+    return RecordEvent{};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TTRANS(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events)
 {

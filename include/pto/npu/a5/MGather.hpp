@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef MGATHER_HPP
 #define MGATHER_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/utils.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/common/pto_tile.hpp>
@@ -249,7 +250,7 @@ __tf__ AICORE void MGatherGm2L1RowImpl(
     typename DstTile::TileDType __out__ dst, __gm__ const T* tablePtr, __gm__ const TIdx* idxPtr, uint32_t validRow,
     uint32_t validCol, uint32_t tableRows, uint32_t tableRowStride)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileCols = DstTile::Cols;
@@ -293,7 +294,7 @@ __tf__ AICORE void MGatherGm2L1ElemImpl(
     typename DstTile::TileDType __out__ dst, __gm__ const T* tablePtr, __gm__ const TIdx* idxPtr, __gm__ T* scratchPtr,
     uint32_t validRow, uint32_t validCol, uint32_t tableSize, uint32_t idxRowStride)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ T* dstPtr = (__cbuf__ T*)__cce_get_tile_ptr(dst);
     constexpr uint32_t kC0 = C0_SIZE_BYTE / sizeof(T);
     constexpr uint32_t kTileRows = DstTile::Rows;
@@ -384,7 +385,7 @@ __tf__ AICORE void MGatherGm2L1ElemSimtImpl(
     constexpr uint32_t kTileRows = DstTile::Rows;
     constexpr uint32_t kTileCols = DstTile::Cols;
     constexpr uint32_t kTileNumel = kTileRows * kTileCols;
-#if defined(__DAV_VEC__)
+#if defined(PTO_COMPILE_VEC)
     if (get_subblockid() == 0) {
         const uint32_t needed = (kTileNumel + mgather_cfg::WARP_SIZE - 1u) / mgather_cfg::WARP_SIZE;
         const uint32_t launchWarps =
@@ -407,7 +408,7 @@ __tf__ AICORE void MGatherGm2L1ElemSimtImpl(
         set_intra_block(PIPE_S, SyncId);
     }
 #endif
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     __cbuf__ T* dstPtr = (__cbuf__ T*)__cce_get_tile_ptr(dst);
     wait_intra_block(PIPE_MTE2, SyncId);
     const uint32_t lenBurst = kTileNumel * sizeof(T);

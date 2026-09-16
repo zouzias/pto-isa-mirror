@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <type_traits>
 
+#include <pto/common/arch_macro.hpp>
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
@@ -1680,7 +1681,7 @@ public:
 
     PTO_INTERNAL bool GetKAligned() const { return isKAligned_; }
     PTO_INTERNAL void SetKAligned(bool isKAligned) { isKAligned_ = isKAligned; }
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     /*
         TF32 precision implementation varies across different chips:
         - a2/a3 : e8m11(1 sign bits, 8 exponent bits, 11 mantissa bits)

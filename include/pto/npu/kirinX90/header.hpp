@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define float8_e8m0_t int8_t
 #define float4_e2m1x2_t int64_t
 #define float4_e1m2x2_t int64_t
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 #include "pto/npu/kirinX90/common.hpp"
@@ -31,7 +32,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/SetFmatrix.hpp"
 #include "pto/npu/a2a3/SetImg2colRpt.hpp"
 #include "pto/npu/a2a3/SetImg2colPadding.hpp"
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
 #include "pto/npu/kirinX90/TCvt.hpp"
 #endif
 #include "pto/npu/a2a3/TAssign.hpp"

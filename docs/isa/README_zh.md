@@ -69,6 +69,7 @@
 - [TPRELU](TPRELU_zh.md) - 带逐元素斜率 Tile 的逐元素参数化 ReLU (PReLU)。
 - [TCVT](TCVT_zh.md) - 带指定舍入模式的逐元素类型转换。
 - [TSEL](TSEL_zh.md) - 使用掩码 Tile 在两个 Tile 之间进行选择（逐元素选择）。
+- [TPARTSEL](TPARTSEL_zh.md) - 允许不同数据 Tile 类型的掩码选择。
 - [TRSQRT](TRSQRT_zh.md) - 逐元素倒数平方根。
 - [TSQRT](TSQRT_zh.md) - 逐元素平方根。
 - [TEXP](TEXP_zh.md) - 逐元素指数运算。

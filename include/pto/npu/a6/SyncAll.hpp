@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_NPU_A6_SYNCALL_HPP
 #define PTO_NPU_A6_SYNCALL_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/npu/a6/TSync.hpp>
 
 namespace pto {
@@ -34,27 +35,27 @@ PTO_INTERNAL void SYNCALL_IMPL()
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
     if constexpr (CoreType == SyncCoreType::AIVOnly) {
-#if defined(__DAV_VEC__)
+#if defined(PTO_COMPILE_VEC)
         ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x0, SYNC_AIV_ONLY_ALL));
         wait_flag_dev(PIPE_S, SYNC_AIV_ONLY_ALL);
 #endif
         return;
     } else if constexpr (CoreType == SyncCoreType::AICOnly) {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
         ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x0, SYNC_AIC_FLAG));
         wait_flag_dev(PIPE_S, SYNC_AIC_FLAG);
 #endif
         return;
     }
 
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     wait_intra_block(PIPE_S, SYNC_AIV_FLAG);
     wait_intra_block(PIPE_S, SYNC_AIV_FLAG + SYNC_FLAG_ID_MAX);
     ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x0, SYNC_AIC_FLAG));
     wait_flag_dev(PIPE_S, SYNC_AIC_FLAG);
     set_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
     set_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG + SYNC_FLAG_ID_MAX);
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     set_intra_block(PIPE_MTE3, SYNC_AIV_FLAG);
     wait_intra_block(PIPE_S, SYNC_AIC_AIV_FLAG);
 #endif

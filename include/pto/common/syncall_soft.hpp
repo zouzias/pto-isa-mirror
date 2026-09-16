@@ -72,7 +72,7 @@ PTO_INTERNAL int32_t SYNCALL_GET_MIX_AIV_RATIO()
 {
 #if defined(__MIX_CORE_AIV_RATIO__)
     return static_cast<int32_t>(__MIX_CORE_AIV_RATIO__);
-#elif defined(__DAV_VEC__)
+#elif defined(PTO_COMPILE_VEC)
     return static_cast<int32_t>(get_subblockdim());
 #else
     return 1;
@@ -123,7 +123,7 @@ PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
     PTO_STATIC_ASSERT(CoreType == SyncCoreType::Mix, "Software SYNCALL mix overload is for AIC/AIV kernels.");
     pipe_barrier(PIPE_ALL);
 
-#if defined(__DAV_CUBE__) || defined(__DAV_VEC__)
+#if defined(PTO_COMPILE_CUBE) || defined(PTO_COMPILE_VEC)
     const int32_t totalBlocks = (usedCores != 0) ? usedCores : SYNCALL_GET_MIX_PARTICIPANT_COUNT();
     SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
 #else
@@ -139,7 +139,7 @@ PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(__gm__ int32_t* gmWorkspace, int32_t use
 #ifndef __PTO_AUTO__
     pipe_barrier(PIPE_ALL);
 
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
     SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
 #else
@@ -158,7 +158,7 @@ PTO_INTERNAL void SYNCALL_SOFT_IMPL(__gm__ int32_t* gmWorkspace, int32_t usedCor
         CoreType == SyncCoreType::AIVOnly, "Software SYNCALL soft GM overload only supports AIV-only kernels.");
     pipe_barrier(PIPE_ALL);
 
-#if defined(__DAV_VEC__)
+#if defined(PTO_COMPILE_VEC)
     const int32_t totalBlocks = (usedCores != 0) ? usedCores : static_cast<int32_t>(get_block_num());
     SYNCALL_SOFT_ATOMIC_BARRIER(gmWorkspace, totalBlocks);
 #else
