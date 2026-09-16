@@ -152,7 +152,7 @@ inline constexpr uint64_t kElementsPerRepeatB32 = 64;
 inline constexpr uint64_t kElementsPerRepeatB16 = 128;
 inline constexpr uint64_t kElementsPerRepeatB8 = 256;
 
-inline bool TryGetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint64_t& elements_per_repeat)
+inline bool GetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint64_t& elements_per_repeat)
 {
     if (dtype_key == "fp4_e1m2" || dtype_key == "fp4_e2m1") {
         elements_per_repeat = kElementsPerRepeatB8;
@@ -178,7 +178,7 @@ inline bool TryGetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint
     return false;
 }
 
-inline bool TryGetA5CvtElementsPerRepeat(
+inline bool GetA5CvtElementsPerRepeat(
     std::string_view src_dtype, std::string_view dst_dtype, lightweight::a5::fit::ShapePath shape_path, uint64_t& elements_per_repeat)
 {
     if ((src_dtype == "fp16" || src_dtype == "bf16") && dst_dtype == "fp32") {
@@ -186,7 +186,7 @@ inline bool TryGetA5CvtElementsPerRepeat(
         return true;
     }
     if (shape_path == lightweight::a5::fit::ShapePath::Path1D) {
-        return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
+        return GetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
     }
     if ((src_dtype == "fp32" && (dst_dtype == "fp16" || dst_dtype == "bf16" || dst_dtype == "fp8_e4m3" ||
                                  dst_dtype == "fp8_e5m2" || dst_dtype == "hif8")) ||
@@ -195,12 +195,12 @@ inline bool TryGetA5CvtElementsPerRepeat(
         elements_per_repeat = kElementsPerRepeatB16;
         return true;
     }
-    return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
+    return GetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
 }
 
 // Shared layout rule: an explicit 2D version can force a contiguous
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
-inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
+inline void SelectA5Layout(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
 {
     const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                          version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
@@ -217,35 +217,35 @@ inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfFormul
     path.vf_impl_kind = post ? "POST_UPDATE" : "NO_POST_UPDATE";
 }
 
-// TBinOp/TBinSOp share the update-layout rule; callers specify the number of participating Tiles.
-inline bool SelectA5UpdatePath(
+// Common 1D/2D selection; callers specify the number of participating Tiles.
+// Update mode is retained only to match the current formula-table keys.
+inline bool SelectA5ShapePath(
     const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfFormulaInput& path)
 {
     if (required_tiles == 0 || required_tiles >= 32 || metadata.tile_count < required_tiles) {
         return false;
     }
-    SelectA5UpdateLayout(FirstA5TilesUseContiguousPath(metadata, required_tiles), metadata.vf_impl_kind, path);
-    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
+    SelectA5Layout(FirstA5TilesUseContiguousPath(metadata, required_tiles), metadata.vf_impl_kind, path);
+    return GetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
-// TUnaryOp/TRsqrt have a single 2D NoPostUpdate implementation; 1D still honors the update option.
-inline bool SelectA5Fixed2DNoPostPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
+// Both default and high-precision algorithms retain 1D/2D layout selection.
+// The entry point has already copied the precision option into path.op_params.
+inline bool SelectA5PrecisionShapePath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
-    if (metadata.tile_count < 2) {
+    if (!SelectA5ShapePath(metadata, 2, path)) {
         return false;
     }
-    const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
-    if (!contiguous || metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_POST_UPDATE ||
-        metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE) {
-        // TUnaryOp/TRsqrt have one strided implementation, not two update variants.
-        path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
+    if (path.opcode == "TRECIP") {
+        if (path.op_params.empty()) {
+            path.op_params = "default";
+        }
+    } else if (path.opcode != "TDIVS" && path.shape_path == lightweight::a5::fit::ShapePath::Path2D) {
+        // TUnaryOp/TRsqrt have one 2D update variant. Preserve its existing table key;
+        // this is not a separate selector category or a different precision mode.
         path.vf_impl_kind = "NO_POST_UPDATE";
-    } else {
-        path.shape_path = lightweight::a5::fit::ShapePath::Path1D;
-        path.vf_impl_kind = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ?
-                                "NO_POST_UPDATE" : "POST_UPDATE";
     }
-    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
+    return true;
 }
 
 // Conversion has separate dtype-pair, rounding/saturation and repeat-width rules.
@@ -277,7 +277,7 @@ inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& 
             return false;
         }
     }
-    return TryGetA5CvtElementsPerRepeat(
+    return GetA5CvtElementsPerRepeat(
         path.src_dtype, path.dst_dtype, path.shape_path, path.elements_per_repeat);
 }
 
@@ -285,14 +285,14 @@ inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& 
 inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
     if (metadata.tile_count < 3 ||
-        !TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
+        !GetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
         return false;
     }
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 3);
     path.shape_path = contiguous ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D;
     path.vf_impl_kind = contiguous ? "NO_POST_UPDATE" : "DEFAULT";
     if (metadata.vf_impl_kind != VFImplKind::VFIMPL_DEFAULT) {
-        SelectA5UpdateLayout(contiguous, metadata.vf_impl_kind, path);
+        SelectA5Layout(contiguous, metadata.vf_impl_kind, path);
     }
     if (path.op_params.empty()) {
         if (path.src_dtype == "fp32") {
@@ -325,20 +325,15 @@ inline bool SelectA5TileOpPath(
     path.valid_cols = static_cast<uint64_t>(metadata.valid_cols);
 
     if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
-        return SelectA5UpdatePath(metadata, 3, path);
+        return SelectA5ShapePath(metadata, 3, path);
     }
-    if (opcode == "TDIVS" || opcode == "TMINS" || opcode == "TNEG") {
-        return SelectA5UpdatePath(metadata, 2, path);
+    if (opcode == "TMINS" || opcode == "TNEG") {
+        return SelectA5ShapePath(metadata, 2, path);
     }
-    if (opcode == "TRECIP") {
-        if (path.op_params.empty()) {
-            path.op_params = "default";
-        }
-        return SelectA5UpdatePath(metadata, 2, path);
+    if (opcode == "TDIVS" || opcode == "TRECIP" || opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT") {
+        return SelectA5PrecisionShapePath(metadata, path);
     }
-    if (opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT") {
-        return SelectA5Fixed2DNoPostPath(metadata, path);
-    }
+    // Dedicated rules only where dtype conversion or other parameters require them.
     if (opcode == "TCVT") {
         return SelectA5CvtPath(metadata, path);
     }
@@ -356,7 +351,7 @@ inline uint64_t EstimateA5TileOpCycles(
     A5VfFormulaInput path;
     uint64_t cycles = 0;
     if (!SelectA5TileOpPath(opcode, options, metadata, path) ||
-        !lightweight::a5::fit::TryEstimateSelectedVfCycles(path, cycles)) {
+        !lightweight::a5::fit::EstimateA5VfCycles(path, cycles)) {
         std::cerr << "[costmodel][ERROR][A5] Unsupported TileOp: op=" << opcode
                   << ", dtype=" << metadata.first_tile_dtype << ", valid_rows=" << metadata.valid_rows
                   << ", valid_cols=" << metadata.valid_cols << ", options=" << options.op_params << '\n';

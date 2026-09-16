@@ -96,7 +96,7 @@ inline uint64_t EvalVfFormula(
 
 
 // Evaluate an already selected implementation. No opcode-specific dispatch here.
-inline bool TryEstimateSelectedVfCycles(const ::pto::mocker::A5VfFormulaInput& path, uint64_t& cycles)
+inline bool EstimateA5VfCycles(const ::pto::mocker::A5VfFormulaInput& path, uint64_t& cycles)
 {
     if (path.valid_rows == 0 || path.valid_cols == 0 || path.elements_per_repeat == 0) {
         return false;
