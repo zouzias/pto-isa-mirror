@@ -82,8 +82,16 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
     for (uint32_t queue = 0U; queue < execCtx.baseConfig.queue_num; ++queue) {
         __gm__ BatchWriteChannelInfo* channel = channels + queue;
         const uint64_t packedHeadTail = GetValue<uint64_t>((__gm__ uint8_t*)channel, tmpBuf);
-        runtimeCtx.sqHead[queue] = static_cast<uint32_t>(packedHeadTail);
-        runtimeCtx.sqTail[queue] = static_cast<uint32_t>(packedHeadTail >> 32U);
+        const uint32_t sqHead = static_cast<uint32_t>(packedHeadTail);
+        const uint32_t sqTail = static_cast<uint32_t>(packedHeadTail >> 32U);
+#ifndef PTO_NPU_ARCH_A5
+        if (channel->sq_base == 0U || channel->sq_reg_base == 0U || channel->sq_depth == 0U ||
+            sqHead >= channel->sq_depth || sqTail >= channel->sq_depth) {
+            return false;
+        }
+#endif
+        runtimeCtx.sqHead[queue] = sqHead;
+        runtimeCtx.sqTail[queue] = sqTail;
     }
     return true;
 }
@@ -97,7 +105,11 @@ PTO_INTERNAL bool StoreFlagPayload(
         // Wait for that flag source to be consumed before overwriting the slot.
         const uint64_t oldPostId = postId - kSdmaFlagPayloadDepth;
         const uint32_t slot = static_cast<uint32_t>(postId % kSdmaFlagPayloadDepth);
-        const uint64_t oldQueueMask = QueueCountToMask(runtimeCtx.flagPayloadQueueCount[slot]);
+        const uint32_t oldQueueCount = runtimeCtx.flagPayloadQueueCount[slot];
+        if (oldQueueCount == 0U || oldQueueCount > session.execCtx.baseConfig.queue_num) {
+            return false;
+        }
+        const uint64_t oldQueueMask = QueueCountToMask(oldQueueCount);
         bool knownComplete = true;
         uint64_t remaining = oldQueueMask;
         uint32_t queue = 0U;
@@ -124,16 +136,18 @@ PTO_INTERNAL bool StoreFlagPayload(
 }
 
 PTO_INTERNAL bool ValidateSinglePostSqCapacity(
-    __gm__ BatchWriteChannelInfo* channels, const SdmaConfig& config, uint32_t dataQueueCount, uint32_t postQueueCount)
+    __gm__ BatchWriteChannelInfo* channels, const SdmaConfig& config, uint32_t dataQueueCount, uint32_t postQueueCount,
+    const SdmaRuntimeContext& runtimeCtx)
 {
     for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
-        uint32_t dataSqes = 0U;
+        uint64_t dataSqes = 0U;
         if (queue < dataQueueCount) {
             dataSqes = (config.iter_num - 1U - queue) / config.queue_num + 1U;
         }
-        const uint32_t sqesPerPost = dataSqes + 1U;
+        const uint64_t sqesPerPost = dataSqes + 1U;
         const uint32_t sqDepth = channels[queue].sq_depth;
-        if (sqDepth == 0U || sqesPerPost > sqDepth) {
+        if (channels[queue].sq_base == 0U || channels[queue].sq_reg_base == 0U || sqDepth == 0U ||
+            runtimeCtx.sqHead[queue] >= sqDepth || runtimeCtx.sqTail[queue] >= sqDepth || sqesPerPost > sqDepth) {
             return false;
         }
     }
@@ -292,9 +306,8 @@ PTO_INTERNAL bool PrepareSdmaPostBase(
     uint64_t messageLen, const SdmaSession& session, SdmaConfig& config, SdmaPostState& state)
 {
     const SdmaExecContext& execCtx = session.execCtx;
-    if (!session.valid || !BuildTransferConfig(execCtx.baseConfig, messageLen, config) || config.iter_num == 0U ||
-        config.queue_num == 0U || config.queue_num > kSdmaMaxChannelGroups ||
-        execCtx.channelGroupIdx >= kSdmaMaxChannel / config.queue_num) {
+    if (!ValidateSdmaSession(session) || !BuildTransferConfig(execCtx.baseConfig, messageLen, config) ||
+        config.iter_num == 0U) {
         return false;
     }
 
@@ -338,7 +351,7 @@ PTO_INTERNAL bool BeginSdmaPost(
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     state.postQueueCount =
         runtimeCtx.usedQueueCount > state.dataQueueCount ? runtimeCtx.usedQueueCount : state.dataQueueCount;
-    if (!ValidateSinglePostSqCapacity(state.channels, config, state.dataQueueCount, state.postQueueCount)) {
+    if (!ValidateSinglePostSqCapacity(state.channels, config, state.dataQueueCount, state.postQueueCount, runtimeCtx)) {
         return false;
     }
 
@@ -389,12 +402,14 @@ PTO_INTERNAL void StoreSignalValue(int32_t signalValue, __gm__ uint8_t* signalVa
 }
 
 PTO_INTERNAL bool ValidateSingleNotifyPostSqCapacity(
-    __gm__ BatchWriteChannelInfo* channels, uint32_t payloadSqeCount, uint32_t postQueueCount)
+    __gm__ BatchWriteChannelInfo* channels, uint32_t payloadSqeCount, uint32_t postQueueCount,
+    const SdmaRuntimeContext& runtimeCtx)
 {
     for (uint32_t queue = 0U; queue < postQueueCount; ++queue) {
-        const uint32_t sqesPerPost = queue == 0U ? payloadSqeCount + 2U : 1U;
+        const uint64_t sqesPerPost = queue == 0U ? static_cast<uint64_t>(payloadSqeCount) + 2U : 1U;
         const uint32_t sqDepth = channels[queue].sq_depth;
-        if (sqDepth == 0U || sqesPerPost > sqDepth) {
+        if (channels[queue].sq_base == 0U || channels[queue].sq_reg_base == 0U || sqDepth == 0U ||
+            runtimeCtx.sqHead[queue] >= sqDepth || runtimeCtx.sqTail[queue] >= sqDepth || sqesPerPost > sqDepth) {
             return false;
         }
     }
@@ -430,7 +445,7 @@ PTO_INTERNAL bool BeginSdmaNotifyPost(
     state.dataQueueCount = 1U;
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     state.postQueueCount = runtimeCtx.usedQueueCount > 1U ? runtimeCtx.usedQueueCount : 1U;
-    if (!ValidateSingleNotifyPostSqCapacity(state.channels, config.iter_num, state.postQueueCount)) {
+    if (!ValidateSingleNotifyPostSqCapacity(state.channels, config.iter_num, state.postQueueCount, runtimeCtx)) {
         return false;
     }
 
@@ -486,11 +501,13 @@ PTO_INTERNAL AsyncEvent SdmaPostAsyncNotify(
     return AsyncEvent(state.eventHandle, DmaEngine::SDMA);
 }
 
-PTO_INTERNAL bool SdmaEventCheck(uint64_t postId, uint64_t queueMask, const SdmaSession& session, bool blocking)
+PTO_INTERNAL bool SdmaEventCheck(uint64_t postId, uint32_t queueCount, const SdmaSession& session, bool blocking)
 {
-    if (!session.valid || postId == 0ULL || queueMask == 0ULL) {
+    if (!ValidateSdmaSession(session) || postId == 0ULL || postId > session.runtimeCtx.nextPostId || queueCount == 0U ||
+        queueCount > session.execCtx.baseConfig.queue_num) {
         return false;
     }
+    const uint64_t queueMask = QueueCountToMask(queueCount);
     UbTmpBuf tmpBuf = session.eventCtx.tmpBuf;
     if (!CheckPostDoneIds(session.runtimeCtx.postDoneBase, postId, queueMask, tmpBuf, blocking)) {
         return false;
@@ -506,8 +523,7 @@ PTO_INTERNAL bool SdmaTestEvent(uint64_t handle, const SdmaSession& session)
     if (!DecodeSdmaEventHandle(handle, postId, queueCount)) {
         return false;
     }
-    const uint64_t queueMask = QueueCountToMask(queueCount);
-    return SdmaEventCheck(postId, queueMask, session, false);
+    return SdmaEventCheck(postId, queueCount, session, false);
 }
 
 PTO_INTERNAL bool SdmaWaitEvent(uint64_t handle, const SdmaSession& session)
@@ -517,8 +533,7 @@ PTO_INTERNAL bool SdmaWaitEvent(uint64_t handle, const SdmaSession& session)
     if (!DecodeSdmaEventHandle(handle, postId, queueCount)) {
         return false;
     }
-    const uint64_t queueMask = QueueCountToMask(queueCount);
-    return SdmaEventCheck(postId, queueMask, session, true);
+    return SdmaEventCheck(postId, queueCount, session, true);
 }
 
 } // namespace detail
