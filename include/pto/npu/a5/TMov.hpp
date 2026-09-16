@@ -480,7 +480,7 @@ __tf__ PTO_INTERNAL void TMovDnTo2Zz(
 template <typename WorkT, typename SrcTileData>
 PTO_INTERNAL void TMovNd2NzLoop(
     __ubuf__ WorkT* srcBase, __ubuf__ WorkT* dstBase, uint16_t repeatTimes, uint16_t rows, uint32_t validCol,
-    uint32_t cfgVsstb, uint32_t virtualRow)
+    uint32_t cfgVsstb, uint32_t virtualRow, uint32_t srcRowStride)
 {
     constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(WorkT);
     RegTensor<WorkT> vreg;
@@ -494,7 +494,7 @@ PTO_INTERNAL void TMovNd2NzLoop(
         __ubuf__ WorkT* psrc = srcBase + static_cast<uint32_t>(j) * elementsPerRepeat;
         __ubuf__ WorkT* pdst = dstBase + static_cast<uint32_t>(j) * virtualRow * elementsPerRepeat;
         for (uint16_t i = 0; i < rows; ++i) {
-            vlds(vreg, psrc, SrcTileData::RowStride, NORM, POST_UPDATE);
+            vlds(vreg, psrc, srcRowStride, NORM, POST_UPDATE);
             vsstb(vreg, pdst, cfgVsstb, preg, POST_UPDATE);
         }
         cols -= elementsPerRepeat;
@@ -522,7 +522,14 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     constexpr int32_t dstByteSize = DstTileData::Rows * DstTileData::Cols * sizeof(T);
 
     constexpr uint32_t elementsPerRepeat = CCE_VL / sizeof(T);
-    uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
+    constexpr bool isByte = (sizeof(T) == 1);
+    // fp4x2 packs two nibbles per byte: tile Cols/validCol/RowStride are
+    // nibble-counted, but the u8 loop below addresses UB in bytes. Convert via
+    // GetByteSize (no-op for the unpacked 1-byte types), otherwise the row
+    // stride doubles and every other source row is skipped.
+    const uint32_t validColLoop = isByte ? GetByteSize<T>(validCol) : validCol;
+    const uint32_t srcRowStride = isByte ? GetByteSize<T>(SrcTileData::RowStride) : SrcTileData::RowStride;
+    uint16_t repeatTimes = CeilDivision(validColLoop, elementsPerRepeat);
     constexpr bool isOptForConflict = DstTileData::Compact == CompactMode::RowPlusOne;
     uint32_t alignRow = (validRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
     uint32_t blockStride = isOptForConflict ? ((alignRow + 1) * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE :
@@ -535,17 +542,17 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(
     PTO_ASSERT(srcValidRow > 0, "Fix: TMOV ND->NZ source validRow is 0.");
     PTO_ASSERT(srcValidRow <= validRow, "Fix: TMOV ND->NZ source validRow exceeds destination validRow.");
     uint16_t moveRow = static_cast<uint16_t>((srcValidRow < validRow) ? srcValidRow : validRow);
-    constexpr bool isByte = (sizeof(T) == 1);
     __VEC_SCOPE__
     {
         if constexpr (isByte) {
             // For 1-byte types (hifloat8_t, int8_t, float8_e4m3_t, etc.), cast to uint8_t
             // since vlds/vsstb don't directly support these types.
             TMovNd2NzLoop<uint8_t, SrcTileData>(
-                (__ubuf__ uint8_t*)srcPtr, (__ubuf__ uint8_t*)dstPtr, repeatTimes, moveRow, validCol, cfgVsstb,
-                virtualRow);
+                (__ubuf__ uint8_t*)srcPtr, (__ubuf__ uint8_t*)dstPtr, repeatTimes, moveRow, validColLoop, cfgVsstb,
+                virtualRow, srcRowStride);
         } else {
-            TMovNd2NzLoop<T, SrcTileData>(srcPtr, dstPtr, repeatTimes, moveRow, validCol, cfgVsstb, virtualRow);
+            TMovNd2NzLoop<T, SrcTileData>(
+                srcPtr, dstPtr, repeatTimes, moveRow, validColLoop, cfgVsstb, virtualRow, srcRowStride);
         }
     } // end of VF
 }
