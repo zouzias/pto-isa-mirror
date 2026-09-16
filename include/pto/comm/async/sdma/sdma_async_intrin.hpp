@@ -39,6 +39,11 @@ PTO_INTERNAL void LoadSdmaSession(const AsyncSession& async, SdmaSession& sessio
     session.valid = async.valid;
 }
 
+PTO_INTERNAL bool ValidateAsyncSdmaSession(const AsyncSession& session)
+{
+    return session.valid && session.engine == DmaEngine::SDMA;
+}
+
 } // namespace detail
 
 // ============================================================================
@@ -49,7 +54,8 @@ PTO_INTERNAL bool BuildSdmaExecContext(
     ScratchTile& scratchTile, uint32_t channelGroupIdx, const SdmaBaseConfig& baseConfig, __gm__ uint8_t* contextGm,
     uint32_t syncId, SdmaExecContext& execCtx)
 {
-    if (contextGm == nullptr) {
+    if (contextGm == nullptr || syncId > 7U || !detail::IsValidSdmaBaseConfig(baseConfig) ||
+        channelGroupIdx >= kSdmaMaxChannel / baseConfig.queue_num) {
         return false;
     }
     TmpBuffer tmpBuf;
@@ -67,6 +73,9 @@ PTO_INTERNAL bool BuildSdmaExecContext(
 template <typename ScratchTile>
 PTO_INTERNAL bool BuildSdmaEventContext(ScratchTile& scratchTile, uint32_t syncId, SdmaEventContext& eventCtx)
 {
+    if (syncId > 7U) {
+        return false;
+    }
     TmpBuffer tmpBuf;
     if (!detail::MakeTmpBufferFromTile(scratchTile, tmpBuf)) {
         return false;
@@ -85,7 +94,7 @@ PTO_INTERNAL bool BuildSdmaSession(
     if (channelGroupIdx == kAutoChannelGroupIdx) {
         channelGroupIdx = static_cast<uint32_t>(get_block_idx());
     }
-    if (workspace == nullptr || syncId > 7 || baseConfig.queue_num == 0 || baseConfig.queue_num > kSdmaMaxChannel ||
+    if (workspace == nullptr || syncId > 7U || !detail::IsValidSdmaBaseConfig(baseConfig) ||
         channelGroupIdx >= (kSdmaMaxChannel / baseConfig.queue_num)) {
         session.valid = false;
         return false;
@@ -96,6 +105,9 @@ PTO_INTERNAL bool BuildSdmaSession(
         return false;
     }
     session.valid = detail::InitializeRuntimeCtx(session);
+    if (session.valid) {
+        session.valid = detail::ValidateSdmaSession(session);
+    }
     return session.valid;
 }
 
@@ -107,7 +119,7 @@ PTO_INTERNAL bool BuildSdmaSession(
     if (channelGroupIdx == kAutoChannelGroupIdx) {
         channelGroupIdx = static_cast<uint32_t>(get_block_idx());
     }
-    if (syncId > 7 || baseConfig.queue_num == 0 || baseConfig.queue_num > kSdmaMaxChannel ||
+    if (syncId > 7U || !detail::IsValidSdmaBaseConfig(baseConfig) ||
         channelGroupIdx >= (kSdmaMaxChannel / baseConfig.queue_num) || workspace == nullptr) {
         session.valid = false;
         return false;
@@ -133,6 +145,10 @@ PTO_INTERNAL bool BuildSdmaSession(
     SdmaSession probe;
     detail::LoadSdmaSession(session, probe);
     session.valid = detail::InitializeRuntimeCtx(probe);
+    probe.valid = session.valid;
+    if (session.valid) {
+        session.valid = detail::ValidateSdmaSession(probe);
+    }
     session.sdmaRuntimeCtx = probe.runtimeCtx;
     return session.valid;
 }
@@ -169,6 +185,10 @@ template <typename T>
 PTO_INTERNAL uint64_t
 __sdma_put_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const AsyncSession& session)
 {
+    if (!detail::ValidateAsyncSdmaSession(session)) {
+        PTO_ASSERT(false, "SDMA PUT: invalid session or engine.");
+        return 0U;
+    }
     if (transfer_size == 0) {
         return 0;
     }
@@ -184,6 +204,10 @@ template <typename T>
 PTO_INTERNAL uint64_t
 __sdma_get_async(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size, const AsyncSession& session)
 {
+    if (!detail::ValidateAsyncSdmaSession(session)) {
+        PTO_ASSERT(false, "SDMA GET: invalid session or engine.");
+        return 0U;
+    }
     if (transfer_size == 0) {
         return 0;
     }
@@ -200,6 +224,10 @@ PTO_INTERNAL uint64_t __sdma_put_async_notify(
     __gm__ T* dst, __gm__ T* src, __gm__ int32_t* remoteSignal, int32_t signalValue, NotifyOp notifyOp,
     uint64_t transferSize, const AsyncSession& session)
 {
+    if (!detail::ValidateAsyncSdmaSession(session)) {
+        PTO_ASSERT(false, "SDMA PUT notify: invalid session or engine.");
+        return 0U;
+    }
     if (transferSize == 0U) {
         return 0U;
     }
@@ -217,6 +245,9 @@ namespace detail {
 // AsyncSession overloads of the event checks used by AsyncEvent::Wait / Test.
 PTO_INTERNAL bool SdmaWaitEvent(uint64_t handle, const AsyncSession& session)
 {
+    if (!ValidateAsyncSdmaSession(session)) {
+        return false;
+    }
     SdmaSession sdmaSession;
     LoadSdmaSession(session, sdmaSession);
     const bool done = SdmaWaitEvent(handle, sdmaSession);
@@ -226,6 +257,9 @@ PTO_INTERNAL bool SdmaWaitEvent(uint64_t handle, const AsyncSession& session)
 
 PTO_INTERNAL bool SdmaTestEvent(uint64_t handle, const AsyncSession& session)
 {
+    if (!ValidateAsyncSdmaSession(session)) {
+        return false;
+    }
     SdmaSession sdmaSession;
     LoadSdmaSession(session, sdmaSession);
     const bool done = SdmaTestEvent(handle, sdmaSession);

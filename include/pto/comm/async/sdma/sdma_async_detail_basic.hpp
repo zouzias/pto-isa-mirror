@@ -75,6 +75,12 @@ PTO_INTERNAL bool IsValidTmpBuffer(const UbTmpBuf& tmpBuf)
     return tmpBuf.addr != nullptr && tmpBuf.size >= sizeof(uint64_t);
 }
 
+PTO_INTERNAL bool IsValidSdmaBaseConfig(const SdmaBaseConfig& baseConfig)
+{
+    return baseConfig.block_bytes != 0U && baseConfig.block_bytes <= UINT32_MAX && baseConfig.queue_num != 0U &&
+           baseConfig.queue_num <= kSdmaMaxChannelGroups;
+}
+
 template <typename ScratchTile>
 PTO_INTERNAL bool MakeTmpBufferFromTile(ScratchTile& scratchTile, UbTmpBuf& tmpBuf)
 {
@@ -100,8 +106,8 @@ PTO_INTERNAL void SetValue(__gm__ uint8_t* addr, UbTmpBuf& tmpBuf, uint32_t sync
     copy_ubuf_to_gm_align_b32(
         (__gm__ void*)addr, (__ubuf__ void*)ubPtr, 0, 1, static_cast<uint32_t>(sizeof(T)), 0, 0, 0, 0);
 #endif
-    set_flag(PIPE_MTE3, PIPE_MTE2, syncId);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, syncId);
+    set_flag(PIPE_MTE3, PIPE_S, syncId);
+    wait_flag(PIPE_MTE3, PIPE_S, syncId);
 }
 
 template <typename T>
@@ -181,14 +187,19 @@ PTO_INTERNAL void AddOneMemcpySqe(
 
 PTO_INTERNAL bool BuildTransferConfig(const SdmaBaseConfig& baseConfig, uint64_t messageLen, SdmaConfig& config)
 {
-    if (baseConfig.queue_num == 0 || baseConfig.block_bytes == 0) {
+    if (!IsValidSdmaBaseConfig(baseConfig) || messageLen > UINT64_MAX - baseConfig.comm_block_offset) {
         return false;
     }
     config.queue_num = baseConfig.queue_num;
     config.block_bytes = baseConfig.block_bytes;
     config.comm_block_offset = baseConfig.comm_block_offset;
     config.per_core_bytes = messageLen;
-    config.iter_num = (config.per_core_bytes + config.block_bytes - 1) / config.block_bytes;
+    const uint64_t iterNum =
+        config.per_core_bytes / config.block_bytes + (config.per_core_bytes % config.block_bytes == 0U ? 0U : 1U);
+    if (iterNum > UINT32_MAX) {
+        return false;
+    }
+    config.iter_num = static_cast<uint32_t>(iterNum);
     return true;
 }
 
@@ -245,6 +256,22 @@ PTO_INTERNAL __gm__ uint8_t* ResolvePostDoneBase(const SdmaExecContext& execCtx)
     WorkspaceLayout layout{};
     PrepareWorkspace(workspace, config, layout, execCtx.channelGroupIdx);
     return layout.recv_workspace;
+}
+
+PTO_INTERNAL bool ValidateSdmaSession(const SdmaSession& session)
+{
+    const SdmaExecContext& execCtx = session.execCtx;
+    const SdmaEventContext& eventCtx = session.eventCtx;
+    if (!session.valid || execCtx.contextGm == nullptr || !IsValidTmpBuffer(execCtx.tmpBuf) ||
+        !IsValidTmpBuffer(eventCtx.tmpBuf) || execCtx.syncId > 7U || eventCtx.syncId > 7U ||
+        !IsValidSdmaBaseConfig(execCtx.baseConfig)) {
+        return false;
+    }
+    const uint32_t queueNum = execCtx.baseConfig.queue_num;
+    if (execCtx.channelGroupIdx >= kSdmaMaxChannel / queueNum || session.runtimeCtx.usedQueueCount > queueNum) {
+        return false;
+    }
+    return session.runtimeCtx.postDoneBase == ResolvePostDoneBase(execCtx);
 }
 
 } // namespace detail
