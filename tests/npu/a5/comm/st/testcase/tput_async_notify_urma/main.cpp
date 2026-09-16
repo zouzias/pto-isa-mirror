@@ -55,6 +55,34 @@ TEST(TPutAsyncNotifyUrma, MixedPutSetGetAddFinalWaitOnly)
     ASSERT_TRUE(RunTPutAsyncNotifyUrma(2, 2, 0, 0, UrmaNotifyStMode::MixedPutSetGetAdd));
 }
 
+// SharedPool notify: one AIV owning one jetty SET-notifies every peer.
+TEST(TPutAsyncNotifyUrma, Pool_OneJettyManyPeers_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 256, 1, 1>(4, 4, 0, 0)));
+}
+
+// SharedPool notify: two AIVs on disjoint one-jetty runs notify every peer.
+TEST(TPutAsyncNotifyUrma, Pool_MultiAivDisjointRuns_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 256, 2, 1>(4, 4, 0, 0)));
+}
+
+// SharedPool notify against 4-jetty runs.
+TEST(TPutAsyncNotifyUrma, Pool_WideRunNotifyStaysOnOneJetty_4Ranks)
+{
+    SKIP_IF_RANKS_LT(4);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 262144, 2, 4>(4, 4, 0, 0)));
+}
+
+// >256MB SET notify
+TEST(TPutAsyncNotifyUrma, Pool_SetOver256MB_Chunked)
+{
+    SKIP_IF_RANKS_LT(2);
+    ASSERT_TRUE((RunNotifyUrmaPool<int32_t, 67371008, 1, 4>(2, 2, 0, 0)));
+}
+
 int main(int argc, char** argv)
 {
     CommMpiInit(&argc, &argv);

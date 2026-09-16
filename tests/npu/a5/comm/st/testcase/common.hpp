@@ -383,6 +383,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
 
 using UrmaWorkspaceManager = pto::comm::urma::UrmaWorkspaceManager;
+using UrmaLayout = pto::comm::urma::UrmaLayout;
 
 // ============================================================================
 // UrmaTestContext: HCCL-based URMA host setup for TGET_ASYNC / TPUT_ASYNC ST.
@@ -472,7 +473,10 @@ struct UrmaTestContext {
         }
     }
 
-    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
+    bool Setup(
+        int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded,
+        UrmaLayout layout = UrmaLayout::PER_PEER, uint32_t aivCount = pto::comm::urma::kUrmaAutoAivCount,
+        uint32_t jettiesPerCore = 1)
     {
         if (n_devices <= 0 || n_ranks <= 0) {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
@@ -486,7 +490,9 @@ struct UrmaTestContext {
             CleanupSetupFailure();
             return false;
         }
-        if (!urmaMgr.Init(comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize)) {
+        if (!urmaMgr.Init(
+                comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize, layout,
+                aivCount, jettiesPerCore)) {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             CleanupSetupFailure();
             return false;

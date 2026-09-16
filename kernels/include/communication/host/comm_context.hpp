@@ -252,12 +252,18 @@ inline bool BuildAsyncSessionUrma(const CommContext& ctx, AsyncSession& out)
         std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): workspace missing\n";
         return false;
     }
+    if (ctx.urmaMgr != nullptr && ctx.urmaMgr->Layout() == urma::UrmaLayout::SHARED_POOL) {
+        std::cerr << "[PTO-DOMAIN] BuildAsyncSession(URMA): a shared jetty pool assigns each AIV its own jetties, "
+                     "so the session must be built on device\n";
+        return false;
+    }
     out = AsyncSession{};
     out.engine = DmaEngine::URMA;
     out.valid = true;
     out.contextGm = ctx.urmaWs;
     out.destRankId = 0; // unused by new API; kept for compatibility.
-    out.qpIdx = 0;
+    out.qpIdxBase = 0;
+    out.qpCount = 1;
     return true;
 }
 #endif
