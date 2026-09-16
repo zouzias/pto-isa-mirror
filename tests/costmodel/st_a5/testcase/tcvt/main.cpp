@@ -11,28 +11,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-#include "a5_vfsim_tileop_check.hpp"
+#include "a5_host_tileop_check.hpp"
 
 using namespace pto;
 
-namespace {
-
-template <typename T, int rows, int cols>
-void runTAddS(T scalar)
+TEST(TCvt, fp16_to_fp32_rint_sat_on_1x512)
 {
-    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
-    TileData srcTile(rows, cols);
-    TileData dstTile(rows, cols);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x8000);
+    using SrcTile = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
+    SrcTile src(1, 512);
+    DstTile dst(1, 512);
 
     ::pto::mocker::ResetTrace();
-    TADDS(dstTile, srcTile, scalar);
+    ::pto::perf_sim::PtoRecorder::Clear();
+    TCVT(dst, src, RoundMode::CAST_RINT, SaturationMode::ON);
 
-    constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
-    pto::test::a5::ExpectLastVecTileOp({"vlds", "vadds", "vsts"}, repeat);
+    constexpr uint64_t expectedCycles = static_cast<uint64_t>(-1.7704918 * 8 + 82.442623 + 0.5);
+    pto::test::a5::ExpectSupportedVfTileOp("TCVT", expectedCycles);
 }
-
-} // namespace
-
-TEST(TAddS, float_1x512) { runTAddS<float, 1, 512>(1.5f); }

@@ -13,9 +13,27 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include <pto/costmodel/a5/formula_costmodel/formula_params_generated.hpp>
+
+namespace pto::mocker {
+
+// The selector supplies formula-table fields directly; the backend does not select a template.
+struct A5VfFormulaInput {
+    lightweight::a5::fit::ShapePath shape_path = lightweight::a5::fit::ShapePath::Path1D;
+    std::string_view vf_impl_kind = "POST_UPDATE";
+    std::string opcode;
+    std::string src_dtype;
+    std::string dst_dtype = "none";
+    std::string op_params;
+    uint64_t valid_rows = 0;
+    uint64_t valid_cols = 0;
+    uint64_t elements_per_repeat = 0;
+};
+
+} // namespace pto::mocker
 
 namespace pto::mocker::lightweight::a5::fit {
 
@@ -74,6 +92,28 @@ inline uint64_t EvalVfFormula(
             return 0;
     }
     return RoundToCycles(value);
+}
+
+
+// Evaluate an already selected implementation. No opcode-specific dispatch here.
+inline bool EstimateA5VfCycles(const ::pto::mocker::A5VfFormulaInput& path, uint64_t& cycles)
+{
+    if (path.valid_rows == 0 || path.valid_cols == 0 || path.elements_per_repeat == 0) {
+        return false;
+    }
+    const uint64_t elements = path.shape_path == ShapePath::Path1D ? path.valid_rows * path.valid_cols : path.valid_cols;
+    const uint64_t inner = elements / path.elements_per_repeat + (elements % path.elements_per_repeat != 0);
+    const uint64_t outer = path.shape_path == ShapePath::Path1D ? 1 : path.valid_rows;
+    const uint64_t tail = elements % path.elements_per_repeat;
+    const VfCurveKey key{
+        path.opcode, path.src_dtype, path.dst_dtype, path.shape_path, path.vf_impl_kind,
+        tail == 0 ? TailKind::Full : TailKind::Tail, path.op_params};
+    const VfFormulaParam* param = nullptr;
+    if (!TryLookupVfFormulaParam(key, param)) {
+        return false;
+    }
+    cycles = EvalVfFormula(*param, inner * outer, outer, inner, tail);
+    return true;
 }
 
 } // namespace pto::mocker::lightweight::a5::fit
