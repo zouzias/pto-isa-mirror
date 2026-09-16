@@ -108,6 +108,11 @@ extern "C" __global__ AICORE void launchTDIVSCase9(__gm__ int64_t* out, __gm__ i
     runTDivS<int64_t, 32, 32, 64, 64>(out, src, scalar);
 }
 
+extern "C" __global__ AICORE void launchTDIVSCase10(__gm__ uint64_t* out, __gm__ uint64_t* src, float scalar)
+{
+    runTDivS<uint64_t, 32, 32, 64, 64>(out, src, scalar);
+}
+
 template <uint32_t caseId>
 void launchTDIVSTestCase(void* out, void* src, float scalar, aclrtStream stream)
 {
@@ -148,6 +153,10 @@ void launchTDIVSTestCase(void* out, void* src, float scalar, aclrtStream stream)
             launchTDIVSCase9((int64_t*)out, (int64_t*)src, scalar);
             break;
         }
+        case 10: {
+            launchTDIVSCase10((uint64_t*)out, (uint64_t*)src, scalar);
+            break;
+        }
         default: {
         }
     }
@@ -162,3 +171,4 @@ template void launchTDIVSTestCase<6>(void* out, void* src, float scalar, aclrtSt
 template void launchTDIVSTestCase<7>(void* out, void* src, float scalar, aclrtStream stream);
 template void launchTDIVSTestCase<8>(void* out, void* src, float scalar, aclrtStream stream);
 template void launchTDIVSTestCase<9>(void* out, void* src, float scalar, aclrtStream stream);
+template void launchTDIVSTestCase<10>(void* out, void* src, float scalar, aclrtStream stream);

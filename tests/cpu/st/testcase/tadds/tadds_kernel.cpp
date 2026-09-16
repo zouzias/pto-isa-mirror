@@ -78,6 +78,11 @@ extern "C" __global__ AICORE void launchTADDSCase8(__gm__ int64_t* out, __gm__ i
     runTAddS<int64_t, 15, 128>(out, src, scalar);
 }
 
+extern "C" __global__ AICORE void launchTADDSCase9(__gm__ uint64_t* out, __gm__ uint64_t* src, uint64_t scalar)
+{
+    runTAddS<uint64_t, 15, 128>(out, src, scalar);
+}
+
 template <uint32_t caseId>
 void launchTADDSTestCase(void* out, void* src, float scalar, aclrtStream stream)
 {
@@ -114,6 +119,10 @@ void launchTADDSTestCase(void* out, void* src, float scalar, aclrtStream stream)
             launchTADDSCase8((int64_t*)out, (int64_t*)src, (int64_t)scalar);
             break;
         }
+        case 9: {
+            launchTADDSCase9((uint64_t*)out, (uint64_t*)src, (uint64_t)scalar);
+            break;
+        }
         default: {
         }
     }
@@ -127,3 +136,4 @@ template void launchTADDSTestCase<5>(void* out, void* src, float scalar, aclrtSt
 template void launchTADDSTestCase<6>(void* out, void* src, float scalar, aclrtStream stream);
 template void launchTADDSTestCase<7>(void* out, void* src, float scalar, aclrtStream stream);
 template void launchTADDSTestCase<8>(void* out, void* src, float scalar, aclrtStream stream);
+template void launchTADDSTestCase<9>(void* out, void* src, float scalar, aclrtStream stream);

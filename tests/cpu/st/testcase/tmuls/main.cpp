@@ -109,3 +109,5 @@ TEST_F(TMULSTest, case8) { TMulSTestFramework<8, uint16_t, 32, 32, 64, 64>(); }
 TEST_F(TMULSTest, case9) { TMulSTestFramework<9, uint32_t, 32, 32, 64, 64>(); }
 
 TEST_F(TMULSTest, case10) { TMulSTestFramework<10, int64_t, 32, 32, 64, 64>(); }
+
+TEST_F(TMULSTest, case11) { TMulSTestFramework<11, uint64_t, 32, 32, 64, 64>(); }

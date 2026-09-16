@@ -96,6 +96,7 @@ TEST_F(TDIVTest, case_int32_64x64_64x64_64x64) { test_tdiv<int32_t, 64, 64, 64, 
 TEST_F(TDIVTest, case_int16_64x64_64x64_64x64) { test_tdiv<int16_t, 64, 64, 64, 64>(); }
 TEST_F(TDIVTest, case_half_16x256_16x256_16x256) { test_tdiv<aclFloat16, 16, 256, 16, 256>(); }
 TEST_F(TDIVTest, case_int64_64x64_64x64_64x64) { test_tdiv<int64_t, 64, 64, 64, 64>(); }
+TEST_F(TDIVTest, case_uint64_64x64_64x64_64x64) { test_tdiv<uint64_t, 64, 64, 64, 64>(); }
 #ifdef CPU_SIM_BFLOAT_ENABLED
 TEST_F(TDIVTest, case_bf16_16x256_16x256_16x256) { test_tdiv<bfloat16_t, 16, 256, 16, 256>(); }
 #endif

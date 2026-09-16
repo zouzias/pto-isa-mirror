@@ -74,6 +74,7 @@ if __name__ == "__main__":
         TMinParams(np.float32, 64, 64, 64, 64, 64, 64),
         TMinParams(np.int32, 64, 64, 64, 64, 64, 64),
         TMinParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TMinParams(np.uint64, 64, 64, 64, 64, 64, 64),
         TMinParams(np.int16, 64, 64, 64, 64, 64, 64),
         TMinParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
