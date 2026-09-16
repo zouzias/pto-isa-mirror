@@ -21,7 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto::mocker {
 
 // The selector supplies formula-table fields directly; the backend does not select a template.
-struct A5VfExecutionPath {
+struct A5VfFormulaInput {
     lightweight::a5::fit::ShapePath shape_path = lightweight::a5::fit::ShapePath::Path1D;
     std::string_view vf_impl_kind = "POST_UPDATE";
     std::string opcode;
@@ -96,7 +96,7 @@ inline uint64_t EvalVfFormula(
 
 
 // Evaluate an already selected implementation. No opcode-specific dispatch here.
-inline bool TryEstimateSelectedVfCycles(const ::pto::mocker::A5VfExecutionPath& path, uint64_t& cycles)
+inline bool TryEstimateSelectedVfCycles(const ::pto::mocker::A5VfFormulaInput& path, uint64_t& cycles)
 {
     if (path.valid_rows == 0 || path.valid_cols == 0 || path.elements_per_repeat == 0) {
         return false;

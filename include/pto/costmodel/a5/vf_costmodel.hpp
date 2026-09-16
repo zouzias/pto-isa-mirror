@@ -200,7 +200,7 @@ inline bool TryGetA5CvtElementsPerRepeat(
 
 // Shared layout rule: an explicit 2D version can force a contiguous
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
-inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfExecutionPath& path)
+inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
 {
     const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                          version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
@@ -219,7 +219,7 @@ inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfExecut
 
 // TBinOp/TBinSOp share the update-layout rule; callers specify the number of participating Tiles.
 inline bool SelectA5UpdatePath(
-    const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfExecutionPath& path)
+    const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfFormulaInput& path)
 {
     if (required_tiles == 0 || required_tiles >= 32 || metadata.tile_count < required_tiles) {
         return false;
@@ -229,7 +229,7 @@ inline bool SelectA5UpdatePath(
 }
 
 // TUnaryOp/TRsqrt have a single 2D NoPostUpdate implementation; 1D still honors the update option.
-inline bool SelectA5Fixed2DNoPostPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+inline bool SelectA5Fixed2DNoPostPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
     if (metadata.tile_count < 2) {
         return false;
@@ -249,7 +249,7 @@ inline bool SelectA5Fixed2DNoPostPath(const A5TileOpMetadata& metadata, A5VfExec
 }
 
 // Conversion has separate dtype-pair, rounding/saturation and repeat-width rules.
-inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
     if (metadata.tile_count < 2) {
         return false;
@@ -282,7 +282,7 @@ inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfExecutionPath&
 }
 
 // TSEL has its own default layout and a fitted variant depending on repeat parity.
-inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
     if (metadata.tile_count < 3 ||
         !TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
@@ -312,7 +312,7 @@ inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfExecutionPath
 // Precision remains part of path.op_params; grouping here does not discard it.
 inline bool SelectA5TileOpPath(
     std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfExecutionPath& path)
+    A5VfFormulaInput& path)
 {
     path = {};
     if (metadata.valid_rows <= 0 || metadata.valid_cols <= 0) {
@@ -353,7 +353,7 @@ inline uint64_t EstimateA5TileOpCycles(
     const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
 {
     const A5TileOpMetadata metadata = BuildA5TileOpMetadata(first_tile, rest_tiles...);
-    A5VfExecutionPath path;
+    A5VfFormulaInput path;
     uint64_t cycles = 0;
     if (!SelectA5TileOpPath(opcode, options, metadata, path) ||
         !lightweight::a5::fit::TryEstimateSelectedVfCycles(path, cycles)) {
