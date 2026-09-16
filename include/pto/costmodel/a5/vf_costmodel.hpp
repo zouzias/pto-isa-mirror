@@ -200,7 +200,7 @@ inline bool GetA5CvtElementsPerRepeat(
 
 // Shared layout rule: an explicit 2D version can force a contiguous
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
-inline void SelectA5Layout(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
+inline void SelectA5LoopType(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
 {
     const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                          version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
@@ -219,28 +219,24 @@ inline void SelectA5Layout(bool contiguous, VFImplKind version, A5VfFormulaInput
 
 // Common 1D/2D selection; callers specify the number of participating Tiles.
 // Update mode is retained only to match the current formula-table keys.
-inline bool SelectA5ShapePath(
+inline bool SelectA5ElementwisePath(
     const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfFormulaInput& path)
 {
     if (required_tiles == 0 || required_tiles >= 32 || metadata.tile_count < required_tiles) {
         return false;
     }
-    SelectA5Layout(FirstA5TilesUseContiguousPath(metadata, required_tiles), metadata.vf_impl_kind, path);
+    SelectA5LoopType(FirstA5TilesUseContiguousPath(metadata, required_tiles), metadata.vf_impl_kind, path);
     return GetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
 // Both default and high-precision algorithms retain 1D/2D layout selection.
 // The entry point has already copied the precision option into path.op_params.
-inline bool SelectA5PrecisionShapePath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
+inline bool SelectA5PrecisionElementwisePath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
-    if (!SelectA5ShapePath(metadata, 2, path)) {
+    if (!SelectA5ElementwisePath(metadata, 2, path)) {
         return false;
     }
-    if (path.opcode == "TRECIP") {
-        if (path.op_params.empty()) {
-            path.op_params = "default";
-        }
-    } else if (path.opcode != "TDIVS" && path.shape_path == lightweight::a5::fit::ShapePath::Path2D) {
+    if (path.opcode != "TDIVS" && path.shape_path == lightweight::a5::fit::ShapePath::Path2D) {
         // TUnaryOp/TRsqrt have one 2D update variant. Preserve its existing table key;
         // this is not a separate selector category or a different precision mode.
         path.vf_impl_kind = "NO_POST_UPDATE";
@@ -292,7 +288,7 @@ inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput&
     path.shape_path = contiguous ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D;
     path.vf_impl_kind = contiguous ? "NO_POST_UPDATE" : "DEFAULT";
     if (metadata.vf_impl_kind != VFImplKind::VFIMPL_DEFAULT) {
-        SelectA5Layout(contiguous, metadata.vf_impl_kind, path);
+        SelectA5LoopType(contiguous, metadata.vf_impl_kind, path);
     }
     if (path.op_params.empty()) {
         if (path.src_dtype == "fp32") {
@@ -310,7 +306,7 @@ inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput&
 
 // Initialize once and map each supported TileOp to its actual selection rule.
 // Precision remains part of path.op_params; grouping here does not discard it.
-inline bool SelectA5TileOpPath(
+inline bool DispatchA5TileOpSelector(
     std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
     A5VfFormulaInput& path)
 {
@@ -325,13 +321,14 @@ inline bool SelectA5TileOpPath(
     path.valid_cols = static_cast<uint64_t>(metadata.valid_cols);
 
     if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
-        return SelectA5ShapePath(metadata, 3, path);
+        return SelectA5ElementwisePath(metadata, 3, path);
     }
     if (opcode == "TMINS" || opcode == "TNEG") {
-        return SelectA5ShapePath(metadata, 2, path);
+        return SelectA5ElementwisePath(metadata, 2, path);
     }
-    if (opcode == "TDIVS" || opcode == "TRECIP" || opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT") {
-        return SelectA5PrecisionShapePath(metadata, path);
+    // Both TDIVS operand orders share the model; TRECIP forwards as TDIVS(dst, 1, src).
+    if (opcode == "TDIVS" || opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT") {
+        return SelectA5PrecisionElementwisePath(metadata, path);
     }
     // Dedicated rules only where dtype conversion or other parameters require them.
     if (opcode == "TCVT") {
@@ -350,7 +347,7 @@ inline uint64_t EstimateA5TileOpCycles(
     const A5TileOpMetadata metadata = BuildA5TileOpMetadata(first_tile, rest_tiles...);
     A5VfFormulaInput path;
     uint64_t cycles = 0;
-    if (!SelectA5TileOpPath(opcode, options, metadata, path) ||
+    if (!DispatchA5TileOpSelector(opcode, options, metadata, path) ||
         !lightweight::a5::fit::EstimateA5VfCycles(path, cycles)) {
         std::cerr << "[costmodel][ERROR][A5] Unsupported TileOp: op=" << opcode
                   << ", dtype=" << metadata.first_tile_dtype << ", valid_rows=" << metadata.valid_rows

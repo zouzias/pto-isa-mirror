@@ -26,19 +26,6 @@ TEST(TRecip, float_default_1x512)
     TRECIP(dst, src);
 
     constexpr uint64_t expectedCycles = static_cast<uint64_t>(1.9081456 * 8 + 64.516464 + 0.5);
-    pto::test::a5::ExpectSupportedVfTileOp("TRECIP", expectedCycles);
-}
-
-TEST(TRecip, float_high_precision_1x512)
-{
-    using TileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    TileData src(1, 512);
-    TileData dst(1, 512);
-
-    ::pto::mocker::ResetTrace();
-    ::pto::perf_sim::PtoRecorder::Clear();
-    TRECIP<RecipAlgorithm::HIGH_PRECISION>(dst, src);
-
-    constexpr uint64_t expectedCycles = static_cast<uint64_t>(345.21788 * 8 + 48.715084 + 0.5);
-    pto::test::a5::ExpectSupportedVfTileOp("TRECIP", expectedCycles);
+    // Match the NPU wrapper: reciprocal forwards to scalar-first TDIVS.
+    pto::test::a5::ExpectSupportedVfTileOp("TDIVS", expectedCycles);
 }

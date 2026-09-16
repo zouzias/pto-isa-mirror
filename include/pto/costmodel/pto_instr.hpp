@@ -1506,11 +1506,7 @@ template <
 PTO_INST RecordEvent TRECIP(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events)
 {
     ::pto::detail::PtoWaitEvents(events...);
-#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
-    MAP_INSTR_IMPL_T(TRECIP, PTO_TEMPLATE_ARGS(PrecisionType), dst, src);
-#else
     MAP_INSTR_IMPL_T(TDIVS, PTO_TEMPLATE_ARGS(static_cast<DivAlgorithm>(PrecisionType)), dst, 1, src);
-#endif
     return RecordEvent{};
 }
 
