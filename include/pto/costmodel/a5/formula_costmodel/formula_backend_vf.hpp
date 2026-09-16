@@ -20,17 +20,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto::mocker {
 
-// A selected implementation, not a hint to be reinterpreted by the backend.
-enum class A5VfTemplate {
-    OneDPostUpdate,
-    OneDNoPostUpdate,
-    TwoDPostUpdate,
-    TwoDNoPostUpdate,
-    TwoDDefault,
-};
-
+// The selector supplies formula-table fields directly; the backend does not select a template.
 struct A5VfExecutionPath {
-    A5VfTemplate implementation = A5VfTemplate::OneDPostUpdate;
+    lightweight::a5::fit::ShapePath shape_path = lightweight::a5::fit::ShapePath::Path1D;
+    std::string_view vf_impl_kind = "POST_UPDATE";
     std::string opcode;
     std::string src_dtype;
     std::string dst_dtype = "none";
@@ -105,26 +98,15 @@ inline uint64_t EvalVfFormula(
 // Evaluate an already selected implementation. No opcode-specific dispatch here.
 inline bool TryEstimateSelectedVfCycles(const ::pto::mocker::A5VfExecutionPath& path, uint64_t& cycles)
 {
-    using ::pto::mocker::A5VfTemplate;
     if (path.valid_rows == 0 || path.valid_cols == 0 || path.elements_per_repeat == 0) {
         return false;
     }
-    ShapePath shape;
-    std::string_view update;
-    switch (path.implementation) {
-        case A5VfTemplate::OneDPostUpdate: shape = ShapePath::Path1D; update = "POST_UPDATE"; break;
-        case A5VfTemplate::OneDNoPostUpdate: shape = ShapePath::Path1D; update = "NO_POST_UPDATE"; break;
-        case A5VfTemplate::TwoDPostUpdate: shape = ShapePath::Path2D; update = "POST_UPDATE"; break;
-        case A5VfTemplate::TwoDNoPostUpdate: shape = ShapePath::Path2D; update = "NO_POST_UPDATE"; break;
-        case A5VfTemplate::TwoDDefault: shape = ShapePath::Path2D; update = "DEFAULT"; break;
-        default: return false;
-    }
-    const uint64_t elements = shape == ShapePath::Path1D ? path.valid_rows * path.valid_cols : path.valid_cols;
+    const uint64_t elements = path.shape_path == ShapePath::Path1D ? path.valid_rows * path.valid_cols : path.valid_cols;
     const uint64_t inner = elements / path.elements_per_repeat + (elements % path.elements_per_repeat != 0);
-    const uint64_t outer = shape == ShapePath::Path1D ? 1 : path.valid_rows;
+    const uint64_t outer = path.shape_path == ShapePath::Path1D ? 1 : path.valid_rows;
     const uint64_t tail = elements % path.elements_per_repeat;
     const VfCurveKey key{
-        path.opcode, path.src_dtype, path.dst_dtype, shape, update,
+        path.opcode, path.src_dtype, path.dst_dtype, path.shape_path, path.vf_impl_kind,
         tail == 0 ? TailKind::Full : TailKind::Tail, path.op_params};
     const VfFormulaParam* param = nullptr;
     if (!TryLookupVfFormulaParam(key, param)) {

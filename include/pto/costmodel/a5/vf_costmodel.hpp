@@ -200,18 +200,21 @@ inline bool TryGetA5CvtElementsPerRepeat(
 
 // Shared by Binary and Scalar: an explicit 2D version can force a contiguous
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
-inline A5VfTemplate SelectA5BinaryTemplate(bool contiguous, VFImplKind version)
+inline void SelectA5BinaryLayout(bool contiguous, VFImplKind version, A5VfExecutionPath& path)
 {
     const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                          version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
     const bool noPost = version == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
                         version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
     if (contiguous && !force2D) {
-        return noPost ? A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::OneDPostUpdate;
+        path.shape_path = lightweight::a5::fit::ShapePath::Path1D;
+        path.vf_impl_kind = noPost ? "NO_POST_UPDATE" : "POST_UPDATE";
+        return;
     }
     const bool post = version == VFImplKind::VFIMPL_1D_POST_UPDATE ||
                       version == VFImplKind::VFIMPL_2D_POST_UPDATE;
-    return post ? A5VfTemplate::TwoDPostUpdate : A5VfTemplate::TwoDNoPostUpdate;
+    path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
+    path.vf_impl_kind = post ? "POST_UPDATE" : "NO_POST_UPDATE";
 }
 
 inline bool InitA5ExecutionPath(
@@ -239,8 +242,7 @@ inline bool SelectA5BinaryCostmodelPath(
         !InitA5ExecutionPath(opcode, options, metadata, path)) {
         return false;
     }
-    path.implementation = SelectA5BinaryTemplate(
-        FirstA5TilesUseContiguousPath(metadata, 3), metadata.vf_impl_kind);
+    SelectA5BinaryLayout(FirstA5TilesUseContiguousPath(metadata, 3), metadata.vf_impl_kind, path);
     return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
@@ -253,8 +255,7 @@ inline bool SelectA5ScalarCostmodelPath(
         !InitA5ExecutionPath(opcode, options, metadata, path)) {
         return false;
     }
-    path.implementation = SelectA5BinaryTemplate(
-        FirstA5TilesUseContiguousPath(metadata, 2), metadata.vf_impl_kind);
+    SelectA5BinaryLayout(FirstA5TilesUseContiguousPath(metadata, 2), metadata.vf_impl_kind, path);
     return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
@@ -271,14 +272,16 @@ inline bool SelectA5UnaryCostmodelPath(
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
     if (opcode == "TRECIP") {
         // Reciprocal follows the scalar-division implementation family.
-        path.implementation = SelectA5BinaryTemplate(contiguous, metadata.vf_impl_kind);
+        SelectA5BinaryLayout(contiguous, metadata.vf_impl_kind, path);
     } else if (!contiguous || metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE) {
         // TUnaryOp/TRsqrt have one strided implementation, not two update variants.
-        path.implementation = A5VfTemplate::TwoDNoPostUpdate;
+        path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
+        path.vf_impl_kind = "NO_POST_UPDATE";
     } else {
-        path.implementation = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ?
-                                  A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::OneDPostUpdate;
+        path.shape_path = lightweight::a5::fit::ShapePath::Path1D;
+        path.vf_impl_kind = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ?
+                                "NO_POST_UPDATE" : "POST_UPDATE";
     }
     if (opcode == "TRECIP" && path.op_params.empty()) {
         path.op_params = "default";
@@ -297,12 +300,14 @@ inline bool SelectA5ConvertCostmodelPath(
     path.dst_dtype = metadata.first_tile_dtype;
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
     if (contiguous) {
-        path.implementation = metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE ?
-                                  A5VfTemplate::TwoDNoPostUpdate : A5VfTemplate::OneDNoPostUpdate;
+        path.shape_path = metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE ?
+                              lightweight::a5::fit::ShapePath::Path2D : lightweight::a5::fit::ShapePath::Path1D;
+        path.vf_impl_kind = "NO_POST_UPDATE";
     } else {
         const bool noPost = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
                             metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
-        path.implementation = noPost ? A5VfTemplate::TwoDNoPostUpdate : A5VfTemplate::TwoDPostUpdate;
+        path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
+        path.vf_impl_kind = noPost ? "NO_POST_UPDATE" : "POST_UPDATE";
     }
     if (path.op_params.empty()) {
         if ((metadata.round_mode == RoundMode::CAST_NONE || metadata.round_mode == RoundMode::CAST_RINT) &&
@@ -314,12 +319,8 @@ inline bool SelectA5ConvertCostmodelPath(
             return false;
         }
     }
-    const bool oneD = path.implementation == A5VfTemplate::OneDPostUpdate ||
-                      path.implementation == A5VfTemplate::OneDNoPostUpdate;
     return TryGetA5CvtElementsPerRepeat(
-        path.src_dtype, path.dst_dtype,
-        oneD ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D,
-        path.elements_per_repeat);
+        path.src_dtype, path.dst_dtype, path.shape_path, path.elements_per_repeat);
 }
 
 // TSEL is not ordinary Binary: its fitted variant also depends on repeat parity.
@@ -331,9 +332,10 @@ inline bool SelectA5SelectCostmodelPath(
         return false;
     }
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 3);
-    path.implementation = contiguous ? A5VfTemplate::OneDNoPostUpdate : A5VfTemplate::TwoDDefault;
+    path.shape_path = contiguous ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D;
+    path.vf_impl_kind = contiguous ? "NO_POST_UPDATE" : "DEFAULT";
     if (metadata.vf_impl_kind != VFImplKind::VFIMPL_DEFAULT) {
-        path.implementation = SelectA5BinaryTemplate(contiguous, metadata.vf_impl_kind);
+        SelectA5BinaryLayout(contiguous, metadata.vf_impl_kind, path);
     }
     if (path.op_params.empty()) {
         if (path.src_dtype == "fp32") {
