@@ -52,8 +52,7 @@ inline void set_flag(SrcPipe srcPipe, DstPipe dstPipe, Token token)
 template <typename SrcPipe, typename DstPipe, typename Token>
 inline void wait_flag(SrcPipe srcPipe, DstPipe dstPipe, Token token)
 {
-    ::pto::perf_sim::SyncRecorder::Wait(
-        static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
+    ::pto::perf_sim::SyncRecorder::Wait(static_cast<int>(token), static_cast<int>(srcPipe), static_cast<int>(dstPipe));
     ::pto::mocker::FlushPendingTail(::pto::mocker::evaluator::PipeKey::VECTOR);
 }
 

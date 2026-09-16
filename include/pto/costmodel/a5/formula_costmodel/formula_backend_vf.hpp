@@ -94,20 +94,20 @@ inline uint64_t EvalVfFormula(
     return RoundToCycles(value);
 }
 
-
 // Evaluate an already selected implementation. No opcode-specific dispatch here.
 inline bool EstimateA5VfCycles(const ::pto::mocker::A5VfFormulaInput& path, uint64_t& cycles)
 {
     if (path.valid_rows == 0 || path.valid_cols == 0 || path.elements_per_repeat == 0) {
         return false;
     }
-    const uint64_t elements = path.shape_path == ShapePath::Path1D ? path.valid_rows * path.valid_cols : path.valid_cols;
+    const uint64_t elements =
+        path.shape_path == ShapePath::Path1D ? path.valid_rows * path.valid_cols : path.valid_cols;
     const uint64_t inner = elements / path.elements_per_repeat + (elements % path.elements_per_repeat != 0);
     const uint64_t outer = path.shape_path == ShapePath::Path1D ? 1 : path.valid_rows;
     const uint64_t tail = elements % path.elements_per_repeat;
-    const VfCurveKey key{
-        path.opcode, path.src_dtype, path.dst_dtype, path.shape_path, path.vf_impl_kind,
-        tail == 0 ? TailKind::Full : TailKind::Tail, path.op_params};
+    const VfCurveKey key{path.opcode,     path.src_dtype,    path.dst_dtype,
+                         path.shape_path, path.vf_impl_kind, tail == 0 ? TailKind::Full : TailKind::Tail,
+                         path.op_params};
     const VfFormulaParam* param = nullptr;
     if (!TryLookupVfFormulaParam(key, param)) {
         return false;

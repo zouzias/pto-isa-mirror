@@ -155,16 +155,14 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     bool useEstimatedCycles = (cycles == 0);
 
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
-    const bool compareWithEstimate =
-        std::string_view(opcode) == "TROWEXPAND" ||
-        (std::string_view(opcode) == "TDIVS" && (dtype == "int16" || dtype == "int32"));
+    const bool compareWithEstimate = std::string_view(opcode) == "TROWEXPAND" ||
+                                     (std::string_view(opcode) == "TDIVS" && (dtype == "int16" || dtype == "int32"));
 #else
     const bool compareWithEstimate = false;
 #endif
 
     if (useEstimatedCycles || compareWithEstimate) {
-        estimated_cycles =
-            perf_sim::EstimateInstrCycles(opcode, rows, cols, dtype.empty() ? "unknown" : dtype.c_str());
+        estimated_cycles = perf_sim::EstimateInstrCycles(opcode, rows, cols, dtype.empty() ? "unknown" : dtype.c_str());
 #if defined(__NPU_ARCH__) && (__NPU_ARCH__ == 2201)
         useEstimatedCycles = useEstimatedCycles ||
                              (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles) ||
@@ -183,8 +181,7 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
 
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
 // A5 predicts before recording; the recorder only consumes the resulting cycles.
-inline void ExecuteA5TileOp(
-    const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
+inline void ExecuteA5TileOp(const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
 {
     const auto stage = perf_sim::ResolvePipeStageArgs(opcode, first_tile, rest_tiles...);
     // Auxiliary TileOps have no timing model; do not invent scalar cycles or records.
@@ -275,11 +272,9 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
 #define PTO_FORWARD_L2HINT_TO_IMPL 1
 #endif
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
-#define MAP_INSTR_IMPL(API, ...) \
-    ::pto::mocker::ExecuteA5TileOp(#API, {}, __VA_ARGS__)
+#define MAP_INSTR_IMPL(API, ...) ::pto::mocker::ExecuteA5TileOp(#API, {}, __VA_ARGS__)
 #define MAP_INSTR_IMPL_T(API, TEMPLATE_ARGS, ...) \
-    ::pto::mocker::ExecuteA5TileOp( \
-        #API, ::pto::mocker::A5OptionsFromTemplate TEMPLATE_ARGS(), __VA_ARGS__)
+    ::pto::mocker::ExecuteA5TileOp(#API, ::pto::mocker::A5OptionsFromTemplate TEMPLATE_ARGS(), __VA_ARGS__)
 #define RECORD_INSTR_ONLY(API, ...) MAP_INSTR_IMPL(API, __VA_ARGS__)
 #else
 #define MAP_INSTR_IMPL(API, ...)                                     \
@@ -385,18 +380,22 @@ PTO_INTERNAL void PtoWaitEvents(WaitEvents&... events)
 // A5 formula prediction does not model synchronization.
 #if defined(PTO_NPU_ARCH_A5)
 template <Op OpCode>
-PTO_INST void TSYNC() {}
+PTO_INST void TSYNC()
+{}
 
 template <typename... WaitEvents>
-PTO_INST void TSYNC(WaitEvents&...) {}
+PTO_INST void TSYNC(WaitEvents&...)
+{}
 
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INST void SYNCALL() {}
+PTO_INST void SYNCALL()
+{}
 
 template <
     SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
     std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
-PTO_INST void SYNCALL(GlobalData&, int32_t = 0) {}
+PTO_INST void SYNCALL(GlobalData&, int32_t = 0)
+{}
 #endif
 
 template <typename T, typename AddrType>

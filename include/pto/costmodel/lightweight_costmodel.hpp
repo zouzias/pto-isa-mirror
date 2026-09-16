@@ -132,7 +132,6 @@ struct PredictRuntimeConfig {
     evaluator::BandwidthTable bandwidth_bytes_per_us{};
 };
 
-
 inline constexpr const char* DTypeToString(DType dtype)
 {
     switch (dtype) {
@@ -433,6 +432,5 @@ inline CostModelResult EstimateCycles(const CostModelInput& input)
 }
 
 } // namespace pto::mocker::lightweight
-
 
 #endif

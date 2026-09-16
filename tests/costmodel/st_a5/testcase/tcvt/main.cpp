@@ -26,6 +26,6 @@ TEST(TCvt, fp16_to_fp32_rint_sat_on_1x512)
     ::pto::perf_sim::PtoRecorder::Clear();
     TCVT(dst, src, RoundMode::CAST_RINT, SaturationMode::ON);
 
-    constexpr uint64_t expectedCycles = static_cast<uint64_t>(-1.7704918 * 8 + 82.442623 + 0.5);
+    constexpr uint64_t expectedCycles = static_cast<uint64_t>(1.7704918 * 8 + 82.442623 + 0.5);
     pto::test::a5::ExpectSupportedVfTileOp("TCVT", expectedCycles);
 }

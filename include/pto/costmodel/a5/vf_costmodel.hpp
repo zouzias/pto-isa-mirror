@@ -32,9 +32,8 @@ inline void CollectA5TemplateOption(A5TileOpOptions& options)
 {
     using T = std::remove_cv_t<decltype(Value)>;
     if constexpr (
-        std::is_same_v<T, RecipAlgorithm> || std::is_same_v<T, DivAlgorithm> ||
-        std::is_same_v<T, SqrtAlgorithm> || std::is_same_v<T, RsqrtAlgorithm> ||
-        std::is_same_v<T, ExpAlgorithm> || std::is_same_v<T, LogAlgorithm> ||
+        std::is_same_v<T, RecipAlgorithm> || std::is_same_v<T, DivAlgorithm> || std::is_same_v<T, SqrtAlgorithm> ||
+        std::is_same_v<T, RsqrtAlgorithm> || std::is_same_v<T, ExpAlgorithm> || std::is_same_v<T, LogAlgorithm> ||
         std::is_same_v<T, PowAlgorithm>) {
         if constexpr (Value == T::HIGH_PRECISION) {
             options.op_params = "high_precision";
@@ -179,7 +178,8 @@ inline bool GetA5ElementsPerRepeatByDTypeKey(std::string_view dtype_key, uint64_
 }
 
 inline bool GetA5CvtElementsPerRepeat(
-    std::string_view src_dtype, std::string_view dst_dtype, lightweight::a5::fit::ShapePath shape_path, uint64_t& elements_per_repeat)
+    std::string_view src_dtype, std::string_view dst_dtype, lightweight::a5::fit::ShapePath shape_path,
+    uint64_t& elements_per_repeat)
 {
     if ((src_dtype == "fp16" || src_dtype == "bf16") && dst_dtype == "fp32") {
         elements_per_repeat = kElementsPerRepeatB32;
@@ -202,25 +202,23 @@ inline bool GetA5CvtElementsPerRepeat(
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
 inline void SelectA5LoopType(bool contiguous, VFImplKind version, A5VfFormulaInput& path)
 {
-    const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
-                         version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
-    const bool noPost = version == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
-                        version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
+    const bool force2D =
+        version == VFImplKind::VFIMPL_2D_POST_UPDATE || version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
+    const bool noPost =
+        version == VFImplKind::VFIMPL_1D_NO_POST_UPDATE || version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
     if (contiguous && !force2D) {
         path.shape_path = lightweight::a5::fit::ShapePath::Path1D;
         path.vf_impl_kind = noPost ? "NO_POST_UPDATE" : "POST_UPDATE";
         return;
     }
-    const bool post = version == VFImplKind::VFIMPL_1D_POST_UPDATE ||
-                      version == VFImplKind::VFIMPL_2D_POST_UPDATE;
+    const bool post = version == VFImplKind::VFIMPL_1D_POST_UPDATE || version == VFImplKind::VFIMPL_2D_POST_UPDATE;
     path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
     path.vf_impl_kind = post ? "POST_UPDATE" : "NO_POST_UPDATE";
 }
 
 // Common 1D/2D selection; callers specify the number of participating Tiles.
 // Update mode is retained only to match the current formula-table keys.
-inline bool SelectA5ElementwisePath(
-    const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfFormulaInput& path)
+inline bool SelectA5ElementwisePath(const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfFormulaInput& path)
 {
     if (required_tiles == 0 || required_tiles >= 32 || metadata.tile_count < required_tiles) {
         return false;
@@ -255,7 +253,8 @@ inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& 
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
     if (contiguous) {
         path.shape_path = metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE ?
-                              lightweight::a5::fit::ShapePath::Path2D : lightweight::a5::fit::ShapePath::Path1D;
+                              lightweight::a5::fit::ShapePath::Path2D :
+                              lightweight::a5::fit::ShapePath::Path1D;
         path.vf_impl_kind = "NO_POST_UPDATE";
     } else {
         const bool noPost = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ||
@@ -273,15 +272,13 @@ inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& 
             return false;
         }
     }
-    return GetA5CvtElementsPerRepeat(
-        path.src_dtype, path.dst_dtype, path.shape_path, path.elements_per_repeat);
+    return GetA5CvtElementsPerRepeat(path.src_dtype, path.dst_dtype, path.shape_path, path.elements_per_repeat);
 }
 
 // TSEL has its own default layout and a fitted variant depending on repeat parity.
 inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
-    if (metadata.tile_count < 3 ||
-        !GetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
+    if (metadata.tile_count < 3 || !GetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
         return false;
     }
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 3);
@@ -307,8 +304,7 @@ inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfFormulaInput&
 // Initialize once and map each supported TileOp to its actual selection rule.
 // Precision remains part of path.op_params; grouping here does not discard it.
 inline bool DispatchA5TileOpSelector(
-    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfFormulaInput& path)
+    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata, A5VfFormulaInput& path)
 {
     path = {};
     if (metadata.valid_rows <= 0 || metadata.valid_cols <= 0) {
