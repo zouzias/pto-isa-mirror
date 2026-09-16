@@ -198,9 +198,9 @@ inline bool TryGetA5CvtElementsPerRepeat(
     return TryGetA5ElementsPerRepeatByDTypeKey(src_dtype, elements_per_repeat);
 }
 
-// Shared by Binary and Scalar: an explicit 2D version can force a contiguous
+// Shared layout rule: an explicit 2D version can force a contiguous
 // Tile onto the 2D path, but a non-contiguous Tile cannot be forced onto 1D.
-inline void SelectA5BinaryLayout(bool contiguous, VFImplKind version, A5VfExecutionPath& path)
+inline void SelectA5UpdateLayout(bool contiguous, VFImplKind version, A5VfExecutionPath& path)
 {
     const bool force2D = version == VFImplKind::VFIMPL_2D_POST_UPDATE ||
                          version == VFImplKind::VFIMPL_2D_NO_POST_UPDATE;
@@ -217,64 +217,26 @@ inline void SelectA5BinaryLayout(bool contiguous, VFImplKind version, A5VfExecut
     path.vf_impl_kind = post ? "POST_UPDATE" : "NO_POST_UPDATE";
 }
 
-inline bool InitA5ExecutionPath(
-    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfExecutionPath& path)
+// TBinOp/TBinSOp share the update-layout rule; callers specify the number of participating Tiles.
+inline bool SelectA5UpdatePath(
+    const A5TileOpMetadata& metadata, uint32_t required_tiles, A5VfExecutionPath& path)
 {
-    if (metadata.valid_rows <= 0 || metadata.valid_cols <= 0) {
+    if (required_tiles == 0 || required_tiles >= 32 || metadata.tile_count < required_tiles) {
         return false;
     }
-    path = {};
-    path.opcode = opcode;
-    path.src_dtype = metadata.first_tile_dtype;
-    path.op_params = options.op_params;
-    path.valid_rows = static_cast<uint64_t>(metadata.valid_rows);
-    path.valid_cols = static_cast<uint64_t>(metadata.valid_cols);
-    return true;
-}
-
-// Three Tile operands; NPU TBinOp.hpp, BinaryInstr/TBinOp{1D,2D}Switch.
-inline bool SelectA5BinaryCostmodelPath(
-    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfExecutionPath& path)
-{
-    if ((opcode != "TADD" && opcode != "TSUB" && opcode != "TMUL") || metadata.tile_count < 3 ||
-        !InitA5ExecutionPath(opcode, options, metadata, path)) {
-        return false;
-    }
-    SelectA5BinaryLayout(FirstA5TilesUseContiguousPath(metadata, 3), metadata.vf_impl_kind, path);
+    SelectA5UpdateLayout(FirstA5TilesUseContiguousPath(metadata, required_tiles), metadata.vf_impl_kind, path);
     return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
-// Tile/scalar family: two Tile operands, using the TBinSOp.hpp path switches.
-inline bool SelectA5ScalarCostmodelPath(
-    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfExecutionPath& path)
+// TUnaryOp/TRsqrt have a single 2D NoPostUpdate implementation; 1D still honors the update option.
+inline bool SelectA5Fixed2DNoPostPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
 {
-    if ((opcode != "TDIVS" && opcode != "TMINS" && opcode != "TNEG") || metadata.tile_count < 2 ||
-        !InitA5ExecutionPath(opcode, options, metadata, path)) {
-        return false;
-    }
-    SelectA5BinaryLayout(FirstA5TilesUseContiguousPath(metadata, 2), metadata.vf_impl_kind, path);
-    return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
-}
-
-// Unary family: shape and precision are selected here, never in the formula backend.
-// TRECIP retains its own default/high_precision parameter family.
-inline bool SelectA5UnaryCostmodelPath(
-    std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
-    A5VfExecutionPath& path)
-{
-    if ((opcode != "TEXP" && opcode != "TSQRT" && opcode != "TRSQRT" && opcode != "TRECIP") ||
-        metadata.tile_count < 2 || !InitA5ExecutionPath(opcode, options, metadata, path)) {
+    if (metadata.tile_count < 2) {
         return false;
     }
     const bool contiguous = FirstA5TilesUseContiguousPath(metadata, 2);
-    if (opcode == "TRECIP") {
-        // Reciprocal follows the scalar-division implementation family.
-        SelectA5BinaryLayout(contiguous, metadata.vf_impl_kind, path);
-    } else if (!contiguous || metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_POST_UPDATE ||
-               metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE) {
+    if (!contiguous || metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_POST_UPDATE ||
+        metadata.vf_impl_kind == VFImplKind::VFIMPL_2D_NO_POST_UPDATE) {
         // TUnaryOp/TRsqrt have one strided implementation, not two update variants.
         path.shape_path = lightweight::a5::fit::ShapePath::Path2D;
         path.vf_impl_kind = "NO_POST_UPDATE";
@@ -283,17 +245,13 @@ inline bool SelectA5UnaryCostmodelPath(
         path.vf_impl_kind = metadata.vf_impl_kind == VFImplKind::VFIMPL_1D_NO_POST_UPDATE ?
                                 "NO_POST_UPDATE" : "POST_UPDATE";
     }
-    if (opcode == "TRECIP" && path.op_params.empty()) {
-        path.op_params = "default";
-    }
     return TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat);
 }
 
 // Conversion has separate dtype-pair, rounding/saturation and repeat-width rules.
-inline bool SelectA5ConvertCostmodelPath(
-    const A5TileOpOptions& options, const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+inline bool SelectA5CvtPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
 {
-    if (metadata.tile_count < 2 || !InitA5ExecutionPath("TCVT", options, metadata, path)) {
+    if (metadata.tile_count < 2) {
         return false;
     }
     path.src_dtype = metadata.second_tile_dtype;
@@ -323,11 +281,10 @@ inline bool SelectA5ConvertCostmodelPath(
         path.src_dtype, path.dst_dtype, path.shape_path, path.elements_per_repeat);
 }
 
-// TSEL is not ordinary Binary: its fitted variant also depends on repeat parity.
-inline bool SelectA5SelectCostmodelPath(
-    const A5TileOpOptions& options, const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
+// TSEL has its own default layout and a fitted variant depending on repeat parity.
+inline bool SelectA5TselPath(const A5TileOpMetadata& metadata, A5VfExecutionPath& path)
 {
-    if (metadata.tile_count < 3 || !InitA5ExecutionPath("TSEL", options, metadata, path) ||
+    if (metadata.tile_count < 3 ||
         !TryGetA5ElementsPerRepeatByDTypeKey(path.src_dtype, path.elements_per_repeat)) {
         return false;
     }
@@ -335,7 +292,7 @@ inline bool SelectA5SelectCostmodelPath(
     path.shape_path = contiguous ? lightweight::a5::fit::ShapePath::Path1D : lightweight::a5::fit::ShapePath::Path2D;
     path.vf_impl_kind = contiguous ? "NO_POST_UPDATE" : "DEFAULT";
     if (metadata.vf_impl_kind != VFImplKind::VFIMPL_DEFAULT) {
-        SelectA5BinaryLayout(contiguous, metadata.vf_impl_kind, path);
+        SelectA5UpdateLayout(contiguous, metadata.vf_impl_kind, path);
     }
     if (path.op_params.empty()) {
         if (path.src_dtype == "fp32") {
@@ -351,25 +308,42 @@ inline bool SelectA5SelectCostmodelPath(
     return true;
 }
 
-// Routing only. Each family owns all implementation-selection decisions.
+// Initialize once and map each supported TileOp to its actual selection rule.
+// Precision remains part of path.op_params; grouping here does not discard it.
 inline bool SelectA5TileOpPath(
     std::string_view opcode, const A5TileOpOptions& options, const A5TileOpMetadata& metadata,
     A5VfExecutionPath& path)
 {
+    path = {};
+    if (metadata.valid_rows <= 0 || metadata.valid_cols <= 0) {
+        return false;
+    }
+    path.opcode = opcode;
+    path.src_dtype = metadata.first_tile_dtype;
+    path.op_params = options.op_params;
+    path.valid_rows = static_cast<uint64_t>(metadata.valid_rows);
+    path.valid_cols = static_cast<uint64_t>(metadata.valid_cols);
+
     if (opcode == "TADD" || opcode == "TSUB" || opcode == "TMUL") {
-        return SelectA5BinaryCostmodelPath(opcode, options, metadata, path);
+        return SelectA5UpdatePath(metadata, 3, path);
     }
     if (opcode == "TDIVS" || opcode == "TMINS" || opcode == "TNEG") {
-        return SelectA5ScalarCostmodelPath(opcode, options, metadata, path);
+        return SelectA5UpdatePath(metadata, 2, path);
     }
-    if (opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT" || opcode == "TRECIP") {
-        return SelectA5UnaryCostmodelPath(opcode, options, metadata, path);
+    if (opcode == "TRECIP") {
+        if (path.op_params.empty()) {
+            path.op_params = "default";
+        }
+        return SelectA5UpdatePath(metadata, 2, path);
+    }
+    if (opcode == "TEXP" || opcode == "TSQRT" || opcode == "TRSQRT") {
+        return SelectA5Fixed2DNoPostPath(metadata, path);
     }
     if (opcode == "TCVT") {
-        return SelectA5ConvertCostmodelPath(options, metadata, path);
+        return SelectA5CvtPath(metadata, path);
     }
     if (opcode == "TSEL") {
-        return SelectA5SelectCostmodelPath(options, metadata, path);
+        return SelectA5TselPath(metadata, path);
     }
     return false;
 }
