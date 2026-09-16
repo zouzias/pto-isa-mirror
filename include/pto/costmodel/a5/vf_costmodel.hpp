@@ -9,7 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
-#include <cstdio>
+#include <iostream>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -381,11 +381,9 @@ inline uint64_t EstimateA5TileOpCycles(
     uint64_t cycles = 0;
     if (!SelectA5TileOpPath(opcode, options, metadata, path) ||
         !lightweight::a5::fit::TryEstimateSelectedVfCycles(path, cycles)) {
-        std::fprintf(stderr,
-                     "[costmodel][A5] Unsupported TileOp %s: dtype=%s, valid=%lldx%lld, options=%.*s\n",
-                     opcode, metadata.first_tile_dtype.c_str(),
-                     static_cast<long long>(metadata.valid_rows), static_cast<long long>(metadata.valid_cols),
-                     static_cast<int>(options.op_params.size()), options.op_params.empty() ? "" : options.op_params.data());
+        std::cerr << "[costmodel][ERROR][A5] Unsupported TileOp: op=" << opcode
+                  << ", dtype=" << metadata.first_tile_dtype << ", valid_rows=" << metadata.valid_rows
+                  << ", valid_cols=" << metadata.valid_cols << ", options=" << options.op_params << '\n';
         throw std::runtime_error("Unsupported A5 Vector costmodel prediction");
     }
     return cycles;

@@ -12,11 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_PERF_SIM_COSTMODEL_PROVIDER_HPP
 
 #include "config.hpp"
-#include "latency.hpp"
 #include "recorder.hpp"
-
+#include "latency.hpp"
 #include <pto/costmodel/lightweight_costmodel.hpp>
-
 #include <string>
 
 namespace pto::perf_sim {
@@ -46,7 +44,8 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
     return ctx;
 }
 
-// ── String → lightweight costmodel mappings ──
+// ── String → lightweight::PtoOpcode mapping (X-macro, single source of truth) ──
+// Enum names in lightweight::PtoOpcode match opcode strings exactly.
 
 // clang-format off
 #define PTO_PERF_SIM_OPCODE_LIST                                                                                      \
@@ -54,7 +53,6 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
     X(TSUB)                                                                                                           \
     X(TMUL)                                                                                                           \
     X(TDIV)                                                                                                           \
-    X(TRECIP)                                                                                                         \
     X(TADDS)                                                                                                          \
     X(TSUBS)                                                                                                          \
     X(TMULS)                                                                                                          \
@@ -64,7 +62,7 @@ inline CostModelRuntimeCtx& GetCostModelCtx()
                 X(TEXTRACT) X(TINSERT) X(TROWEXPAND) X(TCOLEXPAND) X(TLOADCONV)
 // clang-format on
 
-inline bool TryMapOpcode(std::string_view opcode, ::pto::mocker::lightweight::PtoOpcode& out)
+inline bool TryMapOpcode(const std::string& opcode, ::pto::mocker::lightweight::PtoOpcode& out)
 {
 #define X(name)                                            \
     if (opcode == #name) {                                 \
@@ -82,35 +80,19 @@ inline bool TryMapOpcode(std::string_view opcode, ::pto::mocker::lightweight::Pt
     X("fp32", Float)            \
     X("fp16", Half)             \
     X("int8", Int8)             \
-    X("int16", Int16)           \
-    X("int32", Int32)           \
-    X("uint8", Uint8)           \
-    X("uint16", Uint16)         \
-    X("uint32", Uint32)         \
-    X("bf16", BFloat16)         \
-    X("fp8_e4m3", Float8E4M3)   \
-    X("fp8_e5m2", Float8E5M2)   \
-    X("hif8", HFloat8)          \
-    X("fp4_e1m2", Float4E1M2)   \
-    X("fp4_e2m1", Float4E2M1)
+    X("int16", Int16) X("int32", Int32) X("uint8", Uint8) X("uint16", Uint16) X("uint32", Uint32) X("bf16", BFloat16)
 
-inline bool TryMapDType(std::string_view dtype, ::pto::mocker::lightweight::DType& out)
+inline ::pto::mocker::lightweight::DType MapDType(const std::string& dtype)
 {
-#define X(str, enum_val)                                     \
+#define X(str, enum_val)                                    \
     if (dtype == str) {                                     \
-        out = ::pto::mocker::lightweight::DType::enum_val;  \
-        return true;                                        \
+        return ::pto::mocker::lightweight::DType::enum_val; \
     }
     PTO_PERF_SIM_DTYPE_LIST
 #undef X
-    return false;
+    return ::pto::mocker::lightweight::DType::Half;
 }
 
-
-#undef PTO_PERF_SIM_OPCODE_LIST
-#undef PTO_PERF_SIM_DTYPE_LIST
-
-#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
 // ── LightweightFormula backend ──
 
 inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, int cols, const std::string& dtype)
@@ -123,8 +105,7 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
 
     CostModelInput input{};
     input.op = pto_op;
-    if (!TryMapDType(dtype, input.dtype))
-        return 0;
+    input.dtype = MapDType(dtype);
     input.rows = rows;
     input.cols = cols;
     input.data_size = static_cast<int64_t>(rows) * cols;
@@ -138,8 +119,6 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
         return static_cast<uint64_t>(result.cycles);
     return 0;
 }
-
-#endif
 
 // ── Fallback for unsupported instructions ──
 
@@ -162,16 +141,11 @@ inline uint64_t FallbackCycles(const std::string& opcode, int rows, int cols)
 
 inline uint64_t EstimateInstrCycles(const std::string& opcode, int rows, int cols, const std::string& dtype)
 {
-#if !defined(__NPU_ARCH__) || (__NPU_ARCH__ == 2201)
     if (opcode == "TDIVS" && (dtype == "int16" || dtype == "int32")) {
         return 4;
     }
     uint64_t cycles = EstimateLightweightCycles(opcode, rows, cols, dtype);
     return cycles > 0 ? cycles : FallbackCycles(opcode, rows, cols);
-#else
-    (void)dtype;
-    return FallbackCycles(opcode, rows, cols);
-#endif
 }
 
 } // namespace pto::perf_sim

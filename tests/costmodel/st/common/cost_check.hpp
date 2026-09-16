@@ -16,7 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <gtest/gtest.h>
 #include "pto/costmodel/trace.hpp"
 
-// Each st/st_a5_fit test measures one isolated PTO op and expects it to pay its own
+// Each st test measures one isolated PTO op and expects it to pay its own
 // startup latency. The stream-aware change in BeginPtoInstr preserves the VECTOR pipe
 // queue across PTO-instruction boundaries (so consecutive vec ops stream and share
 // startup). Because g_trace_state is a single thread_local shared across all gtest

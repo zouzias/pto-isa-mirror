@@ -187,6 +187,10 @@ inline void ExecuteA5TileOp(
     const char* opcode, const A5TileOpOptions& options, auto&& first_tile, auto&&... rest_tiles)
 {
     const auto stage = perf_sim::ResolvePipeStageArgs(opcode, first_tile, rest_tiles...);
+    // Auxiliary TileOps have no timing model; do not invent scalar cycles or records.
+    if (stage == perf_sim::PipeStage::Scalar) {
+        return;
+    }
     uint64_t cycles;
     if (stage == perf_sim::PipeStage::Vector) {
         cycles = EstimateA5TileOpCycles(opcode, options, first_tile, rest_tiles...);
@@ -195,7 +199,8 @@ inline void ExecuteA5TileOp(
         int cols = 0;
         std::string dtype;
         ExtractFirstTileInfo(rows, cols, dtype, first_tile, rest_tiles...);
-        cycles = perf_sim::EstimateInstrCycles(opcode, rows, cols, dtype);
+        // Keep the existing non-vector approximation without invoking A2/A3 formulas.
+        cycles = perf_sim::FallbackCycles(opcode, rows, cols);
     }
     PtoInstrScope scope(opcode);
     scope.Finish();
@@ -304,7 +309,12 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
     } while (0)
 #endif
 
-// TPUSH/TPOP retain the original implementation path; no A5 FIFO modeling is added.
+// A5 does not model FIFO operations; preserve the original A2/A3 path below.
+#if defined(PTO_NPU_ARCH_A5)
+#define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...) ((void)0)
+#define MAP_INSTR_IMPL_T_TPUSH(API, TEMPLATE_ARGS, ...) ((void)0)
+#define MAP_INSTR_IMPL_T_TPOP(API, TEMPLATE_ARGS, ...) ((void)0)
+#else
 // First arg is Pipe, second is Tile, third is tile index.
 #define MAP_INSTR_IMPL_TPUSH_POP(IS_TPUSH, API, TEMPLATE_ARGS, ...)                                                  \
     do {                                                                                                             \
@@ -346,51 +356,10 @@ inline void RecordTPopSync(Pipe& pipe, TileCons& tile, int tile_index)
         ::RecordInstrFromFirst(#API, __VA_ARGS__);                                                               \
     } while (0)
 
+#endif // A5 FIFO stubs / A2/A3 implementation
 #endif
 
 namespace pto {
-
-#if !defined(PTO_NPU_ARCH_A5)
-inline uint16_t CostmodelFftsMessage(uint16_t eventId) { return static_cast<uint16_t>(1U + ((eventId & 0xfU) << 8U)); }
-
-template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INTERNAL void SYNCALL_IMPL()
-{
-    ::pto_costmodel_pipe_barrier(PIPE_ALL);
-    if constexpr (CoreType == SyncCoreType::AIVOnly) {
-        ::ffts_cross_core_sync(PIPE_MTE3, CostmodelFftsMessage(SYNC_AIV_ONLY_ALL));
-        ::wait_flag_dev(SYNC_AIV_ONLY_ALL);
-
-    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
-        ::ffts_cross_core_sync(PIPE_FIX, CostmodelFftsMessage(SYNC_AIC_FLAG));
-        ::wait_flag_dev(SYNC_AIC_FLAG);
-
-    } else {
-        ::ffts_cross_core_sync(PIPE_MTE3, CostmodelFftsMessage(SYNC_AIV_FLAG));
-        ::wait_flag_dev(SYNC_AIC_AIV_FLAG);
-
-    }
-}
-
-template <SyncCoreType CoreType = SyncCoreType::AIVOnly, typename T>
-PTO_INTERNAL void SYNCALL_SOFT_IMPL(T*, int32_t)
-{
-    SYNCALL_IMPL<CoreType>();
-}
-
-template <typename T>
-PTO_INTERNAL void SYNCALL_SOFT_AIC_IMPL(T*, int32_t)
-{
-    SYNCALL_IMPL<SyncCoreType::AICOnly>();
-}
-
-template <SyncCoreType CoreType = SyncCoreType::Mix, typename T>
-PTO_INTERNAL void SYNCALL_SOFT_MIX_IMPL(T*, int32_t)
-{
-    SYNCALL_IMPL<CoreType>();
-}
-
-#endif
 
 namespace detail {
 template <Op OpCode>
@@ -413,56 +382,32 @@ PTO_INTERNAL void PtoWaitEvents(WaitEvents&... events)
 
 } // namespace detail
 
+// A5 formula prediction does not model synchronization.
+#if defined(PTO_NPU_ARCH_A5)
 template <Op OpCode>
-PTO_INST void TSYNC()
-{
-    detail::PtoSyncOp<OpCode>();
-}
+PTO_INST void TSYNC() {}
 
 template <typename... WaitEvents>
-PTO_INST void TSYNC(WaitEvents&... events)
-{
-    detail::PtoWaitEvents(events...);
-}
+PTO_INST void TSYNC(WaitEvents&...) {}
 
 template <SyncCoreType CoreType = SyncCoreType::AIVOnly>
-PTO_INST void SYNCALL()
-{
-#if !defined(PTO_NPU_ARCH_A5)
-    SYNCALL_IMPL<CoreType>();
-#endif
-}
+PTO_INST void SYNCALL() {}
 
 template <
     SyncAllMode Mode, SyncCoreType CoreType = SyncCoreType::AIVOnly, typename GlobalData,
     std::enable_if_t<is_global_data_v<GlobalData>, int> = 0>
-PTO_INST void SYNCALL(GlobalData& gmWorkspace, int32_t usedCores = 0)
-{
-#if defined(PTO_NPU_ARCH_A5)
-    (void)gmWorkspace;
-    (void)usedCores;
-#else
-    if constexpr (Mode == SyncAllMode::Hard) {
-        (void)gmWorkspace;
-        (void)usedCores;
-        SYNCALL_IMPL<CoreType>();
-    } else if constexpr (CoreType == SyncCoreType::AIVOnly) {
-        SYNCALL_SOFT_IMPL<CoreType>(gmWorkspace.data(), usedCores);
-    } else if constexpr (CoreType == SyncCoreType::AICOnly) {
-        SYNCALL_SOFT_AIC_IMPL(gmWorkspace.data(), usedCores);
-    } else {
-        SYNCALL_SOFT_MIX_IMPL<CoreType>(gmWorkspace.data(), usedCores);
-    }
+PTO_INST void SYNCALL(GlobalData&, int32_t = 0) {}
 #endif
-}
 
 template <typename T, typename AddrType>
 PTO_INST void TASSIGN(T& obj, AddrType addr)
 {
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3101) || (__NPU_ARCH__ == 3510))
+    // Preserve address identity without predicting or recording a setup operation.
     TASSIGN_IMPL(obj, addr);
-#endif
+#else
     MAP_INSTR_IMPL(TASSIGN, obj, addr);
+#endif
 }
 
 // Compile-time address overload: TASSIGN<Addr>(tile)
