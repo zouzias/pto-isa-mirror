@@ -371,15 +371,46 @@ PTO_INTERNAL void TransTail2DTiles(
             __ubuf__ T* srcBlock = srcPtr + bi * yTileSizeElem * srcStride + bj * blockSizeElem;
             __ubuf__ T* dstBlock = dstPtr + bj * blockSizeElem * dstStride + bi * yTileSizeElem;
 
-            if constexpr (sizeof(T) == 1) {
-                TransB8FullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
-            } else {
-                TransFullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
-            }
-            pipe_barrier(PIPE_V);
-
-            // After transpose: tmp is [blockSizeElem, yTileSizeElem]; valid output is cols x rows
-            if (canVecCopy) {
+            // b16 尾块且 dstStride==tmpStride 时 scatter 直写 dst（免掩码搬出与 barrier）；
+            // 其余（b32/b8/非对齐）保持原 tmp+CopyRowsWithMask 路径
+            if (canVecCopy && sizeof(T) == 2 && dstStride == tmpStride && rows == yTileSizeElem) {
+                // 满 16 行的整块迭代：单块直写即可
+                TransFullSubTiles<TransOp<T>, T, blockSizeElem>(dstBlock, srcBlock, dstStride, 1, 1, srcStride);
+            } else if (bj == 0 && canVecCopy && sizeof(T) == 2 && dstStride == tmpStride) {
+                // 列批量 scatter——一次 VA 设置 + repeat（≤255 块/指令）直写 dst 布局
+                unsigned batchBase = bi * yTileSizeElem * srcStride;
+                unsigned batchBlocks = validCol / blockSizeElem;
+                for (unsigned bb = 0; bb < batchBlocks; bb += 255U) {
+                    unsigned batch = (batchBlocks - bb > 255U) ? 255U : (batchBlocks - bb);
+                    uint64_t srcUbB[ADDR_NUM] = {0}, dstUbB[ADDR_NUM] = {0};
+                    for (int j = 0; j < ADDR_NUM; j++) {
+                        srcUbB[j] = (uint64_t)(srcPtr + batchBase + bb * blockSizeElem + j * srcStride);
+                        dstUbB[j] =
+                            (uint64_t)(dstPtr + bi * yTileSizeElem + bb * blockSizeElem * dstStride + j * dstStride);
+                    }
+                    set_va_reg_sb(VA2, srcUbB);
+                    set_va_reg_sb(VA3, &srcUbB[HALF_ADDR_NUM]);
+                    set_va_reg_sb(VA0, dstUbB);
+                    set_va_reg_sb(VA1, &dstUbB[HALF_ADDR_NUM]);
+                    // repeat 走列块：dst 步进 blockSizeElem*dstStride 元素（16 块单位）、src 步进 blockSizeElem 元素（1
+                    // 块单位）
+                    TransOp<T>::TransB16Instr(
+                        static_cast<uint8_t>(batch), blockSizeElem * dstStride * sizeof(T) / BLOCK_BYTE_SIZE,
+                        blockSizeElem * sizeof(T) / BLOCK_BYTE_SIZE);
+                }
+                if (validCol % blockSizeElem != 0) {
+                    TransFullSubTiles<TransOp<T>, T, blockSizeElem>(
+                        dstPtr + bi * yTileSizeElem + batchBlocks * blockSizeElem * dstStride,
+                        srcPtr + batchBase + batchBlocks * blockSizeElem, dstStride, 1, 1, srcStride);
+                }
+                break; // 批量已覆盖全部列块，退出 bj 循环
+            } else if (canVecCopy) {
+                if constexpr (sizeof(T) == 1) {
+                    TransB8FullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+                } else {
+                    TransFullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+                }
+                pipe_barrier(PIPE_V);
                 CopyRowsWithMask<T>(dstBlock, tmpPtr, cols, rows, dstStride, tmpStride);
                 pipe_barrier(PIPE_V);
             } else {
