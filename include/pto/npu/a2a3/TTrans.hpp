@@ -278,15 +278,33 @@ PTO_INTERNAL void TTransVtransposeB16(
         return;
     }
     if (dstStride == blkCol) {
-        // dst 侧整列连续：整列搬入 tmpA，逐块 vtranspose 直接写入 dst
-        for (unsigned bj = 0; bj < numBlkCol; bj++) {
+        // dst 侧整列连续：tmpA 双缓冲 ping-pong——下一列搬入（MTE3）与当前列
+        // vtranspose（V）并行，每列 1 次 pipe_barrier + 1 对 MTE3->V 事件（原 2 次 barrier）
+        {
+            __ubuf__ uint16_t* buf[2] = {tmpA, tmpA + numBlkRow * blk * blk};
             pto_copy_ubuf_to_ubuf(
-                tmpA, (__ubuf__ uint16_t*)(srcPtr + bj * blkCol), numBlkRow * blk, lenBurstIn, srcGap, 0);
-            pipe_barrier(PIPE_V);
-            for (unsigned bi = 0; bi < numBlkRow; bi++) {
-                vtranspose((__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk), tmpA + bi * blk * blk);
+                buf[0], (__ubuf__ uint16_t*)(srcPtr + 0), numBlkRow * blk, lenBurstIn, srcGap, 0);
+#ifndef __PTO_AUTO__
+            set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
+#endif
+            for (unsigned bj = 0; bj < numBlkCol; bj++) {
+#ifndef __PTO_AUTO__
+                wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0); // buf[bj&1] 搬入完成
+#endif
+                for (unsigned bi = 0; bi < numBlkRow; bi++) {
+                    vtranspose(
+                        (__ubuf__ uint16_t*)(dstPtr + bj * blkCol * dstStride + bi * blk), buf[bj & 1] + bi * blk * blk);
+                }
+                pipe_barrier(PIPE_V);  // vtranspose(bj) 完成，buf[(bj+1)&1] 可覆盖
+                if (bj + 1 < numBlkCol) {
+                    pto_copy_ubuf_to_ubuf(
+                        buf[(bj + 1) & 1], (__ubuf__ uint16_t*)(srcPtr + (bj + 1) * blkCol), numBlkRow * blk,
+                        lenBurstIn, srcGap, 0);
+#ifndef __PTO_AUTO__
+                    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0); // 下一列搬入完成
+#endif
+                }
             }
-            pipe_barrier(PIPE_V);
         }
         return;
     }
@@ -371,15 +389,44 @@ PTO_INTERNAL void TransTail2DTiles(
             __ubuf__ T* srcBlock = srcPtr + bi * yTileSizeElem * srcStride + bj * blockSizeElem;
             __ubuf__ T* dstBlock = dstPtr + bj * blockSizeElem * dstStride + bi * yTileSizeElem;
 
-            if constexpr (sizeof(T) == 1) {
-                TransB8FullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
-            } else {
-                TransFullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
-            }
-            pipe_barrier(PIPE_V);
-
-            // After transpose: tmp is [blockSizeElem, yTileSizeElem]; valid output is cols x rows
-            if (canVecCopy) {
+            // b16 尾块且 dstStride==tmpStride 时 scatter 直写 dst（免掩码搬出与 barrier）；
+            // 其余（b32/b8/非对齐）保持原 tmp+CopyRowsWithMask 路径
+            if (canVecCopy && sizeof(T) == 2 && dstStride == tmpStride && rows == yTileSizeElem) {
+                // 满 16 行的整块迭代：单块直写即可
+                TransFullSubTiles<TransOp<T>, T, blockSizeElem>(dstBlock, srcBlock, dstStride, 1, 1, srcStride);
+            } else if (bj == 0 && canVecCopy && sizeof(T) == 2 && dstStride == tmpStride) {
+                // 列批量 scatter——一次 VA 设置 + repeat（≤255 块/指令）直写 dst 布局
+                unsigned batchBase = bi * yTileSizeElem * srcStride;
+                unsigned batchBlocks = validCol / blockSizeElem;
+                for (unsigned bb = 0; bb < batchBlocks; bb += 255U) {
+                    unsigned batch = (batchBlocks - bb > 255U) ? 255U : (batchBlocks - bb);
+                    uint64_t srcUbB[ADDR_NUM] = {0}, dstUbB[ADDR_NUM] = {0};
+                    for (int j = 0; j < ADDR_NUM; j++) {
+                        srcUbB[j] = (uint64_t)(srcPtr + batchBase + bb * blockSizeElem + j * srcStride);
+                        dstUbB[j] = (uint64_t)(dstPtr + bi * yTileSizeElem + bb * blockSizeElem * dstStride + j * dstStride);
+                    }
+                    set_va_reg_sb(VA2, srcUbB);
+                    set_va_reg_sb(VA3, &srcUbB[HALF_ADDR_NUM]);
+                    set_va_reg_sb(VA0, dstUbB);
+                    set_va_reg_sb(VA1, &dstUbB[HALF_ADDR_NUM]);
+                    // repeat 走列块：dst 步进 blockSizeElem*dstStride 元素（16 块单位）、src 步进 blockSizeElem 元素（1 块单位）
+                    TransOp<T>::TransB16Instr(static_cast<uint8_t>(batch),
+                                              blockSizeElem * dstStride * sizeof(T) / BLOCK_BYTE_SIZE,
+                                              blockSizeElem * sizeof(T) / BLOCK_BYTE_SIZE);
+                }
+                if (validCol % blockSizeElem != 0) {
+                    TransFullSubTiles<TransOp<T>, T, blockSizeElem>(
+                        dstPtr + bi * yTileSizeElem + batchBlocks * blockSizeElem * dstStride,
+                        srcPtr + batchBase + batchBlocks * blockSizeElem, dstStride, 1, 1, srcStride);
+                }
+                break;  // 批量已覆盖全部列块，退出 bj 循环
+            } else if (canVecCopy) {
+                if constexpr (sizeof(T) == 1) {
+                    TransB8FullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+                } else {
+                    TransFullSubTiles<TransOp<T>, T, blockSizeElem>(tmpPtr, srcBlock, tmpStride, 1, 1, srcStride);
+                }
+                pipe_barrier(PIPE_V);
                 CopyRowsWithMask<T>(dstBlock, tmpPtr, cols, rows, dstStride, tmpStride);
                 pipe_barrier(PIPE_V);
             } else {
@@ -520,6 +567,42 @@ __tf__ PTO_INTERNAL void TTrans(
     __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
     __ubuf__ T* tmpPtr = (__ubuf__ T*)__cce_get_tile_ptr(tmp);
     TTransOperation<T, blockSizeElem>(dstPtr, srcPtr, tmpPtr, validRow, validCol, dstStride, srcStride);
+}
+
+// TTransTail：TAIL 专用路径。tilegraph 按形状分流（b16 行数非 16 对齐的残余 tile）
+// 直接进入此路径：只走尾块机制（逐 16x16/b8 32x32 块 vnchwconv + 掩码/标量搬出），
+// 无 vtranspose 分支、无 2×numBlkRow 的 tmp 契约——tmp 仅需行方向对齐（tilegraph 侧分配）。
+// 结构解耦：对齐 tile 的 vtranspose 合同（tmp 最后维 ≥32）不再约束行残余 tile 的缓冲。
+// 列残余但行对齐的 tile 仍走 TTRANS（对齐子块用 vtranspose 快路径，性能更优）。
+template <typename T, unsigned blockSizeElem>
+PTO_INTERNAL void TTransTailOperation(
+    __ubuf__ T* dstPtr, __ubuf__ T* srcPtr, __ubuf__ T* tmpPtr, unsigned validRow, unsigned validCol,
+    unsigned dstStride, unsigned srcStride)
+{
+    constexpr unsigned yTileSizeElem = (sizeof(T) == 1) ? Y_ELEM_B8 : Y_ELEM_OTHER;
+    // tmpStride should computed in static way
+    unsigned tmpStride = (validRow + yTileSizeElem - 1) / yTileSizeElem * yTileSizeElem;
+    TransTail2DTiles<T, blockSizeElem, yTileSizeElem>(
+        dstPtr, srcPtr, tmpPtr, tmpStride, validRow, validCol, dstStride, srcStride);
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TTRANSTAIL_IMPL(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp)
+{
+    using T = typename TileDataSrc::DType;
+    using U = typename TileDataDst::DType;
+    static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANSTAIL has unsupported data type.");
+    static_assert(sizeof(T) == sizeof(U), "Fix: TTRANSTAIL has inconsistent input and output data type.");
+    static_assert(!is_conv_tile_v<TileDataSrc>, "Fix: TTRANSTAIL does not support conv tile.");
+    static_assert(TileDataSrc::isRowMajor, "Fix: TTRANSTAIL has not supported layout type.");
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr unsigned dstStride = TileDataDst::RowStride;
+    constexpr unsigned srcStride = TileDataSrc::RowStride;
+
+    unsigned validRow = src.GetValidRow();
+    unsigned validCol = src.GetValidCol();
+    TTransTailOperation<T, blockSizeElem>(
+        dst.data(), src.data(), tmp.data(), validRow, validCol, dstStride, srcStride);
 }
 
 ////////////// TTrans Repeat X/////

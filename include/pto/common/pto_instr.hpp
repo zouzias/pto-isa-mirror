@@ -2137,6 +2137,16 @@ PTO_INST RecordEvent TTRANS(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp
     return {};
 }
 
+// TTRANSTAIL: TAIL 专用转置入口——tilegraph 按形状分流的残余 tile（行数非 16 对齐）
+// 走此路径：无 vtranspose 分支、无 2×numBlkRow tmp 契约，tmp 仅需行方向对齐。
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TTRANSTAIL(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL(TTRANSTAIL, dst, src, tmp);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent
 TMINS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events)
