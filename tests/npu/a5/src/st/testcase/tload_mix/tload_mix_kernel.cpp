@@ -1008,3 +1008,53 @@ template void launchTLOADMIX<uint16_t, 5, 1, 1, 1, 35, 3, 1, 1, 1, 64, 9, 64, 32
 
 template void launchTLOADMIX<uint16_t, 5, 1, 1, 16, 35, 3, 1, 1, 16, 64, 9, 64, 32, 31, true>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream);
+
+template <typename T, int64_t MatrixStride, int64_t ColumnStride, int ValidCols, bool DynamicStride>
+__global__ AICORE void TLOAD_MIX_LARGE_STRIDE_KERNEL(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int64_t matrixStride, int64_t columnStride)
+{
+    using SrcStride = pto::Stride<1, 1, DynamicStride ? -1 : MatrixStride, 1, DynamicStride ? -1 : ColumnStride>;
+    using SrcGlobal = GlobalTensor<T, pto::Shape<1, 1, 2, 32, 2>, SrcStride, Layout::DN>;
+    SrcGlobal input(reinterpret_cast<__gm__ T*>(src), {}, SrcStride(1, 1, matrixStride, 1, columnStride));
+    using MatTile = Tile<TileType::Mat, T, 64, 64, BLayout::RowMajor, 32, ValidCols, SLayout::ColMajor, 512>;
+    using VecTile = Tile<TileType::Vec, T, 64, 64, BLayout::RowMajor, 64, 64>;
+    MatTile mat;
+    VecTile vec;
+    TASSIGN(mat, 0);
+    TASSIGN(vec, 0);
+#if defined(__DAV_CUBE__)
+    constexpr uint64_t repeatBit = (uint64_t(64 * 64 * sizeof(T) / BLOCK_BYTE_SIZE) << 16) | 1;
+    tf_create_cbuf_matrix<MatTile>(mat.data(), repeatBit, 0x33333333);
+#endif
+    TLOAD(mat, input);
+    MovL1ToUbuf<VecTile, MatTile, 0>(vec, mat);
+#if defined(__DAV_VEC__)
+    wait_intra_block(PIPE_MTE3, 0);
+    if (get_subblockid() == 0) {
+        using DstGlobal =
+            GlobalTensor<T, pto::Shape<1, 1, 1, 64, 64>, pto::Stride<4096, 4096, 4096, 64, 1>, Layout::ND>;
+        DstGlobal output(reinterpret_cast<__gm__ T*>(out));
+        TSTORE(output, vec);
+    }
+#endif
+}
+
+template <typename T, int64_t MatrixStride, int64_t ColumnStride, int ValidCols, bool DynamicStride>
+void launchTLOADMIXLargeStride(uint8_t* out, uint8_t* src, void* stream)
+{
+    TLOAD_MIX_LARGE_STRIDE_KERNEL<T, MatrixStride, ColumnStride, ValidCols, DynamicStride>
+        <<<1, nullptr, stream>>>(out, src, MatrixStride, ColumnStride);
+}
+
+template void launchTLOADMIXLargeStride<float, 128, (int64_t(1) << 30) + 32, 2, true>(
+    uint8_t* out, uint8_t* src, void* stream);
+template void launchTLOADMIXLargeStride<uint8_t, (int64_t(1) << 32) + 256, 64, 4, false>(
+    uint8_t* out, uint8_t* src, void* stream);
+template void launchTLOADMIXLargeStride<uint8_t, (int64_t(1) << 32) + 256, 64, 3, true>(
+    uint8_t* out, uint8_t* src, void* stream);
+template void launchTLOADMIXLargeStride<uint8_t, 128, (int64_t(1) << 32) + 256, 2, true>(
+    uint8_t* out, uint8_t* src, void* stream);
+template void launchTLOADMIXLargeStride<uint8_t, (int64_t(1) << 31) + 256, 64, 3, true>(
+    uint8_t* out, uint8_t* src, void* stream);
+template void launchTLOADMIXLargeStride<uint16_t, (int64_t(1) << 31) + 128, 64, 3, true>(
+    uint8_t* out, uint8_t* src, void* stream);

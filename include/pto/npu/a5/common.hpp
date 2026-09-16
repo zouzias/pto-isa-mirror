@@ -18,10 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename T>
-PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
+PTO_INTERNAL uint64_t GetByteSize(const uint64_t value)
 {
     if constexpr (caps::IsFP4<T>()) {
-        return (value + 1) >> 1; // fp4/hif4 4bits, ceil division to include last nibble for odd counts
+        return (value >> 1) + (value & 1); // fp4/hif4: ceil division without overflowing the element count
     }
     return sizeof(T) * value;
 }
