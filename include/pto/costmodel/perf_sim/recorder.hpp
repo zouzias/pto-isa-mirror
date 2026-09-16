@@ -16,6 +16,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string_view>
 #include <vector>
 
+#include <concepts>
+#include <type_traits>
+#include <pto/common/cpu_stub.hpp>
+#include <pto/common/type.hpp>
+#include <pto/cpu/Hifloat8.hpp>
+#include <pto/cpu/MXTypes.hpp>
+
 namespace pto::perf_sim {
 
 // Thread-local subblock ID, set by LAUNCH_KERNEL before kernel execution.
@@ -328,8 +335,22 @@ struct TileTraits<T> {
             return "int8";
         else if constexpr (std::is_same_v<DType, uint8_t>)
             return "uint8";
-        else
+        else if constexpr (std::is_same_v<DType, float8_e4m3_t>)
+            return "fp8_e4m3";
+        else if constexpr (std::is_same_v<DType, float8_e5m2_t>)
+            return "fp8_e5m2";
+        else if constexpr (std::is_same_v<DType, hifloat8_t>)
+            return "hif8";
+        else if constexpr (std::is_same_v<DType, float4_e1m2x2_t>)
+            return "fp4_e1m2";
+        else if constexpr (std::is_same_v<DType, float4_e2m1x2_t>)
+            return "fp4_e2m1";
+        else if constexpr (std::is_same_v<DType, bfloat16_t> && !std::is_same_v<bfloat16_t, half>)
+            return "bf16";
+        else if constexpr (std::is_same_v<DType, half>)
             return "fp16";
+        else
+            return "unknown";
     }
 };
 

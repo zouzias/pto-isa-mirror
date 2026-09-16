@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-#include "a5_vfsim_tileop_check.hpp"
+#include "a5_host_tileop_check.hpp"
 
 using namespace pto;
 
@@ -32,7 +32,8 @@ void runTMul()
     TMUL(dstTile, src0Tile, src1Tile);
 
     constexpr uint64_t repeat = (static_cast<uint64_t>(rows) * cols + 63) / 64;
-    pto::test::a5::ExpectLastBinaryVecTileOp({"vlds", "vlds", "vmul", "vsts"}, repeat);
+    constexpr uint64_t expectedCycles = static_cast<uint64_t>(1.1941075 * repeat + 56.285962 + 0.5);
+    pto::test::a5::ExpectSupportedVfTileOp("TMUL", expectedCycles);
 }
 
 } // namespace
