@@ -122,6 +122,11 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
       运行时：`1 <= Shape2 <= 65535`、`1 <= Shape4 <= 16384`、
       `1 <= dst.GetValidCol() <= min(TileData::Cols, Shape2 * Shape4)`，以及
       `1 <= dst.GetValidRow() <= min(TileData::Rows, Shape3)`。
+    - A5 `TileType::Mat` 多矩阵 ND->NZ 和 DN->ZN 的源步长保留 64 位精度，静态和动态 `Stride` 均适用。
+      `Stride2` 和矩阵内步长（ND 的 `Stride3`、DN 的 `Stride4`）均为 `int64_t` 类型的元素数。
+      对支持的 b8/b16/b32 类型，字节间距为 `stride * sizeof(DType)`，使用 64 位计算；
+      超过 `INT32_MAX` 的元素步长以及 4 GiB 及以上的字节间距不会被截断为 32 位。
+      传入 `Stride` 前，应使用 64 位操作数计算大步长表达式，并确保 GM 存储覆盖所有访问地址。
     - `TileType::Mat` 加载还处理mx格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到ZZ（用于scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到NN（用于scalarB）。
     - 对于 `MX_A_ZZ/MX_B_NN`：`(GlobalData::staticShape[3] == 16 || GlobalData::staticShape[3] == -1)` 且 `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`。
     - 对于 `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`：`(GlobalData::staticShape[0] == 1 || GlobalData::staticShape[0] == -1)` 且 `(GlobalData::staticShape[1] == 1 || GlobalData::staticShape[1] == -1)` 且 `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`。
@@ -141,6 +146,8 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
       单条指令先搬运 `dst.GetValidCol() / Shape4` 个完整矩阵；若 `dst.GetValidCol() % Shape4` 非零，
       再单独搬运下一个矩阵的这些尾列。没有完整矩阵时只搬运尾块。
       Shape2 为动态维度且运行时取值为 1 时也适用。
+      存在尾列时，令 `n = dst.GetValidCol() / Shape4`，尾矩阵从 `src.data() + n * Stride2` 开始
+      （偏移单位为元素）；即使对应的字节距离达到或超过 4 GiB，源偏移也保留 64 位精度。
       两次搬运均保持 `TileData::Cols` 对应的 C0 块步长，单位为 32 字节。
       仅对有效行末尾不足一个 C0 块的部分填零；未参与搬运的列以及有效行之外的完整 C0 块保留原值。
       编译期 Shape2 为 1 时使用单矩阵路径：搬运 `Shape4` 列、`dst.GetValidRow()` 行，
@@ -217,6 +224,39 @@ AICORE void example_dn_to_zn(__gm__ int16_t* in) {
 
 对于 `0 <= r < 35`、`0 <= c < 17`，结果为
 `dst[r, c] = in[(c / 3) * 576 + (c % 3) * 64 + r]`。
+
+### A5 动态大步长 DN 到 ZN 加载（手动模式）
+
+下面的 Cube 函数加载合并后的前 3 列，即第一个矩阵的全部 2 列和第二个矩阵的第 1 列。
+`matrixStride` 在运行时传入，表示相邻矩阵起始地址之间的距离，单位为 `uint16_t` 元素。
+例如，`(int64_t{1} << 31) + 128` 个元素对应 `4294967552` 字节（4 GiB + 256 字节）。
+GM 分配须覆盖所有访问元素，包括第二个矩阵起始处的 32 行。
+使用上述示例步长时，从 `in` 开始所需的存储跨度为 `(matrixStride + 32) * sizeof(uint16_t)` 字节。
+`SrcStride` 中的 `-1` 仅将 `Stride2` 设为动态值；`Shape2` 仍是编译期确定的矩阵数量 2。
+
+```cpp
+#include <cstdint>
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+AICORE void example_dn_to_zn_large_stride(__gm__ uint16_t* in, int64_t matrixStride) {
+  using SrcShape = Shape<1, 1, 2, 32, 2>;
+  using SrcStride = pto::Stride<1, 1, -1, 1, 64>;
+  using SrcGlobal = GlobalTensor<uint16_t, SrcShape, SrcStride, Layout::DN>;
+  using MatTile = Tile<TileType::Mat, uint16_t, 64, 64, BLayout::RowMajor,
+                       32, 3, SLayout::ColMajor, 512>;
+
+  SrcGlobal src(in, SrcShape{}, SrcStride(1, 1, matrixStride, 1, 64));
+  MatTile dst;
+  TASSIGN(dst, 0x1000);
+  TLOAD(dst, src);
+}
+```
+
+对于 `0 <= r < 32`、`0 <= c < 3`，结果为
+`dst[r, c] = in[(c / 2) * matrixStride + (c % 2) * 64 + r]`。
+因此最后加载的一列来自 `in[matrixStride + r]`。
 
 ## 汇编示例（ASM）
 

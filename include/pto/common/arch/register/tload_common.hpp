@@ -220,8 +220,8 @@ PTO_INTERNAL void TLoadCubeCheck()
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeND2NZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     // ZN [D, M] aliases NZ [M, D]: the merged extent and C0-block stride use tile columns.
     constexpr bool isZn = TileData::isRowMajor && TileData::SFractal == SLayout::ColMajor;
@@ -321,8 +321,8 @@ PTO_INTERNAL void TLoadCubeNZ2NZ(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeDN2ZN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     TLoadCubeND2NZ<Op, TileData, GlobalData>(
         dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -332,8 +332,8 @@ PTO_INTERNAL void TLoadCubeDN2ZN(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadCube(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
 #if defined(PTO_COMPILE_CUBE)
     using L1Type = __cbuf__ typename TileData::DType*;

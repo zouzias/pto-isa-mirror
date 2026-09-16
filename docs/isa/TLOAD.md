@@ -122,6 +122,13 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
       and `TileData::Cols <= 65535`. Runtime: `1 <= Shape2 <= 65535`, `1 <= Shape4 <= 16384`,
       `1 <= dst.GetValidCol() <= min(TileData::Cols, Shape2 * Shape4)`, and
       `1 <= dst.GetValidRow() <= min(TileData::Rows, Shape3)`.
+    - A5 `TileType::Mat` multi-matrix ND->NZ and DN->ZN preserve 64-bit source strides for both static and dynamic
+      `Stride` values.
+      `Stride2` and the within-matrix stride (`Stride3` for ND, `Stride4` for DN) are `int64_t` element counts.
+      For the supported b8/b16/b32 types, their byte distances are `stride * sizeof(DType)`, computed in 64 bits;
+      element strides above `INT32_MAX` and byte distances of 4 GiB or more are not truncated to 32 bits.
+      Form large stride expressions with 64-bit operands before passing them to `Stride`, and provide GM storage
+      covering all accessed addresses.
     - `TileType::Mat` loads also handle loads for mx format, which include `MX_A_ZZ/MX_A_ND/MX_A_DN` to ZZ for scalarA and `MX_B_NN/MX_B_ND/MX_B_DN` to NN for scalarB.
     - for `MX_A_ZZ/MX_B_NN`: `(GlobalData::staticShape[3] == 16 || GlobalData::staticShape[3] == -1)` and `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`.
     - for `MX_A_ND/MX_A_DN/MX_B_ND/MX_B_DN`: `(GlobalData::staticShape[0] == 1 || GlobalData::staticShape[0] == -1)` and `(GlobalData::staticShape[1] == 1 || GlobalData::staticShape[1] == -1)` and `(GlobalData::staticShape[4] == 2 || GlobalData::staticShape[4] == -1)`.
@@ -142,6 +149,9 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
       It transfers `dst.GetValidCol() / Shape4` complete matrices in one instruction, then transfers
       `dst.GetValidCol() % Shape4` columns from the next matrix if needed. With no complete matrices, only
       the tail transfer is issued. This also applies when Shape2 is dynamic and its runtime value is 1.
+      When a tail is present, with `n = dst.GetValidCol() / Shape4`, it starts at
+      `src.data() + n * Stride2` (element offset). The source offset retains 64-bit precision even when
+      the byte distance is 4 GiB or more.
       Both transfers retain `TileData::Cols` as the C0-block stride (in 32-byte units).
       Only the final partial C0 block along the valid rows is zero-filled; inactive columns and full
       C0 blocks beyond the valid rows retain their previous contents.
@@ -219,6 +229,39 @@ AICORE void example_dn_to_zn(__gm__ int16_t* in) {
 
 For `0 <= r < 35` and `0 <= c < 17`, the result is
 `dst[r, c] = in[(c / 3) * 576 + (c % 3) * 64 + r]`.
+
+### A5 DN-to-ZN load with a large dynamic stride (Manual)
+
+This Cube function loads three merged columns: both columns of the first matrix and the first column
+of the second. `matrixStride` is the distance between matrix starts in `uint16_t` elements, supplied at runtime.
+For example, `(int64_t{1} << 31) + 128` elements correspond to `4294967552` bytes (4 GiB + 256 bytes).
+The GM allocation must cover all accessed elements, including the 32 rows at the second matrix's start.
+With this example stride, the required span from `in` is `(matrixStride + 32) * sizeof(uint16_t)` bytes.
+The `-1` in `SrcStride` makes only `Stride2` dynamic; `Shape2` remains the compile-time matrix count of 2.
+
+```cpp
+#include <cstdint>
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+AICORE void example_dn_to_zn_large_stride(__gm__ uint16_t* in, int64_t matrixStride) {
+  using SrcShape = Shape<1, 1, 2, 32, 2>;
+  using SrcStride = pto::Stride<1, 1, -1, 1, 64>;
+  using SrcGlobal = GlobalTensor<uint16_t, SrcShape, SrcStride, Layout::DN>;
+  using MatTile = Tile<TileType::Mat, uint16_t, 64, 64, BLayout::RowMajor,
+                       32, 3, SLayout::ColMajor, 512>;
+
+  SrcGlobal src(in, SrcShape{}, SrcStride(1, 1, matrixStride, 1, 64));
+  MatTile dst;
+  TASSIGN(dst, 0x1000);
+  TLOAD(dst, src);
+}
+```
+
+For `0 <= r < 32` and `0 <= c < 3`, the result is
+`dst[r, c] = in[(c / 2) * matrixStride + (c % 2) * 64 + r]`.
+The last loaded column therefore comes from `in[matrixStride + r]`.
 
 ## ASM Form Examples
 
