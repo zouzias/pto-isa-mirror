@@ -178,11 +178,8 @@ Pipeline     | AIC-0   |
 CSV 表头：
 
 ```csv
-op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles,costmodel_status,diagnostic
+op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles
 ```
-
-时间线有效时，`costmodel_status` 为 `Supported`。如果存在当前 costmodel 尚未覆盖的指令，CSV 只输出一条
-带诊断信息的 `Unsupported` 状态记录，pipeline 时间字段留空，不会把零周期作为有效预测输出。
 
 每个物理 core 输出三行，分别是 `AIC`、`AIV0`、`AIV1`。这样可以直接看到 1C2V 的结构，而不是把两个 AIV 的 busy cycles 加在一起。
 
@@ -194,15 +191,14 @@ op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cyc
 | `active_cycles` | `active_end_cycle - active_start_cycle`，更适合和 CAModel 的 core/veccore 运行窗口对比 |
 | `busy_cycles` | 该 unit 内各 pipeline busy cycles 之和 |
 | `mte2_aic_cycles` / `mte2_aiv_cycles` | AIC 和 AIV 的 MTE2 分开统计；AIC 行只会有 `mte2_aic_cycles`，AIV 行只会有 `mte2_aiv_cycles` |
-| `costmodel_status` / `diagnostic` | 预测结果是否有效，以及不支持时的原因 |
 
 示例：
 
 ```csv
-op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles,costmodel_status,diagnostic
-runTFA_64x64x512,0,AIC,12438,0,11849,11849,7592,292,2600,0,1560,1120,2020,0,0,Supported,
-runTFA_64x64x512,0,AIV0,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362,Supported,
-runTFA_64x64x512,0,AIV1,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362,Supported,
+op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles
+runTFA_64x64x512,0,AIC,12438,0,11849,11849,7592,292,2600,0,1560,1120,2020,0,0
+runTFA_64x64x512,0,AIV0,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362
+runTFA_64x64x512,0,AIV1,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362
 ```
 
 常见使用方式：
@@ -214,9 +210,6 @@ runTFA_64x64x512,0,AIV1,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362,Supp
 ### JSON trace
 
 `<op_name>.json` 是 Chrome Trace Event 格式。可以用 Perfetto 或 Chrome tracing 打开：
-
-预测不支持时，文件只包含一个 `costmodel_status` instant event，其中记录 Unsupported 状态和诊断信息，
-不会生成性能时间线事件。
 
 ```text
 chrome://tracing

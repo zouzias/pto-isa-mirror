@@ -178,12 +178,8 @@ Key fields:
 CSV header:
 
 ```csv
-op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles,costmodel_status,diagnostic
+op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles
 ```
-
-`costmodel_status` is `Supported` when the timeline is valid. If an instruction is not covered by the selected
-costmodel, the file contains one `Unsupported` status row with a diagnostic and no pipeline timing values; zero
-cycles are not emitted as a valid prediction.
 
 Each physical core emits three rows: `AIC`, `AIV0`, and `AIV1`. This keeps the 1C2V structure visible instead of adding both AIV busy-cycle totals together.
 
@@ -195,15 +191,14 @@ Each physical core emits three rows: `AIC`, `AIV0`, and `AIV1`. This keeps the 1
 | `active_cycles` | `active_end_cycle - active_start_cycle`; use this when comparing with CAModel core/veccore execution windows |
 | `busy_cycles` | Sum of busy cycles in this unit |
 | `mte2_aic_cycles` / `mte2_aiv_cycles` | MTE2 is split by AIC and AIV. AIC rows use `mte2_aic_cycles`; AIV rows use `mte2_aiv_cycles`. |
-| `costmodel_status` / `diagnostic` | Prediction validity and the reason when it is unsupported. |
 
 Example:
 
 ```csv
-op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles,costmodel_status,diagnostic
-runTFA_64x64x512,0,AIC,12438,0,11849,11849,7592,292,2600,0,1560,1120,2020,0,0,Supported,
-runTFA_64x64x512,0,AIV0,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362,Supported,
-runTFA_64x64x512,0,AIV1,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362,Supported,
+op_name,core_id,unit,total_cycles,active_start_cycle,active_end_cycle,active_cycles,busy_cycles,scalar_cycles,mte2_aic_cycles,mte2_aiv_cycles,mte1_cycles,cube_cycles,fixp_cycles,vec_cycles,mte3_cycles
+runTFA_64x64x512,0,AIC,12438,0,11849,11849,7592,292,2600,0,1560,1120,2020,0,0
+runTFA_64x64x512,0,AIV0,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362
+runTFA_64x64x512,0,AIV1,12438,1488,12438,10950,9000,0,0,1366,0,0,0,7272,362
 ```
 
 Typical use:
@@ -215,9 +210,6 @@ Typical use:
 ### JSON Trace
 
 `<op_name>.json` uses the Chrome Trace Event format. Open it with Perfetto or Chrome tracing:
-
-For an unsupported prediction, the file contains a `costmodel_status` instant event with the status and diagnostics,
-and contains no performance timeline events.
 
 ```text
 chrome://tracing
