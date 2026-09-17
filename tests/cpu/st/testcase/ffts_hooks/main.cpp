@@ -133,8 +133,8 @@ TEST_F(FFTSHooksTest, NullStringProviderIsRejected)
 
 TEST_F(FFTSHooksTest, AmbiguousKernelRoleIsRejected)
 {
-    EXPECT_THROW(__builtin_cce_ffts_cross_core_sync(PIPE_FIX, pto::getFFTSMsg(2, 0)), std::runtime_error);
-    EXPECT_THROW(__builtin_cce_wait_flag_dev(0), std::runtime_error);
+    EXPECT_THROW(ffts_cross_core_sync(PIPE_FIX, pto::getFFTSMsg(2, 0)), std::runtime_error);
+    EXPECT_THROW(wait_flag_dev(0), std::runtime_error);
 }
 
 TEST_F(FFTSHooksTest, OverflowDoesNotPartiallyBroadcast)

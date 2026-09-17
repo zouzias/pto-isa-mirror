@@ -77,7 +77,8 @@ if __name__ == "__main__":
         TAddParams(np.int32, 64, 64, 64, 64, 64, 64),
         TAddParams(np.int16, 64, 64, 64, 64, 64, 64),
         TAddParams(np.float16, 16, 256, 16, 256, 16, 256),
-        TAddParams(np.int64, 64, 64, 64, 64, 64, 64)
+        TAddParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TAddParams(np.uint64, 64, 64, 64, 64, 64, 64)
     ]
     if ENABLE_BF16:
         case_params_list.append(TAddParams(

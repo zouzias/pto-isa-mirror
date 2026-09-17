@@ -91,7 +91,12 @@ endif()
 
 if(AUTO_MODE)
     message(STATUS "Auto Mode Enabled, Add Auto Mode Options")
-    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-auto-enable")
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER} --help OUTPUT_VARIABLE PTO_COMPILER_HELP)
+    if(PTO_COMPILER_HELP MATCHES "--cce-enable-pto-passes")
+        list(APPEND CMAKE_CCE_COMPILE_OPTIONS --cce-enable-pto-passes)
+    else()
+        list(APPEND CMAKE_CCE_COMPILE_OPTIONS --cce-pto-auto-enable)
+    endif()
 endif()
 
 set(CMAKE_CPP_COMPILE_OPTIONS
@@ -103,6 +108,9 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../../../include
     ${PROJECT_SOURCE_DIR}/../../../../../pkg_inc
+)
+# Keep this checkout's PTO headers ahead of the copies injected by --cce-enable-print.
+include_directories(SYSTEM
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )

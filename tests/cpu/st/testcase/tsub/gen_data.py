@@ -73,6 +73,7 @@ if __name__ == "__main__":
         tsubParams(np.float32, 64, 64, 64, 64, 64, 64),
         tsubParams(np.int32, 64, 64, 64, 64, 64, 64),
         tsubParams(np.int64, 64, 64, 64, 64, 64, 64),
+        tsubParams(np.uint64, 64, 64, 64, 64, 64, 64),
         tsubParams(np.int16, 64, 64, 64, 64, 64, 64),
         tsubParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]

@@ -76,7 +76,8 @@ if __name__ == "__main__":
         TSubsParams(np.int32, 64, 64, 64, 64, 64, 64),
         TSubsParams(np.int16, 64, 64, 64, 64, 64, 64),
         TSubsParams(np.float16, 16, 256, 16, 256, 16, 256),
-        TSubsParams(np.int64, 64, 64, 64, 64, 64, 64)
+        TSubsParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TSubsParams(np.uint64, 64, 64, 64, 64, 64, 64)
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
         case_params_list.append(TSubsParams(

@@ -220,7 +220,7 @@ be a `pto::Tile` in UB/Vec memory and remain valid until the associated events h
 - The payload destination range must not overlap `dstSignalData`.
 - For URMA and RDMA, the payload destination and signal must belong to the same target peer. The complete local
   payload, remote payload, and remote signal ranges must lie in memory regions registered during host initialization.
-- One URMA payload must not exceed 256 MB. One RDMA payload must not exceed `0x7fffffff` bytes.
+- A URMA payload has no per-call size cap: a payload larger than 256 MB (the single-WQE transfer limit) is automatically split into multiple WQEs by the implementation, transparently to the caller, and the signal is still guaranteed to complete after all payload chunks. One RDMA payload must not exceed `0x7fffffff` bytes.
 - RDMA supports only `NotifyOp::Set`; do not use `NotifyOp::AtomicAdd`.
 - The SDMA workspace must be initialized by the host-side `SdmaWorkspaceManager`. The URMA workspace must be
   initialized by the host-side `UrmaWorkspaceManager`.

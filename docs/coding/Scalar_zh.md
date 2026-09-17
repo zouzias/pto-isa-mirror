@@ -56,7 +56,8 @@ ISA 文档会用简短助记符（例如 `fp16`、`s8`）描述指令语义。�
 
 ### `pto::RoundMode`
 
-定义于 `include/pto/common/constants.hpp`。`TCVT` 使用它来指定舍入行为（例如 `RoundMode::CAST_RINT`）。
+定义于 `include/pto/common/type.hpp`。`TCVT` 使用它来指定舍入行为（例如 `RoundMode::CAST_RINT`）。
+支持的模式及默认行为取决于转换类型与后端，详见 [TCVT](../isa/TCVT_zh.md)。
 
 ### `pto::CmpMode`
 

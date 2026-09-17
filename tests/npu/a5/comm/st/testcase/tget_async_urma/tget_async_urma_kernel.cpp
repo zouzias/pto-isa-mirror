@@ -172,3 +172,4 @@ template bool RunGetAsyncUrmaRootGet<uint8_t, 512>(int, int, int, int);
 template bool RunGetAsyncUrmaRootGet<float, 524288>(int, int, int,
                                                     int);                    // MR = 8MB (>2MB)
 template bool RunGetAsyncUrmaRootGet<int32_t, 67108864>(int, int, int, int); // MR ≈ 770MB (>512MB)
+template bool RunGetAsyncUrmaRootGet<int32_t, 67371008>(int, int, int, int); // 257MB GET, two WQEs

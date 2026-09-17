@@ -50,3 +50,5 @@ template void LaunchTSHLS<int32_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM
     int32_t* out, int32_t* src, int32_t* scalar, void* stream);
 template void LaunchTSHLS<int64_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>(
     int64_t* out, int64_t* src, int64_t* scalar, void* stream);
+template void LaunchTSHLS<uint64_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>(
+    uint64_t* out, uint64_t* src, uint64_t* scalar, void* stream);

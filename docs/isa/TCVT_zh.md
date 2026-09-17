@@ -38,8 +38,8 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 
 ## C++内建接口
 
-声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
-> 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
+使用此接口应包含 `<pto/pto-inst.hpp>`。各重载定义于 `include/pto/common/pto_instr.hpp`，
+`RoundMode` 和 `SaturationMode` 定义于 `include/pto/common/type.hpp`。
 
 ```cpp
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
@@ -65,6 +65,19 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Roun
     - 一种形式接受显式的 `SaturationMode`，指定的饱和行为会直接传递给实现。
     - 另一种形式不显式给出 `SaturationMode`；此时实现会针对具体类型对选择目标定义的默认饱和行为。
     - CPU_SIM 实现了上面列出的全部四种 C++ 重载；其默认饱和模式为 `SaturationMode::OFF`。
+    - CPU_SIM 的 FP32 到 FP8 E4M3/E5M2 转换实现 `CAST_RINT`（最近舍入，中点取偶数）、`CAST_ROUND`
+      （最近舍入，中点远离零）、`CAST_FLOOR`、`CAST_CEIL` 和 `CAST_TRUNC`。与 A5 分派一致，
+      `CAST_NONE` 及 FP8 不支持的 `CAST_ODD` 回退为 `CAST_RINT`。
+      舍入保留有符号零，且不依赖主机浮点舍入模式。
+    - 对上述 CPU_SIM FP8 转换，饱和模式将有限值溢出及输入无穷大限制为带原符号的最大有限值
+      （E4M3：448；E5M2：57344）。输入 NaN 仍为 NaN，但不保留其 payload。
+      非饱和模式下，E4M3 舍入结果超出有限范围或输入为无穷大时生成 NaN。
+      对 E5M2 有限输入，最近舍入（`CAST_RINT`/`CAST_ROUND`）在绝对值 >= 61440 时生成带原符号的无穷大；
+      向远离零方向舍入在绝对值 > 57344 时生成无穷大。向零方向舍入对绝对值 > 57344 的输入取带原符号的
+      最大有限值；输入无穷大仍保留为无穷大。这里的远离零方向指正数 `CAST_CEIL` 或负数 `CAST_FLOOR`，
+      向零方向指 `CAST_TRUNC`、正数 `CAST_FLOOR` 或负数 `CAST_CEIL`。
+      E4M3 的 `0x7f`/`0xff` 解码为 NaN，E5M2 区分无穷大与 NaN。
+      E8M0 转换及单参数 MXType 编码构造函数保持不变。
 - **临时Tile**:
   - **CPU_SIM**：两个带 `tmp` 的重载与各自对应的不带 `tmp` 重载结果一致。CPU_SIM 为保持源码兼容而接受
     `tmp`，但不会调用 `tmp.data()` 或访问其存储。跨后端 kernel 仍须按照目标 NPU 后端的要求声明并分配

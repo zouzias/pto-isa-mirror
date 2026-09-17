@@ -53,6 +53,8 @@ template void LaunchTSubs<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int16_t* out, int16_t* src, int16_t* scalar, void* stream);
 template void LaunchTSubs<int64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int64_t* out, int64_t* src, int64_t* scalar, void* stream);
+template void LaunchTSubs<uint64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
+    uint64_t* out, uint64_t* src, uint64_t* scalar, void* stream);
 #ifdef CPU_SIM_BFLOAT_ENABLED
 template void LaunchTSubs<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(
     bfloat16_t* out, bfloat16_t* src, bfloat16_t* scalar, void* stream);

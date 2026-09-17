@@ -15,6 +15,7 @@ import numpy as np
 from utils import NumExt
 np.random.seed(19)
 
+
 def gen_golden_data_tcmps(case_name, param):
     dtype = param.dtype
 
@@ -32,15 +33,15 @@ def gen_golden_data_tcmps(case_name, param):
     if param.mode == "CmpMode::EQ":
         golden = np.equal(input1, input2[0])
     if param.mode == "CmpMode::NE":
-        golden = np.not_equal(input1, input2[0]) 
+        golden = np.not_equal(input1, input2[0])
     if param.mode == "CmpMode::LT":
-        golden = np.less(input1, input2[0]) 
+        golden = np.less(input1, input2[0])
     if param.mode == "CmpMode::GT":
-        golden = np.greater(input1, input2[0]) 
+        golden = np.greater(input1, input2[0])
     if param.mode == "CmpMode::GE":
-        golden = np.greater_equal(input1, input2[0]) 
+        golden = np.greater_equal(input1, input2[0])
     if param.mode == "CmpMode::LE":
-        golden = np.less_equal(input1, input2[0]) 
+        golden = np.less_equal(input1, input2[0])
 
     # Apply valid region constraints
     output = NumExt.zeros([H, W], dtype)
@@ -49,7 +50,8 @@ def gen_golden_data_tcmps(case_name, param):
             if h >= h_valid or w >= w_valid:
                 golden[h][w] = np.uint8(output[h][w])
 
-    func_binar = lambda bits: sum(np.uint8(bit * 2 **(i)) for i, bit in enumerate(np.uint8(bits)))
+    def func_binar(bits): return sum(np.uint8(bit * 2 ** (i))
+                                     for i, bit in enumerate(np.uint8(bits)))
     out_uint8 = []
     golden = golden.astype(np.uint8)
     bits_per_row = W // 8
@@ -64,6 +66,7 @@ def gen_golden_data_tcmps(case_name, param):
 
     return input1, input2, golden
 
+
 class tcmpsParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, cmpMode):
         self.dtype = dtype
@@ -75,11 +78,13 @@ class tcmpsParams:
         self.valid_col = valid_col
         self.mode = cmpMode
 
+
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
     mode_str = param.mode.replace("CmpMode::", "")
     return f"TCMPSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
-           f"{param.valid_row}x{param.valid_col}_{mode_str}"
+        f"{param.valid_row}x{param.valid_col}_{mode_str}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -107,6 +112,7 @@ if __name__ == "__main__":
         tcmpsParams(np.uint16, 16, 32, 16, 32, 16, 32, "CmpMode::GT"),
         tcmpsParams(np.int32, 64, 64, 64, 64, 64, 64, "CmpMode::EQ"),
         tcmpsParams(np.int64, 64, 64, 64, 64, 64, 64, "CmpMode::EQ"),
+        tcmpsParams(np.uint64, 64, 64, 64, 64, 64, 64, "CmpMode::EQ"),
         tcmpsParams(np.int32, 16, 32, 16, 32, 16, 32, "CmpMode::LE"),
         tcmpsParams(np.int32, 77, 96, 77, 96, 77, 96, "CmpMode::GT"),
         tcmpsParams(np.int32, 32, 32, 32, 32, 32, 32, "CmpMode::GE"),
@@ -114,7 +120,8 @@ if __name__ == "__main__":
         tcmpsParams(np.uint32, 16, 32, 16, 32, 16, 32, "CmpMode::LE")
     ]
     if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(tcmpsParams(NumExt.bf16, 32, 32, 32, 32, 32, 32, "CmpMode::GE"))
+        case_params_list.append(tcmpsParams(
+            NumExt.bf16, 32, 32, 32, 32, 32, 32, "CmpMode::GE"))
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

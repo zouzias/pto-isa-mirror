@@ -105,6 +105,7 @@ TEST_F(TADDTest, case_int32_64x64_64x64_64x64) { test_tadd<int32_t, 64, 64, 64, 
 TEST_F(TADDTest, case_int16_64x64_64x64_64x64) { test_tadd<int16_t, 64, 64, 64, 64>(); }
 TEST_F(TADDTest, case_half_16x256_16x256_16x256) { test_tadd<aclFloat16, 16, 256, 16, 256>(); }
 TEST_F(TADDTest, case_int64_64x64_64x64_64x64) { test_tadd<int64_t, 64, 64, 64, 64>(); }
+TEST_F(TADDTest, case_uint64_64x64_64x64_64x64) { test_tadd<uint64_t, 64, 64, 64, 64>(); }
 
 TEST_F(TADDTest, case_int32_64x64_mixed_static_valid)
 {

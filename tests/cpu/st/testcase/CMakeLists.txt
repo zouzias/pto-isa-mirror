@@ -71,6 +71,7 @@ tdivs
 texp
 texpands
 textract
+textract_small_m_a5
 textract_conv
 textract_quant
 tfillpad
@@ -123,6 +124,7 @@ tpushpop
 tpushpop_fixpipe
 tput
 tput_async
+tput_async_notify
 tquant
 tquant_dn
 tquantmode

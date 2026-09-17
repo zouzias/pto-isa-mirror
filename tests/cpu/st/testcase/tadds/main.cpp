@@ -117,3 +117,5 @@ TEST_F(TADDSTest, case6) { TAddSTestFramework<6, float, 256, 16>(); }
 TEST_F(TADDSTest, case7) { TAddSTestFramework<7, float, 16, 16, 32, 32, 64, 64>(); }
 
 TEST_F(TADDSTest, case8) { TAddSTestFramework<8, int64_t, 15, 128>(); }
+
+TEST_F(TADDSTest, case9) { TAddSTestFramework<9, uint64_t, 15, 128>(); }

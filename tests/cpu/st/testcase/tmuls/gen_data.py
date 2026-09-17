@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+from utils import NumExt
 np.random.seed(23)
 
 
@@ -22,7 +23,7 @@ def gen_golden_data(param):
     rows = param.row
     cols = param.col
 
-    l = 0 if data_type in [np.uint8, np.uint16, np.uint32] else -8
+    l = 0 if NumExt.is_unsigned_integer(data_type) else -8
     h = 4 if data_type in [np.uint8] else 8
     input_arr = np.random.uniform(
         low=l, high=h, size=(rows, cols)).astype(data_type)
@@ -57,6 +58,7 @@ if __name__ == "__main__":
         TMulsParams("TMULSTest.case8", np.uint16, 32, 64),
         TMulsParams("TMULSTest.case9", np.uint32, 32, 64),
         TMulsParams("TMULSTest.case10", np.int64, 32, 64),
+        TMulsParams("TMULSTest.case11", np.uint64, 32, 64),
     ]
 
     for case in case_params_list:

@@ -71,7 +71,7 @@ AICORE inline void StoreSession(const RdmaSession& rdmaSession, AsyncSession& se
     session.tmpBufSize = rdmaSession.execCtx.tmpBuf.size;
     session.syncId = rdmaSession.execCtx.syncId;
     session.destRankId = rdmaSession.execCtx.destRankId;
-    session.qpIdx = rdmaSession.execCtx.qpIdx;
+    session.qpIdxBase = rdmaSession.execCtx.qpIdx;
     session.rdmaBackend = rdmaSession.execCtx.backend;
     session.myPe = rdmaSession.execCtx.myPe;
 }
@@ -103,7 +103,7 @@ AICORE inline RdmaExecContext MakeExecContext(const AsyncSession& session, uint3
     ctx.contextGm = session.contextGm;
     ctx.backend = session.rdmaBackend;
     ctx.destRankId = peer;
-    ctx.qpIdx = session.qpIdx;
+    ctx.qpIdx = session.qpIdxBase;
     ctx.myPe = session.myPe;
     ctx.tmpBuf = {session.tmpBufAddr, session.tmpBufSize};
     ctx.syncId = session.syncId;

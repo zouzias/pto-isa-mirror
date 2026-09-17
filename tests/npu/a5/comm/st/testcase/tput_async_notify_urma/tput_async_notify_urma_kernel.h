@@ -10,6 +10,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+
 enum class UrmaNotifyStMode {
     Set,
     ReceiverConsumeSet,
@@ -21,3 +24,6 @@ enum class UrmaNotifyStMode {
 
 bool RunTPutAsyncNotifyUrma(int nRanks, int nDevices, int firstRankId, int firstDeviceId, UrmaNotifyStMode mode);
 void FinalizeTPutAsyncNotifyUrma();
+
+template <typename T, size_t count, int nAiv, int jettiesPerCore>
+bool RunNotifyUrmaPool(int nRanks, int nDevices, int firstRankId, int firstDeviceId);

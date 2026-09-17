@@ -54,15 +54,15 @@ class TMaxsParams:
 
 def generate_case_name(param):
     dtype_str = NumExt.get_short_type_name(param.dtype)
-    
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TMAXSTest.case_{dtype_str}" 
+
+    name = f"TMAXSTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -79,6 +79,7 @@ if __name__ == "__main__":
         TMaxsParams(np.float32, 64, 64, 64, 64, 64, 64),
         TMaxsParams(np.int32, 64, 64, 64, 64, 64, 64),
         TMaxsParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TMaxsParams(np.uint64, 64, 64, 64, 64, 64, 64),
         TMaxsParams(np.int16, 64, 64, 64, 64, 64, 64),
         TMaxsParams(np.float16, 16, 256, 16, 256, 16, 256)
     ]

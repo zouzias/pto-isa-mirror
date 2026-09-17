@@ -118,6 +118,7 @@ set(ALL_TESTCASES
     tstore
     tstore_l2hint
     textract
+    textract_small_m
     textract_compact
     trowsum
     trowprod

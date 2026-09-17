@@ -178,10 +178,17 @@ struct CcuTriggerContext {
 
 struct AsyncSession;
 
+constexpr uint32_t kUrmaMaxJettiesPerCore = 8U;
+
 struct AsyncEvent {
     uint64_t handle{0};
     DmaEngine engine{DmaEngine::SDMA};
     uint32_t urmaTargetCqe{0};
+
+    uint32_t urmaTargetBbPerJetty[kUrmaMaxJettiesPerCore]{};
+    uint32_t urmaTargetCqePerJetty[kUrmaMaxJettiesPerCore]{};
+    uint16_t urmaJettyBase{0};
+    uint16_t urmaJettyCount{0};
 
     AICORE constexpr AsyncEvent() = default;
     AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e, uint32_t targetCqe = 0U)
