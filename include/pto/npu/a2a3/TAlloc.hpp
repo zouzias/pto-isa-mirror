@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TALLOC_HPP
 
 #include <type_traits>
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/fifo.hpp>
 #include <pto/npu/a2a3/TPush.hpp>
 
@@ -56,10 +57,10 @@ PTO_INTERNAL void TALLOC_IMPL(Pipe& pipe, GlobalData& gmTensor)
     } else if constexpr (Pipe::is_v2c) {
         entryBase += slotOffset + getSubAIVOffset<GlobalData, Split>();
     } else if constexpr (Pipe::is_both) {
-#ifdef __DAV_CUBE__
+#ifdef PTO_COMPILE_CUBE
         entryBase += slotOffset;
 #endif
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
         entryBase += slotOffset + getSubAIVOffset<GlobalData, Split>();
 #endif
     }

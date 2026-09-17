@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TLOAD_COMMON_REGISTER
 #define TLOAD_COMMON_REGISTER
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/utils.hpp>
 
 namespace pto {
@@ -219,8 +220,8 @@ PTO_INTERNAL void TLoadCubeCheck()
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeND2NZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     // ZN [D, M] aliases NZ [M, D]: the merged extent and C0-block stride use tile columns.
     constexpr bool isZn = TileData::isRowMajor && TileData::SFractal == SLayout::ColMajor;
@@ -320,8 +321,8 @@ PTO_INTERNAL void TLoadCubeNZ2NZ(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeDN2ZN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     TLoadCubeND2NZ<Op, TileData, GlobalData>(
         dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -331,10 +332,10 @@ PTO_INTERNAL void TLoadCubeDN2ZN(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadCube(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     using L1Type = __cbuf__ typename TileData::DType*;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
 
@@ -473,7 +474,7 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(
     uint32_t lenBurst = dstShape1 * dstShape2 * BLOCK_BYTE_SIZE;
     uint64_t gmStride = GetByteSize<typename TileData::DType>(gStride1);
     uint32_t dstStride = dstShape1 * dstShape2 * BLOCK_BYTE_SIZE;
-#if defined(__DAV_CUBE__)
+#if defined(PTO_COMPILE_CUBE)
     set_loop_size_outtol1(1ULL << 21 | 1ULL); // use normal mode
     Op::TLoadCubeInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, dstStride, 0);
 #endif

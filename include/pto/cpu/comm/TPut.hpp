@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TPUT_HPP
 
 #include <pto/cpu/comm/TGet.hpp>
+#include <pto/cpu/comm/TNotify.hpp>
 
 namespace pto {
 namespace comm {
@@ -39,6 +40,17 @@ PTO_INTERNAL AsyncEvent
 TPUT_ASYNC_IMPL(GlobalDstData& dst, GlobalSrcData& src, const AsyncSession& session, uint32_t peer)
 {
     return TPUT_ASYNC_IMPL<engine>(dst, src, session);
+}
+
+template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData, typename GlobalSignalData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_NOTIFY_IMPL(
+    GlobalDstData& dst, GlobalSrcData& src, GlobalSignalData& dstSignalData, int32_t signalValue, NotifyOp notifyOp,
+    const AsyncSession& session, uint32_t peer)
+{
+    (void)peer;
+    AsyncEvent event = TPUT_ASYNC_IMPL<engine>(dst, src, session);
+    TNOTIFY_IMPL(dstSignalData, signalValue, notifyOp);
+    return event;
 }
 
 } // namespace comm

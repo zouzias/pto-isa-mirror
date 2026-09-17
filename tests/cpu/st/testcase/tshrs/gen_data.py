@@ -57,7 +57,9 @@ def generate_case_name(param):
         np.uint16: 'uint16',
         np.int8: 'int8',
         np.int32: 'int32',
-        np.int16: 'int16'
+        np.int16: 'int16',
+        np.int64: 'int64',
+        np.uint64: 'uint64'
     }[param.dtype]
     
     def substring(a, b) -> str:
@@ -82,7 +84,9 @@ if __name__ == "__main__":
 
     case_params_list = [
         TSHRSParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TSHRSParams(np.int32, 16, 256, 16, 256, 16, 256)
+        TSHRSParams(np.int32, 16, 256, 16, 256, 16, 256),
+        TSHRSParams(np.int64, 64, 64, 64, 64, 64, 64),
+        TSHRSParams(np.uint64, 64, 64, 64, 64, 64, 64)
     ]
 
     for param in case_params_list:

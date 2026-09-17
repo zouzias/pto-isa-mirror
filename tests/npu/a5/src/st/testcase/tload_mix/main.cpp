@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "acl/acl.h"
 #include <gtest/gtest.h>
 #include <cstdint>
+#include <cstring>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -640,4 +641,111 @@ TEST_F(TLOADMIXTest, MultiNdZnDynamicSingle_half)
 TEST_F(TLOADMIXTest, MultiNdZnSourceLargerThanTile_half)
 {
     TLOADMIXFUNC<uint16_t, 5, 1, 1, 16, 35, 3, 1, 1, 16, 64, 9, 64, 32, 31, true>();
+}
+
+template <typename T, int64_t MatrixStride, int64_t ColumnStride, int ValidCols, bool DynamicStride>
+void launchTLOADMIXLargeStride(uint8_t* out, uint8_t* src, void* stream);
+
+struct LargeStrideResources {
+    bool initialized = false;
+    bool deviceSet = false;
+    aclrtStream stream = nullptr;
+    uint8_t* input = nullptr;
+    uint8_t* output = nullptr;
+
+    ~LargeStrideResources()
+    {
+        if (stream != nullptr) {
+            aclrtDestroyStream(stream);
+        }
+        if (input != nullptr) {
+            aclrtFree(input);
+        }
+        if (output != nullptr) {
+            aclrtFree(output);
+        }
+        if (deviceSet) {
+            aclrtResetDevice(0);
+        }
+        if (initialized) {
+            aclFinalize();
+        }
+    }
+};
+
+template <typename T, int64_t MatrixStride, int64_t ColumnStride, int ValidCols, bool DynamicStride>
+void TloadLargeStrideTest()
+{
+    constexpr int rows = 64;
+    constexpr int cols = 64;
+    constexpr int validRows = 32;
+    constexpr int c0 = 32 / sizeof(T);
+    constexpr size_t inputBytes =
+        (uint64_t((ValidCols - 1) / 2) * MatrixStride + ((ValidCols - 1) % 2) * ColumnStride + validRows) * sizeof(T);
+    constexpr size_t outputBytes = rows * cols * sizeof(T);
+    LargeStrideResources resources;
+    ASSERT_EQ(aclInit(nullptr), ACL_SUCCESS);
+    resources.initialized = true;
+    ASSERT_EQ(aclrtSetDevice(0), ACL_SUCCESS);
+    resources.deviceSet = true;
+    ASSERT_EQ(aclrtCreateStream(&resources.stream), ACL_SUCCESS);
+    ASSERT_EQ(
+        aclrtMalloc(reinterpret_cast<void**>(&resources.input), inputBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(
+        aclrtMalloc(reinterpret_cast<void**>(&resources.output), outputBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+
+    // Initialize only accessed columns and the low addresses a truncated stride would read.
+    ASSERT_EQ(aclrtMemset(resources.input, inputBytes, 0x7e, 1024), ACL_SUCCESS);
+    std::vector<T> golden(rows * cols);
+    std::memset(golden.data(), 0x33, outputBytes);
+    for (int col = 0; col < ValidCols; ++col) {
+        std::vector<T> column(validRows);
+        for (int row = 0; row < validRows; ++row) {
+            column[row] = static_cast<T>(1 + col * validRows + row);
+            golden[(row / c0) * cols * c0 + col * c0 + row % c0] = column[row];
+        }
+        const uint64_t offset = (uint64_t(col / 2) * MatrixStride + (col % 2) * ColumnStride) * sizeof(T);
+        ASSERT_EQ(
+            aclrtMemcpy(
+                resources.input + offset, inputBytes - offset, column.data(), column.size() * sizeof(T),
+                ACL_MEMCPY_HOST_TO_DEVICE),
+            ACL_SUCCESS);
+    }
+    launchTLOADMIXLargeStride<T, MatrixStride, ColumnStride, ValidCols, DynamicStride>(
+        resources.output, resources.input, resources.stream);
+    ASSERT_EQ(aclrtSynchronizeStreamWithTimeout(resources.stream, 30000), ACL_SUCCESS);
+    std::vector<T> actual(rows * cols);
+    ASSERT_EQ(
+        aclrtMemcpy(actual.data(), outputBytes, resources.output, outputBytes, ACL_MEMCPY_DEVICE_TO_HOST), ACL_SUCCESS);
+    EXPECT_EQ(golden, actual);
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeByteStride_float)
+{
+    TloadLargeStrideTest<float, 128, (int64_t(1) << 30) + 32, 2, true>();
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeMatrixStride_uint8)
+{
+    TloadLargeStrideTest<uint8_t, (int64_t(1) << 32) + 256, 64, 4, false>();
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeMatrixStrideTail_uint8)
+{
+    TloadLargeStrideTest<uint8_t, (int64_t(1) << 32) + 256, 64, 3, true>();
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeColumnStride_uint8)
+{
+    TloadLargeStrideTest<uint8_t, 128, (int64_t(1) << 32) + 256, 2, true>();
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeSignedMatrixStride_uint8)
+{
+    TloadLargeStrideTest<uint8_t, (int64_t(1) << 31) + 256, 64, 3, true>();
+}
+
+TEST_F(TLOADMIXTest, MultiNdZnLargeMatrixStrideTail_uint16)
+{
+    TloadLargeStrideTest<uint16_t, (int64_t(1) << 31) + 128, 64, 3, true>();
 }

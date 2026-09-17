@@ -11,10 +11,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_DATATYPE_HPP_KIRINX90
 #define PTO_DATATYPE_HPP_KIRINX90
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/npu/kirin9030/datatype.hpp>
 
 namespace pto {
-#if defined(__DAV_VEC__)
+#if defined(PTO_COMPILE_VEC)
 template <>
 struct TypeGet<vector_bf16> {
     using T = vector_bf16;

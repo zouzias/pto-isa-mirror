@@ -78,9 +78,6 @@ PTO_INTERNAL uint64_t TPutAsyncCheckUrmaPayload(
 {
     PTO_ASSERT(urma::detail::ValidateUrmaSession(session, peer), "TPUT_ASYNC URMA: invalid session, peer or QP.");
     const uint64_t transferSize = TPutAsyncValidatePayload(dstGlobalData, srcGlobalData);
-    PTO_ASSERT(
-        transferSize > 0U && transferSize <= urma::kUrmaMaxWqeTransferBytes,
-        "TPUT_ASYNC URMA: transfer size must be in (0, 256MB] per single WQE.");
     return transferSize;
 }
 
@@ -90,10 +87,10 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(
 {
     const uint64_t transferSize = TPutAsyncCheckUrmaPayload(dstGlobalData, srcGlobalData, session, peer);
 
-    const urma::detail::UrmaPostResult result = urma::__urma_put_async(
+    const urma::detail::UrmaMultiPostResult result = urma::__urma_put_async(
         reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
         reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), transferSize, session, peer);
-    return AsyncEvent(result.handle, DmaEngine::URMA, result.targetCqe);
+    return urma::MakeUrmaMultiJettyEvent(result);
 }
 
 template <typename GlobalDstData, typename GlobalSrcData>

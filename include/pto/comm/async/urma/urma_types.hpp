@@ -13,6 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cstdint>
 
+#include "pto/comm/comm_types.hpp"
+
 namespace pto {
 namespace comm {
 namespace urma {
@@ -24,8 +26,12 @@ constexpr uint32_t kUrmaMaxPollTimes = 1000000;
 constexpr uint64_t kCacheLineSize = 64;
 constexpr size_t kUrmaEidBytes = 16;
 
-// UB 协议单 WQE 最大传输量，对齐设备 max_read/write_size（现网 A5 典型值）
 constexpr uint64_t kUrmaMaxWqeTransferBytes = 256ULL * 1024ULL * 1024ULL;
+
+constexpr uint64_t kUrmaMinSliceBytes = kUrmaMaxWqeTransferBytes;
+constexpr uint64_t kUrmaSliceAlignBytes = 512ULL;
+
+constexpr uint32_t kUrmaAutoAivCount = UINT32_MAX;
 
 constexpr uint32_t kUrmaSqeSizeBytes = 48;
 constexpr uint32_t kUrmaSgeSizeBytes = 16;
@@ -77,12 +83,24 @@ enum class UrmaOpcode : uint32_t {
 };
 
 // ============================================================================
+// UrmaLayout — how the SQ/CQ context table is indexed
+//
+// PER_PEER:    one jetty per peer, jetty i only reaches peer i. Selecting a peer
+//              is the same act as selecting a queue, so a ctx row is a peer, and
+//              concurrency is capped at one AIV per peer.
+// SHARED_POOL: a pool of jetties, each reaching every peer. Peer and queue are
+//              chosen independently, so a ctx row is a jetty. The pool is carved
+//              into one exclusive run of jettiesPerCore jetties per AIV, so a
+//              session derives its run from get_block_idx() and no caller ever
+//              names a jetty.
+// ============================================================================
+enum class UrmaLayout : uint32_t { PER_PEER = 0, SHARED_POOL = 1 };
+
+// ============================================================================
 // UrmaInfo — device-side workspace root
 // ============================================================================
 struct UrmaInfo {
-    uint32_t qpNum;
-    uint32_t localTokenId;
-    uint32_t notifyPoolTokenId;
+    uint32_t rowsPerPeer; // SQ/CQ ctx rows occupied per peer; >= 1
     uint32_t rankCount;
     uint64_t sqPtr;
     uint64_t rqPtr;
@@ -90,6 +108,9 @@ struct UrmaInfo {
     uint64_t rcqPtr;
     uint64_t memPtr;
     uint64_t notifyPoolPtr;
+    UrmaLayout layout;
+    uint32_t jettyCount;
+    uint32_t jettiesPerCore;
 };
 
 // ============================================================================
@@ -105,6 +126,8 @@ struct UrmaMemInfo {
     uint32_t len;
     uint64_t addr;
     uint64_t eidAddr;
+    uint32_t localTokenId;
+    uint32_t notifyTokenId;
 };
 
 // ============================================================================

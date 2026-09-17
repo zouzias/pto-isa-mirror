@@ -78,7 +78,8 @@ if __name__ == "__main__":
     case_params_list = [
         TSHLSParams(np.int16, 64, 64, 64, 64, 64, 64),
         TSHLSParams(np.int32, 16, 256, 16, 256, 16, 256),
-        TSHLSParams(np.int64, 16, 256, 16, 256, 16, 256)
+        TSHLSParams(np.int64, 16, 256, 16, 256, 16, 256),
+        TSHLSParams(np.uint64, 16, 256, 16, 256, 16, 256)
     ]
 
     for param in case_params_list:

@@ -100,6 +100,7 @@ nav:
           - TMULA: docs/isa/TMULA.md
           - TCVT: docs/isa/TCVT.md
           - TSEL: docs/isa/TSEL.md
+          - TPARTSEL: docs/isa/TPARTSEL.md
           - TRSQRT: docs/isa/TRSQRT.md
           - TSQRT: docs/isa/TSQRT.md
           - TEXP: docs/isa/TEXP.md

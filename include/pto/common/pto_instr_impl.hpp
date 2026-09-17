@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_INSTR_IMPL_HPP
 #define PTO_INSTR_IMPL_HPP
 
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
@@ -223,7 +224,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMin.hpp"
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TLoad.hpp"
-#ifdef __DAV_VEC__
+#ifdef PTO_COMPILE_VEC
 #include "pto/npu/a5/TCvt.hpp"
 #endif
 #include "pto/npu/a5/TStore.hpp"
