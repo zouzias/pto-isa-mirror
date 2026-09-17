@@ -154,6 +154,9 @@ def _bf16(x):
     return x.astype(np.float32).astype(bfloat16).astype(np.float32)
 
 
+# Emulates the CCE intrinsic `vcvt_bf162e6m2(..., ROUND_R, PART_EVEN)` used by
+# TQuant Stage 2. If HiF4 cases mismatch on device, this hand-written conversion
+# (rounding at the e6m2 boundary) is the first place to check.
 def bf16_to_e6m2(ma_flat):
     ma = np.abs(ma_flat).astype(np.float32).astype(bfloat16).astype(np.float32)
     recp_7 = np.float32(1.0 / 7.0).astype(bfloat16).astype(np.float32)
@@ -286,38 +289,24 @@ def pack_bits_lsb(bits):
     return packed
 
 
-def exp_layout_for_cube(ea_flat, eb_flat, ec_flat, total_elem):
-    input_size = total_elem // 64
-    loop_num = (input_size + 127) // 128
-    exp_dst = bytearray()
-    for loop_idx in range(loop_num):
-        ea_chunk = np.zeros(128, dtype=np.uint8)
-        eb_chunk = np.zeros(128, dtype=np.uint8)
-        ec_chunk = np.zeros(256, dtype=np.uint8)
-        ea_start = loop_idx * 64
-        eb_start = loop_idx * 128
-        ec_start = loop_idx * 256
-        ea_chunk[: min(128, len(ea_flat) - ea_start)] = ea_flat[ea_start : ea_start + 128]
-        eb_chunk[: min(128, len(eb_flat) - eb_start)] = eb_flat[eb_start : eb_start + 128]
-        ec_chunk[: min(256, len(ec_flat) - ec_start)] = ec_flat[ec_start : ec_start + 256]
-        eaeb = np.empty(256, dtype=np.uint8)
-        eaeb[0::2] = ea_chunk
-        eaeb[1::2] = eb_chunk
-        for blk in range(8):
-            exp_dst.extend(eaeb[blk * 32 : (blk + 1) * 32].tobytes())
-            exp_dst.extend(ec_chunk[blk * 32 : (blk + 1) * 32].tobytes())
-    return bytes(exp_dst)
-
-
 def _build_hif4_scale_patch_layout(ea, eb, ec, rows, cols):
-    row_fractals = rows // 16
+    # The on-GM HiF4 scale fractal pads the M-axis (A) / N-axis (B) to a full
+    # 16-row fractal; main.cpp allocates ceil16(rows)/16 fractals
+    # (aScaleBytes/bScaleBytes). Mirror that here so the golden buffer always
+    # matches the host upload even when rows is not a multiple of 16. Partial
+    # fractals are zero-filled; `ea`/`eb` hold one entry per 64-group and `ec`
+    # two entries per group.
+    row_fractals = (rows + 15) // 16
     k_groups = cols // 64
+    num_groups = len(ea)
     out = np.zeros(row_fractals * k_groups * 64, dtype=np.uint8)
     view = out.reshape(row_fractals, k_groups, 2, 16, 2)
     for rf in range(row_fractals):
         for kg in range(k_groups):
             for r in range(16):
                 g_lin = (rf * 16 + r) * k_groups + kg
+                if g_lin >= num_groups:
+                    continue  # padding row keeps the pre-zeroed value
                 view[rf, kg, 0, r, 0] = ea[g_lin]
                 view[rf, kg, 0, r, 1] = eb[g_lin]
                 view[rf, kg, 1, r, 0] = ec[g_lin * 2]
@@ -418,6 +407,8 @@ CASES = [
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_e4m3e2m1_128x256x128", 33, "e4m3", "e2m1", 128, 256, 128),
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_fp16hi4_128x256x128", 34, "f16", "hif4", 128, 256, 128),
     ("TMATMUL_MX_A6_TEST.case_mmad_mx_e4m3hi4_128x128x256", 35, "e4m3", "hif4", 128, 128, 256),
+    # N-tiling with a partial final tile (tileN=128, tailN=64).
+    ("TMATMUL_MX_A6_TEST.case_mmad_mx_hif4hif4_512x128x192", 36, "hif4", "hif4", 512, 128, 192),
 ]
 
 

@@ -59,10 +59,16 @@ The L0C accumulator is always `float` (4 B), enforced by `CheckMadMxValid`:
 
 ## Testcases
 
+The HiF4 and e1m2 matmul cases are consolidated into the unified `tmatmul_mx`
+ST (tests/npu/a6/src/st/testcase/tmatmul_mx), which covers all MMAD_MX dtype
+combinations. The HiF4-relevant sub-cases (gtest filter prefix `*hif4*` / `*hi4*`)
+include:
+
 | Testcase | Shapes | Purpose |
 |---|---|---|
-| `tmatmul_mx_hif4` | 128×128×128, 128×256×128, 256×128×128, 64×64×64, 256×256×256, 128×512×128, 512×128×512, 128×128×256, 256×128×512 | HiF4 Cube matmul end-to-end |
-| `tmatmul_mx_e1m2` | 128×128×128 | e1m2 MX oracle (same pipeline, plain MX scale) |
+| `tmatmul_mx` (`case_mmad_mx_hif4hif4_*`) | 128×128×128, 128×256×128, 256×128×128, 64×64×64, 256×256×256, 128×512×128, 512×128×512, 128×128×256, 256×128×512, 512×128×192 | HiF4×HiF4 Cube matmul end-to-end (incl. N-tiling + partial final tile) |
+| `tmatmul_mx` (`case_mmad_mx_*hi4_*`) | 128×128×128, 64×128×64, … | fp8/fp16/bf16 A × HiF4 B (mixed precision) |
+| `tmatmul_mx` (`case_mmad_mx_e1m2*`/`e2m1*`) | 128×128×128, 64×64×64 | e1m2/e2m1 MX (same pipeline, plain MX scale) |
 
 ## References
 
