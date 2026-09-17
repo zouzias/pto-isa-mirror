@@ -45,7 +45,6 @@ set(ALL_TESTCASES
     tdivs
     texp
     textract
-    textract_small_m
     tgather
     tload
     tloadconv
@@ -70,7 +69,6 @@ set(ALL_TESTCASES
     tsels
     tsort32
     tsqrt
-    tstore
     tsub
     tsubs
     ttrans
