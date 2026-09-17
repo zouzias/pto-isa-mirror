@@ -113,11 +113,13 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
   覆盖 NZ512/NZ1024、`Final`、`Partial` 后接 `Final`、`Unspecified` 和 K 切分累加。
 - 对于同 dtype 抽取/布局路径，`DstTileData::DType` 必须等于 `SrcTileData::DType`。
   Acc 转换和量化路径使用下述后端特定 dtype 组合。
-- 运行时边界检查：
+- A2A3 原有 Mat/Acc 提取路径检查以下物理矩形边界（下述小 M Mat→Left 路径改为分别检查有效窗口和完整分形读取范围）：
     - `indexRow + DstTileData::Rows <= SrcTileData::Rows`
     - `indexCol + DstTileData::Cols <= SrcTileData::Cols`
 
 ### Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品实现检查
+
+对于 Mat→Left/Right 布局提取：
 
 - 支持的元素类型：`int8_t`、`half`、`bfloat16_t`、`float`。
 - 源布局必须满足以下已检查到的Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品提取布局之一：
@@ -141,6 +143,125 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
   （A5、kirin9030、kirinX90 和 CPU 模拟器），接受
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
 - 对于 `TileType::Acc -> TileType::Vec`，当目标为32位类型（`float`/`int32_t`）且使用 `DualModeSplitN` 时，切分前的 `ValidCol` 必须是 `32` 的整数倍。
+
+### 小 M Mat→Left 提取（A2A3 和 A5）
+
+A2A3 和 A5 上，普通 `TEXTRACT(dst, src, indexRow, indexCol, events...)` 重载在以下条件下自动
+选择 `load_cbuf_to_ca`（L1→L0A 搬运，也称 load2d）。无需新增模式或公共重载，原有事件接口不变。
+应使用不带 `ReluPreMode` 模板实参的重载。即使显式指定 `ReluPreMode::NoRelu`，
+在 A2A3 上也会选中 Acc→Mat 重载，该重载不支持此 Mat→Left 路径。
+
+| 属性 | 要求 |
+| --- | --- |
+| 元素类型 | 源与目标均为 `half`，或均为 `bfloat16_t` |
+| 源 | `TileType::Mat`，NZ512：`BLayout::ColMajor`、`SLayout::RowMajor`、分形大小 512 |
+| 源物理形状 | 行数、列数均为 16 的倍数 |
+| A2A3 目标 | `TileType::Left`，ZZ512：`BLayout::RowMajor`、`SLayout::RowMajor`、分形大小 512 |
+| A5 目标 | `TileType::Left`，NZ512：`BLayout::ColMajor`、`SLayout::RowMajor`、分形大小 512 |
+| 目标物理形状 | 恰好 16 行，列数为 16 的倍数 |
+| 目标 Compact 模式 | `CompactMode::Null`（普通 `TileLeft`）或 `CompactMode::Normal`（`TileLeftCompact`） |
+| 有效形状 | 支持静态或动态形状；此 load2d 路径处理 1～15 个有效行 |
+
+令 `M = dst.GetValidRow()`、`K = dst.GetValidCol()`、`r = indexRow`、`c = indexCol`。
+两个索引均为无符号类型 `uint16_t`。动态有效行列数须在调用前设置；`TEXTRACT` 使用已有有效形状，
+不会根据索引自动推导或更新有效形状。小 M 路径要求：
+
+```text
+1 <= M <= 15
+1 <= K <= DstTileData::Cols
+r + M <= src.GetValidRow()
+c + K <= src.GetValidCol()
+c % 16 == 0
+```
+
+`r` 无需按 4 或 16 对齐。只要满足这些边界及下述存储边界，有效窗口可以跨越源内部的 16 行分形边界。
+源有效行列数也可以是动态值。动态目标在运行时 `M = 16` 时使用原有普通/Compact 实现，
+仍要求行、列索引按 16 对齐。A2A3 还保留上述物理矩形边界；A5 保留 Compact 按对齐后有效宽度搬运的原有规则。
+静态完整 M、转置、Right、GEMV、其他数据类型以及 A2A3/A5 以外的架构路径保持原有行为。本次扩展不增加空有效形状、超出物理容量的有效形状，
+以及 Mat→Left 的 ReLU、量化或 `STPhase` 变体支持。
+
+**物理读写范围。** 每个 repeat 仍搬运完整的 512B 分形，减小有效 M 不会减少搬运字节数。
+使用整数除法定义 `ceil16(K) = ((K + 15) / 16) * 16`，实际搬运宽度为：
+
+```text
+copyCols = DstTileData::Cols         // 普通 TileLeft
+copyCols = ceil16(K)                // TileLeftCompact
+```
+
+还须满足以下边界，其中 `srcEndBytes` 是相对源 tile 基址的读取末尾（字节，右开区间）：
+
+```text
+c + copyCols <= SrcTileData::Cols
+copyCols <= DstTileData::Cols
+srcEndBytes = (c + copyCols - 16) * SrcTileData::Rows * 2 + r * 32 + 512
+srcEndBytes <= SrcTileData::Numel * 2
+```
+
+因此，Compact 目标的物理列数可以大于源，只要对齐后的有效搬运宽度满足边界；普通目标则必须容纳
+完整物理宽度的搬运。在 A2A3 上，该放宽仅适用于小 M：动态 `M = 16` 时，
+即便是 Compact tile，仍要求 `c + DstTileData::Cols <= SrcTileData::Cols`。
+A5 动态 `M = 16` 保留 Compact 按对齐后有效宽度搬运的规则，不增加上述 A2A3 限制。
+
+两个后端均将源指针偏移 `(c / 16) * SrcTileData::Rows * 16 + r * 16` 个元素，但 load2d 参数格式不同：
+
+| 后端 | 小 M 搬运参数 |
+| --- | --- |
+| A2A3 `pto_load_cbuf_to_ca` | `baseIdx = 0`、`repeat = copyCols / 16`、`srcStride = SrcTileData::Rows / 16`、目标 gap 为 0 |
+| A5 `load_cbuf_to_ca` | `mStart = 0`、`kStart = 0`、`mStep = 1`、`kStep = copyCols / 16`、`srcStride = SrcTileData::Rows / 16`、`dstStride = 1`、transpose 为 0 |
+
+相邻源分形起点相距 `srcStride * 512` 字节，目标分形连续排列。
+实际读取和写入的数据量均为 `copyCols * 32` 字节；`srcStride > 1` 时，这一数据量可以小于源地址跨度。
+repeat/kStep 超过 255 时会分段并相应推进源、目标指针；
+这不放宽平台原有的 L1/L0A 容量限制。
+
+**源 padding 与同步。** 当 `c = 0` 时，复用 K 为 16 倍数的 16×K 源，从行 4/8/12 提取四行直至最后一个 K 分形时，
+会分别超出紧凑分配的 16×K tile 末尾 128/256/384B。可将物理列数声明为 `K + 16`、有效列数保留为 `K`，
+显式拥有额外 512B 存储。对于尾 K，源物理列数取 `ceil16(K) + 16`、目标物理列数取 `ceil16(K)`，
+也可得到同样安全的安排。ND→NZ `TLOAD` 仍可只加载一次 16×K GlobalTensor，NZ 行跨度不变。
+列起点非零时，源有效列数至少为 `c + K`，物理读取末尾也必须计入 `c`。
+其他形状应按读取末尾公式计算：现有容量可能已经足够，且增加 16 列占用 `SrcTileData::Rows * 32` 字节，
+只有物理行数为 16 时才是 512B。
+
+整个源分配（包括 padding）必须保持可读，在 MTE1 读取完成前不能被覆盖或复用。
+padding 无需初始化为零。目标有效窗口以外的元素未定义，不得作为有效结果使用。
+手动模式下，`TLOAD` 后需 MTE2→MTE1 同步，`TMATMUL` 前需 MTE1→M 同步，
+覆盖仍被 Cube 使用的 Left tile 前需 M→MTE1 同步。自动模式通过 tile 操作数跟踪这些依赖。
+`STPhase` 用于 Acc→Mat 搬出，不能替代这些依赖。分配和同步需覆盖整个物理 tile，
+有效形状用于定义结果，不能用它代替物理分配大小。运行时检查使用 `PTO_ASSERT`，由 `_DEBUG` 启用；
+所有构建模式下调用方都必须满足约束。
+
+以下片段在 A2A3 或 A5 设备编译上下文（`__CCE_AICORE__`）中使用 `<pto/pto-inst.hpp>` 和
+`using namespace pto;`；Left 别名会选择对应架构的布局。假定已分配完整 tile、已加载源的 16×64 有效窗口，且调用方或自动模式负责必要同步：
+
+```cpp
+using Mat = Tile<TileType::Mat, half, 16, 80, BLayout::ColMajor, 16, 64, SLayout::RowMajor, 512>;
+using Left = TileLeft<half, 16, 64, 4, 64>;
+AICORE void ExtractFourRows(Left &left, Mat &mat)
+{
+    TEXTRACT(left, mat, /*indexRow=*/12, /*indexCol=*/0);
+}
+```
+
+也可以改用动态 M/K 的 Compact 目标，传入 `m = 4, k = 63` 时，物理列数为 128 仍只读取 64 列。
+辅助函数显式设置有效形状。对于此源和行起点，合法参数为 `1 <= m <= 4`、`1 <= k <= 64`；
+调用方需先分配目标：
+
+```cpp
+using CompactLeft = TileLeftCompact<half, 16, 128, DYNAMIC, DYNAMIC>;
+AICORE void ExtractCompactRows(CompactLeft &left, Mat &mat, uint32_t m, uint32_t k)
+{
+    left.SetValidShape(m, k);
+    TEXTRACT(left, mat, /*indexRow=*/12, /*indexCol=*/0);
+}
+```
+
+参见 [A2A3 实现](../../include/pto/npu/a2a3/TExtract.hpp)与
+[A5 实现](../../include/pto/npu/a5/TExtract.hpp)、
+[A2A3 数值 ST](../../tests/npu/a2a3/src/st/testcase/textract_small_m/textract_small_m_kernel.cpp)与
+[A5 数值 ST](../../tests/npu/a5/src/st/testcase/textract_small_m/textract_small_m_kernel.cpp)，以及
+[A2A3 指令与边界测试](../../tests/costmodel/st/testcase/textract_small_m/main.cpp)与
+[A5 指令与边界测试](../../tests/cpu/st/testcase/textract_small_m_a5/main.cpp)。
+A5 主机测试模拟底层搬运指令并执行真实 A5 后端分发入口及 helper；NPU ST 对完整指令序列进行数值验证。
 
 ### Vec → Vec 抽取路径
 

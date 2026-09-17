@@ -52,6 +52,8 @@ template void LaunchTRems<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int32_t* out, int32_t* src, int32_t* scalar, void* stream);
 template void LaunchTRems<int64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int64_t* out, int64_t* src, int64_t* scalar, void* stream);
+template void LaunchTRems<uint64_t, NUM_64, NUM_64, NUM_64, NUM_64>(
+    uint64_t* out, uint64_t* src, uint64_t* scalar, void* stream);
 template void LaunchTRems<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(
     int16_t* out, int16_t* src, int16_t* scalar, void* stream);
 template void LaunchTRems<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(

@@ -107,6 +107,10 @@ TEST_F(TCMPTest, case_int64_uint8_64x64_64x64_64x64_NE)
 {
     test_tcmp<int64_t, uint8_t, NUM_64, NUM_64, NUM_64, NUM_64>(pto::CmpMode::NE);
 }
+TEST_F(TCMPTest, case_uint64_uint8_64x64_64x64_64x64_NE)
+{
+    test_tcmp<uint64_t, uint8_t, NUM_64, NUM_64, NUM_64, NUM_64>(pto::CmpMode::NE);
+}
 TEST_F(TCMPTest, case_half_uint8_16x256_16x256_16x256_GT)
 {
     test_tcmp<aclFloat16, uint8_t, NUM_16, NUM_256, NUM_16, NUM_256>(pto::CmpMode::GT);

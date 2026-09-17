@@ -168,7 +168,7 @@ inline void wait(int eventId)
 // Setting this address must not clear credits published by another core.
 static inline void set_ffts_base_addr(uint64_t) {}
 
-static inline void __builtin_cce_ffts_cross_core_sync(int, uint16_t message)
+static inline void ffts_cross_core_sync(int, uint16_t message)
 {
 #if defined(__DAV_CUBE__) && !defined(__DAV_VEC__)
     pto::cpu_sim::ffts::signal<true>(message);
@@ -180,7 +180,7 @@ static inline void __builtin_cce_ffts_cross_core_sync(int, uint16_t message)
 #endif
 }
 
-static inline void __builtin_cce_wait_flag_dev(int eventId)
+static inline void wait_flag_dev(int eventId)
 {
 #if defined(__DAV_CUBE__) && !defined(__DAV_VEC__)
     pto::cpu_sim::ffts::wait<true>(eventId);
@@ -191,12 +191,5 @@ static inline void __builtin_cce_wait_flag_dev(int eventId)
     throw std::runtime_error("CPU FFTS requires exactly one kernel role: __DAV_CUBE__ or __DAV_VEC__");
 #endif
 }
-
-static inline void ffts_cross_core_sync(int pipe, uint16_t message)
-{
-    __builtin_cce_ffts_cross_core_sync(pipe, message);
-}
-
-static inline void wait_flag_dev(int eventId) { __builtin_cce_wait_flag_dev(eventId); }
 
 #endif // PTO_CPU_FFTS_HPP

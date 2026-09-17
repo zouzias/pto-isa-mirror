@@ -107,3 +107,7 @@ TEST_F(TSHLSTest, case_int64_16x256_16x256_16x256)
 {
     test_tshls<int64_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>();
 }
+TEST_F(TSHLSTest, case_uint64_16x256_16x256_16x256)
+{
+    test_tshls<uint64_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>();
+}

@@ -108,6 +108,7 @@ trowmin
 trowargmax
 trowargmin
 textract
+textract_small_m
 timg2col
 tmov
 tload

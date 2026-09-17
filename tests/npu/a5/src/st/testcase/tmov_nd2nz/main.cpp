@@ -17,6 +17,9 @@ using namespace PtoTestCommon;
 template <int kRows, int kCols>
 void launchTMOV_nd2nz(uint8_t* out, uint8_t* src, void* stream);
 
+template <int kRows, int kCols>
+void launchTMOV_nd2nz_f4(uint8_t* out, uint8_t* src, void* stream);
+
 class TMovNd2NzTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -79,8 +82,59 @@ void test_tmov_nd2nz()
     EXPECT_TRUE(ret);
 }
 
+template <int kRows, int kCols>
+void test_tmov_nd2nz_f4()
+{
+    constexpr int c0 = 64;                                  // f4 nibbles per NZ panel row (32 bytes)
+    constexpr int alignedCols = (kCols + c0 - 1) / c0 * c0; // padded to full NZ panels
+    size_t inputSize = kRows * alignedCols / 2;             // pre-padded feed, 2 x f4e1m2 per byte
+    size_t outputSize = kRows * alignedCols / 2;            // NZ over the padded width
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstHost, *dstDevice;
+    uint8_t *srcHost, *srcDevice;
+
+    aclrtMallocHost((void**)(&dstHost), outputSize);
+    aclrtMallocHost((void**)(&srcHost), inputSize);
+    aclrtMalloc((void**)(&dstDevice), outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)(&srcDevice), inputSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input_arr.bin", inputSize, srcHost, inputSize);
+    aclrtMemset(dstDevice, outputSize, 0, outputSize);
+
+    aclrtMemcpy(srcDevice, inputSize, srcHost, inputSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    launchTMOV_nd2nz_f4<kRows, kCols>(dstDevice, srcDevice, stream);
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, outputSize, dstDevice, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, outputSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<uint8_t> golden(outputSize);
+    std::vector<uint8_t> devFinal(outputSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", outputSize, golden.data(), outputSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", outputSize, devFinal.data(), outputSize);
+
+    bool ret = ResultCmp<uint8_t>(golden, devFinal, 0.0f);
+    EXPECT_TRUE(ret);
+}
+
 TEST_F(TMovNd2NzTest, case_hif8_32x32) { test_tmov_nd2nz<32, 32>(); }
 
 TEST_F(TMovNd2NzTest, case_hif8_32x64) { test_tmov_nd2nz<32, 64>(); }
 
 TEST_F(TMovNd2NzTest, case_hif8_64x64) { test_tmov_nd2nz<64, 64>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160) { test_tmov_nd2nz_f4<16, 8160>(); }
