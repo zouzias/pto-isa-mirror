@@ -86,69 +86,115 @@ size_t inline GetTileElementOffset(size_t r, size_t c)
     }
 }
 
+// Returns the physical (padded) buffer offset of the tile element at (row, col).
+// The (row, col) logical index is decomposed with the tile's VALID shape, while the
+// buffer stride is taken from the PHYSICAL shape, so valid data keeps its NC1HWC0 /
+// NDC1HWC0 / FRACTAL_Z slot inside the padded buffer.
 template <typename ConvTile>
-size_t inline GetConvTileElementOffset(size_t r, size_t c, const std::vector<int64_t>& shapes)
+size_t inline GetConvTileElementOffset(size_t r, size_t c, const ConvTile& tile)
 {
-    const size_t shape0 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_0]);
-    const size_t shape1 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_1]);
-    const size_t shape2 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_2]);
-    const size_t shape3 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_3]);
-    size_t shape4 = static_cast<size_t>(shapes[GlobalTensorDim::DIM_4]);
-
     constexpr size_t C0 = GetC0ElemCount<typename ConvTile::DType>();
     static_assert(C0 != 0, "Divider cannot be equal to zero");
 
-    int64_t i0 = 0, i1 = 0, i2 = 0, i3 = 0, i4 = 0, c0 = 0;
+    size_t offset = 0;
     if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
-        shape4 = C0;
-        i3 = r % shape3;
-        i2 = (r / shape3) % shape2;
-        i0 = r / (shape2 * shape3);
-        i4 = c % shape4;
-        i1 = c / shape4;
+        const size_t vh = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_2));
+        const size_t vw = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_3));
+        const size_t pc1 = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_1));
+        const size_t ph = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_2));
+        const size_t pw = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_3));
+        const size_t i3 = r % vw;
+        const size_t i2 = (r / vw) % vh;
+        const size_t i0 = r / (vh * vw);
+        const size_t i4 = c % C0;
+        const size_t i1 = c / C0;
+        offset = i0 * pc1 * ph * pw * C0 + i1 * ph * pw * C0 + i2 * pw * C0 + i3 * C0 + i4;
     } else if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
-        i4 = r % shape4;
-        i3 = (r / shape4) % shape3;
-        i0 = r / (shape3 * shape4);
-        c0 = c % C0;
-        i2 = (c / C0) % shape2;
-        i1 = c / (shape2 * C0);
+        const size_t vh = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_3));
+        const size_t vw = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_4));
+        const size_t vc1 = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_2));
+        const size_t pd = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_1));
+        const size_t pc1 = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_2));
+        const size_t ph = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_3));
+        const size_t pw = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_4));
+        const size_t i4 = r % vw;
+        const size_t i3 = (r / vw) % vh;
+        const size_t i0 = r / (vh * vw);
+        const size_t c0 = c % C0;
+        const size_t i2 = (c / C0) % vc1;
+        const size_t i1 = c / (vc1 * C0);
+        const size_t base = i0 * pd * pc1 * ph * pw + i1 * pc1 * ph * pw + i2 * ph * pw + i3 * pw + i4;
+        offset = base * C0 + c0;
     } else if constexpr (ConvTile::layout == pto::Layout::FRACTAL_Z) {
         if constexpr (ConvTile::totalDimCount == 4) {
-            shape4 = 1;
-            i2 = c;
-            i3 = r % shape3;
-            i1 = (r / shape3) % shape1;
-            i0 = r / (shape1 * shape3);
+            const size_t vc0 = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_3));
+            const size_t vn = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_1));
+            const size_t pn1 = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_1));
+            const size_t pn0 = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_2));
+            const size_t i2 = c;
+            const size_t i3 = r % vc0;
+            const size_t i1 = (r / vc0) % vn;
+            const size_t i0 = r / (vn * vc0);
+            offset = i0 * pn1 * pn0 * C0 + i1 * pn0 * C0 + i2 * C0 + i3;
         } else {
-            i4 = r % shape4;
-            i2 = (r / shape4) % shape2;
-            i1 = (r / (shape2 * shape4)) % shape1;
-            i0 = r / (shape1 * shape2 * shape4);
-            i3 = c;
+            const size_t vh = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_1));
+            const size_t vw = static_cast<size_t>(tile.GetValidShape(GlobalTensorDim::DIM_2));
+            const size_t ph = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_1));
+            const size_t pw = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_2));
+            const size_t pn = static_cast<size_t>(tile.GetShape(GlobalTensorDim::DIM_3));
+            const size_t i4 = r % C0;
+            const size_t i2 = (r / C0) % vw;
+            const size_t i1 = (r / (vw * C0)) % vh;
+            const size_t i0 = r / (vh * vw * C0);
+            const size_t i3 = c;
+            offset = i0 * ph * pw * pn * C0 + i1 * pw * pn * C0 + i2 * pn * C0 + i3 * C0 + i4;
         }
     }
-
-    int64_t offset = i0 * shape1 * shape2 * shape3 * shape4 + i1 * shape2 * shape3 * shape4 + i2 * shape3 * shape4 +
-                     i3 * shape4 + i4;
-    if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
-        offset = offset * C0 + c0;
-    }
     return offset;
+}
+
+// Builds the role-aligned valid shape vector (matched to the GLOBAL tensor dims) used
+// to decode the conv (row, col) loop indices. Empty means "no valid shape override"
+// (valid == physical), i.e. the global shapes are used directly.
+template <typename ConvTile>
+std::vector<int64_t> GetConvTileRoleValidShapes(const ConvTile& tile)
+{
+    constexpr size_t C0 = GetC0ElemCount<typename ConvTile::DType>();
+    if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
+        return {
+            tile.GetValidShape(GlobalTensorDim::DIM_0), tile.GetValidShape(GlobalTensorDim::DIM_1),
+            tile.GetValidShape(GlobalTensorDim::DIM_2), tile.GetValidShape(GlobalTensorDim::DIM_3),
+            static_cast<int64_t>(C0)};
+    } else if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
+        return {
+            tile.GetValidShape(GlobalTensorDim::DIM_0), tile.GetValidShape(GlobalTensorDim::DIM_1),
+            tile.GetValidShape(GlobalTensorDim::DIM_2), tile.GetValidShape(GlobalTensorDim::DIM_3),
+            tile.GetValidShape(GlobalTensorDim::DIM_4)};
+    } else if constexpr (ConvTile::layout == pto::Layout::FRACTAL_Z) {
+        if constexpr (ConvTile::totalDimCount == 4) {
+            return {};
+        } else {
+            return {
+                tile.GetValidShape(GlobalTensorDim::DIM_0), tile.GetValidShape(GlobalTensorDim::DIM_1),
+                tile.GetValidShape(GlobalTensorDim::DIM_2), tile.GetValidShape(GlobalTensorDim::DIM_3),
+                static_cast<int64_t>(C0)};
+        }
+    }
+    return {};
 }
 
 template <typename ConvTile>
 PTO_INTERNAL int64_t CalculateValidRowFromTile(ConvTile& tile)
 {
     if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
-        return tile.GetShape(0) * tile.GetShape(2) * tile.GetShape(3);
+        return tile.GetValidShape(0) * tile.GetValidShape(2) * tile.GetValidShape(3);
     } else if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
-        return tile.GetShape(0) * tile.GetShape(3) * tile.GetShape(4);
+        return tile.GetValidShape(0) * tile.GetValidShape(3) * tile.GetValidShape(4);
     } else if constexpr (ConvTile::layout == pto::Layout::FRACTAL_Z) {
         if constexpr (ConvTile::totalDimCount == 4) {
-            return tile.GetShape(0) * tile.GetShape(1) * tile.GetShape(3);
+            return tile.GetValidShape(0) * tile.GetValidShape(1) * tile.GetValidShape(3);
         } else {
-            return tile.GetShape(0) * tile.GetShape(1) * tile.GetShape(2) * tile.GetShape(4);
+            return tile.GetValidShape(0) * tile.GetValidShape(1) * tile.GetValidShape(2) * tile.GetValidShape(4);
         }
     }
     return 0;
@@ -159,14 +205,14 @@ PTO_INTERNAL int64_t CalculateValidColFromTile(ConvTile& tile)
 {
     constexpr size_t C0 = GetC0ElemCount<typename ConvTile::DType>();
     if constexpr (ConvTile::layout == pto::Layout::NC1HWC0) {
-        return tile.GetShape(1) * C0;
+        return tile.GetValidShape(1) * C0;
     } else if constexpr (ConvTile::layout == pto::Layout::NDC1HWC0) {
-        return tile.GetShape(1) * tile.GetShape(2) * C0;
+        return tile.GetValidShape(1) * tile.GetValidShape(2) * C0;
     } else if constexpr (ConvTile::layout == pto::Layout::FRACTAL_Z) {
         if constexpr (ConvTile::totalDimCount == 4) {
-            return tile.GetShape(2);
+            return tile.GetValidShape(2);
         } else {
-            return tile.GetShape(3);
+            return tile.GetValidShape(3);
         }
     }
     return 0;
@@ -180,13 +226,21 @@ size_t inline GetGlobalElementOffsetPlain(GlobalData& gdata, size_t r, size_t c)
 
 template <typename GlobalData, typename TileData = void>
 size_t inline MapTileIndicesToGlobalOffset(
-    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides)
+    size_t r, size_t c, const std::vector<int64_t>& globalShapes, const std::vector<int64_t>& globalStrides,
+    const std::vector<int64_t>& validShapes = {})
 {
-    const size_t shape0 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_0]);
     const size_t shape1 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_1]);
     const size_t shape2 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_2]);
     const size_t shape3 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_3]);
     const size_t shape4 = static_cast<size_t>(globalShapes[GlobalTensorDim::DIM_4]);
+
+    // Conv tiles decode the (row, col) loop indices against the VALID shape but
+    // address against the global (physical) strides.
+    const bool hasValidShapes = validShapes.size() > GlobalTensorDim::DIM_4;
+    const size_t d1 = hasValidShapes ? static_cast<size_t>(validShapes[GlobalTensorDim::DIM_1]) : shape1;
+    const size_t d2 = hasValidShapes ? static_cast<size_t>(validShapes[GlobalTensorDim::DIM_2]) : shape2;
+    const size_t d3 = hasValidShapes ? static_cast<size_t>(validShapes[GlobalTensorDim::DIM_3]) : shape3;
+    const size_t d4 = hasValidShapes ? static_cast<size_t>(validShapes[GlobalTensorDim::DIM_4]) : shape4;
 
     constexpr size_t C0 = GetC0ElemCount<typename GlobalData::DType, TileData>();
     static_assert(C0 != 0, "Divider cannot be equal to zero");
@@ -194,41 +248,41 @@ size_t inline MapTileIndicesToGlobalOffset(
     int64_t i0, i1, i2, i3, i4, c0 = 0;
     if constexpr (GlobalData::layout == pto::Layout::ND) {
         i4 = c;
-        i3 = r % shape3;
-        i2 = (r / shape3) % shape2;
-        i1 = (r / (shape3 * shape2)) % shape1;
-        i0 = r / (shape1 * shape2 * shape3);
+        i3 = r % d3;
+        i2 = (r / d3) % d2;
+        i1 = (r / (d3 * d2)) % d1;
+        i0 = r / (d1 * d2 * d3);
     } else if constexpr (GlobalData::layout == pto::Layout::DN) {
         i3 = r;
-        i4 = c % shape4;
-        i2 = (c / shape4) % shape2;
-        i1 = (c / (shape4 * shape2)) % shape1;
-        i0 = c / (shape1 * shape2 * shape4);
+        i4 = c % d4;
+        i2 = (c / d4) % d2;
+        i1 = (c / (d4 * d2)) % d1;
+        i0 = c / (d1 * d2 * d4);
     } else if constexpr (GlobalData::layout == pto::Layout::NZ) {
-        const size_t outerCol = c / shape4;
-        i0 = outerCol / shape1;
-        i1 = outerCol % shape1;
-        i2 = r / shape3;
-        i3 = r % shape3;
-        i4 = c % shape4;
+        const size_t outerCol = c / d4;
+        i0 = outerCol / d1;
+        i1 = outerCol % d1;
+        i2 = r / d3;
+        i3 = r % d3;
+        i4 = c % d4;
     } else if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) {
-        i3 = r % shape3;
-        i2 = (r / shape3) % shape2;
-        i0 = r / (shape2 * shape3);
-        i4 = c % shape4;
-        i1 = c / shape4;
+        i3 = r % d3;
+        i2 = (r / d3) % d2;
+        i0 = r / (d2 * d3);
+        i4 = c % d4;
+        i1 = c / d4;
     } else if (GlobalData::layout == pto::Layout::NDC1HWC0) {
-        i4 = r % shape4;
-        i3 = (r / shape4) % shape3;
-        i0 = r / (shape3 * shape4);
+        i4 = r % d4;
+        i3 = (r / d4) % d3;
+        i0 = r / (d3 * d4);
         c0 = c % C0;
-        i2 = (c / C0) % shape2;
-        i1 = c / (shape2 * C0);
+        i2 = (c / C0) % d2;
+        i1 = c / (d2 * C0);
     } else if (GlobalData::layout == pto::Layout::FRACTAL_Z) {
-        i4 = r % shape4;
-        i2 = (r / shape4) % shape2;
-        i1 = (r / (shape2 * shape4)) % shape1;
-        i0 = r / (shape1 * shape2 * shape4);
+        i4 = r % d4;
+        i2 = (r / d4) % d2;
+        i1 = (r / (d2 * d4)) % d1;
+        i0 = r / (d1 * d2 * d4);
         i3 = c;
     } else if constexpr (GlobalData::layout == pto::Layout::MX_A_ZZ) {
         i0 = 0;
