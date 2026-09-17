@@ -92,25 +92,29 @@ CFG(32, 64, 64, 64, E2M1, E1M2)
 CFG(33, 128, 256, 128, E4M3, E2M1)
 CFG(34, 128, 256, 128, F16, HIF4)
 CFG(35, 128, 128, 256, E4M3, HIF4)
+CFG(36, 512, 128, 192, HIF4, HIF4)
 
 #undef CFG
 
-static constexpr size_t elemBytes(AKind k)
-{
-    return (k == AKind::E4M3) ? 1 : (k == AKind::F16 || k == AKind::BF16) ? 2 : 0; // 0 => fp4 packed (0.5 B)
-}
+// Element widths on GM. fp4-family A kinds (E1M2/E2M1/HIF4) pack two 4-bit
+// codes per byte (0.5 B/elem). fp8 (E4M3) is 1 B, fp16/bf16 are 2 B.
+static constexpr bool isFp4PackA(AKind k) { return k == AKind::E1M2 || k == AKind::E2M1 || k == AKind::HIF4; }
 
 static size_t aDataBytes(AKind k, int m, int kk)
 {
     size_t elems = static_cast<size_t>(m) * kk;
-    size_t eb = elemBytes(k);
-    return eb ? elems * eb : elems / 2;
+    if (isFp4PackA(k)) {
+        return elems / 2;
+    }
+    return elems * (k == AKind::E4M3 ? 1 : 2);
 }
 
 static size_t bDataBytes(BKind k, int kk, int n)
 {
-    size_t elems = static_cast<size_t>(kk) * n;
-    return elems / 2; // B is always fp4-family (e1m2/e2m1/hif4): 0.5 B/elem packed
+    // B is always an fp4-family type (e1m2/e2m1/hif4): 2 elements per byte.
+    // Keep the explicit /2 rather than a size helper to avoid a 0.5 B sentinel.
+    (void)k;
+    return static_cast<size_t>(kk) * n / 2;
 }
 
 // Scale tile byte sizes. The MX_A_ZZ (A) / MX_B_NN (B) / HIF4 fractal layouts
@@ -267,5 +271,6 @@ CASE(32, case_mmad_mx_e2m1e1m2_64x64x64)
 CASE(33, case_mmad_mx_e4m3e2m1_128x256x128)
 CASE(34, case_mmad_mx_fp16hi4_128x256x128)
 CASE(35, case_mmad_mx_e4m3hi4_128x128x256)
+CASE(36, case_mmad_mx_hif4hif4_512x128x192)
 
 #undef CASE

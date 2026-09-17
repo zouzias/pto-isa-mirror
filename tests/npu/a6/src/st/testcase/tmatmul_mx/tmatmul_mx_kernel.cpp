@@ -103,8 +103,9 @@ AICORE inline void MxRunMatmul(
 
 template <
     typename TileMatA, typename TileMatB, typename TileScaleA, typename TileScaleB, typename LeftTile,
-    typename RightTile, typename LeftScaleTile, typename RightScaleTile, typename AccTile, typename GlobalDataA,
-    typename GlobalDataB, typename GlobalScaleA, typename GlobalScaleB, int validM, int validN, int tileN, int nTiles>
+    typename RightTile, typename LeftScaleTile, typename RightScaleTile, typename AccTile, typename TailRightTile,
+    typename TailRightScaleTile, typename TailAccTile, typename GlobalDataA, typename GlobalDataB,
+    typename GlobalScaleA, typename GlobalScaleB, int validM, int validN, int tileN, int tailN, int nTiles>
 AICORE inline void MxRunTiledMatmul(
     __gm__ bfloat16_t* out, GlobalDataA& aDataGm, GlobalDataB& bDataGm, GlobalScaleA& aScaleGm, GlobalScaleB& bScaleGm)
 {
@@ -126,7 +127,9 @@ AICORE inline void MxRunTiledMatmul(
         bfloat16_t, pto::Shape<1, 1, 1, validM, pto::DYNAMIC>,
         pto::Stride<validM * validN, validM * validN, validM * validN, validN, 1>>;
 
-    for (int j = 0; j < nTiles; ++j) {
+    // Full tiles (tileN wide), covering columns [0, fullTiles*tileN).
+    constexpr int fullTiles = nTiles - 1;
+    for (int j = 0; j < fullTiles; ++j) {
         TEXTRACT(bl0, bMatTile, 0, j * tileN);
         TEXTRACT(bScaleL0, bScaleTile, 0, j * tileN);
         MxComputeStore(cTile, al0, aScaleL0, bl0, bScaleL0);
@@ -138,6 +141,25 @@ AICORE inline void MxRunTiledMatmul(
         wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
 #endif
     }
+
+    // Final tile: tailN == tileN when N is an exact multiple of tileN, else a
+    // narrower (16-aligned) partial tile covering columns [fullTiles*tileN, N).
+    TailRightTile blTail;
+    TailRightScaleTile bScaleTail;
+    TailAccTile cTail;
+    TASSIGN(blTail, L0B_BUF0);
+    TASSIGN(bScaleTail, GetScaleAddr(blTail.data()));
+    TASSIGN(cTail, 0x0u);
+    TEXTRACT(blTail, bMatTile, 0, fullTiles * tileN);
+    TEXTRACT(bScaleTail, bScaleTile, 0, fullTiles * tileN);
+    MxComputeStore(cTail, al0, aScaleL0, blTail, bScaleTail);
+    GlobalDataOut outTail(out + fullTiles * tileN);
+    outTail.template SetShape<GlobalTensorDim::DIM_4>(tailN);
+    TSTORE(outTail, cTail);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+#endif
 }
 
 template <typename LeftT, typename RightT, int validM, int validK, int validN>
@@ -254,7 +276,10 @@ AICORE inline void RunMxHif4ABImpl(
     constexpr int tileNCapped = (tileNRaw < N) ? tileNRaw : N;
     constexpr int tileN = CeilAlign<int>(tileNCapped, 64);
     constexpr int nTiles = (N + tileN - 1) / tileN;
+    constexpr int tailN = N - (nTiles - 1) * tileN; // == tileN when N % tileN == 0, else partial
     static_assert(M * tileN * 4 <= static_cast<int>(L0C_SIZE_BYTES), "tiled accumulator exceeds L0C");
+    static_assert(tailN >= 16 && tailN % 16 == 0, "partial N-tile width must be a positive multiple of 16");
+    static_assert(tailN <= tileN, "tail tile must not exceed the full tile width");
     using TileMatA = Tile<
         TileType::Mat, hifloat4x2_t, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor,
         TileConfig::fractalABSize>;
@@ -282,14 +307,17 @@ AICORE inline void RunMxHif4ABImpl(
     using RightTile = TileRight<hifloat4x2_t, K, tileN, validK, tileN>;
     using RightScaleTile = TileRightScale<uint8_t, scaleKCols, tileN, scaleKCols, tileN>;
     using AccTile = TileAcc<float, M, tileN, validM, tileN>;
+    using TailRightTile = TileRight<hifloat4x2_t, K, tailN, validK, tailN>;
+    using TailRightScaleTile = TileRightScale<uint8_t, scaleKCols, tailN, scaleKCols, tailN>;
+    using TailAccTile = TileAcc<float, M, tailN, validM, tailN>;
     GlobalDataA aDataGm(aData);
     GlobalDataB bDataGm(bData);
     GlobalScaleA aScaleGm(aScale);
     GlobalScaleB bScaleGm(bScale);
     MxRunTiledMatmul<
         TileMatA, TileMatB, TileScaleA, TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, AccTile,
-        GlobalDataA, GlobalDataB, GlobalScaleA, GlobalScaleB, validM, validN, tileN, nTiles>(
-        out, aDataGm, bDataGm, aScaleGm, bScaleGm);
+        TailRightTile, TailRightScaleTile, TailAccTile, GlobalDataA, GlobalDataB, GlobalScaleA, GlobalScaleB, validM,
+        validN, tileN, tailN, nTiles>(out, aDataGm, bDataGm, aScaleGm, bScaleGm);
 }
 
 template <typename LeftT, typename RightT, int validM, int validK, int validN>
@@ -377,6 +405,7 @@ LAUNCH_HIF4AB(23, 128, 512, 128)
 LAUNCH_HIF4AB(24, 512, 128, 512)
 LAUNCH_HIF4AB(25, 128, 128, 256)
 LAUNCH_HIF4AB(26, 256, 128, 512)
+// m == 1 cases exercise the TMATMUL_MX promoted-m path (mad_mx with m=1, not TGEMV_MX).
 LAUNCH_E2M1(27, float8_e4m3_t, float4_e2m1x2_t, 1, 256, 64)
 LAUNCH_E2M1(28, half, float4_e2m1x2_t, 1, 256, 64)
 LAUNCH_HIF4B(29, bfloat16_t, 1, 256, 64)
@@ -386,6 +415,7 @@ LAUNCH_E2M1(32, float4_e2m1x2_t, float4_e1m2x2_t, 64, 64, 64)
 LAUNCH_E2M1(33, float8_e4m3_t, float4_e2m1x2_t, 128, 256, 128)
 LAUNCH_HIF4B(34, half, 128, 256, 128)
 LAUNCH_HIF4B(35, float8_e4m3_t, 128, 128, 256)
+LAUNCH_HIF4AB(36, 512, 128, 192)
 
 #undef LAUNCH_E2M1
 #undef LAUNCH_HIF4B
