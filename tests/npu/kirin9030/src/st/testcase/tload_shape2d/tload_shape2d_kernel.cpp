@@ -45,6 +45,11 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
 
+    if constexpr (sizeof(T) != 8) {
+        TEXPANDS(srcTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+    }
+
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
@@ -90,6 +95,11 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
+
+    if constexpr (sizeof(T) != 8) {
+        TEXPANDS(srcTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+    }
 
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
@@ -139,6 +149,11 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
 
+    if constexpr (sizeof(T) != 8) {
+        TEXPANDS(srcTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+    }
+
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
@@ -186,6 +201,11 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
+
+    if constexpr (sizeof(T) != 8) {
+        TEXPANDS(srcTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+    }
 
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
@@ -238,6 +258,11 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
+
+    if constexpr (sizeof(T) != 8) {
+        TEXPANDS(srcTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+    }
 
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
