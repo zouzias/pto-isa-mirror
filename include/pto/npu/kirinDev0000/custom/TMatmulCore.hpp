@@ -34,19 +34,19 @@ __tf__ PTO_INTERNAL void TMatmulCore(
     set_cube_stride_para(cubeStridePara);
 
     using T = typename TileRes::DType;
-    if (config & 0x1) {
-        ZeroInitCTile<TileRes>(cData);
-    }
-
     __cbuf__ typename TileLeft::DType* a = (__cbuf__ typename TileLeft::DType*)__cce_get_tile_ptr(aData);
     __cb__ typename TileRight::DType* b = (__cb__ typename TileRight::DType*)__cce_get_tile_ptr(bData);
     __cbuf__ void* c = (__cbuf__ void*)__cce_get_tile_ptr(cData);
+
+    if (config & 0x1) {
+        ZeroInitCTilePtr<TileRes>(c);
+    }
 
     matmul_to_cbuf(c, a, b, biasAddr, btAddr, config);
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-__tf__ PTO_INTERNAL void TMatmul(
+PTO_INTERNAL void TMatmul(
     typename TileRes::TileDType __out__ cData, typename TileLeft::TileDType __in__ aData,
     typename TileRight::TileDType __in__ bData, uint16_t m, uint16_t k, uint16_t n, bool initCtrl)
 {
@@ -79,7 +79,7 @@ __tf__ PTO_INTERNAL void TMatmulBiasNonBroadcast(
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-__tf__ PTO_INTERNAL void TMatmulBiasBroadcast(
+PTO_INTERNAL void TMatmulBiasBroadcast(
     typename TileRes::TileDType __out__ cData, typename TileLeft::TileDType __in__ aData,
     typename TileRight::TileDType __in__ bData, uint64_t btAddr, uint16_t m, uint16_t k, uint16_t n, bool initCtrl)
 {
@@ -100,7 +100,7 @@ __tf__ PTO_INTERNAL void TMatmulBiasBroadcast(
 template <
     typename TileRes, typename TileLeft, typename TileRight, bool hasBias, bool isBroadcast = false,
     bool isClear = false>
-__tf__ PTO_INTERNAL void TMatmulMacroAcc(
+PTO_INTERNAL void TMatmulMacroAcc(
     typename TileRes::TileDType __out__ cData, typename TileLeft::TileDType __in__ aData,
     typename TileRight::TileDType __in__ bData, __cbuf__ int32_t* biasAddr, uint64_t btAddr, uint16_t m, uint16_t k,
     uint16_t n, const MatmulMacroConfig& cfg)
@@ -134,7 +134,7 @@ __tf__ PTO_INTERNAL void TMatmulMacroAcc(
 
 template <
     typename TileRes, typename TileLeft, typename TileRight, bool hasBias, bool isBroadcast = false, bool isAcc = false>
-__tf__ PTO_INTERNAL void TMatmulMacro(
+PTO_INTERNAL void TMatmulMacro(
     typename TileRes::TileDType __out__ cData, typename TileLeft::TileDType __in__ aData,
     typename TileRight::TileDType __in__ bData, __cbuf__ int32_t* biasAddr, uint64_t btAddr, uint16_t m, uint16_t k,
     uint16_t n, const MatmulMacroConfig& cfg)
@@ -177,7 +177,7 @@ __tf__ PTO_INTERNAL void TMatmulMacro(
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>
-__tf__ PTO_INTERNAL void TMatmulGemv(
+PTO_INTERNAL void TMatmulGemv(
     typename TileRes::TileDType __out__ cData, typename TileLeft::TileDType __in__ aData,
     typename TileRight::TileDType __in__ bData, uint16_t k, uint16_t n, bool initCtrl)
 {

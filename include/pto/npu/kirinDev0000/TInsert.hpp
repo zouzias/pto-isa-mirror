@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename T>
-__tf__ PTO_INTERNAL void CopyUbufToCbuf(
+PTO_INTERNAL void CopyUbufToCbuf(
     __cbuf__ T* dst, __ubuf__ T* src, uint8_t sid, uint16_t nBurst, uint16_t lenBurst, uint16_t srcGap, uint16_t dstGap)
 {
     constexpr uint32_t CBUF_UB_BURST_UNIT = 32;

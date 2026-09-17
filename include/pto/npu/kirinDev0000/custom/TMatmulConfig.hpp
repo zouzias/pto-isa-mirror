@@ -151,7 +151,7 @@ AICORE constexpr MatmulPreQuant InferPreQuant()
 }
 
 template <typename T>
-__tf__ PTO_INTERNAL void SetMFpcForFp16()
+PTO_INTERNAL void SetMFpcForFp16()
 {
     if constexpr (std::is_same_v<T, half>) {
         uint64_t mFpc = 0;
@@ -160,7 +160,7 @@ __tf__ PTO_INTERNAL void SetMFpcForFp16()
     }
 }
 
-__tf__ PTO_INTERNAL void SetMReluAlpha(float reluScalar)
+PTO_INTERNAL void SetMReluAlpha(float reluScalar)
 {
     uint32_t floatBits = __builtin_bit_cast(uint32_t, reluScalar);
     uint32_t sign = (floatBits >> 31) & 0x1;
@@ -172,7 +172,7 @@ __tf__ PTO_INTERNAL void SetMReluAlpha(float reluScalar)
 }
 
 template <typename OutType>
-__tf__ PTO_INTERNAL void SetMQuantPre(float clipReluVal)
+PTO_INTERNAL void SetMQuantPre(float clipReluVal)
 {
     uint64_t mQuantPre = 0;
     if constexpr (std::is_same_v<OutType, half> || std::is_same_v<OutType, int16_t>) {
@@ -196,12 +196,10 @@ __tf__ PTO_INTERNAL void SetMQuantPre(float clipReluVal)
 }
 
 template <typename TileRes>
-__tf__ PTO_INTERNAL void ZeroInitCTile(typename TileRes::TileDType __out__ cData)
+PTO_INTERNAL void ZeroInitCTilePtr(__cbuf__ void* c)
 {
     using OutType = typename TileRes::DType;
-    constexpr uint32_t BLOCK_BYTE = 32;
-    __cbuf__ void* c = (__cbuf__ void*)__cce_get_tile_ptr(cData);
-    constexpr uint32_t totalBlocks = (TileRes::Rows * TileRes::Cols * sizeof(OutType)) / BLOCK_BYTE;
+    constexpr uint32_t totalBlocks = (TileRes::Rows * TileRes::Cols * sizeof(OutType)) / BLOCK_BYTE_SIZE;
     constexpr int64_t repeatConfig = ((static_cast<int64_t>(0) & 0x7FFF) << 32) |
                                      ((static_cast<int64_t>(totalBlocks) & 0x7FFF) << 16) |
                                      (static_cast<int64_t>(1) & 0x7FFF);
@@ -212,8 +210,14 @@ __tf__ PTO_INTERNAL void ZeroInitCTile(typename TileRes::TileDType __out__ cData
     }
 }
 
+template <typename TileRes>
+__tf__ PTO_INTERNAL void ZeroInitCTile(typename TileRes::TileDType __out__ cData)
+{
+    ZeroInitCTilePtr<TileRes>((__cbuf__ void*)__cce_get_tile_ptr(cData));
+}
+
 template <typename InputType, MatmulPreQuant preQuant>
-__tf__ PTO_INTERNAL void SetMFpcFromConfig(MatmulPreRelu preRelu, const MatmulMacroConfig& cfg)
+PTO_INTERNAL void SetMFpcFromConfig(MatmulPreRelu preRelu, const MatmulMacroConfig& cfg)
 {
     uint64_t mFpc = 0;
     if constexpr (preQuant != MatmulPreQuant::NoQuant) {
