@@ -9,3 +9,4 @@
 # --------------------------------------------------------------------------------
 pto_cpu_sim_st(tcvt)
 
+target_sources(tcvt PRIVATE fp8_tests.cpp)

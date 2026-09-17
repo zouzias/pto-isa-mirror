@@ -55,7 +55,8 @@ All enums below are available via `#include <pto/pto-inst.hpp>`.
 
 ### `pto::RoundMode`
 
-Defined in `include/pto/common/constants.hpp`. Used by `TCVT` to specify rounding behavior (e.g., `RoundMode::CAST_RINT`).
+Defined in `include/pto/common/type.hpp`. Used by `TCVT` to specify rounding behavior (e.g., `RoundMode::CAST_RINT`).
+Supported modes and defaults depend on the conversion and backend; see [TCVT](../isa/TCVT.md).
 
 ### `pto::CmpMode`
 
