@@ -19,12 +19,9 @@ __attribute__((visibility("default"))) void registerTestHooks(void* lane, void* 
     cpu_sim::register_hooks(lane, storage);
 }
 
-__attribute__((visibility("default"))) void signalEvent(uint16_t message)
-{
-    __builtin_cce_ffts_cross_core_sync(PIPE_FIX, message);
-}
+__attribute__((visibility("default"))) void signalEvent(uint16_t message) { ffts_cross_core_sync(PIPE_FIX, message); }
 
-__attribute__((visibility("default"))) void waitEvent(int event) { __builtin_cce_wait_flag_dev(event); }
+__attribute__((visibility("default"))) void waitEvent(int event) { wait_flag_dev(event); }
 
 __attribute__((visibility("default"))) void setBase(uint64_t address) { set_ffts_base_addr(address); }
 

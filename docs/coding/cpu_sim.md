@@ -129,8 +129,24 @@ correctness testing and does not model a specific on-chip address.
 ### A2/A3 FFTS cross-core events
 
 The normal `<pto/pto-inst.hpp>` CPU include path exposes `pto::getFFTSMsg`,
-`__builtin_cce_ffts_cross_core_sync` / `ffts_cross_core_sync`, and
-`__builtin_cce_wait_flag_dev` / `wait_flag_dev` through [ffts.hpp](../../include/pto/cpu/ffts.hpp).
+`ffts_cross_core_sync`, `wait_flag_dev`, and `set_ffts_base_addr` through
+[ffts.hpp](../../include/pto/cpu/ffts.hpp). These are the public interfaces used by the NPU A2/A3 implementation.
+CPU_SIM implements the signal and wait operations directly under these public names; CCE owns the hardware builtins.
+The CPU signatures are:
+
+| Interface | CPU behavior |
+| --- | --- |
+| `uint16_t pto::getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseCount = 1)` | Validate and encode a message for the supported protocol below. |
+| `void ffts_cross_core_sync(int pipe, uint16_t message)` | Publish a notification from the explicitly selected AIC or AIV role; ignore `pipe`. |
+| `void wait_flag_dev(int eventId)` | Wait for and consume the matching notification for the selected role. |
+| `void set_ffts_base_addr(uint64_t address)` | Accept the hardware address without accessing it or resetting CPU event state. |
+
+CPU_SIM provides no compatibility entry points for compiler-private FFTS builtins.
+Update kernel generators to emit the public interfaces, then regenerate and rebuild affected kernels.
+Recompiling old generated source or regenerating it with a generator that still emits private names will fail.
+The matching interface names do not imply support for every NPU FFTS mode or hardware pipeline timing;
+CPU support is limited to the protocol and behavior below.
+
 Compile AIC kernels with `__DAV_CUBE__` and AIV kernels with `__DAV_VEC__`, in addition to `__CPU_SIM`.
 Exactly one role must be selected. When neither role is specified, generic CPU headers enable both
 `PTO_COMPILE_CUBE` and `PTO_COMPILE_VEC` for library code.
@@ -173,10 +189,11 @@ the calling lane correctly. Configure hooks and context before executing kernels
 Run `python3 tests/run_cpu.py --testcase ffts --clean` for the cross-library regression.
 Its 12 cases cover injected and dynamically resolved **numeric-key** hooks, queued events,
 two-lane joins, consumption, device/group/event isolation, runtime reset, invalid arguments,
-a null storage callback, and a three-slot producer/consumer pipeline.
+a null storage callback, and a three-slot producer/consumer pipeline. The AIC/AIV test libraries call
+`ffts_cross_core_sync`, `wait_flag_dev`, and `set_ffts_base_addr` through the public CPU include path.
 Run `python3 tests/run_cpu.py --testcase ffts_hooks --clean` for 9 additional cases covering the
-string-key fallback, task/block isolation, injected-provider precedence, null providers, ambiguous
-kernel roles, and overflow without counter wraparound or a partial AIC broadcast.
+string-key fallback, task/block isolation, injected-provider precedence, null providers, kernel-role
+validation, and overflow without counter wraparound or a partial AIC broadcast.
 The suites use separate executables: `ffts_hooks` omits the process-visible numeric-key provider
 so that the lower-priority string-key fallback can be exercised.
 
