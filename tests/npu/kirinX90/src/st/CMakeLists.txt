@@ -71,7 +71,7 @@ add_link_options(
 )
 if (SOC_VERSION STREQUAL "KirinX90")
     set(CCE_AICORE_ARCH dav-l300)
-    add_compile_definitions(PTO_TEST_KIRINX90 __NPU_ARCH__=3003)
+    add_compile_definitions(PTO_TEST_KIRINX90)
 endif()
 
 if(RUN_MODE STREQUAL "npu")
@@ -117,6 +117,17 @@ else()
 
 endif()
 
+if(RUN_MODE STREQUAL "sim")
+    file(COPY ${ASCEND_HOME_PATH}/lib64/libruntime.so
+         DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+    set(KIRIN_SIM_RPATH
+        "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+        "${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib"
+        "${ASCEND_HOME_PATH}/lib64")
+    set(CMAKE_BUILD_RPATH "${KIRIN_SIM_RPATH}")
+    add_link_options(-Wl,--disable-new-dtags)
+    message(STATUS "Kirin sim: copied lib64/libruntime.so to ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}, using RPATH")
+endif()
 
 if(DEBUG_MODE)
     message(STATUS "Debug Mode Enabled, Add Debug Options")
