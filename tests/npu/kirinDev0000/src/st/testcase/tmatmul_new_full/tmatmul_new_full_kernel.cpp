@@ -21,6 +21,12 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
     return (num_1 + num_2 - 1) / num_2 * num_2;
 }
 
+template <typename PtrT>
+__tf__ AICORE inline PtrT GetTilePtr(PtrT ptr)
+{
+    return (PtrT)__cce_get_tile_ptr(ptr);
+}
+
 template <
     typename OutType, typename AType, typename BType, typename BiasType, int validM, int validK, int validN,
     bool isBias>
@@ -141,9 +147,7 @@ __global__ AICORE void RunTMATMUL(
 
         for (int chunk = 0; chunk < nChunks; chunk++) {
             // Point quantMatTileChunk to the correct offset in CBUF
-            TASSIGN(
-                quantMatTileChunk,
-                (uint64_t)__cce_get_tile_ptr(quantMatTile.data()) + chunk * chunkN * sizeof(uint64_t));
+            TASSIGN(quantMatTileChunk, (uint64_t)GetTilePtr(quantMatTile.data()) + chunk * chunkN * sizeof(uint64_t));
             TMOV(quantFbTileChunk, quantMatTileChunk);
 
             // Extract B columns [chunk*chunkN, (chunk+1)*chunkN] from cbuf to l0b
@@ -153,10 +157,10 @@ __global__ AICORE void RunTMATMUL(
             wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
             // Point cMatTileChunk to the correct CBUF offset within the full C Tile
-            TASSIGN(cMatTileChunk, (uint64_t)__cce_get_tile_ptr(cMatTile.data()) + chunk * cChunkOffset);
+            TASSIGN(cMatTileChunk, (uint64_t)GetTilePtr(cMatTile.data()) + chunk * cChunkOffset);
 
             MatmulMacroConfig chunkCfg;
-            chunkCfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTileChunk.data());
+            chunkCfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTileChunk.data());
             TMATMUL(cMatTileChunk, aMatTile, bTileChunk, chunkCfg);
 
             if (chunk < nChunks - 1) {
@@ -182,7 +186,7 @@ __global__ AICORE void RunTMATMUL(
 
         MatmulMacroConfig cfg;
         if constexpr (isQuant) {
-            cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+            cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
         }
 
         if constexpr (isBias) {
@@ -313,7 +317,7 @@ __global__ AICORE void RunTMATMULRelu(
     cfg.reluScalar = reluScalar;
     cfg.clipReluVal = clipReluVal;
     if constexpr (isQuant) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
     }
 
     if constexpr (isBias) {
@@ -439,7 +443,7 @@ __global__ AICORE void RunTMATMULNormalRelu(
     MatmulMacroConfig cfg;
     cfg.reluMode = MatmulReluMode::NormalRelu;
     if constexpr (isQuant) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
     }
 
     if constexpr (isBias) {
@@ -578,9 +582,9 @@ __global__ AICORE void RunTMATMULVectorRelu(
 
     MatmulMacroConfig cfg;
     cfg.reluMode = MatmulReluMode::VectorRelu;
-    cfg.vectorReluTileAddr = (uint64_t)__cce_get_tile_ptr(reluFbTile.data());
+    cfg.vectorReluTileAddr = (uint64_t)GetTilePtr(reluFbTile.data());
     if constexpr (isQuant) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
     }
 
     if constexpr (isBias) {
@@ -704,7 +708,7 @@ __global__ AICORE void RunGEMV(
     MatmulMacroConfig cfg;
     cfg.gemvCtrl = true;
     if constexpr (isQuant) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
     }
 
     if constexpr (isBias) {
@@ -837,7 +841,7 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
         MatmulMacroConfig cfg;
         cfg.gemvCtrl = isGemv;
         if constexpr (isQuant) {
-            cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+            cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
         }
 
         if (i == 0) {
@@ -852,7 +856,7 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
             TMATMUL_MACRO_ACC_IMPL<AccPhase::Unspecified, AccTile, TileMatAData, RightTile, void, false>(
                 cMatTile, aMatTile, bTile, nullptr, cfg);
         } else {
-            __cbuf__ int32_t* accBiasPtr = (__cbuf__ int32_t*)__cce_get_tile_ptr(cMatTile.data());
+            __cbuf__ int32_t* accBiasPtr = (__cbuf__ int32_t*)GetTilePtr(cMatTile.data());
             TMatmulMacro<OutTile, TileMatAData, RightTile, false, false, true>(
                 outMatTile.data(), aMatTile.data(), bTile.data(), accBiasPtr, 0, aMatTile.GetValidRow(),
                 aMatTile.GetValidCol(), bTile.GetValidCol(), cfg);

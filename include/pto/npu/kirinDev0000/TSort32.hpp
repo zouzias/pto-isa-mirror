@@ -29,7 +29,7 @@ template <typename DstTileData, typename SrcTileData, typename IdxTileData, unsi
 __tf__ AICORE inline void TSort32Impl(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
     typename IdxTileData::TileDType __in__ idx, unsigned validRow, unsigned repeatNumPerRow, unsigned idxStride,
-    __ubuf__ half* scratch)
+    unsigned scratchOffset)
 {
     using T = typename DstTileData::DType;
     using IdxT = typename IdxTileData::DType;
@@ -37,6 +37,7 @@ __tf__ AICORE inline void TSort32Impl(
     __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
     __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
     __ubuf__ IdxT* idxPtr = (__ubuf__ IdxT*)__cce_get_tile_ptr(idx);
+    __ubuf__ half* scratch = (__ubuf__ half*)dstPtr + scratchOffset;
 
     if (repeatNumPerRow <= REPEAT_MAX) {
         for (uint32_t i = 0; i < validRow; i++) {
@@ -119,7 +120,7 @@ __tf__ AICORE void TSort32Impl(
     typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
     typename IdxTileData::TileDType __in__ idx, typename TmpTileData::TileDType __in__ tmp, unsigned validRow,
     unsigned validCol, unsigned repeatNumPerRow, unsigned idxStride, unsigned srcTailPerRow, unsigned srcTailRepeatNum,
-    __ubuf__ half* scratch)
+    unsigned scratchOffset)
 {
     using T = typename DstTileData::DType;
     using IdxT = typename IdxTileData::DType;
@@ -127,6 +128,7 @@ __tf__ AICORE void TSort32Impl(
     __ubuf__ T* srcPtr = (__ubuf__ T*)__cce_get_tile_ptr(src);
     __ubuf__ IdxT* idxPtr = (__ubuf__ IdxT*)__cce_get_tile_ptr(idx);
     __ubuf__ T* tmpPtr = (__ubuf__ T*)__cce_get_tile_ptr(tmp);
+    __ubuf__ half* scratch = (__ubuf__ half*)dstPtr + scratchOffset;
 
     T minVal = -(0.0 / 0.0);
     uint32_t srcShapeBytesPerRow = validCol * sizeof(T);
@@ -188,11 +190,10 @@ AICORE inline void TSORT32_IMPL(DstTileData& dst, SrcTileData& src, IdxTileData&
     constexpr unsigned srcStride = SrcTileData::RowStride;
     unsigned idxStride = idx.GetValidRow() == 1 ? 0 : IdxTileData::RowStride;
 
-    __ubuf__ half* dstHalfPtr = (__ubuf__ half*)__cce_get_tile_ptr(dst.data());
-    __ubuf__ half* scratch = dstHalfPtr + validRow * dstStride;
+    unsigned scratchOffset = validRow * dstStride;
 
     TSort32Impl<DstTileData, SrcTileData, IdxTileData, dstStride, srcStride>(
-        dst.data(), src.data(), idx.data(), validRow, repeatNumPerRow, idxStride, scratch);
+        dst.data(), src.data(), idx.data(), validRow, repeatNumPerRow, idxStride, scratchOffset);
 }
 
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
@@ -210,18 +211,17 @@ AICORE inline void TSORT32_IMPL(DstTileData& dst, SrcTileData& src, IdxTileData&
 
     unsigned idxStride = idx.GetValidRow() == 1 ? 0 : tmpIdxStride;
 
-    __ubuf__ half* dstHalfPtr = (__ubuf__ half*)__cce_get_tile_ptr(dst.data());
-    __ubuf__ half* scratch = dstHalfPtr + validRow * dstStride;
+    unsigned scratchOffset = validRow * dstStride;
 
     if (src.GetValidCol() % 32 == 0) {
         TSort32Impl<DstTileData, SrcTileData, IdxTileData, dstStride, srcStride>(
-            dst.data(), src.data(), idx.data(), validRow, repeatNumPerRow, idxStride, scratch);
+            dst.data(), src.data(), idx.data(), validRow, repeatNumPerRow, idxStride, scratchOffset);
     } else {
         unsigned srcTailPerRow = validCol % 32;
         unsigned srcTailRepeatNum = PTO_DIV_ROUNDUP(validCol, BLOCK_SIZE) % REPEAT_MAX;
         TSort32Impl<DstTileData, SrcTileData, IdxTileData, TmpTileData, dstStride, srcStride>(
             dst.data(), src.data(), idx.data(), tmp.data(), validRow, validCol, repeatNumPerRow, idxStride,
-            srcTailPerRow, srcTailRepeatNum, scratch);
+            srcTailPerRow, srcTailRepeatNum, scratchOffset);
     }
 }
 } // namespace pto
