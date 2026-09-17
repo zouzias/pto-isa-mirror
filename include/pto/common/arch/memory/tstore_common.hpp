@@ -450,7 +450,7 @@ PTO_INTERNAL void TStoreUb2gmNz2nz(
     PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096");
     uint16_t nBurst = gShape1;
     uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmGap = (gStride1 - gShape2 * gShape3 * gShape4) * sizeof(typename TileData::DType);
+    uint32_t gmGap = (gStride1 - validRow * gShape4) * sizeof(typename TileData::DType);
     uint32_t ubGap = TileData::Rows - validRow;
 
     typename GlobalData::DType* dstGlobalAddr = dstAddr;
