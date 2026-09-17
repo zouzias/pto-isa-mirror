@@ -93,6 +93,8 @@ correctness testing and does not model a specific on-chip address.
   access `tmp`, and otherwise has the same ascending or descending sequence semantics as the two-argument form.
   Keep the target-specific scratch allocation required by the NPU backend when writing portable kernels.
 - CPU_SIM implements all four `TCVT` overloads, with or without an explicit scratch Tile and `SaturationMode`.
+  FP32-to-FP8 E4M3/E5M2 conversions honor rounding and saturation; `CAST_NONE` and unsupported FP8
+  `CAST_ODD` fall back to nearest-even, matching A5. See [TCVT](../isa/TCVT.md) for format and overflow semantics.
   Scratch-Tile forms accept but do not access `tmp` and match the corresponding no-scratch conversion. The default
   CPU_SIM saturation mode is `SaturationMode::OFF`; portable kernels must retain any NPU scratch allocation.
 - `TSTORE` from a `TileType::Vec` tile with `SLayout::NoneBox` picks its GM traversal from the tile's own layout

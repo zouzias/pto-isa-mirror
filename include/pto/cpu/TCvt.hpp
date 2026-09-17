@@ -60,6 +60,9 @@ template <typename T>
 constexpr bool is_int4_v = std::is_same_v<T, int4b_t>;
 
 template <typename T>
+constexpr bool is_fp8_v = std::is_same_v<T, float8_e4m3_t> || std::is_same_v<T, float8_e5m2_t>;
+
+template <typename T>
 constexpr bool is_float_like_v = std::is_floating_point_v<T> || std::is_same_v<T, half> ||
                                  std::is_same_v<T, aclFloat16> || std::is_same_v<T, bfloat16_t>;
 
@@ -163,9 +166,11 @@ inline T from_double_value(double val)
 }
 
 template <typename D, typename S>
-inline D convert_value(S val, RoundMode mode)
+inline D convert_value(S val, RoundMode mode, SaturationMode satMode = SaturationMode::OFF)
 {
-    if constexpr (is_fp4_v<S> && is_fp4_v<D>) {
+    if constexpr (is_float_like_v<S> && is_fp8_v<D>) {
+        return D(static_cast<double>(val), mode, satMode);
+    } else if constexpr (is_fp4_v<S> && is_fp4_v<D>) {
         return D::FromRaw(val.RawData());
     } else if constexpr (std::is_same_v<S, int4b_t>) {
         int8_t ival = static_cast<int8_t>(val);
@@ -208,7 +213,7 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
 
             S val = src.GetElement(i, j);
             if constexpr (satMode == SaturationMode::ON) {
-                if constexpr (!IsTwinType<S>() && !IsTwinType<D>()) {
+                if constexpr (!IsTwinType<S>() && !IsTwinType<D>() && !(is_float_like_v<S> && is_fp8_v<D>)) {
                     double dval = to_double_value(val);
                     double min_limit = std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest());
                     double max_limit = std::min(SafeLimits<S>::max(), SafeLimits<D>::max());
@@ -217,7 +222,7 @@ PTO_INTERNAL void TCvt_Impl(TileDataD& dst, TileDataS& src, unsigned validRow, u
                 }
             }
 
-            D result = convert_value<D, S>(val, mode);
+            D result = convert_value<D, S>(val, mode, satMode);
             dst.SetElement(i, j, result);
         }
     }

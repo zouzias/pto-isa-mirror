@@ -38,7 +38,9 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
+Include `<pto/pto-inst.hpp>` to use this interface. The overloads are defined in
+`include/pto/common/pto_instr.hpp`; `RoundMode` and `SaturationMode` are defined in
+`include/pto/common/type.hpp`.
 
 ```cpp
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
@@ -64,6 +66,20 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Roun
     - One form accepts an explicit `SaturationMode`, and the specified saturation behavior is forwarded directly to the implementation.
     - The other form omits `SaturationMode`; in that case, the implementation chooses a target-defined default saturation behavior for the specific type pair.
     - CPU_SIM implements all four C++ overloads shown above. Its default saturation mode is `SaturationMode::OFF`.
+    - CPU_SIM FP32-to-FP8 E4M3/E5M2 conversions implement `CAST_RINT` (nearest, ties to even), `CAST_ROUND`
+      (nearest, ties away from zero), `CAST_FLOOR`, `CAST_CEIL`, and `CAST_TRUNC`. As in the A5 dispatch,
+      `CAST_NONE` and the unsupported FP8 mode `CAST_ODD` fall back to `CAST_RINT`.
+      Rounding preserves signed zero and does not depend on the host floating-point rounding mode.
+    - For these CPU_SIM FP8 conversions, saturation clamps finite overflow and input infinities to the signed
+      finite maximum (E4M3: 448; E5M2: 57344). NaN inputs remain NaN, but their payloads are not preserved.
+      Without saturation, E4M3 rounded results outside its finite range and input infinities become NaN.
+      For finite E5M2 inputs, nearest rounding (`CAST_RINT`/`CAST_ROUND`) produces signed infinity at
+      magnitude >= 61440; directed rounding away from zero does so above 57344. Directed rounding
+      toward zero returns the signed finite maximum for magnitudes above 57344; input infinities remain infinities.
+      Here, away from zero means positive `CAST_CEIL` or negative `CAST_FLOOR`; toward zero means
+      `CAST_TRUNC`, positive `CAST_FLOOR`, or negative `CAST_CEIL`.
+      E4M3 encodings `0x7f`/`0xff` decode as NaN; E5M2 decodes infinity and NaN separately.
+      E8M0 conversions and the single-argument MXType encoding constructors are unchanged.
 - **Temporary tile**:
   - **CPU_SIM**: The two overloads with `tmp` produce the same result as their corresponding no-`tmp` overloads.
     CPU_SIM accepts `tmp` for source compatibility but neither calls `tmp.data()` nor accesses its storage. Portable
