@@ -65,6 +65,19 @@ def set_env_variables(run_mode, soc_version):
         _, simulator_lib_path = get_simulator_info(ascend_home, soc_version)
         os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 
+        if soc_version in ("Kirin9030", "KirinX90"):
+            libruntime_path = os.path.join(simulator_lib_path, "libruntime.so")
+            if os.path.exists(libruntime_path) or os.path.islink(libruntime_path):
+                camodel_path = os.path.join(simulator_lib_path, "libruntime_camodel.so")
+                is_same = False
+                if os.path.islink(libruntime_path):
+                    target = os.readlink(libruntime_path)
+                    is_same = os.path.basename(target) == "libruntime_camodel.so"
+                elif os.path.isfile(libruntime_path) and os.path.isfile(camodel_path):
+                    is_same = os.path.getsize(libruntime_path) == os.path.getsize(camodel_path)
+                if is_same:
+                    os.remove(libruntime_path)
+
 
 def get_simulator_info(ascend_home, soc_version):
     simulator_home = os.path.join(ascend_home, "tools", "simulator")
