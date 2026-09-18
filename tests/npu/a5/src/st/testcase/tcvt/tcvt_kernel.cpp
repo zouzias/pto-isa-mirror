@@ -156,6 +156,18 @@ void launchTCVT(D* dst, S* src, void* stream)
         dst_type * dst, src_type * src, void* stream);                                                                 \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type * dst, src_type * src, void* stream);
 
+// fp4 packs 2 nibbles/byte: a [4,32] fp4 tile has 16B rows — below the 32B vec
+// row alignment enforced by pto_tile (CPU harness convention: fp4 only at
+// >= 64-nibble shapes). fp4 pairs skip the 4x32 instantiation.
+#define INSTANTIATE_TCVT_FP4(dst_type, src_type)                                                                       \
+    template void launchTCVT<dst_type, src_type, 1, 128, 1, 128>(dst_type * dst, src_type * src, void* stream);        \
+    template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type * dst, src_type * src, void* stream);          \
+    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type * dst, src_type * src, void* stream);        \
+    template void launchTCVT<dst_type, src_type, 4, 128, 4, 128, 4, 65>(dst_type * dst, src_type * src, void* stream); \
+    template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 4, 200>(                                              \
+        dst_type * dst, src_type * src, void* stream);                                                                 \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type * dst, src_type * src, void* stream);
+
 // FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
 INSTANTIATE_TCVT(aclFloat16, float)
 INSTANTIATE_TCVT(bfloat16_t, float)
@@ -179,12 +191,12 @@ INSTANTIATE_TCVT(hifloat8_wrapper, aclFloat16)
 INSTANTIATE_TCVT(float, bfloat16_t)
 INSTANTIATE_TCVT(int32_t, bfloat16_t)
 // INSTANTIATE_TCVT(aclFloat16, bfloat16_t)
-INSTANTIATE_TCVT(fp4_e1m2x2_wrapper, bf16_wrapper)
-INSTANTIATE_TCVT(fp4_e2m1x2_wrapper, bf16_wrapper)
+INSTANTIATE_TCVT_FP4(fp4_e1m2x2_wrapper, bf16_wrapper)
+INSTANTIATE_TCVT_FP4(fp4_e2m1x2_wrapper, bf16_wrapper)
 
 // FP4 Source → bf16
-INSTANTIATE_TCVT(bf16_wrapper, fp4_e1m2x2_wrapper)
-INSTANTIATE_TCVT(bf16_wrapper, fp4_e2m1x2_wrapper)
+INSTANTIATE_TCVT_FP4(bf16_wrapper, fp4_e1m2x2_wrapper)
+INSTANTIATE_TCVT_FP4(bf16_wrapper, fp4_e2m1x2_wrapper)
 
 // U8 Source → half, uint16
 INSTANTIATE_TCVT(aclFloat16, uint8_t)
