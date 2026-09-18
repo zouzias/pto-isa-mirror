@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "gmm_common.h"
 #include "gmm_task_queue_device.h"
 #include "utils/hccl_window.hpp"
+#include "utils/mega_moe_urma.hpp"
 
 class Gmm2ExpertProgressCoordinator {
 public:
@@ -55,6 +56,8 @@ public:
             // data-ready publication; no second Combine-side fan-out is needed.
             const bool allExpertsReady = readyExpertCount == expertCount;
             for (uint32_t consumerRank = 0U; consumerRank < rankCount; ++consumerRank) {
+                if (MegaMoeIsCrossServerRank(tilingData_, consumerRank))
+                    continue;
                 remoteWindow_.PublishRankReadyMte(
                     static_cast<int32_t>(consumerRank), readyExpertCount, epoch, allExpertsReady, EVENT_ID0);
             }

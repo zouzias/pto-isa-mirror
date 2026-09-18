@@ -104,6 +104,35 @@ include_directories(
     ${ASCEND_HOME_PATH}/include/experiment/runtime
 )
 
+# Probe real headers AND linked functions; never invent ABI declarations for an older SDK.
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_INCLUDES "${ASCEND_HOME_PATH}/include")
+set(CMAKE_REQUIRED_LIBRARIES "${ASCEND_HOME_PATH}/lib64/libhcomm.so" stdc++)
+unset(MEGA_MOE_HCCL_SHARED_QUEUE_AVAILABLE CACHE)
+check_cxx_source_compiles([=[
+#include <hccl/hccl.h>
+#include <hccl/hccl_res.h>
+int main() {
+    HcclChannelConfig config = nullptr;
+    HcclChannelDesc desc{}; ChannelHandle channel{};
+    HcclChannelConfigCreate(&config);
+    HcclChannelConfigSetInt(config, HCCL_CHANNEL_CONFIG_TYPE_IS_SHARED_QUEUE, 1U);
+    HcclChannelConfigSetStr(config, HCCL_CHANNEL_CONFIG_TYPE_SHARED_QUEUE_TAG, "megamoe_probe");
+    HcclChannelAcquireWithConfig(nullptr, COMM_ENGINE_AIV, &desc, 1U, config, &channel);
+    HcclChannelConfigDestroy(config);
+    return HCCL_CHANNEL_CONFIG_SHARED_QUEUE_TAG_MAX_LEN == 0;
+}
+]=] MEGA_MOE_HCCL_SHARED_QUEUE_AVAILABLE)
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(CMAKE_REQUIRED_LIBRARIES)
+if(NOT MEGA_MOE_HCCL_SHARED_QUEUE_AVAILABLE)
+    message(FATAL_ERROR
+        "MegaMoE requires CANN/HCCL SharedPool headers and libraries "
+        "(HcclChannelAcquireWithConfig and HcclChannelConfigCreate/SetInt/SetStr/Destroy). "
+        "Use a supported SDK for both MTE and URMA builds.")
+endif()
+message(STATUS "MegaMoE URMA: SHARED_POOL, one queue per submitting AIV0")
+
 function(pto_example_mixed NAME)
     add_library(${NAME}_kernel SHARED kernel_launch.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -std=c++17)
@@ -146,6 +175,7 @@ function(pto_example_mixed NAME)
         ${PROJECT_SOURCE_DIR}/op_kernel
         ${PROJECT_SOURCE_DIR}/op_kernel/utils
         ${PROJECT_SOURCE_DIR}/../../../../tests/common
+        ${ASCEND_HOME_PATH}/include
         ${ASCEND_HOME_PATH}/include/hccl
         ${HOST_EXTRA_INCLUDE_DIRS}
         ${PROJECT_BINARY_DIR}

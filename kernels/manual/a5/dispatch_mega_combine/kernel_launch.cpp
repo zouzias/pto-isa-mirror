@@ -61,13 +61,23 @@ extern "C" __global__ __aicore__ void dispatch_mega_combine_kernel(
 #endif
     pto::SYNCALL<pto::SyncCoreType::Mix>();
     if (startSync != 0U) {
-        PtoRemoteWindow remoteWindow;
-        remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData->runtimeInfo.remoteWindowContext));
+        if (tilingData->multiServerTiling.enabled != 0U) {
 #if defined(__DAV_VEC__)
-        remoteWindow.CrossRankStartSyncAiv();
-#elif defined(__DAV_CUBE__)
-        remoteWindow.CrossRankStartSyncAic();
+            if (get_block_idx() == 0U && get_subblockid() == 0U) {
+                MegaMoeUrmaTransport transport;
+                transport.InitForSubmission(tilingData);
+                transport.StartSync();
+            }
 #endif
+        } else {
+            PtoRemoteWindow remoteWindow;
+            remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData->runtimeInfo.remoteWindowContext));
+#if defined(__DAV_VEC__)
+            remoteWindow.CrossRankStartSyncAiv();
+#elif defined(__DAV_CUBE__)
+            remoteWindow.CrossRankStartSyncAic();
+#endif
+        }
         pto::SYNCALL<pto::SyncCoreType::Mix>();
     }
 
