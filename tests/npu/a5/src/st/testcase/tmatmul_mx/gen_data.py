@@ -24,7 +24,7 @@ fp4_e2m1x2 = en_dtypes.float4_e2m1
 np.random.seed(19)
 
 
-def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2):
+def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2, pad_value=0):
     m, k = x1_mx_gm.shape
     pad_m = (block_size - m % block_size) % block_size
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
@@ -33,7 +33,7 @@ def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2):
         padded = np.pad(x1_mx_gm, 
                        ((0, pad_m), (0, pad_k)), 
                        mode='constant',
-                       constant_values=0)
+                       constant_values=pad_value)
     else:
         padded = x1_mx_gm
     
@@ -49,7 +49,7 @@ def convert_x1_scale_format(x1_mx_gm, block_size=16, c0_size_mx=2):
     return x1_scale_gm
 
 
-def convert_x2_scale_format(x2_mx_gm, block_size=16, c0_size_mx=2):
+def convert_x2_scale_format(x2_mx_gm, block_size=16, c0_size_mx=2, pad_value=0):
     k, n = x2_mx_gm.shape
     pad_n = (block_size - n % block_size) % block_size
     pad_k = (c0_size_mx - k % c0_size_mx) % c0_size_mx
@@ -58,7 +58,7 @@ def convert_x2_scale_format(x2_mx_gm, block_size=16, c0_size_mx=2):
         padded = np.pad(x2_mx_gm, 
                        ((0, pad_k), (0, pad_n)),
                        mode='constant',
-                       constant_values=0)
+                       constant_values=pad_value)
     else:
         padded = x2_mx_gm
     
@@ -98,7 +98,7 @@ def gen_golden_data(case_name, param):
     scale_a_format = param.scale_a_format
     scale_b_format = param.scale_b_format
 
-    m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
+    m, k, n, is_bias = param.m, param.k, param.n, param.is_bias
 
     original_k = k
     k_aligned = align_to_multiple(k, 64)
@@ -144,7 +144,7 @@ def gen_golden_data(case_name, param):
 
     if scale_a_format == 'zz':
         # x1_scale_gm, convert to zZ format
-        x1_scale_gm = convert_x1_scale_format(x1_mx_gm, 16, 2)
+        x1_scale_gm = convert_x1_scale_format(x1_mx_gm, 16, 2, param.scale_pad)
     elif scale_a_format == 'dn':
         # x1_scale_gm, convert to dn format
         x1_scale_gm = x1_mx_gm.reshape((x1_mx_gm.shape[0], x1_mx_gm.shape[1] // 2, 2)).transpose(1, 0, 2)
@@ -153,7 +153,7 @@ def gen_golden_data(case_name, param):
 
     if scale_b_format == 'nn':
         # x2_scale_gm, convert to nN format
-        x2_scale_gm = convert_x2_scale_format(x2_mx_gm, 16, 2)
+        x2_scale_gm = convert_x2_scale_format(x2_mx_gm, 16, 2, param.scale_pad)
     elif scale_b_format == 'dn':
         x2_scale_gm = x2_mx_gm.transpose()
     else:
@@ -174,7 +174,10 @@ def gen_golden_data(case_name, param):
 
 class TmatmulmxParams:
 
-    def __init__(self, atype, btype, ctype, m, k, n, is_bias, scale_a_format='zz', scale_b_format='nn', bias_type=None):
+    def __init__(
+        self, atype, btype, ctype, m, k, n, is_bias,
+        scale_a_format='zz', scale_b_format='nn', bias_type=None, scale_pad=0,
+    ):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
@@ -182,6 +185,7 @@ class TmatmulmxParams:
         self.k = k
         self.n = n 
         self.is_bias = is_bias
+        self.scale_pad = scale_pad
         self.scale_a_format = scale_a_format
         self.scale_b_format = scale_b_format
         if (bias_type):
@@ -238,6 +242,100 @@ if __name__ == "__main__":
         TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 1, 64, 62, True),  # TMatmul, gemv mode is disable.
         TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 1, 2048, 64, True, 'nd', 'nn'),
     ]
+
+    # Use unit scales for padded groups so stale tail data cannot be hidden by tiny scales.
+    splitk_cases = [
+        (
+            "splitk_fp4_e1m2_e1m2_k62_nobias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 47, 62, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e1m2_e1m2_k62_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 47, 62, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e1m2_e2m1_k62_nobias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 47, 62, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e1m2_e2m1_k62_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 47, 62, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e2m1_e1m2_k62_nobias",
+            TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 47, 62, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e2m1_e1m2_k62_bias",
+            TmatmulmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 47, 62, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e2m1_e2m1_k62_nobias",
+            TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 47, 62, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e2m1_e2m1_k62_bias",
+            TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 47, 62, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp8_e4m3_e5m2_k62_nobias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 47, 62, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp8_e4m3_e5m2_k72_bias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 47, 72, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e1m2_e2m1_k72_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 47, 72, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e1m2_e2m1_k64_nobias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 47, 64, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp8_e4m3_e5m2_k64_bias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 47, 64, 128, True, scale_pad=127),
+        ),
+        (
+            "splitk_fp8_e4m3_e5m2_k96_nobias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 47, 96, 128, False, scale_pad=127),
+        ),
+        (
+            "splitk_fp4_e2m1_e2m1_k126_nobias",
+            TmatmulmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 47, 126, 128, False, scale_pad=127),
+        ),
+    ]
+    splitk_cases += [(name + "_dynamic", params) for name, params in splitk_cases]
+    splitk_cases += [
+        (
+            "splitk_gemv_fp4_k62_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 1, 62, 64, True, "nd", "nn", scale_pad=127),
+        ),
+        (
+            "splitk_gemv_fp4_k1032_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 1, 1032, 64, True, "nd", "nn", scale_pad=127),
+        ),
+        (
+            "splitk_gemv_fp4_k1056_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 1, 1056, 64, True, "nd", "nn", scale_pad=127),
+        ),
+        (
+            "splitk_gemv_fp4_k1024_bias",
+            TmatmulmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 1, 1024, 64, True, "nd", "nn", scale_pad=127),
+        ),
+        (
+            "splitk_gemv_fp8_k62_bias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 1, 62, 64, True, "nd", "nn", scale_pad=127),
+        ),
+        (
+            "splitk_gemv_fp8_k1032_bias",
+            TmatmulmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 1, 1032, 64, True, "nd", "nn", scale_pad=127),
+        ),
+    ]
+    for name, params in splitk_cases:
+        case_name_list.append("TMATMULMXTest." + name)
+        case_params_list.append(params)
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
