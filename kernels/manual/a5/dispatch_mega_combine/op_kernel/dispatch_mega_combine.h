@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #if defined(__DAV_VEC__)
 #include "combine.h"
+#include "combine_urma.h"
 #include "deferred_route_metadata.h"
 #include "dispatch.h"
 #include "front_reorder.h"
@@ -176,8 +177,10 @@ __aicore__ inline void MegaMoe<CType_>::ProcessFixedGroups()
             PtoRemoteWindow remoteWindow;
             remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
             const int32_t preSumEpoch = remoteWindow.FrontReadyEpoch();
-            for (uint32_t srcRank = 0U; srcRank < tilingData_->runtimeInfo.rankSize; ++srcRank) {
-                remoteWindow.WaitPreSumReady(static_cast<int32_t>(srcRank), preSumEpoch);
+            if (!MegaMoeUrmaEnabled(tilingData_)) {
+                for (uint32_t srcRank = 0U; srcRank < tilingData_->runtimeInfo.rankSize; ++srcRank) {
+                    remoteWindow.WaitPreSumReady(static_cast<int32_t>(srcRank), preSumEpoch);
+                }
             }
             PublishGmm2EntryReady(workspaceGM_, tilingData_);
         }
@@ -224,6 +227,16 @@ __aicore__ inline void MegaMoe<CType_>::ProcessFixedGroups()
         Combine<bfloat16_t> combine;
         combine.Init(workspaceGM_, tilingData_);
         combine.ProcessFixed(physicalBlockId);
+    }
+
+    if (MegaMoeUrmaEnabled(tilingData_) && subblockId == 0U) {
+        UrmaCombineSender sender;
+        sender.Init(workspaceGM_, tilingData_);
+        for (uint32_t peer = physicalBlockId; peer < tilingData_->runtimeInfo.rankSize; peer += fixed.physicalAicNum) {
+            sender.ProcessPeer(peer);
+        }
+        if (physicalBlockId == tilingData_->runtimeInfo.rank % fixed.physicalAicNum)
+            sender.FinalizeRank();
     }
 
     // Rank-streaming uses stable logical ordinals: AIV1 is [0, P), AIV0 is

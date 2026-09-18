@@ -21,6 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils/common_helpers.hpp"
 #include "utils/const_args.hpp"
 #include "utils/hccl_window.hpp"
+#include "utils/mega_moe_urma.hpp"
 #include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
@@ -100,6 +101,8 @@ public:
         coreNum_ = get_block_num() * get_subblockdim();
 
         remoteWindow_.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+        if (MegaMoeUrmaEnabled(tilingData_))
+            urmaTransport_.InitForSubmission(tilingData_);
         peerMemoryLayout_.Init(tilingData_->frontReorderTiling);
         sourceTokenRecords_ = reinterpret_cast<__gm__ int8_t*>(remoteWindow_.LocalBase());
         localRouteMaskSlots_ =
@@ -122,11 +125,16 @@ public:
         dsb(DSB_DDR);
         pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
 
+        if (MegaMoeUrmaEnabled(tilingData_)) {
+            ExchangeUrmaFront();
+        }
         if (coreIdx_ == 0U) {
-            for (uint32_t dstRank = 0U; dstRank < rankSize_; ++dstRank) {
-                remoteWindow_.PublishFrontReady(static_cast<int32_t>(dstRank), frontReadyEpoch);
+            if (!MegaMoeUrmaEnabled(tilingData_)) {
+                for (uint32_t dstRank = 0U; dstRank < rankSize_; ++dstRank) {
+                    remoteWindow_.PublishFrontReady(static_cast<int32_t>(dstRank), frontReadyEpoch);
+                }
+                remoteWindow_.WaitAllFrontReady(frontReadyEpoch);
             }
-            remoteWindow_.WaitAllFrontReady(frontReadyEpoch);
             BuildCumsumAndExpertTokenNums();
             dsb(DSB_DDR);
             PublishScalarEpoch(
@@ -137,12 +145,79 @@ public:
     }
 
 private:
+    // The legacy total-count slot stays reserved; consumers read the original lane-count records.
+    AICORE inline void BuildUrmaPreSum() const
+    {
+        const auto& front = tilingData_->frontReorderTiling;
+        const auto& multi = tilingData_->multiServerTiling;
+        uint32_t prefix = 0U;
+        for (uint32_t dst = 0U; dst < rankSize_; ++dst) {
+            for (uint32_t e = 0U; e < expertPerRank_; ++e) {
+                __gm__ uint8_t* block = urmaTransport_.MetadataSendBlock(dst);
+                const uint32_t lanes = ActiveMaskLaneCount(dst * expertPerRank_ + e);
+                uint32_t count = 0U;
+                for (uint32_t lane = 0U; lane < lanes; ++lane) {
+                    __gm__ uint32_t* value = reinterpret_cast<__gm__ uint32_t*>(
+                        block + static_cast<uint64_t>(e) * front.maskSlotBytes + front.maskBytes +
+                        static_cast<uint64_t>(lane) * kMegaMoeFrontMaskCountRecordBytes);
+                    count += ld_dev(value, 0);
+                }
+                st_dev(prefix, reinterpret_cast<__gm__ uint32_t*>(block + multi.metadataPreSumOffsetBytes) + e, 0);
+                prefix += count;
+            }
+        }
+        dsb(DSB_DDR);
+    }
+
+    AICORE inline void ExchangeUrmaFront() const
+    {
+        if (coreIdx_ == 0U)
+            BuildUrmaPreSum();
+        pipe_barrier(PIPE_ALL);
+        pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+        if (get_subblockid() == 0U) {
+            const uint32_t owners = tilingData_->fixedGroupTiling.physicalAicNum;
+            for (uint32_t peer = get_block_idx(); peer < rankSize_; peer += owners) {
+                if (peer == rank_)
+                    continue;
+                urmaTransport_.SendMetadataToPeer(peer);
+            }
+            for (uint32_t server = 0U; server < urmaTransport_.ServerNum(); ++server) {
+                const uint32_t relay = urmaTransport_.RelayRankForTargetServer(server);
+                if (server == urmaTransport_.ServerId() || !urmaTransport_.IsPeerOwner(relay))
+                    continue;
+                urmaTransport_.SendDenseRelayToTargetServer(server);
+            }
+        }
+        // Every owner drains its own events before the coordinator GETs completion on its own queue.
+        pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+        if (coreIdx_ == 0U) {
+            urmaTransport_.MarkLocalFrontDone();
+            urmaTransport_.WaitAllFrontDoneByGet();
+            // Keep the existing [source-rank][local-expert] preSum layout for all existing consumers.
+            __gm__ uint32_t* dst = reinterpret_cast<__gm__ uint32_t*>(
+                remoteWindow_.LocalBase() + tilingData_->frontReorderTiling.preSumBeforeRankPeerOffset);
+            for (uint32_t src = 0U; src < rankSize_; ++src) {
+                for (uint32_t e = 0U; e < expertPerRank_; ++e) {
+                    st_dev(
+                        ld_dev(reinterpret_cast<__gm__ uint32_t*>(urmaTransport_.MetadataPreSum(src, e)), 0),
+                        dst + src * expertPerRank_ + e, 0);
+                }
+            }
+            dsb(DSB_DDR);
+        }
+        pipe_barrier(PIPE_ALL);
+        pto::SYNCALL<pto::SyncCoreType::AIVOnly>();
+    }
+
     AICORE inline uint32_t PackedRowStride() const { return tilingData_->frontReorderTiling.packedRowStride; }
 
     AICORE inline event_t FrontBufferEvent(uint32_t bufferId) const { return static_cast<event_t>(bufferId); }
 
     AICORE inline __gm__ uint8_t* LocalMaskSlot(uint32_t localExpert, uint32_t sourceRank) const
     {
+        if (MegaMoeUrmaEnabled(tilingData_))
+            return urmaTransport_.MetadataMaskSlot(sourceRank, localExpert);
         const uint64_t slot = static_cast<uint64_t>(localExpert) * rankSize_ + sourceRank;
         return localRouteMaskSlots_ + slot * tilingData_->frontReorderTiling.maskSlotBytes;
     }
@@ -151,6 +226,10 @@ private:
     {
         const uint32_t dstRank = globalExpert / expertPerRank_;
         const uint32_t localExpert = globalExpert - dstRank * expertPerRank_;
+        if (MegaMoeUrmaEnabled(tilingData_)) {
+            return urmaTransport_.MetadataSendBlock(dstRank) +
+                   static_cast<uint64_t>(localExpert) * tilingData_->frontReorderTiling.maskSlotBytes;
+        }
         __gm__ uint8_t* remoteBase = reinterpret_cast<__gm__ uint8_t*>(
             remoteWindow_.RemoteBase(peerMemoryLayout_.routeMaskSlots, static_cast<int32_t>(dstRank)));
         const uint64_t slot = static_cast<uint64_t>(localExpert) * rankSize_ + rank_;
@@ -504,6 +583,7 @@ private:
     GM_ADDR workspaceGM_ = nullptr;
     const __gm__ MegaMoeTilingData* tilingData_ = nullptr;
     PtoRemoteWindow remoteWindow_;
+    MegaMoeUrmaTransport urmaTransport_;
     MegaMoePeerMemoryLayout peerMemoryLayout_;
 
     uint32_t problemM_ = 0U;

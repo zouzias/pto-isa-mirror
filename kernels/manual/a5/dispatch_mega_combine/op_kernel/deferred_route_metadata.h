@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "gmm_task_descriptor_builder.h"
 #include "utils/const_args.hpp"
 #include "utils/hccl_window.hpp"
+#include "utils/mega_moe_urma.hpp"
 #include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
@@ -118,7 +119,7 @@ public:
         // Core 0 owns the single-run sort used by small-M cases. Run preSum on
         // the last worker so both metadata paths overlap at the sort barrier.
         const uint32_t preSumWorker = workerCount_ - 1U;
-        if (workerIdx_ == preSumWorker) {
+        if (workerIdx_ == preSumWorker && !MegaMoeUrmaEnabled(tilingData_)) {
             BuildAndPublishPreSum();
         }
 
