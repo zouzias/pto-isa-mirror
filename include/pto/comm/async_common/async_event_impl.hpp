@@ -178,6 +178,82 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession& session) const
     }
 }
 
+PTO_INTERNAL uint32_t AsyncEvent::CompletionRecordCount(const AsyncSession& session) const
+{
+    if (!session.valid || handle == 0ULL || engine != session.engine) {
+        return 0U;
+    }
+    switch (session.engine) {
+        case DmaEngine::SDMA: {
+            uint64_t postId = 0ULL;
+            uint32_t queueCount = 0U;
+            return sdma::detail::DecodeSdmaEventHandle(handle, postId, queueCount) &&
+                           session.sdmaRuntimeCtx.postDoneBase != nullptr
+                       ? queueCount
+                       : 0U;
+        }
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA: {
+            // A multi-jetty post parks one CQE per jetty, so the consumer has to wait for all of
+            // them; reporting one would let it retire on the first slice.
+            if (urmaJettyCount != 0U) {
+                return urmaJettyCount;
+            }
+            AsyncCompletionRecord record{};
+            return urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record) ? 1U : 0U;
+        }
+#endif
+        default:
+            return 0U;
+    }
+}
+
+PTO_INTERNAL AsyncCompletionRecord AsyncEvent::CompletionRecordAt(const AsyncSession& session, uint32_t idx) const
+{
+    AsyncCompletionRecord record{};
+    if (!session.valid || handle == 0ULL || engine != session.engine) {
+        return record;
+    }
+    switch (session.engine) {
+        case DmaEngine::SDMA: {
+            uint64_t postId = 0ULL;
+            uint32_t queueCount = 0U;
+            if (!sdma::detail::DecodeSdmaEventHandle(handle, postId, queueCount) || idx >= queueCount ||
+                session.sdmaRuntimeCtx.postDoneBase == nullptr) {
+                return record;
+            }
+            record.addr = sdma::detail::GetPostDoneRecordAddr(session.sdmaRuntimeCtx.postDoneBase, idx);
+            record.expected = postId;
+            record.kind = CompletionKind::SDMA_POST_DONE;
+            return record;
+        }
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA: {
+            uint32_t peer = 0U;
+            uint32_t targetBb = 0U;
+            urma::detail::DecodeHandle(handle, peer, targetBb);
+            if (targetBb == 0U) {
+                return record;
+            }
+            if (urmaJettyCount != 0U) {
+                if (idx >= urmaJettyCount) {
+                    return record;
+                }
+                (void)urma::detail::GetUrmaCompletionRecordAt(
+                    session, peer, static_cast<uint32_t>(urmaJettyBase) + idx, urmaTargetCqePerJetty[idx], record);
+                return record;
+            }
+            if (idx == 0U) {
+                (void)urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record);
+            }
+            return record;
+        }
+#endif
+        default:
+            return record;
+    }
+}
+
 } // namespace comm
 } // namespace pto
 

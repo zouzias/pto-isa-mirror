@@ -216,6 +216,12 @@ struct AsyncEvent {
 
     PTO_INTERNAL bool Wait(const AsyncSession& session) const;
     PTO_INTERNAL bool Test(const AsyncSession& session) const;
+
+    // How many completion records this event publishes, and the idx-th one. A consumer that cannot
+    // run device intrinsics reads `addr` and compares against `expected` per `kind`; the producer
+    // has already resolved the backend's queue layout, so none is re-derived downstream.
+    PTO_INTERNAL uint32_t CompletionRecordCount(const AsyncSession& session) const;
+    PTO_INTERNAL AsyncCompletionRecord CompletionRecordAt(const AsyncSession& session, uint32_t idx) const;
 };
 
 // ============================================================================

@@ -159,6 +159,50 @@ AICORE inline bool ValidateUrmaSession(const AsyncSession& session, uint32_t pee
     return true;
 }
 
+AICORE inline bool IsPowerOfTwo(uint32_t value) { return value != 0U && (value & (value - 1U)) == 0U; }
+
+// The CQE address and the owner value that marks it done, for one jetty's slice of a post. Split out
+// so the multi-jetty path below and the single-jetty path share one predicate: publishing the
+// un-inverted lap parity would tell a consumer to accept a slot the NIC has not written yet.
+AICORE inline bool GetUrmaCompletionRecordAt(
+    const AsyncSession& session, uint32_t peer, uint32_t jettyIdx, uint32_t targetCqe, AsyncCompletionRecord& record)
+{
+    if (targetCqe == 0U || !ValidateUrmaSessionAt(session, peer, jettyIdx)) {
+        return false;
+    }
+
+    __gm__ UrmaCqCtx* cq = GetCqContextAt(session, peer, jettyIdx);
+    if (cq->bufAddr == 0U || !IsPowerOfTwo(cq->depth) || cq->depth < 128U || cq->cqeShiftSize >= 63U) {
+        return false;
+    }
+
+    const uint32_t cqeIndex = targetCqe - 1U;
+    const uint64_t cqeSize = 1ULL << cq->cqeShiftSize;
+    const uint64_t cqeAddr = cq->bufAddr + cqeSize * static_cast<uint64_t>(cqeIndex & (cq->depth - 1U));
+    if (cqeAddr < cq->bufAddr) {
+        return false;
+    }
+
+    record.addr = reinterpret_cast<__gm__ uint8_t*>(cqeAddr);
+    // A slot is complete once its owner bit has flipped away from the value the round started with —
+    // the same predicate WaitForUrmaCqe spins on.
+    record.expected = static_cast<uint64_t>(((cqeIndex / cq->depth) & 1U) ^ 1U);
+    record.kind = CompletionKind::URMA_CQE_DW0;
+    return true;
+}
+
+AICORE inline bool GetUrmaCompletionRecord(
+    uint64_t handle, uint32_t targetCqe, const AsyncSession& session, AsyncCompletionRecord& record)
+{
+    uint32_t peer = 0U;
+    uint32_t targetBb = 0U;
+    DecodeHandle(handle, peer, targetBb);
+    if (targetBb == 0U || !ValidateUrmaSession(session, peer)) {
+        return false;
+    }
+    return GetUrmaCompletionRecordAt(session, peer, session.qpIdxBase, targetCqe, record);
+}
+
 AICORE inline __gm__ UrmaNotifyResourceRegion* GetUrmaNotifyResourceRegion(const AsyncSession& session, uint32_t peer)
 {
     __gm__ UrmaInfo* info = reinterpret_cast<__gm__ UrmaInfo*>(session.contextGm);
