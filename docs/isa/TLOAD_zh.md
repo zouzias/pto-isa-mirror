@@ -91,11 +91,17 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
     - ND->NZ 也支持 `GlobalData::staticShape[2] != 1`。此时 `Shape2` 是单条指令搬运的 ND 小矩阵个数
       （指令自带的 `ndNum` 操作数），每个小矩阵形状为 `[Shape3, Shape4]`，多个小矩阵沿 tile 行方向堆叠，
       因此 `dst.GetValidRow() == Shape2 * Shape3`。该平台的 `srcNdMatrixStride` 与 `dstNzMatrixStride`
-      是 16 位的元素数，因此除 `Shape2 * Shape3 <= TileData::Rows` 和 `1 <= Shape2 <= 65535` 外，
-      还要求 `Stride2 <= 65535` 且 `Shape3 * (32 / sizeof(DType)) <= 65535`。
+      是 16 位的元素数，因此运行时 `Shape2 > 1` 时还要求 `1 <= Stride2 <= 65535`，
+      且 `Shape3 * (32 / sizeof(DType)) <= 65535`。动态 Shape2 在运行时为 1 时不使用这两个矩阵步长，
+      不受这两项检查限制；`Shape2 * Shape3 <= TileData::Rows` 和 `1 <= Shape2 <= 65535` 仍须满足。
     - 对于 `int64_t/uint64_t`，仅支持ND->ND或DN->DN。
-    - Vec tile（UB路径）：`1 <= TileData::Rows <= 4095`。
-    - Mat tile（L1路径）：`1 <= TileData::Rows <= 16384`。
+    - Vec ND->ND 要求 `TileData::Rows < 4096`。普通同布局 UB/L1 加载要求 burst 数对应的维度小于 4096：
+      ND 为 `Shape3`，DN 为 `Shape4`，NZ 为 `Shape1`。单行/单列 Mat 路径见下文。
+    - Mat ND->NZ 要求 `1 <= Shape3 <= 16384`、`1 <= Shape4 <= 65535`、
+      `1 <= Stride3 <= 65535`，且 `TileData::Rows <= 16384`。
+    - Mat DN->ZN 要求 `1 <= Shape4 <= 16384`、`1 <= Shape3 <= 65535`、
+      `1 <= Stride4 <= 65535`，且 `TileData::Cols <= 16384`。
+    - tile 尺寸及放置位置必须满足目标 UB/L1 的容量限制；上述维度限制仅适用于对应路径。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，且必须匹配 `sizeof(GlobalData::DType)`。
     - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
@@ -134,7 +140,9 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
     - 对于scaleB，`dst.GetValidRow() % 2 == 0`。
 
 - **有效区域**:
-    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
+    - 源形状与 `dst.GetValidRow()` / `dst.GetValidCol()` 必须满足所选路径的对应关系，不能将有效行列数
+      视为独立的裁剪边界。例如，A2/A3 的 ND->NZ 和 DN->ZN 按源矩阵形状搬运；
+      A5 单矩阵 ND->NZ 搬运 `Shape3` 行、`dst.GetValidCol()` 列。
     - 在A2/A3上，同布局且按块对齐的 `TileType::Mat` 加载仅写入有效区域。ND到NZ、DN到ZN加载（以及单行/单列Mat特殊路径）还会将最后一个不完整C0块的尾部填零。其他数据保持不变，包括共享同一底层存储的其他tile视图所对应的数据。
     - 在A5上，同布局 `TileType::Mat` 的ND/DN加载仅按 `PadVal` 填充最后一个不完整32B块；ND/DN到分形布局的加载将最后一个不完整C0块的尾部填零。完整32B间隔块以及未参与传输的行或列保持不变。
     - 在A5上，`GlobalData::staticShape[2] != 1` 的 ND->NZ 加载合并后的前 `dst.GetValidRow()` 行。
@@ -153,6 +161,37 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
       编译期 Shape2 为 1 时使用单矩阵路径：搬运 `Shape4` 列、`dst.GetValidRow()` 行，
       因此源形状必须描述要搬运的列范围。
     - 在A2/A3和A5上，`PadVal` 非空时，`TileType::Vec` 的ND/DN加载仅填充每个burst传输后不足32B的尾部；完整32B间隔块以及未参与传输的行或列保持不变。NZ加载和`PadValue::Null`不增加填充。
+
+### 步长与长度边界
+
+A2/A3、A5、A6、KirinX90、Kirin9030 和 KirinDev0000 的相关 TLOAD 路径保留 `int64_t` 源步长。
+对于 b8/b16/b32/b64 数据，元素数到字节数的转换使用 64 位计算。构造大 `Stride` 表达式时须使用
+64 位操作数，GM 存储须覆盖所有访问地址，目标存储须满足实际物理容量限制。
+
+**gap** 是前一段 burst 结束到下一段开始之间的间隔；**stride** 是相邻两段 burst 起始地址之间的距离。
+下列上限分别对应不同的指令字段：
+
+| 路径 | 字段与回退行为 |
+| --- | --- |
+| A2/A3、KirinX90 普通 GM 到 UB | 源 gap 单位为字节。超过 `UINT32_MAX` 时，使用 64 位源偏移逐 burst 搬运。 |
+| A2/A3 普通 GM 到 L1 | 源 gap 单位为 32 字节块。超过 `UINT16_MAX` 个块时逐 burst 搬运；原有块对齐要求仍然有效。 |
+| KirinX90 普通 GM 到 L1 | 按所选块搬运或字节对齐指令的单位检查长度和 gap，超出范围时先拆分 burst 和长度，再编码。 |
+| A5/A6 普通 GM 到 UB/L1 | 源 stride 单位为字节。超过 `2^40 - 1` 时逐 burst 搬运；ND/DN 的 Shape1/Shape2 循环字节步长超限时也改用显式源地址。 |
+| A5 NC1HWC0 | 对源循环步长应用相同上限，必要时使用软件循环。 |
+| Kirin9030、KirinDev0000 普通 DMA | 源步长和字节数转换保留 64 位；通过共享 register DMA 封装的调用使用相同的 burst 步长回退。 |
+| KirinX90 b32 ND->NZ/DN->ZN | 转换为 b16 单位后再检查字段，转换值超过 16 位时拆分搬运；公开接口原有的矩阵内步长上限仍为 65535 个元素。 |
+
+在 A2/A3 和 KirinX90 上，`TileData::Rows == 1` 的 ND 或 `TileData::Cols == 1` 的 DN 同布局 Mat 加载
+先搬运完整的 32 字节块，再搬运最后不足一块的有效数据并将块内尾部填零。元素数不会收窄为 16 位，
+b64 长度也不再经过 b16/b32 单位转换。因此，65536 个元素以及原 b64 转换的 16384/32768 元素边界
+不构成额外的长度上限；源形状、有效行列数和 L1 容量约束仍然有效。这些路径要求
+`GlobalData::staticShape[0..2] == 1`，补齐块之后的存储保持不变。
+
+上述回退不会扩展独立格式转换指令的形状和步长约束。特别是，普通 DMA 的 40 位处理不能用来推断
+A5/A6 ND 到分形布局指令的支持范围；仅凭 C++ 参数为 64 位也不能确定硬件范围。
+`PTO_ASSERT` 仅在 `_DEBUG` 下启用，发布构建的调用者同样必须满足接口约束。
+
+各后端注册用例见[步长 ST 覆盖说明](../../tests/npu/a2a3/src/st/testcase/tload_large_stride/README.md)。
 
 ## 示例
 

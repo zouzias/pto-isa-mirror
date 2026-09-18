@@ -79,6 +79,7 @@ endfunction()
 # copy_ubuf_to_gm_align_v2) directly, since PTO's TLOAD/TSTORE wrappers do not
 # lower correctly for dav-920r1-vec yet (see arch_cce_intrinsic.hpp:114-123).
 set(ALL_TESTCASES
+    tload_large_stride
     tquant
     tload_hif4
     tmatmul_mx

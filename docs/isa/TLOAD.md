@@ -91,12 +91,19 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
       a single instruction moves (the instruction's own `ndNum` operand), each matrix being
       `[Shape3, Shape4]`, and the matrices are stacked along the tile rows, so
       `dst.GetValidRow() == Shape2 * Shape3`. Because `srcNdMatrixStride` and `dstNzMatrixStride` are
-      16-bit element counts on this platform, it also requires `Stride2 <= 65535` and
-      `Shape3 * (32 / sizeof(DType)) <= 65535`, on top of `Shape2 * Shape3 <= TileData::Rows` and
-      `1 <= Shape2 <= 65535`.
+      16-bit element counts on this platform, runtime `Shape2 > 1` additionally requires
+      `1 <= Stride2 <= 65535` and `Shape3 * (32 / sizeof(DType)) <= 65535`.
+      A dynamic Shape2 whose runtime value is 1 does not use these matrix strides and is exempt from
+      these two checks. `Shape2 * Shape3 <= TileData::Rows` and `1 <= Shape2 <= 65535` still apply.
     - For `int64_t/uint64_t`, only ND->ND or DN->DN are supported.
-    - Vec tile (UB path): `1 <= TileData::Rows <= 4095`.
-    - Mat tile (L1 path): `1 <= TileData::Rows <= 16384`.
+    - Vec ND->ND requires `TileData::Rows < 4096`. For ordinary same-layout UB/L1 loads,
+      the burst-count dimension must be less than 4096: `Shape3` for ND, `Shape4` for DN,
+      and `Shape1` for NZ. The single-row/single-column Mat paths are described below.
+    - Mat ND->NZ requires `1 <= Shape3 <= 16384`, `1 <= Shape4 <= 65535`,
+      `1 <= Stride3 <= 65535`, and `TileData::Rows <= 16384`.
+    - Mat DN->ZN requires `1 <= Shape4 <= 16384`, `1 <= Shape3 <= 65535`,
+      `1 <= Stride4 <= 65535`, and `TileData::Cols <= 16384`.
+    - Tile dimensions and placement must fit the target UB/L1 capacity; the limits above are path-specific.
 - **Implementation checks (A5)**:
     - `sizeof(TileData::DType)` must be `1`, `2`, `4`, or `8` bytes, and must match `sizeof(GlobalData::DType)`.
     - For `int64_t/uint64_t`, `TileData::PadVal` must be `PadValue::Null` or `PadValue::Zero`.
@@ -136,7 +143,9 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
     - for scaleB, `dst.GetValidRow() % 2 == 0`
 
 - **Valid region**:
-    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the transfer size.
+    - Source shape and `dst.GetValidRow()` / `dst.GetValidCol()` must agree with the selected path.
+      They are not independent clipping bounds. In particular, A2/A3 ND->NZ and DN->ZN transfer the
+      source matrix shape; A5 single-matrix ND->NZ transfers `Shape3` rows and `dst.GetValidCol()` columns.
     - On A2/A3, same-layout, block-aligned `TileType::Mat` loads write only this valid region. ND-to-NZ/DN-to-ZN loads (and the single-row/single-column Mat special paths) additionally zero-fill the final partial C0 block. Other data remains unchanged, including data owned by tile views that share the same backing storage.
     - On A5, same-layout `TileType::Mat` ND/DN loads fill only the final partial 32-byte block according to `PadVal`; ND/DN-to-fractal loads zero-fill the final partial C0 block. Full 32-byte gaps and inactive rows or columns remain unchanged.
     - On A5, ND->NZ with `GlobalData::staticShape[2] != 1` loads the first `dst.GetValidRow()` merged rows.
@@ -158,6 +167,41 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
       A compile-time Shape2 of 1 uses the single-matrix path: the transfer covers `Shape4` columns and
       `dst.GetValidRow()` rows, so the source shape must describe the columns to load.
     - On A2/A3 and A5, a `TileType::Vec` ND/DN load with a non-null `PadVal` fills only the sub-32-byte tail after each transferred burst. Full 32-byte gaps and inactive rows or columns remain unchanged; NZ loads and `PadValue::Null` do not add padding.
+
+### Stride and length boundaries
+
+For A2/A3, A5, A6, KirinX90, Kirin9030 and KirinDev0000, the affected TLOAD paths retain
+source strides as `int64_t`. For b8/b16/b32/b64 data, element-to-byte conversion uses 64-bit
+arithmetic. Construct large `Stride` expressions with 64-bit operands, provide GM storage covering
+all accessed addresses, and keep the destination within its physical capacity.
+
+A **gap** is the distance from the end of one burst to the start of the next; a **stride** is the
+distance between burst starts. The following limits apply to different encoded fields:
+
+| Path | Field and fallback |
+| --- | --- |
+| A2/A3, KirinX90 ordinary GM-to-UB | Source gap is in bytes. Above `UINT32_MAX`, issue one burst at a time using 64-bit source offsets. |
+| A2/A3 ordinary GM-to-L1 | Source gap is in 32-byte blocks. Above `UINT16_MAX` blocks, issue one burst at a time. Existing block-alignment requirements still apply. |
+| KirinX90 ordinary GM-to-L1 | Check length and gap in the units of the selected block or byte-aligned instruction. If they do not fit, split bursts and lengths before encoding. |
+| A5/A6 ordinary GM-to-UB/L1 | Source stride is in bytes. Above `2^40 - 1`, issue one burst at a time. ND/DN Shape1/Shape2 loops also use explicit source addresses when their byte strides exceed this limit. |
+| A5 NC1HWC0 | Apply the same limit to the source loop strides and use software loops when necessary. |
+| Kirin9030, KirinDev0000 ordinary DMA | Preserve 64-bit source strides and byte conversion; calls through the shared register DMA helpers use the same burst-stride fallback. |
+| KirinX90 b32 ND->NZ/DN->ZN | Check fields after conversion to b16 units; split the transfer when the converted values exceed 16 bits. The existing public within-matrix stride limit of 65535 elements remains unchanged. |
+
+On A2/A3 and KirinX90, same-layout Mat loads with `TileData::Rows == 1` (ND) or
+`TileData::Cols == 1` (DN) copy complete 32-byte blocks, then copy and zero-pad any partial final block.
+The element count is not narrowed to 16 bits, and b64 lengths do not pass through b16/b32 conversion.
+Thus 65536 elements, or the former b64 conversion boundaries at 16384/32768 elements, are not
+additional length limits. Source shape, valid dimensions and L1 capacity still constrain the load.
+These paths require `GlobalData::staticShape[0..2] == 1` and leave storage after the padded block unchanged.
+
+These fallbacks do not extend the shape/stride contracts of separate format-conversion instructions.
+In particular, the ordinary DMA 40-bit handling is not a statement of the range supported by A5/A6
+ND-to-fractal instructions. A 64-bit C++ parameter alone does not establish a hardware range.
+`PTO_ASSERT` checks are enabled only with `_DEBUG`; callers must satisfy the constraints in release builds too.
+
+See the [stride ST coverage](../../tests/npu/a2a3/src/st/testcase/tload_large_stride/README.md)
+for the registered cases on each backend.
 
 ## Examples
 
