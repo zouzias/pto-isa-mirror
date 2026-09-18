@@ -11,12 +11,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_COMM_TYPES_HPP
 #define PTO_COMM_COMM_TYPES_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
 #include "pto/common/debug.h"
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "pto/comm/dma_engine.hpp"
 #include "pto/comm/rdma_backend.hpp"
 
 namespace pto {
@@ -116,16 +118,6 @@ enum class ReduceOp : uint8_t {
 };
 
 // ============================================================================
-// DmaEngine: DMA constraints for data transfer
-// ============================================================================
-
-enum class DmaEngine : uint8_t {
-    SDMA = 0, // Supports 2D transfer
-    URMA = 1, // Supports 1D transfer (HCCP V2 Jetty, NPU_ARCH 3510 only)
-    RDMA = 2, // RDMA engine; RdmaBackend identifies the NIC implementation compiled into the binary
-};
-
-// ============================================================================
 // CollEngine: Backend engine selector for collective instructions
 //   AIV  — default tile-based path (TLOAD + compute + TSTORE)
 //   CCU  — AIV triggers CKE gate, CCU hardware performs the collective
@@ -179,6 +171,32 @@ struct CcuTriggerContext {
 struct AsyncSession;
 
 constexpr uint32_t kUrmaMaxJettiesPerCore = 8U;
+
+// ============================================================================
+// Completion records: what a non-AICore consumer reads to decide whether an
+// async transfer finished. The producer computes `addr` and `expected` so the
+// consumer never re-derives a backend's queue layout; `kind` selects the
+// predicate, at NIC granularity because two NICs disagree on CQE layout.
+// ============================================================================
+
+enum class CompletionKind : uint32_t {
+    SDMA_POST_DONE = 1,  // *(uint64*)addr >= expected
+    URMA_CQE_DW0 = 2,    // owner@dw0[2] == expected, status/substatus clear
+    RDMA_HNS1825_CQE = 3, // owner@dw0[31] == expected, opcode@dw1[31:27] valid
+};
+
+struct AsyncCompletionRecord {
+    __gm__ uint8_t* addr{nullptr};
+    uint64_t expected{0};
+    CompletionKind kind{CompletionKind::SDMA_POST_DONE};
+};
+
+static_assert(std::is_standard_layout_v<AsyncCompletionRecord>);
+static_assert(sizeof(AsyncCompletionRecord) == 24U);
+static_assert(alignof(AsyncCompletionRecord) == alignof(uint64_t));
+static_assert(offsetof(AsyncCompletionRecord, addr) == 0U);
+static_assert(offsetof(AsyncCompletionRecord, expected) == 8U);
+static_assert(offsetof(AsyncCompletionRecord, kind) == 16U);
 
 struct AsyncEvent {
     uint64_t handle{0};
