@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_ASYNC_URMA_TYPES_HPP
 #define PTO_COMM_ASYNC_URMA_TYPES_HPP
 
+#include <cstddef>
 #include <cstdint>
 
 namespace pto {
@@ -23,6 +24,11 @@ namespace urma {
 constexpr uint32_t kUrmaMaxPollTimes = 1000000;
 constexpr uint64_t kCacheLineSize = 64;
 constexpr size_t kUrmaEidBytes = 16;
+
+// Upper bound on the jetties a single AIV may own. Lives here rather than in
+// comm_types.hpp so the host-side workspace facade — which must not pull AICORE-decorated
+// headers — can still reach it: it is what sizes AsyncEvent's per-jetty target arrays.
+constexpr uint32_t kUrmaMaxJettiesPerCore = 8U;
 
 constexpr uint64_t kUrmaMaxWqeTransferBytes = 256ULL * 1024ULL * 1024ULL;
 

@@ -62,7 +62,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& ses
         return session.valid;
     }
     const uint32_t perCore = info->jettiesPerCore;
-    if (perCore == 0U || perCore > kUrmaMaxJettiesPerCore) {
+    if (perCore == 0U || perCore > urma::kUrmaMaxJettiesPerCore) {
         return false;
     }
     session.qpIdxBase = static_cast<uint32_t>(get_block_idx()) * perCore;
