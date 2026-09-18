@@ -309,6 +309,30 @@ public:
         return static_cast<int32_t>((static_cast<uint32_t>(epoch) << COMBINE_EXPERT_PROGRESS_COUNT_BITS) | count);
     }
 
+    // Caller selects local/remote slot and owns the UB ring and final MTE3 drain.
+    AICORE inline void StoreRankReadySignal(
+        __gm__ int32_t* slot, uint64_t signalUbOffset, uint32_t readyExpertCount, int32_t epoch, bool publishDataReady,
+        event_t eventId) const
+    {
+        using SignalShape = pto::Shape<1, 1, 1, 1, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT>;
+        using SignalStride = pto::Stride<
+            REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT,
+            REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, 1>;
+        using SignalGlobal = pto::GlobalTensor<int32_t, SignalShape, SignalStride, pto::Layout::ND>;
+        using SignalTile = pto::Tile<
+            pto::TileType::Vec, int32_t, 1, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, pto::BLayout::RowMajor, -1, -1>;
+
+        SignalGlobal signalGlobal(slot);
+        SignalTile signalTile(1U, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT);
+        pto::TASSIGN(signalTile, signalUbOffset);
+        for (uint32_t valueIdx = 0U; valueIdx < REMOTE_WINDOW_SYNC_VALUES_PER_SLOT; ++valueIdx)
+            signalTile.SetValue(valueIdx, 0);
+        signalTile.SetValue(0U, publishDataReady ? epoch : 0);
+        signalTile.SetValue(COMBINE_EXPERT_PROGRESS_OFFSET, EncodeExpertProgress(epoch, readyExpertCount));
+        pto::PtoSetWaitFlag<PIPE_S, PIPE_MTE3>(eventId, eventId);
+        pto::TSTORE(signalGlobal, signalTile);
+    }
+
     AICORE inline void PublishRankReadyMte(
         int32_t consumerRank, uint32_t readyExpertCount, int32_t epoch, bool publishDataReady, event_t eventId) const
     {
@@ -325,16 +349,6 @@ public:
                    static_cast<uint32_t>(rank_) * COMBINE_DATA_READY_STRIDE;
         }
 
-        using SignalShape = pto::Shape<1, 1, 1, 1, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT>;
-        using SignalStride = pto::Stride<
-            REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT,
-            REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, 1>;
-        using SignalGlobal = pto::GlobalTensor<int32_t, SignalShape, SignalStride, pto::Layout::ND>;
-        using SignalTile = pto::Tile<
-            pto::TileType::Vec, int32_t, 1, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT, pto::BLayout::RowMajor, -1, -1>;
-
-        SignalGlobal signalGlobal(slot);
-        SignalTile signalTile(1U, REMOTE_WINDOW_SYNC_VALUES_PER_SLOT);
         const uint64_t signalUbBase =
             publishDataReady ? REMOTE_WINDOW_FINAL_SIGNAL_UB_OFFSET : REMOTE_WINDOW_PROGRESS_SIGNAL_UB_OFFSET;
         const uint32_t progressExpert = readyExpertCount == 0U ? 0U : readyExpertCount - 1U;
@@ -344,14 +358,7 @@ public:
                                (static_cast<uint64_t>(progressBuffer) * COMBINE_EXPERT_PROGRESS_MAX_RANKS +
                                 static_cast<uint32_t>(consumerRank)) *
                                    REMOTE_WINDOW_READY_SIGNAL_SLOT_BYTES;
-        pto::TASSIGN(signalTile, signalUbBase + signalUbOffset);
-        for (uint32_t valueIdx = 0U; valueIdx < REMOTE_WINDOW_SYNC_VALUES_PER_SLOT; ++valueIdx) {
-            signalTile.SetValue(valueIdx, 0);
-        }
-        signalTile.SetValue(0U, publishDataReady ? epoch : 0);
-        signalTile.SetValue(COMBINE_EXPERT_PROGRESS_OFFSET, EncodeExpertProgress(epoch, readyExpertCount));
-        pto::PtoSetWaitFlag<PIPE_S, PIPE_MTE3>(eventId, eventId);
-        pto::TSTORE(signalGlobal, signalTile);
+        StoreRankReadySignal(slot, signalUbBase + signalUbOffset, readyExpertCount, epoch, publishDataReady, eventId);
     }
 
     AICORE inline void AcquireDataReady() const

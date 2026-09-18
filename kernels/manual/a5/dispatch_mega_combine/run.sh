@@ -29,6 +29,10 @@ START_SYNC=${DISPATCH_MEGA_COMBINE_START_SYNC:-0}
 WARMUP_ITERS=${DISPATCH_MEGA_COMBINE_WARMUP_ITERS:-3}
 MEASURE_ITERS=${DISPATCH_MEGA_COMBINE_MEASURE_ITERS:-5}
 BUILD_ONLY=${BUILD_ONLY:-0}
+URMA=${DISPATCH_MEGA_COMBINE_URMA:-0}
+RANKS_PER_SERVER=${DISPATCH_MEGA_COMBINE_RANKS_PER_SERVER:-0}
+LOCAL_DEVICE_MAPPING=${DISPATCH_MEGA_COMBINE_LOCAL_DEVICE_MAPPING:-0}
+HOSTFILE=""
 # 0 selects the runtime-reported core count. Nonzero values select a validated
 # launch topology and must not exceed the physical device count.
 AICORE_NUM=${DISPATCH_MEGA_COMBINE_AICORE_NUM:-0}
@@ -57,6 +61,13 @@ while [[ $# -gt 0 ]]; do
     --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
     --reuse-data) REUSE_DATA=1; shift ;;
     --build-only) BUILD_ONLY=1; shift ;;
+    --urma) URMA=1; shift ;;
+    --rank-num-per-server|--ranks-per-server) RANKS_PER_SERVER="${2:?ranks-per-server needs a value}"; URMA=1; shift 2 ;;
+    --device-map)
+      case "${2:?device-map needs a value}" in global) LOCAL_DEVICE_MAPPING=0;; server-local) LOCAL_DEVICE_MAPPING=1;;
+        *) echo "--device-map must be global or server-local" >&2; exit 2;; esac; shift 2 ;;
+    --hostfile) HOSTFILE="${2:?hostfile needs a path}"; LOCAL_DEVICE_MAPPING=1; URMA=1; shift 2 ;;
+    --start-sync) START_SYNC=1; shift ;;
     *) echo "unknown option: $1"; exit 1 ;;
   esac
 done
@@ -74,12 +85,34 @@ if [[ ! "${AICORE_NUM}" =~ ^(0|28|32|36)$ ]]; then
   exit 1
 fi
 FIRST_DEVICE=$((10#${FIRST_DEVICE}))
+if [[ ! "$URMA" =~ ^[01]$ || ! "$LOCAL_DEVICE_MAPPING" =~ ^[01]$ || ! "$RANKS_PER_SERVER" =~ ^[0-9]+$ ]]; then
+  echo "invalid URMA/topology option" >&2; exit 2
+fi
+RANKS_PER_SERVER=$((10#$RANKS_PER_SERVER))
+if (( RANKS_PER_SERVER > 0 )); then URMA=1; fi
+if (( LOCAL_DEVICE_MAPPING != 0 && (URMA == 0 || RANKS_PER_SERVER == 0) )); then
+  echo "server-local mapping requires explicit --rank-num-per-server and URMA" >&2; exit 2
+fi
+if (( URMA != 0 )); then
+  if (( RANKS_PER_SERVER == 0 )); then RANKS_PER_SERVER=$WORLD_SIZE; fi
+  if (( RANKS_PER_SERVER > WORLD_SIZE || WORLD_SIZE % RANKS_PER_SERVER != 0 )); then
+    echo "ranks-per-server must divide world-size" >&2; exit 2
+  fi
+fi
+if [[ -n "$HOSTFILE" && ! -f "$HOSTFILE" ]]; then echo "hostfile does not exist: $HOSTFILE" >&2; exit 2; fi
+export DISPATCH_MEGA_COMBINE_URMA="$URMA"
+export DISPATCH_MEGA_COMBINE_RANKS_PER_SERVER="$RANKS_PER_SERVER"
+export DISPATCH_MEGA_COMBINE_LOCAL_DEVICE_MAPPING="$LOCAL_DEVICE_MAPPING"
+export DISPATCH_MEGA_COMBINE_WORLD_SIZE="$WORLD_SIZE"
 if [[ -n "${ASCEND_RT_VISIBLE_DEVICES:-}" ]]; then
   echo "[INFO] Ignoring ASCEND_RT_VISIBLE_DEVICES; binding physical devices with --first-device"
   unset ASCEND_RT_VISIBLE_DEVICES
 fi
-echo "[INFO] Mapping MPI ranks 0-$((WORLD_SIZE - 1)) to physical NPU devices" \
-  "${FIRST_DEVICE}-$((FIRST_DEVICE + WORLD_SIZE - 1))"
+if (( LOCAL_DEVICE_MAPPING != 0 )); then
+  echo "[INFO] Each server maps rank%$RANKS_PER_SERVER to devices $FIRST_DEVICE-$((FIRST_DEVICE+RANKS_PER_SERVER-1))"
+else
+  echo "[INFO] Global ranks map to physical devices $FIRST_DEVICE-$((FIRST_DEVICE+WORLD_SIZE-1))"
+fi
 
 case "${SOC}" in
   Ascend910_9599|Ascend950PR_*) ;;
@@ -105,42 +138,16 @@ if [[ "${BUILD_ONLY}" != "0" ]]; then
   exit 0
 fi
 
+# Validate runtime options before data generation or MPI; CMake already requires the SharedPool SDK.
+LD_LIBRARY_PATH="${BUILD_DIR}/lib:${LD_LIBRARY_PATH:-}" "${BUILD_DIR}/dispatch_mega_combine" --check-transport
+
 GEN_DATA_EXTRA_ARGS=()
 if [[ "${REUSE_DATA}" != "0" ]]; then
   GEN_DATA_EXTRA_ARGS+=(--reuse-data)
 fi
 
-MIB=$((1024 * 1024))
-HCCL_WINDOW_HEAD_GUARD_BYTES=4096
-ROUTE_COUNT=$((M * TOPK))
-QUANT_DATA_STORAGE_BYTES=$((((K + 255) / 256) * 256))
-QUANT_SCALE_COLS=$((K / 32))
-QUANT_SCALE_STORAGE_BYTES=$((((QUANT_SCALE_COLS + 31) / 32) * 32))
-PACKED_ROW_STRIDE=$((QUANT_DATA_STORAGE_BYTES + QUANT_SCALE_STORAGE_BYTES))
-SOURCE_TOKEN_RECORD_BYTES=$((M * PACKED_ROW_STRIDE))
-ROUTE_MASK_BYTES=$(((((ROUTE_COUNT + 7) / 8) + 31) / 32 * 32))
-FRONT_AIV_NUM=$((AICORE_NUM == 0 ? 72 : AICORE_NUM * 2))
-MASK_BLOCK_COUNT=$((ROUTE_MASK_BYTES / 32))
-GLOBAL_EXPERTS=$((WORLD_SIZE * EXPERTS))
-MAX_ALLOCATED_MASK_LANES=$(((FRONT_AIV_NUM + GLOBAL_EXPERTS - 1) / GLOBAL_EXPERTS))
-MASK_LANE_CAPACITY=$((MASK_BLOCK_COUNT < MAX_ALLOCATED_MASK_LANES ? MASK_BLOCK_COUNT : MAX_ALLOCATED_MASK_LANES))
-ROUTE_MASK_SLOT_BYTES=$((ROUTE_MASK_BYTES + MASK_LANE_CAPACITY * 32))
-EXPERTS_PER_RANK=${EXPERTS}
-ROUTE_MASK_REGION_BYTES=$((EXPERTS_PER_RANK * WORLD_SIZE * ROUTE_MASK_SLOT_BYTES))
-ROUTE_MASK_OFFSET=$((((SOURCE_TOKEN_RECORD_BYTES + 511) / 512) * 512))
-COMBINE_OUTPUT_OFFSET=$((((ROUTE_MASK_OFFSET + ROUTE_MASK_REGION_BYTES + 511) / 512) * 512))
-COMBINE_OUTPUT_BYTES=$((ROUTE_COUNT * K * 2))
-PRESUM_OFFSET=$((((COMBINE_OUTPUT_OFFSET + COMBINE_OUTPUT_BYTES + 511) / 512) * 512))
-PRESUM_BYTES=$(((((GLOBAL_EXPERTS * 4) + 511) / 512) * 512))
-PEER_DATA_BYTES=$((((PRESUM_OFFSET + PRESUM_BYTES + 511) / 512) * 512))
-NEEDED_WINDOW_BYTES=$((PEER_DATA_BYTES + MIB))
-NEEDED_HCCL_BUFFSIZE_MB=$(((NEEDED_WINDOW_BYTES + HCCL_WINDOW_HEAD_GUARD_BYTES + MIB - 1) / MIB + 64))
-CURRENT_HCCL_BUFFSIZE_MB="${HCCL_BUFFSIZE:-200}"
-if [[ "${CURRENT_HCCL_BUFFSIZE_MB}" -lt "${NEEDED_HCCL_BUFFSIZE_MB}" ]]; then
-  echo "[INFO] Raising HCCL_BUFFSIZE from ${CURRENT_HCCL_BUFFSIZE_MB} to ${NEEDED_HCCL_BUFFSIZE_MB} MB" \
-    "for mask-pull M=${M} topK=${TOPK} K=${K} hcclHeadGuard=${HCCL_WINDOW_HEAD_GUARD_BYTES}"
-  export HCCL_BUFFSIZE="${NEEDED_HCCL_BUFFSIZE_MB}"
-fi
+# C++ tiling owns layout and capacity checks; preserve an explicit caller override.
+export HCCL_BUFFSIZE="${HCCL_BUFFSIZE:-512}"
 
 python3 "${SCRIPT_DIR}/scripts/gen_data.py" \
   --output-dir "${OUT_DIR}" \
@@ -171,4 +178,6 @@ case "${MPI_VERSION}" in
     exit 1
     ;;
 esac
-"${MPI_RUNNER}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_mega_combine" --first-device "${FIRST_DEVICE}"
+MPI_HOST_ARGS=()
+if [[ -n "$HOSTFILE" ]]; then MPI_HOST_ARGS=(-f "$HOSTFILE" -ppn "$RANKS_PER_SERVER"); fi
+"${MPI_RUNNER}" "${MPI_HOST_ARGS[@]}" -n "${WORLD_SIZE}" "${BUILD_DIR}/dispatch_mega_combine" --first-device "${FIRST_DEVICE}"

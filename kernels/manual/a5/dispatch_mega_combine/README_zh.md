@@ -1,5 +1,7 @@
 # PTO MegaMoE Dispatch + Combine 融合算子示例
 
+跨 server URMA 通过同一启动脚本启用，设置 `--rank-num-per-server N` 即可；计算调度保持不变。
+
 ## 概览
 
 本示例使用 PTO Manual kernel 实现 MegaMoE 的端到端融合流程，把 token 量化、route mask 交换、
@@ -13,6 +15,12 @@ grouped FFN、Combine 和 Unpermute 合并到一个 mixed-core kernel。当前�
 - 工具链兼容别名 `Ascend910_9599`
 
 本项目固定使用 `dav-c310` 和 `PTO_NPU_ARCH_A5` 构建 mixed-core kernel。`Ascend910B` 属于 A3，不能作为本目录的 `--soc` 参数。
+
+## 多 server URMA 通信
+
+同一二进制同时支持原有 MTE 路径和多 server URMA。使用 `--rank-num-per-server N` 开启跨 server URMA；同 server 通信继续使用 MTE。
+
+URMA 使用 HCCL SharedPool，通信 queue 由 AIV0 独立持有。启用 URMA 不改变原计算流水、GMM 调度、Combine 和 Unpermute 调度。
 
 ## 目录结构
 
@@ -316,8 +324,8 @@ HCCL remote window 主要承载跨 rank 可见的数据：
 | `sortedRouteSlot` / `expandedRowIdx` | workspace GM | expert-major route 顺序及其 route-slot 到 compact-row 的逆映射 |
 | GMM queue/mailbox | workspace GM | runtime task descriptor、ticket、dependency counter 和 completion counter |
 
-`run.sh` 根据 `M`、`topK`、`K`、expert 拓扑和 mask lane 容量估算 HCCL window，并在需要时自动提高
-`HCCL_BUFFSIZE`。
+`run.sh` 在未设置时使用 `HCCL_BUFFSIZE=512`（MiB），保留用户显式覆盖。
+布局与容量检查只由 C++ tiling 维护；容量不足会明确报错，大 case 需调大该变量。
 
 ## 构建与运行
 
@@ -359,7 +367,7 @@ bash run.sh --soc Ascend910_9599 --world-size 2 --first-device 2 --m 512 --k 716
 | `FIRST_DEVICE` | 连续 rank 映射中的第一张物理卡 | 默认 `0`，可由 `--first-device` 覆盖 |
 | `MPI_LIB_PATH` | 可选的 MPICH `libmpi.so` 绝对路径 | 默认从 `LD_LIBRARY_PATH` 解析 |
 | `MPI_RUNNER` | MPICH 启动命令 | 使用已 source 环境中的 `mpirun` |
-| `HCCL_BUFFSIZE` | HCCL RDMA window 大小 | `run.sh` 按 case 自动抬高到安全值 |
+| `HCCL_BUFFSIZE` | HCCL RDMA window 大小 | 未设置时为 512 MiB；保留显式覆盖，不自动抬高 |
 | `DISPATCH_MEGA_COMBINE_AICORE_NUM` | 有效 AIC 数 | 默认 `0`，使用 runtime 查询值 |
 | `DISPATCH_MEGA_COMBINE_REUSE_DATA` | 复用兼容的已生成 case 数据 | 默认关闭；非零值等价于 `--reuse-data` |
 | `DISPATCH_MEGA_COMBINE_WARMUP_ITERS` | 计时前的 warmup 启动次数 | `3` |
@@ -395,7 +403,7 @@ bash run.sh --world-size 8 --first-device 0 --m 512 --k 7168 --n 4096 --topk 8 -
 | 问题 | 原因与解决 |
 | --- | --- |
 | `ASCEND_HOME_PATH must be set` | 运行 `run.sh` 前需要 source CANN 环境并导出 `ASCEND_HOME_PATH` |
-| HCCL window too small | 手动设置的 `HCCL_BUFFSIZE` 低于 case 需求；取消覆盖或调大该变量 |
+| HCCL window too small | 配置的 `HCCL_BUFFSIZE` 低于 case 需求；调大该变量（默认 512 MiB） |
 | MPI 启动失败 | source 项目环境，并确认 `mpirun --version` 显示 MPICH/HYDRA；不支持 OpenMPI |
 | golden 生成很慢 | 首次生成后使用 `--reuse-data` 复用文件；chunk 大小由程序内部固定 |
 | shape 或 rank 拓扑被拒绝 | 检查 28/32/36-AIC 选择、rank 上限、MXFP8 对齐、UB 容量和 RankStreaming 每 worker token 上限 |
