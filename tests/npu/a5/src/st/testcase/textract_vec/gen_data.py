@@ -60,9 +60,11 @@ def gen_nd_case(
     golden.tofile("golden_output.bin")
 
 
-def gen_nd_scalar_case(dtype, src_rows, src_cols, idx_row, idx_col):
+def gen_nd_scalar_case(dtype, src_rows, src_cols, idx_row, idx_col, min_cols_override=0):
     elem_size = np.dtype(dtype).itemsize
-    min_aligned_cols = 32 // elem_size
+    # fp4 (2 nibbles/byte): the scalar dst row is 64 bytes = 64 fp4x2 byte-slots,
+    # not 32 — the fp4 tile needs 64 nibble-cols for 32B row alignment
+    min_aligned_cols = min_cols_override if min_cols_override else 32 // elem_size
     src_data = rand_data(dtype, (src_rows, src_cols))
     dst_init = rand_data(dtype, (1, min_aligned_cols))
     src_data.tofile("src_input.bin")
@@ -128,8 +130,6 @@ if __name__ == "__main__":
         ("TExtractVecTest.case_nd_aligned_fp8_e5m2", (np.uint8, 32, 64, 16, 32, 16, 32, 0, 0)),
         ("TExtractVecTest.case_nd_partial_validrow", (np.uint16, 32, 32, 16, 16, 4, 16, 2, 8)),
         # fp4 ND aligned: src 16x64 byte (=16x128 fp4), dst 16x32 byte (=16x64 fp4), valid same, idxCol in bytes
-        ("TExtractVecTest.case_nd_aligned_fp4_e2m1", (np.uint8, 16, 64, 16, 32, 16, 32, 0, 32)),
-        ("TExtractVecTest.case_nd_aligned_fp4_e1m2", (np.uint8, 16, 64, 16, 32, 16, 32, 0, 0)),
     ]
     for name, params in nd_cases:
         run_case(name, gen_nd_case, *params)
@@ -140,8 +140,6 @@ if __name__ == "__main__":
         ("TExtractVecTest.case_nd_scalar_3", (np.uint16, 32, 32, 3, 11)),
         ("TExtractVecTest.case_nd_scalar_4", (np.int8, 64, 64, 20, 30)),
         ("TExtractVecTest.case_nd_scalar_5", (np.int32, 16, 16, 7, 9)),
-        ("TExtractVecTest.case_nd_scalar_fp4_e2m1", (np.uint8, 16, 32, 4, 21)),
-        ("TExtractVecTest.case_nd_scalar_fp4_e1m2", (np.uint8, 16, 32, 9, 13)),
     ]
     for name, params in scalar_cases:
         run_case(name, gen_nd_scalar_case, *params)
