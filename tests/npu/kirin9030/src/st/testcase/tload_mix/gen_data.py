@@ -148,6 +148,12 @@ class TloadParams:
 if __name__ == "__main__":
     # 用例名称
     case_name_list = [
+        "TLOADMIXTest.1_2_8_16_16_1_2_4103_16_16_128_32_half_NZ2NZ",
+        "TLOADMIXTest.1_2_8_16_16_1_2_4104_16_16_128_32_half_NZ2NZ",
+        "TLOADMIXTest.1_2_8_16_16_1_2_4104_16_16_144_32_half_NZ2NZ",
+        "TLOADMIXTest.1_1_1_2_16_1_1_1_2_17_2_16_half_ND2ND",
+        "TLOADMIXTest.1_1_1_2_15_1_1_1_2_32782_2_16_half_ND2ND",
+        "TLOADMIXTest.1_1_1_2_15_1_1_1_2_32783_2_16_half_ND2ND",
         "TLOADMIXTest.1_1_1_128_128_half_ND2NZ",
         "TLOADMIXTest.1_1_1_128_128_int8_t_ND2NZ",
         "TLOADMIXTest.1_1_1_128_128_float_ND2NZ",
@@ -183,6 +189,12 @@ if __name__ == "__main__":
     ]
 
     case_params_list = [
+        TloadParams(np.float16, 1, 2, 8, 16, 16, 1, 2, 4103, 16, 16, 128, 32, DataFormat["NZ2NZ"].value),
+        TloadParams(np.float16, 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16, 128, 32, DataFormat["NZ2NZ"].value),
+        TloadParams(np.float16, 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16, 144, 32, DataFormat["NZ2NZ"].value),
+        TloadParams(np.float16, 1, 1, 1, 2, 16, 1, 1, 1, 2, 17, 2, 16, DataFormat["ND2ND"].value),
+        TloadParams(np.float16, 1, 1, 1, 2, 15, 1, 1, 1, 2, 32782, 2, 16, DataFormat["ND2ND"].value),
+        TloadParams(np.float16, 1, 1, 1, 2, 15, 1, 1, 1, 2, 32783, 2, 16, DataFormat["ND2ND"].value),
         TloadParams(np.float16, 1, 1, 1, 128, 128, 1, 1, 1, 128, 128, 128, 128, DataFormat["ND2NZ"].value),
         TloadParams(np.int8, 1, 1, 1, 128, 128, 1, 1, 1, 128, 128, 128, 128, DataFormat["ND2NZ"].value),
         TloadParams(np.float32, 1, 1, 1, 128, 128, 1, 1, 1, 128, 128, 128, 128, DataFormat["ND2NZ"].value),

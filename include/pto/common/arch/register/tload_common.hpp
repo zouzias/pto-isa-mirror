@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 
 namespace pto {
+constexpr uint64_t TLOAD_MAX_SRC_STRIDE = (1ULL << 40) - 1;
+
 // Templated L2-aware base for A5/A6. Kirin keeps non-template LoadOpBase (NormalFirstVictim).
 template <TLoadL2Hint l2Control>
 struct LoadOpL2Base {
@@ -23,10 +25,17 @@ struct LoadOpL2Base {
         bool enableUBPad)
     {
         using LoadT = LoadTypeBySize_t<T>;
-        pto_copy_gm_to_ubuf_align_v2(
-            reinterpret_cast<__ubuf__ LoadT*>(dst), reinterpret_cast<__gm__ LoadT*>(src), 0 /*sid*/, nBurst, lenBurst,
-            0 /*left padding count*/, 0 /*right padding count*/, enableUBPad /*data select bit*/,
-            static_cast<uint8_t>(l2Control), gmStride, ubStride);
+        bool split = gmStride > TLOAD_MAX_SRC_STRIDE;
+        uint32_t transfers = split ? nBurst : 1;
+        for (uint32_t i = 0; i < transfers; ++i) {
+            auto dstBurst =
+                reinterpret_cast<__ubuf__ LoadT*>(reinterpret_cast<__ubuf__ uint8_t*>(dst) + uint64_t(i) * ubStride);
+            auto srcBurst =
+                reinterpret_cast<__gm__ LoadT*>(reinterpret_cast<__gm__ uint8_t*>(src) + uint64_t(i) * gmStride);
+            pto_copy_gm_to_ubuf_align_v2(
+                dstBurst, srcBurst, 0 /*sid*/, split ? 1 : nBurst, lenBurst, 0, 0, enableUBPad,
+                static_cast<uint8_t>(l2Control), split ? 0 : gmStride, split ? 0 : ubStride);
+        }
     }
 
     template <typename T>
@@ -37,9 +46,17 @@ struct LoadOpL2Base {
         if constexpr (sizeof(T) == sizeof(uint64_t)) {
             padCount *= sizeof(uint64_t) / sizeof(uint32_t);
         }
-        pto_copy_gm_to_cbuf_align_v2(
-            dst, src, 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, padCount /*right padding count*/,
-            true /*data select bit*/, static_cast<uint8_t>(l2Control), srcStride, dstStride);
+        bool split = srcStride > TLOAD_MAX_SRC_STRIDE;
+        uint32_t transfers = split ? nBurst : 1;
+        for (uint32_t i = 0; i < transfers; ++i) {
+            auto dstBurst =
+                reinterpret_cast<__cbuf__ T*>(reinterpret_cast<__cbuf__ uint8_t*>(dst) + uint64_t(i) * dstStride);
+            auto srcBurst =
+                reinterpret_cast<__gm__ T*>(reinterpret_cast<__gm__ uint8_t*>(src) + uint64_t(i) * srcStride);
+            pto_copy_gm_to_cbuf_align_v2(
+                dstBurst, srcBurst, 0 /*sid*/, split ? 1 : nBurst, lenBurst, 0, padCount, true,
+                static_cast<uint8_t>(l2Control), split ? 0 : srcStride, split ? 0 : dstStride);
+        }
     }
 };
 
@@ -51,55 +68,55 @@ struct LoadOpBase : LoadOpL2Base<TLoadL2Hint::NormalFirstVictim> {
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecND2ND(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad);
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad);
 
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecDN2DN(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad);
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad);
 
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeND2ND(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol);
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol);
 
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeDN2DN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol);
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol);
 
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoad5HD(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstShape0,
-    int dstShape1, int dstShape2, int dstShape3);
+    int srcShape2, int srcShape3, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3);
 
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecNZ2NZ(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     uint32_t nBurst = gShape1;
     uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmStride = GetByteSize<typename TileData::DType>(gStride1);
+    uint64_t gmStride = GetByteSize<typename TileData::DType>(gStride1);
     uint32_t ubStride = TileData::Rows * C0_SIZE_BYTE;
 
     typename GlobalData::DType* srcAddrP = srcAddr;
     __ubuf__ typename TileData::DType* dstAddrP = dstAddr;
 
-    int64_t tileStride = gShape1 * TileData::Rows * gShape4;
+    int64_t tileStride = int64_t(gShape1) * TileData::Rows * gShape4;
     set_loop_size_outtoub(1ULL << 21 | 1ULL);
     if constexpr (caps::IsFP4<typename TileData::DType>()) {
         tileStride = tileStride >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
         gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
     }
     for (uint32_t i = 0; i < gShape0; i++) {
-        srcAddrP = srcAddr + i * gStride0;
+        srcAddrP = srcAddr + int64_t(i) * gStride0;
         dstAddrP = dstAddr + i * tileStride;
         Op::TLoadInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, ubStride, 0);
     }
@@ -108,8 +125,8 @@ PTO_INTERNAL void TLoadVecNZ2NZ(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL OP_NAME(TLOAD) OP_TYPE(memory) void TLoad(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     __ubuf__ typename TileData::DType* dstAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
@@ -295,8 +312,8 @@ PTO_INTERNAL void TLoadCubeND2NZ(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeNZ2NZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddrP = dst;
     typename GlobalData::DType* srcAddrP = src;
@@ -305,14 +322,14 @@ PTO_INTERNAL void TLoadCubeNZ2NZ(
     uint64_t gmStride = GetByteSize<typename TileData::DType>(gStride1);
     uint32_t dstStride = TileData::Rows * BLOCK_BYTE_SIZE;
 
-    int64_t tileStride = gShape1 * TileData::Rows * gShape4;
+    int64_t tileStride = int64_t(gShape1) * TileData::Rows * gShape4;
     if constexpr (caps::IsFP4<typename TileData::DType>()) {
         gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
         tileStride = tileStride >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
     }
     set_loop_size_outtol1(1ULL << 21 | 1ULL);
     for (uint32_t i = 0; i < gShape0; i++) {
-        srcAddrP = src + i * gStride0;
+        srcAddrP = src + int64_t(i) * gStride0;
         dstAddrP = dst + i * tileStride;
         Op::TLoadCubeInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, dstStride, 0);
     }
@@ -449,8 +466,8 @@ PTO_INTERNAL void StaticCheck()
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadFractalZ(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
