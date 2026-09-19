@@ -11,11 +11,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef HIFLOAT8_HPP
 #define HIFLOAT8_HPP
 
-#include <iostream>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <algorithm>
+#include <iostream>
+#include <limits>
 
 class Hifloat8LUT {
 private:
@@ -30,7 +31,6 @@ private:
     static constexpr int exponentBitsFor2BitPrefix1 = 2;
     static constexpr int exponentBitsFor3BitPrefix001 = 1;
     static constexpr int exponentBitsFor4BitPrefix1 = 0;
-    static constexpr int totalExponentMantissaBits = 5;
     static constexpr double infinityExponent = 15.0;
     static constexpr int prefixThree = 3;
     static constexpr int prefixTwo = 2;
@@ -81,6 +81,7 @@ private:
         // --- NORMAL MODES (NML) ---
         int exponentBits = 0;
         int remainingBits = 0;
+        int remainingBitCount = prefix2BitShift;
 
         // Check 2-bit prefixes (examine top 2 bits of prefix4bits)
         if ((payload >> prefix2BitShift) == prefixThree) {
@@ -97,14 +98,16 @@ private:
         else if ((payload >> prefix3BitShift) == prefixOne) {
             exponentBits = exponentBitsFor3BitPrefix001;
             remainingBits = payload & 0x0F; // 4 remaining bits
+            remainingBitCount = prefix3BitShift;
         }
         // Check 4-bit prefix
         else if ((payload >> prefix4BitShift) == prefixOne) {
             exponentBits = exponentBitsFor4BitPrefix1;
             remainingBits = payload & 0x07; // 3 remaining bits
+            remainingBitCount = prefix4BitShift;
         }
 
-        int mantissaBits = totalExponentMantissaBits - exponentBits;
+        int mantissaBits = remainingBitCount - exponentBits;
         int rawExponent = remainingBits >> mantissaBits;
         int rawMantissa = remainingBits & ((1 << mantissaBits) - 1);
 
