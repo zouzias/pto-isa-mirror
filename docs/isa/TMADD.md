@@ -12,7 +12,7 @@ Elementwise operation: `src0 * dst + src1`.
 
 For each element `(i, j)` in the valid region:
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \* \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
+$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
 
 ## Assembly Syntax
 
