@@ -132,9 +132,8 @@ inline void RecordInstr(const char* opcode, auto&& first_tile, auto&&... rest_ti
     const uint64_t estimated_cycles =
         perf_sim::EstimateInstrCycles(opcode, r.rows, r.cols, r.dtype.empty() ? "unknown" : r.dtype.c_str());
     uint64_t cycles = measured_cycles;
-    const bool useEstimatedCycles = cycles == 0 ||
-                                    (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles) ||
-                                    (std::string_view(opcode) == "TDIVS" && (r.dtype == "int16" || r.dtype == "int32"));
+    const bool useEstimatedCycles =
+        cycles == 0 || (std::string_view(opcode) == "TROWEXPAND" && estimated_cycles > cycles);
     if (useEstimatedCycles) {
         cycles = estimated_cycles;
         auto& trace = ::pto::mocker::GetMutableTrace();
