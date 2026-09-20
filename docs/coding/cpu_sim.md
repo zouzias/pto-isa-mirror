@@ -260,7 +260,10 @@ python3 tests/run_cpu.py --trace-mode
 ```
 
 This sets the `PTO_CPU_SIM_TRACE_MODE` CMake option. A trace-enabled build records instruction opcodes, block indexes,
-sequence IDs, tile operands, and scalar operands. `LaunchKernelMultiCore` writes the combined JSON Lines trace to:
+subblock IDs, sequence IDs, tile operands, and scalar operands. Within each launch, group records by
+`(block_idx, subblock_id)` and use `sequence_id` for the order within that worker.
+With tracing enabled and `KernelLaunchOptions::write_trace_files` set to `true` (the default),
+`LaunchKernelMultiCore` writes the combined JSON Lines trace to:
 
 ```text
 cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
@@ -268,8 +271,41 @@ cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
 
 The following environment variables control tracing at runtime:
 
-- `PTO_CPU_SIM_TRACE_ENABLE`: set to `0` or `false` to disable trace collection for a trace-enabled build.
+- `PTO_CPU_SIM_TRACE_ENABLE`: supplies the default collection setting during runtime initialization.
+  Set to `0` or `false` to disable tracing unless an explicit API setting overrides it.
 - `PTO_CPU_SIM_TRACE_DIR`: override the default `cpu_sim_traces` output directory.
 
 Set these variables before CPU_SIM runtime initialization. The trace APIs in `include/pto/cpu/trace.hpp` can also be
 used to reset, inspect, copy, or serialize the current thread's instruction records.
+
+Run the focused tracing regressions with `python3 tests/run_cpu.py --testcase ttrace --trace-mode`.
+They check instruction operands, environment defaults, explicit settings before and after initialization,
+and separate trace files for repeated launches with multiple blocks and subblocks.
+The same testcase without `--trace-mode` also verifies computation with tracing compiled out.
+
+For a standalone CPU example that needs no CANN runtime:
+
+```bash
+cmake -S kernels/custom/fused_add_relu_mul -B build/fused_trace \
+  -DPTO_CPU_SIM_STANDALONE=ON -DPTO_CPU_SIM_TRACE_MODE=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fused_trace --parallel 2
+PTO_CPU_SIM_NUM_CORES=4 PTO_CPU_SIM_TRACE_ENABLE=1 PTO_CPU_SIM_TRACE_DIR=build/fused_trace/traces \
+  build/fused_trace/fused_add_relu_mul_cpu_sim --functional-only
+```
+
+This validates basic, double-buffered, and large-tile kernels, including partial tiles, without running the
+performance benchmark. Each launch produces a separate `trace.jsonl` file.
+For regression coverage, run this functional example with tracing enabled and the `ttrace` regressions with tracing
+compiled both in and out. The example checks numerical results; the `ttrace` regressions check trace records and file export.
+
+An external runtime that calls kernels directly must compile them with `PTO_CPU_SIM_TRACE_MODE=1` and manage
+`ResetInstructionTrace()` / `DumpInstructionTraceJson()` on the executing thread. Calling a kernel directly
+does not invoke `LaunchKernelMultiCore` or automatically export a trace. `SetInstructionTraceEnabled(bool)`
+controls collection and, when `write_trace_files` is enabled, automatic launch export in a trace-enabled build;
+`IsInstructionTraceEnabled()` reports the current setting. An explicit API setting overrides the environment
+default and survives runtime initialization, including when set before the first launch. Set this process-wide
+option before starting a launch or between launches. It cannot enable tracing in a build compiled with tracing disabled.
+The build-time constant `kInstructionTraceEnabled` reports whether tracing was compiled in.
+For direct kernel calls, the environment default is applied only if the external runtime initializes the
+CPU_SIM runtime; alternatively, set collection explicitly with `SetInstructionTraceEnabled(bool)`.
