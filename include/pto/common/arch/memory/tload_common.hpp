@@ -30,6 +30,25 @@ PTO_INTERNAL T* TLoadSrcAddrWithL2Hint(T* addr)
 #endif
 
 template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLoadInstrGm2ub(
+    __ubuf__ typename TileData::DType* dst, typename GlobalData::DType* src, uint16_t nBurst, uint32_t lenBurst,
+    uint64_t gmGap, uint32_t ubGap, uint32_t ubPad)
+{
+    if (gmGap <= UINT32_MAX) {
+        TLoadInstrGm2ubNative<TileData, GlobalData>(
+            dst, src, nBurst, lenBurst, static_cast<uint32_t>(gmGap), ubGap, ubPad);
+        return;
+    }
+    constexpr uint32_t elementBytes = sizeof(typename TileData::DType);
+    uint64_t dstStride = ((uint64_t(lenBurst) + ubPad * elementBytes + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE + ubGap) *
+                         BLOCK_BYTE_SIZE / elementBytes;
+    uint64_t srcStride = (lenBurst + gmGap) / elementBytes;
+    for (uint16_t i = 0; i < nBurst; i++) {
+        TLoadInstrGm2ubNative<TileData, GlobalData>(dst + i * dstStride, src + i * srcStride, 1, lenBurst, 0, 0, ubPad);
+    }
+}
+
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadNd2nzInstr(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, uint16_t ndNum, uint16_t nValue,
     uint16_t dValue, uint16_t srcNdMatrixStride, uint16_t srcDValue, uint16_t dstNzC0Stride, uint16_t dstNzNStride,
@@ -58,8 +77,8 @@ PTO_INTERNAL void CheckNzFormat(
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2ubNd2nd(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     PTO_STATIC_ASSERT(TileData::Rows < 4096, "Fix: TLOAD Rows>=4096 not supported");
     PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
@@ -70,8 +89,7 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(
     constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t nBurst = gShape3;
     uint32_t lenBurst = validCol * sizeof(typename TileData::DType);
-    uint64_t gmGapValue = (gStride3 - gShape4) * sizeof(typename TileData::DType);
-    uint32_t gmGap = (uint32_t)gmGapValue;
+    uint64_t gmGap = (gStride3 - gShape4) * sizeof(typename TileData::DType);
     uint32_t ubGapElement = (TileData::Cols - validCol);
     uint32_t ubGap = (ubGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
     uint32_t ubPad = 0;
@@ -103,8 +121,8 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2ubDn2dn(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     PTO_ASSERT(validRow == gShape3, "The validCol of TileData must be equal to the 4th dim(Shape3) of DN shape!");
     PTO_ASSERT(
@@ -114,8 +132,7 @@ PTO_INTERNAL void TLoadGm2ubDn2dn(
     constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t nBurst = gShape4;
     uint32_t lenBurst = validRow * sizeof(typename TileData::DType);
-    uint64_t gmGapValue = (gStride4 - gShape3) * sizeof(typename TileData::DType);
-    uint32_t gmGap = (uint32_t)gmGapValue;
+    uint64_t gmGap = (gStride4 - gShape3) * sizeof(typename TileData::DType);
     uint32_t ubGapElement = (TileData::Rows - gShape3);
     uint32_t ubGap = (ubGapElement * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
     uint32_t ubPad = 0;
@@ -147,13 +164,13 @@ PTO_INTERNAL void TLoadGm2ubDn2dn(
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2ubNz2nz(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     CheckNzFormat<TileData, GlobalData>(gShape0, gShape1, gShape2, gShape3, gShape4, validRow, validCol);
     uint16_t nBurst = gShape1;
     uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmGap = (gStride1 - validRow * gShape4) * sizeof(typename TileData::DType);
+    uint64_t gmGap = (gStride1 - validRow * gShape4) * sizeof(typename TileData::DType);
     uint32_t ubGap = TileData::Rows - validRow;
     typename GlobalData::DType* srcAddrP = srcAddr;
     __ubuf__ typename TileData::DType* dstAddrP = dstAddr;
@@ -168,8 +185,8 @@ PTO_INTERNAL void TLoadGm2ubNz2nz(
 template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadGm2ub(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     __ubuf__ typename TileData::DType* dstAddr = (__ubuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
@@ -189,10 +206,35 @@ __tf__ PTO_INTERNAL void TLoadGm2ub(
 }
 
 template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLoadGm2L1Vector(
+    __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, uint32_t elements)
+{
+    auto dstBytes = reinterpret_cast<__cbuf__ uint8_t*>(dst);
+    auto srcBytes = reinterpret_cast<__gm__ uint8_t*>(src);
+    uint64_t remaining = uint64_t(elements) * sizeof(typename TileData::DType);
+    // Copy complete blocks without narrowing element counts or converting b64 lengths.
+    while (remaining >= BLOCK_BYTE_SIZE) {
+        uint64_t blocks = remaining / BLOCK_BYTE_SIZE;
+        if (blocks > UINT16_MAX) {
+            blocks = UINT16_MAX;
+        }
+        pto_copy_gm_to_cbuf(dstBytes, srcBytes, 0, 1, static_cast<uint16_t>(blocks), 0, 0);
+        uint64_t bytes = blocks * BLOCK_BYTE_SIZE;
+        dstBytes += bytes;
+        srcBytes += bytes;
+        remaining -= bytes;
+    }
+    if (remaining != 0) {
+        // Preserve zero padding to a C0 boundary without reading beyond the valid elements.
+        pto_copy_gm_to_cbuf_multi_nd2nz(dstBytes, srcBytes, 0, 1, 1, static_cast<uint16_t>(remaining), 0, 0, 1, 1, 0);
+    }
+}
+
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2L1VectorInND(
     __cbuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
     PTO_ASSERT(
@@ -201,19 +243,14 @@ PTO_INTERNAL void TLoadGm2L1VectorInND(
     static_assert(
         GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1 && GlobalData::staticShape[2] == 1,
         "Fix: GlobalTensor only support 2 dim when using vector input!");
-    uint16_t nValue = gShape3;
-    uint16_t dValue = gShape4;
-    uint16_t srcDValue = gStride3;
-    typename GlobalData::DType* srcAddrP = srcAddr;
-    __cbuf__ typename TileData::DType* dstAddrP = dstAddr;
-    TLoadNd2nzInstr<TileData, GlobalData>(dstAddrP, srcAddrP, 1, nValue, dValue, 0, srcDValue, TileData::Rows, 1, 1);
+    TLoadGm2L1Vector<TileData, GlobalData>(dstAddr, srcAddr, gShape4);
 }
 
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadGm2L1VectorInDn(
     __cbuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     static_assert(
         GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1 && GlobalData::staticShape[2] == 1,
@@ -222,19 +259,14 @@ PTO_INTERNAL void TLoadGm2L1VectorInDn(
     PTO_ASSERT(
         validCol == gShape0 * gShape1 * gShape2 * gShape4,
         "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
-    uint16_t nValue = gShape4;
-    uint16_t dValue = gShape3;
-    uint16_t srcDValue = gStride3;
-    typename GlobalData::DType* srcAddrP = srcAddr;
-    __cbuf__ typename TileData::DType* dstAddrP = dstAddr;
-    TLoadNd2nzInstr<TileData, GlobalData>(dstAddrP, srcAddrP, 1, nValue, dValue, 0, srcDValue, TileData::Cols, 1, 1);
+    TLoadGm2L1Vector<TileData, GlobalData>(dstAddr, srcAddr, gShape3);
 }
 
 template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadGm2L1(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
@@ -268,8 +300,8 @@ __tf__ PTO_INTERNAL void TLoadGm2L1(
 template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadGm2L1Nd2nz(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
@@ -324,8 +356,8 @@ __tf__ PTO_INTERNAL void TLoadGm2L1Nd2nz(
 template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadGm2L1Dn2zn(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     static_assert(
         GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1 && GlobalData::staticShape[2] == 1,
