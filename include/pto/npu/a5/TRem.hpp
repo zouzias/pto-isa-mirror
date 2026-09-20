@@ -28,13 +28,22 @@ PTO_INTERNAL void Int64RemRegs(
     vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
     vector_s32& rhsHigh, MaskReg& mask)
 {
-    vector_s32 qLow, qHigh, productLow, productHigh;
-    if constexpr (std::is_same_v<T, int64_t>)
-        Int64DivSignedRegs(qLow, qHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
-    else
+    if constexpr (std::is_same_v<T, int64_t>) {
+        vector_2xvl_s64 lhs, rhs, remainder;
+        lhs.val[0] = lhsLow;
+        lhs.val[1] = lhsHigh;
+        rhs.val[0] = rhsLow;
+        rhs.val[1] = rhsHigh;
+        vmod<DivisionMode::DIV_FLOOR>(remainder, lhs, rhs, mask, MODE_ZEROING);
+        dstLow = remainder.val[0];
+        dstHigh = remainder.val[1];
+    } else {
+        vector_s32 qLow, qHigh, productLow, productHigh;
         Int64DivUnsignedRegs(qLow, qHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
-    Int64MulRegs(productLow, productHigh, qLow, qHigh, rhsLow, rhsHigh, mask);
-    Int64SubRegs(dstLow, dstHigh, lhsLow, lhsHigh, productLow, productHigh, mask);
+        Int64MulRegs(productLow, productHigh, qLow, qHigh, rhsLow, rhsHigh, mask);
+        Int64SubRegs(dstLow, dstHigh, lhsLow, lhsHigh, productLow, productHigh, mask);
+    }
+    // Preserve the int64/uint64 zero-divisor result of zero.
     vector_s32 zeroLow, zeroHigh;
     Int64DuplicateRegs(zeroLow, zeroHigh, 0, 0);
     MaskReg zeroMask;
@@ -258,7 +267,7 @@ __tf__ PTO_INTERNAL OP_NAME(TREM) OP_TYPE(element_wise) void TRem(
     __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
     __ubuf__ T* src0Ptr = (__ubuf__ T*)__cce_get_tile_ptr(src0);
     __ubuf__ T* src1Ptr = (__ubuf__ T*)__cce_get_tile_ptr(src1);
-    // Note: tmp parameter is not used in a5 implementation (no sign correction needed)
+    // The A5 implementation does not use the temporary tile.
     if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
         Int64Rem<T, TileDataDst::Cols, TileDataSrc0::Cols, TileDataSrc1::Cols>(
             dstPtr, src0Ptr, src1Ptr, validRows, validCols);

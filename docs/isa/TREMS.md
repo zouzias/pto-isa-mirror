@@ -7,13 +7,17 @@
 
 ## Introduction
 
-Elementwise remainder with a scalar: `%`.
+Elementwise remainder with a scalar. A nonzero result has the same sign as the scalar divisor.
 
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
 
-$$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
+$$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} - \mathrm{floor}(\frac{\mathrm{src}_{i,j}}{\mathrm{scalar}}) \times \mathrm{scalar}$$
+
+For a nonzero `scalar`, a nonzero result has the same sign as `scalar`; exact division gives zero.
+For example, `remainder(-7, 3) = 2`, `remainder(7, -3) = -2`, and `remainder(-6, 3) = 0`.
+On A5, `int64_t` follows this floor-based definition, with the same remainder semantics as `int32_t`.
 
 ## Assembly Syntax
 
@@ -70,6 +74,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
     - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
     - Note: tmp parameter is accepted but not validated or used on A5.
 - **Division by Zero**:
+    - On A5, `int64_t` and `uint64_t` return zero when `scalar` is zero.
     - Behavior is target-defined; the CPU simulator asserts in debug builds.
 - **Valid Region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.

@@ -6,7 +6,7 @@
 
 ## Introduction
 
-Elementwise remainder of two tiles. The result has the same sign as the divider.
+Elementwise remainder of two tiles. A nonzero result has the same sign as the divisor.
 
 ## Math Interpretation
 
@@ -14,7 +14,9 @@ For each element `(i, j)` in the valid region:
 
 $$\mathrm{dst}_{i,j} = \mathrm{remainder}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) = \mathrm{src0}_{i,j} - \mathrm{floor}(\frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}}) \times \mathrm{src1}_{i,j}$$
 
-The result sign is corrected to match the sign of the divider (`src1`).
+For a nonzero divisor (`src1`), a nonzero result has the same sign as the divisor; exact division gives zero.
+For example, `remainder(-7, 3) = 2`, `remainder(7, -3) = -2`, and `remainder(-6, 3) = 0`.
+On A5, `int64_t` follows this floor-based definition, with the same remainder semantics as `int32_t`.
 
 **Note**: This differs from `TFMOD` where the result sign follows the dividend (`src0`).
 
@@ -65,6 +67,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Division-by-zero**:
+    - On A5, `int64_t` and `uint64_t` return zero when the divisor is zero.
     - Behavior is target-defined; the CPU simulator asserts in debug builds.
 - **High Precision Algorithm**:
     - Only available on A5 for `float` type; `PrecisionType` option is ignored on A2A3.
