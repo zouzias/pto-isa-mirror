@@ -34,8 +34,8 @@ struct Kirin9030LoadOp : LoadOpBase {
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecND2ND(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad)
 {
     typename GlobalData::DType* srcAddrP = srcAddr;
     __ubuf__ typename TileData::DType* dstAddrP = dstAddr;
@@ -71,8 +71,8 @@ PTO_INTERNAL void TLoadVecND2ND(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecDN2DN(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad)
 {
     uint32_t nBurst = gShape4;
     uint32_t lenBurst = GetByteSize<typename TileData::DType>(validRow);
@@ -111,8 +111,8 @@ PTO_INTERNAL void TLoadVecDN2DN(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeND2ND(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddrP = dst;
     typename GlobalData::DType* srcAddrP = src;
@@ -162,8 +162,8 @@ PTO_INTERNAL void TLoadCubeND2ND(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeDN2DN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddrP = dst;
     typename GlobalData::DType* srcAddrP = src;
@@ -237,8 +237,8 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoad5HD(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstShape0,
-    int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
