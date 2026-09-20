@@ -39,8 +39,15 @@ def gen_golden_data(case_name, param):
     input2[0:v_valid_row, 0:v_valid_col1] = input2_valid
     if (idx_tiles != 'none'):
         elem_size = np.dtype(idxtype).itemsize
-        input1_idx_valid = np.random.uniform(0, v_valid_col0 * elem_size, size=(v_valid_row, 1)).astype(idxtype)
-        input2_idx_valid = np.random.uniform(0, v_valid_col1 * elem_size, size=(v_valid_row, 1)).astype(idxtype)
+        if param.idx_values is None:
+            input1_idx_valid = np.random.uniform(0, v_valid_col0 * elem_size, size=(v_valid_row, 1)).astype(idxtype)
+            input2_idx_valid = np.random.uniform(0, v_valid_col1 * elem_size, size=(v_valid_row, 1)).astype(idxtype)
+        else:
+            boundary_values = np.asarray(param.idx_values, dtype=idxtype)
+            if boundary_values.shape != (v_valid_row, 2):
+                raise ValueError("idx_values must contain one (src0, src1) pair per valid row")
+            input1_idx_valid = boundary_values[:, 0:1]
+            input2_idx_valid = boundary_values[:, 1:2]
         input1_idx = np.zeros([src0_idx_row, src0_idx_col]).astype(idxtype)
         input2_idx = np.zeros([src1_idx_row, src1_idx_col]).astype(idxtype)
         input1_idx[0:v_valid_row, 0:1] = input1_idx_valid
@@ -81,13 +88,15 @@ def gen_golden_data(case_name, param):
 class TConcatParams:
     def __init__(self, dtype, valid_row, valid_col0, valid_col1, idxtype=None, idx_tiles='none', dst_h=None,
                  dst_w=None, src0_h=None, src0_w=None, src1_h=None, src1_w=None, dst_idx_h=None, dst_idx_w=None,
-                 src0_idx_h=None, src0_idx_w=None, src1_idx_h=None, src1_idx_w=None):
+                 src0_idx_h=None, src0_idx_w=None, src1_idx_h=None, src1_idx_w=None, idx_values=None, case_name=None):
         self.dtype = dtype
         self.idxtype = idxtype
         self.idx_tiles = idx_tiles
         self.valid_row = valid_row
         self.valid_col0 = valid_col0
         self.valid_col1 = valid_col1
+        self.idx_values = idx_values
+        self.case_name = case_name
         self.dst_tile_row = self._default_if_none(dst_h, valid_row)
         self.dst_tile_col = self._default_if_none(dst_w, valid_col0 + valid_col1)
         self.src0_tile_row = self._default_if_none(src0_h, valid_row)
@@ -123,6 +132,8 @@ def generate_case_name(param):
     idxsizes_str = f"{param.dst_idx_row}x{param.dst_idx_col}_{param.src0_idx_row}x{param.src0_idx_col}_\
 {param.src1_idx_row}x{param.src1_idx_col}"
 
+    if param.case_name is not None:
+        return f"TCONCATTest.{param.case_name}"
     if (idx_tiles == 'none'):
         return f"TCONCATTest.case_{dtype_str}_{sizes_str}"
     return f"TCONCATTest.case_{dtype_str}_{idxtype_str}_{idx_tiles}_{sizes_str}_{idxsizes_str}"
@@ -136,6 +147,21 @@ if __name__ == "__main__":
     # Ensure the testcases directory exists
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
+
+    repeat_boundary_kwargs = dict(
+        dst_h=1,
+        dst_w=32768,
+        src0_h=1,
+        src0_w=16384,
+        src1_h=1,
+        src1_w=16384,
+        dst_idx_h=1,
+        dst_idx_w=8,
+        src0_idx_h=1,
+        src0_idx_w=8,
+        src1_idx_h=1,
+        src1_idx_w=8,
+    )
 
     case_params_list = [
         TConcatParams(np.float32, 64, 64, 64),
@@ -163,6 +189,30 @@ if __name__ == "__main__":
         TConcatParams(np.float32, 16, 31, 32, np.int32, 'dst', src0_w=32, dst_w=64),
         TConcatParams(np.int16, 32, 127, 128, np.int32, 'dst', src0_w=128, dst_w=256),
     ]
+
+    repeat_boundary_cases = [
+        ('255', (255 * 64 * 4, 0)),
+        ('256', (256 * 64 * 4, 0)),
+        ('tail', ((255 * 64 + 1) * 4, 0)),
+        ('src1_256', (0, 256 * 64 * 4)),
+        ('src1_tail', (0, (255 * 64 + 1) * 4)),
+        ('empty', (0, 0)),
+    ]
+    for idx_tiles in ('src', 'dst'):
+        for suffix, idx_values in repeat_boundary_cases:
+            case_params_list.append(
+                TConcatParams(
+                    np.float32,
+                    1,
+                    16384,
+                    16384,
+                    np.int32,
+                    idx_tiles,
+                    **repeat_boundary_kwargs,
+                    idx_values=[idx_values],
+                    case_name=f'case_float_int32_{idx_tiles}_repeat_{suffix}',
+                )
+            )
 
     for param in case_params_list:
         case_name = generate_case_name(param)

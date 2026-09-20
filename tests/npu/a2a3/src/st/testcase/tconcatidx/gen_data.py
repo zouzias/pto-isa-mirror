@@ -45,6 +45,15 @@ def gen_golden_data(case_name, param):
     src1_idx = np.zeros([src1_tile_row, src1_tile_col]).astype(itype)
     src0_idx_valid = np.random.randint(1, v_valid_col0, size=(v_valid_row, v_valid_col0)).astype(itype) * itype_len
     src1_idx_valid = np.random.randint(1, v_valid_col1, size=(v_valid_row, v_valid_col1)).astype(itype) * itype_len
+    boundary_values = [
+        (0, v_valid_col1),
+        (v_valid_col0, 0),
+        (0, 0),
+        (max(v_valid_col0 - 1, 0), max(v_valid_col1 - 1, 0)),
+    ]
+    for i, (src0_num, src1_num) in enumerate(boundary_values[:v_valid_row]):
+        src0_idx_valid[i, 0] = src0_num * itype_len
+        src1_idx_valid[i, 0] = src1_num * itype_len
     src0_idx[0:v_valid_row, 0:v_valid_col0] = src0_idx_valid
     src1_idx[0:v_valid_row, 0:v_valid_col1] = src1_idx_valid
 

@@ -307,3 +307,66 @@ TEST_F(TCONCATTest, case_int16_int32_dst_32x256_32x128_32x128_32x127_32x128_32x2
 {
     test_tconcat<int16_t, TilesSize{32, 256, 32, 128, 32, 128, 32, 127, 128}, int32_t, USE_DST_IDX>();
 }
+
+constexpr TilesSize REPEAT_BOUNDARY_SIZES{1, 32768, 1, 16384, 1, 16384, 1, 16384, 16384};
+constexpr TilesSize REPEAT_BOUNDARY_IDX_SIZES{1, 8, 1, 8, 1, 8, 1, 8, 8};
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_255)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_256)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_tail)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_src1_256)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_src1_tail)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_src_repeat_empty)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_SRC_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_255)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_256)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_tail)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_src1_256)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_src1_tail)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
+
+TEST_F(TCONCATTest, case_float_int32_dst_repeat_empty)
+{
+    test_tconcat<float, REPEAT_BOUNDARY_SIZES, int32_t, USE_DST_IDX, REPEAT_BOUNDARY_IDX_SIZES>();
+}
