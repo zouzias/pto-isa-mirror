@@ -51,6 +51,11 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
 类型/布局/位置/形状的合法性取决于后端；将实现特定的说明视为该后端的规范。
 `FpTileData` 的合法性由所选后端实现检查。
 
+A5 上，Acc→Mat 向量量化的目标若为 `half` 或 `bfloat16_t` NZ1024 tile
+（`BLayout::ColMajor`、`SLayout::RowMajor`、分形大小 1024），会在编译期拒绝。
+此限制适用于 `TEXTRACT(..., fp, ...)` 和 `TEXTRACT_FP(...)`，包括各自的 `STPhase` 形式。
+支持的普通转换见 [A5 Acc→Mat NZ 布局转换](TEXTRACT_zh.md#a5-accmat-nz-布局转换)。
+
 ## 示例
 
 参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。

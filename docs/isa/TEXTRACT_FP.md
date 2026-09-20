@@ -70,6 +70,11 @@ for that backend. The canonical same-name `TEXTRACT(..., fp, ...)` facade requir
 `FpTileData::Loc == TileType::Scaling`; the legacy `TEXTRACT_FP(...)` alias is checked by the selected
 backend implementation.
 
+On A5, Acc-to-Mat vector quantization into a `half` or `bfloat16_t` NZ1024 tile
+(`BLayout::ColMajor`, `SLayout::RowMajor`, fractal size 1024) is rejected at compile time.
+This applies to both `TEXTRACT(..., fp, ...)` and `TEXTRACT_FP(...)`, including their `STPhase` forms.
+See [A5 Acc-to-Mat NZ layout conversion](TEXTRACT.md#a5-acc-to-mat-nz-layout-conversion) for the supported plain conversions.
+
 ## Examples
 
 See related examples in `docs/isa/` and `docs/coding/tutorials/`.
