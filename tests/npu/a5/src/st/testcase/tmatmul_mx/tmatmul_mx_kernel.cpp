@@ -211,11 +211,55 @@ __global__ AICORE void RunTMATMULMX(
 }
 
 template <
+    typename AType, typename BType, int validM, int validK, int validN, int M, int N, int BASEK, int loadK, bool isFp4,
+    typename LeftTile, typename RightTile>
+AICORE inline void LoadSplitKOperands(
+    LeftTile& aTile, RightTile& bTile, __gm__ AType* src0, __gm__ BType* src1, int runtimeLoadK = loadK,
+    int runtimeK = validK)
+{
+    using GlobalA = GlobalTensor<
+        AType, Shape<1, 1, 1, validM, loadK>,
+        pto::Stride<validM * validK, validM * validK, validM * validK, loadK == DYNAMIC ? DYNAMIC : validK, 1>>;
+    using GlobalB = GlobalTensor<
+        BType, Shape<1, 1, 1, loadK, validN>,
+        pto::Stride<validK * validN, validK * validN, validK * validN, validN, 1>>;
+    using MatA = Tile<TileType::Mat, AType, M, BASEK, BLayout::ColMajor, validM, loadK, SLayout::RowMajor, 512>;
+    using MatB = Tile<TileType::Mat, BType, BASEK, N, BLayout::ColMajor, loadK, validN, SLayout::RowMajor, 512>;
+    GlobalA aGlobal(
+        src0, typename GlobalA::Shape(1, 1, 1, validM, runtimeLoadK),
+        typename GlobalA::Stride(validM * runtimeK, validM * runtimeK, validM * runtimeK, runtimeK, 1));
+    GlobalB bGlobal(src1, typename GlobalB::Shape(1, 1, 1, runtimeLoadK, validN));
+    MatA aMatTile;
+    MatB bMatTile;
+    if constexpr (loadK == DYNAMIC) {
+        aMatTile.SetValidCol(runtimeLoadK);
+        bMatTile.SetValidRow(runtimeLoadK);
+    }
+    TASSIGN(aMatTile, 0);
+    TASSIGN(bMatTile, M * BASEK);
+
+    TLOAD(aMatTile, aGlobal);
+    TLOAD(bMatTile, bGlobal);
+    // ND2NZ zeros the partial C0 block; clear complete blocks and rows left by the previous split.
+    constexpr int blockAlign = isFp4 ? 64 : 32;
+    if (BASEK - runtimeLoadK >= blockAlign) {
+        TFILLPAD(aMatTile, aMatTile);
+    }
+    TFILLPAD(bMatTile, bMatTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+}
+
+template <
     typename OutType, typename AType, typename BType, typename ScaleType, typename BiasType, int validM, int validK,
-    int validN, bool isBias, bool isFp4>
+    int validN, bool isBias, bool isFp4, bool dynamic = false>
 __global__ AICORE void RunTMATMULMX_SPLIT_K(
     __gm__ OutType* out, __gm__ AType* src0, __gm__ BType* src1, __gm__ ScaleType* src2, __gm__ ScaleType* src3,
-    __gm__ BiasType* src4)
+    __gm__ BiasType* src4, int runtimeK)
 {
     constexpr int blockAlign = isFp4 ? 64 : 32; // need to be 32B aligned
 
@@ -226,13 +270,6 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(
 
     constexpr int BASEK = 64;
     constexpr int BASEKMX = CeilDiv(BASEK, 32);
-
-    using GlobalDataSrc0 = GlobalTensor<
-        AType, pto::Shape<1, 1, 1, validM, BASEK>,
-        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
-    using GlobalDataSrc1 = GlobalTensor<
-        BType, pto::Shape<1, 1, 1, BASEK, validN>,
-        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
 
     using MxShapeA = TileShape2D<ScaleType, M, BASEKMX, Layout::MX_A_ZZ>;
     using MxStrideA = BaseShape2D<ScaleType, M, KMX, Layout::MX_A_ZZ>;
@@ -251,9 +288,6 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(
         BiasType, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
     GlobalDataSrc4 src4Global(src4);
 
-    using TileMatAData = Tile<TileType::Mat, AType, M, BASEK, BLayout::ColMajor, validM, BASEK, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, BType, BASEK, N, BLayout::ColMajor, BASEK, validN, SLayout::RowMajor, 512>;
-
     using TileScaleAData =
         Tile<TileType::Mat, ScaleType, M, BASEKMX, BLayout::RowMajor, validM, BASEKMX, SLayout::RowMajor, 32>;
     using TileScaleBData =
@@ -268,14 +302,10 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(
     using AccTile = TileAcc<OutType, M, N, validM, validN>;
     using BiasTile = Tile<TileType::Bias, BiasType, 1, N, BLayout::RowMajor, 1, validN>;
 
-    TileMatAData aMatTile;
-    TileMatBData bMatTile;
     TileScaleAData aScaleMatTile;
     TileScaleBData bScaleMatTile;
     TileBiasData biasDataTile;
 
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * BASEK);
     TASSIGN(aScaleMatTile, M * BASEK + N * BASEK);
     TASSIGN(bScaleMatTile, M * BASEK + N * BASEK + M * BASEKMX);
     TASSIGN(biasDataTile, M * BASEK + N * BASEK + M * BASEKMX + N * BASEKMX);
@@ -303,13 +333,6 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(
     for (int i = 0; i < iter; i++) {
         const int offsetA = (!isFp4) ? (i * BASEK) : (i * BASEK / 2);
         const int offsetB = (!isFp4) ? (validN * i * BASEK) : (validN * i * BASEK / 2);
-        GlobalDataSrc0 src0Global(src0 + offsetA);
-        GlobalDataSrc1 src1Global(src1 + offsetB);
-
-        /******************************TLOAD*****************************/
-        TLOAD(aMatTile, src0Global);
-        TLOAD(bMatTile, src1Global);
-
         const int offsetAMX = i * BASEKMX * 16;
         const int offsetBMX = 16 * i * BASEKMX;
         GlobalDataSrc2 src2Global(src2 + offsetAMX);
@@ -322,14 +345,24 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(
             TLOAD(biasDataTile, src4Global);
         }
 
-#ifndef __PTO_AUTO__
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-#endif
-
-        /**************************TMOV && TEXTRACT**************************/
-        TMOV(aTile, aMatTile);
-        TMOV(bTile, bMatTile);
+        constexpr int tailK = validK % BASEK;
+        if constexpr (dynamic) {
+            const int remainingK = runtimeK - i * BASEK;
+            const int loadK = remainingK < BASEK ? remainingK : BASEK;
+            LoadSplitKOperands<AType, BType, validM, validK, validN, M, N, BASEK, DYNAMIC, isFp4>(
+                aTile, bTile, src0 + offsetA, src1 + offsetB, loadK, runtimeK);
+        } else if constexpr (tailK != 0) {
+            if (i == iter - 1) {
+                LoadSplitKOperands<AType, BType, validM, validK, validN, M, N, BASEK, tailK, isFp4>(
+                    aTile, bTile, src0 + offsetA, src1 + offsetB);
+            } else {
+                LoadSplitKOperands<AType, BType, validM, validK, validN, M, N, BASEK, BASEK, isFp4>(
+                    aTile, bTile, src0 + offsetA, src1 + offsetB);
+            }
+        } else {
+            LoadSplitKOperands<AType, BType, validM, validK, validN, M, N, BASEK, BASEK, isFp4>(
+                aTile, bTile, src0 + offsetA, src1 + offsetB);
+        }
 
         TMOV(aScaleTile, aScaleMatTile);
         TMOV(bScaleTile, bScaleMatTile);
@@ -497,6 +530,56 @@ __global__ AICORE void RunTGEMVMX(
 }
 
 template <
+    typename AType, typename BType, typename ScaleType, int validK, int validN, int N, int BASEK, int loadK, bool isFp4>
+AICORE inline void LoadSplitKGemvOperands(
+    __gm__ AType* src0, __gm__ BType* src1, __gm__ ScaleType* src2, __gm__ ScaleType* src3)
+{
+    constexpr int BASEKMX = BASEK / 32;
+    constexpr int KMX = CeilAlign(validK, 64) / 32;
+    constexpr int loadScaleA = CeilDiv(loadK, 32);
+    constexpr int loadScaleB = CeilAlign(loadK, 64) / 32;
+    using GlobalA = GlobalTensor<AType, Shape<1, 1, 1, 1, loadK>, pto::Stride<validK, validK, validK, validK, 1>>;
+    using GlobalB = GlobalTensor<
+        BType, Shape<1, 1, 1, loadK, validN>,
+        pto::Stride<validK * validN, validK * validN, validK * validN, validN, 1>>;
+    using GlobalScaleA = GlobalTensor<ScaleType, Shape<1, 1, 1, 1, loadScaleA>, pto::Stride<KMX, KMX, KMX, KMX, 1>>;
+    using GlobalScaleB = GlobalTensor<
+        ScaleType, TileShape2D<ScaleType, loadScaleB, N, Layout::MX_B_NN>,
+        BaseShape2D<ScaleType, KMX, N, Layout::MX_B_NN>, Layout::MX_B_NN>;
+    using MatA = Tile<TileType::Mat, AType, 1, BASEK, BLayout::RowMajor, 1, loadK>;
+    using MatB = Tile<TileType::Mat, BType, BASEK, N, BLayout::ColMajor, loadK, validN, SLayout::RowMajor, 512>;
+    using ScaleA = Tile<TileType::Mat, ScaleType, 1, BASEKMX, BLayout::RowMajor, 1, loadScaleA, SLayout::RowMajor, 32>;
+    using ScaleB =
+        Tile<TileType::Mat, ScaleType, BASEKMX, N, BLayout::ColMajor, loadScaleB, validN, SLayout::ColMajor, 32>;
+    MatA aMat;
+    MatB bMat;
+    ScaleA aScale;
+    ScaleB bScale;
+    TASSIGN(aMat, 0);
+    TASSIGN(bMat, 0x10000);
+    TASSIGN(aScale, 0x20000);
+    TASSIGN(bScale, 0x30000);
+    if constexpr (loadK < BASEK) {
+        // ND vector loads only pad to 32 bytes; clear the rest of the reused L1 buffer.
+        Tile<TileType::Mat, uint8_t, 1, isFp4 ? BASEK / 2 : BASEK, BLayout::RowMajor> aBytes;
+        Tile<TileType::Mat, uint8_t, BASEKMX, N, BLayout::RowMajor> scaleBytes;
+        TASSIGN(aBytes, 0);
+        TASSIGN(scaleBytes, 0x30000);
+        TEXPANDS(aBytes, uint8_t(0));
+        TEXPANDS(scaleBytes, uint8_t(127));
+    }
+    GlobalA aGlobal(src0);
+    GlobalB bGlobal(src1);
+    GlobalScaleA aScaleGlobal(src2);
+    GlobalScaleB bScaleGlobal(src3);
+    TLOAD(aMat, aGlobal);
+    TLOAD(bMat, bGlobal);
+    TFILLPAD(bMat, bMat);
+    TLOAD(aScale, aScaleGlobal);
+    TLOAD(bScale, bScaleGlobal);
+}
+
+template <
     typename OutType, typename AType, typename BType, typename ScaleType, typename BiasType, int validM, int validK,
     int validN, bool isFp4>
 __global__ AICORE void RunTGEMVMX_SPLIT_K(
@@ -513,19 +596,6 @@ __global__ AICORE void RunTGEMVMX_SPLIT_K(
     constexpr int BASEK = 1024;
     constexpr int BASEKMX = CeilDiv(BASEK, 32);
 
-    using GlobalDataSrc0 = GlobalTensor<
-        AType, pto::Shape<1, 1, 1, validM, BASEK>,
-        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
-    using GlobalDataSrc1 = GlobalTensor<
-        BType, pto::Shape<1, 1, 1, BASEK, validN>,
-        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
-    // SCALEA in GM, ND
-    using GlobalDataSrc2 = GlobalTensor<ScaleType, pto::Shape<1, 1, 1, 1, BASEKMX>, pto::Stride<KMX, KMX, KMX, KMX, 1>>;
-
-    using MxShapeB = TileShape2D<ScaleType, BASEKMX, N, Layout::MX_B_NN>;
-    using MxStrideB = BaseShape2D<ScaleType, KMX, N, Layout::MX_B_NN>;
-    using GlobalDataSrc3 = GlobalTensor<ScaleType, MxShapeB, MxStrideB, Layout::MX_B_NN>;
-
     using GlobalDataOut = GlobalTensor<
         OutType, pto::Shape<1, 1, 1, validM, validN>,
         pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
@@ -535,8 +605,6 @@ __global__ AICORE void RunTGEMVMX_SPLIT_K(
         BiasType, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
     GlobalDataSrc4 src4Global(src4);
 
-    constexpr int blockLeft = isFp4 ? 1024 : 512;
-    constexpr int KLeft = CeilAlign<int>(validK, blockLeft);
     using TileMatAData = Tile<TileType::Mat, AType, 1, BASEK, BLayout::RowMajor, 1, BASEK>;
 
     // scale need 32B Align
@@ -590,18 +658,21 @@ __global__ AICORE void RunTGEMVMX_SPLIT_K(
     for (int i = 0; i < iter; i++) {
         const int offsetA = (!isFp4) ? (i * BASEK) : (i * BASEK / 2);
         const int offsetB = (!isFp4) ? (validN * i * BASEK) : (validN * i * BASEK / 2);
-        GlobalDataSrc0 src0Global(src0 + offsetA);
-        GlobalDataSrc1 src1Global(src1 + offsetB);
-
-        /*************************************TLOAD****************************************/
-        TLOAD(aMatTile, src0Global);
-        TLOAD(bMatTile, src1Global);
         const int offsetAMX = i * BASEKMX;
         const int offsetBMX = 16 * i * BASEKMX;
-        GlobalDataSrc2 src2Global(src2 + offsetAMX);
-        GlobalDataSrc3 src3Global(src3 + offsetBMX);
-        TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
-        TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);
+        constexpr int tailK = validK % BASEK;
+        if constexpr (tailK != 0) {
+            if (i == iter - 1) {
+                LoadSplitKGemvOperands<AType, BType, ScaleType, validK, validN, N, BASEK, tailK, isFp4>(
+                    src0 + offsetA, src1 + offsetB, src2 + offsetAMX, src3 + offsetBMX);
+            } else {
+                LoadSplitKGemvOperands<AType, BType, ScaleType, validK, validN, N, BASEK, BASEK, isFp4>(
+                    src0 + offsetA, src1 + offsetB, src2 + offsetAMX, src3 + offsetBMX);
+            }
+        } else {
+            LoadSplitKGemvOperands<AType, BType, ScaleType, validK, validN, N, BASEK, BASEK, isFp4>(
+                src0 + offsetA, src1 + offsetB, src2 + offsetAMX, src3 + offsetBMX);
+        }
         if (i == 0) {
             TLOAD(biasDataTile, src4Global);
         }
@@ -776,13 +847,13 @@ void LaunchTMATMUL_MX_BIAS(
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<float*>(out), reinterpret_cast<float4_e1m2x2_t*>(src0),
                 reinterpret_cast<float4_e1m2x2_t*>(src1), reinterpret_cast<float8_e8m0_t*>(src2),
-                reinterpret_cast<float8_e8m0_t*>(src3), reinterpret_cast<float*>(src4));
+                reinterpret_cast<float8_e8m0_t*>(src3), reinterpret_cast<float*>(src4), 128);
     } else if constexpr (tilingKey == 5) {
         RunTMATMULMX_SPLIT_K<float, float8_e4m3_t, float8_e5m2_t, float8_e8m0_t, float, 64, 192, 64, true, false>
             <<<1, nullptr, stream>>>(
                 reinterpret_cast<float*>(out), reinterpret_cast<float8_e4m3_t*>(src0),
                 reinterpret_cast<float8_e5m2_t*>(src1), reinterpret_cast<float8_e8m0_t*>(src2),
-                reinterpret_cast<float8_e8m0_t*>(src3), reinterpret_cast<float*>(src4));
+                reinterpret_cast<float8_e8m0_t*>(src3), reinterpret_cast<float*>(src4), 192);
     } else if constexpr (tilingKey == 6) {
         RunTMATMULMX<float, float4_e1m2x2_t, float4_e1m2x2_t, float8_e8m0_t, float, 1, 64, 62, true, true>
             <<<1, nullptr, stream>>>(
@@ -812,3 +883,129 @@ template void LaunchTMATMUL_MX_BIAS<6>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
 template void LaunchTMATMUL_MX_BIAS<7>(
     uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+// Keys 0..7 cover every FP4 pair with/without bias at the original K=62 boundary.
+template <int32_t key>
+void LaunchTMATMUL_MX_SPLITK(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream)
+{
+    constexpr int caseKey = key % 15;
+    constexpr bool dynamic = key >= 15;
+    constexpr bool isFp4 = caseKey < 8 || caseKey == 10 || caseKey == 11 || caseKey == 14;
+    constexpr bool isBias = caseKey < 8 ? caseKey % 2 != 0 : caseKey == 9 || caseKey == 10 || caseKey == 12;
+    constexpr int validK = caseKey < 9                   ? 62 :
+                           caseKey == 9 || caseKey == 10 ? 72 :
+                           caseKey < 13                  ? 64 :
+                           caseKey == 13                 ? 96 :
+                                                           126;
+    using AType = std::conditional_t<
+        isFp4, std::conditional_t<(caseKey / 4) % 2 == 0, float4_e1m2x2_t, float4_e2m1x2_t>, float8_e4m3_t>;
+    using BType = std::conditional_t<
+        isFp4, std::conditional_t<(caseKey / 2) % 2 == 0, float4_e1m2x2_t, float4_e2m1x2_t>, float8_e5m2_t>;
+    RunTMATMULMX_SPLIT_K<float, AType, BType, float8_e8m0_t, float, 47, validK, 128, isBias, isFp4, dynamic>
+        <<<1, nullptr, stream>>>(
+            reinterpret_cast<float*>(out), reinterpret_cast<AType*>(src0), reinterpret_cast<BType*>(src1),
+            reinterpret_cast<float8_e8m0_t*>(src2), reinterpret_cast<float8_e8m0_t*>(src3),
+            reinterpret_cast<float*>(src4), validK);
+}
+
+template void LaunchTMATMUL_MX_SPLITK<0>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<1>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<2>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<3>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<4>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<5>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<6>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<7>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<8>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<9>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<10>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<11>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<12>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<13>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+template void LaunchTMATMUL_MX_SPLITK<14>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<15>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<16>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<17>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<18>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<19>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<20>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<21>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<22>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<23>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<24>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<25>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<26>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<27>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<28>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template void LaunchTMATMUL_MX_SPLITK<29>(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream);
+
+template <int32_t key>
+void LaunchTGEMV_MX_SPLITK(
+    uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, uint8_t* src4, void* stream)
+{
+    constexpr bool isFp4 = key < 4;
+    constexpr int validK = key == 0 || key == 4 ? 62 : key == 1 || key == 5 ? 1032 : key == 2 ? 1056 : 1024;
+    using AType = std::conditional_t<isFp4, float4_e1m2x2_t, float8_e4m3_t>;
+    using BType = std::conditional_t<isFp4, float4_e2m1x2_t, float8_e5m2_t>;
+    RunTGEMVMX_SPLIT_K<float, AType, BType, float8_e8m0_t, float, 1, validK, 64, isFp4><<<1, nullptr, stream>>>(
+        reinterpret_cast<float*>(out), reinterpret_cast<AType*>(src0), reinterpret_cast<BType*>(src1),
+        reinterpret_cast<float8_e8m0_t*>(src2), reinterpret_cast<float8_e8m0_t*>(src3), reinterpret_cast<float*>(src4));
+}
+
+template void LaunchTGEMV_MX_SPLITK<0>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+
+template void LaunchTGEMV_MX_SPLITK<1>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+
+template void LaunchTGEMV_MX_SPLITK<2>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+
+template void LaunchTGEMV_MX_SPLITK<3>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+
+template void LaunchTGEMV_MX_SPLITK<4>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);
+
+template void LaunchTGEMV_MX_SPLITK<5>(uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, uint8_t*, void*);

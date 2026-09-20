@@ -1,6 +1,7 @@
 # PTO MegaMoE Dispatch + Combine Fusion Example
 
-[中文文档](README_zh.md)
+Multi-server URMA is enabled with the same launcher by setting `--rank-num-per-server N`; the compute schedule
+remains unchanged.
 
 ## Overview
 
@@ -21,6 +22,14 @@ FrontReorder -> Dispatch -> GMM1 -> SwiGLU -> GMM2 -> Combine -> Unpermute
 - Toolchain-compatible alias `Ascend910_9599`
 
 This project always builds the mixed-core kernel with `dav-c310` and `PTO_NPU_ARCH_A5`. `Ascend910B` is an A3 target and is not a valid `--soc` value for this directory.
+
+## Multi-server URMA Transport
+
+The same binary supports both the existing MTE path and multi-server URMA. Use `--rank-num-per-server N` to enable
+URMA for cross-server communication; same-server traffic continues to use MTE.
+
+URMA uses HCCL SharedPool resources with independent queues owned by AIV0. Enabling URMA does not change the compute
+pipeline, GMM scheduling, Combine flow, or Unpermute scheduling.
 
 ## Directory Layout
 
@@ -324,8 +333,8 @@ The HCCL remote window carries cross-rank visible data:
 | `sortedRouteSlot` / `expandedRowIdx` | workspace GM | Expert-major route order and its route-slot-to-compact-row inverse |
 | GMM queues/mailbox | workspace GM | Runtime task descriptors, tickets, dependency counters, and completion counters |
 
-`run.sh` estimates the HCCL window from `M`, `topK`, `K`, expert topology, and mask-lane capacity, then raises
-`HCCL_BUFFSIZE` when needed.
+`run.sh` defaults `HCCL_BUFFSIZE` to 512 MiB and preserves an explicit override.
+C++ tiling owns the layout and rejects insufficient capacity; increase the variable for larger cases.
 
 ## Build and Run
 
@@ -368,7 +377,7 @@ bash run.sh --soc Ascend910_9599 --world-size 2 --first-device 2 --m 512 --k 716
 | `FIRST_DEVICE` | First physical device in the contiguous rank mapping | `0`; overridden by `--first-device` |
 | `MPI_LIB_PATH` | Optional absolute path to the MPICH `libmpi.so` | Otherwise resolved from `LD_LIBRARY_PATH` |
 | `MPI_RUNNER` | MPICH launch command | `mpirun` from the sourced environment |
-| `HCCL_BUFFSIZE` | HCCL RDMA window size | Raised automatically by `run.sh` when needed |
+| `HCCL_BUFFSIZE` | HCCL RDMA window size | 512 MiB when unset; explicit values are preserved |
 | `DISPATCH_MEGA_COMBINE_AICORE_NUM` | Effective AIC count | `0`, which uses the runtime-reported count |
 | `DISPATCH_MEGA_COMBINE_REUSE_DATA` | Reuse compatible generated case data | Disabled; a nonzero value is equivalent to `--reuse-data` |
 | `DISPATCH_MEGA_COMBINE_WARMUP_ITERS` | Warmup launches before timing | `3` |
@@ -406,7 +415,7 @@ Common constraints:
 | Problem | Cause and Fix |
 | --- | --- |
 | `ASCEND_HOME_PATH must be set` | Source the CANN environment and export `ASCEND_HOME_PATH` before running `run.sh` |
-| HCCL window too small | The manually set `HCCL_BUFFSIZE` is below the case requirement; unset it or increase it |
+| HCCL window too small | The configured `HCCL_BUFFSIZE` is below the case requirement; increase it (default: 512 MiB) |
 | MPI launch fails | Source the project environment and verify `mpirun --version` reports MPICH/HYDRA; OpenMPI is unsupported |
 | Golden generation is slow | Reuse the generated files with `--reuse-data` after the first run; the chunk size is fixed internally |
 | Shape or rank topology is rejected | Check the 28/32/36-AIC selection, rank limit, MXFP8 alignment, UB capacity, and RankStreaming token-per-worker limit |
