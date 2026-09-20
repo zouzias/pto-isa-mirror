@@ -23,6 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils/const_args.hpp"
 #include "utils/mega_wave_schedule.hpp"
 #include "utils/hccl_window.hpp"
+#include "utils/mega_moe_urma.hpp"
 #include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
@@ -72,6 +73,8 @@ private:
     GM_ADDR workspaceGM_ = nullptr;
     const __gm__ MegaMoeTilingData* tilingData_ = nullptr;
     Gmm2CombineCvPipe cvPipe_;
+    __gm__ OutputElement* gmm2StagingPtr_ = nullptr;
+    uint32_t stagingExpertBase_ = 0U;
     __gm__ int32_t* cumsumMMPtr_ = nullptr;
     __gm__ int32_t* preSumBeforeRankPtr_ = nullptr;
     __gm__ OutputElement* remoteOutputBase_[kMegaMoeExpertProgressMaxRanks] = {nullptr};
@@ -99,12 +102,18 @@ AICORE inline void Combine<OutputElement>::Init(GM_ADDR workspaceGM, const __gm_
 
     PtoRemoteWindow remoteWindow;
     remoteWindow.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+    if (MegaMoeUrmaEnabled(tilingData_)) {
+        gmm2StagingPtr_ =
+            reinterpret_cast<__gm__ OutputElement*>(workspaceGM + tilingData_->multiServerTiling.combineStagingOffset);
+    }
     MegaMoePeerMemoryLayout peerMemoryLayout;
     peerMemoryLayout.Init(tilingData_->frontReorderTiling);
     cumsumMMPtr_ = reinterpret_cast<__gm__ int32_t*>(workspaceGM + tilingData_->frontReorderTiling.cumsumMMOffset);
     preSumBeforeRankPtr_ =
         reinterpret_cast<__gm__ int32_t*>(remoteWindow.LocalBase() + peerMemoryLayout.preSumBeforeRank);
     for (uint32_t srcRank = 0U; srcRank < rankSize_; ++srcRank) {
+        if (MegaMoeIsCrossServerRank(tilingData_, srcRank))
+            continue;
         remoteOutputBase_[srcRank] = reinterpret_cast<__gm__ OutputElement*>(
             remoteWindow.RemoteBase(peerMemoryLayout.combineOutputByRouteSlot, static_cast<int32_t>(srcRank)));
     }
@@ -143,6 +152,13 @@ AICORE inline void Combine<OutputElement>::PrefetchDirectMetadata()
 template <typename OutputElement>
 AICORE inline void Combine<OutputElement>::PrepareDirectExpert(uint32_t groupIdx)
 {
+    if (MegaMoeUrmaEnabled(tilingData_)) {
+        stagingExpertBase_ = 0U;
+        for (uint32_t e = 0U; e < groupIdx; ++e) {
+            stagingExpertBase_ += static_cast<uint32_t>(PtoGetValue<int32_t, kDirectCombineMetadataMaxElems>(
+                kDirectCombineCumsumUbOffset, (rankSize_ - 1U) * expertPerRank_ + e));
+        }
+    }
     uint32_t rankRowBegin = 0U;
     for (uint32_t srcRank = 0U; srcRank < rankSize_; ++srcRank) {
         const uint32_t metadataIdx = srcRank * expertPerRank_ + groupIdx;
@@ -181,11 +197,16 @@ AICORE inline void Combine<OutputElement>::StoreDirectTile(const GmmCommonTileIn
         if (compactRow >= routeElems_ || rows > routeElems_ - compactRow) {
             continue;
         }
-        __gm__ OutputElement* dstBase = remoteOutputBase_[srcRank];
-        if (dstBase == nullptr) {
-            continue;
+        __gm__ OutputElement* dst = nullptr;
+        if (MegaMoeIsCrossServerRank(tilingData_, srcRank)) {
+            dst = gmm2StagingPtr_ + static_cast<uint64_t>(stagingExpertBase_ + intersectionBegin) * problemK_ +
+                  tileInfo.blockColStart;
+        } else {
+            __gm__ OutputElement* dstBase = remoteOutputBase_[srcRank];
+            if (dstBase == nullptr)
+                continue;
+            dst = dstBase + static_cast<uint64_t>(compactRow) * problemK_ + tileInfo.blockColStart;
         }
-        __gm__ OutputElement* dst = dstBase + static_cast<uint64_t>(compactRow) * problemK_ + tileInfo.blockColStart;
         const uint64_t srcOffset = kGmm2CombineCvBufferOffset +
                                    static_cast<uint64_t>(srcTileRow) * kGmm2CombineCvTileCols * sizeof(bfloat16_t);
         Gmm2CombineCvTile srcTile(rows, tileInfo.actualN);

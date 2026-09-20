@@ -9,6 +9,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -20,6 +21,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include "acl/acl.h"
 #include "hccl/hccl_types.h"
@@ -29,6 +31,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "kernel_launch.hpp"
 #include "op_kernel/utils/const_args.hpp"
 #include "runtime_context.hpp"
+#include "transport_options.hpp"
 #include "tiling_builder.hpp"
 
 extern "C" rtError_t rtSetDevice(int32_t device);
@@ -45,8 +48,11 @@ constexpr double kNanosecondsPerSysCntTick = 1.0;
 constexpr double kNanosecondsPerMicrosecond = 1000.0;
 
 struct RunOptions {
+    MegaMoeTransportOptions transport;
     int warmupIters = kDefaultWarmupIters;
     int measureIters = kDefaultMeasureIters;
+    uint32_t requestedAicoreNum = 0U;
+    bool startSync = false;
 };
 
 struct PerfStats {
@@ -145,27 +151,14 @@ std::vector<uint16_t> BytesToU16(const std::vector<uint8_t>& bytes)
     return out;
 }
 
-int ParseEnvInt(const char* name, int defaultValue)
-{
-    const char* value = std::getenv(name);
-    if (value == nullptr || value[0] == '\0') {
-        return defaultValue;
-    }
-    try {
-        return std::stoi(value);
-    } catch (const std::exception&) {
-        throw std::runtime_error(std::string("invalid integer in env: ") + name);
-    }
-}
-
 RunOptions LoadRunOptions()
 {
     RunOptions options;
-    options.warmupIters = ParseEnvInt("DISPATCH_MEGA_COMBINE_WARMUP_ITERS", kDefaultWarmupIters);
-    options.measureIters = ParseEnvInt("DISPATCH_MEGA_COMBINE_MEASURE_ITERS", kDefaultMeasureIters);
-    if (options.warmupIters < 0 || options.measureIters < 0) {
-        throw std::runtime_error("warmup/measure iterations must be non-negative");
-    }
+    options.transport = LoadMegaMoeTransportOptions();
+    options.warmupIters = MegaMoeEnvInteger("WARMUP_ITERS", INT32_MAX, kDefaultWarmupIters, 10);
+    options.measureIters = MegaMoeEnvInteger("MEASURE_ITERS", INT32_MAX, kDefaultMeasureIters, 10);
+    options.requestedAicoreNum = MegaMoeEnvInteger("AICORE_NUM", INT32_MAX, 0U, 10);
+    options.startSync = MegaMoeEnvInteger("START_SYNC", 1U, 0U, 10) != 0U;
     return options;
 }
 
@@ -602,7 +595,8 @@ RankDeviceBuffers AllocateRankDeviceBuffers(
     return buffers;
 }
 
-MegaMoeLaunchArgs BuildLaunchArgs(const MegaMoeBuildResult& build, const RankDeviceBuffers& buffers, int rankId)
+MegaMoeLaunchArgs BuildLaunchArgs(
+    const MegaMoeBuildResult& build, const RankDeviceBuffers& buffers, int rankId, bool startSync)
 {
     uint64_t fftsAddr = 0U;
     uint32_t fftsLen = 0U;
@@ -628,29 +622,21 @@ MegaMoeLaunchArgs BuildLaunchArgs(const MegaMoeBuildResult& build, const RankDev
     args.tiling = buffers.tiling.ptr;
     args.kernel_timing = buffers.kernelTiming.ptr;
     args.block_dim = build.block_dim;
-    args.start_sync = ParseEnvInt("DISPATCH_MEGA_COMBINE_START_SYNC", 0) != 0 ? 1U : 0U;
+    args.start_sync = startSync ? 1U : 0U;
     return args;
 }
 
-void LaunchAndSynchronize(const MegaMoeLaunchArgs& args, aclrtStream stream)
-{
-    launchMegaMoe(args, stream);
-    const aclError result = aclrtSynchronizeStream(stream);
-    if (result != ACL_SUCCESS) {
-        throw std::runtime_error("stream sync failed, acl error=" + std::to_string(result));
-    }
-}
-
-void RunWarmupIterations(
+void RunIteration(
     const StandaloneRankRuntime& runtime, const RankDeviceBuffers& buffers, const MegaMoeTilingData& tiling,
-    const MegaMoeLaunchArgs& args, int warmupIters)
+    const MegaMoeLaunchArgs& args)
 {
-    for (int iter = 0; iter < warmupIters; ++iter) {
-        PrepareLaunchState(runtime, buffers, tiling);
-        CommMpiBarrier();
-        LaunchAndSynchronize(args, runtime.compute_stream);
-        CommMpiBarrier();
-    }
+    PrepareLaunchState(runtime, buffers, tiling);
+    CommMpiBarrier();
+    launchMegaMoe(args, runtime.compute_stream);
+    const aclError result = aclrtSynchronizeStream(runtime.compute_stream);
+    if (result != ACL_SUCCESS)
+        throw std::runtime_error("stream sync failed, acl error=" + std::to_string(result));
+    CommMpiBarrier();
 }
 
 double ReadKernelTimingUs(const DeviceBuffer& kernelTiming, uint32_t blockDim)
@@ -686,29 +672,6 @@ double ReadKernelTimingUs(const DeviceBuffer& kernelTiming, uint32_t blockDim)
     return static_cast<double>(endMax - startMin) * kNanosecondsPerSysCntTick / kNanosecondsPerMicrosecond;
 }
 
-double RunMeasuredIteration(
-    const StandaloneRankRuntime& runtime, const RankDeviceBuffers& buffers, const MegaMoeTilingData& tiling,
-    const MegaMoeLaunchArgs& args)
-{
-    PrepareLaunchState(runtime, buffers, tiling);
-    CommMpiBarrier();
-    LaunchAndSynchronize(args, runtime.compute_stream);
-    CommMpiBarrier();
-    return ReadKernelTimingUs(buffers.kernelTiming, args.block_dim);
-}
-
-std::vector<double> RunMeasureIterations(
-    const StandaloneRankRuntime& runtime, const RankDeviceBuffers& buffers, const MegaMoeTilingData& tiling,
-    const MegaMoeLaunchArgs& args, int measureIters)
-{
-    std::vector<double> samples;
-    samples.reserve(static_cast<size_t>(measureIters));
-    for (int iter = 0; iter < measureIters; ++iter) {
-        samples.push_back(RunMeasuredIteration(runtime, buffers, tiling, args));
-    }
-    return samples;
-}
-
 std::vector<uint16_t> CopyOutputToHost(const CaseConfig& cfg, const DeviceBuffer& out)
 {
     std::vector<uint16_t> actual(static_cast<size_t>(cfg.m) * cfg.k);
@@ -719,18 +682,91 @@ std::vector<uint16_t> CopyOutputToHost(const CaseConfig& cfg, const DeviceBuffer
     return actual;
 }
 
+template <class T, class Validator>
+bool ValidateGatheredRanks(const T& local, int rank, int ranks, const char* error, Validator validate)
+{
+    std::vector<T> peers(rank == 0 ? static_cast<size_t>(ranks) : 0U);
+    CommMpiGather(
+        &local, sizeof(local), COMM_MPI_CHAR, rank == 0 ? peers.data() : nullptr, sizeof(local), COMM_MPI_CHAR, 0);
+    int valid = rank != 0 || validate(peers);
+    if (!valid)
+        std::cerr << error << std::endl;
+    CommMpiBcast(&valid, sizeof(valid), COMM_MPI_CHAR, 0);
+    return valid != 0;
+}
+
+bool ValidateTransportLaunch(const MegaMoeTransportOptions& options, bool startSync, int rank, int ranks)
+{
+    struct Identity {
+        char host[256] = {};
+        uint32_t perServer = 0U;
+        uint32_t urma = 0U;
+        uint32_t localMapping = 0U;
+        uint32_t startSync = 0U;
+    } local;
+    local.perServer = MegaMoeRanksPerServer(options, static_cast<uint32_t>(ranks));
+    local.urma = options.urma;
+    local.localMapping = options.localDeviceMapping;
+    local.startSync = startSync;
+    if (gethostname(local.host, sizeof(local.host) - 1U) != 0)
+        local.host[0] = '\0';
+    return ValidateGatheredRanks(
+        local, rank, ranks,
+        "URMA launch mismatch: start-sync/topology must match; server-local ranks must be contiguous and unique per "
+        "physical host",
+        [&](const auto& peers) {
+            for (int peer = 0; peer < ranks; ++peer) {
+                const auto& p = peers[peer];
+                if (p.host[0] == '\0' || p.perServer != local.perServer || p.urma != local.urma ||
+                    p.localMapping != local.localMapping || p.startSync != local.startSync)
+                    return false;
+                if (options.localDeviceMapping) {
+                    const uint32_t group = static_cast<uint32_t>(peer) / local.perServer;
+                    if (std::strcmp(p.host, peers[group * local.perServer].host) != 0)
+                        return false;
+                    for (uint32_t earlier = 0U; earlier < group; ++earlier)
+                        if (std::strcmp(p.host, peers[earlier * local.perServer].host) == 0)
+                            return false;
+                }
+            }
+            return true;
+        });
+}
+
+bool ValidateUrmaSymmetricLayout(const CaseConfig& cfg, const StandaloneRankRuntime& runtime)
+{
+    // Registered offsets and mask lane counts must be identical on every peer.
+    const std::array<uint64_t, 9> local = {
+        cfg.m,
+        cfg.k,
+        cfg.n,
+        cfg.topk,
+        cfg.expert_per_rank,
+        cfg.world_size,
+        cfg.max_output_size,
+        cfg.aic_num,
+        runtime.hccl.WindowBytes()};
+    return ValidateGatheredRanks(
+        local, runtime.hccl.rank_id, runtime.hccl.world_size,
+        "URMA requires matching shape/effective AIC count/window size on every rank", [&](const auto& peers) {
+            return std::all_of(peers.begin(), peers.end(), [&](const auto& p) { return p == local; });
+        });
+}
+
 bool RunOneRank(
     int rankId, int worldSize, int deviceId, uint32_t aicoreNum, const std::string& caseDir,
-    const HcclRootInfo& rootInfo)
+    const HcclRootInfo& rootInfo, const RunOptions& options)
 {
     StandaloneRankRuntime runtime;
+    runtime.rank_num_per_server =
+        options.transport.urma ? MegaMoeRanksPerServer(options.transport, static_cast<uint32_t>(worldSize)) : 0U;
     if (!InitStandaloneRankRuntime(runtime, rankId, worldSize, deviceId, rootInfo)) {
+        DestroyStandaloneRankRuntime(runtime);
         return false;
     }
 
     bool ok = false;
     try {
-        const RunOptions options = LoadRunOptions();
         CaseConfig cfg = LoadCaseConfig(caseDir + "/case.json");
         if (cfg.world_size != static_cast<uint32_t>(worldSize)) {
             throw std::runtime_error("case world_size does not match MPI world size");
@@ -738,28 +774,34 @@ bool RunOneRank(
         cfg.aic_num = aicoreNum;
         cfg.aiv_num = aicoreNum * kMegaMoeFixedAivSubblocksPerPhysicalBlock;
         ValidateFullPathConstraints(cfg);
+        if (options.transport.urma) {
+            if (!ValidateUrmaSymmetricLayout(cfg, runtime))
+                throw std::runtime_error("asymmetric URMA layout");
+            if (!InitStandaloneUrmaRuntime(runtime, runtime.rank_num_per_server, cfg.aic_num))
+                throw std::runtime_error("failed to initialize URMA on the HCCL window");
+        }
 
         const RankHostInputs inputs = LoadRankHostInputs(BuildRankFileSet(caseDir, rankId));
         ValidateRankHostInputSizes(cfg, inputs);
         ValidateMaskPullRoutes(cfg, inputs, rankId, worldSize);
         const MegaMoeBuildResult build = BuildAndValidateTiling(cfg, runtime, rankId);
         RankDeviceBuffers buffers = AllocateRankDeviceBuffers(cfg, build, inputs);
-        const MegaMoeLaunchArgs args = BuildLaunchArgs(build, buffers, rankId);
+        const MegaMoeLaunchArgs args = BuildLaunchArgs(build, buffers, rankId, options.startSync);
 
-        RunWarmupIterations(runtime, buffers, build.tiling, args, options.warmupIters);
+        for (int iter = 0; iter < options.warmupIters; ++iter)
+            RunIteration(runtime, buffers, build.tiling, args);
         std::vector<double> localSamples;
-        if (options.measureIters > 0) {
-            localSamples = RunMeasureIterations(runtime, buffers, build.tiling, args, options.measureIters);
+        localSamples.reserve(static_cast<size_t>(options.measureIters));
+        for (int iter = 0; iter < options.measureIters; ++iter) {
+            RunIteration(runtime, buffers, build.tiling, args);
+            localSamples.push_back(ReadKernelTimingUs(buffers.kernelTiming, args.block_dim));
         }
         const std::vector<double> kernelSamples = GatherMaxSamplesToRoot(localSamples, rankId, worldSize);
         if (rankId == 0) {
             PrintPerfSummary(cfg, build, options, kernelSamples);
         }
 
-        PrepareLaunchState(runtime, buffers, build.tiling);
-        CommMpiBarrier();
-        LaunchAndSynchronize(args, runtime.compute_stream);
-        CommMpiBarrier();
+        RunIteration(runtime, buffers, build.tiling, args);
 
         const std::vector<uint16_t> actual = CopyOutputToHost(cfg, buffers.out);
         WriteBinaryFile(
@@ -781,6 +823,19 @@ bool RunOneRank(
 
 int main(int argc, char** argv)
 {
+    RunOptions options;
+    try {
+        options = LoadRunOptions();
+        for (int i = 1; i < argc; ++i) {
+            if (std::strcmp(argv[i], "--check-transport") == 0) {
+                std::cout << "TRANSPORT_OPTIONS_PASS no_MPI_no_NPU=1" << std::endl;
+                return 0;
+            }
+        }
+    } catch (const std::exception& error) {
+        std::cerr << "run option error: " << error.what() << std::endl;
+        return 2;
+    }
     if (!CommMpiInit(&argc, &argv)) {
         std::cerr << "MPI_Init failed" << std::endl;
         return 1;
@@ -793,11 +848,29 @@ int main(int argc, char** argv)
         CommMpiFinalize();
         return 1;
     }
-    const int deviceId = firstDevice + rankId;
+    const MegaMoeTransportOptions& transportOptions = options.transport;
+    int deviceId = 0;
+    try {
+        deviceId = static_cast<int>(MegaMoeDeviceForRank(transportOptions, rankId, worldSize, firstDevice));
+        if (!ValidateTransportLaunch(transportOptions, options.startSync, rankId, worldSize)) {
+            CommMpiFinalize();
+            return 1;
+        }
+    } catch (const std::exception& error) {
+        std::cerr << "rank=" << rankId << " transport topology: " << error.what() << std::endl;
+        CommMpiFinalize();
+        return 1;
+    }
+    if (transportOptions.urma) {
+        std::cout << "rank=" << rankId
+                  << " transport=URMA server=" << rankId / MegaMoeRanksPerServer(transportOptions, worldSize)
+                  << " physical_device=" << deviceId
+                  << " device_map=" << (transportOptions.localDeviceMapping ? "server-local" : "global") << std::endl;
+    }
     const char* caseDirEnv = std::getenv("DISPATCH_MEGA_COMBINE_CASE_DIR");
     const std::string caseDir = caseDirEnv == nullptr ? "../out" : caseDirEnv;
 
-    if (rankId == 0) {
+    if (rankId == 0 && !transportOptions.localDeviceMapping) {
         std::cout << "rank/device mapping: ranks=[0," << worldSize << ") physical_devices=[" << firstDevice << ","
                   << firstDevice + worldSize << ")" << std::endl;
     }
@@ -829,18 +902,8 @@ int main(int argc, char** argv)
     }
 
     const uint32_t runtimeAicoreNum = static_cast<uint32_t>(queriedAicoreNum);
-    int requestedAicoreNum = 0;
-    try {
-        requestedAicoreNum = ParseEnvInt("DISPATCH_MEGA_COMBINE_AICORE_NUM", 0);
-    } catch (const std::exception& ex) {
-        std::cerr << "rank=" << rankId << " " << ex.what() << std::endl;
-        aclrtResetDevice(deviceId);
-        aclFinalize();
-        CommMpiFinalize();
-        return 1;
-    }
-    if (requestedAicoreNum < 0 ||
-        (requestedAicoreNum > 0 && static_cast<uint32_t>(requestedAicoreNum) > runtimeAicoreNum)) {
+    const uint32_t requestedAicoreNum = options.requestedAicoreNum;
+    if (requestedAicoreNum > runtimeAicoreNum) {
         std::cerr << "rank=" << rankId << " invalid requested AICore count=" << requestedAicoreNum
                   << " runtime=" << runtimeAicoreNum << std::endl;
         aclrtResetDevice(deviceId);
@@ -848,8 +911,7 @@ int main(int argc, char** argv)
         CommMpiFinalize();
         return 1;
     }
-    const uint32_t effectiveAicoreNum =
-        requestedAicoreNum == 0 ? runtimeAicoreNum : static_cast<uint32_t>(requestedAicoreNum);
+    const uint32_t effectiveAicoreNum = requestedAicoreNum == 0 ? runtimeAicoreNum : requestedAicoreNum;
     const A5FixedScheduleConfig* defaultSchedule = FindA5DefaultSchedule(effectiveAicoreNum);
     if (defaultSchedule == nullptr) {
         std::cerr << "rank=" << rankId << " unsupported effective A5 AICore count=" << effectiveAicoreNum
@@ -877,7 +939,7 @@ int main(int argc, char** argv)
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    const bool ok = RunOneRank(rankId, worldSize, deviceId, effectiveAicoreNum, caseDir, rootInfo);
+    const bool ok = RunOneRank(rankId, worldSize, deviceId, effectiveAicoreNum, caseDir, rootInfo, options);
 
     CommMpiBarrier();
     aclrtResetDevice(deviceId);

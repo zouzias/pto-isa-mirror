@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "dispatch_mega_combine_tiling.h"
 #include "utils/const_args.hpp"
 #include "utils/hccl_window.hpp"
+#include "utils/mega_moe_urma.hpp"
 #include "utils/mega_expert_sync.hpp"
 #include "utils/pto_vector.hpp"
 
@@ -93,6 +94,8 @@ public:
         cumsumMMPtr_ = reinterpret_cast<__gm__ int32_t*>(workspaceGM + tilingData_->frontReorderTiling.cumsumMMOffset);
 
         remoteWindow_.Init(reinterpret_cast<GM_ADDR>(tilingData_->runtimeInfo.remoteWindowContext));
+        if (MegaMoeUrmaEnabled(tilingData_))
+            urmaTransport_.Init(tilingData_);
         peerMemoryLayout_.Init(tilingData_->frontReorderTiling);
         localRouteMaskSlots_ =
             reinterpret_cast<__gm__ uint8_t*>(remoteWindow_.LocalBase() + peerMemoryLayout_.routeMaskSlots);
@@ -263,8 +266,9 @@ private:
     {
         const uint32_t bufferCount = tilingData_->dispatchTiling.bufferCount;
         const uint64_t routeIndexUbOffset = tilingData_->dispatchTiling.routeIndexUbOffset;
-        __gm__ int8_t* remoteRecords =
-            reinterpret_cast<__gm__ int8_t*>(remoteWindow_.RemoteBase(0, static_cast<int32_t>(srcRank)));
+        __gm__ int8_t* remoteRecords = MegaMoeUrmaEnabled(tilingData_) ?
+                                           urmaTransport_.DispatchSourceRecords(srcRank) :
+                                           reinterpret_cast<__gm__ int8_t*>(remoteWindow_.RemoteBase(0, srcRank));
 
         const uint32_t firstRouteSlot = PtoGetValue<uint32_t>(routeIndexUbOffset, routeIndexBegin);
         IssueRemoteRouteToken<false>(remoteRecords, srcRank, firstRouteSlot, 0U);
@@ -292,6 +296,8 @@ private:
 
     AICORE inline __gm__ uint8_t* LocalMaskSlot(uint32_t groupIdx, uint32_t srcRank) const
     {
+        if (MegaMoeUrmaEnabled(tilingData_))
+            return urmaTransport_.MetadataMaskSlot(srcRank, groupIdx);
         const uint64_t slot = static_cast<uint64_t>(groupIdx) * rankSize_ + srcRank;
         return localRouteMaskSlots_ + slot * tilingData_->frontReorderTiling.maskSlotBytes;
     }
@@ -366,6 +372,7 @@ private:
     __gm__ int32_t* cumsumMMPtr_ = nullptr;
 
     PtoRemoteWindow remoteWindow_;
+    MegaMoeUrmaTransport urmaTransport_;
     MegaMoePeerMemoryLayout peerMemoryLayout_;
 
     uint32_t problemK_ = 0;
