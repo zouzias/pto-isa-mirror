@@ -1248,11 +1248,128 @@ public:
 #endif
 };
 
-template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
+template <int... ValidShapes>
+struct ConvTileValidShape {
+    static constexpr int totalDimCount = sizeof...(ValidShapes);
+    static constexpr int dynamicValidDimCount = ConvTileDetail::CountDynamicDim<ValidShapes...>::value;
+    static constexpr int64_t staticValidShape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {
+        ConvTileDetail::GetNthShape<0, ValidShapes...>::value, ConvTileDetail::GetNthShape<1, ValidShapes...>::value,
+        ConvTileDetail::GetNthShape<2, ValidShapes...>::value, ConvTileDetail::GetNthShape<3, ValidShapes...>::value,
+        ConvTileDetail::GetNthShape<4, ValidShapes...>::value, ConvTileDetail::GetNthShape<5, ValidShapes...>::value};
+    static constexpr bool isValidDynamic[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {
+        staticValidShape[0] == DYNAMIC, staticValidShape[1] == DYNAMIC,
+        staticValidShape[2] == DYNAMIC, staticValidShape[3] == DYNAMIC,
+        staticValidShape[4] == DYNAMIC, staticValidShape[5] == DYNAMIC};
+
+    PTO_INTERNAL ConvTileValidShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5, int64_t n6)
+    {
+        if constexpr (staticValidShape[0] == DYNAMIC)
+            validShape[0] = n1;
+        if constexpr (staticValidShape[1] == DYNAMIC)
+            validShape[1] = n2;
+        if constexpr (staticValidShape[2] == DYNAMIC)
+            validShape[2] = n3;
+        if constexpr (staticValidShape[3] == DYNAMIC)
+            validShape[3] = n4;
+        if constexpr (staticValidShape[4] == DYNAMIC)
+            validShape[4] = n5;
+        if constexpr (staticValidShape[5] == DYNAMIC)
+            validShape[5] = n6;
+    }
+
+    PTO_INTERNAL ConvTileValidShape()
+    {
+        if constexpr (staticValidShape[0] == DYNAMIC)
+            validShape[0] = 1;
+        if constexpr (staticValidShape[1] == DYNAMIC)
+            validShape[1] = 1;
+        if constexpr (staticValidShape[2] == DYNAMIC)
+            validShape[2] = 1;
+        if constexpr (staticValidShape[3] == DYNAMIC)
+            validShape[3] = 1;
+        if constexpr (staticValidShape[4] == DYNAMIC)
+            validShape[4] = 1;
+        if constexpr (staticValidShape[5] == DYNAMIC)
+            validShape[5] = 1;
+    }
+
+    PTO_INTERNAL ConvTileValidShape(int64_t n)
+    {
+        static_assert(
+            dynamicValidDimCount == 1,
+            "1-parameter constructors is only applicable to ValidShape with 1 dynamic dimension.");
+
+        int val_idx = 0;
+        const int64_t vals[] = {n};
+        ConvTileDetail::AssignDynamicDim<0, ValidShapes...>::apply(validShape, vals, val_idx);
+    }
+
+    PTO_INTERNAL ConvTileValidShape(int64_t n1, int64_t n2)
+    {
+        static_assert(
+            dynamicValidDimCount == 2,
+            "2-parameter constructors is only applicable to ValidShape with 2 dynamic dimension.");
+
+        int val_idx = 0;
+        const int64_t vals[] = {n1, n2};
+        ConvTileDetail::AssignDynamicDim<0, ValidShapes...>::apply(validShape, vals, val_idx);
+    }
+
+    PTO_INTERNAL ConvTileValidShape(int64_t n1, int64_t n2, int64_t n3)
+    {
+        static_assert(
+            dynamicValidDimCount == 3,
+            "3-parameter constructors is only applicable to ValidShape with 3 dynamic dimension.");
+
+        int val_idx = 0;
+        const int64_t vals[] = {n1, n2, n3};
+        ConvTileDetail::AssignDynamicDim<0, ValidShapes...>::apply(validShape, vals, val_idx);
+    }
+
+    PTO_INTERNAL ConvTileValidShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4)
+    {
+        static_assert(
+            dynamicValidDimCount == 4,
+            "4-parameter constructors is only applicable to ValidShape with 4 dynamic dimension.");
+
+        int val_idx = 0;
+        const int64_t vals[] = {n1, n2, n3, n4};
+        ConvTileDetail::AssignDynamicDim<0, ValidShapes...>::apply(validShape, vals, val_idx);
+    }
+    PTO_INTERNAL ConvTileValidShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5)
+    {
+        static_assert(
+            dynamicValidDimCount == 5,
+            "5-parameter constructors is only applicable to ValidShape with 5 dynamic dimension.");
+
+        int val_idx = 0;
+        const int64_t vals[] = {n1, n2, n3, n4, n5};
+        ConvTileDetail::AssignDynamicDim<0, ValidShapes...>::apply(validShape, vals, val_idx);
+    }
+
+public:
+#ifdef __PTO_AUTO__
+    int64_t validShape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)];
+#else
+    int64_t validShape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
+#endif
+};
+
+template <typename Shape_>
+struct DefaultValidFromShape;
+
+template <int... Shapes>
+struct DefaultValidFromShape<ConvTileShape<Shapes...>> {
+    using type = ConvTileValidShape<Shapes...>;
+};
+
+template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_,
+          typename ValidShape_ = typename DefaultValidFromShape<Shape_>::type>
 struct ConvTile {
 public:
     using DType = Element_;
     using ShapeType = Shape_;
+    using ValidShapeType = ValidShape_;
     static constexpr TileType Loc = Loc_;
     static constexpr int bufferSize = BufferSize_;
     static constexpr Layout layout = Layout_;
@@ -1268,7 +1385,29 @@ public:
         ShapeType::staticShape[0] == DYNAMIC, ShapeType::staticShape[1] == DYNAMIC,
         ShapeType::staticShape[2] == DYNAMIC, ShapeType::staticShape[3] == DYNAMIC,
         ShapeType::staticShape[4] == DYNAMIC, ShapeType::staticShape[5] == DYNAMIC};
+    static constexpr int64_t staticValidShape[ConvTileDetail::MAX_CONVTILE_DIM] = {
+        ValidShapeType::staticValidShape[0], ValidShapeType::staticValidShape[1],
+        ValidShapeType::staticValidShape[2], ValidShapeType::staticValidShape[3],
+        ValidShapeType::staticValidShape[4], ValidShapeType::staticValidShape[5]};
+    static constexpr bool isValidDynamic[ConvTileDetail::MAX_CONVTILE_DIM] = {
+        ValidShapeType::isValidDynamic[0], ValidShapeType::isValidDynamic[1], ValidShapeType::isValidDynamic[2],
+        ValidShapeType::isValidDynamic[3], ValidShapeType::isValidDynamic[4], ValidShapeType::isValidDynamic[5]};
+    static constexpr int dynamicValidDimCount = ValidShapeType::dynamicValidDimCount;
+
+    template <int I>
+    static constexpr bool checkValidLePhysical()
+    {
+        constexpr int64_t v = staticValidShape[I];
+        constexpr int64_t p = staticShape[I];
+        return v == DYNAMIC || p == DYNAMIC || v <= p;
+    }
+    static_assert(
+        checkValidLePhysical<0>() && checkValidLePhysical<1>() && checkValidLePhysical<2>() &&
+            checkValidLePhysical<3>() && checkValidLePhysical<4>() && checkValidLePhysical<5>(),
+        "ConvTile valid shape must not exceed physical shape.");
+
     int64_t shape[ConvTileDetail::MAX_CONVTILE_DIM] = {1};
+    int64_t validShape[ConvTileDetail::MAX_CONVTILE_DIM] = {1};
 
     PTO_INTERNAL constexpr int64_t GetShape(int dim) const
     {
@@ -1282,6 +1421,44 @@ public:
 #else
         return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
 #endif
+    }
+
+    PTO_INTERNAL constexpr int64_t GetValidShape(int dim) const
+    {
+        if (dim < 0 || dim >= totalDimCount) {
+            return -1;
+        }
+
+#ifdef __PTO_AUTO__
+        return staticValidShape[dim];
+#else
+        return isValidDynamic[dim] ? validShape[dim] : staticValidShape[dim];
+#endif
+    }
+
+    PTO_INTERNAL void SetValidShape(int dim, int64_t val)
+    {
+        PTO_ASSERT(isValidDynamic[dim], "Only dynamic valid dim support set value.");
+        PTO_ASSERT(val <= GetShape(dim), "valid must not exceed physical shape.");
+        validShape[dim] = val;
+    }
+
+    template <typename... Ints>
+    PTO_INTERNAL void SetAllValidShape(Ints... vals)
+    {
+        static_assert(
+            sizeof...(vals) == dynamicValidDimCount,
+            "Number of valid values does not match dynamic valid dimension count!");
+        static_assert((std::is_same_v<Ints, int64_t> && ...), "Valid values must be int64_t type!");
+
+        int idx = 0;
+        const int64_t validVals[] = {vals...};
+        for (int i = 0; i < ConvTileDetail::MAX_CONVTILE_DIM; ++i) {
+            if (isValidDynamic[i]) {
+                PTO_ASSERT(validVals[idx] <= GetShape(i), "valid must not exceed physical shape.");
+                validShape[i] = validVals[idx++];
+            }
+        }
     }
 
 #ifdef __PTO_AUTO__
@@ -1304,6 +1481,13 @@ public:
                 shape[i] = dynamicVals[idx++];
             }
         }
+#ifndef __PTO_AUTO__
+        for (int i = 0; i < ConvTileDetail::MAX_CONVTILE_DIM; ++i) {
+            if (isValidDynamic[i]) {
+                validShape[i] = isDynamicDim[i] ? shape[i] : staticShape[i];
+            }
+        }
+#endif
     }
 
     template <typename... Ints>
@@ -1834,8 +2018,8 @@ constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != 
 
 template <typename T>
 struct is_conv_tile : std::false_type {};
-template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
+template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_, typename ValidShape_>
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_, ValidShape_>> : std::true_type {};
 
 template <typename tile_shape>
 struct is_Nz_layout {

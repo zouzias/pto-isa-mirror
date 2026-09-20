@@ -274,14 +274,10 @@ __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
 {
     CheckConvTileData<ConTile, GlobalData>(dst, src);
 
-    using T = typename ConTile::DType;
     const size_t validRow = CalculateValidRowFromTile(dst);
     const size_t validCol = CalculateValidColFromTile(dst);
 
-    const std::vector<int64_t> tile_shapes = {
-        dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
-        dst.GetShape(GlobalTensorDim::DIM_2), dst.GetShape(GlobalTensorDim::DIM_3),
-        dst.GetShape(GlobalTensorDim::DIM_4)};
+    const std::vector<int64_t> validShapes = GetConvTileRoleValidShapes(dst);
 
     const std::vector<int64_t> shapes = {
         src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
@@ -294,8 +290,8 @@ __tf__ PTO_INLINE void TLOAD_CONVTILE_IMPL(ConTile& dst, GlobalData& src)
 
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
-            const size_t srcOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
-            dst.SetElement(GetConvTileElementOffset<ConTile>(row, col, tile_shapes), src.GetElement(srcOffset));
+            const size_t srcOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides, validShapes);
+            dst.SetElement(GetConvTileElementOffset<ConTile>(row, col, dst), src.GetElement(srcOffset));
         }
     }
 }
