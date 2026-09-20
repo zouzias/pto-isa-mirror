@@ -103,13 +103,13 @@ AICORE inline void FillTransferWqeAt(
     DcciCachelines(wqe, kUrmaSqeSizeBytes + kUrmaSgeSizeBytes);
 }
 
-AICORE inline void CommitPostedWqes(__gm__ UrmaWQCtx* wq, uint32_t head, uint32_t submittedWqeCount)
+AICORE inline void CommitPostedWqes(__gm__ UrmaWQCtx* wq, uint32_t head, uint32_t targetCqe)
 {
-    wq->submittedWqeCount = submittedWqeCount;
-    pipe_barrier(PIPE_ALL);
+    wq->submittedWqeCount = targetCqe;
     DcciCachelines(reinterpret_cast<__gm__ uint8_t*>(&wq->submittedWqeCount), sizeof(wq->submittedWqeCount));
     dsb(DSB_DDR);
     UrmaPostSendUpdateInfo(head, wq);
+    pipe_barrier(PIPE_ALL);
 }
 
 AICORE inline uint32_t UrmaJettiesForMessage(uint32_t qpCount, uint64_t messageLen)
