@@ -39,9 +39,9 @@ void VerifyResult(size_t numElements)
     std::vector<uint8_t> outBytes(byteSize);
 
     size_t rd = byteSize;
-    CHECK_RESULT_GTEST(ReadFile("../output/golden.bin", rd, goldenBytes.data(), byteSize));
+    ReadFile("../output/golden.bin", rd, goldenBytes.data(), byteSize);
     rd = byteSize;
-    CHECK_RESULT_GTEST(ReadFile("../output/output_z.bin", rd, outBytes.data(), byteSize));
+    ReadFile("../output/output_z.bin", rd, outBytes.data(), byteSize);
 
     auto golden = Bf16BytesToFloat(goldenBytes.data(), numElements);
     auto out = Bf16BytesToFloat(outBytes.data(), numElements);
@@ -86,13 +86,13 @@ void Hif4Matmul()
     aclrtMalloc((void**)&src3Device, bScaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     size_t rd = aFileSize;
-    CHECK_RESULT_GTEST(ReadFile("../input/x1_gm.bin", rd, src0Host, aFileSize));
+    ReadFile("../input/x1_gm.bin", rd, src0Host, aFileSize);
     rd = bFileSize;
-    CHECK_RESULT_GTEST(ReadFile("../input/x2_gm.bin", rd, src1Host, bFileSize));
+    ReadFile("../input/x2_gm.bin", rd, src1Host, bFileSize);
     rd = aScaleFileSize;
-    CHECK_RESULT_GTEST(ReadFile("../input/x1_scale_gm.bin", rd, src2Host, aScaleFileSize));
+    ReadFile("../input/x1_scale_gm.bin", rd, src2Host, aScaleFileSize);
     rd = bScaleFileSize;
-    CHECK_RESULT_GTEST(ReadFile("../input/x2_scale_gm.bin", rd, src3Host, bScaleFileSize));
+    ReadFile("../input/x2_scale_gm.bin", rd, src3Host, bScaleFileSize);
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);

@@ -68,6 +68,7 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
+    ${PROJECT_SOURCE_DIR}/../../../../include
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
@@ -78,15 +79,11 @@ function(pto_example_cube NAME)
         ${CMAKE_CCE_COMPILE_OPTIONS}
         --cce-aicore-arch=dav-920r1-cube
         -DREGISTER_BASE -std=c++17 -Wno-c++20-extensions)
-    target_include_directories(${NAME}_kernel PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../include/
-    )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../include/
         ${PROJECT_SOURCE_DIR}/../../../../tests/common
     )
 
