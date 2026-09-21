@@ -448,6 +448,53 @@ __tf__ PTO_INTERNAL void TExtractAccToMat(
     __cc__ srcType* srcData = (__cc__ srcType*)__cce_get_tile_ptr(src) + srcOffset;
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
 
+#if defined(PTO_NPU_ARCH_A5)
+    if constexpr (
+        !DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor &&
+        (std::is_same_v<dstType, half> || std::is_same_v<dstType, bfloat16_t>) &&
+        DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) {
+        static_assert(
+            QuantPre == QuantMode_t::F322F16 || QuantPre == QuantMode_t::F322BF16,
+            "TEXTRACT half/bfloat16 NZ1024 currently supports plain float conversion only.");
+        PTO_ASSERT(
+            indexRow + validRow <= SrcTileData::Rows && indexCol + validCol <= SrcTileData::Cols,
+            "TEXTRACT Acc->Mat window exceeds source storage.");
+        PTO_ASSERT(
+            validCol % (C0_SIZE_BYTE / sizeof(dstType)) == 0,
+            "TEXTRACT NZ1024 valid columns must occupy complete 32-byte blocks.");
+        // Each NZ1024 column group is a row-major matrix with 32 columns.
+        // Fixpipe's native half/bfloat16 NZ output has only 16 columns per group.
+        set_loop3_para(static_cast<uint64_t>(1));
+        for (uint32_t col = 0; col < validCol; col += c0Size) {
+            const uint16_t width = validCol - col < c0Size ? validCol - col : c0Size;
+            const uint8_t groupPhase = Phase == STPhase::Final && col + width < validCol ?
+                                           static_cast<uint8_t>(STPhase::Partial) :
+                                           unitFlagCtrl;
+            pto_copy_matrix_cc_to_cbuf(
+                dstAddr + (col / c0Size) * dstStride, srcData + (col / ACC_C0_SIZE) * SrcTileData::Rows * ACC_C0_SIZE,
+                0, width, validRow, c0Size, SrcTileData::Rows, 0, 0, groupPhase, QuantPre,
+                static_cast<uint8_t>(reluMode), false, true, 0, 0, false, false, 0, false, false, false, false, false,
+                false);
+        }
+        return;
+    }
+
+    if constexpr (
+        !DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor && std::is_same_v<srcType, int32_t> &&
+        std::is_same_v<dstType, int32_t> && DstTileData::SFractalSize == CUBE_BLOCK_SIZE) {
+        static_assert(
+            QuantPre == QuantMode_t::NoQuant && reluMode == ReluPreMode::NoRelu,
+            "TEXTRACT int32 NZ512 requires an unmodified 32-bit move.");
+        // NoQuant/NoRelu copies bits without floating-point arithmetic. Use the float
+        // overload solely to split each 16-column block into two 8-column blocks.
+        pto_copy_matrix_cc_to_cbuf(
+            reinterpret_cast<__cbuf__ float*>(dstAddr), reinterpret_cast<__cc__ float*>(srcData), 0, nSize, validRow,
+            dstStride, SrcTileData::Rows, 0, 0, unitFlagCtrl, QuantMode_t::NoQuant, 0, true, false, 0, 0, false, false,
+            0, false, false, false, false, false, false);
+        return;
+    }
+
+#endif
     pto_copy_matrix_cc_to_cbuf(
         dstAddr, srcData, 0, nSize, validRow, dstStride, SrcTileData::Rows, 0, 0, unitFlagCtrl, QuantPre,
         static_cast<uint8_t>(reluMode), channelSplitEnable, false, 0, 0, false, false, 0, false, false, false, false,

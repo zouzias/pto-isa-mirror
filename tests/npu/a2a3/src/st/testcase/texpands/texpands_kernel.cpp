@@ -16,7 +16,9 @@ using namespace pto;
 #define PAD_VALUE_NULL (-100)
 #define PAD_VALUE_MAX (1)
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool StaticValid = false, bool InitializeFromGlobal = false>
 __global__ AICORE void runTEXPANDS(__gm__ T __out__* out, float scalar)
 {
     constexpr bool isColMajor = ((kTRows_ * sizeof(T) % 32) == 0);
@@ -31,11 +33,23 @@ __global__ AICORE void runTEXPANDS(__gm__ T __out__* out, float scalar)
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5, lay>;
     GlobalData dstGlobal(out);
 
-    using TileData =
-        Tile<TileType::Vec, T, kTRows_, kTCols_, bLay, -1, -1, SLayout::NoneBox, TileConfig::fractalABSize, padType>;
-    TileData dstTile(kVRows_, kVCols_);
+    using TileData = Tile<
+        TileType::Vec, T, kTRows_, kTCols_, bLay, StaticValid ? kVRows_ : -1, StaticValid ? kVCols_ : -1,
+        SLayout::NoneBox, TileConfig::fractalABSize, padType>;
+    TileData dstTile;
+    if constexpr (!StaticValid) {
+        dstTile.SetValidShape(kVRows_, kVCols_);
+    }
     TASSIGN(dstTile, 0x0);
 
+    if constexpr (InitializeFromGlobal) {
+        // Initialize valid UB elements so missed writes have a deterministic value.
+        TLOAD(dstTile, dstGlobal);
+#ifndef __PTO_AUTO__
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    }
     TEXPANDS(dstTile, scalar);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -44,14 +58,18 @@ __global__ AICORE void runTEXPANDS(__gm__ T __out__* out, float scalar)
     TSTORE(dstGlobal, dstTile);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool StaticValid = false, bool InitializeFromGlobal = false>
 void LaunchTExpandS(void* out, float scalar, void* stream)
 {
     if constexpr (std::is_same_v<T, uint16_t>)
-        runTEXPANDS<half, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>
+        runTEXPANDS<
+            half, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, StaticValid, InitializeFromGlobal>
             <<<1, nullptr, stream>>>((half*)out, scalar);
     else
-        runTEXPANDS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>
+        runTEXPANDS<
+            T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, StaticValid, InitializeFromGlobal>
             <<<1, nullptr, stream>>>((T*)out, scalar);
 }
 
@@ -65,3 +83,16 @@ template void LaunchTExpandS<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>(voi
 template void LaunchTExpandS<uint16_t, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
 template void LaunchTExpandS<int8_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>(void* out, float scalar, void* stream);
+
+template void LaunchTExpandS<float, 4, 8, 4, 16, 4, 8, PAD_VALUE_NULL, true, true>(
+    void* out, float scalar, void* stream);
+template void LaunchTExpandS<float, 4, 8, 4, 16, 4, 8, PAD_VALUE_NULL, false, true>(
+    void* out, float scalar, void* stream);
+template void LaunchTExpandS<float, 8, 4, 16, 4, 8, 4, PAD_VALUE_NULL, true, true>(
+    void* out, float scalar, void* stream);
+template void LaunchTExpandS<float, 8, 4, 16, 4, 8, 4, PAD_VALUE_NULL, false, true>(
+    void* out, float scalar, void* stream);
+template void LaunchTExpandS<float, 101, 78, 101, 400, 101, 78, PAD_VALUE_NULL, true, true>(
+    void* out, float scalar, void* stream);
+template void LaunchTExpandS<float, 101, 78, 101, 400, 101, 78, PAD_VALUE_NULL, false, true>(
+    void* out, float scalar, void* stream);

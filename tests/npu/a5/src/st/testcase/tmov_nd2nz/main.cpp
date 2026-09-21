@@ -18,7 +18,10 @@ template <int kRows, int kCols>
 void launchTMOV_nd2nz(uint8_t* out, uint8_t* src, void* stream);
 
 template <int kRows, int kCols>
-void launchTMOV_nd2nz_f4(uint8_t* out, uint8_t* src, void* stream);
+void launchTMOV_nd2nz_f4e1m2(uint8_t* out, uint8_t* src, void* stream);
+
+template <int kRows, int kCols>
+void launchTMOV_nd2nz_f4e2m1(uint8_t* out, uint8_t* src, void* stream);
 
 class TMovNd2NzTest : public testing::Test {
 protected:
@@ -82,12 +85,12 @@ void test_tmov_nd2nz()
     EXPECT_TRUE(ret);
 }
 
-template <int kRows, int kCols>
+template <bool isE2M1, int kRows, int kCols>
 void test_tmov_nd2nz_f4()
 {
     constexpr int c0 = 64;                                  // f4 nibbles per NZ panel row (32 bytes)
     constexpr int alignedCols = (kCols + c0 - 1) / c0 * c0; // padded to full NZ panels
-    size_t inputSize = kRows * alignedCols / 2;             // pre-padded feed, 2 x f4e1m2 per byte
+    size_t inputSize = kRows * kCols / 2;                   // dense feed (2 x f4 per byte), NOT pre-padded
     size_t outputSize = kRows * alignedCols / 2;            // NZ over the padded width
 
     aclInit(nullptr);
@@ -107,7 +110,11 @@ void test_tmov_nd2nz_f4()
     aclrtMemset(dstDevice, outputSize, 0, outputSize);
 
     aclrtMemcpy(srcDevice, inputSize, srcHost, inputSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTMOV_nd2nz_f4<kRows, kCols>(dstDevice, srcDevice, stream);
+    if constexpr (isE2M1) {
+        launchTMOV_nd2nz_f4e2m1<kRows, kCols>(dstDevice, srcDevice, stream);
+    } else {
+        launchTMOV_nd2nz_f4e1m2<kRows, kCols>(dstDevice, srcDevice, stream);
+    }
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, outputSize, dstDevice, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -137,4 +144,27 @@ TEST_F(TMovNd2NzTest, case_hif8_32x64) { test_tmov_nd2nz<32, 64>(); }
 
 TEST_F(TMovNd2NzTest, case_hif8_64x64) { test_tmov_nd2nz<64, 64>(); }
 
-TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160) { test_tmov_nd2nz_f4<16, 8160>(); }
+// fp4: dense (non-32B-aligned where noted) GM feeds — TLOAD auto zero-pads
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x32) { test_tmov_nd2nz_f4<false, 16, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_16x32) { test_tmov_nd2nz_f4<true, 16, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160) { test_tmov_nd2nz_f4<false, 16, 8160>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_16x8160) { test_tmov_nd2nz_f4<true, 16, 8160>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_4080x32) { test_tmov_nd2nz_f4<false, 4080, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_4080x32) { test_tmov_nd2nz_f4<true, 4080, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_32x32) { test_tmov_nd2nz_f4<false, 32, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_32x32) { test_tmov_nd2nz_f4<true, 32, 32>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_32x64) { test_tmov_nd2nz_f4<false, 32, 64>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_32x64) { test_tmov_nd2nz_f4<true, 32, 64>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e1m2_64x64) { test_tmov_nd2nz_f4<false, 64, 64>(); }
+
+TEST_F(TMovNd2NzTest, case_f4e2m1_64x64) { test_tmov_nd2nz_f4<true, 64, 64>(); }

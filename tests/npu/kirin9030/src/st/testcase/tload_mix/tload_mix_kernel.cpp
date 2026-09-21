@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename TileDataDst, typename TileDataSrc>
-AICORE inline void tf_copy_cbuf_to_ubuf(
+__tf__ AICORE inline void tf_copy_cbuf_to_ubuf(
     typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src, int vec_core, int block_count,
     int block_len, int src_stride, int dst_stride)
 {

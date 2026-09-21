@@ -66,6 +66,8 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
 - **有效区域**:
     - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
     - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上填充 `dst`。
+    - 在 A2/A3 上，向量 Tile 支持行主序和列主序布局，有效尺寸可以是静态或动态的。
+    - 有效尺寸可以小于 Tile 的物理尺寸；填充时使用物理行步长或列步长。
     - 对于Tile位置是Mat（`TileData::Loc == TileType::Mat`）:
     - 对于Tile，该操作在 `TileData::Rows` / `TileData::Cols` 上填充 `dst`。
     - 对于convTile，该操作在`ConvTileData`的`shape`内填充`dst`。

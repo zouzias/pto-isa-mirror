@@ -28,7 +28,7 @@ namespace pto {
 // kirinDev0000-specific helpers
 //---------------------------------------------------------------------------------------
 
-__tf__ PTO_INTERNAL void SetFixpNzPara(
+PTO_INTERNAL void SetFixpNzPara(
     uint16_t loop4Size, uint16_t loop2SrcStride, uint16_t loop3SrcStride, uint16_t loop4SrcStride)
 {
     uint64_t fixpNzPara = static_cast<uint64_t>(loop4Size) | (static_cast<uint64_t>(loop2SrcStride) << 16) |
@@ -120,7 +120,7 @@ __tf__ PTO_INTERNAL void TExtractCbufToUb(
 // One 32-byte-unit burst per block: kirinDev0000 hardware does not support the
 // multi-burst form of copy_ubuf_to_cbuf.
 template <typename T>
-__tf__ PTO_INTERNAL void TCopyUbToCbufFractal(
+PTO_INTERNAL void TCopyUbToCbufFractal(
     __cbuf__ T* dstPtr, __ubuf__ T* srcPtr, uint16_t blockCout, uint16_t blockLen, uint16_t srcStride)
 {
     constexpr uint32_t CBUF_UB_BURST_UNIT = 32;

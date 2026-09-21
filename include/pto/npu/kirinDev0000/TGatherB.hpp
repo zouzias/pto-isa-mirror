@@ -28,7 +28,7 @@ namespace pto {
 // for vgatherb. We process 4 repeats per aligned load (4 * offsetsPerRepeat = 8).
 
 template <typename T, typename SrcT, typename DistT>
-__tf__ PTO_INTERNAL void TGatherBSelectGather(
+PTO_INTERNAL void TGatherBSelectGather(
     RegTensor<uint32_t>& vregOffset, RegTensor<uint32_t>& vregOffsetSel, RegTensor<uint32_t>& selIdx,
     RegTensor<T>& vregDst, __ubuf__ SrcT* srcAddr, __ubuf__ T* dstPtr, uint32_t subIdx, uint32_t dstOffset,
     DistT distMode, MaskReg& preg)

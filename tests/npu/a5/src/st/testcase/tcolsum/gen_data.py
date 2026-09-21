@@ -227,6 +227,7 @@ if __name__ == "__main__":
         TColsumParams("TCOLSUMTest.case24", np.int8, 64, 63, 128, 127, True),
         TColsumParams("TCOLSUMTest.case25", np.int8, 64, 64, 128, 128, True),
         TColsumParams("TCOLSUMTest.case31", np.float32, 1, 1, 512, 511, True),
+        TColsumParams("TCOLSUMTest.case32", np.float32, 6, 6, 128, 128, True),
         TColsumParams("TCOLSUMTest.case_int64_4x16", np.int64, 4, 4, 16, 16),
         TColsumParams("TCOLSUMTest.case_uint64_4x16", np.uint64, 4, 4, 16, 16),
         TColsumParams("TCOLSUMTest.case_int64_4x64", np.int64, 4, 4, 64, 64),

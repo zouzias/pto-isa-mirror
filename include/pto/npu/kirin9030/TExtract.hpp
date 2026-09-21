@@ -244,7 +244,7 @@ AICORE void TExtractToLeft(DstTile& dst, SrcTile& src, uint16_t indexRow, uint16
 
 // Single multi-burst copy: kirin9030 hardware supports it directly.
 template <typename T>
-__tf__ PTO_INTERNAL void TCopyUbToCbufFractal(
+PTO_INTERNAL void TCopyUbToCbufFractal(
     __cbuf__ T* dstPtr, __ubuf__ T* srcPtr, uint16_t blockCout, uint16_t blockLen, uint16_t srcStride)
 {
     copy_ubuf_to_cbuf(dstPtr, srcPtr, 0, blockCout, blockLen, srcStride, 0);

@@ -121,6 +121,7 @@ PTO_INTERNAL void TColSum_Binary(
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
 
         for (i = 0; i < repeatTimes; ++i) {
+            mem_bar(VST_VST);
             // sreg在每次执行CreatePredicate之后会累减nElmPerRepeat，直至0
             pReg = CreatePredicate<T>(sreg);
             vbr(dstVReg, 0);

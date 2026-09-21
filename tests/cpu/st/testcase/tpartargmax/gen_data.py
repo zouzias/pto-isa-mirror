@@ -47,13 +47,42 @@ def gen_case():
     dst_idx.tofile("golden_idx.bin")
 
 
+def gen_tie_case():
+    # src0 == src1 on every element inside the valid region, so every overlap element is a tie.
+    # The (updated) inclusive compare src0 >= src1 must keep src0's value and index on ties.
+    rng = np.random.default_rng(RANDOM_SEED)
+    src0_val = rng.uniform(UNIFORM_LOW, UNIFORM_HIGH, size=(H, W)).astype(np.float32)
+    src1_val = src0_val.copy()
+    src0_idx = np.tile(np.arange(W, dtype=np.uint32), (H, 1))
+    src1_idx = src0_idx + W
+    dst_val = src0_val.copy()
+    dst_idx = src0_idx.copy()
+
+    for i in range(VALID_H):
+        for j in range(VALID_W):
+            if src1_val[i, j] > dst_val[i, j]:
+                dst_val[i, j] = src1_val[i, j]
+                dst_idx[i, j] = src1_idx[i, j]
+
+    src0_val.tofile("input0_val.bin")
+    src1_val.tofile("input1_val.bin")
+    src0_idx.tofile("input0_idx.bin")
+    src1_idx.tofile("input1_idx.bin")
+    dst_val.tofile("golden_val.bin")
+    dst_idx.tofile("golden_idx.bin")
+
+
+def gen_case_dir(case_name, gen_runner):
+    os.makedirs(case_name, exist_ok=True)
+    cwd = os.getcwd()
+    os.chdir(case_name)
+    gen_runner()
+    os.chdir(cwd)
+
+
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
-    case_name = "TPARTARGMAX_Test.case_float_64x64_src1_32x32"
-    os.makedirs(case_name, exist_ok=True)
-    cwd = os.getcwd()
-    os.chdir(case_name)
-    gen_case()
-    os.chdir(cwd)
+    gen_case_dir("TPARTARGMAX_Test.case_float_64x64_src1_32x32", gen_case)
+    gen_case_dir("TPARTARGMAX_Test.case_float_64x64_src1_32x32_tie", gen_tie_case)

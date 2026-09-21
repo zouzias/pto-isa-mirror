@@ -51,7 +51,7 @@
 | 逐元素（Tile-Tile） | [`TNOT`](isa/TNOT_zh.md) | Tile 的逐元素按位取反。 |
 | 逐元素（Tile-Tile） | [`TRELU`](isa/TRELU_zh.md) | Tile 的逐元素 ReLU。 |
 | 逐元素（Tile-Tile） | [`TNEG`](isa/TNEG_zh.md) | Tile 的逐元素取负。 |
-| 逐元素（Tile-Tile） | [`TREM`](isa/TREM_zh.md) | 两个 Tile 的逐元素余数，余数符号与除数相同。 |
+| 逐元素（Tile-Tile） | [`TREM`](isa/TREM_zh.md) | 两个 Tile 的逐元素余数。除数非零时，非零余数的符号与除数相同。 |
 | 逐元素（Tile-Tile） | [`TFMOD`](isa/TFMOD_zh.md) | 两个 Tile 的逐元素余数，余数符号与被除数相同。 |
 | 逐元素（Tile-Tile） | [`TMULA`](isa/TMULA_zh.md) | 三元逐元素运算：`src0 * src1 + dst`。 |
 | Tile-标量 / Tile-立即数 | [`TEXPANDS`](isa/TEXPANDS_zh.md) | 将标量广播到目标 Tile 中。 |

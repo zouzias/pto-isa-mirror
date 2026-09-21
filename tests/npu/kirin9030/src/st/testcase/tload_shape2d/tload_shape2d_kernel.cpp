@@ -41,6 +41,19 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     __ubuf__ T* srcUbAddr = srcTile.data();
     __gm__ T* outAddr = dstGlobal.data();
 
+    if constexpr (sizeof(T) != 8) {
+        using TileUBFull = Tile<
+            TileType::Vec, T, TileUBData::Rows, TileUBData::Cols, BLayout::RowMajor, TileUBData::Rows,
+            TileUBData::Cols>;
+        TileUBFull ubFullTile;
+        TASSIGN<0x0>(ubFullTile);
+        TEXPANDS(ubFullTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+        copy_ubuf_to_cbuf(
+            (__cbuf__ void*)srcMatAddr, (__ubuf__ void*)srcUbAddr, 0, 1, baseM * baseK * sizeof(T) / 32, 0, 0);
+        pipe_barrier(PIPE_ALL);
+    }
+
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
@@ -86,6 +99,19 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     __cbuf__ T* srcMatAddr = aMatTile.data();
     __ubuf__ T* srcUbAddr = srcTile.data();
     __gm__ T* outAddr = dstGlobal.data();
+
+    if constexpr (sizeof(T) != 8) {
+        using TileUBFull = Tile<
+            TileType::Vec, T, TileUBData::Rows, TileUBData::Cols, BLayout::RowMajor, TileUBData::Rows,
+            TileUBData::Cols>;
+        TileUBFull ubFullTile;
+        TASSIGN<0x0>(ubFullTile);
+        TEXPANDS(ubFullTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+        copy_ubuf_to_cbuf(
+            (__cbuf__ void*)srcMatAddr, (__ubuf__ void*)srcUbAddr, 0, 1, baseM * baseK * sizeof(T) / 32, 0, 0);
+        pipe_barrier(PIPE_ALL);
+    }
 
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
@@ -135,6 +161,19 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     __ubuf__ T* srcUbAddr = srcTile.data();
     __gm__ T* outAddr = dstGlobal.data();
 
+    if constexpr (sizeof(T) != 8) {
+        using TileUBFull = Tile<
+            TileType::Vec, T, TileUBData::Rows, TileUBData::Cols, BLayout::RowMajor, TileUBData::Rows,
+            TileUBData::Cols>;
+        TileUBFull ubFullTile;
+        TASSIGN<0x0>(ubFullTile);
+        TEXPANDS(ubFullTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+        copy_ubuf_to_cbuf(
+            (__cbuf__ void*)srcMatAddr, (__ubuf__ void*)srcUbAddr, 0, 1, baseM * baseK * sizeof(T) / 32, 0, 0);
+        pipe_barrier(PIPE_ALL);
+    }
+
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
     uint8_t syncID = 0;
@@ -182,6 +221,19 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     __cbuf__ T* srcMatAddr = aMatTile.data();
     __ubuf__ T* srcUbAddr = srcTile.data();
     __gm__ T* outAddr = dstGlobal.data();
+
+    if constexpr (sizeof(T) != 8) {
+        using TileUBFull = Tile<
+            TileType::Vec, T, TileUBData::Rows, TileUBData::Cols, BLayout::RowMajor, TileUBData::Rows,
+            TileUBData::Cols>;
+        TileUBFull ubFullTile;
+        TASSIGN<0x0>(ubFullTile);
+        TEXPANDS(ubFullTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+        copy_ubuf_to_cbuf(
+            (__cbuf__ void*)srcMatAddr, (__ubuf__ void*)srcUbAddr, 0, 1, baseM * baseK * sizeof(T) / 32, 0, 0);
+        pipe_barrier(PIPE_ALL);
+    }
 
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
@@ -234,6 +286,19 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T* out, __gm__ T* src0, __gm__ T* s
     __cbuf__ T* srcMatAddr = aMatTile.data();
     __ubuf__ T* srcUbAddr = srcTile.data();
     __gm__ T* outAddr = dstGlobal.data();
+
+    if constexpr (sizeof(T) != 8) {
+        using TileUBFull = Tile<
+            TileType::Vec, T, TileUBData::Rows, TileUBData::Cols, BLayout::RowMajor, TileUBData::Rows,
+            TileUBData::Cols>;
+        TileUBFull ubFullTile;
+        TASSIGN<0x0>(ubFullTile);
+        TEXPANDS(ubFullTile, static_cast<T>(0));
+        pipe_barrier(PIPE_ALL);
+        copy_ubuf_to_cbuf(
+            (__cbuf__ void*)srcMatAddr, (__ubuf__ void*)srcUbAddr, 0, 1, baseM * baseK * sizeof(T) / 32, 0, 0);
+        pipe_barrier(PIPE_ALL);
+    }
 
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);

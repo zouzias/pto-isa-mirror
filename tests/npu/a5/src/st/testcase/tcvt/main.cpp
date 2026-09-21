@@ -138,6 +138,18 @@ void test_tcvt()
     TEST_F(TCVTTest, case_##type_name##_4x256_4x200) { test_tcvt<dst_type, src_type, 4, 256, 4, 256, 4, 200>(); } \
     TEST_F(TCVTTest, case_##type_name##_1x256_1x129) { test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); }
 
+// fp4 packs 2 nibbles/byte: tile Cols are nibble-counted, so a [4,32] fp4 tile
+// has 16B rows — below the 32B vec row alignment (enforced by the pto_tile
+// static_assert; the CPU harness never used sub-64-nibble fp4 shapes either).
+// fp4 keeps every other shape (all >= 64 nibbles = 32B rows).
+#define GENERATE_TCVT_TESTS_FP4(dst_type, src_type, type_name)                                                    \
+    TEST_F(TCVTTest, case_##type_name##_1x128) { test_tcvt<dst_type, src_type, 1, 128, 1, 128>(); }               \
+    TEST_F(TCVTTest, case_##type_name##_2x64) { test_tcvt<dst_type, src_type, 2, 64, 2, 64>(); }                  \
+    TEST_F(TCVTTest, case_##type_name##_2x128) { test_tcvt<dst_type, src_type, 2, 128, 2, 128>(); }               \
+    TEST_F(TCVTTest, case_##type_name##_4x128_4x65) { test_tcvt<dst_type, src_type, 4, 128, 4, 128, 4, 65>(); }   \
+    TEST_F(TCVTTest, case_##type_name##_4x256_4x200) { test_tcvt<dst_type, src_type, 4, 256, 4, 256, 4, 200>(); } \
+    TEST_F(TCVTTest, case_##type_name##_1x256_1x129) { test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); }
+
 // FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
 GENERATE_TCVT_TESTS(aclFloat16, float, fp32_fp16)
 GENERATE_TCVT_TESTS(aclFloat16, float, fp32_bf16)
@@ -161,12 +173,12 @@ GENERATE_TCVT_TESTS(hifloat8_wrapper, aclFloat16, fp16_h8)
 GENERATE_TCVT_TESTS(float, aclFloat16, bf16_fp32)
 GENERATE_TCVT_TESTS(int32_t, aclFloat16, bf16_int32)
 // GENERATE_TCVT_TESTS(aclFloat16, bfloat16_t, bf16_fp16)
-GENERATE_TCVT_TESTS(fp4_e1m2x2_wrapper, bf16_wrapper, bf16_fp4_e1m2x2)
-GENERATE_TCVT_TESTS(fp4_e2m1x2_wrapper, bf16_wrapper, bf16_fp4_e2m1x2)
+GENERATE_TCVT_TESTS_FP4(fp4_e1m2x2_wrapper, bf16_wrapper, bf16_fp4_e1m2x2)
+GENERATE_TCVT_TESTS_FP4(fp4_e2m1x2_wrapper, bf16_wrapper, bf16_fp4_e2m1x2)
 
 // FP4 Source → bf16
-GENERATE_TCVT_TESTS(bf16_wrapper, fp4_e1m2x2_wrapper, fp4_e1m2x2_bf16)
-GENERATE_TCVT_TESTS(bf16_wrapper, fp4_e2m1x2_wrapper, fp4_e2m1x2_bf16)
+GENERATE_TCVT_TESTS_FP4(bf16_wrapper, fp4_e1m2x2_wrapper, fp4_e1m2x2_bf16)
+GENERATE_TCVT_TESTS_FP4(bf16_wrapper, fp4_e2m1x2_wrapper, fp4_e2m1x2_bf16)
 
 // U8 Source → half, uint16
 GENERATE_TCVT_TESTS(aclFloat16, uint8_t, uint8_fp16)
