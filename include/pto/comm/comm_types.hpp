@@ -92,6 +92,12 @@ enum class NotifyOp : uint8_t {
     Set = 1,       // Direct set operation
 };
 
+// Selects deferred TPUT_ASYNC submission. Omitting this argument preserves
+// the existing immediate-submission behavior.
+enum class AsyncPutMode : uint8_t {
+    DEFER = 0,
+};
+
 // ============================================================================
 // WaitCmp: Comparison operators for signal wait/test operations
 // ============================================================================

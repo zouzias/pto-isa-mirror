@@ -32,6 +32,20 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
                                const AsyncSession &session, WaitEvents &... events);
 ```
 
+To stage writes in an aggregate batch, use the deferred overload:
+
+```cpp
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData>
+PTO_INST void TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                         const AsyncSession &session, AsyncPutMode mode,
+                         uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U);
+```
+
+`mode` must be `AsyncPutMode::DEFER`. Omitting the mode preserves the original immediate-submission behavior.
+Publish the staged writes with [`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH.md). See
+[`TPUT_ASYNC` Batch Mode](TPUT_ASYNC_BATCH.md) for the complete call contract and constraints.
+
 `AsyncSession` is an engine-agnostic session object. Build once with
 `BuildAsyncSession<engine>()`, then pass to all async calls and event waits.
 The template `engine` parameter selects the DMA backend at compile time, making the

@@ -1,8 +1,8 @@
-# TPUT_ASYNC_DEFER
+# TPUT_ASYNC Batch Mode
 
 ## Introduction
 
-`TPUT_ASYNC_DEFER` prepares one asynchronous write from local GM to remote GM. It writes one or more transfer descriptions into backend send queues, but does not advance the hardware-visible Producer or ring the Send Doorbell, so the transfer task has not yet been published to hardware. One or more successful non-empty `TPUT_ASYNC_DEFER` calls form the current batch. A subsequent [`TPUT_ASYNC_SUBMIT`](TPUT_ASYNC_SUBMIT.md) call advances the corresponding Producer positions, rings the Send Doorbell, publishes the batch for asynchronous hardware execution, and returns one final event. `TPUT_ASYNC_DEFER` itself returns no event.
+`TPUT_ASYNC` with `AsyncPutMode::DEFER` prepares one asynchronous write from local GM to remote GM. It writes one or more transfer descriptions into backend send queues, but does not advance the hardware-visible Producer or ring the Send Doorbell, so the transfer task has not yet been published to hardware. One or more successful non-empty deferred calls form the current batch. A subsequent [`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH.md) call advances the corresponding Producer positions, rings the Send Doorbell, publishes the batch for asynchronous hardware execution, and returns one final event. A deferred `TPUT_ASYNC` call itself returns no event.
 
 Data direction:
 
@@ -19,7 +19,7 @@ Data direction:
 
 Currently, only standard `TPUT_ASYNC` data transfers are supported, and A5 `DmaEngine::SDMA` is not supported.
 
-## C++ Intrinsic
+## Deferred `TPUT_ASYNC` Overload
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
@@ -28,10 +28,11 @@ template <
     DmaEngine engine = DmaEngine::SDMA,
     typename GlobalDstData,
     typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC_DEFER(
+PTO_INST void TPUT_ASYNC(
     GlobalDstData& dstGlobalData,
     GlobalSrcData& srcGlobalData,
     const AsyncSession& session,
+    AsyncPutMode mode,
     uint32_t peer = UINT32_MAX,
     uint32_t jettyIndex = 0U);
 ```
@@ -43,6 +44,7 @@ PTO_INST void TPUT_ASYNC_DEFER(
 | `dstGlobalData` | Destination GlobalTensor for the payload in remote GM. |
 | `srcGlobalData` | Source GlobalTensor in local GM; its shape and element type determine the transfer size. |
 | `session` | A session successfully built by `BuildAsyncSession<engine>()`; it also holds the current batch state. |
+| `mode` | Must be `AsyncPutMode::DEFER`; omitting this argument preserves the original immediate-submission behavior. |
 | `peer` | Required for URMA and must identify the target rank. SDMA ignores this parameter; if omitted, it defaults to `UINT32_MAX`. |
 | `jettyIndex` | Zero-based index within the Jetties available to the current AIV under the URMA workspace configuration. The default is 0. Unused by SDMA. |
 
@@ -50,7 +52,7 @@ The intrinsic returns `void`, creates no per-write `AsyncEvent`, and accepts no 
 
 ## Remote-Write Semantics
 
-One non-empty Defer call adds one remote write:
+One non-empty deferred `TPUT_ASYNC` call adds one remote write:
 
 1. Validate the session, tensors, non-null pointers, and batch capacity against the session configuration.
 2. Write the TPUT transfer description into the send queue.
@@ -103,7 +105,7 @@ built session may be used by Defer, Submit, and event completion calls.
 - The first successful non-empty Defer starts a batch; later Defer calls append writes to it.
 - Every Defer and the final Submit in one batch must use the same session and the same `engine`.
 - One URMA batch must always use the same `peer` and `jettyIndex`.
-- A non-empty Defer sequence must be followed by `TPUT_ASYNC_SUBMIT`; there is no explicit batch-cancel interface.
+- A non-empty Defer sequence must be followed by `SubmitAsyncPutBatch`; there is no explicit batch-cancel interface.
 - If Defer or Submit detects an argument, resource, or capacity error before publication, it discards the current
   batch's staged descriptors and batch state, and none of the previously staged content is published. Defer returns
   `void` and does not report that failure directly; if execution continues and no new successful Defer follows, the
@@ -150,7 +152,7 @@ built session may be used by Defer, Submit, and event completion calls.
 ## Completion Semantics
 
 Defer does not return an event and does not represent transfer completion. The final `AsyncEvent` is created only by
-`TPUT_ASYNC_SUBMIT`; its successful completion covers all non-empty writes in the batch. Keep every source
+`SubmitAsyncPutBatch`; its successful completion covers all non-empty writes in the batch. Keep every source
 range, the session, workspace, SDMA scratch tile, and communication resources valid until that event completes.
 
 The public contract does not guarantee that remote writes complete in Defer call order. Do not use that order to
@@ -215,13 +217,13 @@ __global__ AICORE void BatchPutSdma(
         return;
     }
 
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst0, src0, session);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst1, src1, session);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::SDMA>(session);
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::SDMA>(session);
     if (!event.valid()) {
         return;
     }
@@ -269,13 +271,13 @@ __global__ AICORE void BatchPutUrma(
     }
 
     constexpr uint32_t kJettyIndex = 0U;
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst0, src0, session, peer, kJettyIndex);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst1, src1, session, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::URMA>(
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(
             session, peer, kJettyIndex);
     if (!event.valid()) {
         return;

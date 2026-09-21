@@ -70,10 +70,13 @@ __global__ AICORE void BatchPutUrma(
     }
 
     constexpr uint32_t kJettyIndex = 0U;
-    pto::comm::TPUT_ASYNC_DEFER<pto::comm::DmaEngine::URMA>(dst0, src0, session, peer, kJettyIndex);
-    pto::comm::TPUT_ASYNC_DEFER<pto::comm::DmaEngine::URMA>(dst1, src1, session, peer, kJettyIndex);
+    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
+        dst0, src0, session, pto::comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
+        dst1, src1, session, pto::comm::AsyncPutMode::DEFER, peer, kJettyIndex);
 
-    pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC_SUBMIT<pto::comm::DmaEngine::URMA>(session, peer, kJettyIndex);
+    pto::comm::AsyncEvent event =
+        pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session, peer, kJettyIndex);
     if (!event.valid()) {
         return;
     }
@@ -204,8 +207,8 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
                 const uint32_t offset = (round * kBatchOperationCount + operation) * kElementsPerOperation;
                 BatchGlobal sendGlobal(send + offset, shape, stride);
                 BatchGlobal recvGlobal(remoteRecv + offset, shape, stride);
-                pto::comm::TPUT_ASYNC_DEFER<pto::comm::DmaEngine::URMA>(
-                    recvGlobal, sendGlobal, session, kTargetPeer, jettyIndex);
+                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
+                    recvGlobal, sendGlobal, session, pto::comm::AsyncPutMode::DEFER, kTargetPeer, jettyIndex);
                 if (oldNotifyPrefix && round == 0U && operation == 0U &&
                     (session.urmaRuntimeCtx.batchStartBbProducer != prefixTargetBb ||
                      session.urmaRuntimeCtx.batchStartCqeExpected != prefixTargetCqe ||
@@ -214,7 +217,8 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
                     return;
                 }
             }
-            lastBatchEvent = pto::comm::TPUT_ASYNC_SUBMIT<pto::comm::DmaEngine::URMA>(session, kTargetPeer, jettyIndex);
+            lastBatchEvent =
+                pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session, kTargetPeer, jettyIndex);
             if (!lastBatchEvent.valid() || lastBatchEvent.urmaJettyCount != 1U ||
                 lastBatchEvent.urmaJettyBase != physicalJetty) {
                 producerStatus = 0U;

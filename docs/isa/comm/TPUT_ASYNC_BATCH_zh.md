@@ -1,8 +1,8 @@
-# TPUT_ASYNC_DEFER
+# TPUT_ASYNC Batch模式
 
 ## 简介
 
-`TPUT_ASYNC_DEFER`准备一次从本地GM到远端GM的异步写。它把一个或多个传输描述写入后端发送队列，但不推进硬件可见Producer，也不敲Send Doorbell，因此该传输任务尚未发布给硬件。一次或多次成功的非零长度`TPUT_ASYNC_DEFER`组成当前Batch。随后调用[`TPUT_ASYNC_SUBMIT`](TPUT_ASYNC_SUBMIT_zh.md)统一推进相应Producer并敲Send Doorbell，把Batch发布给硬件异步执行，同时返回一个最终Event。`TPUT_ASYNC_DEFER`本身不返回Event。
+带`AsyncPutMode::DEFER`参数的`TPUT_ASYNC`准备一次从本地GM到远端GM的异步写。它把一个或多个传输描述写入后端发送队列，但不推进硬件可见Producer，也不敲Send Doorbell，因此该传输任务尚未发布给硬件。一次或多次成功的非零长度Defer调用组成当前Batch。随后调用[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH_zh.md)统一推进相应Producer并敲Send Doorbell，把Batch发布给硬件异步执行，同时返回一个最终Event。Defer模式的`TPUT_ASYNC`本身不返回Event。
 
 数据方向：
 
@@ -19,7 +19,7 @@
 
 当前仅支持标准`TPUT_ASYNC`数据传输，且不支持A5 `DmaEngine::SDMA`。
 
-## C++内建接口
+## `TPUT_ASYNC` Defer重载
 
 声明于`include/pto/comm/pto_comm_inst.hpp`：
 
@@ -28,10 +28,11 @@ template <
     DmaEngine engine = DmaEngine::SDMA,
     typename GlobalDstData,
     typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC_DEFER(
+PTO_INST void TPUT_ASYNC(
     GlobalDstData& dstGlobalData,
     GlobalSrcData& srcGlobalData,
     const AsyncSession& session,
+    AsyncPutMode mode,
     uint32_t peer = UINT32_MAX,
     uint32_t jettyIndex = 0U);
 ```
@@ -43,6 +44,7 @@ PTO_INST void TPUT_ASYNC_DEFER(
 | `dstGlobalData` | Payload在远端GM中的目的GlobalTensor。 |
 | `srcGlobalData` | Payload在本地GM中的源GlobalTensor；传输大小由其Shape和元素类型决定。 |
 | `session` | 由`BuildAsyncSession<engine>()`成功构建的会话，同时保存当前Batch状态。 |
+| `mode` | 必须为`AsyncPutMode::DEFER`；省略该参数时保持原有立即提交行为。 |
 | `peer` | URMA必填，用于指定目标Rank；SDMA忽略此参数。省略时默认值为`UINT32_MAX`。 |
 | `jettyIndex` | 当前AIV根据URMA Workspace配置可用的Jetty范围内，从0开始的索引；默认值为0，SDMA忽略此参数。 |
 
@@ -103,7 +105,7 @@ Defer、Submit和Event完成检查。
 - 第一次成功的非零Defer开始一个Batch；后续Defer继续向该Batch追加远程写。
 - 同一Batch的所有Defer和最终Submit必须使用同一个Session及相同的`engine`。
 - URMA同一Batch必须始终使用相同的`peer`和`jettyIndex`。
-- 非零Defer后必须调用`TPUT_ASYNC_SUBMIT`；接口不提供主动取消Batch的操作。
+- 非零Defer后必须调用`SubmitAsyncPutBatch`；接口不提供主动取消Batch的操作。
 - Defer或Submit在发布前检测到参数、资源或容量错误时，当前Batch的暂存描述和Batch状态会被丢弃，
   此前暂存的内容不会发布。Defer返回`void`，不直接报告该失败；若执行继续且此后没有新的成功Defer，
   Submit的失败路径返回无效Event。
@@ -140,7 +142,7 @@ Defer、Submit和Event完成检查。
 
 ## 完成语义
 
-Defer不返回Event，也不表示传输完成。最终`AsyncEvent`只由`TPUT_ASYNC_SUBMIT`创建；该Event成功
+Defer不返回Event，也不表示传输完成。最终`AsyncEvent`只由`SubmitAsyncPutBatch`创建；该Event成功
 完成后，才表示Batch中所有非零远程写完成。在此之前，所有源范围、Session、Workspace、SDMA
 scratch tile和通信资源都必须保持有效。
 
@@ -203,13 +205,13 @@ __global__ AICORE void BatchPutSdma(
         return;
     }
 
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst0, src0, session);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst1, src1, session);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::SDMA>(session);
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::SDMA>(session);
     if (!event.valid()) {
         return;
     }
@@ -257,13 +259,13 @@ __global__ AICORE void BatchPutUrma(
     }
 
     constexpr uint32_t kJettyIndex = 0U;
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst0, src0, session, peer, kJettyIndex);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst1, src1, session, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::URMA>(
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(
             session, peer, kJettyIndex);
     if (!event.valid()) {
         return;

@@ -15,8 +15,8 @@
 - [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
 
 ### 聚合异步写
-- [**TPUT_ASYNC_DEFER**](TPUT_ASYNC_DEFER_zh.md)：向当前Batch暂存一个异步远程写
-- [**TPUT_ASYNC_SUBMIT**](TPUT_ASYNC_SUBMIT_zh.md)：发布当前异步写Batch并返回最终Event
+- [**TPUT_ASYNC Batch??**](TPUT_ASYNC_BATCH_zh.md)：向当前Batch暂存一个异步远程写
+- [**SubmitAsyncPutBatch**](SUBMIT_ASYNC_PUT_BATCH_zh.md)：发布当前异步写Batch并返回最终Event
 
 ## 基于信号的同步
 - [**TNOTIFY**](TNOTIFY_zh.md)：向远端 NPU 发送通知
