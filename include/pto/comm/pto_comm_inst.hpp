@@ -350,9 +350,10 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     if (mode == AsyncPutMode::IMMEDIATE) {
         return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
     }
-    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
-    if (mode != AsyncPutMode::DEFER)
+    if (mode != AsyncPutMode::DEFER) {
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
         return AsyncEvent(0U, engine);
+    }
     ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, UINT32_MAX, 0U);
     return AsyncEvent(0U, engine);
 }
@@ -367,9 +368,10 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     if (mode == AsyncPutMode::IMMEDIATE) {
         return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
     }
-    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
-    if (mode != AsyncPutMode::DEFER)
+    if (mode != AsyncPutMode::DEFER) {
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
         return AsyncEvent(0U, engine);
+    }
     if constexpr (engine == DmaEngine::URMA) {
         ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(
             dstGlobalData, srcGlobalData, session, session.destRankId, jettyIndex);
@@ -388,9 +390,10 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     if (mode == AsyncPutMode::IMMEDIATE) {
         return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
     }
-    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
-    if (mode != AsyncPutMode::DEFER)
+    if (mode != AsyncPutMode::DEFER) {
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
         return AsyncEvent(0U, engine);
+    }
     if constexpr (engine == DmaEngine::URMA) {
         ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, jettyIndex);
     } else {
