@@ -27,9 +27,12 @@ Submit返回表示Batch已经交给硬件执行，不表示传输已经完成。
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session);
+
+// A5显式peer形式
+template <DmaEngine engine = DmaEngine::SDMA>
 PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
-    const AsyncSession& session,
-    uint32_t peer = UINT32_MAX,
+    const AsyncSession& session, uint32_t peer,
     uint32_t jettyIndex = 0U);
 ```
 
@@ -38,8 +41,8 @@ PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
 | 参数 | 说明 |
 |---|---|
 | `session` | 保存当前非空Batch的`AsyncSession`，必须与此前Defer使用的Session相同。 |
-| `peer` | URMA必填，用于指定目标Rank，且必须与本Batch所有Defer一致；SDMA忽略此参数。省略时默认值为`UINT32_MAX`。 |
-| `jettyIndex` | 当前AIV根据URMA Workspace配置可用的Jetty范围内，从0开始的索引，必须与本Batch所有Defer一致；默认值为0，SDMA忽略此参数。 |
+| `peer` | 仅用于A5显式peer形式，必须指定目标Rank并与本Batch所有Defer一致；无peer形式使用首次成功Defer绑定的Peer。 |
+| `jettyIndex` | 仅用于A5显式peer形式，必须与本Batch所有Defer一致；默认值为0。A2/A3接口不包含该参数。 |
 
 返回值为最终`AsyncEvent`。有效Event覆盖该Batch中的全部非零长度远程写，不为单次远程写提供
 独立完成状态。调用Wait/Test前必须先检查`event.valid()`；无效Event不得用于判断Batch成功完成。
@@ -237,9 +240,9 @@ __global__ AICORE void BatchPutUrma(
 
     constexpr uint32_t kJettyIndex = 0U;
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst0, src0, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst1, src1, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
 
     comm::AsyncEvent event =
         comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(

@@ -26,24 +26,34 @@ Data flow:
 Declared in `include/pto/comm/pto_comm_inst.hpp`.
 
 ```cpp
+// A2/A3
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &... events);
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               WaitEvents &... events);
+
+// A5, peer obtained from session.destRankId
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
+
+// A5, explicit peer
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session, uint32_t peer,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
 ```
 
-To stage writes in an aggregate batch, use the deferred overload:
-
-```cpp
-template <DmaEngine engine = DmaEngine::SDMA,
-          typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                         const AsyncSession &session, AsyncPutMode mode,
-                         uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U);
-```
-
-`mode` must be `AsyncPutMode::DEFER`. Omitting the mode preserves the original immediate-submission behavior.
-Publish the staged writes with [`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH.md). See
+The default `IMMEDIATE` mode preserves standard submission and returns its completion event. `DEFER` stages the
+write and returns an invalid placeholder event (`handle == 0`); discard that value and publish the batch with
+[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH.md). Only the Submit event represents batch completion. Existing
+calls that pass prerequisite events directly remain source-compatible through forwarding overloads. When an A5 call
+passes both an explicit mode and prerequisite events, specify `jettyIndex` before those events. See
 [`TPUT_ASYNC` Batch Mode](TPUT_ASYNC_BATCH.md) for the complete call contract and constraints.
 
 `AsyncSession` is an engine-agnostic session object. Build once with

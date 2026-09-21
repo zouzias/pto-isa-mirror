@@ -340,6 +340,36 @@ PTO_INST RecordEvent TREDUCE(
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
 // ============================================================================
 
+#if defined(PTO_NPU_ARCH_A2A3)
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session,
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, mode);
+}
+
+#elif defined(PTO_NPU_ARCH_A5)
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session,
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE, uint32_t jettyIndex = 0U, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, mode, jettyIndex);
+}
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE, uint32_t jettyIndex = 0U, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, mode, jettyIndex);
+}
+
+#else
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
@@ -348,14 +378,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-/**
- * @brief Asynchronous remote write with explicit peer (A5 / CPU stub).
- *
- * For URMA and RDMA: @p peer selects the per-peer queue and memory metadata (session need not bind peer).
- * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
- * For CPU: @p peer is ignored; use default implementation
- */
+#if defined(__CPU_SIM)
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
@@ -365,24 +388,25 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
 }
 #endif
+#endif
 
-// ============================================================================
-// TPUT_ASYNC deferred mode / SubmitAsyncPutBatch: stage multiple asynchronous
-// PUT operations in one session, then publish them as one batch.
-// ============================================================================
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)
-template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC(
-    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, AsyncPutMode mode,
-    uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U)
+// Submit the batch staged by TPUT_ASYNC(..., AsyncPutMode::DEFER).
+#if defined(PTO_NPU_ARCH_A2A3)
+template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session)
 {
-    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
-    ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, jettyIndex);
+    return ::pto::comm::TPUT_ASYNC_SUBMIT_IMPL<engine>(session, UINT32_MAX, 0U);
+}
+#elif defined(PTO_NPU_ARCH_A5)
+template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session)
+{
+    return ::pto::comm::TPUT_ASYNC_SUBMIT_IMPL<engine>(
+        session, session.urmaRuntimeCtx.batchPeer, session.urmaRuntimeCtx.batchJettyIndex);
 }
 
 template <DmaEngine engine = DmaEngine::SDMA>
-PTO_INTERNAL AsyncEvent
-SubmitAsyncPutBatch(const AsyncSession& session, uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U)
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session, uint32_t peer, uint32_t jettyIndex = 0U)
 {
     return ::pto::comm::TPUT_ASYNC_SUBMIT_IMPL<engine>(session, peer, jettyIndex);
 }
@@ -452,5 +476,7 @@ PTO_INST AsyncEvent TGET_ASYNC(
 
 } // namespace comm
 } // namespace pto
+
+#include "pto/comm/async_common/TPutAsyncCompat.hpp"
 
 #endif // PTO_COMM_INST_HPP

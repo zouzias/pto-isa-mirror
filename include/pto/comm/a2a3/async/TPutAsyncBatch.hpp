@@ -37,6 +37,21 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
         reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), totalBytes, session);
 }
 
+template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_MODE_IMPL(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, AsyncPutMode mode)
+{
+    if (mode == AsyncPutMode::IMMEDIATE) {
+        return TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    }
+    if (mode == AsyncPutMode::DEFER) {
+        TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, UINT32_MAX, 0U);
+        return AsyncEvent(0U, engine);
+    }
+    PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
+    return AsyncEvent(0U, engine);
+}
+
 template <DmaEngine engine>
 PTO_INTERNAL AsyncEvent TPUT_ASYNC_SUBMIT_IMPL(const AsyncSession& session, uint32_t peer, uint32_t jettyIndex)
 {

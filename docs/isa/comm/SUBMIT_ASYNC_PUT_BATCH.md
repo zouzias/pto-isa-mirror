@@ -27,9 +27,12 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session);
+
+// A5 explicit-peer form
+template <DmaEngine engine = DmaEngine::SDMA>
 PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
-    const AsyncSession& session,
-    uint32_t peer = UINT32_MAX,
+    const AsyncSession& session, uint32_t peer,
     uint32_t jettyIndex = 0U);
 ```
 
@@ -38,8 +41,8 @@ PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
 | Parameter | Description |
 |---|---|
 | `session` | The `AsyncSession` holding a non-empty batch; it must be the session used by all preceding Defer calls. |
-| `peer` | Required for URMA; it must identify the target rank and match every Defer in the batch. SDMA ignores this parameter; if omitted, it defaults to `UINT32_MAX`. |
-| `jettyIndex` | Zero-based index within the Jetties available to the current AIV under the URMA workspace configuration; it must match every Defer in the batch. The default is 0. Unused by SDMA. |
+| `peer` | A5 explicit-peer form only. It must identify the target rank and match every Defer in the batch. The no-peer form uses the peer bound by the first successful Defer. |
+| `jettyIndex` | A5 explicit-peer form only. It must match every Defer in the batch; default 0. A2/A3 does not expose it. |
 
 The return value is the final `AsyncEvent`. A valid event covers every non-empty write in the batch and does not
 provide individual per-write completion. Check `event.valid()` before Wait or Test; an invalid event must not be used
@@ -251,9 +254,9 @@ __global__ AICORE void BatchPutUrma(
 
     constexpr uint32_t kJettyIndex = 0U;
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst0, src0, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst1, src1, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
 
     comm::AsyncEvent event =
         comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(

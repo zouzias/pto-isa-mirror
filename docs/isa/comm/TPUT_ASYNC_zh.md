@@ -24,24 +24,34 @@
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
+// A2/A3
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &... events);
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               WaitEvents &... events);
+
+// A5，peer来自session.destRankId
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
+
+// A5，显式peer
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session, uint32_t peer,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
 ```
 
-聚合Batch使用以下Defer重载：
-
-```cpp
-template <DmaEngine engine = DmaEngine::SDMA,
-          typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                         const AsyncSession &session, AsyncPutMode mode,
-                         uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U);
-```
-
-`mode`必须为`AsyncPutMode::DEFER`。省略`mode`时保持原有立即提交行为。使用
-[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH_zh.md)发布已经暂存的远程写。完整调用契约和约束参见
+默认`IMMEDIATE`保持标准立即提交并返回对应完成Event。`DEFER`只暂存远程写并返回无效占位Event
+（`handle == 0`）；应直接丢弃该返回值，再使用
+[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH_zh.md)发布Batch。只有Submit返回的Event表示Batch完成。
+原来直接传前置Event的调用通过兼容转发重载保持源码兼容；A5显式传`mode`和前置Event时，必须先
+写出`jettyIndex`。完整调用契约和约束参见
 [`TPUT_ASYNC` Batch模式](TPUT_ASYNC_BATCH_zh.md)。
 
 `AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择DMA后端，使代码对未来引擎（CCU等）保持前向兼容。

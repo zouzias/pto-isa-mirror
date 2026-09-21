@@ -35,6 +35,10 @@ using BatchStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::D
 using BatchGlobal = pto::GlobalTensor<int32_t, BatchShape, BatchStride, pto::Layout::ND>;
 using ConsumeTile = pto::Tile<pto::TileType::Vec, int32_t, 1, kElementsPerOperation>;
 
+struct AsyncPutWaitEventStub {
+    PTO_INTERNAL void Wait() {}
+};
+
 bool AllRanksReady(bool localReady, int rankId, int nRanks)
 {
     bool allReady = true;
@@ -65,18 +69,29 @@ __global__ AICORE void BatchPutUrma(
     GT src1(localSrc + kElementsPerWrite, shape, stride);
 
     pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, session)) {
+    if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, peer, session)) {
         return;
     }
 
-    constexpr uint32_t kJettyIndex = 0U;
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-        dst0, src0, session, pto::comm::AsyncPutMode::DEFER, peer, kJettyIndex);
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-        dst1, src1, session, pto::comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    // Compile-only coverage for legacy and mode-aware WaitEvents call forms.
+    if (status == nullptr) {
+        AsyncPutWaitEventStub waitEvent;
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, peer, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
+            dst0, src0, session, pto::comm::AsyncPutMode::IMMEDIATE, 0U, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
+            dst0, src0, session, peer, pto::comm::AsyncPutMode::DEFER, 0U, waitEvent);
+    }
 
-    pto::comm::AsyncEvent event =
-        pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session, peer, kJettyIndex);
+    const pto::comm::AsyncEvent deferEvent =
+        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, pto::comm::AsyncPutMode::DEFER);
+    if (deferEvent.valid()) {
+        return;
+    }
+    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst1, src1, session, pto::comm::AsyncPutMode::DEFER);
+
+    pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session);
     if (!event.valid()) {
         return;
     }
@@ -208,7 +223,7 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
                 BatchGlobal sendGlobal(send + offset, shape, stride);
                 BatchGlobal recvGlobal(remoteRecv + offset, shape, stride);
                 pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-                    recvGlobal, sendGlobal, session, pto::comm::AsyncPutMode::DEFER, kTargetPeer, jettyIndex);
+                    recvGlobal, sendGlobal, session, kTargetPeer, pto::comm::AsyncPutMode::DEFER, jettyIndex);
                 if (oldNotifyPrefix && round == 0U && operation == 0U &&
                     (session.urmaRuntimeCtx.batchStartBbProducer != prefixTargetBb ||
                      session.urmaRuntimeCtx.batchStartCqeExpected != prefixTargetCqe ||

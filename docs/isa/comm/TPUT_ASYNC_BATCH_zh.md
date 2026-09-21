@@ -2,7 +2,7 @@
 
 ## 简介
 
-带`AsyncPutMode::DEFER`参数的`TPUT_ASYNC`准备一次从本地GM到远端GM的异步写。它把一个或多个传输描述写入后端发送队列，但不推进硬件可见Producer，也不敲Send Doorbell，因此该传输任务尚未发布给硬件。一次或多次成功的非零长度Defer调用组成当前Batch。随后调用[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH_zh.md)统一推进相应Producer并敲Send Doorbell，把Batch发布给硬件异步执行，同时返回一个最终Event。Defer模式的`TPUT_ASYNC`本身不返回Event。
+带`AsyncPutMode::DEFER`参数的`TPUT_ASYNC`准备一次从本地GM到远端GM的异步写。它把一个或多个传输描述写入后端发送队列，但不推进硬件可见Producer，也不敲Send Doorbell，因此该传输任务尚未发布给硬件。一次或多次成功的非零长度Defer调用组成当前Batch。随后调用[`SubmitAsyncPutBatch`](SUBMIT_ASYNC_PUT_BATCH_zh.md)统一推进相应Producer并敲Send Doorbell，把Batch发布给硬件异步执行，同时返回一个最终Event。Defer模式返回`handle == 0`的无效占位Event。
 
 数据方向：
 
@@ -24,17 +24,38 @@
 声明于`include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
-template <
-    DmaEngine engine = DmaEngine::SDMA,
-    typename GlobalDstData,
-    typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC(
+// A2/A3 SDMA
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData,
     GlobalSrcData& srcGlobalData,
     const AsyncSession& session,
-    AsyncPutMode mode,
-    uint32_t peer = UINT32_MAX,
-    uint32_t jettyIndex = 0U);
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+    WaitEvents&... events);
+
+// A5，peer来自session.destRankId
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData,
+    GlobalSrcData& srcGlobalData,
+    const AsyncSession& session,
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+    uint32_t jettyIndex = 0U,
+    WaitEvents&... events);
+
+// A5，显式peer
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData,
+    GlobalSrcData& srcGlobalData,
+    const AsyncSession& session,
+    uint32_t peer,
+    AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+    uint32_t jettyIndex = 0U,
+    WaitEvents&... events);
 ```
 
 ## 参数说明
@@ -44,11 +65,14 @@ PTO_INST void TPUT_ASYNC(
 | `dstGlobalData` | Payload在远端GM中的目的GlobalTensor。 |
 | `srcGlobalData` | Payload在本地GM中的源GlobalTensor；传输大小由其Shape和元素类型决定。 |
 | `session` | 由`BuildAsyncSession<engine>()`成功构建的会话，同时保存当前Batch状态。 |
-| `mode` | 必须为`AsyncPutMode::DEFER`；省略该参数时保持原有立即提交行为。 |
-| `peer` | URMA必填，用于指定目标Rank；SDMA忽略此参数。省略时默认值为`UINT32_MAX`。 |
-| `jettyIndex` | 当前AIV根据URMA Workspace配置可用的Jetty范围内，从0开始的索引；默认值为0，SDMA忽略此参数。 |
+| `mode` | 使用`AsyncPutMode::DEFER`暂存远程写；默认`IMMEDIATE`保持标准`TPUT_ASYNC`语义。 |
+| `peer` | A5原有显式peer重载保持`peer`紧跟`session`；无peer重载使用`session.destRankId`。 |
+| `jettyIndex` | A5 URMA Jetty索引，默认0，仅Defer模式有意义；A2/A3接口不包含该参数。 |
+| `events` | 可选前置Event，在立即提交或Defer前等待。A5若在`mode`后传Event，必须显式写出`jettyIndex`，包括`0U`。 |
 
-该接口返回`void`，不会为单次远程写创建`AsyncEvent`，也不接受前置`WaitEvents`。
+该接口始终返回`AsyncEvent`。Defer模式返回无效占位Event（`handle == 0`、`valid() == false`），
+通常应直接丢弃；不得用其`Wait/Test`判断Batch完成，只有`SubmitAsyncPutBatch`返回的Event表示
+Batch完成。
 
 ## 远程写语义
 
@@ -107,8 +131,8 @@ Defer、Submit和Event完成检查。
 - URMA同一Batch必须始终使用相同的`peer`和`jettyIndex`。
 - 非零Defer后必须调用`SubmitAsyncPutBatch`；接口不提供主动取消Batch的操作。
 - Defer或Submit在发布前检测到参数、资源或容量错误时，当前Batch的暂存描述和Batch状态会被丢弃，
-  此前暂存的内容不会发布。Defer返回`void`，不直接报告该失败；若执行继续且此后没有新的成功Defer，
-  Submit的失败路径返回无效Event。
+  此前暂存的内容不会发布。Defer只返回无效占位Event，不直接报告该失败；若执行继续且此后没有新的
+  成功Defer，Submit的失败路径返回无效Event。
 - Defer到Submit之间，不能在同一Channel Group或Jetty上插入普通`TPUT_ASYNC`、
   `TGET_ASYNC`、`TPUT_ASYNC_NOTIFY`、另一Batch或`TPREFETCH_ASYNC`。
 - 第一次成功的非零Defer到Submit之间，不得复制、重建、销毁Session或转移其所有权。
@@ -142,7 +166,7 @@ Defer、Submit和Event完成检查。
 
 ## 完成语义
 
-Defer不返回Event，也不表示传输完成。最终`AsyncEvent`只由`SubmitAsyncPutBatch`创建；该Event成功
+Defer只返回无效占位Event，也不表示传输完成。最终有效`AsyncEvent`只由`SubmitAsyncPutBatch`创建；该Event成功
 完成后，才表示Batch中所有非零远程写完成。在此之前，所有源范围、Session、Workspace、SDMA
 scratch tile和通信资源都必须保持有效。
 
@@ -260,9 +284,9 @@ __global__ AICORE void BatchPutUrma(
 
     constexpr uint32_t kJettyIndex = 0U;
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst0, src0, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
     comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
-        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+        dst1, src1, session, peer, comm::AsyncPutMode::DEFER, kJettyIndex);
 
     comm::AsyncEvent event =
         comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(

@@ -39,6 +39,10 @@ using BatchGlobal = pto::GlobalTensor<int32_t, BatchShape, BatchStride, pto::Lay
 using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
 using ConsumeTile = pto::Tile<pto::TileType::Vec, int32_t, 1, kElementsPerOperation>;
 
+struct AsyncPutWaitEventStub {
+    PTO_INTERNAL void Wait() {}
+};
+
 bool AllRanksReady(bool localReady, int nRanks)
 {
     const int mpiRank = CommMpiRank();
@@ -75,7 +79,21 @@ __global__ AICORE void BatchPutSdma(
         return;
     }
 
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session, pto::comm::AsyncPutMode::DEFER);
+    // Compile-only coverage for legacy and mode-aware WaitEvents call forms.
+    if (status == nullptr) {
+        AsyncPutWaitEventStub waitEvent;
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(
+            dst0, src0, session, pto::comm::AsyncPutMode::IMMEDIATE, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(
+            dst0, src0, session, pto::comm::AsyncPutMode::DEFER, waitEvent);
+    }
+
+    const pto::comm::AsyncEvent deferEvent =
+        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session, pto::comm::AsyncPutMode::DEFER);
+    if (deferEvent.valid()) {
+        return;
+    }
     pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst1, src1, session, pto::comm::AsyncPutMode::DEFER);
 
     pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);

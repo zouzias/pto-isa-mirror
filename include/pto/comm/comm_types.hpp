@@ -92,10 +92,11 @@ enum class NotifyOp : uint8_t {
     Set = 1,       // Direct set operation
 };
 
-// Selects deferred TPUT_ASYNC submission. Omitting this argument preserves
-// the existing immediate-submission behavior.
+// Controls whether TPUT_ASYNC publishes immediately or stages the write for
+// SubmitAsyncPutBatch.
 enum class AsyncPutMode : uint8_t {
-    DEFER = 0,
+    IMMEDIATE = 0,
+    DEFER = 1,
 };
 
 // ============================================================================
