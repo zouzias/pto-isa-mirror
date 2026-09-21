@@ -121,6 +121,10 @@ extern "C" __global__ AICORE void launchTCOLSUMCase31(__gm__ float* out, __gm__ 
 {
     runTColSum<float, 1, 1, 1, 512, 511>(out, src, true);
 }
+extern "C" __global__ AICORE void launchTCOLSUMCase32(__gm__ float* out, __gm__ float* src)
+{
+    runTColSum<float, 6, 6, 1, 128, 128>(out, src, true);
+}
 extern "C" __global__ AICORE void launchTCOLSUMCase41(__gm__ int64_t* out, __gm__ int64_t* src)
 {
     using ShapeType = Shape<1, 1, 1, 4, 16>;
@@ -392,6 +396,14 @@ struct TColSumCaseLauncher<31> {
 };
 
 template <>
+struct TColSumCaseLauncher<32> {
+    static void Launch(void* out, void* src, aclrtStream stream)
+    {
+        launchTCOLSUMCase32<<<1, nullptr, stream>>>((float*)out, (float*)src);
+    }
+};
+
+template <>
 struct TColSumCaseLauncher<41> {
     static void Launch(void* out, void* src, aclrtStream stream)
     {
@@ -542,6 +554,7 @@ template void launchTCOLSUMTestCase<23>(void* out, void* src, aclrtStream stream
 template void launchTCOLSUMTestCase<24>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<25>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<31>(void* out, void* src, aclrtStream stream);
+template void launchTCOLSUMTestCase<32>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<41>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<42>(void* out, void* src, aclrtStream stream);
 template void launchTCOLSUMTestCase<43>(void* out, void* src, aclrtStream stream);
