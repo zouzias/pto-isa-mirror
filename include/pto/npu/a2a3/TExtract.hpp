@@ -182,6 +182,8 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_
             GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
         TExtractAccToMat<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(
             dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+    } else {
+        static_assert(sizeof(DstTileData) == 0, "TExtract: Unsupported source and destination TileType combination.");
     }
 }
 
@@ -580,19 +582,16 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
 {
     if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
         CheckTExtractVecToVecCommon<DstTileData, SrcTileData>();
-        if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
+        if constexpr (
+            DstTileData::isRowMajor && SrcTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox &&
+            SrcTileData::SFractal == SLayout::NoneBox) {
             TExtractVecToVecNDDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
         } else if constexpr (
             !DstTileData::isRowMajor && !SrcTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor &&
             SrcTileData::SFractal == SLayout::RowMajor) {
             TExtractVecToVecNZDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
         } else {
-            static_assert(
-                DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                "TEXTRACT Vec->Vec : Source and destination layout must match (both ND or both NZ).");
-            static_assert(
-                DstTileData::SFractal == SrcTileData::SFractal,
-                "TEXTRACT Vec->Vec : Source and destination SFractal must match.");
+            static_assert(sizeof(DstTileData) == 0, "TEXTRACT Vec->Vec : Only ND-to-ND and NZ-to-NZ are supported.");
         }
     } else if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
