@@ -1037,7 +1037,7 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst& dst, TileDataSrc& src, TileDat
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     if constexpr (TileDataSrc::layout == Layout::NC1HWC0 && TileDataDst::layout == Layout::FRACTAL_Z) {
         CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
-        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcN = src.GetValidShape(GlobalTensorDim::DIM_0);
         unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_1);
         unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
         unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
@@ -1070,7 +1070,7 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst& dst, TileDataSrc& src, TileDat
             dst.data(), src.data(), tmp.data(), dstN0 * dstN1, srcG, srcN, srcC1 * srcH * srcW, srcC0);
     } else if constexpr (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
         CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
-        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcN = src.GetValidShape(GlobalTensorDim::DIM_0);
         unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
         unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
         unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
@@ -1090,7 +1090,7 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst& dst, TileDataSrc& src, TileDat
             dst.data(), src.data(), tmp.data(), srcN, srcC, srcD, srcH, srcW, dstN0, dstC0);
     } else if constexpr (TileDataSrc::layout == Layout::NC1HWC0 && TileDataDst::layout == Layout::NCHW) {
         CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
-        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcN = src.GetValidShape(GlobalTensorDim::DIM_0);
         unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_1);
         unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
         unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);

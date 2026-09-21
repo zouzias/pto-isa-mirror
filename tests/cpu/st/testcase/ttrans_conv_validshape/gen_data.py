@@ -1,0 +1,143 @@
+#!/usr/bin/python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+"""Generate input/golden binaries for TTRANSConvValidShapeTest.
+
+The golden data is computed from the *physical* shape: the CPU simulator implementation
+of TTRANS (include/pto/cpu/TTrans.hpp) derives every axis from GetShape(), so the
+ValidShape configured by each case does not change the expected result. The valid
+configuration is kept in the registry below for traceability with main.cpp.
+"""
+import os
+from enum import Enum
+import numpy as np
+
+
+SUITE_NAME = "TTRANSConvValidShapeTest"
+
+
+class DataFormat(Enum):
+    NCHW2NC1HWC0 = 0
+    NC1HWC02NCHW = 1
+    GNCHW2GNC1HWC0 = 2
+
+
+def golden_NCHW2NC1HWC0(case):
+    n, c, h, w = case.phys[0], case.phys[1], case.phys[2], case.phys[3]
+    c0 = 32 // np.dtype(case.data_type).itemsize
+    c1 = (c + c0 - 1) // c0
+
+    input_arr = np.random.randint(1, 5, size=(n, c, h, w)).astype(case.data_type)
+    input_arr.tofile("./input.bin")
+
+    padding = c1 * c0 - c
+    if padding > 0:
+        input_arr = np.pad(input_arr, ((0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
+
+    output_arr = input_arr.reshape(n, c1, c0, h, w).transpose(0, 1, 3, 4, 2)
+    output_arr.tofile("./golden.bin")
+    print(f"  -> Input ({n},{c},{h},{w}) | Golden {output_arr.shape} | C0={c0} C1={c1}")
+
+
+def golden_NC1HWC02NCHW(case):
+    n, c1, h, w, c0 = case.phys[0], case.phys[1], case.phys[2], case.phys[3], case.phys[4]
+    assert c0 == 32 // np.dtype(case.data_type).itemsize
+    c = c1 * c0
+
+    input_arr = np.random.randint(1, 5, size=(n, c1, h, w, c0)).astype(case.data_type)
+    input_arr.tofile("./input.bin")
+
+    output_arr = input_arr.transpose(0, 1, 4, 2, 3).reshape(n, c, h, w)
+    output_arr.tofile("./golden.bin")
+    print(f"  -> Input ({n},{c1},{h},{w},{c0}) | Golden {output_arr.shape}")
+
+
+def golden_GNCHW2GNC1HWC0(case):
+    g, n, c, h, w = case.phys[0], case.phys[1], case.phys[2], case.phys[3], case.phys[4]
+    c0 = 32 // np.dtype(case.data_type).itemsize
+    c1 = (c + c0 - 1) // c0
+
+    input_arr = np.random.randint(1, 5, size=(g, n, c, h, w)).astype(case.data_type)
+    input_arr.tofile("./input.bin")
+
+    padding = c1 * c0 - c
+    if padding > 0:
+        input_arr = np.pad(input_arr, ((0, 0), (0, 0), (0, padding), (0, 0), (0, 0)), mode='constant')
+
+    output_arr = input_arr.reshape(g, n, c1, c0, h, w).transpose(0, 1, 2, 4, 5, 3)
+    output_arr.tofile("./golden.bin")
+    print(f"  -> Input ({g},{n},{c},{h},{w}) | Golden {output_arr.shape} | C0={c0} C1={c1}")
+
+
+def gen_golden_data(case):
+    if case.fmt == DataFormat.NCHW2NC1HWC0.value:
+        golden_NCHW2NC1HWC0(case)
+    elif case.fmt == DataFormat.NC1HWC02NCHW.value:
+        golden_NC1HWC02NCHW(case)
+    elif case.fmt == DataFormat.GNCHW2GNC1HWC0.value:
+        golden_GNCHW2GNC1HWC0(case)
+    else:
+        raise ValueError(f"unsupported format {case.fmt}")
+
+
+class TTRANSValidParams:
+    def __init__(self, case_name, data_type, fmt, phys, valid):
+        self.case_name = case_name
+        self.data_type = data_type
+        self.fmt = fmt
+        self.phys = phys
+        self.valid = valid
+
+
+FWD = DataFormat.NCHW2NC1HWC0.value
+REV = DataFormat.NC1HWC02NCHW.value
+GRP = DataFormat.GNCHW2GNC1HWC0.value
+
+test_cases_registry = [
+    # ---------------- NCHW -> NC1HWC0: phys (N, C, H, W), valid (VN, VC, VH, VW) ----------------
+    TTRANSValidParams("NCHW2NC1HWC0_valid_n_half", np.float16, FWD, (8, 8, 4, 4), (3, 8, 4, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_c_half", np.float16, FWD, (4, 20, 4, 4), (4, 7, 4, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_h_half", np.float16, FWD, (4, 16, 7, 4), (4, 16, 5, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_w_half", np.float16, FWD, (4, 16, 4, 9), (4, 16, 4, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_all_half", np.float16, FWD, (8, 20, 7, 9), (3, 7, 5, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_all_float", np.float32, FWD, (8, 20, 7, 9), (3, 7, 5, 4)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_eq_phys_half", np.float16, FWD, (8, 20, 7, 9), (8, 20, 7, 9)),
+    TTRANSValidParams("NCHW2NC1HWC0_valid_min_half", np.float16, FWD, (8, 20, 7, 9), (1, 1, 1, 1)),
+
+    # ------------- NC1HWC0 -> NCHW: phys (N, C1, H, W, C0), valid (VN, VC1, VH, VW, VC0) -------------
+    TTRANSValidParams("NC1HWC02NCHW_valid_n_half", np.float16, REV, (8, 2, 4, 4, 16), (5, 2, 4, 4, 16)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_c1_half", np.float16, REV, (8, 2, 4, 4, 16), (8, 1, 4, 4, 16)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_c0_half", np.float16, REV, (8, 2, 4, 4, 16), (8, 2, 4, 4, 7)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_h_half", np.float16, REV, (4, 2, 7, 4, 16), (4, 2, 5, 4, 16)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_w_half", np.float16, REV, (4, 2, 4, 9, 16), (4, 2, 4, 4, 16)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_all_half", np.float16, REV, (8, 2, 7, 9, 16), (3, 1, 5, 4, 7)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_all_int32", np.int32, REV, (8, 2, 7, 9, 8), (3, 1, 5, 4, 5)),
+    TTRANSValidParams("NC1HWC02NCHW_valid_eq_phys_half", np.float16, REV, (8, 2, 7, 9, 16), (8, 2, 7, 9, 16)),
+
+    # ------------- GNCHW -> GNC1HWC0: phys (G, N, C, H, W), valid (VG, VN, VC, VH, VW) -------------
+    TTRANSValidParams("GNCHW2GNC1HWC0_valid_g_half", np.float16, GRP, (2, 4, 20, 5, 7), (1, 4, 20, 5, 7)),
+    TTRANSValidParams("GNCHW2GNC1HWC0_valid_all_half", np.float16, GRP, (2, 4, 20, 5, 7), (1, 3, 7, 4, 5)),
+]
+
+if __name__ == "__main__":
+    print(f"Generating golden data for {len(test_cases_registry)} cases of {SUITE_NAME}...\n")
+
+    for case in test_cases_registry:
+        dirname = f"{SUITE_NAME}.{case.case_name}"
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        original_dir = os.getcwd()
+        os.chdir(dirname)
+        print(f"Case: {case.case_name} | dtype: {case.data_type.__name__} | valid: {case.valid}")
+        gen_golden_data(case)
+        os.chdir(original_dir)
+
+    print("\nAll binary test files (input.bin, golden.bin) have been generated successfully.")

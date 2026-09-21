@@ -115,6 +115,7 @@ tload
 tload_l2hint
 ttrans
 ttrans_conv
+ttrans_conv_validshape
 ttrans_3d
 tmrgsort
 tfillpad
@@ -280,6 +281,7 @@ if (AUTO_MODE)
     textract
     ttrans
     ttrans_conv
+    ttrans_conv_validshape
     tci
     tquant
     texpands_mat

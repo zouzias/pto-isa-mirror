@@ -167,6 +167,8 @@ twait
 txor
 txors
 ttrans_conv
+ttrans_conv_validshape
+tvalidshape
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

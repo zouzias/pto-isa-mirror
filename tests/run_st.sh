@@ -712,8 +712,11 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
       fi
       if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv -g TTRANSConvTest.int8_1_63_2_128
-      fi
+       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv -g TTRANSConvTest.int8_1_63_2_128
+       fi
+       if [ -z "$ST_PART" ] || [ "$ST_PART" = "2" ]; then
+       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv_validshape -g TTRANSConvValidShapeTest.NCHW2NC1HWC0_valid_all_half
+       fi
       if [ -z "$ST_PART" ] || [ "$ST_PART" = "1" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tci -g TCITest.case1_int32
       fi
@@ -829,8 +832,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
       python3 tests/script/run_st.py $ARGS -w -v a3 -t textract
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tgather
       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv
-      python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd
+       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv
+       python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv_validshape
+       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpow
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul
       python3 tests/script/run_st.py $ARGS -w -v a3 -t tload_gm2mat

@@ -87,10 +87,7 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
     const size_t validRow = CalculateValidRowFromTile(src);
     const size_t validCol = CalculateValidColFromTile(src);
 
-    const std::vector<int64_t> tile_shapes = {
-        src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),
-        src.GetShape(GlobalTensorDim::DIM_2), src.GetShape(GlobalTensorDim::DIM_3),
-        src.GetShape(GlobalTensorDim::DIM_4)};
+    const std::vector<int64_t> validShapes = GetConvTileRoleValidShapes(src);
 
     const std::vector<int64_t> shapes = {
         dst.GetShape(GlobalTensorDim::DIM_0), dst.GetShape(GlobalTensorDim::DIM_1),
@@ -104,8 +101,8 @@ __tf__ PTO_INLINE void TStoreConv(GlobalData& dst, ConTile& src)
     uint64_t scalar = 0;
     for (size_t row = 0; row < validRow; ++row) {
         for (size_t col = 0; col < validCol; ++col) {
-            T val = src.GetElement(GetConvTileElementOffset<ConTile>(row, col, tile_shapes));
-            const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides);
+            T val = src.GetElement(GetConvTileElementOffset<ConTile>(row, col, src));
+            const size_t dstOffset = MapTileIndicesToGlobalOffset<GlobalData>(row, col, shapes, strides, validShapes);
             if constexpr (atomicType == AtomicType::AtomicAdd) {
                 dst.AddToElement(dstOffset, val);
             } else {
