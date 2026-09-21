@@ -8,9 +8,15 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
+#include <cstddef>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+
 #include <gtest/gtest.h>
+#include "runtime/rt.h"
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -30,24 +36,41 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
+template <
+    typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+    bool StaticValid = false, bool InitializeFromGlobal = false>
 void LaunchTExpandS(void* out, float scalar, void* stream);
 
+struct RuntimeResources {
+    rtStream_t stream = nullptr;
+    void* dst = nullptr;
+    bool deviceSet = false;
+
+    ~RuntimeResources()
+    {
+        if (stream != nullptr) {
+            EXPECT_EQ(rtStreamDestroy(stream), RT_ERROR_NONE);
+        }
+        if (dst != nullptr) {
+            EXPECT_EQ(rtFree(dst), RT_ERROR_NONE);
+        }
+        if (deviceSet) {
+            EXPECT_EQ(rtDeviceReset(0), RT_ERROR_NONE);
+        }
+    }
+};
+
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
-void test_texpands()
+void testTExpands()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T* dstHost;
-    T* dstDevice;
-
-    aclrtMallocHost((void**)(&dstHost), fileSize);
-    aclrtMalloc((void**)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    RuntimeResources resources;
+    ASSERT_EQ(rtSetDevice(0), RT_ERROR_NONE);
+    resources.deviceSet = true;
+    ASSERT_EQ(rtStreamCreate(&resources.stream, 0), RT_ERROR_NONE);
+    ASSERT_EQ(rtMalloc(&resources.dst, fileSize, RT_MEMORY_HBM, 0), RT_ERROR_NONE);
+    std::vector<T> dstHost(fileSize / sizeof(T));
 
     float scalar;
     std::string scalar_file = GetGoldenDir() + "/scalar.bin";
@@ -55,19 +78,13 @@ void test_texpands()
     file.read(reinterpret_cast<char*>(&scalar), 4);
     file.close();
 
-    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>(dstDevice, scalar, stream);
+    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>(
+        resources.dst, scalar, resources.stream);
 
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    ASSERT_EQ(rtStreamSynchronize(resources.stream), RT_ERROR_NONE);
+    ASSERT_EQ(rtMemcpy(dstHost.data(), fileSize, resources.dst, fileSize, RT_MEMCPY_DEVICE_TO_HOST), RT_ERROR_NONE);
 
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSize);
-
-    aclrtFree(dstDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost.data(), fileSize);
 
     std::vector<T> golden(fileSize / sizeof(T));
     std::vector<T> devFinal(fileSize / sizeof(T));
@@ -81,38 +98,92 @@ void test_texpands()
 
 TEST_F(TEXPANDSTest, case_float_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    test_texpands<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+    testTExpands<float, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
 TEST_F(TEXPANDSTest, case_int32_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    test_texpands<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+    testTExpands<int32_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
 TEST_F(TEXPANDSTest, case_half_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    test_texpands<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+    testTExpands<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
 TEST_F(TEXPANDSTest, case_int16_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    test_texpands<int16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
+    testTExpands<int16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
 
 TEST_F(TEXPANDSTest, case_float_60x60_64x64_60x60_PAD_VALUE_MAX)
 {
-    test_texpands<float, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
+    testTExpands<float, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
 }
 TEST_F(TEXPANDSTest, case_int32_60x60_64x64_60x60_PAD_VALUE_MAX)
 {
-    test_texpands<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
+    testTExpands<int32_t, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX>();
 }
 TEST_F(TEXPANDSTest, case_half_1x3600_2x4096_1x3600_PAD_VALUE_MAX)
 {
-    test_texpands<aclFloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>();
+    testTExpands<aclFloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>();
 }
 TEST_F(TEXPANDSTest, case_int16_16x200_20x512_16x200_PAD_VALUE_MAX)
 {
-    test_texpands<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>();
+    testTExpands<int16_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>();
 }
 TEST_F(TEXPANDSTest, case_int8_16x200_20x512_16x200_PAD_VALUE_MAX)
 {
-    test_texpands<int8_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>();
+    testTExpands<int8_t, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX>();
+}
+
+template <int TileRows, int TileCols, int ValidRows, int ValidCols, bool StaticValid>
+void testTExpandsValidShape()
+{
+    constexpr float SCALAR = 1.4020596f;
+    constexpr size_t ELEMENT_COUNT = ValidRows * ValidCols;
+    constexpr size_t OUTPUT_BYTES = ELEMENT_COUNT * sizeof(float);
+    RuntimeResources resources;
+    ASSERT_EQ(rtSetDevice(0), RT_ERROR_NONE);
+    resources.deviceSet = true;
+    ASSERT_EQ(rtStreamCreate(&resources.stream, 0), RT_ERROR_NONE);
+    ASSERT_EQ(rtMalloc(&resources.dst, OUTPUT_BYTES, RT_MEMORY_HBM, 0), RT_ERROR_NONE);
+    ASSERT_EQ(rtMemset(resources.dst, OUTPUT_BYTES, 0, OUTPUT_BYTES), RT_ERROR_NONE);
+
+    LaunchTExpandS<
+        float, ValidRows, ValidCols, TileRows, TileCols, ValidRows, ValidCols, PAD_VALUE_NULL, StaticValid, true>(
+        resources.dst, SCALAR, resources.stream);
+    ASSERT_EQ(rtStreamSynchronize(resources.stream), RT_ERROR_NONE);
+
+    std::vector<float> actual(ELEMENT_COUNT);
+    ASSERT_EQ(
+        rtMemcpy(actual.data(), OUTPUT_BYTES, resources.dst, OUTPUT_BYTES, RT_MEMCPY_DEVICE_TO_HOST), RT_ERROR_NONE);
+    size_t matchedCount = 0;
+    size_t zeroCount = 0;
+    size_t firstMismatch = ELEMENT_COUNT;
+    for (size_t i = 0; i < ELEMENT_COUNT; ++i) {
+        matchedCount += actual[i] == SCALAR;
+        zeroCount += actual[i] == 0.0f;
+        if (actual[i] != SCALAR && firstMismatch == ELEMENT_COUNT) {
+            firstMismatch = i;
+        }
+    }
+    std::cout << "matched=" << matchedCount << "/" << ELEMENT_COUNT << " zeros=" << zeroCount << std::endl;
+    EXPECT_EQ(matchedCount, ELEMENT_COUNT)
+        << "first mismatch=" << firstMismatch << ", expected=" << SCALAR << ", tail=" << actual.back();
+}
+
+TEST_F(TEXPANDSTest, case_float_rowmajor_4x16_4x8_static_valid) { testTExpandsValidShape<4, 16, 4, 8, true>(); }
+
+TEST_F(TEXPANDSTest, case_float_rowmajor_4x16_4x8_dynamic_valid) { testTExpandsValidShape<4, 16, 4, 8, false>(); }
+
+TEST_F(TEXPANDSTest, case_float_colmajor_16x4_8x4_static_valid) { testTExpandsValidShape<16, 4, 8, 4, true>(); }
+
+TEST_F(TEXPANDSTest, case_float_colmajor_16x4_8x4_dynamic_valid) { testTExpandsValidShape<16, 4, 8, 4, false>(); }
+
+TEST_F(TEXPANDSTest, case_float_rowmajor_101x400_101x78_static_valid)
+{
+    testTExpandsValidShape<101, 400, 101, 78, true>();
+}
+
+TEST_F(TEXPANDSTest, case_float_rowmajor_101x400_101x78_dynamic_valid)
+{
+    testTExpandsValidShape<101, 400, 101, 78, false>();
 }
