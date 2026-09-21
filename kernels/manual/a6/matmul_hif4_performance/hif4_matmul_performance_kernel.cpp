@@ -272,6 +272,26 @@ AICORE inline void Compute(
             aScaleMatTile = TileScaleA(currentM, scaleCols);
             bScaleMatTile = TileScaleB(scaleCols, currentN);
 
+            // TASSIGN the buffer addresses AFTER the dims re-assignment above
+            // (the assignment operator overwrites data_, so the address must be
+            // re-applied every iteration).
+            TASSIGN(aMatTile[0], 0x0);
+            TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa / 2);
+            TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM);
+            TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2);
+            const uint32_t scaleBaseAddr =
+                baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2 * BUFFER_NUM;
+            TASSIGN(aScaleMatTile, scaleBaseAddr);
+            TASSIGN(bScaleMatTile, scaleBaseAddr + baseM * scaleCols);
+            TASSIGN(aTile[0], 0x0);
+            TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);
+            TASSIGN(bTile[0], 0x0);
+            TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
+            TASSIGN(aScaleTile[0], GetScaleAddr(aTile[0].data()));
+            TASSIGN(aScaleTile[1], GetScaleAddr(aTile[1].data()));
+            TASSIGN(bScaleTile[0], GetScaleAddr(bTile[0].data()));
+            TASSIGN(bScaleTile[1], GetScaleAddr(bTile[1].data()));
+
             ResTile outTile(currentM, currentN);
             TASSIGN(outTile, 0x0);
 
@@ -337,26 +357,6 @@ AICORE inline void RunHif4MatmulDispatch(__gm__ T* out, __gm__ U* src0, __gm__ U
     LeftScaleTile aScaleTile[BUFFER_NUM];
     RightScaleTile bScaleTile[BUFFER_NUM];
     ResTile cTile;
-
-    // L1 data buffers (double-buffered), then full-K scale buffers.
-    TASSIGN(aMatTile[0], 0x0);
-    TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa / 2);
-    TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM);
-    TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2);
-    const uint32_t scaleBaseAddr = baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2 * BUFFER_NUM;
-    TASSIGN(aScaleMatTile, scaleBaseAddr);
-    TASSIGN(bScaleMatTile, scaleBaseAddr + baseM * scaleCols);
-
-    // L0A/L0B ping-pong buffers.
-    TASSIGN(aTile[0], 0x0);
-    TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);
-    TASSIGN(bTile[0], 0x0);
-    TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(aScaleTile[0], GetScaleAddr(aTile[0].data()));
-    TASSIGN(aScaleTile[1], GetScaleAddr(aTile[1].data()));
-    TASSIGN(bScaleTile[0], GetScaleAddr(bTile[0].data()));
-    TASSIGN(bScaleTile[1], GetScaleAddr(bTile[1].data()));
 
     InitSyncFlags();
     Compute<
