@@ -1,12 +1,12 @@
-# TPUT_ASYNC_SUBMIT
+# SubmitAsyncPutBatch
 
 ## 简介
 
-`TPUT_ASYNC_SUBMIT`发布当前`AsyncSession`中由[`TPUT_ASYNC_DEFER`](TPUT_ASYNC_DEFER_zh.md)准备的全部远程写。它推进硬件可见Producer，按照后端要求敲Send Doorbell，并返回一个覆盖整个Batch的`AsyncEvent`。
+`SubmitAsyncPutBatch`是普通辅助函数，用于发布当前`AsyncSession`中由Defer模式[`TPUT_ASYNC`](TPUT_ASYNC_BATCH_zh.md)准备的全部远程写。它推进硬件可见Producer，按照后端要求敲Send Doorbell，并返回一个覆盖整个Batch的`AsyncEvent`。该函数不是独立的PTO指令。
 
 调用关系：
 
-`TPUT_ASYNC_DEFER × N（暂存）` → `TPUT_ASYNC_SUBMIT（发布）` → `Wait/Test（完成）`
+`TPUT_ASYNC(..., AsyncPutMode::DEFER) × N（暂存）` → `SubmitAsyncPutBatch（发布）` → `Wait/Test（完成）`
 
 Submit返回表示Batch已经交给硬件执行，不表示传输已经完成。调用方必须使用返回的Event判断完成。
 
@@ -21,13 +21,13 @@ Submit返回表示Batch已经交给硬件执行，不表示传输已经完成。
 
 当前仅支持标准`TPUT_ASYNC`数据传输，且不支持A5 `DmaEngine::SDMA`。
 
-## C++内建接口
+## C++辅助函数
 
 声明于`include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA>
-PTO_INST AsyncEvent TPUT_ASYNC_SUBMIT(
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
     const AsyncSession& session,
     uint32_t peer = UINT32_MAX,
     uint32_t jettyIndex = 0U);
@@ -109,7 +109,7 @@ Defer、Submit和Event完成检查。
 - 释放URMA通信资源前，必须完成每个活动Peer和Jetty的最后一个Event，并同步使用该通信上下文的Host
   Stream。
 - Tensor、地址范围、SDMA `commBlockOffset`、SQ容量以及URMA注册内存和WQ/CQ容量必须满足
-  [`TPUT_ASYNC_DEFER`](TPUT_ASYNC_DEFER_zh.md)中的约束。
+  [`TPUT_ASYNC` Batch模式](TPUT_ASYNC_BATCH_zh.md)中的约束。
 - 不支持的Engine在编译期被拒绝。其他参数和通信资源必须满足对应`BuildAsyncSession`建立的要求。
 
 ## 完成语义
@@ -182,13 +182,13 @@ __global__ AICORE void BatchPutSdma(
         return;
     }
 
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst0, src0, session);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst1, src1, session);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::SDMA>(session);
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::SDMA>(session);
     if (!event.valid()) {
         return;
     }
@@ -236,13 +236,13 @@ __global__ AICORE void BatchPutUrma(
     }
 
     constexpr uint32_t kJettyIndex = 0U;
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst0, src0, session, peer, kJettyIndex);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst1, src1, session, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::URMA>(
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(
             session, peer, kJettyIndex);
     if (!event.valid()) {
         return;

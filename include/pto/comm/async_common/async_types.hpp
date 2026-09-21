@@ -74,7 +74,7 @@ struct SdmaRuntimeContext {
     uint32_t sqHead[kSdmaMaxChannelGroups];
     // Cumulative queue prefix used by this session. Every Post fences these queues.
     uint32_t usedQueueCount;
-    // Data SQEs staged by TPUT_ASYNC_DEFER but not published yet.
+    // Data SQEs staged by TPUT_ASYNC(DEFER) but not published yet.
     uint32_t batchStagedDataSqeCount;
     __gm__ uint8_t* postDoneBase;
 };

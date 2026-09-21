@@ -26,7 +26,7 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
 {
     static_assert(
         engine == DmaEngine::URMA,
-        "TPUT_ASYNC_DEFER: A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
+        "TPUT_ASYNC(DEFER): A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
 #ifdef PTO_URMA_SUPPORTED
     uint64_t totalBytes = 0U;
     if (!detail::TPutAsyncBatchValidatePayload(dstGlobalData, srcGlobalData, session, totalBytes) || totalBytes == 0U) {
@@ -41,7 +41,7 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
     (void)session;
     (void)peer;
     (void)jettyIndex;
-    static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC_DEFER: URMA requires NPU_ARCH 3510.");
+    static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC(DEFER): URMA requires NPU_ARCH 3510.");
 #endif
 }
 
@@ -50,14 +50,14 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SUBMIT_IMPL(const AsyncSession& session, uint
 {
     static_assert(
         engine == DmaEngine::URMA,
-        "TPUT_ASYNC_SUBMIT: A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
+        "SubmitAsyncPutBatch: A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
 #ifdef PTO_URMA_SUPPORTED
     return urma::detail::UrmaTPutAsyncSubmit(session, peer, jettyIndex);
 #else
     (void)session;
     (void)peer;
     (void)jettyIndex;
-    static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC_SUBMIT: URMA requires NPU_ARCH 3510.");
+    static_assert(engine != DmaEngine::URMA, "SubmitAsyncPutBatch: URMA requires NPU_ARCH 3510.");
     return {};
 #endif
 }

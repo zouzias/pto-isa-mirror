@@ -15,8 +15,8 @@ This directory contains the per-instruction reference for the PTO Communication 
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
 ### Aggregate Asynchronous Put
-- [**TPUT_ASYNC_DEFER**](TPUT_ASYNC_DEFER.md): Stage one asynchronous remote write in the current batch
-- [**TPUT_ASYNC_SUBMIT**](TPUT_ASYNC_SUBMIT.md): Publish the current asynchronous write batch and return its
+- [**TPUT_ASYNC Batch Mode**](TPUT_ASYNC_BATCH.md): Stage asynchronous remote writes through the existing instruction
+- [**SubmitAsyncPutBatch**](SUBMIT_ASYNC_PUT_BATCH.md): Publish the current asynchronous write batch and return its
   final event
 
 ## Signal-Based Synchronization

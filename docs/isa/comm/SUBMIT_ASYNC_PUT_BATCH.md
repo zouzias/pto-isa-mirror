@@ -1,12 +1,12 @@
-# TPUT_ASYNC_SUBMIT
+# SubmitAsyncPutBatch
 
 ## Introduction
 
-`TPUT_ASYNC_SUBMIT` publishes all remote writes prepared in the current `AsyncSession` by [`TPUT_ASYNC_DEFER`](TPUT_ASYNC_DEFER.md). It advances the hardware-visible Producer, rings the Send Doorbell or Doorbells required by the backend, and returns one `AsyncEvent` that covers the complete batch.
+`SubmitAsyncPutBatch` is a helper function that publishes all remote writes prepared in the current `AsyncSession` by deferred [`TPUT_ASYNC`](TPUT_ASYNC_BATCH.md) calls. It advances the hardware-visible Producer, rings the Send Doorbell or Doorbells required by the backend, and returns one `AsyncEvent` that covers the complete batch. It is not a separate PTO instruction.
 
 Call sequence:
 
-`TPUT_ASYNC_DEFER × N (stage)` → `TPUT_ASYNC_SUBMIT (publish)` → `Wait/Test (complete)`
+`TPUT_ASYNC(..., AsyncPutMode::DEFER) × N (stage)` → `SubmitAsyncPutBatch (publish)` → `Wait/Test (complete)`
 
 Returning from Submit means that the batch has been made available to hardware, not that its transfers have completed. The caller must use the returned event to determine completion.
 
@@ -21,13 +21,13 @@ Returning from Submit means that the batch has been made available to hardware, 
 
 Currently, only standard `TPUT_ASYNC` data transfers are supported, and A5 `DmaEngine::SDMA` is not supported.
 
-## C++ Intrinsic
+## C++ Helper Function
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <DmaEngine engine = DmaEngine::SDMA>
-PTO_INST AsyncEvent TPUT_ASYNC_SUBMIT(
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
     const AsyncSession& session,
     uint32_t peer = UINT32_MAX,
     uint32_t jettyIndex = 0U);
@@ -114,7 +114,7 @@ built session may be used by Defer, Submit, and event completion calls.
 - Before releasing URMA communication resources, complete the last event for every active peer and Jetty, and synchronize
   host streams using the communication context.
 - Tensor and address ranges, SDMA `commBlockOffset` and SQ capacity, and URMA registered-memory and WQ/CQ capacity
-  must satisfy the constraints in [`TPUT_ASYNC_DEFER`](TPUT_ASYNC_DEFER.md).
+  must satisfy the constraints in [`TPUT_ASYNC` Batch Mode](TPUT_ASYNC_BATCH.md).
 - Unsupported engines are rejected at compile time. Other arguments and communication resources must satisfy the
   requirements established by the corresponding `BuildAsyncSession`.
 
@@ -196,13 +196,13 @@ __global__ AICORE void BatchPutSdma(
         return;
     }
 
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst0, src0, session);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::SDMA>(
-        dst1, src1, session);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER);
+    comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::SDMA>(session);
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::SDMA>(session);
     if (!event.valid()) {
         return;
     }
@@ -250,13 +250,13 @@ __global__ AICORE void BatchPutUrma(
     }
 
     constexpr uint32_t kJettyIndex = 0U;
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst0, src0, session, peer, kJettyIndex);
-    comm::TPUT_ASYNC_DEFER<comm::DmaEngine::URMA>(
-        dst1, src1, session, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
+    comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER, peer, kJettyIndex);
 
     comm::AsyncEvent event =
-        comm::TPUT_ASYNC_SUBMIT<comm::DmaEngine::URMA>(
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(
             session, peer, kJettyIndex);
     if (!event.valid()) {
         return;

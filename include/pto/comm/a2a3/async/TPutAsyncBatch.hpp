@@ -22,7 +22,7 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
     uint32_t jettyIndex)
 {
-    static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC_DEFER: only SDMA is supported on A2/A3.");
+    static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC(DEFER): only SDMA is supported on A2/A3.");
     if (!detail::ValidateAsyncPutBatchSession<engine>(session)) {
         return;
     }
@@ -40,7 +40,7 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
 template <DmaEngine engine>
 PTO_INTERNAL AsyncEvent TPUT_ASYNC_SUBMIT_IMPL(const AsyncSession& session, uint32_t peer, uint32_t jettyIndex)
 {
-    static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC_SUBMIT: only SDMA is supported on A2/A3.");
+    static_assert(engine == DmaEngine::SDMA, "SubmitAsyncPutBatch: only SDMA is supported on A2/A3.");
     if (!detail::ValidateAsyncPutBatchSession<engine>(session)) {
         return {};
     }

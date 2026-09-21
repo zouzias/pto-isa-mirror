@@ -81,7 +81,7 @@ PTO_INTERNAL void SdmaDeferAsyncPut(
     SdmaPostState state{};
     if (!PrepareBatchPostBase(messageLen, session, config, state)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER SDMA: failed to prepare the SDMA batch operation.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) SDMA: failed to prepare the SDMA batch operation.");
         return;
     }
 
@@ -92,14 +92,14 @@ PTO_INTERNAL void SdmaDeferAsyncPut(
             state.channels, config.queue_num, static_cast<uint32_t>(totalDataSqeCount),
             session.runtimeCtx.usedQueueCount)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER SDMA: this batch exceeds an SQ depth; submit fewer data SQEs per queue.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) SDMA: this batch exceeds an SQ depth; submit fewer data SQEs per queue.");
         return;
     }
 
     if (stagedDataSqeCount == 0U) {
         if (session.runtimeCtx.nextPostId >= kSdmaHandlePostIdMask) {
             ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-            PTO_ASSERT(false, "TPUT_ASYNC_DEFER SDMA: post ID space is exhausted.");
+            PTO_ASSERT(false, "TPUT_ASYNC(DEFER) SDMA: post ID space is exhausted.");
             return;
         }
         const uint64_t postId = session.runtimeCtx.nextPostId + 1U;
@@ -131,7 +131,7 @@ PTO_INTERNAL bool PrepareSdmaBatchSubmit(
         execCtx.channelGroupIdx >= kSdmaMaxChannel / execCtx.baseConfig.queue_num ||
         !IsValidTmpBuffer(execCtx.tmpBuf)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT SDMA: invalid session resources.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch SDMA: invalid session resources.");
         return false;
     }
     __gm__ BatchWriteChannelInfo* channelBase =
@@ -145,13 +145,13 @@ PTO_INTERNAL bool PrepareSdmaBatchSubmit(
     if (!ValidateBatchSqCapacity(
             state.channels, state.queueNum, stagedDataSqeCount, session.runtimeCtx.usedQueueCount)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT SDMA: staged batch capacity is invalid.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch SDMA: staged batch capacity is invalid.");
         return false;
     }
     state.postId = session.runtimeCtx.nextPostId + 1U;
     if (!EncodeSdmaEventHandle(state.postId, state.postQueueCount, state.eventHandle)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT SDMA: failed to encode the completion event.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch SDMA: failed to encode the completion event.");
         return false;
     }
     state.flagPayload = GetFlagPayloadAddr(ResolveFlagPayloadBase(execCtx), state.postId);
@@ -194,7 +194,7 @@ PTO_INTERNAL AsyncEvent SdmaTPutAsyncSubmit(const AsyncSession& asyncSession)
     const uint32_t stagedDataSqeCount = session.runtimeCtx.batchStagedDataSqeCount;
     if (!session.valid || stagedDataSqeCount == 0U || session.runtimeCtx.nextPostId >= kSdmaHandlePostIdMask) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(asyncSession);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT SDMA: session is invalid, batch is empty, or post IDs are exhausted.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch SDMA: session is invalid, batch is empty, or post IDs are exhausted.");
         return {};
     }
     SdmaBatchSubmitState state{};

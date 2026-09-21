@@ -98,7 +98,7 @@ AICORE inline void UrmaDeferAsyncPut(
     uint32_t physicalJetty = 0U;
     if (!ResolveUrmaBatchJetty(session, peer, jettyIndex, physicalJetty)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER URMA: invalid session, peer, or jetty.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) URMA: invalid session, peer, or jetty.");
         return;
     }
 
@@ -106,14 +106,14 @@ AICORE inline void UrmaDeferAsyncPut(
     if (runtimeCtx.batchStagedWqeCount != 0U &&
         (runtimeCtx.batchPeer != peer || runtimeCtx.batchJettyIndex != jettyIndex)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER URMA: all operations in one batch must use the same peer and jetty.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) URMA: all operations in one batch must use the same peer and jetty.");
         return;
     }
 
     uint32_t newWqeCount = 0U;
     if (!UrmaBatchWqeCount(messageLen, newWqeCount)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER URMA: invalid transfer size or WQE count overflow.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) URMA: invalid transfer size or WQE count overflow.");
         return;
     }
 
@@ -129,7 +129,7 @@ AICORE inline void UrmaDeferAsyncPut(
     if (!EnsureUrmaBatchCapacity(
             session, peer, physicalJetty, wq, cq, startBbProducer, startCqeExpected, stagedWqeCount, newWqeCount)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER URMA: batch exceeds WQ/CQ capacity or completion polling failed.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER) URMA: batch exceeds WQ/CQ capacity or completion polling failed.");
         return;
     }
 
@@ -148,18 +148,18 @@ AICORE inline AsyncEvent UrmaTPutAsyncSubmit(const AsyncSession& session, uint32
     uint32_t physicalJetty = 0U;
     if (!ResolveUrmaBatchJetty(session, peer, jettyIndex, physicalJetty)) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT URMA: invalid session, peer, or jetty.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch URMA: invalid session, peer, or jetty.");
         return {};
     }
     UrmaRuntimeContext& runtimeCtx = session.urmaRuntimeCtx;
     if (runtimeCtx.batchStagedWqeCount == 0U) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT URMA: batch is empty.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch URMA: batch is empty.");
         return {};
     }
     if (runtimeCtx.batchPeer != peer || runtimeCtx.batchJettyIndex != jettyIndex) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT URMA: peer and jetty must match the deferred batch.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch URMA: peer and jetty must match the deferred batch.");
         return {};
     }
 
@@ -169,7 +169,7 @@ AICORE inline AsyncEvent UrmaTPutAsyncSubmit(const AsyncSession& session, uint32
     const uint64_t handle = EncodeHandle(peer, targetBb);
     if (handle == 0U) {
         ::pto::comm::detail::DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_SUBMIT URMA: failed to encode a valid completion event.");
+        PTO_ASSERT(false, "SubmitAsyncPutBatch URMA: failed to encode a valid completion event.");
         return {};
     }
 

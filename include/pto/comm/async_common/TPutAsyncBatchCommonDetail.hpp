@@ -69,13 +69,13 @@ PTO_INTERNAL bool TPutAsyncBatchValidatePayload(
 {
     using SrcElem = typename GlobalSrcData::RawDType;
     static_assert(
-        std::is_same_v<SrcElem, typename GlobalDstData::RawDType>, "TPUT_ASYNC_DEFER: src/dst element type mismatch");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT_ASYNC_DEFER: src/dst layout mismatch");
+        std::is_same_v<SrcElem, typename GlobalDstData::RawDType>, "TPUT_ASYNC(DEFER): src/dst element type mismatch");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT_ASYNC(DEFER): src/dst layout mismatch");
 
     uint64_t srcElems = 0U;
     if (!TPutAsyncBatchGetElemCount(srcGlobalData, srcElems) || srcElems > UINT64_MAX / sizeof(SrcElem)) {
         DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER: invalid source shape or byte-size overflow.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): invalid source shape or byte-size overflow.");
         return false;
     }
     if (srcElems == 0U) {
@@ -86,13 +86,13 @@ PTO_INTERNAL bool TPutAsyncBatchValidatePayload(
     const bool pointersValid = srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr;
     if (!pointersValid) {
         DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER: src and dst tensor pointers must not be null.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): src and dst tensor pointers must not be null.");
         return false;
     }
     const bool layoutsValid = TPutAsyncIsFlatContiguous1D(srcGlobalData) && TPutAsyncIsFlatContiguous1D(dstGlobalData);
     if (!layoutsValid) {
         DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER: src and dst tensors must be flat contiguous 1D.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): src and dst tensors must be flat contiguous 1D.");
         return false;
     }
 
@@ -100,7 +100,7 @@ PTO_INTERNAL bool TPutAsyncBatchValidatePayload(
     const bool countsValid = TPutAsyncBatchGetElemCount(dstGlobalData, dstElems) && dstElems >= srcElems;
     if (!countsValid) {
         DiscardPendingAsyncPutBatch(session);
-        PTO_ASSERT(false, "TPUT_ASYNC_DEFER: invalid shape, dst capacity, or byte-size overflow.");
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): invalid shape, dst capacity, or byte-size overflow.");
         return false;
     }
     totalBytes = srcElems * sizeof(SrcElem);

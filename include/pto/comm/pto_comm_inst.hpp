@@ -367,20 +367,22 @@ PTO_INST AsyncEvent TPUT_ASYNC(
 #endif
 
 // ============================================================================
-// TPUT_ASYNC_DEFER / TPUT_ASYNC_SUBMIT: stage multiple asynchronous PUT
-// operations in one session, then publish them as one batch.
+// TPUT_ASYNC deferred mode / SubmitAsyncPutBatch: stage multiple asynchronous
+// PUT operations in one session, then publish them as one batch.
 // ============================================================================
 #if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_A5)
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TPUT_ASYNC_DEFER(
-    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer = UINT32_MAX,
-    uint32_t jettyIndex = 0U)
+PTO_INST void TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, AsyncPutMode mode,
+    uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U)
 {
+    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
     ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, jettyIndex);
 }
 
 template <DmaEngine engine = DmaEngine::SDMA>
-PTO_INST AsyncEvent TPUT_ASYNC_SUBMIT(const AsyncSession& session, uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U)
+PTO_INTERNAL AsyncEvent
+SubmitAsyncPutBatch(const AsyncSession& session, uint32_t peer = UINT32_MAX, uint32_t jettyIndex = 0U)
 {
     return ::pto::comm::TPUT_ASYNC_SUBMIT_IMPL<engine>(session, peer, jettyIndex);
 }
