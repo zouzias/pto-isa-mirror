@@ -65,6 +65,9 @@ PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight
     - `TileBias::DType` must match `TileRes::DType`.
     - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**: Input type combinations, A5 simulation mode, and
+  numerical limits follow [TMATMUL](TMATMUL.md#constraints).
+
 ## Examples
 
 ### Auto

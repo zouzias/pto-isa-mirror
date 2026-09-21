@@ -104,6 +104,9 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
     - DN使用列主序 + `SLayout::NoneBox`（DN->DN），
     - NZ使用 `SLayout::RowMajor`（NZ->NZ）。
     - 对于使用编译时已知形状的行主序ND->ND，`TileData::ValidCol` 必须等于 `GlobalData::staticShape[4]`，且 `TileData::ValidRow` 必须等于 `GlobalData::staticShape[0..3]` 的乘积。
+    - A5 Vec NZ->NZ 要求静态内层形状 `Shape3 == 16`、`Shape4 == 32 / sizeof(DType)`，
+      打包 FP4 的 `Shape4 == 64`；源形状不要求等于 Tile 的逻辑有效窗口。
+      CPU_SIM 的 A5 模式适用相同的内层形状约束。
     - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的ND/DN/NZ转换和L1大小限制）。
     - 对于 `TileType::Mat` 的 ND->NZ 和 DN->NZ：`TileData::SFractalSize == 512`、`sizeof(TileData::DType) != 8`，
       且 `GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1`。
@@ -134,7 +137,15 @@ A5 上表内取值均透传给 DMA。CPU / costmodel 接受该模板并忽略。
     - 对于scaleB，`dst.GetValidRow() % 2 == 0`。
 
 - **有效区域**:
-    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
+    - 传输范围由所选布局路径决定，不一定等于逻辑有效矩形。
+    - A5 Vec NZ->NZ（CPU A5 模式也模拟此行为）搬运 `Shape0` 组、每组 `Shape1` 个列块。
+      每个 burst 复制 `dst.GetValidRow() * 32` 字节；源组步长、列块步长分别为以元素计数的
+      `Stride0`、`Stride1`。目标列块步长为 `TileData::Rows * 32` 字节，组步长为
+      `Shape1 * TileData::Rows * Shape4` 个元素；FP4 的元素步长除以 2 后换算为字节。
+      此路径不按 `validCol` 裁剪列块，也不增加 `PadVal` 填充。有效行之外及未搬运列块保留原值，
+      GM 和 Tile 的物理存储必须覆盖全部搬运范围。
+      CPU_SIM 需在绑定 Tile 前选择 A5，见
+      [选择模拟目标架构](../coding/cpu_sim_zh.md)。
     - 在A2/A3上，同布局且按块对齐的 `TileType::Mat` 加载仅写入有效区域。ND到NZ、DN到ZN加载（以及单行/单列Mat特殊路径）还会将最后一个不完整C0块的尾部填零。其他数据保持不变，包括共享同一底层存储的其他tile视图所对应的数据。
     - 在A5上，同布局 `TileType::Mat` 的ND/DN加载仅按 `PadVal` 填充最后一个不完整32B块；ND/DN到分形布局的加载将最后一个不完整C0块的尾部填零。完整32B间隔块以及未参与传输的行或列保持不变。
     - 在A5上，`GlobalData::staticShape[2] != 1` 的 ND->NZ 加载合并后的前 `dst.GetValidRow()` 行。

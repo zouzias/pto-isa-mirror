@@ -95,6 +95,9 @@ pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.t
         - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
     - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**: Input type combinations, A5 simulation mode, and
+  numerical limits follow [TMATMUL](TMATMUL.md#constraints).
+
 ## Examples
 
 ### Auto

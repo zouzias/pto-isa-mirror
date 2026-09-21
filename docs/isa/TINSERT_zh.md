@@ -14,7 +14,7 @@
 - Acc → Vec插入（含可选的 `AccToVecMode`、relu、标量量化或向量量化） *(Ascend 950PR/Ascend 950DT)*
 - Vec → Mat插入（ND和NZ布局） *(Ascend 950PR/Ascend 950DT)*
 - Vec → Vec插入（ND和NZ布局） *(Ascend 950PR/Ascend 950DT)*
-- NZ split插入（`SPLIT2`、`SPLIT4`） *(Ascend 950PR/Ascend 950DT)*
+- NZ split 插入（`SPLIT2`、`SPLIT4`），CPU 模拟器也提供此接口
 
 ## 数学语义
 
@@ -107,7 +107,8 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                              uint16_t indexRow, uint16_t indexCol,
                              WaitEvents &... events);
 
-#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90)
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || \
+    defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(__CPU_SIM)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -171,7 +172,7 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
     - 向量量化形式：`TINSERT<..., FpTileData, reluMode>(dst, src, fp, indexRow, indexCol)`、
       `TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)`，以及目标支持的
       `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)` Acc-to-Vec 路由
-    - NZ split形式 *(仅Ascend 950PR/Ascend 950DT/kirin9030/kirinX90)*：`TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` 或 `TINSERT<TInsertMode::SPLIT4>(...)`
+    - NZ split 形式 *(A5、kirin9030、kirinX90、kirinDev0000 和 CPU 模拟器)*：`TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` 或 `TINSERT<TInsertMode::SPLIT4>(...)`
 - `reluMode` 取值为 `ReluPreMode::{NoRelu, NormalRelu}`。
 - `mode` 取值为 `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
   向量量化 `fp + mode` 重载仅在存在对应后端实现的目标上暴露
@@ -238,13 +239,21 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
     - ND路径：源必须为 `isRowMajor`；使用 `copy_ubuf_to_cbuf`。每行数据字节数必须与 `BLOCK_BYTE_SIZE`（32字节）对齐。
     - NZ路径：源必须为 `(!isRowMajor, SFractal: RowMajor)`；使用 `ComputeNZBlockParams` 进行分形块 `copy_ubuf_to_cbuf`。
 
-- **NZ Split**（`TInsertMode::SPLIT2` / `TInsertMode::SPLIT4`，仅Ascend 950PR/Ascend 950DT/kirin9030/kirinX90）：
+- **NZ Split**（`TInsertMode::SPLIT2` / `TInsertMode::SPLIT4`，以下为 A5 行为，CPU 也模拟此搬运方式）：
     - 目标必须为 `TileType::Mat`；源必须为 `TileType::Vec`。
     - `DstTileData::DType` 必须等于 `SrcTileData::DType`。
     - 源必须为NZ格式：`(!isRowMajor, SFractal: RowMajor)`。
     - 支持的元素类型：`half`、`bfloat16_t`、`float`、`int32_t`、`int8_t`、`hifloat8_t`、`float8_e4m3_t`、`float8_e5m2_t`、`float8_e8m0_t`、`float4_e2m1x2_t`、`float4_e1m2x2_t`。
     - `validRow` 对齐到 `FRACTAL_NZ_ROW`（16）用于burst计算。
-    - 将 `copy_ubuf_to_cbuf` 的总burst拆分为2或4个子传输，每个处理 `totalBurstNum / SplitCount` 列块。
+    - 将 `copy_ubuf_to_cbuf` 的总burst拆分为2或4个子传输，前 `SplitCount - 1` 段各处理 `totalBurstNum / SplitCount` 个列块，最后一段处理剩余列块。
+    - 实际复制覆盖完整的 32 字节列块和 `ceil16(validRow)` 行，包含逻辑有效窗口之外的行尾、列尾。
+      源和目标都必须为这些补齐区域提供存储空间。
+    - 源列块的行步长：`CompactMode::Null` 取 `SrcTileData::Rows`，`RowPlusOne` 取
+      `ceil16(validRow) + 1`，其他模式（`Normal` 和 `RowAlignedPadding`）取 `ceil16(validRow)`；
+      目标取 `DstTileData::Rows`。
+      这些行步长乘以 32 即为字节步长。
+    - FP4 的列数和列偏移以逻辑元素计数，每两个元素共用一个字节。
+    - CPU_SIM 遵循上述类型、布局和数据搬运规则。
 
 ## 示例
 

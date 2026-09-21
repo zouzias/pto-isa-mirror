@@ -82,6 +82,18 @@ correctness testing and does not model a specific on-chip address.
 
 ## Supported behavior and backend differences
 
+- `TINSERT` in `SPLIT2`/`SPLIT4` mode models A5 Vec-to-Mat transfers with complete column blocks,
+  aligned row tails, and Compact block pitches. Source and destination storage must cover the physical
+  transfer beyond the valid window. See [TINSERT](../isa/TINSERT.md#constraints) for type and layout constraints.
+- In A5 mode, Vec NZ-to-NZ `TLOAD` uses the GM column-block count, tile valid rows, and physical strides.
+  Source blocks beyond the valid columns are also loaded. See [TLOAD](../isa/TLOAD.md#constraints) for
+  transfer extents and padding behavior.
+- A5 ordinary matrix multiplication supports all four FP8 E4M3/E5M2 input pairs and HIF8-by-HIF8 with
+  a float accumulator. This applies to `TMATMUL`, `TMATMUL_ACC`, `TMATMUL_BIAS`, and their `TGEMV`
+  counterparts; see [TMATMUL](../isa/TMATMUL.md#constraints) for type and numerical constraints.
+  Architecture assertions on these paths are disabled when `NDEBUG` is defined.
+- `hifloat8_t` encoding and decoding share a lookup table. Exponent and mantissa fields depend on the
+  prefix length; for example, raw encoding `0x18` represents 0.5.
 - CPU_SIM `TROWSUM` selects its reduction and validation path from the calling thread's initialized architecture.
   Both paths accept but do not access `tmp`. See [TROWSUM](../isa/TROWSUM.md#cpu_sim-implementation-checks) for
   types, layouts, and numerical limits, and [TROWSUM implementation notes](#trowsum-implementation-notes) below

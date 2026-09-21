@@ -7,15 +7,22 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#include <pto/pto-inst.hpp>
-#include "test_common.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
+#include <vector>
+
 #include <gtest/gtest.h>
+#include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+
+#include "test_common.h"
 
 using namespace std;
 using namespace pto;
 using namespace PtoTestCommon;
-using namespace pto;
 
 constexpr struct {
     BLayout bl;
@@ -368,4 +375,426 @@ TEST_F(TINSERTTest, case_half_half_Mat_Mat_32_32_24_16_DST_24_16_L_3_2)
 TEST_F(TINSERTTest, case_float_float_Mat_Mat_128_96_18_16_DST_18_16_L_3_2)
 {
     tinsert_test<float, float, TileType::Mat, TileType::Mat, 128, 96, 18, 16, 125, 93, 3, 2>();
+}
+
+namespace {
+template <typename T, int Rows, int Cols, int ValidRows, int ValidCols, int IndexCol, bool LoadFullTile>
+void checkNzWindowInsert()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    constexpr int C0_ELEMENTS = BLOCK_BYTE_SIZE / sizeof(T);
+    using GlobalData = GlobalTensor<
+        T, Shape<1, Cols / C0_ELEMENTS, Rows / 16, 16, C0_ELEMENTS>,
+        Stride<Rows * Cols, Rows * C0_ELEMENTS, 16 * C0_ELEMENTS, C0_ELEMENTS, 1>, Layout::NZ>;
+    using SrcTile = Tile<
+        TileType::Vec, T, Rows, Cols, BLayout::ColMajor, ValidRows, ValidCols, SLayout::RowMajor, 512, PadValue::Null,
+        CompactMode::Null>;
+    using DstTile = Tile<TileType::Mat, T, Rows, Cols, BLayout::ColMajor, Rows, Cols, SLayout::RowMajor>;
+    std::vector<T> input(Rows * Cols);
+    for (int row = 0; row < Rows; ++row) {
+        for (int col = 0; col < Cols; ++col) {
+            input[(col / C0_ELEMENTS) * Rows * C0_ELEMENTS + row * C0_ELEMENTS + col % C0_ELEMENTS] =
+                T((row * 3 + col) % 127);
+        }
+    }
+    GlobalData srcGlobal(input.data());
+    SrcTile src;
+    DstTile dst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    std::fill_n(src.data(), Rows * Cols, T(-1));
+    std::fill_n(dst.data(), Rows * Cols, T(-1));
+    if constexpr (LoadFullTile) {
+        // A full valid window isolates TINSERT from partial-window TLOAD behavior.
+        Tile<TileType::Vec, T, Rows, Cols, BLayout::ColMajor, Rows, Cols, SLayout::RowMajor> fullTile;
+        TASSIGN(fullTile, 0);
+        TLOAD(fullTile, srcGlobal);
+    } else {
+        TLOAD(src, srcGlobal);
+    }
+    for (int row = 0; row < Rows; ++row) {
+        for (int col = 0; col < Cols; ++col) {
+            const float expected = row < (LoadFullTile ? Rows : ValidRows) ? (row * 3 + col) % 127 : -1;
+            ASSERT_EQ(expected, static_cast<float>(src.GetElement(row, col))) << "row=" << row << " col=" << col;
+        }
+    }
+    TINSERT(dst, src, 0, IndexCol);
+    for (int row = 0; row < Rows; ++row) {
+        for (int col = 0; col < Cols; ++col) {
+            const float expected = row < ValidRows && col >= IndexCol && col < IndexCol + ValidCols ?
+                                       (row * 3 + col - IndexCol) % 127 :
+                                       -1;
+            ASSERT_EQ(expected, static_cast<float>(dst.GetElement(row, col))) << "row=" << row << " col=" << col;
+        }
+    }
+}
+
+template <TInsertMode Mode>
+void checkSplitInsert()
+{
+    using SrcTile = Tile<
+        TileType::Vec, float, 17, 64, BLayout::ColMajor, 16, 64, SLayout::RowMajor, 512, PadValue::Null,
+        CompactMode::RowPlusOne>;
+    using DstTile = Tile<TileType::Mat, float, 16, 64, BLayout::ColMajor, 16, 64, SLayout::RowMajor>;
+    NPU_MEMORY_INIT(NPUArch::A5);
+    SrcTile src;
+    DstTile dst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 64; ++col) {
+            src.SetElement(row, col, row * 64 + col);
+        }
+    }
+    TINSERT<Mode>(dst, src);
+    for (int row = 0; row < 16; ++row) {
+        for (int col = 0; col < 64; ++col) {
+            ASSERT_EQ(row * 64 + col, dst.GetElement(row, col)) << "row=" << row << " col=" << col;
+        }
+    }
+}
+} // namespace
+
+TEST_F(TINSERTTest, NzHalfIndex0) { checkNzWindowInsert<half, 128, 64, 64, 32, 0, false>(); }
+TEST_F(TINSERTTest, NzHalfIndex32) { checkNzWindowInsert<half, 128, 64, 64, 32, 32, false>(); }
+TEST_F(TINSERTTest, NzFloatIndex8) { checkNzWindowInsert<float, 64, 32, 32, 16, 8, false>(); }
+TEST_F(TINSERTTest, NzHalfFullLoadControl) { checkNzWindowInsert<half, 128, 64, 64, 32, 32, true>(); }
+TEST_F(TINSERTTest, NzFloatFullLoadControl) { checkNzWindowInsert<float, 64, 32, 32, 16, 8, true>(); }
+#if defined(CPU_SIM_BFLOAT_ENABLED)
+TEST_F(TINSERTTest, NzBfloat16Index16) { checkNzWindowInsert<bfloat16_t, 128, 128, 80, 48, 16, false>(); }
+TEST_F(TINSERTTest, NzBfloat16FullLoadControl) { checkNzWindowInsert<bfloat16_t, 128, 128, 80, 48, 16, true>(); }
+#endif
+
+TEST_F(TINSERTTest, Split2PublicApi) { checkSplitInsert<TInsertMode::SPLIT2>(); }
+
+TEST_F(TINSERTTest, Split4PublicApi) { checkSplitInsert<TInsertMode::SPLIT4>(); }
+
+namespace {
+template <TInsertMode Mode, CompactMode Compact>
+void checkSplitAlignedTail()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    constexpr int SRC_ROWS = Compact == CompactMode::Null ? 48 : 33;
+    using SrcTile = Tile<
+        TileType::Vec, float, SRC_ROWS, 48, BLayout::ColMajor, 19, 35, SLayout::RowMajor, 512, PadValue::Null, Compact>;
+    using DstTile = Tile<TileType::Mat, float, 64, 64, BLayout::ColMajor, 64, 64, SLayout::RowMajor>;
+    SrcTile src;
+    DstTile dst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    std::fill_n(src.data(), SRC_ROWS * 48, -99.0f);
+    std::fill_n(dst.data(), 64 * 64, -1.0f);
+    int srcStrideRows = 32;
+    if constexpr (Compact == CompactMode::Null) {
+        srcStrideRows = 48;
+    } else if constexpr (Compact == CompactMode::RowPlusOne) {
+        srcStrideRows = 33;
+    }
+    for (int row = 0; row < 32; ++row) {
+        for (int col = 0; col < 40; ++col) {
+            src.data()[(col / 8) * srcStrideRows * 8 + row * 8 + col % 8] = row * 40 + col;
+        }
+    }
+    TINSERT<Mode>(dst, src, 16, 8);
+    // Five blocks exercise a split remainder; both row and column tails are transferred.
+    for (int row = 0; row < 64; ++row) {
+        for (int col = 0; col < 64; ++col) {
+            const float expected = row >= 16 && row < 48 && col >= 8 && col < 48 ? (row - 16) * 40 + col - 8 : -1;
+            ASSERT_EQ(expected, dst.GetElement(row, col)) << "row=" << row << " col=" << col;
+        }
+    }
+}
+
+template <typename A, typename B, int M = 16, bool UseRawHif8Input = false>
+void checkAccToMat()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    constexpr int K = 32, N = 32;
+    auto getLeftValue = [](int row, int k) {
+        if constexpr (UseRawHif8Input) {
+            return 0.5f;
+        } else {
+            return ((row + 2 * k) % 7 - 3) * 0.5f;
+        }
+    };
+    auto getRightValue = [](int k, int col) {
+        if constexpr (UseRawHif8Input) {
+            return 0.5f;
+        } else {
+            return ((k + 3 * col) % 5 - 2) * 0.5f;
+        }
+    };
+    std::vector<A> src0(M * K);
+    std::vector<B> src1(K * N);
+    for (int row = 0; row < M; ++row) {
+        for (int k = 0; k < K; ++k) {
+            if constexpr (UseRawHif8Input) {
+                static_assert(std::is_same_v<A, hifloat8_t>);
+                src0[row * K + k] = A::FromRaw(0x18);
+            } else {
+                src0[row * K + k] = A(getLeftValue(row, k));
+            }
+            ASSERT_EQ(getLeftValue(row, k), static_cast<float>(src0[row * K + k]));
+        }
+    }
+    for (int k = 0; k < K; ++k) {
+        for (int col = 0; col < N; ++col) {
+            if constexpr (UseRawHif8Input) {
+                static_assert(std::is_same_v<B, hifloat8_t>);
+                src1[k * N + col] = B::FromRaw(0x18);
+            } else {
+                src1[k * N + col] = B(getRightValue(k, col));
+            }
+            ASSERT_EQ(getRightValue(k, col), static_cast<float>(src1[k * N + col]));
+        }
+    }
+    GlobalTensor<A, Shape<1, 1, 1, M, K>, Stride<M * K, M * K, M * K, K, 1>> src0Global(src0.data());
+    GlobalTensor<B, Shape<1, 1, 1, K, N>, Stride<K * N, K * N, K * N, N, 1>> src1Global(src1.data());
+    Tile<TileType::Mat, A, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor> src0Mat;
+    Tile<TileType::Mat, B, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor> src1Mat;
+    TileLeft<A, M, K, M, K> left;
+    TileRight<B, K, N, K, N> right;
+    TileAcc<float, M, N, M, N> acc;
+    Tile<TileType::Mat, float, M, N, BLayout::ColMajor, M, N, SLayout::RowMajor> dst;
+    TASSIGN(src0Mat, 0);
+    TASSIGN(src1Mat, 0x10000);
+    TASSIGN(left, 0);
+    TASSIGN(right, 0);
+    TASSIGN(acc, 0);
+    TASSIGN(dst, 0);
+    TLOAD(src0Mat, src0Global);
+    TLOAD(src1Mat, src1Global);
+    TMOV(left, src0Mat);
+    TMOV(right, src1Mat);
+    TMATMUL(acc, left, right);
+    TINSERT(dst, acc, 0, 0);
+    for (int row = 0; row < M; ++row) {
+        for (int col = 0; col < N; ++col) {
+            float expected = 0;
+            for (int k = 0; k < K; ++k) {
+                expected += getLeftValue(row, k) * getRightValue(k, col);
+            }
+            ASSERT_EQ(expected, dst.GetElement(row, col)) << "row=" << row << " col=" << col;
+        }
+    }
+}
+} // namespace
+
+TEST_F(TINSERTTest, Split2NullAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT2, CompactMode::Null>(); }
+TEST_F(TINSERTTest, Split4NullAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT4, CompactMode::Null>(); }
+TEST_F(TINSERTTest, Split2RowPlusOneTail) { checkSplitAlignedTail<TInsertMode::SPLIT2, CompactMode::RowPlusOne>(); }
+TEST_F(TINSERTTest, Split4RowPlusOneTail) { checkSplitAlignedTail<TInsertMode::SPLIT4, CompactMode::RowPlusOne>(); }
+TEST_F(TINSERTTest, Split2NormalAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT2, CompactMode::Normal>(); }
+TEST_F(TINSERTTest, Split4NormalAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT4, CompactMode::Normal>(); }
+TEST_F(TINSERTTest, Split2RowAlignedPaddingTail)
+{
+    checkSplitAlignedTail<TInsertMode::SPLIT2, CompactMode::RowAlignedPadding>();
+}
+TEST_F(TINSERTTest, Split4RowAlignedPaddingTail)
+{
+    checkSplitAlignedTail<TInsertMode::SPLIT4, CompactMode::RowAlignedPadding>();
+}
+TEST_F(TINSERTTest, AccToMatE4M3) { checkAccToMat<float8_e4m3_t, float8_e4m3_t>(); }
+TEST_F(TINSERTTest, AccToMatE5M2) { checkAccToMat<float8_e5m2_t, float8_e5m2_t>(); }
+TEST_F(TINSERTTest, AccToMatE4M3E5M2) { checkAccToMat<float8_e4m3_t, float8_e5m2_t>(); }
+TEST_F(TINSERTTest, AccToMatE5M2E4M3) { checkAccToMat<float8_e5m2_t, float8_e4m3_t>(); }
+TEST_F(TINSERTTest, AccToMatHif8) { checkAccToMat<hifloat8_t, hifloat8_t>(); }
+TEST_F(TINSERTTest, AccToMatE4M3M2032) { checkAccToMat<float8_e4m3_t, float8_e4m3_t, 2032>(); }
+
+TEST_F(TINSERTTest, NzGappedOuterBlocks)
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    using SrcGlobal = GlobalTensor<float, Shape<2, 2, 4, 16, 8>, Stride<1408, 640, 128, 8, 1>, Layout::NZ>;
+    using DstTile =
+        Tile<TileType::Vec, float, 64, 48, BLayout::ColMajor, 19, 8, SLayout::RowMajor, 512, PadValue::Zero>;
+    std::vector<float> input(2816, -99.0f);
+    for (int row = 0; row < 64; ++row) {
+        for (int col = 0; col < 32; ++col) {
+            input[(col / 16) * 1408 + ((col / 8) % 2) * 640 + row * 8 + col % 8] = row * 32 + col;
+        }
+    }
+    SrcGlobal src(input.data());
+    DstTile dst;
+    TASSIGN(dst, 0);
+    std::fill_n(dst.data(), 64 * 48, -1.0f);
+    TLOAD(dst, src);
+    for (int row = 0; row < 64; ++row) {
+        for (int col = 0; col < 48; ++col) {
+            const float expected = row < 19 && col < 32 ? row * 32 + col : -1;
+            ASSERT_EQ(expected, dst.GetElement(row, col)) << "row=" << row << " col=" << col;
+        }
+    }
+}
+
+#ifndef NDEBUG
+TEST_F(TINSERTTest, A2A3NzRejectsMismatchedShape)
+{
+    NPU_MEMORY_INIT(NPUArch::A2A3);
+    using GlobalData = GlobalTensor<float, Shape<1, 4, 4, 16, 8>, Stride<2048, 512, 128, 8, 1>, Layout::NZ>;
+    std::vector<float> input(2048, 1.0f);
+    GlobalData src(input.data());
+    Tile<TileType::Vec, float, 64, 32, BLayout::ColMajor, 32, 16, SLayout::RowMajor> dst;
+    TASSIGN(dst, 0);
+    EXPECT_DEATH(TLOAD(dst, src), "Assertion");
+}
+
+TEST_F(TINSERTTest, A2A3RejectsFp8Matmul)
+{
+    NPU_MEMORY_INIT(NPUArch::A2A3);
+    TileLeft<float8_e4m3_t, 16, 32> left;
+    TileRight<float8_e4m3_t, 32, 32> right;
+    TileAcc<float, 16, 32> acc;
+    EXPECT_DEATH(TMATMUL(acc, left, right), "FP8/HIF8 TMATMUL requires A5");
+}
+
+TEST_F(TINSERTTest, A5MatNzRejectsMismatchedShape)
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    using GlobalData = GlobalTensor<float, Shape<1, 4, 4, 16, 8>, Stride<2048, 512, 128, 8, 1>, Layout::NZ>;
+    std::vector<float> input(2048, 1.0f);
+    GlobalData src(input.data());
+    Tile<TileType::Mat, float, 64, 32, BLayout::ColMajor, 32, 16, SLayout::RowMajor> dst;
+    TASSIGN(dst, 0);
+    EXPECT_DEATH(TLOAD(dst, src), "Assertion");
+}
+
+namespace {
+template <int InnerRows, int InnerCols>
+void loadInvalidNzInnerShape()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    using GlobalData =
+        GlobalTensor<float, Shape<1, 1, 1, InnerRows, InnerCols>, Stride<128, 128, 128, InnerCols, 1>, Layout::NZ>;
+    std::vector<float> input(128, 1.0f);
+    GlobalData src(input.data());
+    Tile<TileType::Vec, float, 16, 8, BLayout::ColMajor, 16, 8, SLayout::RowMajor> dst;
+    TASSIGN(dst, 0);
+    TLOAD(dst, src);
+}
+} // namespace
+
+TEST_F(TINSERTTest, A5NzRejectsInvalidInnerRows)
+{
+    EXPECT_DEATH((loadInvalidNzInnerShape<8, 8>()), "A5 NZ-to-UB requires a static 16-row, 32-byte fractal");
+}
+
+TEST_F(TINSERTTest, A5NzRejectsInvalidInnerCols)
+{
+    EXPECT_DEATH((loadInvalidNzInnerShape<16, 4>()), "A5 NZ-to-UB requires a static 16-row, 32-byte fractal");
+}
+#endif
+
+namespace {
+template <typename T>
+void checkNzPackedFp4Load()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    using GlobalShape = Shape<DYNAMIC, DYNAMIC, 2, 16, 64>;
+    using GlobalStride = Stride<DYNAMIC, DYNAMIC, 1024, 64, 1>;
+    using GlobalData = GlobalTensor<T, GlobalShape, GlobalStride, Layout::NZ>;
+    using DstTile = Tile<TileType::Vec, T, 32, 320, BLayout::ColMajor, 19, 64, SLayout::RowMajor, 512, PadValue::Zero>;
+    constexpr size_t SRC_GROUP_BYTES = 2816;
+    constexpr size_t SRC_BLOCK_BYTES = 1280;
+    std::vector<T> input(2 * SRC_GROUP_BYTES);
+    auto* inputBytes = reinterpret_cast<uint8_t*>(input.data());
+    for (size_t i = 0; i < input.size(); ++i) {
+        inputBytes[i] = static_cast<uint8_t>(i * 13 + i / 256 + 7);
+    }
+    GlobalData src(input.data(), GlobalShape(2, 2), GlobalStride(2 * SRC_GROUP_BYTES, 2 * SRC_BLOCK_BYTES));
+    DstTile dst;
+    TASSIGN(dst, 0);
+    auto* output = reinterpret_cast<uint8_t*>(dst.data());
+    std::fill_n(output, 32 * 320 / 2, 0xab);
+    TLOAD(dst, src);
+
+    // Four blocks are loaded despite validCol=64; the fifth block and row tails remain untouched.
+    for (int block = 0; block < 5; ++block) {
+        for (int row = 0; row < 32; ++row) {
+            for (int byte = 0; byte < 32; ++byte) {
+                const uint8_t expected =
+                    block < 4 && row < 19 ?
+                        inputBytes[(block / 2) * SRC_GROUP_BYTES + (block % 2) * SRC_BLOCK_BYTES + row * 32 + byte] :
+                        0xab;
+                ASSERT_EQ(expected, output[block * 32 * 32 + row * 32 + byte])
+                    << "block=" << block << " row=" << row << " byte=" << byte;
+            }
+        }
+    }
+}
+
+template <typename T, TInsertMode Mode>
+void checkSplitPackedFp4()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    using SrcTile = Tile<
+        TileType::Vec, T, 33, 192, BLayout::ColMajor, 19, 160, SLayout::RowMajor, 512, PadValue::Null,
+        CompactMode::RowPlusOne>;
+    using DstTile = Tile<TileType::Mat, T, 64, 256, BLayout::ColMajor, 64, 256, SLayout::RowMajor>;
+    SrcTile src;
+    DstTile dst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    auto* input = reinterpret_cast<uint8_t*>(src.data());
+    auto* output = reinterpret_cast<uint8_t*>(dst.data());
+    for (size_t i = 0; i < 33 * 192 / 2; ++i) {
+        input[i] = static_cast<uint8_t>(i * 13 + 7);
+    }
+    std::fill_n(output, 64 * 256 / 2, 0xab);
+    TINSERT<Mode>(dst, src, 16, 64);
+    for (int block = 0; block < 4; ++block) {
+        for (int row = 0; row < 64; ++row) {
+            for (int byte = 0; byte < 32; ++byte) {
+                const uint8_t expected =
+                    block >= 1 && row >= 16 && row < 48 ? input[(block - 1) * 33 * 32 + (row - 16) * 32 + byte] : 0xab;
+                ASSERT_EQ(expected, output[block * 64 * 32 + row * 32 + byte])
+                    << "block=" << block << " row=" << row << " byte=" << byte;
+            }
+        }
+    }
+}
+} // namespace
+
+TEST_F(TINSERTTest, NzFp4E2M1DynamicGroups) { checkNzPackedFp4Load<float4_e2m1x2_t>(); }
+TEST_F(TINSERTTest, NzFp4E1M2DynamicGroups) { checkNzPackedFp4Load<float4_e1m2x2_t>(); }
+
+TEST_F(TINSERTTest, Split2Fp4E2M1) { checkSplitPackedFp4<float4_e2m1x2_t, TInsertMode::SPLIT2>(); }
+TEST_F(TINSERTTest, Split4Fp4E2M1) { checkSplitPackedFp4<float4_e2m1x2_t, TInsertMode::SPLIT4>(); }
+TEST_F(TINSERTTest, Split2Fp4E1M2) { checkSplitPackedFp4<float4_e1m2x2_t, TInsertMode::SPLIT2>(); }
+TEST_F(TINSERTTest, Split4Fp4E1M2) { checkSplitPackedFp4<float4_e1m2x2_t, TInsertMode::SPLIT4>(); }
+
+TEST_F(TINSERTTest, AccToMatHif8Raw0x18) { checkAccToMat<hifloat8_t, hifloat8_t, 16, true>(); }
+
+TEST_F(TINSERTTest, Hif8AllEncodings)
+{
+    // Golden values for raw 0x00..0x7f from en_dtypes 0.0.4, independent of the CPU decoder.
+    constexpr double POSITIVE_VALUES[] = {
+        0x0p+0,  0x1p-22,   0x1p-21,  0x1p-20,   0x1p-19,  0x1p-18,   0x1p-17,  0x1p-16,
+        0x1p+0,  0x1.2p+0,  0x1.4p+0, 0x1.6p+0,  0x1.8p+0, 0x1.ap+0,  0x1.cp+0, 0x1.ep+0,
+        0x1p+1,  0x1.2p+1,  0x1.4p+1, 0x1.6p+1,  0x1.8p+1, 0x1.ap+1,  0x1.cp+1, 0x1.ep+1,
+        0x1p-1,  0x1.2p-1,  0x1.4p-1, 0x1.6p-1,  0x1.8p-1, 0x1.ap-1,  0x1.cp-1, 0x1.ep-1,
+        0x1p+2,  0x1.2p+2,  0x1.4p+2, 0x1.6p+2,  0x1.8p+2, 0x1.ap+2,  0x1.cp+2, 0x1.ep+2,
+        0x1p+3,  0x1.2p+3,  0x1.4p+3, 0x1.6p+3,  0x1.8p+3, 0x1.ap+3,  0x1.cp+3, 0x1.ep+3,
+        0x1p-2,  0x1.2p-2,  0x1.4p-2, 0x1.6p-2,  0x1.8p-2, 0x1.ap-2,  0x1.cp-2, 0x1.ep-2,
+        0x1p-3,  0x1.2p-3,  0x1.4p-3, 0x1.6p-3,  0x1.8p-3, 0x1.ap-3,  0x1.cp-3, 0x1.ep-3,
+        0x1p+4,  0x1.4p+4,  0x1.8p+4, 0x1.cp+4,  0x1p+5,   0x1.4p+5,  0x1.8p+5, 0x1.cp+5,
+        0x1p+6,  0x1.4p+6,  0x1.8p+6, 0x1.cp+6,  0x1p+7,   0x1.4p+7,  0x1.8p+7, 0x1.cp+7,
+        0x1p-4,  0x1.4p-4,  0x1.8p-4, 0x1.cp-4,  0x1p-5,   0x1.4p-5,  0x1.8p-5, 0x1.cp-5,
+        0x1p-6,  0x1.4p-6,  0x1.8p-6, 0x1.cp-6,  0x1p-7,   0x1.4p-7,  0x1.8p-7, 0x1.cp-7,
+        0x1p+8,  0x1.8p+8,  0x1p+9,   0x1.8p+9,  0x1p+10,  0x1.8p+10, 0x1p+11,  0x1.8p+11,
+        0x1p+12, 0x1.8p+12, 0x1p+13,  0x1.8p+13, 0x1p+14,  0x1.8p+14, 0x1p+15,  std::numeric_limits<double>::infinity(),
+        0x1p-8,  0x1.8p-8,  0x1p-9,   0x1.8p-9,  0x1p-10,  0x1.8p-10, 0x1p-11,  0x1.8p-11,
+        0x1p-12, 0x1.8p-12, 0x1p-13,  0x1.8p-13, 0x1p-14,  0x1.8p-14, 0x1p-15,  0x1.8p-15,
+    };
+    for (unsigned raw = 0; raw < 256; ++raw) {
+        const double actual = static_cast<double>(hifloat8_t::FromRaw(static_cast<uint8_t>(raw)));
+        if (raw == 0x80) {
+            EXPECT_TRUE(std::isnan(actual));
+            continue;
+        }
+        const double expected = (raw & 0x80) ? -POSITIVE_VALUES[raw & 0x7f] : POSITIVE_VALUES[raw];
+        EXPECT_EQ(expected, actual) << "raw=" << raw;
+        if (std::isfinite(expected)) {
+            EXPECT_EQ(raw, hifloat8_t(expected).RawData()) << "value=" << expected;
+        }
+    }
 }

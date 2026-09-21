@@ -60,6 +60,9 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight 
     - `TMATMUL_ACC_IMPL` 使用 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()` 和 `bMatrix.GetValidCol()` 作为 `m/k/n`。
     - `cInMatrix` 在当前实现中不通过显式断言进行验证（目标定义的行为）。
 
+- **实现检查（CPU_SIM，FP8/HIF8）**：输入类型组合、A5 模拟模式要求及数值精度限制与
+  [TMATMUL](TMATMUL_zh.md) 相同。
+
 ## 示例
 
 ### 自动（Auto）

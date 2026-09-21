@@ -117,6 +117,9 @@ These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwi
         - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
         - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**: Input type combinations, A5 simulation mode, and
+  numerical limits follow [TMATMUL](TMATMUL.md#constraints).
+
 ### TGEMV_BIAS additional constraints
 
 - Bias tile datatype must exactly match `TileRes::DType`.

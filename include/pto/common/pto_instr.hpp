@@ -1599,7 +1599,7 @@ TINSERT(DstTileData& dst, SrcTileData& src, FpTileData& fp, uint16_t indexRow, u
 #endif
 
 #if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || \
-    defined(PTO_NPU_ARCH_KIRINDEV0000)
+    defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(__CPU_SIM)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent
 TINSERT(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0, WaitEvents&... events)

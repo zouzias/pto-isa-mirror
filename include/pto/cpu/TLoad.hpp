@@ -11,8 +11,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TLOAD_HPP
 #define TLOAD_HPP
 
-#include <unistd.h>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <unistd.h>
+
 #include <pto/common/constants.hpp>
 #include <pto/cpu/NPUMemoryModel.hpp>
 #include "pto/cpu/parallel.hpp"
@@ -66,6 +70,18 @@ PTO_INLINE void CheckTileData(TileData& dst, GlobalData& src)
         "Only ND, DN, NZ and MX_* GLobal Tensors are currently supported");
 
     if constexpr (GlobalData::layout == pto::Layout::NZ) {
+        if constexpr (
+            TileData::Loc == TileType::Vec && !TileData::isRowMajor && TileData::SFractal == SLayout::RowMajor) {
+            // A5 NZ-to-UB DMA takes its row count from the tile and column blocks from GM.
+            if (NPUMemoryModel::Instance().GetArch() == NPUArch::A5) {
+                [[maybe_unused]] constexpr size_t C0_ELEMENTS =
+                    C0_SIZE_BYTE / sizeof(typename TileData::DType) * (IsTwinType<typename TileData::DType>() ? 2 : 1);
+                assert(
+                    GlobalData::staticShape[3] == FRACTAL_NZ_ROW && GlobalData::staticShape[4] == C0_ELEMENTS &&
+                    "A5 NZ-to-UB requires a static 16-row, 32-byte fractal");
+                return;
+            }
+        }
         assert(
             dst.GetValidRow() == src.GetShape(GlobalTensorDim::DIM_2) * src.GetShape(GlobalTensorDim::DIM_3) &&
             dst.GetValidCol() == src.GetShape(GlobalTensorDim::DIM_0) * src.GetShape(GlobalTensorDim::DIM_1) *
@@ -242,6 +258,32 @@ PTO_INTERNAL void FillTLoadPadding(TileData& dst, size_t validRow, size_t validC
     }
 }
 
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void loadA5VecNz(TileData& dst, GlobalData& src)
+{
+    using T = typename TileData::DType;
+    constexpr size_t ELEMENTS_PER_STORAGE_UNIT = IsTwinType<T>() ? 2 : 1;
+    const size_t groupCount = src.GetShape(GlobalTensorDim::DIM_0);
+    const size_t blockCount = src.GetShape(GlobalTensorDim::DIM_1);
+    const size_t srcGroupStrideBytes = src.GetStride(GlobalTensorDim::DIM_0) * sizeof(T) / ELEMENTS_PER_STORAGE_UNIT;
+    const size_t srcBlockStrideBytes = src.GetStride(GlobalTensorDim::DIM_1) * sizeof(T) / ELEMENTS_PER_STORAGE_UNIT;
+    const size_t dstGroupStrideBytes =
+        blockCount * TileData::Rows * src.GetShape(GlobalTensorDim::DIM_4) * sizeof(T) / ELEMENTS_PER_STORAGE_UNIT;
+    constexpr size_t DST_BLOCK_STRIDE_BYTES = TileData::Rows * C0_SIZE_BYTE;
+    const size_t burstBytes = dst.GetValidRow() * C0_SIZE_BYTE;
+    auto* dstBytes = reinterpret_cast<uint8_t*>(dst.data());
+    const auto* srcBytes = reinterpret_cast<const uint8_t*>(src.data());
+
+    // A5 TLoadVecNZ2NZ copies every GM column block, including columns beyond validCol.
+    for (size_t group = 0; group < groupCount; ++group) {
+        for (size_t block = 0; block < blockCount; ++block) {
+            std::memcpy(
+                dstBytes + group * dstGroupStrideBytes + block * DST_BLOCK_STRIDE_BYTES,
+                srcBytes + group * srcGroupStrideBytes + block * srcBlockStrideBytes, burstBytes);
+        }
+    }
+}
+
 template <TLoadL2Hint l2Control = TLoadL2Hint::NormalFirstVictim, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 {
@@ -249,6 +291,15 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 
     const size_t validRow = dst.GetValidRow();
     const size_t validCol = dst.GetValidCol();
+
+    if constexpr (
+        GlobalData::layout == Layout::NZ && TileData::Loc == TileType::Vec && !TileData::isRowMajor &&
+        TileData::SFractal == SLayout::RowMajor) {
+        if (NPUMemoryModel::Instance().GetArch() == NPUArch::A5) {
+            loadA5VecNz(dst, src);
+            return;
+        }
+    }
 
     const std::vector<int64_t> shapes = {
         src.GetShape(GlobalTensorDim::DIM_0), src.GetShape(GlobalTensorDim::DIM_1),

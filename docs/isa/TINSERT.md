@@ -15,7 +15,7 @@ Insert a source sub-tile into a destination tile at `(indexRow, indexCol)`. Conc
 - Acc → Vec insertion (with optional `AccToVecMode`, relu, scalar-quant, or vector-quant) *(A5)*
 - Vec → Mat insertion (ND, NZ, and ZN layouts) *(A5)*
 - Vec → Vec insertion (ND and NZ layouts) *(A5)*
-- NZ split insertion (`SPLIT2`, `SPLIT4`) *(A5)*
+- NZ split insertion (`SPLIT2`, `SPLIT4`), also exposed in CPU simulation
 
 ## Math Interpretation
 
@@ -118,7 +118,8 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                              uint16_t indexRow, uint16_t indexCol,
                              WaitEvents &... events);
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_KIRIN9030) || defined(PTO_NPU_ARCH_KIRINX90) || \
+    defined(PTO_NPU_ARCH_KIRINDEV0000) || defined(__CPU_SIM)
 template <TInsertMode mode, typename DstTileData, typename SrcTileData,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -184,7 +185,7 @@ canonical overload.
     - vector-quant form: canonical `TINSERT<..., FpTileData, reluMode>(dst, src, fp, indexRow, indexCol)`,
       legacy `TINSERT_FP<..., reluMode>(dst, src, fp, indexRow, indexCol)`, and target-supported
       `TINSERT<..., FpTileData, mode, reluMode>(dst, src, fp, indexRow, indexCol)` Acc-to-Vec routing
-    - NZ split form *(A5 only)*: `TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` or `TINSERT<TInsertMode::SPLIT4>(...)`
+    - NZ split form *(A5, kirin9030, kirinX90, kirinDev0000, and CPU simulator)*: `TINSERT<TInsertMode::SPLIT2>(dst, src, indexRow, indexCol)` or `TINSERT<TInsertMode::SPLIT4>(...)`
 - `reluMode` is `ReluPreMode::{NoRelu, NormalRelu}`.
 - `mode` is `AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
   The vector-quantized `fp + mode` overload is exposed only on targets with matching backend support
@@ -252,13 +253,22 @@ canonical overload.
     - NZ path: source must be `(!isRowMajor, SFractal: RowMajor)`; uses `ComputeNZBlockParams` for fractal-block `copy_ubuf_to_cbuf`. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validCol and indexCol are halved for byte addressing.
     - ZN path: source and destination must both be `(isRowMajor, SFractal: ColMajor)`; uses `ComputeZNBlockParams` for fractal-block `copy_ubuf_to_cbuf`. ZN is the transpose-dual of NZ: rows are the fractal dimension and columns are the free dimension. `indexRow` and `validRow` must be aligned to the fractal row size (`BLOCK_BYTE_SIZE / sizeof(T)`); `indexCol` and `validCol` are unconstrained (free dimension), matching the NZ row dimension. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validRow and indexRow are halved for byte addressing.
 
-- **NZ Split** (`TInsertMode::SPLIT2` / `TInsertMode::SPLIT4`, A5 only):
+- **NZ Split** (`TInsertMode::SPLIT2` / `TInsertMode::SPLIT4`, A5 behavior, also modeled on CPU):
     - Destination must be `TileType::Mat`; source must be `TileType::Vec`.
     - `DstTileData::DType` must equal `SrcTileData::DType`.
     - Source must be NZ format: `(!isRowMajor, SFractal: RowMajor)`.
     - Supported element types: `half`, `bfloat16_t`, `float`, `int32_t`, `int8_t`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`.
     - `validRow` is aligned up to `FRACTAL_NZ_ROW` (16) for burst calculation.
-    - Splits the `copy_ubuf_to_cbuf` total burst into 2 or 4 sub-transfers, each handling `totalBurstNum / SplitCount` column blocks (last sub-transfer takes the remainder).
+    - Splits `copy_ubuf_to_cbuf` into 2 or 4 sub-transfers. The first `SplitCount - 1` each handle
+      `totalBurstNum / SplitCount` column blocks; the last handles all remaining blocks.
+    - The physical copy covers complete 32-byte column blocks and `ceil16(validRow)` rows, including
+      row and column tails outside the logical valid window. These tails must be backed by source and destination storage.
+    - Source block pitch in rows is `SrcTileData::Rows` for `CompactMode::Null`,
+      `ceil16(validRow) + 1` for `RowPlusOne`, and `ceil16(validRow)` for the other modes
+      (`Normal` and `RowAlignedPadding`).
+      Destination block pitch is `DstTileData::Rows`; multiply either pitch by 32 to obtain bytes.
+    - FP4 column counts and offsets are logical element counts; two elements share one byte.
+    - CPU_SIM follows the same type, layout, and data-transfer rules described above.
 
 ## Examples
 

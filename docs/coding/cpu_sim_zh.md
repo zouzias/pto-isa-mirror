@@ -85,6 +85,14 @@ CPU_SIM 默认提供至少 512 KiB 的 UB 临时空间。应在初始化内存�
 
 ## 已支持行为和后端差异
 
+- `TINSERT` 的 `SPLIT2`/`SPLIT4` 模式按 A5 的完整列块、行补齐和 Compact 步长执行 Vec→Mat 搬运，
+  源和目标必须为有效窗口之外的实际搬运区域提供存储空间。类型与布局约束见 [TINSERT](../isa/TINSERT_zh.md)。
+- A5 模式下，Vec NZ→NZ `TLOAD` 按 GM 列块数、Tile 有效行数和物理 Stride 搬运；
+  有效列之外的源列块也会加载。范围与 Padding 行为见 [TLOAD](../isa/TLOAD_zh.md)。
+- A5 模式的普通矩阵乘支持 FP8 E4M3/E5M2 的四种输入组合和 HIF8×HIF8，使用 float 累加器。
+  该规则适用于 `TMATMUL`、`TMATMUL_ACC`、`TMATMUL_BIAS` 及对应的 `TGEMV` 入口；
+  类型和精度约束见 [TMATMUL](../isa/TMATMUL_zh.md)。这些路径的架构检查在定义 `NDEBUG` 时关闭。
+- `hifloat8_t` 编码和解码使用共用查找表，按前缀长度确定指数和尾数字段；例如原始编码 `0x18` 表示 0.5。
 - CPU_SIM `TROWSUM` 根据调用线程已初始化的架构选择计算及检查路径，两种路径均接受但不访问 `tmp`。类型、布局和数值边界见 [TROWSUM](../isa/TROWSUM_zh.md#cpu_sim实现检查)，计算方式见下文 [TROWSUM 实现说明](#trowsum-实现说明)。
 - 当各操作数的元素类型及运行时有效形状一致时，CPU_SIM `TADD` 和 `TABS` 支持操作数使用不同的 Tile 类型，包括混用静态和动态 `ValidRow`/`ValidCol` 模板参数。CPU_SIM 按每个操作数自身的 Tile 布局和物理形状计算索引；运行时有效形状不一致会触发断言。
 - CPU_SIM 同时实现 `TCI(dst, start)` 和 `TCI(dst, start, tmp)`。三参数形式接受 `tmp` 但不访问其存储，其升序或降序序列语义与两参数形式相同。编写跨后端 kernel 时，仍须保留目标 NPU 后端要求的临时空间分配。
