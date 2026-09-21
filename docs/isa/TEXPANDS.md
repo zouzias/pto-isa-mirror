@@ -66,6 +66,8 @@ PTO_INST RecordEvent TEXPANDS(TileData &dst, typename TileData::DType scalar, Wa
 - **Valid region**:
     - For `TileType::Vec` :
     - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
+    - On A2A3, vector tiles support row-major and column-major layouts with static or dynamic valid dimensions.
+    - Valid dimensions may be smaller than the physical tile dimensions; filling follows the physical row or column stride.
     - For  `TileType::Mat` :
     - For Tile : The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
     - For ConvTile : The op fills `dst` over `ConvTileData`'s shape.
