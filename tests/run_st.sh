@@ -141,6 +141,9 @@ if { [ "$ENABLE_A3" = "true" ] || [ "$ENABLE_A5" = "true" ]; } && \
 fi
 
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
+  if [ "$ENABLE_SIMPLE" = "true" ] || [ "$ENABLE_ALL" = "true" ]; then
+    python3 tests/script/check_a2a3_textract.py
+  fi
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
     if [ -z "$ST_PART" ] || [ "$ST_PART" = "1" ]; then
@@ -857,6 +860,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 fi
 
 if [ "$ENABLE_A5" = "true" ]; then
+  if [ "$IS_AUTO_MODE" = "false" ]; then
+    python3 tests/script/check_ub2l1_nd2nz.py
+  fi
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcatdstidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
@@ -1022,6 +1028,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum_trowexpand -g TROWSUM_TROWEXPANDTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpand_tdiv -g TROWEXPAND_TDIVTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_ub2l1 -g TMovUb2l1Test.case1
+    if [ "$IS_AUTO_MODE" = "false" ]; then
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_ub2l1 -g 'TMovUb2l1Test.nd2nz_*'
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*'
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g 'TInsertTest.nd2nz_*'
+    fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tneg -g TNEGTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpand -g TCOLEXPANDTest.case_float_1_8_128_63
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_n3
