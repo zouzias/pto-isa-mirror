@@ -20,7 +20,7 @@ namespace TmatmulMxA6 {
 template <int caseId>
 void Launch(uint8_t* out, uint8_t* aData, uint8_t* aScale, uint8_t* bData, uint8_t* bScale, void* stream);
 } // namespace TmatmulMxA6
-
+i
 class TMATMUL_MX_A6_TEST : public testing::Test {
 protected:
     void SetUp() override {}

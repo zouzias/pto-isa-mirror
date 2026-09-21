@@ -11,20 +11,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // --------------------------------------------------------------------------------
 // hif4_matmul_performance_kernel.cpp
 //
-// A6 (dav-9201) HiF4 GEMM demo, single-buffered sequential tiling. Pipeline:
+// A6 (dav-9201) HiF4 GEMM demo, double-buffered (ping-pong) tiling. Pipeline:
 //
 //   GM(BF16) --TLOAD--> L1 --TEXTRACT--> L0A/L0B + L0AMX/L0BMX --TMATMUL_MX--> L0C --TSTORE--> GM(BF16)
 //
-// HiF4 scale is pre-fractalized in GM ([16,4] cells, HIF4_A_ZZ / HIF4_B_NN) and is
-// consumed by contiguous ZZ2ZZ/NN2NN bursts, so it cannot be K-sliced at TLOAD time.
-// The full-K scale for each (M,N) base block is therefore loaded once, and the per-K
-// slice is produced at TEXTRACT (L1 -> L0AMX/L0BMX).
+// Performance structure:
+//   * multi-core partition (4x4 core grid over the output);
+//   * L1 data tiles double-buffered (stepKa/stepKb = 2 K-slices per TLOAD);
+//   * L0A/L0B/L0AMX/L0BMX ping-pong double-buffered;
+//   * full-K HiF4 scale loaded once per (M,N) base block (it cannot be K-sliced
+//     at TLOAD time because it is pre-fractalized HIF4_A_ZZ/HIF4_B_NN), then
+//     K-sliced at TEXTRACT.
 //
-// Synchronization is a straightforward cross-pipe set_flag/wait_flag chain (the
-// simulator does not accept self-pipe flags): MTE2 -> MTE1 (load -> extract),
-// MTE1 -> MTE2 (extract -> next load), MTE1 -> M (extract -> matmul), M -> MTE1
-// (matmul -> next extract), M -> FIX (matmul -> store), FIX -> MTE2 (store -> next
-// tile load). Event ids are namespaced per (src,dst) pipe pair, so id 0 is reused.
+// Sync is a cross-pipe set_flag/wait_flag token chain. Every set_flag has exactly
+// one matching wait_flag (1:1), ping-pong flags are primed once and the final
+// dangling tokens are drained by WaitSyncFlags.
 // --------------------------------------------------------------------------------
 
 #include <pto/common/constants.hpp>
@@ -33,8 +34,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-constexpr uint32_t HIF4_SCALE_GROUP = 64;  // HiF4 groups over 64 elements
-constexpr uint32_t HIF4_COL_BYTES = 4;     // 4 bytes per 64-group (Ea/Eb/Ec packed cell width)
+constexpr uint32_t BUFFER_NUM = 2;              // double-buffered data tiles
+constexpr uint32_t HIF4_SCALE_GROUP = 64;       // HiF4 groups over 64 elements
+constexpr uint32_t HIF4_COL_BYTES = 4;          // 4 bytes per 64-group packed scale cell
+constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;
+
+// Event ids (namespaced per (src,dst) pipe pair).
+constexpr uint32_t EV_DATA_A = 0;          // MTE2 -> MTE1: A data L1 buffer loaded
+constexpr uint32_t EV_DATA_B = 1;          // MTE2 -> MTE1: B data L1 buffer loaded
+constexpr uint32_t EV_SCALE_LOADED = 2;    // MTE2 -> MTE1: full-K scale loaded
+constexpr uint32_t EV_DATA_FREE = 0;       // MTE1 -> MTE2: data L1 buffer free (ping-pong 0/1)
+constexpr uint32_t EV_SCALE_FREE = 2;      // MTE1 -> MTE2: scale L1 buffer free
+constexpr uint32_t EV_EXTRACT_DONE = 0;    // MTE1 -> M: slice extracted (ping-pong 0/1)
+constexpr uint32_t EV_MATMUL_DONE = 0;     // M -> MTE1: matmul done (ping-pong 0/1)
+constexpr uint32_t EV_STORE = 0;           // M -> FIX: matmul done, store may start
+constexpr uint32_t EV_STORE_DONE = 0;      // FIX -> MTE2: store done, L1 reusable
 
 template <typename OutTile, typename LeftTile, typename RightTile, typename LeftScaleTile, typename RightScaleTile>
 AICORE inline void MatmulAcc(
@@ -45,6 +59,18 @@ AICORE inline void MatmulAcc(
     } else {
         TMATMUL_MX(cTile, cTile, aTile, aScaleTile, bTile, bScaleTile);
     }
+}
+
+template <pipe_t srcPipe, pipe_t dstPipe>
+AICORE inline void SetFlag(uint32_t id)
+{
+    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+}
+
+template <pipe_t srcPipe, pipe_t dstPipe>
+AICORE inline void WaitFlag(uint32_t id)
+{
+    wait_flag(srcPipe, dstPipe, static_cast<event_t>(id));
 }
 
 // Work partition: core (mIterIdx, nIterIdx) owns C tile
@@ -78,11 +104,205 @@ AICORE inline void InitGMOffsets(
 }
 
 template <
-    typename T, typename U, typename X, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreN,
-    uint32_t baseM, uint32_t baseK, uint32_t baseN>
-AICORE inline void RunHif4MatmulCore(
-    __gm__ T* out, __gm__ U* src0, __gm__ U* src1, __gm__ X* src2, __gm__ X* src3)
+    typename X, int m, int k, int n, uint32_t baseM, uint32_t baseN, typename TileScaleA, typename TileScaleB>
+AICORE inline void LoadScaleFullK(
+    TileScaleA& aScaleMatTile, TileScaleB& bScaleMatTile, __gm__ X* currentSrc2, __gm__ X* currentSrc3, uint32_t i,
+    uint32_t j, uint32_t currentM, uint32_t currentN)
 {
+    constexpr uint32_t fullScaleK = k / HIF4_SCALE_GROUP;
+
+    using DynShapeScaleA = TileShape2D<uint8_t, -1, -1, Layout::HIF4_A_ZZ>;
+    using FullStrideScaleA = BaseShape2D<uint8_t, m, fullScaleK, Layout::HIF4_A_ZZ>;
+    using GlobalScaleA = GlobalTensor<uint8_t, DynShapeScaleA, FullStrideScaleA, Layout::HIF4_A_ZZ>;
+
+    using DynShapeScaleB = TileShape2D<uint8_t, -1, -1, Layout::HIF4_B_NN>;
+    using FullStrideScaleB = BaseShape2D<uint8_t, fullScaleK, n, Layout::HIF4_B_NN>;
+    using GlobalScaleB = GlobalTensor<uint8_t, DynShapeScaleB, FullStrideScaleB, Layout::HIF4_B_NN>;
+
+    GlobalScaleA gmA(currentSrc2 + static_cast<uint64_t>(i) * (baseM >> 4) * k, DynShapeScaleA(currentM, fullScaleK));
+    GlobalScaleB gmB(currentSrc3 + static_cast<uint64_t>(j) * (baseN >> 4) * k, DynShapeScaleB(fullScaleK, currentN));
+
+    WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
+    TLOAD<TileScaleA, GlobalScaleA>(aScaleMatTile, gmA);
+    TLOAD<TileScaleB, GlobalScaleB>(bScaleMatTile, gmB);
+    SetFlag<PIPE_MTE2, PIPE_MTE1>(EV_SCALE_LOADED);
+}
+
+template <
+    typename U, typename X, int m, int k, int n, uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t baseScaleK,
+    uint32_t stepKa, uint32_t stepKb, typename TileMatA, typename TileMatB, typename TileScaleA, typename TileScaleB,
+    typename LeftTile, typename RightTile, typename LeftScaleTile, typename RightScaleTile, typename ResTile>
+AICORE inline void ProcessKIteration(
+    uint32_t kIter, uint32_t loopsK, uint32_t i, uint32_t j, __gm__ U* currentSrc0, __gm__ U* currentSrc1,
+    TileMatA aMatTile[BUFFER_NUM], TileMatB bMatTile[BUFFER_NUM], TileScaleA& aScaleMatTile,
+    TileScaleB& bScaleMatTile, LeftTile aTile[BUFFER_NUM], RightTile bTile[BUFFER_NUM],
+    LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], ResTile& cTile, uint8_t& mte2DBFlag,
+    uint8_t& mte1DBFlag, uint32_t currentM, uint32_t currentN)
+{
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using GlobalDataSrc0 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, m, k, Layout::ND>, Layout::ND>;
+    using GlobalDataSrc1 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, k, n, Layout::ND>, Layout::ND>;
+
+    const uint32_t kModstepKa = kIter % stepKa;
+    const bool isFirstK = (kIter == 0);
+    const bool isLastK = (kIter == loopsK - 1);
+
+    // TLOAD stage (double-buffered L1 data; full-K scale was loaded once per base block).
+    if (kModstepKa == 0) {
+        GlobalDataSrc0 gmA(
+            currentSrc0 + static_cast<uint64_t>(i) * baseM * k / 2 + static_cast<uint64_t>(kIter) * baseK / 2,
+            DynShapeDim5(currentM, baseK * stepKa));
+        GlobalDataSrc1 gmB(
+            currentSrc1 + static_cast<uint64_t>(kIter) * baseK * n / 2 + static_cast<uint64_t>(j) * baseN / 2,
+            DynShapeDim5(baseK * stepKb, currentN));
+
+        WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + mte2DBFlag);
+        TLOAD(aMatTile[mte2DBFlag], gmA);
+        SetFlag<PIPE_MTE2, PIPE_MTE1>(EV_DATA_A);
+        TLOAD(bMatTile[mte2DBFlag], gmB);
+        SetFlag<PIPE_MTE2, PIPE_MTE1>(EV_DATA_B);
+        mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
+    }
+    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0; // just-loaded buffer
+
+    // TEXTRACT stage (ping-pong L0).
+    WaitFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + mte1DBFlag);
+    if (kModstepKa == 0) {
+        WaitFlag<PIPE_MTE2, PIPE_MTE1>(EV_DATA_A);
+    }
+    TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
+    if (isFirstK) {
+        WaitFlag<PIPE_MTE2, PIPE_MTE1>(EV_SCALE_LOADED);
+    }
+    TEXTRACT(aScaleTile[mte1DBFlag], aScaleMatTile, 0, kIter * baseScaleK * HIF4_COL_BYTES);
+
+    if (kModstepKa == 0) {
+        WaitFlag<PIPE_MTE2, PIPE_MTE1>(EV_DATA_B);
+    }
+    TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
+    TEXTRACT(bScaleTile[mte1DBFlag], bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
+
+    if ((kIter + 1) % stepKa == 0) {
+        SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + currMte2Idx);
+    }
+    if (isLastK) {
+        SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
+    }
+
+    // TMATMUL stage.
+    SetFlag<PIPE_MTE1, PIPE_M>(EV_EXTRACT_DONE + mte1DBFlag);
+    WaitFlag<PIPE_MTE1, PIPE_M>(EV_EXTRACT_DONE + mte1DBFlag);
+    MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], aScaleTile[mte1DBFlag], bScaleTile[mte1DBFlag], kIter);
+    SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + mte1DBFlag);
+    mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
+}
+
+template <typename T, int m, int n, uint32_t baseM, uint32_t baseN, typename ResTile>
+AICORE inline void StoreResult(ResTile& cTile, __gm__ T* currentDst, uint32_t i, uint32_t j, uint32_t currentM,
+    uint32_t currentN)
+{
+    SetFlag<PIPE_M, PIPE_FIX>(EV_STORE);
+    WaitFlag<PIPE_M, PIPE_FIX>(EV_STORE);
+
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStrideDim5 = pto::Stride<m * n, m * n, m * n, n, 1>;
+    using GlobalDataOut = GlobalTensor<T, DynShapeDim5, DynStrideDim5, Layout::ND>;
+
+    uint32_t gmOffset = i * baseM * n + j * baseN;
+    GlobalDataOut dstGlobal(currentDst + gmOffset, DynShapeDim5(currentM, currentN));
+    TSTORE(dstGlobal, cTile);
+
+    SetFlag<PIPE_FIX, PIPE_MTE2>(EV_STORE_DONE);
+    WaitFlag<PIPE_FIX, PIPE_MTE2>(EV_STORE_DONE);
+}
+
+AICORE inline void InitSyncFlags()
+{
+    SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 0);
+    SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 1);
+    SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
+    SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 0);
+    SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 1);
+}
+
+AICORE inline void WaitSyncFlags()
+{
+    WaitFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 0);
+    WaitFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 1);
+    WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 0);
+    WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 1);
+    WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
+}
+
+template <
+    typename T, typename U, typename X, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreN,
+    uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepKa, uint32_t stepKb, typename TileMatA,
+    typename TileMatB, typename TileScaleA, typename TileScaleB, typename LeftTile, typename RightTile,
+    typename LeftScaleTile, typename RightScaleTile, typename ResTile>
+AICORE inline void Compute(
+    __gm__ U* currentSrc0, __gm__ U* currentSrc1, __gm__ X* currentSrc2, __gm__ X* currentSrc3, __gm__ T*& currentDst,
+    TileMatA aMatTile[BUFFER_NUM], TileMatB bMatTile[BUFFER_NUM], TileScaleA& aScaleMatTile,
+    TileScaleB& bScaleMatTile, LeftTile aTile[BUFFER_NUM], RightTile bTile[BUFFER_NUM],
+    LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], ResTile& cTile)
+{
+    constexpr uint32_t baseScaleK = baseK / HIF4_SCALE_GROUP;
+    constexpr uint32_t scaleCols = k / HIF4_SCALE_GROUP * HIF4_COL_BYTES;
+    const uint32_t loopsM = (singleCoreM + baseM - 1) / baseM;
+    const uint32_t loopsN = (singleCoreN + baseN - 1) / baseN;
+    const uint32_t loopsK = (k + baseK - 1) / baseK;
+    const uint32_t remM = singleCoreM % baseM;
+    const uint32_t remN = singleCoreN % baseN;
+
+    for (uint32_t i = 0; i < loopsM; ++i) {
+        uint32_t currentM = (i == loopsM - 1 && remM > 0) ? remM : baseM;
+        for (uint32_t j = 0; j < loopsN; ++j) {
+            uint32_t currentN = (j == loopsN - 1 && remN > 0) ? remN : baseN;
+
+            uint8_t mte2DBFlag = 0;
+            uint8_t mte1DBFlag = 0;
+
+            for (int buf = 0; buf < BUFFER_NUM; ++buf) {
+                aMatTile[buf] = TileMatA(currentM, baseK * stepKa);
+                bMatTile[buf] = TileMatB(baseK * stepKb, currentN);
+                aTile[buf] = LeftTile(currentM, baseK);
+                bTile[buf] = RightTile(baseK, currentN);
+                aScaleTile[buf] = LeftScaleTile(currentM, baseScaleK * HIF4_COL_BYTES);
+                bScaleTile[buf] = RightScaleTile(baseScaleK * HIF4_COL_BYTES, currentN);
+            }
+            aScaleMatTile = TileScaleA(currentM, scaleCols);
+            bScaleMatTile = TileScaleB(scaleCols, currentN);
+
+            ResTile outTile(currentM, currentN);
+            TASSIGN(outTile, 0x0);
+
+            LoadScaleFullK<X, m, k, n, baseM, baseN, TileScaleA, TileScaleB>(
+                aScaleMatTile, bScaleMatTile, currentSrc2, currentSrc3, i, j, currentM, currentN);
+
+            for (uint32_t kIter = 0; kIter < loopsK; ++kIter) {
+                ProcessKIteration<
+                    U, X, m, k, n, baseM, baseK, baseN, baseScaleK, stepKa, stepKb, TileMatA, TileMatB, TileScaleA,
+                    TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile>(
+                    kIter, loopsK, i, j, currentSrc0, currentSrc1, aMatTile, bMatTile, aScaleMatTile, bScaleMatTile,
+                    aTile, bTile, aScaleTile, bScaleTile, outTile, mte2DBFlag, mte1DBFlag, currentM, currentN);
+            }
+
+            StoreResult<T, m, n, baseM, baseN, ResTile>(outTile, currentDst, i, j, currentM, currentN);
+        }
+    }
+}
+
+template <
+    typename T, typename U, typename X, uint32_t blockDim, int m, int k, int n, uint32_t baseM, uint32_t baseK,
+    uint32_t baseN, uint32_t stepKa, uint32_t stepKb, uint32_t singleCoreM, uint32_t singleCoreN>
+AICORE inline void RunHif4MatmulDispatch(__gm__ T* out, __gm__ U* src0, __gm__ U* src1, __gm__ X* src2, __gm__ X* src3)
+{
+    constexpr uint32_t mIter = (m + singleCoreM - 1) / singleCoreM;
+    constexpr uint32_t nIter = (n + singleCoreN - 1) / singleCoreN;
+    uint32_t coreIdx = get_block_idx();
+    if (coreIdx >= mIter * nIter) {
+        return;
+    }
+
     __gm__ U* currentSrc0 = nullptr;
     __gm__ U* currentSrc1 = nullptr;
     __gm__ X* currentSrc2 = nullptr;
@@ -95,9 +315,9 @@ AICORE inline void RunHif4MatmulCore(
     constexpr uint32_t fullScaleK = k / HIF4_SCALE_GROUP;
     constexpr uint32_t scaleCols = fullScaleK * HIF4_COL_BYTES;
 
-    using TileMatA = Tile<TileType::Mat, U, baseM, baseK, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
+    using TileMatA = Tile<TileType::Mat, U, baseM, baseK * stepKa, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
         TileConfig::fractalABSize>;
-    using TileMatB = Tile<TileType::Mat, U, baseK, baseN, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
+    using TileMatB = Tile<TileType::Mat, U, baseK * stepKb, baseN, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
         TileConfig::fractalABSize>;
     using TileScaleA = Tile<TileType::Mat, X, baseM, scaleCols, BLayout::RowMajor, -1, -1, SLayout::RowMajor, 32>;
     using TileScaleB = Tile<TileType::Mat, X, scaleCols, baseN, BLayout::ColMajor, -1, -1, SLayout::ColMajor, 32>;
@@ -108,131 +328,54 @@ AICORE inline void RunHif4MatmulCore(
     using RightScaleTile = TileRightScale<X, baseScaleK * HIF4_COL_BYTES, baseN, -1, -1>;
     using ResTile = TileAcc<float, baseM, baseN, -1, -1>;
 
-    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
-    using GlobalDataSrc0 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, m, k, Layout::ND>, Layout::ND>;
-    using GlobalDataSrc1 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, k, n, Layout::ND>, Layout::ND>;
-    using GlobalScaleA = GlobalTensor<X, TileShape2D<X, -1, -1, Layout::HIF4_A_ZZ>,
-        BaseShape2D<X, m, fullScaleK, Layout::HIF4_A_ZZ>, Layout::HIF4_A_ZZ>;
-    using GlobalScaleB = GlobalTensor<X, TileShape2D<X, -1, -1, Layout::HIF4_B_NN>,
-        BaseShape2D<X, fullScaleK, n, Layout::HIF4_B_NN>, Layout::HIF4_B_NN>;
-    using DynStrideDim5 = pto::Stride<m * n, m * n, m * n, n, 1>;
-    using GlobalDataOut = GlobalTensor<T, DynShapeDim5, DynStrideDim5, Layout::ND>;
+    TileMatA aMatTile[BUFFER_NUM];
+    TileMatB bMatTile[BUFFER_NUM];
+    TileScaleA aScaleMatTile;
+    TileScaleB bScaleMatTile;
+    LeftTile aTile[BUFFER_NUM];
+    RightTile bTile[BUFFER_NUM];
+    LeftScaleTile aScaleTile[BUFFER_NUM];
+    RightScaleTile bScaleTile[BUFFER_NUM];
+    ResTile cTile;
 
-    const uint32_t loopsM = (singleCoreM + baseM - 1) / baseM;
-    const uint32_t loopsN = (singleCoreN + baseN - 1) / baseN;
-    const uint32_t loopsK = (k + baseK - 1) / baseK;
-    const uint32_t remM = singleCoreM % baseM;
-    const uint32_t remN = singleCoreN % baseN;
+    // L1 data buffers (double-buffered), then full-K scale buffers.
+    TASSIGN(aMatTile[0], 0x0);
+    TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa / 2);
+    TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM);
+    TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2);
+    const uint32_t scaleBaseAddr = baseM * baseK * stepKa / 2 * BUFFER_NUM + baseK * baseN * stepKb / 2 * BUFFER_NUM;
+    TASSIGN(aScaleMatTile, scaleBaseAddr);
+    TASSIGN(bScaleMatTile, scaleBaseAddr + baseM * scaleCols);
 
-    for (uint32_t i = 0; i < loopsM; ++i) {
-        uint32_t currentM = (i == loopsM - 1 && remM > 0) ? remM : baseM;
-        for (uint32_t j = 0; j < loopsN; ++j) {
-            uint32_t currentN = (j == loopsN - 1 && remN > 0) ? remN : baseN;
+    // L0A/L0B ping-pong buffers.
+    TASSIGN(aTile[0], 0x0);
+    TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);
+    TASSIGN(bTile[0], 0x0);
+    TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
+    TASSIGN(cTile, 0x0);
+    TASSIGN(aScaleTile[0], GetScaleAddr(aTile[0].data()));
+    TASSIGN(aScaleTile[1], GetScaleAddr(aTile[1].data()));
+    TASSIGN(bScaleTile[0], GetScaleAddr(bTile[0].data()));
+    TASSIGN(bScaleTile[1], GetScaleAddr(bTile[1].data()));
 
-            // Construct with runtime valid dims, then TASSIGN sets the buffer address.
-            TileMatA aMatTile(currentM, baseK);
-            TileMatB bMatTile(baseK, currentN);
-            TileScaleA aScaleMatTile(currentM, scaleCols);
-            TileScaleB bScaleMatTile(scaleCols, currentN);
-            LeftTile aTile(currentM, baseK);
-            RightTile bTile(baseK, currentN);
-            LeftScaleTile aScaleTile(currentM, baseScaleK * HIF4_COL_BYTES);
-            RightScaleTile bScaleTile(baseScaleK * HIF4_COL_BYTES, currentN);
-
-            // L1 buffer assignment (tightly packed, single-buffered). fp4 data = 0.5 B/elem.
-            TASSIGN(aMatTile, 0x0);
-            TASSIGN(bMatTile, 0x0 + baseM * baseK / 2);
-            TASSIGN(aScaleMatTile, 0x0 + baseM * baseK / 2 + baseK * baseN / 2);
-            TASSIGN(bScaleMatTile, 0x0 + baseM * baseK / 2 + baseK * baseN / 2 + baseM * scaleCols);
-            // L0 buffer assignment.
-            TASSIGN(aTile, 0x0);
-            TASSIGN(bTile, 0x0);
-            TASSIGN(aScaleTile, GetScaleAddr(aTile.data()));
-            TASSIGN(bScaleTile, GetScaleAddr(bTile.data()));
-
-            ResTile outTile(currentM, currentN);
-            TASSIGN(outTile, 0x0);
-
-            // Load full-K scale for this base block once.
-            {
-                GlobalScaleA gmA(
-                    currentSrc2 + static_cast<uint64_t>(i) * (baseM >> 4) * k,
-                    TileShape2D<X, -1, -1, Layout::HIF4_A_ZZ>(currentM, fullScaleK));
-                GlobalScaleB gmB(
-                    currentSrc3 + static_cast<uint64_t>(j) * (baseN >> 4) * k,
-                    TileShape2D<X, -1, -1, Layout::HIF4_B_NN>(fullScaleK, currentN));
-                TLOAD<TileScaleA, GlobalScaleA>(aScaleMatTile, gmA);
-                TLOAD<TileScaleB, GlobalScaleB>(bScaleMatTile, gmB);
-                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-            }
-
-            for (uint32_t kIter = 0; kIter < loopsK; ++kIter) {
-                // Wait until the previous TEXTRACT released the L1 data buffer.
-                if (kIter > 0) {
-                    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-                }
-
-                // Load data panels (MTE2).
-                GlobalDataSrc0 gmA(
-                    currentSrc0 + static_cast<uint64_t>(i) * baseM * k / 2 +
-                        static_cast<uint64_t>(kIter) * baseK / 2,
-                    DynShapeDim5(currentM, baseK));
-                GlobalDataSrc1 gmB(
-                    currentSrc1 + static_cast<uint64_t>(kIter) * baseK * n / 2 +
-                        static_cast<uint64_t>(j) * baseN / 2,
-                    DynShapeDim5(baseK, currentN));
-                TLOAD(aMatTile, gmA);
-                TLOAD(bMatTile, gmB);
-                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-
-                // Wait until the previous TMATMUL released the L0A/L0B buffer.
-                if (kIter > 0) {
-                    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-                }
-
-                // Extract data + scale slices (MTE1).
-                TEXTRACT(aTile, aMatTile, 0, 0);
-                TEXTRACT(aScaleTile, aScaleMatTile, 0, kIter * baseScaleK * HIF4_COL_BYTES);
-                TEXTRACT(bTile, bMatTile, 0, 0);
-                TEXTRACT(bScaleTile, bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
-
-                // Release the L1 data buffer and signal the matmul. Skip the last
-                // iteration: those flags are only consumed by the *next* k-iteration.
-                if (kIter < loopsK - 1) {
-                    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-                }
-                set_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
-                wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
-
-                // Accumulate (M).
-                MatmulAcc(outTile, aTile, bTile, aScaleTile, bScaleTile, kIter);
-                if (kIter < loopsK - 1) {
-                    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-                }
-            }
-
-            // Store (FIX) after the last matmul, then release L1 for the next tile.
-            set_flag(PIPE_M, PIPE_FIX, EVENT_ID5);
-            wait_flag(PIPE_M, PIPE_FIX, EVENT_ID5);
-            GlobalDataOut dstGlobal(
-                currentDst + static_cast<uint64_t>(i) * baseM * n + j * baseN, DynShapeDim5(currentM, currentN));
-            TSTORE(dstGlobal, outTile);
-            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID6);
-            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID6);
-        }
-    }
+    InitSyncFlags();
+    Compute<
+        T, U, X, m, k, n, singleCoreM, singleCoreN, baseM, baseK, baseN, stepKa, stepKb, TileMatA, TileMatB,
+        TileScaleA, TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile>(
+        currentSrc0, currentSrc1, currentSrc2, currentSrc3, currentDst, aMatTile, bMatTile, aScaleMatTile,
+        bScaleMatTile, aTile, bTile, aScaleTile, bScaleTile, cTile);
+    WaitSyncFlags();
 }
 
 template <
     uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n, uint32_t singleCoreM, uint32_t singleCoreN,
-    uint32_t baseM, uint32_t baseK, uint32_t baseN>
+    uint32_t baseM, uint32_t baseK, uint32_t baseN, uint32_t stepKa, uint32_t stepKb>
 __global__ AICORE void Hif4MatmulPerformance(
     __gm__ uint8_t* out, __gm__ uint8_t* src0, __gm__ uint8_t* src1, __gm__ uint8_t* src2, __gm__ uint8_t* src3)
 {
-    RunHif4MatmulCore<
-        bfloat16_t, hifloat4x2_t, uint8_t, m, k, n, singleCoreM, singleCoreN, baseM, baseK, baseN>(
+    RunHif4MatmulDispatch<
+        bfloat16_t, hifloat4x2_t, uint8_t, blockDim, m, k, n, baseM, baseK, baseN, stepKa, stepKb, singleCoreM,
+        singleCoreN>(
         reinterpret_cast<__gm__ bfloat16_t*>(out), reinterpret_cast<__gm__ hifloat4x2_t*>(src0),
         reinterpret_cast<__gm__ hifloat4x2_t*>(src1), reinterpret_cast<__gm__ uint8_t*>(src2),
         reinterpret_cast<__gm__ uint8_t*>(src3));
@@ -249,8 +392,10 @@ void LaunchHif4Matmul(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2,
     constexpr uint32_t baseM = 256;
     constexpr uint32_t baseK = 256;
     constexpr uint32_t baseN = 256;
+    constexpr uint32_t stepKa = 2;
+    constexpr uint32_t stepKb = 2;
 
-    Hif4MatmulPerformance<blockDim, m, k, n, singleCoreM, singleCoreN, baseM, baseK, baseN>
+    Hif4MatmulPerformance<blockDim, m, k, n, singleCoreM, singleCoreN, baseM, baseK, baseN, stepKa, stepKb>
         <<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3);
 }
 
