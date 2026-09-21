@@ -10,13 +10,10 @@
 - [**TGET**](TGET_zh.md)：远程读（GM → UB → GM）
 
 ## 点对点通信（异步）
-- [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：异步远程写（GM → DMA 引擎 → GM）
+- [**TPUT_ASYNC**](TPUT_ASYNC_zh.md)：立即提交或聚合Batch异步远程写，包含
+  `SubmitAsyncPutBatch`辅助函数（GM → DMA 引擎 → GM）
 - [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY_zh.md)：远程写并更新远端 `int32_t` signal
 - [**TGET_ASYNC**](TGET_ASYNC_zh.md)：异步远程读（GM → DMA 引擎 → GM）
-
-### 聚合异步写
-- [**TPUT_ASYNC Batch??**](TPUT_ASYNC_BATCH_zh.md)：向当前Batch暂存一个异步远程写
-- [**SubmitAsyncPutBatch**](SUBMIT_ASYNC_PUT_BATCH_zh.md)：发布当前异步写Batch并返回最终Event
 
 ## 基于信号的同步
 - [**TNOTIFY**](TNOTIFY_zh.md)：向远端 NPU 发送通知
