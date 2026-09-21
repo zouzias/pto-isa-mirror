@@ -84,6 +84,9 @@ public:
         UrmaLayout layout = UrmaLayout::PER_PEER, uint32_t aivCount = kUrmaAutoAivCount, uint32_t jettiesPerCore = 1,
         uint32_t sqDepth = 0, const char* sharedTagPrefix = kDefaultSharedTagPrefix)
     {
+        if (initialized_) {
+            return true;
+        }
         uint32_t resolvedAivCount = 0;
         uint32_t resolvedJettiesPerCore = 1;
         if (layout == UrmaLayout::SHARED_POOL) {
@@ -179,9 +182,7 @@ public:
         if (!initialized_) {
             return 0;
         }
-        return static_cast<uint64_t>(
-            sizeof(UrmaInfo) + CtxRowCount() * (2U * sizeof(UrmaWQCtx) + 2U * sizeof(UrmaCqCtx)) +
-            TargetRowCount() * sizeof(UrmaMemInfo));
+        return ComputeWorkspaceBytes();
     }
 
 private:
@@ -189,6 +190,13 @@ private:
     uint64_t TargetRowCount() const
     {
         return (aivCount_ == 0) ? rankCount_ : static_cast<uint64_t>(JettyCount()) * rankCount_;
+    }
+
+    uint64_t ComputeWorkspaceBytes() const
+    {
+        return static_cast<uint64_t>(
+            sizeof(UrmaInfo) + CtxRowCount() * (2U * sizeof(UrmaWQCtx) + 2U * sizeof(UrmaCqCtx)) +
+            TargetRowCount() * sizeof(UrmaMemInfo));
     }
 
     bool AllocateNotifyPool()

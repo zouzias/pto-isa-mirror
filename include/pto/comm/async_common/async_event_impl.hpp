@@ -180,31 +180,52 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession& session) const
 
 PTO_INTERNAL uint32_t AsyncEvent::CompletionRecordCount(const AsyncSession& session) const
 {
-    if (!session.valid || handle == 0ULL || engine != session.engine) {
+    if (handle == 0ULL) {
         return 0U;
+    }
+    if (!session.valid || engine != session.engine) {
+        return kCompletionRecordCountError;
     }
     switch (session.engine) {
         case DmaEngine::SDMA: {
             uint64_t postId = 0ULL;
             uint32_t queueCount = 0U;
             return sdma::detail::DecodeSdmaEventHandle(handle, postId, queueCount) &&
-                           session.sdmaRuntimeCtx.postDoneBase != nullptr
-                       ? queueCount
-                       : 0U;
+                           session.sdmaRuntimeCtx.postDoneBase != nullptr ?
+                       queueCount :
+                       kCompletionRecordCountError;
         }
 #ifdef PTO_URMA_SUPPORTED
         case DmaEngine::URMA: {
-            // A multi-jetty post parks one CQE per jetty, so the consumer has to wait for all of
-            // them; reporting one would let it retire on the first slice.
+            uint32_t peer = 0U;
+            uint32_t targetBb = 0U;
+            urma::detail::DecodeHandle(handle, peer, targetBb);
+            if (targetBb == 0U || urmaJettyCount > urma::kUrmaMaxJettiesPerCore) {
+                return kCompletionRecordCountError;
+            }
+
             if (urmaJettyCount != 0U) {
+                // A multi-jetty post parks one CQE per jetty, so the consumer has to wait for all
+                // of them; reporting one would let it retire on the first slice. Validate every
+                // slice here so Count and At cannot disagree about a record's existence.
+                for (uint32_t idx = 0U; idx < urmaJettyCount; ++idx) {
+                    AsyncCompletionRecord record{};
+                    if (!urma::detail::GetUrmaCompletionRecordAt(
+                            session, peer, static_cast<uint32_t>(urmaJettyBase) + idx, urmaTargetCqePerJetty[idx],
+                            record)) {
+                        return kCompletionRecordCountError;
+                    }
+                }
                 return urmaJettyCount;
             }
             AsyncCompletionRecord record{};
-            return urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record) ? 1U : 0U;
+            return urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record) ?
+                       1U :
+                       kCompletionRecordCountError;
         }
 #endif
         default:
-            return 0U;
+            return kCompletionRecordCountError;
     }
 }
 
