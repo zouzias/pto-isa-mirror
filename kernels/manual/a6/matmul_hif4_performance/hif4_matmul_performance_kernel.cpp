@@ -198,14 +198,19 @@ AICORE inline void RunHif4MatmulCore(
                 TEXTRACT(bTile, bMatTile, 0, 0);
                 TEXTRACT(bScaleTile, bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
 
-                // Release the L1 data buffer and signal the matmul.
-                set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+                // Release the L1 data buffer and signal the matmul. Skip the last
+                // iteration: those flags are only consumed by the *next* k-iteration.
+                if (kIter < loopsK - 1) {
+                    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+                }
                 set_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
                 wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
 
                 // Accumulate (M).
                 MatmulAcc(outTile, aTile, bTile, aScaleTile, bScaleTile, kIter);
-                set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
+                if (kIter < loopsK - 1) {
+                    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
+                }
             }
 
             // Store (FIX) after the last matmul, then release L1 for the next tile.
