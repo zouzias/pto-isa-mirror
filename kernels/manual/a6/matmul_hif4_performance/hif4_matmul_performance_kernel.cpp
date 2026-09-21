@@ -11,8 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // --------------------------------------------------------------------------------
 // hif4_matmul_performance_kernel.cpp
 //
-// A6 (dav-9201) HiF4 GEMM demo, single-buffered sequential tiling (correctness-first
-// reference). Pipeline:
+// A6 (dav-9201) HiF4 GEMM demo, single-buffered sequential tiling. Pipeline:
 //
 //   GM(BF16) --TLOAD--> L1 --TEXTRACT--> L0A/L0B + L0AMX/L0BMX --TMATMUL_MX--> L0C --TSTORE--> GM(BF16)
 //
@@ -21,8 +20,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // The full-K scale for each (M,N) base block is therefore loaded once, and the per-K
 // slice is produced at TEXTRACT (L1 -> L0AMX/L0BMX).
 //
-// This version trades the A5-style double-buffering for explicit pipe drains so the
-// tiling is easy to reason about; double-buffering can be layered back in afterwards.
+// Synchronization is a straightforward cross-pipe set_flag/wait_flag chain (the
+// simulator does not accept self-pipe flags): MTE2 -> MTE1 (load -> extract),
+// MTE1 -> MTE2 (extract -> next load), MTE1 -> M (extract -> matmul), M -> MTE1
+// (matmul -> next extract), M -> FIX (matmul -> store), FIX -> MTE2 (store -> next
+// tile load). Event ids are namespaced per (src,dst) pipe pair, so id 0 is reused.
 // --------------------------------------------------------------------------------
 
 #include <pto/common/constants.hpp>
@@ -33,13 +35,6 @@ using namespace pto;
 
 constexpr uint32_t HIF4_SCALE_GROUP = 64;  // HiF4 groups over 64 elements
 constexpr uint32_t HIF4_COL_BYTES = 4;     // 4 bytes per 64-group (Ea/Eb/Ec packed cell width)
-
-template <pipe_t pipe>
-AICORE inline void DrainPipe()
-{
-    set_flag(pipe, pipe, EVENT_ID0);
-    wait_flag(pipe, pipe, EVENT_ID0);
-}
 
 template <typename OutTile, typename LeftTile, typename RightTile, typename LeftScaleTile, typename RightScaleTile>
 AICORE inline void MatmulAcc(
@@ -100,7 +95,6 @@ AICORE inline void RunHif4MatmulCore(
     constexpr uint32_t fullScaleK = k / HIF4_SCALE_GROUP;
     constexpr uint32_t scaleCols = fullScaleK * HIF4_COL_BYTES;
 
-    // L1 tiles (data + scale).
     using TileMatA = Tile<TileType::Mat, U, baseM, baseK, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
         TileConfig::fractalABSize>;
     using TileMatB = Tile<TileType::Mat, U, baseK, baseN, BLayout::ColMajor, -1, -1, SLayout::RowMajor,
@@ -108,14 +102,12 @@ AICORE inline void RunHif4MatmulCore(
     using TileScaleA = Tile<TileType::Mat, X, baseM, scaleCols, BLayout::RowMajor, -1, -1, SLayout::RowMajor, 32>;
     using TileScaleB = Tile<TileType::Mat, X, scaleCols, baseN, BLayout::ColMajor, -1, -1, SLayout::ColMajor, 32>;
 
-    // L0 tiles.
     using LeftTile = TileLeft<U, baseM, baseK, -1, -1>;
     using RightTile = TileRight<U, baseK, baseN, -1, -1>;
     using LeftScaleTile = TileLeftScale<X, baseM, baseScaleK * HIF4_COL_BYTES, -1, -1>;
     using RightScaleTile = TileRightScale<X, baseScaleK * HIF4_COL_BYTES, baseN, -1, -1>;
     using ResTile = TileAcc<float, baseM, baseN, -1, -1>;
 
-    // GM tensors.
     using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
     using GlobalDataSrc0 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, m, k, Layout::ND>, Layout::ND>;
     using GlobalDataSrc1 = GlobalTensor<U, DynShapeDim5, BaseShape2D<U, k, n, Layout::ND>, Layout::ND>;
@@ -151,15 +143,17 @@ AICORE inline void RunHif4MatmulCore(
             TASSIGN(aMatTile, 0x0);
             TASSIGN(bMatTile, 0x0 + baseM * baseK / 2);
             TASSIGN(aScaleMatTile, 0x0 + baseM * baseK / 2 + baseK * baseN / 2);
-            TASSIGN(
-                bScaleMatTile, 0x0 + baseM * baseK / 2 + baseK * baseN / 2 + baseM * scaleCols);
+            TASSIGN(bScaleMatTile, 0x0 + baseM * baseK / 2 + baseK * baseN / 2 + baseM * scaleCols);
             // L0 buffer assignment.
             TASSIGN(aTile, 0x0);
             TASSIGN(bTile, 0x0);
             TASSIGN(aScaleTile, GetScaleAddr(aTile.data()));
             TASSIGN(bScaleTile, GetScaleAddr(bTile.data()));
 
-            // Load full-K scale for this base block, then drain MTE2 so it is visible.
+            ResTile outTile(currentM, currentN);
+            TASSIGN(outTile, 0x0);
+
+            // Load full-K scale for this base block once.
             {
                 GlobalScaleA gmA(
                     currentSrc2 + static_cast<uint64_t>(i) * (baseM >> 4) * k,
@@ -169,14 +163,17 @@ AICORE inline void RunHif4MatmulCore(
                     TileShape2D<X, -1, -1, Layout::HIF4_B_NN>(fullScaleK, currentN));
                 TLOAD<TileScaleA, GlobalScaleA>(aScaleMatTile, gmA);
                 TLOAD<TileScaleB, GlobalScaleB>(bScaleMatTile, gmB);
-                DrainPipe<PIPE_MTE2>();
+                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
             }
 
-            ResTile outTile(currentM, currentN);
-            TASSIGN(outTile, 0x0);
-
             for (uint32_t kIter = 0; kIter < loopsK; ++kIter) {
-                // Load data panels and drain MTE2.
+                // Wait until the previous TEXTRACT released the L1 data buffer.
+                if (kIter > 0) {
+                    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+                }
+
+                // Load data panels (MTE2).
                 GlobalDataSrc0 gmA(
                     currentSrc0 + static_cast<uint64_t>(i) * baseM * k / 2 +
                         static_cast<uint64_t>(kIter) * baseK / 2,
@@ -187,25 +184,38 @@ AICORE inline void RunHif4MatmulCore(
                     DynShapeDim5(baseK, currentN));
                 TLOAD(aMatTile, gmA);
                 TLOAD(bMatTile, gmB);
-                DrainPipe<PIPE_MTE2>();
+                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
-                // TEXTRACT data + scale slices, then drain MTE1.
+                // Wait until the previous TMATMUL released the L0A/L0B buffer.
+                if (kIter > 0) {
+                    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+                }
+
+                // Extract data + scale slices (MTE1).
                 TEXTRACT(aTile, aMatTile, 0, 0);
                 TEXTRACT(aScaleTile, aScaleMatTile, 0, kIter * baseScaleK * HIF4_COL_BYTES);
                 TEXTRACT(bTile, bMatTile, 0, 0);
                 TEXTRACT(bScaleTile, bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
-                DrainPipe<PIPE_MTE1>();
 
-                // Accumulate.
+                // Release the L1 data buffer and signal the matmul.
+                set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+                set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+                wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+                // Accumulate (M).
                 MatmulAcc(outTile, aTile, bTile, aScaleTile, bScaleTile, kIter);
+                set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
             }
 
-            // Drain M, store, drain FIX.
-            DrainPipe<PIPE_M>();
-            GlobalDataOut dstGlobal(currentDst + static_cast<uint64_t>(i) * baseM * n + j * baseN,
-                DynShapeDim5(currentM, currentN));
+            // Store (FIX) after the last matmul, then release L1 for the next tile.
+            set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+            GlobalDataOut dstGlobal(
+                currentDst + static_cast<uint64_t>(i) * baseM * n + j * baseN, DynShapeDim5(currentM, currentN));
             TSTORE(dstGlobal, outTile);
-            DrainPipe<PIPE_FIX>();
+            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
         }
     }
 }
