@@ -10,7 +10,8 @@ This directory contains the per-instruction reference for the PTO Communication 
 - [**TGET**](TGET.md): Remote read (GM → UB → GM)
 
 ## Point-to-Point Communication (Asynchronous)
-- [**TPUT_ASYNC**](TPUT_ASYNC.md): Asynchronous remote write (GM → DMA engine → GM)
+- [**TPUT_ASYNC**](TPUT_ASYNC.md): Immediate or aggregate-batch asynchronous remote write, including the
+  `SubmitAsyncPutBatch` helper (GM → DMA engine → GM)
 - [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY.md): Remote write followed by a remote `int32_t` signal update
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 

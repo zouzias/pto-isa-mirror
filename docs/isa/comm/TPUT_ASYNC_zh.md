@@ -2,7 +2,9 @@
 
 ## 简介
 
-`TPUT_ASYNC` 是异步远程写原语。它启动一次从本地GM到远端GM的传输，并立即返回 `AsyncEvent`。
+`TPUT_ASYNC`是异步远程写原语。默认`IMMEDIATE`模式会发布一次从本地GM到远端GM的传输并返回
+对应`AsyncEvent`。`DEFER`模式只暂存远程写，在`SubmitAsyncPutBatch`前不会启动传输；暂存过程可能
+等待队列资源，随后返回无效占位Event。
 
 数据流：
 
@@ -24,11 +26,66 @@
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
 
 ```cpp
+// A2/A3
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &... events);
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               WaitEvents &... events);
+
+// A5，peer来自session.destRankId
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
+
+// A5，显式peer
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session, uint32_t peer,
+                               AsyncPutMode mode = AsyncPutMode::IMMEDIATE,
+                               uint32_t jettyIndex = 0U,
+                               WaitEvents &... events);
 ```
+
+默认`IMMEDIATE`保持标准立即提交并返回对应完成Event。`DEFER`只暂存远程写并返回无效占位Event
+（`handle == 0`）。传入前置Event时必须先显式写出`mode`；A5还必须在Event前显式写出
+`jettyIndex`，包括`0U`。
+
+## 提交模式
+
+| 模式 | 行为 | 返回值 |
+|---|---|---|
+| `AsyncPutMode::IMMEDIATE`（默认） | 立即发布本次远程写。 | 本次已提交操作对应的有效完成`AsyncEvent`。 |
+| `AsyncPutMode::DEFER` | 将本次远程写暂存到当前Session，不推进硬件可见Producer，也不敲Send Doorbell。 | `handle == 0`的无效占位Event，不得用于判断完成。 |
+
+一次或多次成功的非零Defer调用组成当前聚合Batch。使用`SubmitAsyncPutBatch`发布该Batch。只有
+`SubmitAsyncPutBatch`返回的Event表示Batch完成。
+
+## SubmitAsyncPutBatch辅助函数
+
+`SubmitAsyncPutBatch`是`PTO_INTERNAL`辅助函数，不是独立PTO指令：
+
+```cpp
+// A2/A3 SDMA及A5绑定peer形式
+template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(const AsyncSession& session);
+
+// A5显式peer形式
+template <DmaEngine engine = DmaEngine::SDMA>
+PTO_INTERNAL AsyncEvent SubmitAsyncPutBatch(
+    const AsyncSession& session, uint32_t peer,
+    uint32_t jettyIndex = 0U);
+```
+
+A2/A3 SDMA使用仅含Session的形式。A5 URMA中，仅含Session的形式发布首次成功Defer绑定的`peer`和
+`jettyIndex`；显式peer形式要求其值与Batch中所有Defer完全一致。有效返回Event覆盖Batch中全部
+非零远程写；调用`Wait/Test`前应先检查`event.valid()`。
 
 `AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择DMA后端，使代码对未来引擎（CCU等）保持前向兼容。
 
@@ -130,6 +187,43 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, m
 
 若不满足一维连续要求，当前实现返回无效async event（`handle == 0`）。
 
+### Defer聚合Batch约束
+
+- 聚合模式支持A2/A3的`DmaEngine::SDMA`和A5的`DmaEngine::URMA`，不支持A5 SDMA聚合。
+- A2/A3接口不包含`peer`和`jettyIndex`；A5保留绑定peer与显式peer两种形式。
+- 首次成功的非零Defer启动Batch；零长度Defer为no-op。
+- 每次Defer和最终Submit必须使用相同Session及Engine。一个URMA Batch还必须保持相同的`peer`和
+  `jettyIndex`。
+- 首次Defer到Submit之间，不得在同一Channel Group或Jetty上插入普通`TPUT_ASYNC`、
+  `TGET_ASYNC`、`TPUT_ASYNC_NOTIFY`、另一个聚合Batch或`TPREFETCH_ASYNC`。
+- Submit前不得复制、重建、销毁Session或转移其所有权。
+- 所有源数据范围、Session和Workspace必须保持有效，直至Submit Event完成。
+- Defer或Submit在发布前检测到参数、资源或容量错误时，会丢弃当前暂存Batch，不会将其发布。
+  Defer始终返回无效占位Event，因此该返回值不能区分成功与失败；调用方必须在首次Defer前满足全部
+  前置条件。
+- Submit要求当前Batch至少包含一次成功的非零Defer。空Submit返回无效Event，并在启用断言的构建
+  中报告调用契约错误。
+- Submit后Session隐藏Batch状态被清零，可以开始新Batch；这不表示上一Batch已经完成。
+- 同一Batch中不同远端目的范围不得重叠，不得利用Defer顺序表达写间依赖。
+
+### Defer聚合Batch资源限制
+
+- 源、目的Tensor必须具有相同RawDType和Layout，必须都是扁平连续的逻辑一维Tensor；每次非零传输
+  的源、目的指针均不得为空。
+- Tensor元素数、字节数和地址范围计算必须能用`uint64_t`表示；目的Tensor元素容量不得小于源
+  Tensor元素数。
+- 接口不校验通信内存归属、地址边界、范围重叠或目标Peer所有权，调用方必须保证这些条件。
+- 每次SDMA Defer消耗`ceil(transferBytes / blockBytes)`个数据SQE，并基于整个Batch累计SQE索引
+  在`queueNum`个队列间轮转分配；每个队列分配到的数量必须小于该队列SQ深度。
+- SDMA会在源、目的Tensor基地址上增加`commBlockOffset`。底层分配必须无溢出地覆盖
+  `[base + commBlockOffset, base + commBlockOffset + transferBytes)`。
+- URMA要求有效的注册Workspace、Peer内存注册和Jetty；`peer`必须小于Workspace Rank数，且
+  `jettyIndex < session.qpCount`。
+- 完整URMA源范围必须位于`UrmaWorkspaceManager::Init()`注册的本地通信缓冲区内，完整目的范围
+  必须位于所选Peer的已注册通信缓冲区内。
+- URMA将一次远程写拆分为每个最大256 MiB的WQE。完整Batch必须同时适配所选Jetty的WQ和CQ深度。
+  更大工作负载应拆分为多个Batch；接口不会自动提交部分Batch。
+
 ## scratchTile的作用
 
 `scratchTile` **不是**用于存放用户数据负载的暂存缓冲区。
@@ -151,7 +245,7 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, m
 
 ## 完成语义（Quiet语义）
 
-不同引擎的底层完成机制不同，但用户侧的quiet语义行为一致：
+对于`IMMEDIATE`模式，不同引擎的底层完成机制不同，但用户侧的quiet语义行为一致：
 
 - **SDMA**：每次`TPUT_ASYNC`都会提交数据传输SQE和用于标记本次操作完成的flag SQE。对其返回的Event调用`Wait`或`Test`时，通过轮询对应flag判断该次`TPUT_ASYNC`是否完成；完成后也能保证同一Session中此前提交的所有SDMA操作均已完成。
 - **URMA**：`TPUT_ASYNC` 立即提交RDMA WRITE WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
@@ -167,12 +261,34 @@ RDMA操作涉及不同peer时，必须分别等待每个peer的最后一个Event
 
 wait成功后，所有已发出的 `dstGlobalData` 写入均已全部完成。
 
-## SDMA并发与Session所有权
+对于`DEFER`模式，每次`TPUT_ASYNC`返回的占位Event均为无效Event。对该占位Event执行`Wait`或
+`Test`不能证明传输已经发布或完成；只能等待`SubmitAsyncPutBatch`返回的有效Event。Submit只负责
+发布暂存任务，不表示Batch已经完成；Submit Event的Wait/Test成功后才表示发送端完成并允许复用
+源数据。
+
+聚合Batch不是事务。接收端可能逐步观察到不同写，错误发生后已完成的写不会回滚，公共契约也不
+定义各写之间的完成顺序。Submit Event不会自动通知接收端；接收端消费仍需使用`TNOTIFY/TWAIT`
+等应用协议，并执行平台要求的Cache可见性处理。
+
+只有Wait/Test成功才能确认完成。失败结果不会取消已提交传输；此时不得复用源数据，也不得释放或
+重建Session、Workspace、Scratch Tile、Channel Group或Jetty。
+
+## 并发与Session所有权
 
 - 同一个Session不能被多个执行流并发使用。
 - 共用同一Channel Group的操作必须共享同一个Session。
 - 并发Kernel或Kernel内多个独立Session必须使用隔离的Channel Group。
 - 重新构建Session或复用Channel Group前，必须先完成此前所有Event。
+- 同一Session上的Build/Rebuild、Defer、Submit、Wait和Test必须串行执行。
+- 不同Session不代表物理资源不同。从Build到最后一个Event完成期间，不得将另一Session映射到相同
+  SDMA Channel、URMA WQ或URMA CQ。
+- URMA `PER_PEER`模式下，同一Peer共享同一物理WQ/CQ，调用必须串行；不同Peer使用不同队列。
+- URMA `SHARED_POOL`模式下，物理Jetty为`session.qpIdxBase + jettyIndex`。同一AIV上的Session
+  若该物理索引相同则发生别名，即使Peer不同也会冲突。
+- 同一物理Channel Group、WQ或CQ上的Wait/Test不得与Defer、Submit或另一个Wait/Test并发执行。
+- 只有Session使用的所有物理队列上的未完成Event均已完成后，才能重建或销毁Session及通信资源。
+- 释放URMA通信资源前，还必须同步所有使用该通信Context的Host Stream，确保后续Stream任务不再
+  引用该Context。
 
 ## 示例
 
@@ -211,7 +327,7 @@ __global__ AICORE void SimplePut(__gm__ T *remoteDst, __gm__ T *localSrc,
 }
 ```
 
-### 批量传输（Quiet语义）
+### 多次立即传输（Quiet语义）
 
 ```cpp
 template <typename T>
@@ -242,6 +358,41 @@ __global__ AICORE void BatchPut(__gm__ T *remoteDstBase, __gm__ T *localSrc,
     }
     (void)lastEvent.Wait(session);  // 一次 Wait 等待所有 pending 操作
 }
+```
+
+### 聚合Batch传输
+
+```cpp
+template <typename GT>
+AICORE void AggregatePutSdma(
+    GT& dst0, GT& src0, GT& dst1, GT& src1,
+    const comm::AsyncSession& session)
+{
+    (void)comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst0, src0, session, comm::AsyncPutMode::DEFER);
+    (void)comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(
+        dst1, src1, session, comm::AsyncPutMode::DEFER);
+
+    auto batchEvent =
+        comm::SubmitAsyncPutBatch<comm::DmaEngine::SDMA>(session);
+    if (!batchEvent.valid() || !batchEvent.Wait(session)) {
+        return;
+    }
+}
+```
+
+Defer返回的无效Event只是占位值，不是成功状态。暂存前必须保证参数和Batch容量合法；只有有效的
+Submit Event可用于完成判断。
+
+A5 URMA显式peer形式保持原有peer位置，并要求每次Defer和Submit使用相同的`peer`与`jettyIndex`：
+
+```cpp
+(void)comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+    dst0, src0, session, peer, comm::AsyncPutMode::DEFER, jettyIndex);
+(void)comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+    dst1, src1, session, peer, comm::AsyncPutMode::DEFER, jettyIndex);
+auto batchEvent = comm::SubmitAsyncPutBatch<comm::DmaEngine::URMA>(
+    session, peer, jettyIndex);
 ```
 
 ### URMA示例（NPU_ARCH 3510）
