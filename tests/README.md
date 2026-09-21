@@ -14,6 +14,50 @@ Common test entry points:
 
 > `run_st.sh` requires a platform flag (`--a3`/`--a5`/`--a3_a5`/`--kirin9030`) **and**, for `--a3`/`--a5`, a mode flag (`--simple` or `--all`); optionally a run mode (`--sim`/`--npu`, defaults to on-board `npu`). Run `./tests/run_st.sh` with no/invalid arguments to print the full usage. Note the `--` prefixes are required.
 
+## A2/A3 TEXTRACT Costmodel Regression Tests
+
+For the costmodel regressions, run
+`python3 tests/run_costmodel.py --suite st --testcase textract --clean` and
+`python3 tests/run_costmodel.py --suite st --testcase textract_small_m --clean`.
+The `textract` target checks ND and NZ Vec-to-Vec full and offset windows, including ND column tails,
+and requires the expected DMA/vector copy calls and a nonzero cycle count.
+The `textract_small_m` target checks Mat-to-Left extraction and its boundary assertions.
+
+## A5 UB ND-to-L1 NZ Regression Tests
+
+Cases belong to their instruction directories under `npu/a5/src/st/testcase/` and are
+registered in the existing test targets:
+
+| Instruction | Test target | GTest filter | ND-to-NZ cases |
+|-------------|-------------|--------------|----------------|
+| TMOV | `tmov_ub2l1` | `TMovUb2l1Test.nd2nz_*` | 14 |
+| TEXTRACT | `textract` | `TEXTRACTTest.nd2nz_*` | 14 |
+| TINSERT | `tinsert` | `TInsertTest.nd2nz_*` | 18 |
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tmov_ub2l1
+python3 tests/script/run_st.py -r npu -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*'
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.nd2nz_*'
+```
+
+The first command also runs the 9 NZ-input cases in `tmov_ub2l1`, for 55 cases across
+these commands. ND-to-NZ cases generate inputs and byte-exact golden data on the host,
+including checks that data outside the valid window is preserved.
+Shared golden generation, L1 initialization, readback, and AIV/AIC synchronization live in
+`npu/a5/src/st/testcase/tmov_ub2l1/ub2l1_nd2nz_*.h`. The `textract` and `tinsert` targets
+include these shared headers; each instruction directory owns its `nd2nz_cases.h` parameter list.
+Large NZ results are initialized and read back in chunks of at most 128 KiB,
+with synchronization before reusing the UB buffer. The TEXTRACT UB-to-L1 kernel uses mixed compilation.
+
+TMOV and TEXTRACT cover all 10 supported data types; TINSERT also covers `int32_t` (11 types).
+Boundary cases include FP4 offsets, static and dynamic valid shapes, zero rows and columns,
+extraction at a smaller source valid-window edge, dual-AIV FP4 insertion, and static/dynamic
+FP4 widths of 65536 columns, including a larger source row stride.
+The manual A5 `--all` entry point includes this regression coverage.
+These cases require manual Tile address aliasing and are not registered in auto mode.
+In auto mode, `tmov_ub2l1` retains its 9 NZ-input cases; `textract` and `tinsert` are
+excluded by the existing auto-mode target list.
+
 ## Layout
 
 - `script/`: Recommended entry scripts
