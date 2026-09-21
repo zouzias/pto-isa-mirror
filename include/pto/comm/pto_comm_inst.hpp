@@ -369,7 +369,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, mode, jettyIndex);
 }
 
-#else
+#elif defined(__CPU_SIM)
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
@@ -378,7 +378,6 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-#if defined(__CPU_SIM)
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
@@ -387,7 +386,6 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     WaitAllEvents(events...);
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
 }
-#endif
 #endif
 
 // Submit the batch staged by TPUT_ASYNC(..., AsyncPutMode::DEFER).
