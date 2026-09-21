@@ -184,8 +184,8 @@ AICORE inline void RunHif4MatmulCore(
                     DynShapeDim5(baseK, currentN));
                 TLOAD(aMatTile, gmA);
                 TLOAD(bMatTile, gmB);
-                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+                set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+                wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
 
                 // Wait until the previous TMATMUL released the L0A/L0B buffer.
                 if (kIter > 0) {
