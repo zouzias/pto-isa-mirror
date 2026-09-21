@@ -347,7 +347,14 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     AsyncPutMode mode = AsyncPutMode::IMMEDIATE, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, mode);
+    if (mode == AsyncPutMode::IMMEDIATE) {
+        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    }
+    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
+    if (mode != AsyncPutMode::DEFER)
+        return AsyncEvent(0U, engine);
+    ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, UINT32_MAX, 0U);
+    return AsyncEvent(0U, engine);
 }
 
 #elif defined(PTO_NPU_ARCH_A5)
@@ -357,7 +364,19 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     AsyncPutMode mode = AsyncPutMode::IMMEDIATE, uint32_t jettyIndex = 0U, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, mode, jettyIndex);
+    if (mode == AsyncPutMode::IMMEDIATE) {
+        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    }
+    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
+    if (mode != AsyncPutMode::DEFER)
+        return AsyncEvent(0U, engine);
+    if constexpr (engine == DmaEngine::URMA) {
+        ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(
+            dstGlobalData, srcGlobalData, session, session.destRankId, jettyIndex);
+    } else {
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): A5 aggregate PUT requires URMA.");
+    }
+    return AsyncEvent(0U, engine);
 }
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
@@ -366,7 +385,18 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     AsyncPutMode mode = AsyncPutMode::IMMEDIATE, uint32_t jettyIndex = 0U, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TPUT_ASYNC_MODE_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, mode, jettyIndex);
+    if (mode == AsyncPutMode::IMMEDIATE) {
+        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+    }
+    PTO_ASSERT(mode == AsyncPutMode::DEFER, "TPUT_ASYNC: unsupported asynchronous PUT mode.");
+    if (mode != AsyncPutMode::DEFER)
+        return AsyncEvent(0U, engine);
+    if constexpr (engine == DmaEngine::URMA) {
+        ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer, jettyIndex);
+    } else {
+        PTO_ASSERT(false, "TPUT_ASYNC(DEFER): A5 aggregate PUT requires URMA.");
+    }
+    return AsyncEvent(0U, engine);
 }
 
 #elif defined(__CPU_SIM)
