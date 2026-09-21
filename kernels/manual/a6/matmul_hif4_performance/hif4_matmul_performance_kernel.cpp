@@ -392,8 +392,8 @@ void LaunchHif4Matmul(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2,
     constexpr uint32_t baseM = 256;
     constexpr uint32_t baseK = 256;
     constexpr uint32_t baseN = 256;
-    constexpr uint32_t stepKa = 2;
-    constexpr uint32_t stepKb = 2;
+    constexpr uint32_t stepKa = 1;
+    constexpr uint32_t stepKb = 1;
 
     Hif4MatmulPerformance<blockDim, m, k, n, singleCoreM, singleCoreN, baseM, baseK, baseN, stepKa, stepKb>
         <<<blockDim, nullptr, stream>>>(out, src0, src1, src2, src3);
