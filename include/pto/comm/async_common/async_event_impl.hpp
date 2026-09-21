@@ -62,7 +62,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t* workspace, AsyncSession& ses
         return session.valid;
     }
     const uint32_t perCore = info->jettiesPerCore;
-    if (perCore == 0U || perCore > kUrmaMaxJettiesPerCore) {
+    if (perCore == 0U || perCore > urma::kUrmaMaxJettiesPerCore) {
         return false;
     }
     session.qpIdxBase = static_cast<uint32_t>(get_block_idx()) * perCore;
@@ -175,6 +175,103 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession& session) const
 #endif
         default:
             return false;
+    }
+}
+
+PTO_INTERNAL uint32_t AsyncEvent::CompletionRecordCount(const AsyncSession& session) const
+{
+    if (handle == 0ULL) {
+        return 0U;
+    }
+    if (!session.valid || engine != session.engine) {
+        return kCompletionRecordCountError;
+    }
+    switch (session.engine) {
+        case DmaEngine::SDMA: {
+            uint64_t postId = 0ULL;
+            uint32_t queueCount = 0U;
+            return sdma::detail::DecodeSdmaEventHandle(handle, postId, queueCount) &&
+                           session.sdmaRuntimeCtx.postDoneBase != nullptr ?
+                       queueCount :
+                       kCompletionRecordCountError;
+        }
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA: {
+            uint32_t peer = 0U;
+            uint32_t targetBb = 0U;
+            urma::detail::DecodeHandle(handle, peer, targetBb);
+            if (targetBb == 0U || urmaJettyCount > urma::kUrmaMaxJettiesPerCore) {
+                return kCompletionRecordCountError;
+            }
+
+            if (urmaJettyCount != 0U) {
+                // A multi-jetty post parks one CQE per jetty, so the consumer has to wait for all
+                // of them; reporting one would let it retire on the first slice. Validate every
+                // slice here so Count and At cannot disagree about a record's existence.
+                for (uint32_t idx = 0U; idx < urmaJettyCount; ++idx) {
+                    AsyncCompletionRecord record{};
+                    if (!urma::detail::GetUrmaCompletionRecordAt(
+                            session, peer, static_cast<uint32_t>(urmaJettyBase) + idx, urmaTargetCqePerJetty[idx],
+                            record)) {
+                        return kCompletionRecordCountError;
+                    }
+                }
+                return urmaJettyCount;
+            }
+            AsyncCompletionRecord record{};
+            return urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record) ?
+                       1U :
+                       kCompletionRecordCountError;
+        }
+#endif
+        default:
+            return kCompletionRecordCountError;
+    }
+}
+
+PTO_INTERNAL AsyncCompletionRecord AsyncEvent::CompletionRecordAt(const AsyncSession& session, uint32_t idx) const
+{
+    AsyncCompletionRecord record{};
+    if (!session.valid || handle == 0ULL || engine != session.engine) {
+        return record;
+    }
+    switch (session.engine) {
+        case DmaEngine::SDMA: {
+            uint64_t postId = 0ULL;
+            uint32_t queueCount = 0U;
+            if (!sdma::detail::DecodeSdmaEventHandle(handle, postId, queueCount) || idx >= queueCount ||
+                session.sdmaRuntimeCtx.postDoneBase == nullptr) {
+                return record;
+            }
+            record.addr = sdma::detail::GetPostDoneRecordAddr(session.sdmaRuntimeCtx.postDoneBase, idx);
+            record.expected = postId;
+            record.kind = CompletionKind::SDMA_POST_DONE;
+            return record;
+        }
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA: {
+            uint32_t peer = 0U;
+            uint32_t targetBb = 0U;
+            urma::detail::DecodeHandle(handle, peer, targetBb);
+            if (targetBb == 0U) {
+                return record;
+            }
+            if (urmaJettyCount != 0U) {
+                if (idx >= urmaJettyCount) {
+                    return record;
+                }
+                (void)urma::detail::GetUrmaCompletionRecordAt(
+                    session, peer, static_cast<uint32_t>(urmaJettyBase) + idx, urmaTargetCqePerJetty[idx], record);
+                return record;
+            }
+            if (idx == 0U) {
+                (void)urma::detail::GetUrmaCompletionRecord(handle, urmaTargetCqe, session, record);
+            }
+            return record;
+        }
+#endif
+        default:
+            return record;
     }
 }
 

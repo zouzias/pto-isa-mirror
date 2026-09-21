@@ -157,6 +157,20 @@ public:
         }
     }
 
+    // Size of the workspace published by GetWorkspaceAddr, so a caller need not re-derive the
+    // RdmaInfo table layout. Zero before a successful Init.
+    uint64_t GetWorkspaceSize() const
+    {
+        switch (activeBackend_) {
+#ifdef PTO_RDMA_BACKEND_HNS_1825_SUPPORTED
+            case RdmaBackend::HNS_1825:
+                return hns1825Backend_.GetWorkspaceSize();
+#endif
+            default:
+                return 0;
+        }
+    }
+
     RdmaBackend ActiveBackend() const { return activeBackend_; }
 
 private:
