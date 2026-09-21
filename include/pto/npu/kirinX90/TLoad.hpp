@@ -18,7 +18,7 @@ PTO_INTERNAL void CheckNzFormat(
     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int validRow, int validCol);
 
 template <typename TileDataDst, typename GlobalDataSrc>
-PTO_INTERNAL void TLoadInstrGm2ub(
+PTO_INTERNAL void TLoadInstrGm2ubNative(
     __ubuf__ typename TileDataDst::DType* dst, typename GlobalDataSrc::DType* src, uint16_t nBurst, uint32_t lenBurst,
     uint32_t gmGap, uint32_t ubGap, uint32_t ubPad)
 {
@@ -39,39 +39,46 @@ PTO_INTERNAL void TLoadInstrGm2ub(
 template <typename TileDataDst, typename GlobalDataSrc>
 PTO_INTERNAL void TLoadInstrGm2L1(
     __cbuf__ typename TileDataDst::DType* dst, typename GlobalDataSrc::DType* src, uint16_t nBurst, uint32_t lenBurst,
-    uint32_t gmGap, uint32_t l1Gap)
+    uint64_t gmGap, uint32_t l1Gap)
 {
-    if (l1Gap == 0 && (lenBurst % BLOCK_BYTE_SIZE == 0)) {
-        lenBurst = lenBurst >> SHIFT_BLOCK_BYTE;
-        gmGap = gmGap >> SHIFT_BLOCK_BYTE;
-        pto_copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
+    if (l1Gap == 0 && lenBurst % BLOCK_BYTE_SIZE == 0 && gmGap % BLOCK_BYTE_SIZE == 0 &&
+        (lenBurst >> SHIFT_BLOCK_BYTE) <= UINT16_MAX && (gmGap >> SHIFT_BLOCK_BYTE) <= UINT16_MAX) {
+        pto_copy_gm_to_cbuf(
+            dst, src, (uint8_t)0, nBurst, static_cast<uint16_t>(lenBurst >> SHIFT_BLOCK_BYTE),
+            static_cast<uint16_t>(gmGap >> SHIFT_BLOCK_BYTE), 0);
         return;
     }
-    if (lenBurst <= UINT16_MAX) {
-        pto_copy_gm_to_cbuf_align(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap);
+    if (lenBurst <= UINT16_MAX && gmGap <= UINT16_MAX && l1Gap < BLOCK_BYTE_SIZE) {
+        pto_copy_gm_to_cbuf_align(
+            dst, src, (uint8_t)0, nBurst, static_cast<uint16_t>(lenBurst), static_cast<uint16_t>(gmGap),
+            static_cast<uint16_t>(l1Gap));
         return;
     }
 
+    constexpr uint32_t MAX_CHUNK_BYTES = UINT16_MAX / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE;
     for (uint16_t i = 0; i < nBurst; i++) {
-        for (uint32_t j = 0; j < (lenBurst + (uint32_t)UINT16_MAX - 1) / (uint32_t)UINT16_MAX; j++) {
-            uint32_t curLen = lenBurst - j * (uint32_t)UINT16_MAX;
-            if (curLen > (uint32_t)UINT16_MAX) {
-                curLen = (uint32_t)UINT16_MAX;
+        auto srcBurst = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(src) + i * (lenBurst + gmGap));
+        auto dstBurst = reinterpret_cast<decltype(dst)>(
+            reinterpret_cast<uintptr_t>(dst) + uint64_t(i) * (uint64_t(lenBurst) + l1Gap));
+        uint32_t remainingBytes = lenBurst;
+        while (remainingBytes != 0) {
+            uint32_t chunkBytes = remainingBytes;
+            if (chunkBytes > UINT16_MAX) {
+                chunkBytes = MAX_CHUNK_BYTES;
             }
-            pto_copy_gm_to_cbuf_align(dst, src, (uint8_t)0, 1, curLen, 0, 0);
-            src = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(src) + curLen);
-            dst = reinterpret_cast<decltype(dst)>(reinterpret_cast<uintptr_t>(dst) + curLen);
+            pto_copy_gm_to_cbuf_align(dstBurst, srcBurst, (uint8_t)0, 1, static_cast<uint16_t>(chunkBytes), 0, 0);
+            srcBurst = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(srcBurst) + chunkBytes);
+            dstBurst = reinterpret_cast<decltype(dst)>(reinterpret_cast<uintptr_t>(dstBurst) + chunkBytes);
+            remainingBytes -= chunkBytes;
         }
-        src = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(src) + gmGap);
-        dst = reinterpret_cast<decltype(dst)>(reinterpret_cast<uintptr_t>(dst) + l1Gap);
     }
 }
 
 template <typename TileDataDst, typename GlobalDataSrc>
 __tf__ PTO_INTERNAL void TLoadNDC1HWC0(
     typename TileDataDst::TileDType __out__ dst, typename GlobalDataSrc::DType __in__* src, int srcN, int srcD,
-    int srcC1, int srcH, int srcW, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstN,
-    int dstD, int dstC1, int dstH, int dstW)
+    int srcC1, int srcH, int srcW, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstN, int dstD, int dstC1, int dstH, int dstW)
 {
     __cbuf__ typename TileDataDst::DType* dstAddr = (__cbuf__ typename TileDataDst::DType*)__cce_get_tile_ptr(dst);
     typename GlobalDataSrc::DType* srcAddr = src;
@@ -80,18 +87,19 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(
     typename GlobalDataSrc::DType* srcAddrP = srcAddr;
     __cbuf__ typename TileDataDst::DType* dstAddrP = dstAddr;
     constexpr uint32_t maxSupportBurst = 4095;
-    uint32_t gmGap = ((gStride2 - dstH * dstW * c0ElemCount) * sizeof(typename TileDataDst::DType)) >> SHIFT_BLOCK_BYTE;
+    uint64_t gmGap = ((int64_t(gStride2) - int64_t(dstH) * dstW * c0ElemCount) * sizeof(typename TileDataDst::DType)) >>
+                     SHIFT_BLOCK_BYTE;
 
     if ((gStride3 == dstW * c0ElemCount || dstH == 1) && gmGap <= UINT16_MAX && dstC1 <= maxSupportBurst &&
         dstH * dstW <= UINT16_MAX) {
         uint16_t nBurst = dstC1;
-        uint32_t srcGap = gmGap * BLOCK_BYTE_SIZE;
+        uint64_t srcGap = gmGap * BLOCK_BYTE_SIZE;
         uint32_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
         for (uint32_t i = 0; i < dstN; i++) {
-            int64_t srcAddr1 = i * gStride0;
+            int64_t srcAddr1 = int64_t(i) * gStride0;
             int64_t dstAddr1 = i * dstD * dstH * dstW * dstC1 * c0ElemCount;
             for (uint32_t j = 0; j < dstD; j++) {
-                srcAddrP = srcAddr + srcAddr1 + j * gStride1;
+                srcAddrP = srcAddr + srcAddr1 + int64_t(j) * gStride1;
                 dstAddrP = dstAddr + dstAddr1 + j * dstH * dstW * dstC1 * c0ElemCount;
                 TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, 0);
             }
@@ -101,16 +109,16 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(
         PTO_ASSERT(dstW <= UINT16_MAX, "Fix: max support dstW is UINT16_MAX!");
 
         uint16_t nBurst = dstH;
-        uint32_t srcGap = (gStride3 - srcW * c0ElemCount) * sizeof(typename TileDataDst::DType);
+        uint64_t srcGap = (int64_t(gStride3) - int64_t(srcW) * c0ElemCount) * sizeof(typename TileDataDst::DType);
         uint32_t lenBurst = dstW * C0_SIZE_BYTE;
         for (uint32_t i = 0; i < dstN; i++) {
-            int64_t srcAddr1 = i * gStride0;
+            int64_t srcAddr1 = int64_t(i) * gStride0;
             int64_t dstAddr1 = i * dstD * dstH * dstW * dstC1 * c0ElemCount;
             for (uint32_t j = 0; j < dstD; j++) {
-                int64_t srcAddr2 = j * gStride1;
+                int64_t srcAddr2 = int64_t(j) * gStride1;
                 int64_t dstAddr2 = j * dstH * dstW * dstC1 * c0ElemCount;
                 for (uint32_t k = 0; k < dstC1; k++) {
-                    srcAddrP = srcAddr + srcAddr1 + srcAddr2 + k * gStride2;
+                    srcAddrP = srcAddr + srcAddr1 + srcAddr2 + int64_t(k) * gStride2;
                     dstAddrP = dstAddr + dstAddr1 + dstAddr2 + k * dstH * dstW * c0ElemCount;
                     TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, 0);
                 }
@@ -122,8 +130,8 @@ __tf__ PTO_INTERNAL void TLoadNDC1HWC0(
 template <typename TileDataDst, typename GlobalDataSrc>
 PTO_INTERNAL void TLoadGm2L1Nd2nd(
     __cbuf__ typename TileDataDst::DType* dstAddr, typename GlobalDataSrc::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     PTO_ASSERT(validCol == gShape4, "The validCol of TileDataDst must be equal to the 5th dim(Shape4) of ND shape!");
     PTO_ASSERT(
@@ -132,7 +140,7 @@ PTO_INTERNAL void TLoadGm2L1Nd2nd(
     PTO_ASSERT(gShape3 < 4096, "The gshape3 (which equals nBurst) must be less than 4096 for kirinX90");
     uint16_t nBurst = gShape3;
     uint32_t lenBurst = validCol * sizeof(typename TileDataDst::DType);
-    uint32_t gmGap = (gStride3 - gShape4) * sizeof(typename TileDataDst::DType);
+    uint64_t gmGap = (int64_t(gStride3) - int64_t(gShape4)) * sizeof(typename TileDataDst::DType);
     uint32_t l1Gap = (TileDataDst::Cols - validCol) * sizeof(typename TileDataDst::DType);
 
     int64_t dstStride2 = gShape3 * TileDataDst::Cols;
@@ -141,14 +149,14 @@ PTO_INTERNAL void TLoadGm2L1Nd2nd(
     typename GlobalDataSrc::DType* srcAddrP = srcAddr;
     __cbuf__ typename TileDataDst::DType* dstAddrP = dstAddr;
     for (uint32_t i = 0; i < gShape0; i++) {
-        int64_t srcAddr0 = i * gStride0;
+        int64_t srcAddr0 = int64_t(i) * gStride0;
         int64_t dstAddr0 = i * dstStride0;
         for (uint32_t j = 0; j < gShape1; j++) {
             int64_t dstAddr1 = j * dstStride1;
-            int64_t srcAddr1 = j * gStride1;
+            int64_t srcAddr1 = int64_t(j) * gStride1;
             for (uint32_t k = 0; k < gShape2; k++) {
                 dstAddrP = dstAddr + dstAddr0 + dstAddr1 + k * dstStride2;
-                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + k * gStride2;
+                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + int64_t(k) * gStride2;
                 TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
             }
         }
@@ -158,8 +166,8 @@ PTO_INTERNAL void TLoadGm2L1Nd2nd(
 template <typename TileDataDst, typename GlobalDataSrc>
 PTO_INTERNAL void TLoadGm2L1Dn2dn(
     __cbuf__ typename TileDataDst::DType* dstAddr, typename GlobalDataSrc::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     PTO_ASSERT(validRow == gShape3, "The validCol of TileDataDst must be equal to the 4th dim(Shape3) of DN shape!");
     PTO_ASSERT(
@@ -168,7 +176,7 @@ PTO_INTERNAL void TLoadGm2L1Dn2dn(
     PTO_ASSERT(gShape4 < 4096, "The gshape4 (which equals nBurst) must be less than 4096 for kirinX90");
     uint16_t nBurst = gShape4;
     uint32_t lenBurst = validRow * sizeof(typename TileDataDst::DType);
-    uint32_t gmGap = (gStride4 - gShape3) * sizeof(typename TileDataDst::DType);
+    uint64_t gmGap = (int64_t(gStride4) - int64_t(gShape3)) * sizeof(typename TileDataDst::DType);
     uint32_t l1Gap = (TileDataDst::Rows - gShape3) * sizeof(typename TileDataDst::DType);
     __cbuf__ typename TileDataDst::DType* dstAddrP = dstAddr;
     typename GlobalDataSrc::DType* srcAddrP = srcAddr;
@@ -177,13 +185,13 @@ PTO_INTERNAL void TLoadGm2L1Dn2dn(
     int64_t dstStride1 = gShape2 * dstStride2;
     int64_t dstStride0 = gShape1 * dstStride1;
     for (uint32_t i = 0; i < gShape0; i++) {
-        int64_t srcAddr0 = i * gStride0;
+        int64_t srcAddr0 = int64_t(i) * gStride0;
         int64_t dstAddr0 = i * dstStride0;
         for (uint32_t j = 0; j < gShape1; j++) {
             int64_t dstAddr1 = j * dstStride1;
-            int64_t srcAddr1 = j * gStride1;
+            int64_t srcAddr1 = int64_t(j) * gStride1;
             for (uint32_t k = 0; k < gShape2; k++) {
-                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + k * gStride2;
+                srcAddrP = srcAddr + srcAddr0 + srcAddr1 + int64_t(k) * gStride2;
                 dstAddrP = dstAddr + dstAddr0 + dstAddr1 + k * dstStride2;
                 TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
             }
@@ -194,20 +202,20 @@ PTO_INTERNAL void TLoadGm2L1Dn2dn(
 template <typename TileDataDst, typename GlobalDataSrc>
 PTO_INTERNAL void TLoadGm2L1Nz2nz(
     __cbuf__ typename TileDataDst::DType* dstAddr, typename GlobalDataSrc::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     CheckNzFormat<TileDataDst, GlobalDataSrc>(gShape0, gShape1, gShape2, gShape3, gShape4, validRow, validCol);
     uint16_t nBurst = gShape1;
     uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmGap = (gStride1 - gShape2 * gShape3 * gShape4) * sizeof(typename TileDataDst::DType);
+    uint64_t gmGap = (int64_t(gStride1) - int64_t(gShape2) * gShape3 * gShape4) * sizeof(typename TileDataDst::DType);
     uint32_t l1Gap = (TileDataDst::Rows - validRow) * C0_SIZE_BYTE;
     typename GlobalDataSrc::DType* srcAddrP = srcAddr;
     __cbuf__ typename TileDataDst::DType* dstAddrP = dstAddr;
-    int64_t tileStride = TileDataDst::Rows * gShape1 * gShape4;
+    int64_t tileStride = int64_t(TileDataDst::Rows) * gShape1 * gShape4;
 
     for (uint32_t i = 0; i < gShape0; i++) {
-        srcAddrP = srcAddr + i * gStride0;
+        srcAddrP = srcAddr + int64_t(i) * gStride0;
         dstAddrP = dstAddr + i * tileStride;
         TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
     }
@@ -216,8 +224,8 @@ PTO_INTERNAL void TLoadGm2L1Nz2nz(
 template <typename TileDataDst, typename GlobalDataSrc>
 __tf__ PTO_INTERNAL void TLoad5HD(
     typename TileDataDst::TileDType __out__ dst, typename GlobalDataSrc::DType __in__* src, int srcN, int srcC1,
-    int srcH, int srcW, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstN, int dstC1,
-    int dstH, int dstW)
+    int srcH, int srcW, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int dstN, int dstC1, int dstH, int dstW)
 {
     __cbuf__ typename TileDataDst::DType* dstAddr = (__cbuf__ typename TileDataDst::DType*)__cce_get_tile_ptr(dst);
     typename GlobalDataSrc::DType* srcAddr = src;
@@ -226,15 +234,16 @@ __tf__ PTO_INTERNAL void TLoad5HD(
     typename GlobalDataSrc::DType* srcAddrP = srcAddr;
     __cbuf__ typename TileDataDst::DType* dstAddrP = dstAddr;
     constexpr uint32_t maxSupportBurst = 4095;
-    uint32_t gmGap = ((gStride1 - dstH * dstW * c0ElemCount) * sizeof(typename TileDataDst::DType)) >> SHIFT_BLOCK_BYTE;
+    uint64_t gmGap = ((int64_t(gStride1) - int64_t(dstH) * dstW * c0ElemCount) * sizeof(typename TileDataDst::DType)) >>
+                     SHIFT_BLOCK_BYTE;
 
     if ((gStride2 == dstW * c0ElemCount || dstH == 1) && gmGap <= UINT16_MAX && dstC1 <= maxSupportBurst &&
         dstH * dstW <= UINT16_MAX) {
         uint16_t nBurst = dstC1;
-        uint32_t srcGap = gmGap * BLOCK_BYTE_SIZE;
+        uint64_t srcGap = gmGap * BLOCK_BYTE_SIZE;
         uint32_t lenBurst = dstH * dstW * C0_SIZE_BYTE;
         for (uint32_t i = 0; i < dstN; i++) {
-            srcAddrP = srcAddr + i * gStride0;
+            srcAddrP = srcAddr + int64_t(i) * gStride0;
             dstAddrP = dstAddr + i * dstH * dstW * dstC1 * c0ElemCount;
             TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, 0);
         }
@@ -244,13 +253,13 @@ __tf__ PTO_INTERNAL void TLoad5HD(
 
         uint16_t nBurst = dstH;
         uint32_t lenBurst = dstW * C0_SIZE_BYTE;
-        uint32_t srcGap = (gStride2 - srcW * c0ElemCount) * sizeof(typename TileDataDst::DType);
+        uint64_t srcGap = (int64_t(gStride2) - int64_t(srcW) * c0ElemCount) * sizeof(typename TileDataDst::DType);
         uint32_t l1Gap = 0;
         for (uint32_t i = 0; i < dstN; i++) {
             int64_t dstAddr1 = i * dstH * dstW * dstC1 * c0ElemCount;
-            int64_t srcAddr1 = i * gStride0;
+            int64_t srcAddr1 = int64_t(i) * gStride0;
             for (uint32_t j = 0; j < dstC1; j++) {
-                srcAddrP = srcAddr + srcAddr1 + j * gStride1;
+                srcAddrP = srcAddr + srcAddr1 + int64_t(j) * gStride1;
                 dstAddrP = dstAddr + dstAddr1 + j * dstH * dstW * c0ElemCount;
                 TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, srcGap, l1Gap);
             }
@@ -261,8 +270,8 @@ __tf__ PTO_INTERNAL void TLoad5HD(
 template <typename TileDataDst, typename GlobalDataSrc>
 __tf__ PTO_INTERNAL void TLoadFractalZ(
     typename TileDataDst::TileDType __out__ dst, typename GlobalDataSrc::DType __in__* src, int srcShape0,
-    int srcShape1, int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3,
-    int gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape1, int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2,
+    int64_t gStride3, int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
     __cbuf__ typename TileDataDst::DType* dstAddr = (__cbuf__ typename TileDataDst::DType*)__cce_get_tile_ptr(dst);
     typename GlobalDataSrc::DType* srcAddr = src;
@@ -281,7 +290,8 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(
 
         uint16_t nBurst = dstShape0;
         uint32_t lenBurst = dstShape1 * dstShape2 * C0_SIZE_BYTE;
-        uint32_t gmGap = (gStride1 - srcShape2 * srcShape3 * c0ElemCount) * sizeof(typename TileDataDst::DType);
+        uint64_t gmGap =
+            (int64_t(gStride1) - int64_t(srcShape2) * srcShape3 * c0ElemCount) * sizeof(typename TileDataDst::DType);
         TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, 0);
 
     } else {
@@ -291,7 +301,7 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(
         PTO_ASSERT(dstShape3 <= UINT16_MAX, "Fix: max support dstN is UINT16_MAX!");
 
         uint32_t lenBurst = dstShape3 * C0_SIZE_BYTE;
-        uint32_t gmGap = (gStride2 - srcShape3 * c0ElemCount) * sizeof(typename TileDataDst::DType);
+        uint64_t gmGap = (int64_t(gStride2) - int64_t(srcShape3) * c0ElemCount) * sizeof(typename TileDataDst::DType);
         constexpr uint32_t maxSupportBurst = 4095;
 
         if (dstShape0 * dstShape1 * dstShape2 <= maxSupportBurst) {
@@ -300,7 +310,7 @@ __tf__ PTO_INTERNAL void TLoadFractalZ(
         } else {
             uint16_t nBurst = dstShape1 * dstShape2;
             for (uint32_t i = 0; i < dstShape0; i++) {
-                srcAddrP = srcAddr + i * gStride0;
+                srcAddrP = srcAddr + int64_t(i) * gStride0;
                 dstAddrP = dstAddr + i * dstShape1 * dstShape2 * dstShape3 * c0ElemCount;
                 TLoadInstrGm2L1<TileDataDst, GlobalDataSrc>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, 0);
             }
