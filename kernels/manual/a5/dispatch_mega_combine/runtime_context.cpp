@@ -9,6 +9,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include "runtime_context.hpp"
+// One project-local resource manager shared by all production URMA communication paths.
+#include "runtime_urma_manager.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -362,7 +364,7 @@ bool ReadRingParams(
 
 bool BuildRingHostRemoteWindowContext(
     StandaloneHcclContext& hccl, uint8_t* raw_ctx, const pto_hccl_compat::HcclOpResParamHead& head,
-    const std::vector<pto_hccl_compat::RemoteResPtr>& remote_res_arr)
+    const std::vector<pto_hccl_compat::RemoteResPtr>& remote_res_arr, uint32_t ranksPerServer)
 {
     hccl.ResetHostRemoteWindowContext();
 
@@ -383,6 +385,8 @@ bool BuildRingHostRemoteWindowContext(
 
         const uint64_t dev_ptr = remote_res_arr[i].nextDevicePtr;
         if (dev_ptr == 0) {
+            if (ranksPerServer != 0U && i / ranksPerServer != head.localUsrRankId / ranksPerServer)
+                continue;
             return false;
         }
 
@@ -477,12 +481,52 @@ bool InitStandaloneRankRuntime(
     if (!ReadRingParams(raw_ctx, head, remote_res_arr)) {
         return ReportRuntimeInitFailure(rank_id, "ReadRingParams", -1);
     }
-    if (!BuildRingHostRemoteWindowContext(runtime.hccl, raw_ctx, head, remote_res_arr)) {
+    if (!BuildRingHostRemoteWindowContext(runtime.hccl, raw_ctx, head, remote_res_arr, runtime.rank_num_per_server)) {
         return ReportRuntimeInitFailure(rank_id, "BuildRingHostRemoteWindowContext", -1);
     }
     if (!runtime.hccl.CopyHostRemoteWindowContextToDevice()) {
         return ReportRuntimeInitFailure(rank_id, "CopyHostRemoteWindowContextToDevice", -1);
     }
+    return true;
+}
+
+bool InitStandaloneUrmaRuntime(StandaloneRankRuntime& runtime, uint32_t ranksPerServer, uint32_t submittingAivs)
+{
+    const uint32_t ranks = static_cast<uint32_t>(runtime.hccl.world_size);
+    const uint32_t rank = static_cast<uint32_t>(runtime.hccl.rank_id);
+    if (runtime.urma_manager != nullptr || runtime.hccl.comm == nullptr || rank >= ranks || ranksPerServer == 0U ||
+        ranksPerServer > ranks || ranks % ranksPerServer != 0U) {
+        return ReportRuntimeInitFailure(runtime.hccl.rank_id, "URMA topology", -1);
+    }
+    auto& windows = runtime.hccl.host_remote_window_ctx;
+    const uint64_t bytes = runtime.hccl.WindowBytes();
+    if (windows.windowIn[rank] == 0U || bytes == 0U || bytes > UINT32_MAX) {
+        return ReportRuntimeInitFailure(runtime.hccl.rank_id, "URMA registered-window size", -1);
+    }
+    // Only intra-server pointers are dereferenced through MTE in URMA mode.
+    const uint32_t begin = rank / ranksPerServer * ranksPerServer;
+    for (uint32_t peer = begin; peer < begin + ranksPerServer; ++peer) {
+        if (windows.windowIn[peer] == 0U) {
+            return ReportRuntimeInitFailure(runtime.hccl.rank_id, "URMA missing intra-server MTE window", -1);
+        }
+    }
+    runtime.urma_manager = new SharedUrmaWorkspace();
+    // Retain ownership on failure: HCCL must be destroyed before registered resources are freed.
+    if (!runtime.urma_manager->Init(
+            runtime.hccl.comm, rank, ranks, reinterpret_cast<void*>(windows.windowIn[rank]), bytes, submittingAivs)) {
+        return ReportRuntimeInitFailure(runtime.hccl.rank_id, "URMA manager Init", -1);
+    }
+    runtime.urma_workspace = runtime.urma_manager->GetWorkspaceAddr();
+    runtime.urma_jetty_count = runtime.urma_manager->QueueCount();
+    if (runtime.urma_workspace == nullptr || runtime.urma_jetty_count != submittingAivs) {
+        return ReportRuntimeInitFailure(runtime.hccl.rank_id, "URMA workspace/queue pool", -1);
+    }
+    runtime.rank_num_per_server = ranksPerServer;
+    runtime.urma_enabled = true;
+    std::cout << "rank=" << rank << " URMA enabled ranks_per_server=" << ranksPerServer
+              << " servers=" << ranks / ranksPerServer << " registered_window_bytes=" << bytes
+              << " layout=SHARED_POOL queue_owner=AIV0 jetties=" << runtime.urma_jetty_count << " jetties_per_core=1"
+              << std::endl;
     return true;
 }
 
@@ -495,6 +539,15 @@ void DestroyStandaloneRankRuntime(StandaloneRankRuntime& runtime)
         HcclCommDestroy(runtime.hccl.comm);
         runtime.hccl.comm = nullptr;
     }
+    if (runtime.urma_manager != nullptr) {
+        // The manager destructor releases its buffers after HCCL has been destroyed.
+        delete runtime.urma_manager;
+        runtime.urma_manager = nullptr;
+    }
+    runtime.urma_workspace = nullptr;
+    runtime.urma_jetty_count = 0U;
+    runtime.urma_enabled = false;
+    runtime.rank_num_per_server = 0U;
     if (runtime.hccl.hccl_stream != nullptr) {
         rtStreamDestroy(runtime.hccl.hccl_stream);
         runtime.hccl.hccl_stream = nullptr;

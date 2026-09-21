@@ -89,6 +89,8 @@ CPU_SIM 默认提供至少 512 KiB 的 UB 临时空间。应在初始化内存�
 - 当各操作数的元素类型及运行时有效形状一致时，CPU_SIM `TADD` 和 `TABS` 支持操作数使用不同的 Tile 类型，包括混用静态和动态 `ValidRow`/`ValidCol` 模板参数。CPU_SIM 按每个操作数自身的 Tile 布局和物理形状计算索引；运行时有效形状不一致会触发断言。
 - CPU_SIM 同时实现 `TCI(dst, start)` 和 `TCI(dst, start, tmp)`。三参数形式接受 `tmp` 但不访问其存储，其升序或降序序列语义与两参数形式相同。编写跨后端 kernel 时，仍须保留目标 NPU 后端要求的临时空间分配。
 - CPU_SIM 实现了 `TCVT` 带或不带临时 Tile、显式或省略 `SaturationMode` 的全部四种重载。带临时 Tile 的形式接受但不访问 `tmp`，并与对应的不带临时 Tile 形式保持相同转换结果。CPU_SIM 默认使用 `SaturationMode::OFF`；跨后端 kernel 仍须保留 NPU 所需的临时空间。
+  FP32 到 FP8 E4M3/E5M2 的转换遵循舍入与饱和模式；`CAST_NONE` 和 FP8 不支持的 `CAST_ODD` 与 A5 一致，
+  回退为最近偶数舍入。格式及溢出语义见 [TCVT](../isa/TCVT_zh.md)。
 - 使用 `SLayout::NoneBox` 的 `TileType::Vec` Tile 做 `TSTORE` 时，只有一种情形按 Tile 自身布局选择 GM 遍历方式，与硬件 DMA 一致：即在 ND/DN/NZ 同布局之外，`TSTORE` 额外允许的单行或单列配对。ColMajor 的 `[N, 1]` Tile 经 ND `GlobalTensor` 落盘，或 RowMajor 的 `[1, N]` Tile 经 DN `GlobalTensor` 落盘，都按连续向量写入，而不是按另一维的跨距散开。其余组合（包括列数大于 1 的 ColMajor Tile）仍按 `GlobalTensor` 的布局取映射。`TLOAD` 不存在该情形：`TileType::Vec` 加载只接受匹配布局。
 - TileData `TPUSH`/`TPOP`/`TFREE` 使用主机侧 `TPipe` FIFO 模型。该模型会等待空闲槽位和就绪数据。对于 `Direction::DIR_BOTH`，C2V 和 V2C 使用独立的环形队列，每个方向各有 `SlotNum` 个槽位及独立的 payload、游标和同步状态。该模型通过模拟的 block/subblock 上下文协调 split lane。即使生成代码传入了非空 NPU GM workspace，TileData 数据也始终保存在主机 FIFO 状态拥有的槽位中，CPU_SIM 不会访问该 workspace。`TFREE` 会参与 CPU FIFO 的释放协议并释放对应方向，不是 A2A3 TileData 路径中的空操作。在 `TileSplitAxis::TILE_NO_SPLIT` 下，TileData `TPUSH` 按实际搬运窗口的形状（即所推送 Tile 的有效形状）排布槽位 payload，因此推送宽 Tile 的窄视图时，行与消费者弹出的 Tile 仍然对齐；split 轴仍使用生产者 Tile 的声明形状。CPU_SIM 当前不支持公共 GlobalData `TALLOC`/`TPUSH`/`TPOP`/`TFREE` 流程。
 - CPU_SIM 中，Tile-vs-Tile `TCMPS` 重载逐元素比较 `src0[i,j]` 与 `src1[i,j]`。该行为与 A5 一致，与 A2/A3 的标量广播行为不同；标量重载仍按通常的标量比较语义执行。
@@ -147,7 +149,7 @@ A2A3 兼容路径也不承诺与真机逐位一致。依赖 A5 归约顺序时�
 python3 tests/run_cpu.py --trace-mode
 ```
 
-该参数会设置 CMake 选项 `PTO_CPU_SIM_TRACE_MODE`。启用 Trace 的构建会记录指令操作码、block 索引、指令序号、Tile 操作数和标量操作数。`LaunchKernelMultiCore` 会将合并后的 JSON Lines Trace 写入：
+该参数会设置 CMake 选项 `PTO_CPU_SIM_TRACE_MODE`。启用 Trace 的构建会记录指令操作码、block 索引、subblock ID、指令序号、Tile 操作数和标量操作数。每次启动内，按 `(block_idx, subblock_id)` 区分执行线程，按 `sequence_id` 确定该线程的指令顺序。启用采集且 `KernelLaunchOptions::write_trace_files` 为 `true`（默认值）时，`LaunchKernelMultiCore` 会将合并后的 JSON Lines Trace 写入：
 
 ```text
 cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
@@ -155,7 +157,29 @@ cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
 
 以下环境变量用于控制运行时 Trace：
 
-- `PTO_CPU_SIM_TRACE_ENABLE`：对于已经启用 Trace 的构建，设置为 `0` 或 `false` 可关闭 Trace 收集。
+- `PTO_CPU_SIM_TRACE_ENABLE`：提供运行时初始化时的默认采集设置。设置为 `0` 或 `false` 可关闭 Trace，显式 API 设置优先于该默认值。
 - `PTO_CPU_SIM_TRACE_DIR`：覆盖默认的 `cpu_sim_traces` 输出目录。
 
 应在初始化 CPU_SIM 运行时前设置这些环境变量。也可使用 `include/pto/cpu/trace.hpp` 中的接口重置、查看、复制或序列化当前线程的指令记录。
+
+使用 `python3 tests/run_cpu.py --testcase ttrace --trace-mode` 运行 Trace 专项回归，检查指令操作数、环境默认值、初始化前后的显式开关，以及包含多个 block 和 subblock 的重复启动与独立文件导出。不传 `--trace-mode` 时，同一测试集也会验证编译关闭 Trace 后的计算行为。
+
+以下独立 CPU 示例不依赖 CANN 运行时：
+
+```bash
+cmake -S kernels/custom/fused_add_relu_mul -B build/fused_trace \
+  -DPTO_CPU_SIM_STANDALONE=ON -DPTO_CPU_SIM_TRACE_MODE=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fused_trace --parallel 2
+PTO_CPU_SIM_NUM_CORES=4 PTO_CPU_SIM_TRACE_ENABLE=1 PTO_CPU_SIM_TRACE_DIR=build/fused_trace/traces \
+  build/fused_trace/fused_add_relu_mul_cpu_sim --functional-only
+```
+
+该命令验证基础、双缓冲和大 Tile kernel，覆盖不足一个 Tile 的尾块，并跳过性能基准。每次启动分别生成一个 `trace.jsonl` 文件。
+回归验证应运行该功能示例，以及分别编译开启和关闭 Trace 的 `ttrace` 回归。示例检查数值结果，`ttrace` 检查指令记录和文件导出。
+
+外部运行时若直接调用 kernel，必须在编译时设置 `PTO_CPU_SIM_TRACE_MODE=1`，并在执行 kernel 的线程上管理 `ResetInstructionTrace()` / `DumpInstructionTraceJson()`。直接调用 kernel 不会经过 `LaunchKernelMultiCore`，也不会自动导出 Trace。
+
+`SetInstructionTraceEnabled(bool)` 控制已启用 Trace 构建中的采集，并在 `write_trace_files` 开启时控制自动导出；`IsInstructionTraceEnabled()` 返回当前开关状态。显式 API 设置优先于环境默认值，即使在首次启动前设置，也不会被运行时初始化覆盖。该开关作用于整个进程，应在启动前或两次启动之间设置；编译关闭 Trace 时无法通过该 API 开启。编译期常量 `kInstructionTraceEnabled` 表示构建是否包含 Trace 能力。
+
+直接调用 kernel 时，环境默认值需要外部运行时初始化 CPU_SIM 运行时后才会生效，也可以直接调用 `SetInstructionTraceEnabled(bool)` 显式控制采集。

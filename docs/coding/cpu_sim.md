@@ -93,6 +93,8 @@ correctness testing and does not model a specific on-chip address.
   access `tmp`, and otherwise has the same ascending or descending sequence semantics as the two-argument form.
   Keep the target-specific scratch allocation required by the NPU backend when writing portable kernels.
 - CPU_SIM implements all four `TCVT` overloads, with or without an explicit scratch Tile and `SaturationMode`.
+  FP32-to-FP8 E4M3/E5M2 conversions honor rounding and saturation; `CAST_NONE` and unsupported FP8
+  `CAST_ODD` fall back to nearest-even, matching A5. See [TCVT](../isa/TCVT.md) for format and overflow semantics.
   Scratch-Tile forms accept but do not access `tmp` and match the corresponding no-scratch conversion. The default
   CPU_SIM saturation mode is `SaturationMode::OFF`; portable kernels must retain any NPU scratch allocation.
 - `TSTORE` from a `TileType::Vec` tile with `SLayout::NoneBox` picks its GM traversal from the tile's own layout
@@ -129,8 +131,24 @@ correctness testing and does not model a specific on-chip address.
 ### A2/A3 FFTS cross-core events
 
 The normal `<pto/pto-inst.hpp>` CPU include path exposes `pto::getFFTSMsg`,
-`__builtin_cce_ffts_cross_core_sync` / `ffts_cross_core_sync`, and
-`__builtin_cce_wait_flag_dev` / `wait_flag_dev` through [ffts.hpp](../../include/pto/cpu/ffts.hpp).
+`ffts_cross_core_sync`, `wait_flag_dev`, and `set_ffts_base_addr` through
+[ffts.hpp](../../include/pto/cpu/ffts.hpp). These are the public interfaces used by the NPU A2/A3 implementation.
+CPU_SIM implements the signal and wait operations directly under these public names; CCE owns the hardware builtins.
+The CPU signatures are:
+
+| Interface | CPU behavior |
+| --- | --- |
+| `uint16_t pto::getFFTSMsg(uint16_t mode, uint16_t eventId, uint16_t baseCount = 1)` | Validate and encode a message for the supported protocol below. |
+| `void ffts_cross_core_sync(int pipe, uint16_t message)` | Publish a notification from the explicitly selected AIC or AIV role; ignore `pipe`. |
+| `void wait_flag_dev(int eventId)` | Wait for and consume the matching notification for the selected role. |
+| `void set_ffts_base_addr(uint64_t address)` | Accept the hardware address without accessing it or resetting CPU event state. |
+
+CPU_SIM provides no compatibility entry points for compiler-private FFTS builtins.
+Update kernel generators to emit the public interfaces, then regenerate and rebuild affected kernels.
+Recompiling old generated source or regenerating it with a generator that still emits private names will fail.
+The matching interface names do not imply support for every NPU FFTS mode or hardware pipeline timing;
+CPU support is limited to the protocol and behavior below.
+
 Compile AIC kernels with `__DAV_CUBE__` and AIV kernels with `__DAV_VEC__`, in addition to `__CPU_SIM`.
 Exactly one role must be selected. When neither role is specified, generic CPU headers enable both
 `PTO_COMPILE_CUBE` and `PTO_COMPILE_VEC` for library code.
@@ -173,10 +191,11 @@ the calling lane correctly. Configure hooks and context before executing kernels
 Run `python3 tests/run_cpu.py --testcase ffts --clean` for the cross-library regression.
 Its 12 cases cover injected and dynamically resolved **numeric-key** hooks, queued events,
 two-lane joins, consumption, device/group/event isolation, runtime reset, invalid arguments,
-a null storage callback, and a three-slot producer/consumer pipeline.
+a null storage callback, and a three-slot producer/consumer pipeline. The AIC/AIV test libraries call
+`ffts_cross_core_sync`, `wait_flag_dev`, and `set_ffts_base_addr` through the public CPU include path.
 Run `python3 tests/run_cpu.py --testcase ffts_hooks --clean` for 9 additional cases covering the
-string-key fallback, task/block isolation, injected-provider precedence, null providers, ambiguous
-kernel roles, and overflow without counter wraparound or a partial AIC broadcast.
+string-key fallback, task/block isolation, injected-provider precedence, null providers, kernel-role
+validation, and overflow without counter wraparound or a partial AIC broadcast.
 The suites use separate executables: `ffts_hooks` omits the process-visible numeric-key provider
 so that the lower-priority string-key fallback can be exercised.
 
@@ -241,7 +260,10 @@ python3 tests/run_cpu.py --trace-mode
 ```
 
 This sets the `PTO_CPU_SIM_TRACE_MODE` CMake option. A trace-enabled build records instruction opcodes, block indexes,
-sequence IDs, tile operands, and scalar operands. `LaunchKernelMultiCore` writes the combined JSON Lines trace to:
+subblock IDs, sequence IDs, tile operands, and scalar operands. Within each launch, group records by
+`(block_idx, subblock_id)` and use `sequence_id` for the order within that worker.
+With tracing enabled and `KernelLaunchOptions::write_trace_files` set to `true` (the default),
+`LaunchKernelMultiCore` writes the combined JSON Lines trace to:
 
 ```text
 cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
@@ -249,8 +271,41 @@ cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
 
 The following environment variables control tracing at runtime:
 
-- `PTO_CPU_SIM_TRACE_ENABLE`: set to `0` or `false` to disable trace collection for a trace-enabled build.
+- `PTO_CPU_SIM_TRACE_ENABLE`: supplies the default collection setting during runtime initialization.
+  Set to `0` or `false` to disable tracing unless an explicit API setting overrides it.
 - `PTO_CPU_SIM_TRACE_DIR`: override the default `cpu_sim_traces` output directory.
 
 Set these variables before CPU_SIM runtime initialization. The trace APIs in `include/pto/cpu/trace.hpp` can also be
 used to reset, inspect, copy, or serialize the current thread's instruction records.
+
+Run the focused tracing regressions with `python3 tests/run_cpu.py --testcase ttrace --trace-mode`.
+They check instruction operands, environment defaults, explicit settings before and after initialization,
+and separate trace files for repeated launches with multiple blocks and subblocks.
+The same testcase without `--trace-mode` also verifies computation with tracing compiled out.
+
+For a standalone CPU example that needs no CANN runtime:
+
+```bash
+cmake -S kernels/custom/fused_add_relu_mul -B build/fused_trace \
+  -DPTO_CPU_SIM_STANDALONE=ON -DPTO_CPU_SIM_TRACE_MODE=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fused_trace --parallel 2
+PTO_CPU_SIM_NUM_CORES=4 PTO_CPU_SIM_TRACE_ENABLE=1 PTO_CPU_SIM_TRACE_DIR=build/fused_trace/traces \
+  build/fused_trace/fused_add_relu_mul_cpu_sim --functional-only
+```
+
+This validates basic, double-buffered, and large-tile kernels, including partial tiles, without running the
+performance benchmark. Each launch produces a separate `trace.jsonl` file.
+For regression coverage, run this functional example with tracing enabled and the `ttrace` regressions with tracing
+compiled both in and out. The example checks numerical results; the `ttrace` regressions check trace records and file export.
+
+An external runtime that calls kernels directly must compile them with `PTO_CPU_SIM_TRACE_MODE=1` and manage
+`ResetInstructionTrace()` / `DumpInstructionTraceJson()` on the executing thread. Calling a kernel directly
+does not invoke `LaunchKernelMultiCore` or automatically export a trace. `SetInstructionTraceEnabled(bool)`
+controls collection and, when `write_trace_files` is enabled, automatic launch export in a trace-enabled build;
+`IsInstructionTraceEnabled()` reports the current setting. An explicit API setting overrides the environment
+default and survives runtime initialization, including when set before the first launch. Set this process-wide
+option before starting a launch or between launches. It cannot enable tracing in a build compiled with tracing disabled.
+The build-time constant `kInstructionTraceEnabled` reports whether tracing was compiled in.
+For direct kernel calls, the environment default is applied only if the external runtime initializes the
+CPU_SIM runtime; alternatively, set collection explicitly with `SetInstructionTraceEnabled(bool)`.

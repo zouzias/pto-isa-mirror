@@ -190,6 +190,72 @@ static_assert(sizeof(MegaMoeGmmSchedulerTiling) == 96);
 static_assert(sizeof(MegaMoeUnpermuteTiling) == 16);
 static_assert(sizeof(MegaMoeFixedGroupTiling) == 48);
 
+#if defined(__DAV_VEC__) || defined(__DAV_CUBE__)
+#define MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR AICORE constexpr
+#else
+#define MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR constexpr
+#endif
+
+// Transport extension only. The original production tiling prefix remains byte-compatible.
+struct MegaMoeMultiServerTiling {
+    uint64_t urmaWorkspace = 0;
+    uint64_t reservedLegacyTokenTable = 0; // Tokens are indexed by (jetty, peer) in UrmaMemInfo.
+    uint32_t enabled = 0;
+    uint32_t rankNumPerServer = 0;
+    uint32_t serverNum = 0;
+    uint32_t serverId = 0;
+    uint32_t rankIdInServer = 0;
+    uint32_t urmaJettyCount = 0;
+    uint64_t metadataSendOffset = 0;
+    uint64_t metadataRecvOffset = 0;
+    uint64_t metadataBlockBytes = 0;
+    uint64_t metadataReadyOffset = 0;
+    uint64_t relayDataOffset = 0;
+    uint64_t relaySourceStrideBytes = 0;
+    uint64_t combineTxStagingOffset = 0;
+    uint64_t combineTxOwnerStrideBytes = 0;
+    uint64_t transportReadyOffset = 0;
+    uint64_t startReadyOffset = 0;
+    uint64_t peerDataBytes = 0;
+    uint64_t combineStagingOffset = 0;
+    uint64_t combineStagingBytes = 0;
+    uint32_t metadataCountOffsetBytes = 0;
+    uint32_t metadataPreSumOffsetBytes = 0;
+    uint32_t relayChunkTokens = 0;
+    uint32_t relayChunkCount = 0;
+    uint32_t combineTxChunkRows = 0;
+    uint32_t combineTxSlotCount = 0;
+    uint32_t readySlotBytes = 0;
+    uint32_t reservedLayout = 0;
+};
+
+// Common address/topology rules used by the actual transport and Host regression tests.
+MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR uint32_t MegaMoeUrmaServerOf(uint32_t rank, uint32_t ranksPerServer)
+{
+    return ranksPerServer == 0U ? 0U : rank / ranksPerServer;
+}
+MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR uint32_t
+MegaMoeUrmaTargetRelay(uint32_t source, uint32_t server, uint32_t ranksPerServer)
+{
+    return server * ranksPerServer + source % ranksPerServer;
+}
+MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR uint32_t
+MegaMoeUrmaLocalRelay(uint32_t localRank, uint32_t source, uint32_t ranksPerServer)
+{
+    return localRank / ranksPerServer * ranksPerServer + source % ranksPerServer;
+}
+MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR uint32_t MegaMoeUrmaPeerOwner(uint32_t peer, uint32_t cores)
+{
+    return cores == 0U ? 0U : peer % cores;
+}
+MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR uint64_t
+MegaMoeUrmaRankExpertIndex(uint32_t rank, uint32_t expert, uint32_t experts)
+{
+    return static_cast<uint64_t>(rank) * experts + expert;
+}
+
+#undef MEGA_MOE_URMA_HOST_DEVICE_CONSTEXPR
+
 struct MegaMoeTilingData {
     MegaMoeInfo megaMoeInfo;
     MegaMoeRuntimeInfo runtimeInfo;
@@ -199,4 +265,5 @@ struct MegaMoeTilingData {
     MegaMoeGmmSchedulerTiling gmmSchedulerTiling;
     MegaMoeUnpermuteTiling unpermuteTiling;
     MegaMoeFixedGroupTiling fixedGroupTiling;
+    MegaMoeMultiServerTiling multiServerTiling;
 };

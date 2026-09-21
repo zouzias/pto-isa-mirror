@@ -15,14 +15,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <limits>
 
 constexpr unsigned int MAN_DBL = 52;
 constexpr unsigned int EXP_DBL = 11;
 constexpr int EXP_DBL_BIAS = 1023;
 constexpr int RESERVED_EXPONENT_COUNT = 2;
 
+// float8_e4m3_t: exponent=4 bits, mantissa=3 bits, bias=7
+constexpr int kFloat8E4M3ExponentBits = 4;
+constexpr int kFloat8E4M3MantissaBits = 3;
+constexpr int kFloat8E4M3Bias = 7;
+
+// float8_e5m2_t: exponent=5 bits, mantissa=2 bits, bias=15
+constexpr int kFloat8E5M2ExponentBits = 5;
+constexpr int kFloat8E5M2MantissaBits = 2;
+constexpr int kFloat8E5M2Bias = 15;
+
 template <int EXP_SZ, int MAN_SZ, int EXP_BIAS, bool IS_X2>
 class MXType {
+    static constexpr bool IS_FP8 =
+        !IS_X2 &&
+        ((EXP_SZ == kFloat8E4M3ExponentBits && MAN_SZ == kFloat8E4M3MantissaBits && EXP_BIAS == kFloat8E4M3Bias) ||
+         (EXP_SZ == kFloat8E5M2ExponentBits && MAN_SZ == kFloat8E5M2MantissaBits && EXP_BIAS == kFloat8E5M2Bias));
+
 public:
     MXType() : data(0) {}
 
@@ -74,6 +90,83 @@ public:
         data = static_cast<uint8_t>(
             (dblSign << (MAN_SZ + EXP_SZ)) | ((outExponent & ((1ULL << EXP_SZ) - 1)) << MAN_SZ) |
             (outMantissa & ((1ULL << MAN_SZ) - 1)));
+    }
+
+    template <typename = void>
+        requires(IS_FP8)
+    MXType(double value, pto::RoundMode mode, pto::SaturationMode satMode = pto::SaturationMode::OFF) : data(0)
+    {
+        constexpr uint8_t maxCode = EXP_SZ == kFloat8E4M3ExponentBits ? 0x7e : 0x7b;
+        constexpr uint8_t overflowCode = EXP_SZ == kFloat8E4M3ExponentBits ? 0x7f : 0x7c;
+        constexpr int maxExponent = EXP_SZ == kFloat8E4M3ExponentBits ? 8 : 15;
+        constexpr double maxValue = EXP_SZ == kFloat8E4M3ExponentBits ? 448.0 : 57344.0;
+        const uint8_t sign = std::signbit(value) ? 0x80 : 0;
+        const double magnitude = std::abs(value);
+        if (std::isnan(value)) {
+            data = sign | 0x7f;
+            return;
+        }
+        if (satMode == pto::SaturationMode::ON && magnitude >= maxValue) {
+            data = sign | maxCode;
+            return;
+        }
+        if (std::isinf(value)) {
+            data = sign | overflowCode;
+            return;
+        }
+        if (magnitude == 0) {
+            data = sign;
+            return;
+        }
+
+        const bool towardZero = mode == pto::RoundMode::CAST_TRUNC || (mode == pto::RoundMode::CAST_FLOOR && !sign) ||
+                                (mode == pto::RoundMode::CAST_CEIL && sign);
+        if (magnitude >= std::ldexp(1.0, maxExponent + 1)) {
+            data = sign | ((EXP_SZ == kFloat8E5M2ExponentBits && towardZero) ? maxCode : overflowCode);
+            return;
+        }
+
+        int exponent;
+        std::frexp(magnitude, &exponent);
+        exponent = std::max(exponent - 1, 1 - EXP_BIAS);
+        // Scale to an integer significand, including the subnormal binade.
+        const double scaled = std::ldexp(magnitude, MAN_SZ - exponent);
+        unsigned significand = static_cast<unsigned>(scaled);
+        constexpr double ROUNDING_THRESHOLD = 0.5;
+        const double remainder = scaled - significand;
+        switch (mode) {
+            // A5 defaults to RINT for NONE and for ODD, which is unsupported for FP8.
+            case pto::RoundMode::CAST_NONE:
+            case pto::RoundMode::CAST_ODD:
+            case pto::RoundMode::CAST_RINT:
+            default:
+                significand += remainder > ROUNDING_THRESHOLD || (remainder == ROUNDING_THRESHOLD && (significand & 1));
+                break;
+            case pto::RoundMode::CAST_ROUND:
+                significand += remainder >= ROUNDING_THRESHOLD;
+                break;
+            case pto::RoundMode::CAST_FLOOR:
+                significand += sign && remainder != 0;
+                break;
+            case pto::RoundMode::CAST_CEIL:
+                significand += !sign && remainder != 0;
+                break;
+            case pto::RoundMode::CAST_TRUNC:
+                break;
+        }
+        // A carry advances the exponent; subnormals naturally carry into the minimum normal.
+        if (significand == (2u << MAN_SZ)) {
+            significand >>= 1;
+            ++exponent;
+        }
+        unsigned code = significand < (1u << MAN_SZ) ? significand :
+                                                       ((exponent + EXP_BIAS) << MAN_SZ) + significand - (1u << MAN_SZ);
+        if (code > maxCode) {
+            code = (satMode == pto::SaturationMode::ON || (EXP_SZ == kFloat8E5M2ExponentBits && towardZero)) ?
+                       maxCode :
+                       overflowCode;
+        }
+        data = sign | static_cast<uint8_t>(code);
     }
 
     template <typename = void>
@@ -141,6 +234,22 @@ public:
         uint64_t mantissa = (data & ((1 << MAN_SZ) - 1));
         uint64_t exponent = (data >> MAN_SZ) & ((1 << EXP_SZ) - 1);
         uint64_t sign = (data >> (MAN_SZ + EXP_SZ)) & 1;
+
+        if constexpr (IS_FP8) {
+            const uint8_t magnitude = data & 0x7f;
+            if ((EXP_SZ == kFloat8E4M3ExponentBits && magnitude == 0x7f) ||
+                (EXP_SZ == kFloat8E5M2ExponentBits && magnitude > 0x7c))
+                return std::copysign(std::numeric_limits<double>::quiet_NaN(), sign ? -1.0 : 1.0);
+            if (EXP_SZ == kFloat8E5M2ExponentBits && magnitude == 0x7c)
+                return std::copysign(std::numeric_limits<double>::infinity(), sign ? -1.0 : 1.0);
+            if (magnitude == 0)
+                return sign ? -0.0 : 0.0;
+            const double value = exponent == 0 ? std::ldexp(static_cast<double>(mantissa), 1 - EXP_BIAS - MAN_SZ) :
+                                                 std::ldexp(
+                                                     static_cast<double>((1u << MAN_SZ) + mantissa),
+                                                     static_cast<int>(exponent) - EXP_BIAS - MAN_SZ);
+            return sign ? -value : value;
+        }
 
         double retVal = 0;
 
@@ -218,16 +327,6 @@ constexpr int kFloat4E1M2Bias = 1;
 constexpr int kFloat8E8M0ExponentBits = 8;
 constexpr int kFloat8E8M0MantissaBits = 0;
 constexpr int kFloat8E8M0Bias = 127;
-
-// float8_e4m3_t: exponent=4 bits, mantissa=3 bits, bias=7
-constexpr int kFloat8E4M3ExponentBits = 4;
-constexpr int kFloat8E4M3MantissaBits = 3;
-constexpr int kFloat8E4M3Bias = 7;
-
-// float8_e5m2_t: exponent=5 bits, mantissa=2 bits, bias=15
-constexpr int kFloat8E5M2ExponentBits = 5;
-constexpr int kFloat8E5M2MantissaBits = 2;
-constexpr int kFloat8E5M2Bias = 15;
 
 // Using declarations (can remain as is, or use the constants as shown below)
 using float4_e2m1x2_t = MXType<kFloat4E2M1ExponentBits, kFloat4E2M1MantissaBits, kFloat4E2M1Bias, true>;

@@ -17,6 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl/hccl_types.h"
 #include "op_kernel/utils/hccl_window_context.hpp"
 
+class SharedUrmaWorkspace;
+
 using rtError_t = int32_t;
 using rtStream_t = void*;
 
@@ -59,8 +61,14 @@ struct StandaloneHcclContext {
 struct StandaloneRankRuntime {
     StandaloneHcclContext hccl;
     aclrtStream compute_stream = nullptr;
+    SharedUrmaWorkspace* urma_manager = nullptr;
+    void* urma_workspace = nullptr;
+    uint32_t urma_jetty_count = 0U;
+    bool urma_enabled = false;
+    uint32_t rank_num_per_server = 0;
 };
 
 bool InitStandaloneRankRuntime(
     StandaloneRankRuntime& runtime, int rank_id, int world_size, int device_id, const HcclRootInfo& root_info);
+bool InitStandaloneUrmaRuntime(StandaloneRankRuntime& runtime, uint32_t ranksPerServer, uint32_t submittingAivs);
 void DestroyStandaloneRankRuntime(StandaloneRankRuntime& runtime);

@@ -32,7 +32,7 @@ PTO_INTERNAL void SetLoop3Para()
 // [47:32] loop3_src_stride (in unit of C0_SIZE=32B)
 // [63:48] loop4_src_stride (in unit of C0_SIZE=32B)
 // Defined in TExtract.hpp (included below) — forward-declare here.
-__tf__ PTO_INTERNAL void SetFixpNzPara(
+PTO_INTERNAL void SetFixpNzPara(
     uint16_t loop4Size, uint16_t loop2SrcStride, uint16_t loop3SrcStride, uint16_t loop4SrcStride);
 
 // L1 -> L1 flat byte copy using the LOOP_ENHANCE pattern

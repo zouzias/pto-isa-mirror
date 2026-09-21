@@ -131,18 +131,64 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
 ### Ascend 950PR/Ascend 950DT实现检查
 
 - 支持的元素类型：`int8_t`、`hifloat8_t`、`float8_e5m2_t`、`float8_e4m3_t`、`half`、`bfloat16_t`、`float`、`float4_e2m1x2_t`、`float4_e1m2x2_t`、`float8_e8m0_t`。
+- 普通 Acc→Mat 提取还支持 `int32_t -> int32_t`。
 - 源布局必须满足以下已检查到的Ascend 950PR/Ascend 950DT提取布局之一：
     - 对于 `Left` / `Right`：`(SFractal == ColMajor && isRowMajor)` 或 `(SFractal == RowMajor && !isRowMajor)`
     - 对于 `ScaleLeft`：`(SFractal == RowMajor && isRowMajor)`
     - 对于 `ScaleRight`：`(SFractal == ColMajor && !isRowMajor)`
 - 在以 `Left` 为目标的GEMV场景中，已检查到的源布局还允许 `(SrcTileData::Rows == 1 && SrcTileData::isRowMajor)`。
-- 目标支持 `TileType::Mat -> TileType::Left/Right/Scale`、`TileType::Acc -> TileType::Mat`（含relu、标量量化、向量量化形式）、`TileType::Acc -> TileType::Vec`，以及特定的 `TileType::Vec -> TileType::Mat` 提取路径。
+- 目标支持 `TileType::Mat -> TileType::Left/Right/Scale`、`TileType::Acc -> TileType::Mat`（ReLU 和量化形式受 dtype、布局限制，见下方 Acc→Mat NZ 约束）、`TileType::Acc -> TileType::Vec`，以及特定的 `TileType::Vec -> TileType::Mat` 提取路径。
 - 规范向量量化 `TEXTRACT(..., fp, ...)` 形式额外要求提供 `FpTileData` Scaling 操作数。
   `TEXTRACT_FP(...)` 仍作为源码兼容历史 alias 保留，并由所选后端实现继续检查合法性。
 - 向量量化 Acc-to-Vec 形式仅在存在对应后端实现的目标上暴露
   （A5、kirin9030、kirinX90 和 CPU 模拟器），接受
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
 - 对于 `TileType::Acc -> TileType::Vec`，当目标为32位类型（`float`/`int32_t`）且使用 `DualModeSplitN` 时，切分前的 `ValidCol` 必须是 `32` 的整数倍。
+
+### A5 Acc→Mat NZ 布局转换
+
+以下路径的目标为 NZ 布局（`BLayout::ColMajor`、`SLayout::RowMajor`）：
+
+| 源 → 目标类型 | 目标布局 | 支持的操作 |
+| --- | --- | --- |
+| `float → half/bfloat16_t` | NZ1024，每组 32 列 | 普通转换，可选 `NoRelu` 或 `NormalRelu`；标量/向量量化在编译期拒绝 |
+| `int32_t → int32_t` | NZ512，每组 8 列 | `NoQuant`、`NoRelu` 下保持位模式的搬运；ReLU 在编译期拒绝 |
+
+普通 `TEXTRACT(dst, src, row, col)` 与显式 `STPhase` 形式均可进入上述路径。
+普通形式使用 `STPhase::Unspecified`，须显式同步 Cube 与 Fixpipe。
+ReLU 需选择显式指定 `ReluPreMode` 模板实参的重载。
+
+half/bfloat16 路径按每组最多 32 列执行 Fixpipe NZ→ND。组内目标行跨度为 32 个元素，
+各组起始偏移为 `group * DstTileData::Rows * 32` 个元素；末组只有 16 个有效列时仅写这 16 列。
+int32 路径通过 float 指令重载的 channel split 生成 8 列分组，不进行数值类型转换或浮点运算。
+
+调用方须满足以下存储要求：
+
+- 源使用常规 16 列 L0C 布局，物理跨度取 `SrcTileData::Rows`；
+  此路径不会根据源有效行数推导 compact 跨度。
+- L0C 源窗口起始地址须 64 字节对齐（对于基址已对齐的常规 L0C tile，`indexCol` 为 16 的倍数）；
+  L1 目标地址须 32 字节对齐。
+- 有效行列数须为正且不超过目标物理形状，完整源窗口须落在源已分配的存储范围内。
+- half/bfloat16 NZ1024 有效列数须为 16 的倍数。辅助函数使用 `PTO_ASSERT` 检查这一条件和
+  源存储边界，仅在定义 `_DEBUG` 时生效；这不是无条件的运行时检查，也不检查源有效形状。
+- int32 NZ512 指令将有效列数向上补齐到 8 的倍数。补齐后的窗口须位于源和目标存储范围内，
+  最后一个块内的额外列可能被写入。此分支未新增运行时边界检查；
+  要求列 padding 保持不变的测试使用 8 的倍数作为有效列数。
+
+half/bfloat16 NZ1024 各条指令的 flag 随外层 phase 设置：
+
+| 外层 phase | 非末组 | 末组 |
+| --- | --- | --- |
+| `Final` | `Partial` | `Final` |
+| `Partial` | `Partial` | `Partial` |
+| `Unspecified` | `Unspecified` | `Unspecified` |
+
+因此外层为 `Partial` 时，调用方仍须对同一累加器执行后续 `Final` 提取。
+int32 路径只发出一条指令，原样传递外层 phase。
+
+`textract_acc2mat_layout` 覆盖原生 NZ 布局对照、phase 配对、K 切分累加、偏移、
+部分有效形状、padding、输出保护区及代表性的 int32 特殊位模式。
+case22–23 覆盖 half/bfloat16 ReLU；case24–26 覆盖 int32/half/bfloat16 的普通重载。
 
 ### 小 M Mat→Left 提取（A2A3 和 A5）
 

@@ -670,6 +670,71 @@ void PopulateUnpermuteTiling(MegaMoeTilingData& tiling, const A5FixedScheduleCon
         unpermute.unpermuteInputBufferCount);
 }
 
+void PopulateMultiServerTiling(MegaMoeBuildResult& result, const CaseConfig& cfg, const StandaloneRankRuntime& runtime)
+{
+    if (!runtime.urma_enabled)
+        return;
+    auto& multi = result.tiling.multiServerTiling;
+    const auto& front = result.tiling.frontReorderTiling;
+    const uint32_t ranks = cfg.world_size;
+    const uint32_t rank = static_cast<uint32_t>(runtime.hccl.rank_id);
+    const uint32_t perServer = runtime.rank_num_per_server;
+    if (ranks != static_cast<uint32_t>(runtime.hccl.world_size) || rank >= ranks || perServer == 0U ||
+        perServer > ranks || ranks % perServer != 0U || runtime.urma_workspace == nullptr ||
+        runtime.urma_jetty_count != cfg.aic_num) {
+        throw std::runtime_error("URMA topology/workspace is incomplete");
+    }
+    multi.enabled = 1U;
+    multi.rankNumPerServer = perServer;
+    multi.serverNum = ranks / perServer;
+    multi.serverId = rank / perServer;
+    multi.rankIdInServer = rank % perServer;
+    multi.urmaWorkspace = reinterpret_cast<uint64_t>(runtime.urma_workspace);
+    multi.urmaJettyCount = runtime.urma_jetty_count;
+    multi.readySlotBytes = 64U;
+    const uint64_t masks = CheckedMul(cfg.expert_per_rank, front.maskSlotBytes, "URMA mask block");
+    const uint64_t counts = AlignUp(masks, 32U);
+    const uint64_t preSum = AlignUp(CheckedAdd(counts, cfg.expert_per_rank * 4ULL, "URMA counts"), 32U);
+    const uint64_t block = AlignUp(CheckedAdd(preSum, cfg.expert_per_rank * 4ULL, "URMA preSum"), 512U);
+    if (block > UINT32_MAX)
+        throw std::runtime_error("URMA metadata block exceeds WQE size field");
+    multi.metadataCountOffsetBytes = static_cast<uint32_t>(counts);
+    multi.metadataPreSumOffsetBytes = static_cast<uint32_t>(preSum);
+    multi.metadataBlockBytes = block;
+    uint64_t offset = AlignUp(
+        CheckedAdd(
+            front.preSumBeforeRankPeerOffset,
+            AlignUp(CheckedMul(ranks, cfg.expert_per_rank * 4ULL, "preSum end"), 512U), "peer end"),
+        512U);
+    multi.metadataSendOffset = AllocateAlignedSection(offset, CheckedMul(ranks, block, "URMA send"), "URMA send");
+    multi.metadataRecvOffset = AllocateAlignedSection(offset, CheckedMul(ranks, block, "URMA recv"), "URMA recv");
+    multi.metadataReadyOffset = AllocateAlignedSection(offset, ranks * 64ULL, "URMA front epoch");
+    multi.startReadyOffset = AllocateAlignedSection(offset, ranks * 64ULL, "URMA start epoch");
+    multi.relayChunkTokens = 256U;
+    multi.relayChunkCount = CeilDivU32(cfg.m, multi.relayChunkTokens);
+    multi.relaySourceStrideBytes = AlignUp(CheckedMul(cfg.m, front.packedRowStride, "URMA token rows"), 512U);
+    multi.relayDataOffset = AllocateAlignedSection(
+        offset, CheckedMul(multi.serverNum, multi.relaySourceStrideBytes, "URMA relay"), "URMA relay");
+    multi.combineTxChunkRows = 16U;
+    multi.combineTxSlotCount = 2U;
+    multi.combineTxOwnerStrideBytes = AlignUp(CheckedMul(cfg.k, 2ULL * 16U * 2U, "URMA TX slots"), 512U);
+    multi.combineTxStagingOffset = AllocateAlignedSection(
+        offset, CheckedMul(ranks, multi.combineTxOwnerStrideBytes, "URMA TX owners"), "URMA TX owners");
+    multi.transportReadyOffset = AllocateAlignedSection(offset, ranks * 64ULL, "URMA transport epoch");
+    multi.peerDataBytes = offset;
+    if (runtime.hccl.WindowBytes() < MB_SIZE || offset > runtime.hccl.WindowBytes() - MB_SIZE) {
+        throw std::runtime_error(
+            "HCCL window too small for URMA: dataBytes=" + std::to_string(offset) +
+            " windowBytes=" + std::to_string(runtime.hccl.WindowBytes()));
+    }
+    const uint64_t maxReceiveRows = std::min<uint64_t>(
+        cfg.max_output_size,
+        CheckedMul(CheckedMul(ranks, cfg.m, "URMA global tokens"), cfg.topk, "URMA global routes"));
+    multi.combineStagingBytes = AlignUp(CheckedMul(maxReceiveRows, cfg.k * 2ULL, "URMA Combine workspace"), 512U);
+    multi.combineStagingOffset =
+        AllocateAlignedSection(result.workspace_bytes, multi.combineStagingBytes, "URMA Combine workspace");
+}
+
 } // namespace
 
 const A5FixedScheduleConfig* FindA5DefaultSchedule(uint32_t effectiveAicNum)
@@ -735,5 +800,6 @@ MegaMoeBuildResult BuildMegaMoeTiling(const CaseConfig& cfg, const StandaloneRan
     result.workspace_bytes = AllocatePipelineWorkspace(result.tiling, cfg, frontWorkspaceBytes);
     AllocateFixedGroupWorkspace(result.tiling, *schedule, cfg, result.workspace_bytes);
     PopulateUnpermuteTiling(result.tiling, *schedule, cfg);
+    PopulateMultiServerTiling(result, cfg, runtime);
     return result;
 }

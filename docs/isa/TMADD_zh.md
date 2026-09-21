@@ -12,7 +12,7 @@
 
 对每个元素 `(i, j)` 在有效区域内：
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \* \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
+$$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{dst}_{i,j} + \mathrm{src1}_{i,j} $$
 
 ## 汇编语法
 
