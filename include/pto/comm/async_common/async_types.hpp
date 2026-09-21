@@ -74,6 +74,8 @@ struct SdmaRuntimeContext {
     uint32_t sqHead[kSdmaMaxChannelGroups];
     // Cumulative queue prefix used by this session. Every Post fences these queues.
     uint32_t usedQueueCount;
+    // Data SQEs staged by TPUT_ASYNC(DEFER) but not published yet.
+    uint32_t batchStagedDataSqeCount;
     __gm__ uint8_t* postDoneBase;
 };
 
@@ -93,6 +95,20 @@ constexpr uint32_t kAutoChannelGroupIdx = UINT32_MAX;
 constexpr uint64_t kDefaultSdmaBlockBytes = 1024 * 1024;
 
 } // namespace sdma
+
+namespace urma {
+namespace detail {
+
+struct UrmaRuntimeContext {
+    uint32_t batchStartBbProducer;
+    uint32_t batchStartCqeExpected;
+    uint32_t batchStagedWqeCount;
+    uint32_t batchPeer;
+    uint32_t batchJettyIndex;
+};
+
+} // namespace detail
+} // namespace urma
 
 // ============================================================================
 // AsyncSession: engine-agnostic session for async DMA operations.
@@ -120,6 +136,7 @@ struct AsyncSession {
     uint32_t destRankId{0};
     uint32_t qpIdxBase{0};
     uint32_t qpCount{1};
+    mutable urma::detail::UrmaRuntimeContext urmaRuntimeCtx{};
 
     RdmaBackend rdmaBackend{RdmaBackend::NONE};
     uint32_t myPe{0};
