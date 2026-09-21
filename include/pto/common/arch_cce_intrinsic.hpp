@@ -226,11 +226,39 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(
     }
 #elif defined(PTO_NPU_ARCH_KIRINX90)
     if constexpr (sizeof(T) == sizeof(uint32_t)) {
-        uint16_t dValueb32 = dValue * sizeof(T) / sizeof(uint16_t);
-        uint16_t srcDValueb32 = srcDValue * sizeof(T) / sizeof(uint16_t);
-        copy_gm_to_cbuf_multi_nd2nz_b16(
-            reinterpret_cast<__cbuf__ uint16_t*>(dst), reinterpret_cast<__gm__ uint16_t*>(src), sid, ndNum, nValue,
-            dValueb32, srcNdMatrixStride, srcDValueb32, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
+        constexpr uint32_t c0Elements = 32 / sizeof(uint16_t);
+        uint32_t dValueb32 = uint32_t(dValue) * 2;
+        uint32_t srcDValueb32 = uint32_t(srcDValue) * 2;
+        uint32_t srcMatrixStride = uint32_t(srcNdMatrixStride) * 2;
+        uint32_t dstMatrixStride = uint32_t(dstNzMatrixStride) * 2;
+        if (dValueb32 <= UINT16_MAX && srcDValueb32 <= UINT16_MAX &&
+            (ndNum == 1 || (srcMatrixStride <= UINT16_MAX && dstMatrixStride <= UINT16_MAX))) {
+            copy_gm_to_cbuf_multi_nd2nz_b16(
+                reinterpret_cast<__cbuf__ uint16_t*>(dst), reinterpret_cast<__gm__ uint16_t*>(src), sid, ndNum, nValue,
+                static_cast<uint16_t>(dValueb32), static_cast<uint16_t>(srcMatrixStride),
+                static_cast<uint16_t>(srcDValueb32), dstNzC0Stride, dstNzNStride,
+                static_cast<uint16_t>(dstMatrixStride));
+            return;
+        }
+        // Split after converting element counts to the b16 instruction's units.
+        constexpr uint32_t maxChunk = UINT16_MAX / c0Elements * c0Elements;
+        for (uint32_t matrix = 0; matrix < ndNum; ++matrix) {
+            for (uint32_t row = 0; row < nValue; ++row) {
+                auto srcRow = reinterpret_cast<__gm__ uint16_t*>(src) + uint64_t(matrix) * srcMatrixStride +
+                              uint64_t(row) * srcDValueb32;
+                auto dstRow = reinterpret_cast<__cbuf__ uint16_t*>(dst) + uint64_t(matrix) * dstMatrixStride +
+                              uint64_t(row) * dstNzNStride * c0Elements;
+                for (uint32_t column = 0; column < dValueb32; column += maxChunk) {
+                    uint32_t count = dValueb32 - column;
+                    if (count > maxChunk) {
+                        count = maxChunk;
+                    }
+                    copy_gm_to_cbuf_multi_nd2nz_b16(
+                        dstRow + uint64_t(column / c0Elements) * dstNzC0Stride * c0Elements, srcRow + column, sid, 1, 1,
+                        static_cast<uint16_t>(count), 0, 0, dstNzC0Stride, dstNzNStride, 0);
+                }
+            }
+        }
     } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
         uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint16_t);
         uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint16_t);
