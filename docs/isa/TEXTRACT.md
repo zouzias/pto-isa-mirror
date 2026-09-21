@@ -138,6 +138,11 @@ canonical overload.
 
 ### A2A3 implementation checks
 
+The ordinary two-Tile overload supports `Vec -> Vec`, `Mat -> Left/Right`, and
+`Acc -> Mat`, subject to each path's dtype and layout constraints. Other TileType
+combinations, including `Vec -> Mat`, are rejected at compile time. UB-to-L1 data
+exchange uses GM staging through `TPUSH`/`TPOP` or explicit `TSTORE`/`TLOAD`.
+
 For Mat-to-Left/Right layout extraction:
 
 - Supported element types: `int8_t`, `half`, `bfloat16_t`, `float`.
@@ -164,6 +169,15 @@ For Mat-to-Left/Right layout extraction:
   (A5, kirin9030, kirinX90, and CPU simulator). It accepts
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
 - For `TileType::Acc -> TileType::Vec` with a 32-bit destination type (`float`/`int32_t`), when using `DualModeSplitN` the `ValidCol` (before the split) must be a multiple of `32`.
+
+### A5 Vec ND-to-Mat NZ extraction
+
+An ND Vec source can be extracted directly into a non-compact NZ512 Mat destination.
+The destination valid shape defines the source window at `(indexRow, indexCol)`.
+The full window must fit the source valid shape; column width, source row stride,
+and column offset must be 32-byte aligned. Row offsets and row tails need no fractal alignment.
+Only the valid window is written; destination padding is preserved. See
+[UB ND → L1 NZ](TMOV.md#ub-nd--l1-nz-a5) for the shared storage and MTE3 synchronization requirements.
 
 ### A5 Acc-to-Mat NZ layout conversion
 
@@ -362,6 +376,8 @@ NPU ST verifies the complete instruction sequence numerically.
 
 In addition to the `Mat/Acc -> ...` paths above, `TEXTRACT` supports a `TileType::Vec -> TileType::Vec` extraction path (ND and NZ layouts). A2A3 uses `CheckTExtractVecToVecCommon`; A5 checks this separately in `TEXTRACT_IMPL`:
 
+- On A2A3, both Vec tiles must be ND (`RowMajor`, `NoneBox`) or both NZ (`ColMajor`, `RowMajor`).
+  Other layouts and layout conversions are rejected at compile time by the ordinary two-Tile overload.
 - `DstTileData::DType` must equal `SrcTileData::DType`.
 - A2A3 element types: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `bfloat16_t`, `float`.
 - A5 element types: `int8_t`, `int32_t`, `half`, `bfloat16_t`, `float`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`. A5 does not support `uint8_t`, `int16_t`, `uint16_t`, `uint32_t` or 64-bit integers on this path.
