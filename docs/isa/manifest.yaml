@@ -424,7 +424,7 @@
       "instruction": "TREM",
       "category": "Elementwise (Tile-Tile)",
       "summary_en": "Elementwise remainder of two tiles.",
-      "summary_zh": "两个 Tile 的逐元素余数，余数符号与除数相同。",
+      "summary_zh": "两个 Tile 的逐元素余数。除数非零时，非零余数的符号与除数相同。",
       "diagram_template": "elementwise",
       "operands": [
         "dst",

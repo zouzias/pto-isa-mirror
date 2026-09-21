@@ -6,13 +6,17 @@
 
 ## 简介
 
-与标量的逐元素余数：`remainder(src, scalar)`。
+与标量的逐元素余数：`remainder(src, scalar)`。标量除数非零时，非零结果的符号与除数相同。
 
 ## 数学语义
 
-对每个元素 `(i, j)` 在有效区域内：
+对有效区域内除数非零的每个元素 `(i, j)`：
 
-$$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
+$$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} - \mathrm{floor}(\frac{\mathrm{src}_{i,j}}{\mathrm{scalar}}) \times \mathrm{scalar}$$
+
+当 `scalar` 非零时，非零结果的符号与 `scalar` 相同；整除时结果为零。
+例如，`remainder(-7, 3) = 2`、`remainder(7, -3) = -2`、`remainder(-6, 3) = 0`。
+在Ascend 950PR/Ascend 950DT上，`int64_t` 遵循上述向下取整定义，在除数非零时余数语义与 `int32_t` 一致。
 
 ## 汇编语法
 
@@ -71,6 +75,7 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
     - 运行时：`dst.GetValidRow() == src.GetValidRow()` 且 `dst.GetValidCol() == src.GetValidCol()`。
     - 注意：tmp参数在Ascend 950PR/Ascend 950DT上被接受但不进行验证或使用。
 - **除零**:
+    - 在Ascend 950PR/Ascend 950DT上，`int64_t` 和 `uint64_t` 在 `scalar` 为零时分别返回 `-1` 和 `UINT64_MAX`（64 位全为 1）。
     - 行为由目标定义；CPU模拟器在调试构建中会断言。
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
