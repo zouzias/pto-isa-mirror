@@ -170,6 +170,42 @@ PTO_INTERNAL void RingDoorbell(
 #endif
 }
 
+PTO_INTERNAL void WarmupSdmaSqPages(__gm__ BatchWriteChannelInfo* channel)
+{
+    constexpr uint64_t kSqWarmupPageBytes = 4096ULL;
+    constexpr uint32_t kDsbBatchPages = 32U;
+    uint64_t previousPage = ~0ULL;
+    uint32_t warmedPages = 0U;
+    // The cold publication state is shared by all SQEs in one 4 KiB page.
+    // Touch only the first SQE encountered in each page; rewriting every SQE
+    // adds stores without warming any additional state.
+    for (uint32_t slot = 0U; slot < channel->sq_depth; ++slot) {
+        __gm__ BatchWriteItem* sqe = reinterpret_cast<__gm__ BatchWriteItem*>(channel->sq_base) + slot;
+        const uint64_t page =
+            (channel->sq_base + static_cast<uint64_t>(slot) * sizeof(BatchWriteItem)) / kSqWarmupPageBytes;
+        if (page == previousPage) {
+            continue;
+        }
+        previousPage = page;
+        volatile __gm__ uint64_t* sqeWords = reinterpret_cast<volatile __gm__ uint64_t*>(sqe);
+        for (uint32_t word = 0U; word < sizeof(BatchWriteItem) / sizeof(uint64_t); ++word) {
+            const uint64_t original = sqeWords[word];
+            sqeWords[word] = original;
+        }
+        pipe_barrier(PIPE_ALL);
+        __asm__ __volatile__("");
+        dcci((__gm__ void*)sqe, cache_line_t::SINGLE_CACHE_LINE);
+        __asm__ __volatile__("");
+        ++warmedPages;
+        if (warmedPages % kDsbBatchPages == 0U) {
+            dsb(DSB_DDR);
+        }
+    }
+    if (warmedPages % kDsbBatchPages != 0U) {
+        dsb(DSB_DDR);
+    }
+}
+
 // Internal integration helper for Simpler runtime initialization. This is not a
 // PTO instruction or a public user API.
 template <typename = void>
@@ -205,39 +241,7 @@ PTO_INTERNAL bool WarmupSdmaControlPathForAiv(__gm__ uint8_t* workspace, uint32_
         return false;
     }
 
-    constexpr uint64_t kSqWarmupPageBytes = 4096ULL;
-    constexpr uint32_t kDsbBatchPages = 32U;
-    uint64_t previousPage = ~0ULL;
-    uint32_t warmedPages = 0U;
-    // The cold publication state is shared by all SQEs in one 4 KiB page.
-    // Touch only the first SQE encountered in each page; rewriting every SQE
-    // adds stores without warming any additional state.
-    for (uint32_t slot = 0U; slot < channel->sq_depth; ++slot) {
-        __gm__ BatchWriteItem* sqe = reinterpret_cast<__gm__ BatchWriteItem*>(channel->sq_base) + slot;
-        const uint64_t page =
-            (channel->sq_base + static_cast<uint64_t>(slot) * sizeof(BatchWriteItem)) / kSqWarmupPageBytes;
-        if (page == previousPage) {
-            continue;
-        }
-        previousPage = page;
-        volatile __gm__ uint64_t* sqeWords = reinterpret_cast<volatile __gm__ uint64_t*>(sqe);
-        for (uint32_t word = 0U; word < sizeof(BatchWriteItem) / sizeof(uint64_t); ++word) {
-            const uint64_t original = sqeWords[word];
-            sqeWords[word] = original;
-        }
-        pipe_barrier(PIPE_ALL);
-        __asm__ __volatile__("");
-        dcci((__gm__ void*)sqe, cache_line_t::SINGLE_CACHE_LINE);
-        __asm__ __volatile__("");
-        ++warmedPages;
-        if (warmedPages % kDsbBatchPages == 0U) {
-            dsb(DSB_DDR);
-        }
-    }
-    if (warmedPages % kDsbBatchPages != 0U) {
-        dsb(DSB_DDR);
-    }
-
+    WarmupSdmaSqPages(channel);
     RingDoorbell(channel, sqTail, tmpBuf, syncId);
     pipe_barrier(PIPE_ALL);
     return true;

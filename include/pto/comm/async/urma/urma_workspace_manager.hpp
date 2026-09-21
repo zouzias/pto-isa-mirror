@@ -86,34 +86,7 @@ public:
     {
         uint32_t resolvedAivCount = 0;
         uint32_t resolvedJettiesPerCore = 1;
-        if (layout == UrmaLayout::SHARED_POOL) {
-            resolvedAivCount = aivCount;
-            if (resolvedAivCount == kUrmaAutoAivCount) {
-                resolvedAivCount = QueryDeviceAivCount();
-                if (resolvedAivCount == 0U) {
-                    std::cerr << "[URMA] cannot query the device AIV count; pass aivCount explicitly" << std::endl;
-                    return false;
-                }
-                std::cout << "[URMA] aivCount resolved from device AIV count: " << resolvedAivCount << std::endl;
-            } else if (resolvedAivCount == 0U) {
-                std::cerr << "[URMA] aivCount=0 is not a SharedPool size; omit it for the device AIV "
-                             "count, pass N >= 1, or use UrmaLayout::PER_PEER"
-                          << std::endl;
-                return false;
-            }
-            if (jettiesPerCore == 0 || jettiesPerCore > kUrmaMaxJettiesPerCore) {
-                std::cerr << "[URMA] jettiesPerCore=" << jettiesPerCore << " must be in [1, " << kUrmaMaxJettiesPerCore
-                          << "]" << std::endl;
-                return false;
-            }
-            if (resolvedAivCount > std::numeric_limits<uint32_t>::max() / jettiesPerCore) {
-                std::cerr << "[URMA] aivCount=" << resolvedAivCount << " * jettiesPerCore=" << jettiesPerCore
-                          << " overflows the jetty count" << std::endl;
-                return false;
-            }
-            resolvedJettiesPerCore = jettiesPerCore;
-        } else if (layout != UrmaLayout::PER_PEER) {
-            std::cerr << "[URMA] unknown layout " << static_cast<uint32_t>(layout) << std::endl;
+        if (!ResolveLayoutConfig(layout, aivCount, jettiesPerCore, resolvedAivCount, resolvedJettiesPerCore)) {
             return false;
         }
 
@@ -173,6 +146,46 @@ public:
     uint32_t JettiesPerCore() const { return (aivCount_ == 0) ? 1U : jettiesPerCore_; }
 
 private:
+    static bool ResolveLayoutConfig(
+        UrmaLayout layout, uint32_t aivCount, uint32_t jettiesPerCore, uint32_t& resolvedAivCount,
+        uint32_t& resolvedJettiesPerCore)
+    {
+        if (layout == UrmaLayout::PER_PEER) {
+            return true;
+        }
+        if (layout != UrmaLayout::SHARED_POOL) {
+            std::cerr << "[URMA] unknown layout " << static_cast<uint32_t>(layout) << std::endl;
+            return false;
+        }
+
+        resolvedAivCount = aivCount;
+        if (resolvedAivCount == kUrmaAutoAivCount) {
+            resolvedAivCount = QueryDeviceAivCount();
+            if (resolvedAivCount == 0U) {
+                std::cerr << "[URMA] cannot query the device AIV count; pass aivCount explicitly" << std::endl;
+                return false;
+            }
+            std::cout << "[URMA] aivCount resolved from device AIV count: " << resolvedAivCount << std::endl;
+        } else if (resolvedAivCount == 0U) {
+            std::cerr << "[URMA] aivCount=0 is not a SharedPool size; omit it for the device AIV "
+                         "count, pass N >= 1, or use UrmaLayout::PER_PEER"
+                      << std::endl;
+            return false;
+        }
+        if (jettiesPerCore == 0 || jettiesPerCore > kUrmaMaxJettiesPerCore) {
+            std::cerr << "[URMA] jettiesPerCore=" << jettiesPerCore << " must be in [1, " << kUrmaMaxJettiesPerCore
+                      << "]" << std::endl;
+            return false;
+        }
+        if (resolvedAivCount > std::numeric_limits<uint32_t>::max() / jettiesPerCore) {
+            std::cerr << "[URMA] aivCount=" << resolvedAivCount << " * jettiesPerCore=" << jettiesPerCore
+                      << " overflows the jetty count" << std::endl;
+            return false;
+        }
+        resolvedJettiesPerCore = jettiesPerCore;
+        return true;
+    }
+
     uint64_t CtxRowCount() const { return (aivCount_ == 0) ? rankCount_ : JettyCount(); }
     uint64_t TargetRowCount() const
     {
