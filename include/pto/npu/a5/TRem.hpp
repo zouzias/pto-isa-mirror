@@ -28,18 +28,16 @@ PTO_INTERNAL void Int64RemRegs(
     vector_s32& dstLow, vector_s32& dstHigh, vector_s32& lhsLow, vector_s32& lhsHigh, vector_s32& rhsLow,
     vector_s32& rhsHigh, MaskReg& mask)
 {
-    vector_s32 qLow, qHigh, productLow, productHigh;
-    if constexpr (std::is_same_v<T, int64_t>)
-        Int64DivSignedRegs(qLow, qHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
-    else
-        Int64DivUnsignedRegs(qLow, qHigh, lhsLow, lhsHigh, rhsLow, rhsHigh, mask);
-    Int64MulRegs(productLow, productHigh, qLow, qHigh, rhsLow, rhsHigh, mask);
-    Int64SubRegs(dstLow, dstHigh, lhsLow, lhsHigh, productLow, productHigh, mask);
-    vector_s32 zeroLow, zeroHigh;
-    Int64DuplicateRegs(zeroLow, zeroHigh, 0, 0);
-    MaskReg zeroMask;
-    Int64CompareEqRegs(zeroMask, rhsLow, rhsHigh, zeroLow, zeroHigh, mask);
-    Int64SelectRegs(dstLow, dstHigh, zeroLow, zeroHigh, dstLow, dstHigh, zeroMask);
+    using Reg64 = std::conditional_t<std::is_same_v<T, int64_t>, vector_2xvl_s64, vector_2xvl_u64>;
+    using Reg32 = std::conditional_t<std::is_same_v<T, int64_t>, vector_s32, vector_u32>;
+    Reg64 lhs, rhs, remainder;
+    lhs.val[0] = (Reg32)lhsLow;
+    lhs.val[1] = (Reg32)lhsHigh;
+    rhs.val[0] = (Reg32)rhsLow;
+    rhs.val[1] = (Reg32)rhsHigh;
+    vmod<DivisionMode::DIV_FLOOR>(remainder, lhs, rhs, mask, MODE_ZEROING);
+    dstLow = (vector_s32)remainder.val[0];
+    dstHigh = (vector_s32)remainder.val[1];
 }
 
 template <typename T, unsigned DstCols, unsigned Src0Cols, unsigned Src1Cols, bool FullLoad>
@@ -102,42 +100,9 @@ PTO_INTERNAL void Int64Rem(__ubuf__ T* dst, __ubuf__ T* src0, __ubuf__ T* src1, 
     }
 }
 
-template <typename T, unsigned DstCols>
-PTO_INTERNAL void Int64Zero(__ubuf__ T* dst, unsigned validRows, unsigned validCols)
-{
-    constexpr unsigned elementsPerRepeat = CCE_VL * 2 / sizeof(T);
-    __VEC_SCOPE__
-    {
-        vector_s32 zero, half0, half1;
-        MaskReg lowMask, highMask;
-        vbr(zero, 0);
-        uint16_t rows = validRows;
-        uint16_t colRepeats = CeilDivision(validCols, elementsPerRepeat);
-        for (uint16_t row = 0; row < rows; ++row) {
-            uint32_t sreg = validCols;
-            for (uint16_t colRepeat = 0; colRepeat < colRepeats; ++colRepeat) {
-                uint32_t colOffset = colRepeat * elementsPerRepeat;
-                MaskReg preg = CreatePredicate<uint32_t>(sreg);
-                pintlv_b32(lowMask, highMask, preg, preg);
-                vintlv(half0, half1, zero, zero);
-                vsts(half0, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2, 0, NORM_B32, lowMask);
-                vsts(
-                    half1, (__ubuf__ int32_t*)dst + (row * DstCols + colOffset) * 2 + CCE_VL / sizeof(int32_t), 0,
-                    NORM_B32, highMask);
-            }
-        }
-    }
-}
-
 template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void Int64RemScalar(__ubuf__ T* dst, __ubuf__ T* src, T scalar, unsigned validRows, unsigned validCols)
 {
-    if constexpr (std::is_same_v<T, uint64_t>) {
-        if (scalar == 0) {
-            Int64Zero<T, DstCols>(dst, validRows, validCols);
-            return;
-        }
-    }
     constexpr unsigned elementsPerRepeat = CCE_VL * 2 / sizeof(T);
     uint16_t colRepeats = CeilDivision(validCols, elementsPerRepeat);
     uint16_t fullRepeats = Int64FullLoadRepeats<SrcCols, elementsPerRepeat>(colRepeats);
@@ -258,7 +223,7 @@ __tf__ PTO_INTERNAL OP_NAME(TREM) OP_TYPE(element_wise) void TRem(
     __ubuf__ T* dstPtr = (__ubuf__ T*)__cce_get_tile_ptr(dst);
     __ubuf__ T* src0Ptr = (__ubuf__ T*)__cce_get_tile_ptr(src0);
     __ubuf__ T* src1Ptr = (__ubuf__ T*)__cce_get_tile_ptr(src1);
-    // Note: tmp parameter is not used in a5 implementation (no sign correction needed)
+    // The A5 implementation does not use the temporary tile.
     if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
         Int64Rem<T, TileDataDst::Cols, TileDataSrc0::Cols, TileDataSrc1::Cols>(
             dstPtr, src0Ptr, src1Ptr, validRows, validCols);

@@ -6,15 +6,17 @@
 
 ## 简介
 
-两个Tile的逐元素余数运算。结果符号与除数相同。
+两个Tile的逐元素余数运算。除数非零时，非零结果的符号与除数相同。
 
 ## 数学语义
 
-对每个元素 `(i, j)` 在有效区域内：
+对有效区域内除数非零的每个元素 `(i, j)`：
 
 $$\mathrm{dst}_{i,j} = \mathrm{remainder}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) = \mathrm{src0}_{i,j} - \mathrm{floor}(\frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}}) \times \mathrm{src1}_{i,j}$$
 
-结果符号会被修正为与除数（`src1`）的符号相同。
+当除数（`src1`）非零时，非零结果的符号与除数相同；整除时结果为零。
+例如，`remainder(-7, 3) = 2`、`remainder(7, -3) = -2`、`remainder(-6, 3) = 0`。
+在Ascend 950PR/Ascend 950DT上，`int64_t` 遵循上述向下取整定义，在除数非零时余数语义与 `int32_t` 一致。
 
 **注意**：这与 `TFMOD` 不同，`TFMOD` 的结果符号与被除数（`src0`）相同。
 
@@ -56,7 +58,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
     - Tile位置必须是向量（`TileData::Loc == TileType::Vec`）。
     - 运行时：`src0`、`src1` 和 `dst` tiles应具有相同的 `validRow/validCol`。
-    - `tmp` tile必须至少有2行和 `validCols` 列（第0行用于中间结果，第1行用于比较掩码）。
+    - `tmp` 必须至少有 1 个有效行和 `TileDataDst::RowStride + 8 * ceil(TileDataDst::RowStride / 256) + 8` 个有效列，依次用于中间结果、按 32 字节对齐的压缩比较掩码和 32 字节的地址缓冲区。
 - **实现检查 (Ascend 950PR/Ascend 950DT)**:
     - `TileData::DType` 必须是以下之一：`half`， `float`， `int16_t`， `uint16_t`， `int32_t`， `uint32_t`， `int64_t`， `uint64_t`。
     - Tile布局必须是行主序（`TileData::isRowMajor`）。
@@ -66,6 +68,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **除零**:
+    - 在Ascend 950PR/Ascend 950DT上，`int64_t` 和 `uint64_t` 在除数为零时分别返回 `-1` 和 `UINT64_MAX`（64 位全为 1）。
     - 行为由目标定义；CPU仿真在调试构建中会断言。
 - **高精度算法**:
     - 仅在Ascend 950PR/Ascend 950DT上对 `float` 类型有效；`PrecisionType` 选项在Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品上将被忽略。
@@ -79,7 +82,7 @@ using namespace pto;
 
 void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
-  using TmpT = Tile<TileType::Vec, float, 2, 16>;
+  using TmpT = Tile<TileType::Vec, float, 1, 32>;
   TileT dst, src0, src1;
   TmpT tmp;
   TREM(dst, src0, src1, tmp);

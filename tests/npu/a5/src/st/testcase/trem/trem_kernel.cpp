@@ -131,3 +131,4 @@ template void LaunchTRemInplace<uint64_t, 4, 32, 4, 32>(uint64_t* out, uint64_t*
 template void LaunchTRemInplace<int64_t, 1, 1024, 1, 1024>(int64_t* out, int64_t* src1, void* stream);
 template void LaunchTRemInplace<int64_t, 1, 2048, 1, 2045>(int64_t* out, int64_t* src1, void* stream);
 template void LaunchTRemInplace<int64_t, 4, 64, 4, 40>(int64_t* out, int64_t* src1, void* stream);
+template void LaunchTRemInplace<uint64_t, 4, 64, 4, 40>(uint64_t* out, uint64_t* src1, void* stream);
