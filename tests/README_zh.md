@@ -14,6 +14,55 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
 
 > `run_st.sh` 必须指定平台参数（`--a3`/`--a5`/`--a3_a5`/`--kirin9030`），并且对 `--a3`/`--a5` 还需指定模式参数（`--simple` 或 `--all`）；可选地指定运行模式（`--sim`/`--npu`，默认板上 `npu`）。不带参数或参数非法运行 `./tests/run_st.sh` 会打印完整用法。注意各参数均需 `--` 前缀。
 
+## A2/A3 TEXTRACT 编译检查
+
+加载 CANN `set_env.sh` 后，运行 `python3 tests/script/check_a2a3_textract.py`。
+该检查面向 A2/A3 目标编译公开 TEXTRACT 接口，要求不支持的 TileType 组合产生指定的编译期诊断，
+包含 ND/NZ Vec→Mat 输入及所有不支持的 Vec 外层/内层布局组合。
+正向用例覆盖 Vec→Vec、Mat→Left/Right、Acc→Mat、小 M 提取和双输出 ND→NZ 提取。
+该检查不在设备上执行 kernel；A2/A3 的 `--simple` 和 `--all` ST 入口会在构建测试前执行此检查。
+
+costmodel 回归分别运行
+`python3 tests/run_costmodel.py --suite st --testcase textract --clean` 和
+`python3 tests/run_costmodel.py --suite st --testcase textract_small_m --clean`。
+`textract` 目标检查 ND Vec→Vec 的完整窗口、偏移窗口及列尾，要求产生预期的 DMA/向量搬运调用和非零周期；
+`textract_small_m` 目标检查 Mat→Left 提取及其边界断言。
+
+## A5 UB ND→L1 NZ 回归测试
+
+用例按指令归属放在 `npu/a5/src/st/testcase/` 下的对应目录，并注册到已有测试目标：
+
+| 指令 | 测试目标 | GTest 过滤条件 | ND→NZ 用例数 |
+|------|----------|----------------|---------------|
+| TMOV | `tmov_ub2l1` | `TMovUb2l1Test.nd2nz_*` | 14 |
+| TEXTRACT | `textract` | `TEXTRACTTest.nd2nz_*` | 14 |
+| TINSERT | `tinsert` | `TInsertTest.nd2nz_*` | 18 |
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tmov_ub2l1
+python3 tests/script/run_st.py -r npu -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*'
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.nd2nz_*'
+```
+
+第一条命令还运行 `tmov_ub2l1` 的 9 个 NZ 输入用例，以上命令共执行 55 个用例。
+ND→NZ 用例在 host 端直接生成输入和逐字节标杆，包含有效窗口外的数据校验。
+公共标杆、L1 初始化、回读及 AIV/AIC 同步代码位于 `npu/a5/src/st/testcase/tmov_ub2l1/ub2l1_nd2nz_*.h`，
+`textract` 和 `tinsert` 目标引用这些共享头文件；各指令目录维护自己的 `nd2nz_cases.h` 参数列表。
+大尺寸 NZ 结果按不超过 128 KiB 分块初始化和回读，复用 UB 缓冲区前进行同步。
+TEXTRACT 的 UB→L1 kernel 使用混合编译。
+
+TMOV 和 TEXTRACT 覆盖各自支持的全部 10 种数据类型；TINSERT 额外覆盖 `int32_t`，共 11 种。
+边界用例包含 FP4 非零偏移、静态与动态有效形状、零行和零列、源有效窗口小于物理形状时的边界提取、双 AIV FP4 插入，
+以及 65536 列 FP4 的静态和动态有效形状，其中动态用例的源行跨度大于有效列宽。
+A5 手动同步模式的 `--simple` 和 `--all` 入口均包含这些回归用例。
+这些用例依赖手动 Tile 地址别名，不在 auto 模式注册。
+auto 模式下 `tmov_ub2l1` 保留原有的 9 个 NZ 输入用例；`textract` 和 `tinsert` 由现有 auto 模式目标列表排除。
+
+加载 CANN `set_env.sh` 后，可运行 `python3 tests/script/check_ub2l1_nd2nz.py` 检查不支持的类型、布局、非法对齐和越界窗口。
+该检查编译参数为常量的 kernel，验证编译诊断和调试模式的 trap 指令，不在设备上执行非法 kernel；
+同时使用正常搬运和空窗口用例校验反汇编预期。CANN 工具链中的 `llvm-objdump` 须支持 A5 指令解码；
+遇到不可用或未知指令时会明确报告工具链错误。两个 A5 手动同步模式入口均自动执行此编译检查。
+
 ## 目录结构
 
 - `script/`：推荐的入口脚本

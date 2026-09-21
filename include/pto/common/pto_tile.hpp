@@ -1434,7 +1434,7 @@ public:
     // so the packed types are listed explicitly, as in GetNZC0Size.
 #ifdef __CPU_SIM
     static constexpr size_t kPackedElementsPerByte = IsTwinType<DType>() ? 2 : 1;
-#else
+#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
     static constexpr bool kIsPackedTwin = std::is_same_v<DType, float4_e2m1x2_t> ||
                                           std::is_same_v<DType, float4_e1m2x2_t>
 #if defined(PTO_NPU_ARCH_A6)
@@ -1442,6 +1442,8 @@ public:
 #endif
         ;
     static constexpr size_t kPackedElementsPerByte = kIsPackedTwin ? 2 : 1;
+#else
+    static constexpr size_t kPackedElementsPerByte = 1;
 #endif
 
     static constexpr int getInnerRow()
