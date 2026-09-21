@@ -18,7 +18,7 @@ struct MaxCompareOp {
     template <typename ValType>
     static inline bool apply(ValType src0Val, ValType src1Val)
     {
-        return src0Val > src1Val;
+        return src0Val >= src1Val;
     }
 };
 
