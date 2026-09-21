@@ -32,6 +32,7 @@ def gen_golden_data_trem(case_name, param):
     input1 = np.random.uniform(value_min, value_max, size=(row, col)).astype(dtype)
     input2 = np.random.uniform(value_min // 10, value_max // 10, size=(row, col)).astype(dtype)
     golden = np.remainder(input1, input2)
+    golden = np.where(golden == 0, np.float32(0).astype(dtype), golden)
 
     if np.issubdtype(dtype, np.integer):
         zero_mask = (input2 == 0)

@@ -14,7 +14,6 @@ full text of the License.
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "TPartBinOps.hpp"
-#include <math.h>
 #include <type_traits>
 
 namespace pto {

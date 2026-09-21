@@ -9,3 +9,10 @@
 # --------------------------------------------------------------------------------
 
 pto_vec_st(texpands)
+# Link only Runtime APIs so sim mode does not load the hardware Runtime through ACL.
+get_target_property(texpands_libraries texpands LINK_LIBRARIES)
+list(REMOVE_ITEM texpands_libraries ascendcl nnopbase tiling_api platform)
+set_target_properties(texpands PROPERTIES LINK_LIBRARIES "${texpands_libraries}")
+# Drop unused ACL helpers defined in test_common.h.
+target_compile_options(texpands PRIVATE -ffunction-sections -fdata-sections)
+target_link_options(texpands PRIVATE -Wl,--gc-sections)

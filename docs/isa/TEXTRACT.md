@@ -150,12 +150,13 @@ For Mat-to-Left/Right layout extraction:
 ### A5 implementation checks
 
 - Supported element types: `int8_t`, `hifloat8_t`, `float8_e5m2_t`, `float8_e4m3_t`, `half`, `bfloat16_t`, `float`, `float4_e2m1x2_t`, `float4_e1m2x2_t`, `float8_e8m0_t`.
+- Ordinary Acc-to-Mat extraction additionally accepts `int32_t -> int32_t`.
 - Source layout must satisfy one of the checked A5 extraction layouts:
     - for `Left` / `Right`: `(SFractal == ColMajor && isRowMajor)` or `(SFractal == RowMajor && !isRowMajor)`
     - for `ScaleLeft`: `(SFractal == RowMajor && isRowMajor)`
     - for `ScaleRight`: `(SFractal == ColMajor && !isRowMajor)`
 - In GEMV scenarios targeting `Left`, the checked source layout also allows `(SrcTileData::Rows == 1 && SrcTileData::isRowMajor)`.
-- Destination supports `TileType::Mat -> TileType::Left/Right/Scale`, `TileType::Acc -> TileType::Mat` (including relu, scalar-quant, and vector-quantized forms), `TileType::Acc -> TileType::Vec`, and specific `TileType::Vec -> TileType::Mat` extraction paths.
+- Destination supports `TileType::Mat -> TileType::Left/Right/Scale`, `TileType::Acc -> TileType::Mat` (ReLU and quantized forms depend on dtype and layout; see the Acc-to-Mat NZ restrictions below), `TileType::Acc -> TileType::Vec`, and specific `TileType::Vec -> TileType::Mat` extraction paths.
 - The canonical vector-quantized `TEXTRACT(..., fp, ...)` form additionally requires an `FpTileData`
   scaling operand. `TEXTRACT_FP(...)` remains available as a source-compatible legacy alias and is
   checked by the selected backend implementation.
@@ -163,6 +164,56 @@ For Mat-to-Left/Right layout extraction:
   (A5, kirin9030, kirinX90, and CPU simulator). It accepts
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
 - For `TileType::Acc -> TileType::Vec` with a 32-bit destination type (`float`/`int32_t`), when using `DualModeSplitN` the `ValidCol` (before the split) must be a multiple of `32`.
+
+### A5 Acc-to-Mat NZ layout conversion
+
+The following paths use an NZ destination (`BLayout::ColMajor`, `SLayout::RowMajor`):
+
+| Source → destination | Destination layout | Supported operation |
+| --- | --- | --- |
+| `float → half/bfloat16_t` | NZ1024, 32 columns per group | Plain conversion, with `NoRelu` or `NormalRelu`; scalar/vector quantization is rejected at compile time |
+| `int32_t → int32_t` | NZ512, 8 columns per group | Bit-preserving move with `NoQuant` and `NoRelu`; ReLU is rejected at compile time |
+
+Both the ordinary `TEXTRACT(dst, src, row, col)` and explicit `STPhase` forms reach these paths.
+The ordinary form uses `STPhase::Unspecified` and requires explicit Cube-to-Fixpipe synchronization.
+For ReLU, select the overload with an explicit `ReluPreMode` template argument.
+
+The half/bfloat16 path emits Fixpipe NZ-to-ND instructions for groups of at most 32 columns.
+Each group's destination row stride is 32 elements; its starting offset is
+`group * DstTileData::Rows * 32` elements. A final 16-column group writes only those columns.
+The int32 path uses the float instruction overload with channel splitting to produce 8-column groups;
+it performs no numerical cast or floating-point arithmetic.
+
+Callers must satisfy the following storage requirements:
+
+- The source uses the ordinary 16-column L0C layout with `SrcTileData::Rows` as its physical stride;
+  this path does not derive a compact stride from the source's valid row count.
+- The L0C source window starts at a 64-byte-aligned address (`indexCol` is a multiple of 16 for
+  an aligned ordinary L0C tile); the L1 destination address is 32-byte aligned.
+- Valid rows and columns are positive and fit within the destination's physical shape.
+  The complete source window must fit within allocated source storage.
+- For half/bfloat16 NZ1024, valid columns must be a multiple of 16. The helper checks this and
+  the source storage bounds with `PTO_ASSERT`, which is active only when `_DEBUG` is defined;
+  these are not unconditional runtime checks, and source valid dimensions are not checked.
+- For int32 NZ512, the instruction rounds valid columns up to a multiple of 8. The rounded window
+  must fit within source and destination storage; trailing columns inside that block can be written.
+  This branch does not add runtime bounds checks. Tests that require untouched column padding use
+  valid column counts that are multiples of 8.
+
+For half/bfloat16 NZ1024, the flag on each emitted instruction follows the outer phase:
+
+| Outer phase | Non-last group | Last group |
+| --- | --- | --- |
+| `Final` | `Partial` | `Final` |
+| `Partial` | `Partial` | `Partial` |
+| `Unspecified` | `Unspecified` | `Unspecified` |
+
+An outer `Partial` therefore requires a later `Final` extraction from the same accumulator.
+The int32 path emits one instruction and forwards the outer phase unchanged.
+
+`textract_acc2mat_layout` covers native NZ controls, phase sequencing, K accumulation, offsets,
+partial valid shapes, padding and output guards, and representative special int32 bit patterns.
+Cases 22–23 cover half/bfloat16 ReLU; cases 24–26 cover the ordinary int32/half/bfloat16 overloads.
 
 ### Small-M Mat-to-Left extraction (A2A3 and A5)
 

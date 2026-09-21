@@ -44,7 +44,7 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTile& dst, SrcTile& src, uint16_t indexR
 // 32-byte-unit burst per block. Declared here because TExtractVecToMat below
 // calls it with explicit template arguments (no ADL).
 template <typename T>
-__tf__ PTO_INTERNAL void TCopyUbToCbufFractal(
+PTO_INTERNAL void TCopyUbToCbufFractal(
     __cbuf__ T* dstPtr, __ubuf__ T* srcPtr, uint16_t blockCout, uint16_t blockLen, uint16_t srcStride);
 
 //---------------------------------------------------------------------------------------

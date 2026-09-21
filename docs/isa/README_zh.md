@@ -77,7 +77,7 @@
 - [TNOT](TNOT_zh.md) - Tile 的逐元素按位取反。
 - [TRELU](TRELU_zh.md) - Tile 的逐元素 ReLU。
 - [TNEG](TNEG_zh.md) - Tile 的逐元素取负。
-- [TREM](TREM_zh.md) - 两个 Tile 的逐元素余数，余数符号与除数相同。
+- [TREM](TREM_zh.md) - 两个 Tile 的逐元素余数。除数非零时，非零余数的符号与除数相同。
 - [TFMOD](TFMOD_zh.md) - 两个 Tile 的逐元素余数，余数符号与被除数相同。
 - [TMULA](TMULA_zh.md) - 三元逐元素运算：`src0 * src1 + dst`。
 

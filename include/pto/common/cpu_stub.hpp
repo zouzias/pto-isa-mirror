@@ -116,7 +116,6 @@ inline int aclrtFreeHost(void* p)
     return 0;
 }
 
-inline int aclrtDestroyStream(aclrtStream) { return 0; }
 inline int aclrtResetDevice(int) { return 0; }
 inline int aclFinalize() { return 0; }
 #endif
@@ -155,6 +154,7 @@ inline uint64_t sbitset0(uint64_t value, int bit) { return value & ~(1ULL << bit
 #define set_vector_mask(...)
 
 inline uint32_t get_block_idx();
+inline uint32_t get_subblockid();
 
 #if !defined(__COSTMODEL)
 #include <pto/cpu/trace.hpp>
@@ -201,7 +201,6 @@ struct RuntimeConfig {
     bool initialized = false;
     uint32_t device_id = 0;
     uint32_t num_cores = 1;
-    bool trace_enabled = kInstructionTraceEnabled;
     std::filesystem::path trace_root = "cpu_sim_traces";
     uint64_t next_stream_id = 1;
     uint64_t next_launch_id = 0;
@@ -271,14 +270,14 @@ inline void InitializeRuntime()
     std::scoped_lock lock(config.mutex);
     config.device_id = 0;
     config.num_cores = ReadEnvU32("PTO_CPU_SIM_NUM_CORES", DEFAULT_CORE_NUM);
-    config.trace_enabled = kInstructionTraceEnabled && ReadEnvBool("PTO_CPU_SIM_TRACE_ENABLE", true);
+    SetInstructionTraceDefault(ReadEnvBool("PTO_CPU_SIM_TRACE_ENABLE", true));
     if (const char* trace_dir = std::getenv("PTO_CPU_SIM_TRACE_DIR"); trace_dir != nullptr && *trace_dir != '\0') {
         config.trace_root = trace_dir;
     } else {
         config.trace_root = "cpu_sim_traces";
     }
     config.next_stream_id = 1;
-    if (config.trace_enabled) {
+    if (IsInstructionTraceEnabled()) {
         std::filesystem::create_directories(config.trace_root);
     }
     config.initialized = true;
@@ -308,7 +307,7 @@ inline uint32_t GetConfiguredCoreCount()
 inline bool IsTraceEnabled()
 {
     EnsureRuntimeInitialized();
-    return runtime_config().trace_enabled;
+    return IsInstructionTraceEnabled();
 }
 
 inline std::filesystem::path GetTraceRoot()
@@ -546,6 +545,12 @@ inline int aclrtCreateStream(aclrtStream* stream)
         state->id = config.next_stream_id++;
     }
     *stream = reinterpret_cast<aclrtStream>(state);
+    return 0;
+}
+
+inline int aclrtDestroyStream(aclrtStream stream)
+{
+    delete pto::cpu_sim::ToStreamState(stream);
     return 0;
 }
 #endif

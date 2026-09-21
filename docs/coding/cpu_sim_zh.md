@@ -149,7 +149,7 @@ A2A3 兼容路径也不承诺与真机逐位一致。依赖 A5 归约顺序时�
 python3 tests/run_cpu.py --trace-mode
 ```
 
-该参数会设置 CMake 选项 `PTO_CPU_SIM_TRACE_MODE`。启用 Trace 的构建会记录指令操作码、block 索引、指令序号、Tile 操作数和标量操作数。`LaunchKernelMultiCore` 会将合并后的 JSON Lines Trace 写入：
+该参数会设置 CMake 选项 `PTO_CPU_SIM_TRACE_MODE`。启用 Trace 的构建会记录指令操作码、block 索引、subblock ID、指令序号、Tile 操作数和标量操作数。每次启动内，按 `(block_idx, subblock_id)` 区分执行线程，按 `sequence_id` 确定该线程的指令顺序。启用采集且 `KernelLaunchOptions::write_trace_files` 为 `true`（默认值）时，`LaunchKernelMultiCore` 会将合并后的 JSON Lines Trace 写入：
 
 ```text
 cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
@@ -157,7 +157,29 @@ cpu_sim_traces/<kernel_name>/launch_<id>/trace.jsonl
 
 以下环境变量用于控制运行时 Trace：
 
-- `PTO_CPU_SIM_TRACE_ENABLE`：对于已经启用 Trace 的构建，设置为 `0` 或 `false` 可关闭 Trace 收集。
+- `PTO_CPU_SIM_TRACE_ENABLE`：提供运行时初始化时的默认采集设置。设置为 `0` 或 `false` 可关闭 Trace，显式 API 设置优先于该默认值。
 - `PTO_CPU_SIM_TRACE_DIR`：覆盖默认的 `cpu_sim_traces` 输出目录。
 
 应在初始化 CPU_SIM 运行时前设置这些环境变量。也可使用 `include/pto/cpu/trace.hpp` 中的接口重置、查看、复制或序列化当前线程的指令记录。
+
+使用 `python3 tests/run_cpu.py --testcase ttrace --trace-mode` 运行 Trace 专项回归，检查指令操作数、环境默认值、初始化前后的显式开关，以及包含多个 block 和 subblock 的重复启动与独立文件导出。不传 `--trace-mode` 时，同一测试集也会验证编译关闭 Trace 后的计算行为。
+
+以下独立 CPU 示例不依赖 CANN 运行时：
+
+```bash
+cmake -S kernels/custom/fused_add_relu_mul -B build/fused_trace \
+  -DPTO_CPU_SIM_STANDALONE=ON -DPTO_CPU_SIM_TRACE_MODE=ON \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fused_trace --parallel 2
+PTO_CPU_SIM_NUM_CORES=4 PTO_CPU_SIM_TRACE_ENABLE=1 PTO_CPU_SIM_TRACE_DIR=build/fused_trace/traces \
+  build/fused_trace/fused_add_relu_mul_cpu_sim --functional-only
+```
+
+该命令验证基础、双缓冲和大 Tile kernel，覆盖不足一个 Tile 的尾块，并跳过性能基准。每次启动分别生成一个 `trace.jsonl` 文件。
+回归验证应运行该功能示例，以及分别编译开启和关闭 Trace 的 `ttrace` 回归。示例检查数值结果，`ttrace` 检查指令记录和文件导出。
+
+外部运行时若直接调用 kernel，必须在编译时设置 `PTO_CPU_SIM_TRACE_MODE=1`，并在执行 kernel 的线程上管理 `ResetInstructionTrace()` / `DumpInstructionTraceJson()`。直接调用 kernel 不会经过 `LaunchKernelMultiCore`，也不会自动导出 Trace。
+
+`SetInstructionTraceEnabled(bool)` 控制已启用 Trace 构建中的采集，并在 `write_trace_files` 开启时控制自动导出；`IsInstructionTraceEnabled()` 返回当前开关状态。显式 API 设置优先于环境默认值，即使在首次启动前设置，也不会被运行时初始化覆盖。该开关作用于整个进程，应在启动前或两次启动之间设置；编译关闭 Trace 时无法通过该 API 开启。编译期常量 `kInstructionTraceEnabled` 表示构建是否包含 Trace 能力。
+
+直接调用 kernel 时，环境默认值需要外部运行时初始化 CPU_SIM 运行时后才会生效，也可以直接调用 `SetInstructionTraceEnabled(bool)` 显式控制采集。

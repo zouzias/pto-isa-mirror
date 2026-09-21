@@ -43,7 +43,7 @@ AICORE inline constexpr uint8_t getMode()
 }
 
 template <typename GlobalData, typename TileData>
-AICORE void tf_copy_ubuf_to_gm(
+__tf__ AICORE void tf_copy_ubuf_to_gm(
     typename GlobalData::DType* dst, typename TileData::TileDType src, int startDstAddr, int gShape0, int gStride0,
     uint16_t nBurst, uint32_t lenBurst, uint64_t burstDstStride, uint32_t burstSrcStride, int64_t tileStride)
 {
