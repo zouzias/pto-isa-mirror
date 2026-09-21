@@ -186,3 +186,27 @@ TEST_F(TREMSTest, case_uint64_4x32_inplace) { TRemSInplaceTestFramework<uint64_t
 TEST_F(TREMSTest, case_int64_1x1024_inplace) { TRemSInplaceTestFramework<int64_t, 1, 1024, 1, 1024>(); }
 TEST_F(TREMSTest, case_int64_4x64_40_inplace) { TRemSInplaceTestFramework<int64_t, 4, 64, 4, 40>(); }
 TEST_F(TREMSTest, case_int64_1x2048_2045_inplace) { TRemSInplaceTestFramework<int64_t, 1, 2048, 1, 2045>(); }
+TEST_F(TREMSTest, case_int64_floor_positive_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_floor_negative_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_floor_minus_one_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_floor_min_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_floor_large_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_zero_divisor_4x64) { TRemSTestFramework<int64_t, 4, 64, 4, 64, 4, 64>(); }
+TEST_F(TREMSTest, case_int64_floor_negative_divisor_4x64_40_inplace)
+{
+    TRemSInplaceTestFramework<int64_t, 4, 64, 4, 40>();
+}
+
+TEST_F(TREMSTest, case_uint64_one_divisor_4x64) { TRemSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+
+TEST_F(TREMSTest, case_uint64_high_divisor_4x64) { TRemSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+
+TEST_F(TREMSTest, case_uint64_max_divisor_4x64) { TRemSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+
+TEST_F(TREMSTest, case_uint64_large_divisor_4x64) { TRemSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+
+TEST_F(TREMSTest, case_uint64_zero_divisor_4x64) { TRemSTestFramework<uint64_t, 4, 64, 4, 64, 4, 64>(); }
+
+TEST_F(TREMSTest, case_int64_zero_divisor_4x64_40_inplace) { TRemSInplaceTestFramework<int64_t, 4, 64, 4, 40>(); }
+
+TEST_F(TREMSTest, case_uint64_zero_divisor_4x64_40_inplace) { TRemSInplaceTestFramework<uint64_t, 4, 64, 4, 40>(); }

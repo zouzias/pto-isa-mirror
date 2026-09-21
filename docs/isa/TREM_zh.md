@@ -6,7 +6,7 @@
 
 ## 简介
 
-两个Tile的逐元素余数运算。结果符号与除数相同。
+两个Tile的逐元素余数运算。除数非零时，非零结果的符号与除数相同。
 
 ## 数学语义
 
@@ -14,7 +14,9 @@
 
 $$\mathrm{dst}_{i,j} = \mathrm{remainder}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) = \mathrm{src0}_{i,j} - \mathrm{floor}(\frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}}) \times \mathrm{src1}_{i,j}$$
 
-结果符号会被修正为与除数（`src1`）的符号相同。
+当除数（`src1`）非零时，非零结果的符号与除数相同；整除时结果为零。
+例如，`remainder(-7, 3) = 2`、`remainder(7, -3) = -2`、`remainder(-6, 3) = 0`。
+在Ascend 950PR/Ascend 950DT上，`int64_t` 遵循上述向下取整定义，在除数非零时余数语义与 `int32_t` 一致。
 
 **注意**：这与 `TFMOD` 不同，`TFMOD` 的结果符号与被除数（`src0`）相同。
 
@@ -66,6 +68,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 - **有效区域**:
     - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 - **除零**:
+    - 在Ascend 950PR/Ascend 950DT上，`int64_t` 和 `uint64_t` 在除数为零时分别返回 `-1` 和 `UINT64_MAX`（64 位全为 1）。
     - 行为由目标定义；CPU仿真在调试构建中会断言。
 - **高精度算法**:
     - 仅在Ascend 950PR/Ascend 950DT上对 `float` 类型有效；`PrecisionType` 选项在Atlas A2/A3 训练系列产品/Atlas A2/A3 推理系列产品上将被忽略。
