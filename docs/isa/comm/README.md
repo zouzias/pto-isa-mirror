@@ -14,6 +14,11 @@ This directory contains the per-instruction reference for the PTO Communication 
 - [**TPUT_ASYNC_NOTIFY**](TPUT_ASYNC_NOTIFY.md): Remote write followed by a remote `int32_t` signal update
 - [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
+### Aggregate Asynchronous Put
+- [**TPUT_ASYNC_DEFER**](TPUT_ASYNC_DEFER.md): Stage one asynchronous remote write in the current batch
+- [**TPUT_ASYNC_SUBMIT**](TPUT_ASYNC_SUBMIT.md): Publish the current asynchronous write batch and return its
+  final event
+
 ## Signal-Based Synchronization
 - [**TNOTIFY**](TNOTIFY.md): Send notification to remote NPU
 - [**TWAIT**](TWAIT.md): Blocking wait for signal condition
