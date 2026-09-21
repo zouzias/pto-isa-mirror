@@ -237,11 +237,14 @@ size_t TargetRow(uint32_t jetty, uint32_t peer) const
 
 static bool ValidateQueueDepths(uint32_t peer, const UrmaWQCtx& wq, const UrmaCqCtx& cq)
 {
-    if (wq.depth != 0U && (wq.depth & (wq.depth - 1U)) == 0U && cq.depth != 0U && (cq.depth & (cq.depth - 1U)) == 0U) {
+    const bool validSqDepth = wq.depth != 0U && (wq.depth & (wq.depth - 1U)) == 0U;
+    const bool validCqDepth = cq.depth >= kUrmaCompletionRecordMinCqDepth && (cq.depth & (cq.depth - 1U)) == 0U;
+    if (validSqDepth && validCqDepth) {
         return true;
     }
-    std::cerr << "[URMA] peer=" << peer << " queue depths must be non-zero powers of two, got sqDepth=" << wq.depth
-              << " cqDepth=" << cq.depth << std::endl;
+    std::cerr << "[URMA] peer=" << peer << " queue depths must be non-zero powers of two and CQ depth must be >= "
+              << kUrmaCompletionRecordMinCqDepth << ", got sqDepth=" << wq.depth << " cqDepth=" << cq.depth
+              << std::endl;
     return false;
 }
 
@@ -307,9 +310,7 @@ bool AllocAndCopyEidTable(UrmaPeerInfoTables& tables)
 bool BuildAndCopyUrmaInfoTable(const UrmaPeerInfoTables& tables)
 {
     // sq + rq share the WQ layout, scq + rcq share the CQ layout.
-    const size_t totalSize = static_cast<size_t>(
-        sizeof(UrmaInfo) + CtxRowCount() * (2U * sizeof(UrmaWQCtx) + 2U * sizeof(UrmaCqCtx)) +
-        TargetRowCount() * sizeof(UrmaMemInfo));
+    const size_t totalSize = static_cast<size_t>(ComputeWorkspaceBytes());
 
     aclError err = aclrtMalloc(&urmaInfoDevice_, totalSize, ACL_MEM_MALLOC_HUGE_FIRST);
     if (err != ACL_SUCCESS) {
