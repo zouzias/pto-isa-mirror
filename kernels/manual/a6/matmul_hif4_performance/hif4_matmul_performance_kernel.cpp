@@ -170,7 +170,7 @@ AICORE inline void RunHif4MatmulCore(
             for (uint32_t kIter = 0; kIter < loopsK; ++kIter) {
                 // Wait until the previous TEXTRACT released the L1 data buffer.
                 if (kIter > 0) {
-                    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+                    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
                 }
 
                 // Load data panels (MTE2).
@@ -189,7 +189,7 @@ AICORE inline void RunHif4MatmulCore(
 
                 // Wait until the previous TMATMUL released the L0A/L0B buffer.
                 if (kIter > 0) {
-                    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+                    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
                 }
 
                 // Extract data + scale slices (MTE1).
@@ -199,23 +199,23 @@ AICORE inline void RunHif4MatmulCore(
                 TEXTRACT(bScaleTile, bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
 
                 // Release the L1 data buffer and signal the matmul.
-                set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-                set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-                wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+                set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
+                set_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
+                wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
 
                 // Accumulate (M).
                 MatmulAcc(outTile, aTile, bTile, aScaleTile, bScaleTile, kIter);
-                set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+                set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
             }
 
             // Store (FIX) after the last matmul, then release L1 for the next tile.
-            set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-            wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+            set_flag(PIPE_M, PIPE_FIX, EVENT_ID5);
+            wait_flag(PIPE_M, PIPE_FIX, EVENT_ID5);
             GlobalDataOut dstGlobal(
                 currentDst + static_cast<uint64_t>(i) * baseM * n + j * baseN, DynShapeDim5(currentM, currentN));
             TSTORE(dstGlobal, outTile);
-            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID0);
+            set_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID6);
+            wait_flag(PIPE_FIX, PIPE_MTE2, EVENT_ID6);
         }
     }
 }
