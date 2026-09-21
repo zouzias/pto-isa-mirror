@@ -73,11 +73,9 @@ __global__ AICORE void BatchPutUrma(
         return;
     }
 
-    // Compile-only coverage for legacy and mode-aware WaitEvents call forms.
+    // Compile-only coverage for mode-aware WaitEvents call forms.
     if (status == nullptr) {
         AsyncPutWaitEventStub waitEvent;
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, waitEvent);
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, peer, waitEvent);
         (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
             dst0, src0, session, pto::comm::AsyncPutMode::IMMEDIATE, 0U, waitEvent);
         (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(

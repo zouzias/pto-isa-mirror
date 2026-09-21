@@ -56,9 +56,8 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 ```
 
 The default `IMMEDIATE` mode preserves standard submission and returns its completion event. `DEFER` stages the
-write and returns an invalid placeholder event (`handle == 0`). Existing calls that pass prerequisite events directly
-remain source-compatible through forwarding overloads. When an A5 call passes both an explicit mode and prerequisite
-events, specify `jettyIndex` before those events.
+write and returns an invalid placeholder event (`handle == 0`). Calls with prerequisite events must specify `mode`
+before those events. On A5, they must also specify `jettyIndex`, including `0U`, before the events.
 
 ## Submission Modes
 

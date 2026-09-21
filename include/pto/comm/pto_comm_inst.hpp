@@ -477,6 +477,4 @@ PTO_INST AsyncEvent TGET_ASYNC(
 } // namespace comm
 } // namespace pto
 
-#include "pto/comm/async_common/TPutAsyncCompat.hpp"
-
 #endif // PTO_COMM_INST_HPP

@@ -54,8 +54,8 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 ```
 
 默认`IMMEDIATE`保持标准立即提交并返回对应完成Event。`DEFER`只暂存远程写并返回无效占位Event
-（`handle == 0`）。原来直接传前置Event的调用通过兼容转发重载保持源码兼容；A5显式传`mode`和
-前置Event时，必须先写出`jettyIndex`。
+（`handle == 0`）。传入前置Event时必须先显式写出`mode`；A5还必须在Event前显式写出
+`jettyIndex`，包括`0U`。
 
 ## 提交模式
 
