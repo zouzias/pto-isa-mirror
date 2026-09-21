@@ -83,6 +83,13 @@ static void dispatchTExtractNd2xNz(
         <<<1, nullptr, stream>>>((T*)out0, (T*)out1, (T*)src, ir0, ic0, ir1, ic1);
 }
 
+static void dispatchTExtractNd2xNzTailInt8(
+    uint8_t* out0, uint8_t* out1, uint8_t* src, uint16_t ir0, uint16_t ic0, uint16_t ir1, uint16_t ic1, void* stream)
+{
+    runTExtractNd2xNz<int8_t, 64, 128, 32, 64, 32, 64, 32, 63, 32, 61, CompactMode::Null>
+        <<<1, nullptr, stream>>>((int8_t*)out0, (int8_t*)out1, (int8_t*)src, ir0, ic0, ir1, ic1);
+}
+
 template <typename T>
 static void dispatchTExtractNd2xNz1x1(
     uint8_t* out0, uint8_t* out1, uint8_t* src, uint16_t ir0, uint16_t ic0, uint16_t ir1, uint16_t ic1, void* stream)
@@ -123,6 +130,9 @@ void launchTExtractNd2xNz(
             break;
         case 8:
             dispatchTExtractNd2xNz<float8_e8m0_t>(out0, out1, src, ir0, ic0, ir1, ic1, stream);
+            break;
+        case 9:
+            dispatchTExtractNd2xNzTailInt8(out0, out1, src, ir0, ic0, ir1, ic1, stream);
             break;
         default:
             break;

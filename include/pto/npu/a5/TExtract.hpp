@@ -458,7 +458,8 @@ PTO_INTERNAL void TExtractNd2NzWindowLoop(
             uint32_t remaining = validCol;
             for (uint32_t cb = 0; cb < totalColBlk; ++cb) {
                 uint32_t colsThis = remaining < c0Elems ? remaining : c0Elems;
-                preg = CreatePredicate<WorkT>(colsThis);
+                uint32_t predCount = colsThis;
+                preg = CreatePredicate<WorkT>(predCount);
                 __ubuf__ WorkT* psrc = rowBase + cb * c0Elems;
                 vldas(ureg, psrc);
                 vldus(vreg, ureg, psrc);

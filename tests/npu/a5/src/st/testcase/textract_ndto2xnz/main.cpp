@@ -183,3 +183,5 @@ TEST_F(TExtractNd2xNzTest, case_half_1x1) { test_ndto2xnz_1x1(0, 2, 0, 0, 5, 7);
 TEST_F(TExtractNd2xNzTest, case_float_1x1) { test_ndto2xnz_1x1(1, 4, 0, 0, 10, 3); }
 
 TEST_F(TExtractNd2xNzTest, case_int8_1x1) { test_ndto2xnz_1x1(3, 1, 0, 0, 20, 17); }
+
+TEST_F(TExtractNd2xNzTest, case_int8_tail_unaligned) { test_ndto2xnz(9, 1, 0, 0, 0, 2); }
