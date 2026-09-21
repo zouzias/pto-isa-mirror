@@ -30,6 +30,10 @@ constexpr size_t kUrmaEidBytes = 16;
 // headers — can still reach it: it is what sizes AsyncEvent's per-jetty target arrays.
 constexpr uint32_t kUrmaMaxJettiesPerCore = 8U;
 
+// Completion records use the CQ owner bit, so CQ depths smaller than 128 do not
+// provide the required completion window for this path.
+constexpr uint32_t kUrmaCompletionRecordMinCqDepth = 128U;
+
 constexpr uint64_t kUrmaMaxWqeTransferBytes = 256ULL * 1024ULL * 1024ULL;
 
 constexpr uint64_t kUrmaMinSliceBytes = kUrmaMaxWqeTransferBytes;

@@ -75,10 +75,16 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
     __gm__ BatchWriteChannelInfo* channelBase =
         reinterpret_cast<__gm__ BatchWriteChannelInfo*>(execCtx.contextGm + sizeof(BatchWriteFlagInfo));
     __gm__ BatchWriteChannelInfo* channels = channelBase + execCtx.channelGroupIdx * execCtx.baseConfig.queue_num;
+    for (uint32_t slot = 0U; slot < kSdmaFlagPayloadDepth; ++slot) {
+        // The slot queue mask is session-local. Use the current queue count as a conservative
+        // cold-start value so a rebuilt session never skips reuse checks for an old payload.
+        runtimeCtx.flagPayloadQueueCount[slot] = static_cast<uint8_t>(execCtx.baseConfig.queue_num);
+    }
     // ChannelInfo is populated outside AI Core and read through scalar loads during Post.
     // Invalidate stale metadata once at session build time to keep DCCI out of the Post hot path.
     __asm__ __volatile__("");
     dcci((__gm__ void*)channels, cache_line_t::ENTIRE_DATA_CACHE);
+    dcci((__gm__ void*)nextPostIdAddr, cache_line_t::SINGLE_CACHE_LINE);
     __asm__ __volatile__("");
     dsb(DSB_DDR);
     for (uint32_t queue = 0U; queue < execCtx.baseConfig.queue_num; ++queue) {
@@ -87,9 +93,9 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
         runtimeCtx.sqHead[queue] = static_cast<uint32_t>(packedHeadTail);
         runtimeCtx.sqTail[queue] = static_cast<uint32_t>(packedHeadTail >> 32U);
     }
-    // Resume the committed post counter instead of restarting at zero. Read after the invalidation
-    // above so it shares that barrier; the first post of a fresh workspace still sees 0, because the
-    // workspace is zeroed when it is allocated.
+    // Resume the committed post counter instead of restarting at zero. The explicit invalidation
+    // above keeps this read independent of the channel metadata cache range; the first post of a
+    // fresh workspace still sees 0 because the workspace is zeroed when it is allocated.
     runtimeCtx.nextPostId = GetValue<uint64_t>(nextPostIdAddr, tmpBuf);
     return true;
 }

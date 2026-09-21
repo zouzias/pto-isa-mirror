@@ -216,7 +216,8 @@ PTO_INTERNAL __gm__ uint8_t* GetPostDoneRecordAddr(__gm__ uint8_t* postDoneBase,
 // Records occupy only the first kPostDoneStrideBytes of each queue's kSdmaFlagLength region, so the
 // tail of the region past the last queue holds the committed post counter. A session rebuild must
 // resume from it: restarting at zero hands two adjacent tasks the same postId and skips the
-// flag-slot reuse check that reads this value.
+// flag-slot reuse check that reads this value. queueNum is part of this workspace layout; callers
+// must keep it fixed for a given workspace and channel group for the lifetime of that workspace.
 PTO_INTERNAL __gm__ uint8_t* GetNextPostIdAddr(__gm__ uint8_t* postDoneBase, uint32_t queueNum)
 {
     return postDoneBase + static_cast<uint64_t>(queueNum) * kPostDoneStrideBytes;

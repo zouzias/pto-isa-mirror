@@ -179,8 +179,8 @@ struct AsyncSession;
 // ============================================================================
 
 enum class CompletionKind : uint32_t {
-    SDMA_POST_DONE = 1,  // *(uint64*)addr >= expected
-    URMA_CQE_DW0 = 2,    // owner@dw0[2] == expected, status/substatus clear
+    SDMA_POST_DONE = 1,   // *(uint64*)addr >= expected
+    URMA_CQE_DW0 = 2,     // owner@dw0[2] == expected, status/substatus clear
     RDMA_HNS1825_CQE = 3, // owner@dw0[31] == expected, opcode@dw1[31:27] valid
 };
 
@@ -189,6 +189,10 @@ struct AsyncCompletionRecord {
     uint64_t expected{0};
     CompletionKind kind{CompletionKind::SDMA_POST_DONE};
 };
+
+// CompletionRecordCount returns this sentinel when a non-zero event handle cannot be
+// resolved into a complete set of records. Zero is reserved for an empty event.
+constexpr uint32_t kCompletionRecordCountError = UINT32_MAX;
 
 static_assert(std::is_standard_layout_v<AsyncCompletionRecord>);
 static_assert(sizeof(AsyncCompletionRecord) == 24U);
@@ -219,6 +223,10 @@ struct AsyncEvent {
     // How many completion records this event publishes, and the idx-th one. A consumer that cannot
     // run device intrinsics reads `addr` and compares against `expected` per `kind`; the producer
     // has already resolved the backend's queue layout, so none is re-derived downstream.
+    // CompletionRecordCount returns 0 only for handle == 0. For a non-zero handle, it returns
+    // kCompletionRecordCountError if the session, handle, or any record cannot be resolved. A
+    // consumer must treat that sentinel as an error rather than as an empty event. CompletionRecordAt
+    // returns an empty record (addr == nullptr) when the requested record cannot be resolved.
     PTO_INTERNAL uint32_t CompletionRecordCount(const AsyncSession& session) const;
     PTO_INTERNAL AsyncCompletionRecord CompletionRecordAt(const AsyncSession& session, uint32_t idx) const;
 };

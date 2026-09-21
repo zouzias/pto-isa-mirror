@@ -173,7 +173,8 @@ AICORE inline bool GetUrmaCompletionRecordAt(
     }
 
     __gm__ UrmaCqCtx* cq = GetCqContextAt(session, peer, jettyIdx);
-    if (cq->bufAddr == 0U || !IsPowerOfTwo(cq->depth) || cq->depth < 128U || cq->cqeShiftSize >= 63U) {
+    if (cq->bufAddr == 0U || !IsPowerOfTwo(cq->depth) || cq->depth < kUrmaCompletionRecordMinCqDepth ||
+        cq->cqeShiftSize >= 63U) {
         return false;
     }
 
