@@ -256,3 +256,33 @@ TEST_F(TLOADMIXTest, FZ4D2FZ4D_float_1_64_3_16_8_1_4704_7_16_8)
 {
     TLOADMIXFUNC<float, 8, 1, 64, 3, 16, 8, 1, 4704, 7, 16, 8, 1, 1>();
 }
+
+TEST_F(TLOADMIXTest, 1_2_8_16_16_1_2_4103_16_16_128_32_half_NZ2NZ)
+{
+    TLOADMIXFUNC<uint16_t, 4, 1, 2, 8, 16, 16, 1, 2, 4103, 16, 16, 128, 32>();
+}
+
+TEST_F(TLOADMIXTest, 1_2_8_16_16_1_2_4104_16_16_128_32_half_NZ2NZ)
+{
+    TLOADMIXFUNC<uint16_t, 4, 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16, 128, 32>();
+}
+
+TEST_F(TLOADMIXTest, 1_2_8_16_16_1_2_4104_16_16_144_32_half_NZ2NZ)
+{
+    TLOADMIXFUNC<uint16_t, 4, 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16, 144, 32>();
+}
+
+TEST_F(TLOADMIXTest, 1_1_1_2_16_1_1_1_2_17_2_16_half_ND2ND)
+{
+    TLOADMIXFUNC<uint16_t, 2, 1, 1, 1, 2, 16, 1, 1, 1, 2, 17, 2, 16>();
+}
+
+TEST_F(TLOADMIXTest, 1_1_1_2_15_1_1_1_2_32782_2_16_half_ND2ND)
+{
+    TLOADMIXFUNC<uint16_t, 2, 1, 1, 1, 2, 15, 1, 1, 1, 2, 32782, 2, 16>();
+}
+
+TEST_F(TLOADMIXTest, 1_1_1_2_15_1_1_1_2_32783_2_16_half_ND2ND)
+{
+    TLOADMIXFUNC<uint16_t, 2, 1, 1, 1, 2, 15, 1, 1, 1, 2, 32783, 2, 16>();
+}

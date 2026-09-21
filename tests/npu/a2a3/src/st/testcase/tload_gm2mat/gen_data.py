@@ -92,6 +92,10 @@ class GlobalTensorInfo:
 if __name__ == "__main__":
     # 用例名称
     case_name_list = [
+        "TLoadGM2L1Test.NDC1HWC02NDC1HWC0_GapOverflow_int8",
+        "TLoadGM2L1Test.FZ4D2FZ4D_GapOverflow_int8",
+        "TLoadGM2L1Test.FZ2FZ_GapOverflow_int8",
+        "TLoadGM2L1Test.NC1HWC02NC1HWC0_GapOverflow_int8",
         "TLoadGM2L1Test.ND_float_1_1_1_3_128_3_3_3_32_128",
         "TLoadGM2L1Test.ND_int16_t_2_2_1_2_32_3_3_3_111_64",
         "TLoadGM2L1Test.ND_int8_t_1_2_1_11_32_1_3_2_93_32",
@@ -113,6 +117,9 @@ if __name__ == "__main__":
         "TLoadGM2L1Test.ND_bfloat16_t_1_1_1_128_128_1_1_1_256_256",
         "TLoadGM2L1Test.DN_bfloat16_t_1_2_2_128_311_4_3_3_256_400",
         "TLoadGM2L1Test.NZ_bfloat16_t_2_4_5_16_16_7_7_7_16_16",
+        "TLoadGM2L1Test.NZ_int16_t_1_2_8_16_16_1_2_4096_16_16",
+        "TLoadGM2L1Test.NZ_int16_t_1_2_8_16_16_1_2_4104_16_16",
+        "TLoadGM2L1Test.NZ_int16_t_1_2_16_16_16_1_2_4104_16_16",
         "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1",
         "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_16_16",
         "TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_256_1024_1_1_1_256_1024",
@@ -158,6 +165,10 @@ if __name__ == "__main__":
     ]
 
     case_params_list = [
+        GlobalTensorInfo(np.int8, "NDC1HWC02NDC1HWC0", 1, 1, 1, 2, 1, 1, 1, 1, 2, 65537),
+        GlobalTensorInfo(np.int8, "FZ4D2FZ4D", 1, 2, 1, 16, 32, 1, 2, 4097, 16, 32),
+        GlobalTensorInfo(np.int8, "FZ2FZ", 1, 1, 2, 16, 32, 1, 1, 2, 65552, 32),
+        GlobalTensorInfo(np.int8, "NC1HWC02NC1HWC0", 1, 1, 2, 1, 32, 1, 1, 2, 65537, 32),
         GlobalTensorInfo(np.float32, "ND", 1, 1, 1, 3, 128, 3, 3, 3, 32, 128),
         GlobalTensorInfo(np.int16, "ND", 2, 2, 1, 2, 32, 3, 3, 3, 111, 64),
         GlobalTensorInfo(np.int8, "ND", 1, 2, 1, 11, 32, 1, 3, 2, 93, 32),
@@ -179,6 +190,9 @@ if __name__ == "__main__":
         GlobalTensorInfo(np.float16, "ND", 1, 1, 1, 128, 128, 1, 1, 1, 256, 256),
         GlobalTensorInfo(np.float16, "DN", 1, 2, 2, 128, 311, 4, 3, 3, 256, 400),
         GlobalTensorInfo(np.float16, "NZ", 2, 4, 5, 16, 16, 7, 7, 7, 16, 16),
+        GlobalTensorInfo(np.int16, "NZ", 1, 2, 8, 16, 16, 1, 2, 4096, 16, 16),
+        GlobalTensorInfo(np.int16, "NZ", 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16),
+        GlobalTensorInfo(np.int16, "NZ", 1, 2, 16, 16, 16, 1, 2, 4104, 16, 16),
         GlobalTensorInfo(np.float16, "ND2NZ", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
         GlobalTensorInfo(np.float16, "ND2NZ", 1, 1, 1, 1, 1, 1, 1, 1, 16, 16),
         GlobalTensorInfo(np.float16, "ND2NZ", 1, 1, 1, 256, 1024, 1, 1, 1, 256, 1024),
