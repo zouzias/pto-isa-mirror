@@ -177,9 +177,9 @@ AICORE inline void ProcessKIteration(
     TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
     TEXTRACT(bScaleTile[mte1DBFlag], bScaleMatTile, kIter * baseScaleK * HIF4_COL_BYTES, 0);
 
-#ifdef _DEBUG
+#ifdef HIF4_DEBUG
     if (get_block_idx() == 0 && i == 0 && j == 0) {
-        cce::printf(
+        printf(
             "DBG k=%u mte2=%u cur=%u mte1=%u | Aoff=%u Boff=%u | sA=%u sB=%u | scale=%u\n", kIter,
             static_cast<uint32_t>(mte2DBFlag), currMte2Idx, static_cast<uint32_t>(mte1DBFlag),
             static_cast<uint32_t>(i * baseM * k / 2 + kIter * baseK / 2),

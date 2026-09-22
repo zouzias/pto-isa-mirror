@@ -57,7 +57,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-pto-enable")
 
 if(DEBUG_MODE)
     message(STATUS "Debug Mode Enabled, Add Debug Options")
-    add_compile_definitions(_DEBUG)
+    add_compile_definitions(HIF4_DEBUG)
     set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
 endif()
 
