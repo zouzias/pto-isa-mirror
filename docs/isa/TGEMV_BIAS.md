@@ -95,6 +95,9 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
         - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
         - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**: Input type combinations, A5 simulation mode, and
+  numerical limits follow [TMATMUL](TMATMUL.md#constraints).
+
 ### Bias-specific constraints
 
 - Bias tile datatype must exactly match `TileRes::DType`.

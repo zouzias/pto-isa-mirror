@@ -118,6 +118,9 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
         - Right：`Loc == Right`、`isRowMajor`、`SFractal == ColMajor`
         - Acc：`Loc == Acc`、`!isRowMajor`、`SFractal == RowMajor`
 
+- **实现检查（CPU_SIM，FP8/HIF8）**：输入类型组合、A5 模拟模式要求及数值精度限制与
+  [TMATMUL](TMATMUL_zh.md) 相同。
+
 ### TGEMV_BIAS的附加约束
 
 - 偏置tile的数据类型必须与 `TileRes::DType` 完全一致。

@@ -190,6 +190,10 @@ int32 路径只发出一条指令，原样传递外层 phase。
 部分有效形状、padding、输出保护区及代表性的 int32 特殊位模式。
 case22–23 覆盖 half/bfloat16 ReLU；case24–26 覆盖 int32/half/bfloat16 的普通重载。
 
+在 CPU 模拟中，若通过 `TMATMUL` 将 FP8/HIF8 输入计算到源 Acc Tile，应在绑定 Tile 前选择 A5。
+输入类型和精度约束遵循 [TMATMUL](TMATMUL_zh.md)；源 Acc Tile 的元素类型为 `float`，不是 FP8/HIF8。
+架构配置见 [选择模拟目标架构](../coding/cpu_sim_zh.md)。
+
 ### 小 M Mat→Left 提取（A2A3 和 A5）
 
 A2A3 和 A5 上，普通 `TEXTRACT(dst, src, indexRow, indexCol, events...)` 重载在以下条件下自动

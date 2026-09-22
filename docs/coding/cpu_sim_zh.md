@@ -41,8 +41,11 @@ CPU_SIM 会为每个线程分配以下内存区域：
 A2A3 和 A5 表示要模拟的目标架构，不是宿主机安装的 NPU 型号；CPU_SIM 执行不需要 NPU。
 该选择影响内存配置及 `TROWSUM` 等具有架构分支的指令，不代表所有 CPU 指令都已分别实现两种架构的逐位模拟。
 
+- 无需修改 kernel 或驱动代码：在进程启动前设置 `PTO_CPU_SIM_ARCH=a5`。支持 `a2a3`/`A2A3` 和
+  `a5`/`A5`。尚未显式选择默认架构时，未设置或为空的值默认为 A2A3，其他值在首次查询架构或自动初始化模型时
+  抛出 `std::invalid_argument`。
 - 为后续初始化的线程局部内存模型选择默认架构：在启动阶段、任何线程使用模型之前，调用一次
-  `pto::NPUMemoryModel::SetDefaultArch(pto::NPUArch::A5)`。未设置时默认为 `pto::NPUArch::A2A3`。
+  `pto::NPUMemoryModel::SetDefaultArch(pto::NPUArch::A5)`。该显式选择的优先级高于 `PTO_CPU_SIM_ARCH`。
 - 仅显式初始化当前线程：在绑定或访问 Tile 前调用
   `pto::NPUMemoryModel::Instance().Initialize(pto::NPUArch::A5)`。
 - 同时设置默认架构并初始化当前线程：在启动阶段、其他线程使用模型之前，调用一次
@@ -51,8 +54,21 @@ A2A3 和 A5 表示要模拟的目标架构，不是宿主机安装的 NPU 型号
   重设为 A2A3，并以 A2A3 初始化当前线程。
 - `SetDefaultArch` 不会重新配置已经初始化的线程局部实例。不要在执行期间并发修改默认架构，也不要在 Tile 仍引用模型存储时重新初始化模型。
 
+尚未显式选择默认架构时，各线程在模型初始化前读取环境配置；修改环境变量不会重新配置已初始化的模型。
+应在启动工作线程前设置，并在执行期间保持不变。内存分配前调用 `GetArch()` 也遵循此配置，包括将 Tile 直接绑定到主机指针的 kernel。
+
 外部模拟器集成需要在 kernel 执行前设置目标；集成层的 `a5sim` 名称本身不是 pto-isa 内部的架构选择开关。
 更多信息请参考 `include/pto/cpu/NPUMemoryModel.hpp` 和 `include/pto/cpu/TAssign.hpp`。
+
+外部 A5 CPU 测试应统一使用目标仓库或安装版本的头文件：
+
+```bash
+g++ -std=c++23 -D__CPU_SIM -I/path/to/pto-isa/include kernel.cpp -o kernel
+PTO_CPU_SIM_ARCH=a5 ./kernel
+```
+
+该 include 路径应排在其他 CANN include 路径之前。架构配置作用于编译可执行文件时使用的头文件，不会更新
+已安装的头文件副本。选择 A5 后，模型的 L0C 容量为 256 KiB；A2A3 为 128 KiB。显式容量覆盖仍然生效。
 
 ### 内存容量覆盖
 
@@ -85,6 +101,14 @@ CPU_SIM 默认提供至少 512 KiB 的 UB 临时空间。应在初始化内存�
 
 ## 已支持行为和后端差异
 
+- `TINSERT` 的 `SPLIT2`/`SPLIT4` 模式按 A5 的完整列块、行补齐和 Compact 步长执行 Vec→Mat 搬运，
+  源和目标必须为有效窗口之外的实际搬运区域提供存储空间。类型与布局约束见 [TINSERT](../isa/TINSERT_zh.md)。
+- A5 模式下，Vec NZ→NZ `TLOAD` 按 GM 列块数、Tile 有效行数和物理 Stride 搬运；
+  有效列之外的源列块也会加载。范围与 Padding 行为见 [TLOAD](../isa/TLOAD_zh.md)。
+- A5 模式的普通矩阵乘支持 FP8 E4M3/E5M2 的四种输入组合和 HIF8×HIF8，使用 float 累加器。
+  该规则适用于 `TMATMUL`、`TMATMUL_ACC`、`TMATMUL_BIAS` 及对应的 `TGEMV` 入口；
+  类型和精度约束见 [TMATMUL](../isa/TMATMUL_zh.md)。这些路径的架构检查在定义 `NDEBUG` 时关闭。
+- `hifloat8_t` 编码和解码使用共用查找表，按前缀长度确定指数和尾数字段；例如原始编码 `0x18` 表示 0.5。
 - CPU_SIM `TROWSUM` 根据调用线程已初始化的架构选择计算及检查路径，两种路径均接受但不访问 `tmp`。类型、布局和数值边界见 [TROWSUM](../isa/TROWSUM_zh.md#cpu_sim实现检查)，计算方式见下文 [TROWSUM 实现说明](#trowsum-实现说明)。
 - 当各操作数的元素类型及运行时有效形状一致时，CPU_SIM `TADD` 和 `TABS` 支持操作数使用不同的 Tile 类型，包括混用静态和动态 `ValidRow`/`ValidCol` 模板参数。CPU_SIM 按每个操作数自身的 Tile 布局和物理形状计算索引；运行时有效形状不一致会触发断言。
 - CPU_SIM 同时实现 `TCI(dst, start)` 和 `TCI(dst, start, tmp)`。三参数形式接受 `tmp` 但不访问其存储，其升序或降序序列语义与两参数形式相同。编写跨后端 kernel 时，仍须保留目标 NPU 后端要求的临时空间分配。

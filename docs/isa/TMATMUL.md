@@ -88,6 +88,14 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
     - Runtime: `m/k/n` (taken from `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**:
+    - The accumulator type must be `float`. Each input may independently be `float8_e4m3_t` or
+      `float8_e5m2_t` (all four combinations); `hifloat8_t` supports only `hifloat8_t` as the other input.
+    - A5 simulation mode is required. Select the target architecture before assigning tiles; see
+      [Selecting the simulated architecture](../coding/cpu_sim.md#selecting-the-simulated-architecture).
+    - Inputs are converted to `float` and accumulated using fused multiply-add; results are not
+      guaranteed to match NPU hardware bit for bit.
+
 ## Examples
 
 ### Auto

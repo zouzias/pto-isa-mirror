@@ -7,11 +7,15 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#include <vector>
+
+#include <gtest/gtest.h>
+
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+
 #include "cpu_tile_test_utils.h"
 #include "test_common.h"
-#include <gtest/gtest.h>
-#include <pto/common/constants.hpp>
 
 using namespace std;
 using namespace pto;
@@ -451,3 +455,63 @@ TEST_F(TEXTRACTTest, MatToLeftSmallMBfloatDynamic)
     TestMatToLeftSmallM<bfloat16_t, true, true>();
 }
 #endif
+
+namespace {
+template <typename AType, typename BType, typename DstType>
+void checkAccToMatExtract()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    constexpr int M = 32, K = 96, N = 64;
+    constexpr int INDEX_ROW = 16, INDEX_COL = 16, OUT_ROWS = 16, OUT_COLS = 48;
+    std::vector<AType> inputA(M * K);
+    std::vector<BType> inputB(K * N);
+    for (int row = 0; row < M; ++row) {
+        for (int k = 0; k < K; ++k) {
+            inputA[row * K + k] = AType(((row + 2 * k) % 7 - 3) * 0.5f);
+        }
+    }
+    for (int k = 0; k < K; ++k) {
+        for (int col = 0; col < N; ++col) {
+            inputB[k * N + col] = BType(((k + 3 * col) % 5 - 2) * 0.5f);
+        }
+    }
+    GlobalTensor<AType, Shape<1, 1, 1, M, K>, Stride<M * K, M * K, M * K, K, 1>> gmA(inputA.data());
+    GlobalTensor<BType, Shape<1, 1, 1, K, N>, Stride<K * N, K * N, K * N, N, 1>> gmB(inputB.data());
+    Tile<TileType::Mat, AType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor> matA;
+    Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor> matB;
+    TileLeft<AType, M, K, M, K> left;
+    TileRight<BType, K, N, K, N> right;
+    TileAcc<float, M, N, M, N> acc;
+    Tile<TileType::Mat, DstType, OUT_ROWS, OUT_COLS, BLayout::ColMajor, OUT_ROWS, OUT_COLS, SLayout::RowMajor> dst;
+    TASSIGN(matA, 0);
+    TASSIGN(matB, 0x10000);
+    TASSIGN(left, 0);
+    TASSIGN(right, 0);
+    TASSIGN(acc, 0);
+    TASSIGN(dst, 0x20000);
+    TLOAD(matA, gmA);
+    TLOAD(matB, gmB);
+    TMOV(left, matA);
+    TMOV(right, matB);
+    TMATMUL<AccPhase::Final>(acc, left, right);
+    TEXTRACT<STPhase::Final>(dst, acc, INDEX_ROW, INDEX_COL);
+    for (int row = 0; row < OUT_ROWS; ++row) {
+        for (int col = 0; col < OUT_COLS; ++col) {
+            float expected = 0;
+            for (int k = 0; k < K; ++k) {
+                expected += static_cast<float>(inputA[(row + INDEX_ROW) * K + k]) *
+                            static_cast<float>(inputB[k * N + col + INDEX_COL]);
+            }
+            ASSERT_EQ(static_cast<float>(DstType(expected)), static_cast<float>(dst.GetElement(row, col)))
+                << "row=" << row << " col=" << col;
+        }
+    }
+}
+} // namespace
+
+TEST_F(TEXTRACTTest, AccToMatE4M3) { checkAccToMatExtract<float8_e4m3_t, float8_e4m3_t, float>(); }
+TEST_F(TEXTRACTTest, AccToMatE5M2) { checkAccToMatExtract<float8_e5m2_t, float8_e5m2_t, float>(); }
+TEST_F(TEXTRACTTest, AccToMatE4M3E5M2) { checkAccToMatExtract<float8_e4m3_t, float8_e5m2_t, float>(); }
+TEST_F(TEXTRACTTest, AccToMatE5M2E4M3) { checkAccToMatExtract<float8_e5m2_t, float8_e4m3_t, float>(); }
+TEST_F(TEXTRACTTest, AccToMatHif8) { checkAccToMatExtract<hifloat8_t, hifloat8_t, float>(); }
+TEST_F(TEXTRACTTest, AccToMatFp8ToHalf) { checkAccToMatExtract<float8_e4m3_t, float8_e4m3_t, half>(); }
