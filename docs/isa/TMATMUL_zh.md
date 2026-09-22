@@ -87,6 +87,13 @@ PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     - Acc：`Loc == Acc`、`!isRowMajor`、`SFractal == RowMajor`
     - 运行时：`m/k/n`（取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()`、`bMatrix.GetValidCol()`）必须在 `[1, 4095]` 范围内。
 
+- **实现检查（CPU_SIM，FP8/HIF8）**：
+    - 累加器类型必须为 `float`。两路输入可分别为 `float8_e4m3_t` 或 `float8_e5m2_t`，
+      支持全部四种组合；`hifloat8_t` 仅支持与 `hifloat8_t` 配对。
+    - 要求使用 A5 模拟模式；应在绑定 Tile 前选择目标架构，见
+      [选择模拟目标架构](../coding/cpu_sim_zh.md)。
+    - 输入转换为 `float` 后进行融合乘加累加，结果不保证与 NPU 硬件逐位一致。
+
 ## 示例
 
 ### 自动（Auto）

@@ -105,6 +105,9 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
     - DN with col-major + `SLayout::NoneBox` (DN->DN),
     - NZ with `SLayout::RowMajor` (NZ->NZ).
     - For row-major ND->ND with compile-time-known shapes, `TileData::ValidCol` must equal `GlobalData::staticShape[4]`, and `TileData::ValidRow` must equal the product of `GlobalData::staticShape[0..3]`.
+    - A5 Vec NZ->NZ requires static inner dimensions `Shape3 == 16` and `Shape4 == 32 / sizeof(DType)`
+      (`Shape4 == 64` for packed FP4). The source shape need not equal the tile's logical valid window.
+      The same inner-shape constraints apply in CPU_SIM A5 mode.
     - `TileType::Mat` loads are additionally constrained by `TLoadCubeCheck` (e.g., only specific ND/DN/NZ conversions and L1-size limits).
     - For `TileType::Mat` ND->NZ and DN->NZ: `TileData::SFractalSize == 512`, `sizeof(TileData::DType) != 8`, and `GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1`.
     - ND->NZ additionally accepts `GlobalData::staticShape[2] != 1` (including dynamic Shape2).
@@ -136,8 +139,16 @@ On A5 all listed values are passed through to DMA. CPU / costmodel accept the te
     - for scaleB, `dst.GetValidRow() % 2 == 0`
 
 - **Valid region**:
-    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the transfer size.
-    - On A2/A3, same-layout, block-aligned `TileType::Mat` loads write only this valid region. ND-to-NZ/DN-to-ZN loads (and the single-row/single-column Mat special paths) additionally zero-fill the final partial C0 block. Other data remains unchanged, including data owned by tile views that share the same backing storage.
+    - Transfer extent depends on the selected layout path; it is not always the logical valid rectangle.
+    - A5 Vec NZ->NZ (also modeled in CPU A5 mode) transfers `Shape0` groups of `Shape1` column blocks.
+      Each burst copies `dst.GetValidRow() * 32` bytes. Source group/block pitches are `Stride0`/`Stride1`
+      in elements; destination block pitch is `TileData::Rows * 32` bytes and group pitch is
+      `Shape1 * TileData::Rows * Shape4` elements. FP4 element pitches are divided by two for byte addressing.
+      This path does not use `validCol` to trim column blocks or add `PadVal` padding. Rows beyond `validRow`
+      and untransferred blocks retain their contents; GM and tile storage must cover every transferred block.
+      For CPU_SIM, select A5 before assigning tiles; see
+      [Selecting the simulated architecture](../coding/cpu_sim.md#selecting-the-simulated-architecture).
+    - On A2/A3, same-layout, block-aligned `TileType::Mat` loads write only the logical valid region. ND-to-NZ/DN-to-ZN loads (and the single-row/single-column Mat special paths) additionally zero-fill the final partial C0 block. Other data remains unchanged, including data owned by tile views that share the same backing storage.
     - On A5, same-layout `TileType::Mat` ND/DN loads fill only the final partial 32-byte block according to `PadVal`; ND/DN-to-fractal loads zero-fill the final partial C0 block. Full 32-byte gaps and inactive rows or columns remain unchanged.
     - On A5, ND->NZ with `GlobalData::staticShape[2] != 1` loads the first `dst.GetValidRow()` merged rows.
       It transfers `dst.GetValidRow() / Shape3` complete matrices in one instruction, then transfers

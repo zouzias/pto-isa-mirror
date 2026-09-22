@@ -215,6 +215,11 @@ The int32 path emits one instruction and forwards the outer phase unchanged.
 partial valid shapes, padding and output guards, and representative special int32 bit patterns.
 Cases 22–23 cover half/bfloat16 ReLU; cases 24–26 cover the ordinary int32/half/bfloat16 overloads.
 
+For CPU simulation, when `TMATMUL` produces the source Acc tile from FP8/HIF8 inputs,
+select A5 before binding Tiles. The input types and numerical constraints follow
+[TMATMUL](TMATMUL.md#constraints); the source Acc tile contains `float`, not FP8/HIF8 elements.
+See [Selecting the simulated architecture](../coding/cpu_sim.md#selecting-the-simulated-architecture).
+
 ### Small-M Mat-to-Left extraction (A2A3 and A5)
 
 The ordinary `TEXTRACT(dst, src, indexRow, indexCol, events...)` overload automatically

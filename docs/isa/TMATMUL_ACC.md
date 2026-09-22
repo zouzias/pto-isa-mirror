@@ -65,6 +65,9 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight 
     - `TMATMUL_ACC_IMPL` uses `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()` for `m/k/n`.
     - `cInMatrix` is not validated by explicit assertions in the current implementations (target-defined behavior).
 
+- **Implementation checks (CPU_SIM, FP8/HIF8)**: Input type combinations, A5 simulation mode, and
+  numerical limits follow [TMATMUL](TMATMUL.md#constraints).
+
 ## Examples
 
 ### Auto

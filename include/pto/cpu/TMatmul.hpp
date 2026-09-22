@@ -11,12 +11,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TMATMUL_HPP
 #define TMATMUL_HPP
 
-#include "pto/cpu/tile_offsets.hpp"
-#include "pto/cpu/parallel.hpp"
-#include "pto/cpu/MXTypes.hpp"
+#include <cassert>
 #include <cmath>
+#include <type_traits>
+
+#include "pto/cpu/MXTypes.hpp"
+#include "pto/cpu/NPUMemoryModel.hpp"
+#include "pto/cpu/parallel.hpp"
+#include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
+
+template <typename A, typename B>
+constexpr bool isSupportedFp8Combo = (std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, float8_e4m3_t>) ||
+                                     (std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, float8_e5m2_t>) ||
+                                     (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e4m3_t>) ||
+                                     (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e5m2_t>);
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
 PTO_INTERNAL void CheckMadValid()
@@ -24,14 +34,19 @@ PTO_INTERNAL void CheckMadValid()
     using AType = typename TileLeft::DType;
     using BType = typename TileRight::DType;
     using CType = typename TileAcc::DType;
+    constexpr bool IS_FP8_OR_HIF8_INPUT =
+        isSupportedFp8Combo<AType, BType> || (std::is_same_v<AType, hifloat8_t> && std::is_same_v<BType, hifloat8_t>);
     static_assert(
         (std::is_same_v<AType, int8_t> && std::is_same_v<BType, int8_t> && std::is_same_v<CType, int32_t>) || // s8
             (std::is_same_v<AType, half> && std::is_same_v<BType, half> && std::is_same_v<CType, float>) ||   // f162f32
             (std::is_same_v<AType, bfloat16_t> && std::is_same_v<BType, bfloat16_t> &&
-             std::is_same_v<CType, float>) ||                                                              // bf162f32
-            (std::is_same_v<AType, float> && std::is_same_v<BType, float> && std::is_same_v<CType, float>) // f322f32
-        ,
+             std::is_same_v<CType, float>) || // bf162f32
+            (std::is_same_v<AType, float> && std::is_same_v<BType, float> && std::is_same_v<CType, float>) ||
+            (IS_FP8_OR_HIF8_INPUT && std::is_same_v<CType, float>),
         "Not supported data type");
+    if constexpr (IS_FP8_OR_HIF8_INPUT) {
+        assert(NPUMemoryModel::Instance().GetArch() == NPUArch::A5 && "FP8/HIF8 TMATMUL requires A5");
+    }
     static_assert(
         (TileLeft::Rows == TileAcc::Rows) && (TileLeft::Cols == TileRight::Rows) && (TileRight::Cols == TileAcc::Cols),
         "Inconsistent number of m, k, n");
@@ -96,12 +111,6 @@ void TMatmulNzZn(TileAcc& dst, TileAcc* acc, TileLeft& src0, TileRight& src1)
         }
     });
 }
-
-template <typename A, typename B>
-constexpr bool isSupportedFp8Combo = (std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, float8_e4m3_t>) ||
-                                     (std::is_same_v<A, float8_e4m3_t> && std::is_same_v<B, float8_e5m2_t>) ||
-                                     (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e4m3_t>) ||
-                                     (std::is_same_v<A, float8_e5m2_t> && std::is_same_v<B, float8_e5m2_t>);
 
 template <typename A, typename B>
 constexpr bool isSupportedFp4Combo = (std::is_same_v<A, float4_e1m2x2_t> && std::is_same_v<B, float4_e1m2x2_t>) ||

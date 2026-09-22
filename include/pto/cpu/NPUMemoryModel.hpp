@@ -28,13 +28,16 @@
 #ifndef PTO_NPU_MEMORY_MODEL_HPP
 #define PTO_NPU_MEMORY_MODEL_HPP
 
-#include <cstddef>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
 #include <pto/common/pto_tile.hpp>
 
 namespace pto {
@@ -60,6 +63,25 @@ public:
     using ArchMemorySizes = std::size_t[MemoryRegion::_MAX_REGIONS];
 
 private:
+    static NPUArch GetDefaultArch()
+    {
+        if (defaultArch_.has_value()) {
+            return *defaultArch_;
+        }
+        const char* value = std::getenv("PTO_CPU_SIM_ARCH");
+        if (value == nullptr || *value == '\0') {
+            return NPUArch::A2A3;
+        }
+        const std::string archName(value);
+        if (archName == "a5" || archName == "A5") {
+            return NPUArch::A5;
+        }
+        if (archName == "a2a3" || archName == "A2A3") {
+            return NPUArch::A2A3;
+        }
+        throw std::invalid_argument("PTO_CPU_SIM_ARCH must be a2a3 or a5");
+    }
+
     static inline constexpr std::size_t kDefaultCpuSimUBScratchSize = 512 * 1024;
 
     // Memory sizes by architecture
@@ -155,7 +177,7 @@ public:
     void EnsureInitialized()
     {
         if (!initialized_) {
-            Initialize(defaultArch_);
+            Initialize(GetDefaultArch());
         }
     }
 
@@ -252,7 +274,7 @@ public:
     }
 
     const NPUMemoryModel::ArchMemorySizes& GetSizes() const { return sizes_; }
-    NPUArch GetArch() const { return arch_; }
+    NPUArch GetArch() const { return initialized_ ? arch_ : GetDefaultArch(); }
     bool IsInitialized() const { return initialized_; }
 
     // Returns true when rawAddr already points into one of this thread's
@@ -324,8 +346,8 @@ private:
     NPUMemoryModel(const NPUMemoryModel&) = delete;
     NPUMemoryModel(const NPUMemoryModel&&) = delete;
 
-    // Shared default architecture — set once, read by all threads during auto-init
-    static inline NPUArch defaultArch_ = NPUArch::A2A3;
+    // Explicit selection takes precedence over the environment for subsequent auto-initialization.
+    static inline std::optional<NPUArch> defaultArch_;
 
     // Per-thread memory buffers (thread_local instance owns these)
     std::vector<char> buffers_[MemoryRegion::_MAX_REGIONS];

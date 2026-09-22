@@ -28,9 +28,13 @@ A2A3 and A5 identify the simulated target, not the NPU installed on the host. CP
 The selection controls memory configuration and architecture-aware instruction paths such as `TROWSUM`; it does
 not mean that every CPU instruction has separate, bit-exact implementations for both architectures.
 
+- To select the target without changing kernel or driver code, set `PTO_CPU_SIM_ARCH=a5` before starting the
+  process. When no default has been selected explicitly, accepted values are `a2a3`/`A2A3` and `a5`/`A5`.
+  An unset or empty value defaults to A2A3; other values raise `std::invalid_argument` when the architecture
+  is first queried or the model is automatically initialized.
 - To select the default for subsequently initialized thread-local memory models, call
   `pto::NPUMemoryModel::SetDefaultArch(pto::NPUArch::A5)` once during startup, before any thread uses the model.
-  Without this call, the default is `pto::NPUArch::A2A3`.
+  This explicit selection takes precedence over `PTO_CPU_SIM_ARCH`.
 - To initialize only the calling thread explicitly, use
   `pto::NPUMemoryModel::Instance().Initialize(pto::NPUArch::A5)` before binding/accessing its Tiles.
 - For both default selection and calling-thread initialization, use `pto::NPU_MEMORY_INIT(pto::NPUArch::A5)`
@@ -40,9 +44,25 @@ not mean that every CPU instruction has separate, bit-exact implementations for 
 - `SetDefaultArch` does not reconfigure already initialized thread-local instances. Do not change the default
   concurrently with execution or reinitialize a memory model while Tiles still reference its storage.
 
+Unless an explicit default has been selected, each thread consults the environment before its model is
+initialized. Changing it does not reconfigure an initialized model; set it before starting workers and keep
+it unchanged during execution. `GetArch()` also respects this selection before memory allocation, including
+kernels that bind Tiles directly to host pointers.
+
 External simulator integrations must select the target before running kernels. An integration's `a5sim` name
 alone is not an architecture selector inside pto-isa. See **include/pto/cpu/NPUMemoryModel.hpp** and
 **include/pto/cpu/TAssign.hpp**.
+
+For an external A5 CPU test, use the intended repository or installed version consistently:
+
+```bash
+g++ -std=c++23 -D__CPU_SIM -I/path/to/pto-isa/include kernel.cpp -o kernel
+PTO_CPU_SIM_ARCH=a5 ./kernel
+```
+
+Place this include directory before other CANN include directories. Architecture selection takes effect in the
+headers used to compile the executable; it does not update an installed header copy. Selecting A5 also selects
+the model's 256 KiB L0C capacity, compared with 128 KiB for A2A3. Explicit capacity overrides still apply.
 
 ### Memory capacity overrides
 
@@ -82,6 +102,18 @@ correctness testing and does not model a specific on-chip address.
 
 ## Supported behavior and backend differences
 
+- `TINSERT` in `SPLIT2`/`SPLIT4` mode models A5 Vec-to-Mat transfers with complete column blocks,
+  aligned row tails, and Compact block pitches. Source and destination storage must cover the physical
+  transfer beyond the valid window. See [TINSERT](../isa/TINSERT.md#constraints) for type and layout constraints.
+- In A5 mode, Vec NZ-to-NZ `TLOAD` uses the GM column-block count, tile valid rows, and physical strides.
+  Source blocks beyond the valid columns are also loaded. See [TLOAD](../isa/TLOAD.md#constraints) for
+  transfer extents and padding behavior.
+- A5 ordinary matrix multiplication supports all four FP8 E4M3/E5M2 input pairs and HIF8-by-HIF8 with
+  a float accumulator. This applies to `TMATMUL`, `TMATMUL_ACC`, `TMATMUL_BIAS`, and their `TGEMV`
+  counterparts; see [TMATMUL](../isa/TMATMUL.md#constraints) for type and numerical constraints.
+  Architecture assertions on these paths are disabled when `NDEBUG` is defined.
+- `hifloat8_t` encoding and decoding share a lookup table. Exponent and mantissa fields depend on the
+  prefix length; for example, raw encoding `0x18` represents 0.5.
 - CPU_SIM `TROWSUM` selects its reduction and validation path from the calling thread's initialized architecture.
   Both paths accept but do not access `tmp`. See [TROWSUM](../isa/TROWSUM.md#cpu_sim-implementation-checks) for
   types, layouts, and numerical limits, and [TROWSUM implementation notes](#trowsum-implementation-notes) below
