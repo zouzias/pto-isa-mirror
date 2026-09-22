@@ -388,12 +388,12 @@ __global__ AICORE void Hif4MatmulPerformance(
 
 void LaunchHif4Matmul(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, uint8_t* src3, void* stream)
 {
-    constexpr uint32_t blockDim = 16;
+    constexpr uint32_t blockDim = 1; // BISECT: single core to isolate multi-core vs ping-pong
     constexpr uint32_t m = 2048;
     constexpr uint32_t k = 2048;
     constexpr uint32_t n = 2048;
-    constexpr uint32_t singleCoreM = 512;
-    constexpr uint32_t singleCoreN = 512;
+    constexpr uint32_t singleCoreM = 2048; // BISECT: one core owns the whole output
+    constexpr uint32_t singleCoreN = 2048;
     constexpr uint32_t baseM = 256;
     constexpr uint32_t baseK = 256;
     constexpr uint32_t baseN = 256;
