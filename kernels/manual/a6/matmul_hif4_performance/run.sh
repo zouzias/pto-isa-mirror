@@ -47,7 +47,11 @@ cd build
 export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 set -euo pipefail
 
-cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+if [[ -n "${DEBUG_BUILD:-}" ]]; then
+    cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DDEBUG_MODE=1 ..
+else
+    cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ..
+fi
 make -j16
 
 ./hif4_matmul_performance
