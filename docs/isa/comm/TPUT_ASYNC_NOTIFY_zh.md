@@ -245,7 +245,7 @@ Event，也会覆盖此前尚未完成的操作。URMA或RDMA访问不同peer时
   Group。`queue_num` 为 `N` 时，合法Group数最多为 `kSdmaMaxChannelGroups / N`。
 - 多个AIV并发 `Set` 时，应为每个生产者使用独立signal；使用同一个signal做完成计数时应使用
   `AtomicAdd`。无论哪种模式，各AIV的payload目的地址范围都不得重叠。
-- 对URMA和RDMA，即使调用方基于同一workspace构建了不同Session，对同一peer/QP的提交也必须串行；
+- 对URMA，即使调用方基于同一workspace构建了不同Session，对同一peer/QP的提交也必须串行；
   不同peer使用独立队列。
 - 重新构建Session或复用后端队列前，必须先完成此前全部Event。
 - 使用URMA时，释放通信资源前必须完成每个活动peer/QP的最后一个Event，并同步所有使用该

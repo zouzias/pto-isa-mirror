@@ -28,10 +28,10 @@ void ExpectPutResult(int nRanks = 2, int nDevices = 2)
 template <typename T, size_t count>
 void ExpectPutPlan(
     int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode, int nRanks = 2,
-    int nDevices = 2)
+    int nDevices = 2, int blockCount = 1)
 {
     RdmaTestResult result = RunPutAsyncRdmaRootPutPlan<T, count>(
-        nRanks, nDevices, 0, 0, elemOffset, elemCount, operationCount, completionMode);
+        nRanks, nDevices, 0, 0, elemOffset, elemCount, operationCount, completionMode, blockCount);
     if (result == RdmaTestResult::SKIPPED) {
         GTEST_SKIP() << "RDMA runtime prerequisites are unavailable on at least one rank";
     }
@@ -84,6 +84,16 @@ TEST(TPutAsyncRdma, Vec_Int32_MultiWqe_WaitLast)
 {
     SKIP_IF_RANKS_LT(2);
     ExpectPutPlan<int32_t, 4096>(0, 256, 16, RdmaCompletionMode::STATUS_WAIT_LAST);
+}
+
+TEST(TPutAsyncRdma, Vec_Int32_MultiAiv)
+{
+    SKIP_IF_RANKS_LT(2);
+    const RdmaTestResult result = RunPutAsyncRdmaConcurrent(2, 2, 0, 0);
+    if (result == RdmaTestResult::SKIPPED) {
+        GTEST_SKIP() << "RDMA runtime prerequisites are unavailable on at least one rank";
+    }
+    ASSERT_EQ(result, RdmaTestResult::PASSED);
 }
 
 // Cover the public AsyncEvent dispatch, including Test before/after Wait.

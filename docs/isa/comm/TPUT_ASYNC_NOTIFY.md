@@ -256,7 +256,7 @@ payload, the caller must ensure visibility according to the target platform and 
   not submit concurrently to one group. With `queue_num == N`, at most `kSdmaMaxChannelGroups / N` groups are valid.
 - Concurrent `Set` producers should use separate remote signals. Use `AtomicAdd` when multiple AIVs share one signal
   as a completion counter. Payload destination ranges must not overlap in either mode.
-- For URMA and RDMA, submissions to the same peer/QP must be serialized even when callers constructed separate
+- For URMA, submissions to the same peer/QP must be serialized even when callers constructed separate
   sessions over the same workspace. Different peers use independent queues.
 - Complete all earlier events before rebuilding a session or reusing its backend queue.
 - When using URMA, complete the last event for every active peer/QP and synchronize every host stream that uses the

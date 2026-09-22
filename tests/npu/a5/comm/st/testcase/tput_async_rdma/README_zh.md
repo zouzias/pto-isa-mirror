@@ -20,6 +20,9 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_notify_rdma -d -n 2
 ```
 
+`TPutAsyncRdma.Vec_Int32_MultiAiv` 验证16个AIV共享同一peer/QP时的PUT/notify、队列回绕及数据/Event正确性。
+在 `tput_async_rdma` 命令中加 `-g TPutAsyncRdma.Vec_Int32_MultiAiv` 可单独运行。
+
 首次验证`TPUT_ASYNC_NOTIFY`时，先只运行2个rank的定向用例：
 
 ```bash

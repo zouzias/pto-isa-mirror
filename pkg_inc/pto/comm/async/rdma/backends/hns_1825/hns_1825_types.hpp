@@ -22,6 +22,19 @@ namespace comm {
 namespace rdma {
 namespace hns_1825 {
 
+// One zero-initialized, 64-byte record per peer/QP. All device accesses
+// to these fields use scalar atomics; session-local UB is never shared.
+struct QueueState {
+    uint64_t reserveHead;
+    uint64_t readyHead;
+    uint64_t postedHead;
+    uint64_t completedHead;
+    uint64_t postLock;
+    uint64_t cqLock;
+    uint64_t error;
+    uint64_t reserved;
+};
+
 struct SqContext {
     uint32_t wqn;
     uint64_t bufAddr;
@@ -38,6 +51,7 @@ struct SqContext {
     uint8_t mtuShift{4};
     uint8_t dbCos{0x7};
     uint8_t reserved[6];
+    uint64_t stateAddr;
 };
 
 struct CqContext {
@@ -141,6 +155,14 @@ constexpr uint32_t kSessionBuildError = 0x20000;
 constexpr uint32_t kInvalidArgumentError = 0x20001;
 constexpr uint32_t kInvalidContextError = 0x20002;
 constexpr uint32_t kCqeError = 0x20003;
+// Handles retain their peer/u32-index encoding. Stop before the index can wrap
+// into the zero/no-op handle or alias a live event from an earlier generation.
+constexpr uint32_t kQueueIndexExhaustedError = 0x20004;
+constexpr uint64_t kMaxQueueIndex = 0xffffffffULL;
+constexpr uint32_t kCqProgressBatch = 8;
+constexpr uint32_t kPostSendBatch = 32;
+
+static_assert(sizeof(QueueState) == 64, "unexpected HNS1825 queue-state layout");
 
 #if defined(PTO_NPU_ARCH_A2A3) || defined(__DAV_C220_VEC__) || defined(__DAV_C220_CUBE__)
 constexpr uint64_t kCycleToTimeBase = 50;
