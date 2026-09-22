@@ -217,6 +217,8 @@ constexpr TilesSize SIZES_32x128{32, 256, 32, 128, 32, 128, 32, 128, 128};
 constexpr TilesSize SIZES_16x63_64{16, 128, 16, 64, 16, 64, 16, 63, 64};
 constexpr TilesSize SIZES_16x31_32{16, 64, 16, 32, 16, 32, 16, 31, 32};
 constexpr TilesSize SIZES_32x127_128{32, 256, 32, 128, 32, 128, 32, 127, 128};
+constexpr TilesSize REPEAT_BOUNDARY_SIZES{1, 32768, 1, 16384, 1, 16384, 1, 16384, 16384};
+constexpr TilesSize REPEAT_BOUNDARY_IDX_SIZES{1, 8, 1, 8, 1, 8, 1, 8, 8};
 
 template void LaunchTConcat<float, SIZES_64x64>(float* out, float* src0, float* src1, void* stream);
 template void LaunchTConcat<int32_t, SIZES_64x64>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
@@ -264,3 +266,8 @@ template void LaunchTConcat<float, int32_t, SIZES_16x31_32>(
     float* out, float* src0, float* src1, int32_t* outIdx, int32_t* src0Idx, int32_t* src1Idx, void* stream);
 template void LaunchTConcat<int16_t, int32_t, SIZES_32x127_128>(
     int16_t* out, int16_t* src0, int16_t* src1, int32_t* outIdx, int32_t* src0Idx, int32_t* src1Idx, void* stream);
+
+template void LaunchTConcat<float, int32_t, REPEAT_BOUNDARY_SIZES, REPEAT_BOUNDARY_IDX_SIZES>(
+    float* out, float* src0, float* src1, int32_t* src0Idx, int32_t* src1Idx, void* stream);
+template void LaunchTConcat<float, int32_t, REPEAT_BOUNDARY_SIZES, REPEAT_BOUNDARY_IDX_SIZES>(
+    float* out, float* src0, float* src1, int32_t* outIdx, int32_t* src0Idx, int32_t* src1Idx, void* stream);

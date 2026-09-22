@@ -173,8 +173,20 @@ __tf__ PTO_INTERNAL void TConcatIdx(
         bool isAligned = (src0Num % elementsPerBlock) == 0;
 
         SetWaitFlag<PIPE_S, PIPE_V>();
-        if (src0RepeatTime > 0) {
-            vcopy((copyType)(dstPtr + i * dstStride), (copyType)(src0Ptr + i * src0Stride), src0RepeatTime, 1, 1, 8, 8);
+        unsigned src0RepeatOffset = 0;
+        unsigned src0RepeatCount = src0RepeatTime;
+        while (src0RepeatCount > REPEAT_MAX) {
+            vcopy(
+                (copyType)(dstPtr + i * dstStride + src0RepeatOffset * elementsPerRepeat),
+                (copyType)(src0Ptr + i * src0Stride + src0RepeatOffset * elementsPerRepeat), REPEAT_MAX, 1, 1, 8, 8);
+            src0RepeatOffset += REPEAT_MAX;
+            src0RepeatCount -= REPEAT_MAX;
+        }
+        if (src0RepeatCount > 0) {
+            vcopy(
+                (copyType)(dstPtr + i * dstStride + src0RepeatOffset * elementsPerRepeat),
+                (copyType)(src0Ptr + i * src0Stride + src0RepeatOffset * elementsPerRepeat), src0RepeatCount, 1, 1, 8,
+                8);
         }
         if (src0MaskNum > 0) {
             SetContinuousMask(src0MaskNum);
@@ -185,10 +197,21 @@ __tf__ PTO_INTERNAL void TConcatIdx(
         }
 
         if (isAligned) {
-            if (src1RepeatTime > 0) {
+            unsigned src1RepeatOffset = 0;
+            unsigned src1RepeatCount = src1RepeatTime;
+            while (src1RepeatCount > REPEAT_MAX) {
                 vcopy(
-                    (copyType)(dstPtr + i * dstStride + src0Num), (copyType)(src1Ptr + i * src1Stride), src1RepeatTime,
-                    1, 1, 8, 8);
+                    (copyType)(dstPtr + i * dstStride + src0Num + src1RepeatOffset * elementsPerRepeat),
+                    (copyType)(src1Ptr + i * src1Stride + src1RepeatOffset * elementsPerRepeat), REPEAT_MAX, 1, 1, 8,
+                    8);
+                src1RepeatOffset += REPEAT_MAX;
+                src1RepeatCount -= REPEAT_MAX;
+            }
+            if (src1RepeatCount > 0) {
+                vcopy(
+                    (copyType)(dstPtr + i * dstStride + src0Num + src1RepeatOffset * elementsPerRepeat),
+                    (copyType)(src1Ptr + i * src1Stride + src1RepeatOffset * elementsPerRepeat), src1RepeatCount, 1, 1,
+                    8, 8);
             }
             if (src1MaskNum > 0) {
                 SetContinuousMask(src1MaskNum);
