@@ -191,7 +191,9 @@ AICORE inline void ProcessKIteration(
     WaitFlag<PIPE_MTE1, PIPE_M>(EV_EXTRACT_DONE + mte1DBFlag);
     MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], aScaleTile, bScaleTile, kIter);
     SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + mte1DBFlag);
-    SetFlag<PIPE_M, PIPE_MTE1>(EV_SCALE_MATMUL_DONE);
+    if (kIter < loopsK - 1) {
+        SetFlag<PIPE_M, PIPE_MTE1>(EV_SCALE_MATMUL_DONE);
+    }
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
 }
 
@@ -221,14 +223,12 @@ AICORE inline void InitSyncFlags()
     SetFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
     SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 0);
     SetFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 1);
-    SetFlag<PIPE_M, PIPE_MTE1>(EV_SCALE_MATMUL_DONE);
 }
 
 AICORE inline void WaitSyncFlags()
 {
     WaitFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 0);
     WaitFlag<PIPE_M, PIPE_MTE1>(EV_MATMUL_DONE + 1);
-    WaitFlag<PIPE_M, PIPE_MTE1>(EV_SCALE_MATMUL_DONE);
     WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 0);
     WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_DATA_FREE + 1);
     WaitFlag<PIPE_MTE1, PIPE_MTE2>(EV_SCALE_FREE);
