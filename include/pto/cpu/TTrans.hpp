@@ -106,6 +106,24 @@ inline void CheckValidConvShape(DstTileData& dst, SrcTileData& src)
             dst.GetShape(DIM_1) == (src.GetShape(DIM_0) + dst.GetShape(DIM_2) - 1) / dst.GetShape(DIM_2) && // N1*N0
             dst.GetShape(DIM_3) == C0 &&                                                                    // C0
             "Shape mismatch: NCDHW to FRACTAL_Z_3D");
+    } else if constexpr (src_layout == Layout::NCHW && dst_layout == Layout::FRACTAL_Z) {
+        // NCHW (N, C, H, W) -> FRACTAL_Z (C1, H, W, N1, N0, C0)
+        // C1 = ceil(C / C0); N = N1 * N0
+        assert(
+            dst.GetShape(DIM_0) ==
+                (src.GetShape(DIM_1) + C0 - 1) / C0 * src.GetShape(DIM_2) * src.GetShape(DIM_3) && // C1*H*W
+            dst.GetShape(DIM_1) * dst.GetShape(DIM_2) >= src.GetShape(DIM_0) &&                    // N1*N0 = N
+            dst.GetShape(DIM_3) == C0 &&                                                           // C0
+            "Shape mismatch: NCHW to FRACTAL_Z");
+    } else if constexpr (src_layout == Layout::NCHW && dst_layout == Layout::FRACTAL_Z_3D) {
+        // NCHW (N, C, H, W) -> FRACTAL_Z_3D (D, C1, H, W, N1, N0, C0) with implicit D = 1
+        // C1 = ceil(C / C0); N = N1 * N0
+        assert(
+            dst.GetShape(DIM_0) ==
+                (src.GetShape(DIM_1) + C0 - 1) / C0 * src.GetShape(DIM_2) * src.GetShape(DIM_3) && // C1*H*W
+            dst.GetShape(DIM_1) * dst.GetShape(DIM_2) >= src.GetShape(DIM_0) &&                    // N1*N0 = N
+            dst.GetShape(DIM_3) == C0 &&                                                           // C0
+            "Shape mismatch: NCHW to FRACTAL_Z_3D");
     }
 }
 
@@ -277,6 +295,56 @@ inline void TTRANS_GNC1HWC02C1HWN1N0C0(DstTileData& dst, SrcTileData& src)
     TTRANS_GNC1HWC02C1HWN1N0C0_Impl(dst, src, G, N, C1, H, W);
 }
 
+// NCHW (N, C, H, W) -> FRACTAL_Z (C1*H*W, N1, N0, C0)
+// FRACTAL_Z_3D from a 4D NCHW source is produced with an implicit D = 1, so it shares this same layout.
+template <typename DstTileData, typename SrcTileData>
+inline void TTRANS_NCHW2C1HWN1N0C0(DstTileData& dst, SrcTileData& src)
+{
+    using SrcDType = typename SrcTileData::DType;
+    using DstDType = typename DstTileData::DType;
+
+    auto* src_ptr = reinterpret_cast<SrcDType*>(src.data());
+    auto* dst_ptr = reinterpret_cast<DstDType*>(dst.data());
+
+    const int64_t N = src.GetShape(0);
+    const int64_t C = src.GetShape(1);
+    const int64_t H = src.GetShape(2);
+    const int64_t W = src.GetShape(3);
+
+    const int64_t N1 = dst.GetShape(1);
+    const int64_t N0 = dst.GetShape(2);
+    const int64_t C0 = dst.GetShape(3);
+
+    assert(N0 > 0 && "N0 must be greater than 0!");
+
+    const size_t HW = H * W;
+    const size_t CHW = C * HW;
+    const size_t C0_N0 = C0 * N0;
+    const size_t C0_N0_N1 = C0_N0 * N1;
+
+    for (int64_t n = 0; n < N; ++n) {
+        const size_t n1 = n / N0;
+        const size_t n0 = n % N0;
+        const size_t dst_n_base = n1 * C0_N0 + n0 * C0;
+        const size_t src_n_offset = n * CHW;
+        for (int64_t c = 0; c < C; ++c) {
+            const size_t c1 = c / C0;
+            const size_t c0 = c % C0;
+            const size_t src_c_offset = src_n_offset + c * HW;
+            const size_t dst_c1_base = (c1 * HW) * C0_N0_N1;
+            for (int64_t h = 0; h < H; ++h) {
+                const size_t src_h_offset = src_c_offset + h * W;
+                const size_t dst_hw_base = dst_c1_base + (h * W) * C0_N0_N1;
+                for (int64_t w = 0; w < W; ++w) {
+                    const size_t src_offset = src_h_offset + w;
+                    const size_t dst_offset = dst_n_base + dst_hw_base + w * C0_N0_N1 + c0;
+                    SetProperDataPart(dst_ptr, dst_offset, GetProperDataPart(src_ptr, src_offset));
+                }
+            }
+        }
+    }
+}
+
 template <typename DstTileData, typename SrcTileData>
 inline void TTRANS_NCDHW2DC1HWN1N0C0(DstTileData& dst, SrcTileData& src)
 {
@@ -365,6 +433,9 @@ PTO_INTERNAL void TTRANS_CONV_IMPL(DstTileData& dst, SrcTileData& src)
         TTRANS_GNC1HWC02C1HWN1N0C0(dst, src);
     } else if constexpr (src_layout == Layout::NCDHW && dst_layout == Layout::FRACTAL_Z_3D) {
         TTRANS_NCDHW2DC1HWN1N0C0(dst, src);
+    } else if constexpr (
+        src_layout == Layout::NCHW && (dst_layout == Layout::FRACTAL_Z || dst_layout == Layout::FRACTAL_Z_3D)) {
+        TTRANS_NCHW2C1HWN1N0C0(dst, src);
     }
 }
 

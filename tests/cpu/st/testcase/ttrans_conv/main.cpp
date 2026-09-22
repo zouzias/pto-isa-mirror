@@ -226,3 +226,17 @@ TEST_F(TTRANSConvTest, GNC1HWC02C1HWN1N0C0_5) { test_ttrans<int8_t, 4, 4, 2, 3, 
 TEST_F(TTRANSConvTest, NCDHW2C1DHWN1N0C0_1) { test_ttrans<float, 5, 5, 3, 3, 4, 8, 96, 1, 16, 8, 1>(); }
 
 TEST_F(TTRANSConvTest, NCDHW2C1DHWN1N0C0_2) { test_ttrans<int32_t, 5, 18, 2, 4, 5, 3, 60, 2, 16, 8, 1>(); }
+
+/*---------------------------------------------------------------*/
+
+TEST_F(TTRANSConvTest, NCHW2C1HWN1N0C0_1) { test_ttrans<float, 6, 15, 4, 3, 8, 1, 24, 1, 16, 8, 1>(); }
+
+TEST_F(TTRANSConvTest, NCHW2C1HWN1N0C0_2) { test_ttrans<int32_t, 6, 11, 14, 3, 16, 1, 96, 2, 8, 8, 1>(); }
+
+TEST_F(TTRANSConvTest, NCHW2C1HWN1N0C0_3) { test_ttrans<int8_t, 6, 4, 8, 3, 8, 1, 24, 1, 32, 32, 1>(); }
+
+/*---------------------------------------------------------------*/
+
+TEST_F(TTRANSConvTest, NCHW2C1DHWN1N0C0_1) { test_ttrans<float, 7, 15, 4, 3, 8, 1, 24, 1, 16, 8, 1>(); }
+
+TEST_F(TTRANSConvTest, NCHW2C1DHWN1N0C0_2) { test_ttrans<int32_t, 7, 11, 14, 3, 16, 1, 96, 2, 8, 8, 1>(); }
