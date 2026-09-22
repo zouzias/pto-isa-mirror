@@ -24,6 +24,7 @@ PTO_INTERNAL void DiscardPendingAsyncPutBatch(const AsyncSession& session)
 {
     if (session.engine == DmaEngine::SDMA) {
         session.sdmaRuntimeCtx.batchStagedDataSqeCount = 0U;
+        session.sdmaRuntimeCtx.batchStagedOperationCount = 0U;
         return;
     }
     if (session.engine == DmaEngine::URMA) {
@@ -31,6 +32,7 @@ PTO_INTERNAL void DiscardPendingAsyncPutBatch(const AsyncSession& session)
         return;
     }
     session.sdmaRuntimeCtx.batchStagedDataSqeCount = 0U;
+    session.sdmaRuntimeCtx.batchStagedOperationCount = 0U;
     session.urmaRuntimeCtx = {};
 }
 
@@ -61,6 +63,13 @@ PTO_INTERNAL bool TPutAsyncBatchGetElemCount(GlobalData& data, uint64_t& count)
         count *= extent;
     }
     return true;
+}
+
+template <typename GlobalData>
+PTO_INTERNAL bool IsEmptyAsyncTransfer(GlobalData& data)
+{
+    uint64_t count = 0U;
+    return TPutAsyncBatchGetElemCount(data, count) && count == 0U;
 }
 
 template <typename GlobalDstData, typename GlobalSrcData>

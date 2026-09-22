@@ -37,12 +37,12 @@ TEST(TPutAsyncUrmaBatch, SharedPoolSingleBatchFourOperationsConsumed)
     ASSERT_TRUE(RunTPutAsyncUrmaBatchBasic(2, 2, 0, 0, true));
 }
 
-TEST(TPutAsyncUrmaBatch, SharedPoolExplicitJettyOneConsumedAndBaseJettyUntouched)
+TEST(TPutAsyncUrmaBatch, SharedPoolRoundRobinAcrossTwoJetties)
 {
     if (CommMpiSize() != 2) {
         GTEST_SKIP() << "Requires exactly 2 MPI ranks";
     }
-    ASSERT_TRUE(RunTPutAsyncUrmaBatchSelectedJetty(2, 2, 0, 0));
+    ASSERT_TRUE(RunTPutAsyncUrmaBatchMultiJetty(2, 2, 0, 0));
 }
 
 TEST(TPutAsyncUrmaBatch, PerPeer65UniqueBatchesWqWrapAndConsume)

@@ -78,24 +78,20 @@ __global__ AICORE void BatchPutSdma(
     if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::SDMA>(scratchTile, sdmaWorkspace, session)) {
         return;
     }
+    session.batchSize = 2U;
 
-    // Compile-only coverage for mode-aware WaitEvents call forms.
+    // Compile-only coverage for the unchanged WaitEvents call form.
     if (status == nullptr) {
         AsyncPutWaitEventStub waitEvent;
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(
-            dst0, src0, session, pto::comm::AsyncPutMode::IMMEDIATE, waitEvent);
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(
-            dst0, src0, session, pto::comm::AsyncPutMode::DEFER, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session, waitEvent);
     }
 
-    const pto::comm::AsyncEvent deferEvent =
-        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session, pto::comm::AsyncPutMode::DEFER);
-    if (deferEvent.valid()) {
+    session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+    const pto::comm::AsyncEvent deferEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst0, src0, session);
+    if (!deferEvent.valid()) {
         return;
     }
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst1, src1, session, pto::comm::AsyncPutMode::DEFER);
-
-    pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
+    pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst1, src1, session);
     if (!event.valid()) {
         return;
     }
@@ -175,6 +171,7 @@ __global__ AICORE void TPutAsyncBatchConsumeKernel(
             pipe_barrier(PIPE_ALL);
             return;
         }
+        session.batchSize = 3U;
 
         BatchShape shape(1, 1, 1, 1, kElementsPerOperation);
         BatchStride stride(
@@ -187,10 +184,11 @@ __global__ AICORE void TPutAsyncBatchConsumeKernel(
                 const uint32_t offset = (round * kBatchOperationCount + operation) * kElementsPerOperation;
                 BatchGlobal sendGlobal(send + offset, shape, stride);
                 BatchGlobal recvGlobal(remoteRecv + offset, shape, stride);
-                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(
-                    recvGlobal, sendGlobal, session, pto::comm::AsyncPutMode::DEFER);
+                session.submitMode = operation + 1U == kBatchOperationCount ?
+                                         pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT :
+                                         pto::comm::AsyncSubmitMode::DEFER;
+                lastEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(recvGlobal, sendGlobal, session);
             }
-            lastEvent = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
             if (!lastEvent.valid()) {
                 producerStatus = 0U;
                 break;
@@ -267,6 +265,7 @@ __global__ AICORE void TPutAsyncBatchMultiAivConsumeKernel(
             status[controlIndex] = 0U;
             return;
         }
+        session.batchSize = 3U;
 
         BatchShape shape(1, 1, 1, 1, kElementsPerOperation);
         BatchStride stride(
@@ -279,9 +278,11 @@ __global__ AICORE void TPutAsyncBatchMultiAivConsumeKernel(
                 const uint32_t offset = (round * kBatchOperationCount + operation) * kElementsPerOperation;
                 BatchGlobal src(localSend + offset, shape, stride);
                 BatchGlobal dst(remoteRecv + offset, shape, stride);
-                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session, pto::comm::AsyncPutMode::DEFER);
+                session.submitMode = operation + 1U == kBatchOperationCount ?
+                                         pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT :
+                                         pto::comm::AsyncSubmitMode::DEFER;
+                lastEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session);
             }
-            lastEvent = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
             submitted = lastEvent.valid();
         }
         const bool completed = submitted && lastEvent.Wait(session);
@@ -368,10 +369,12 @@ AICORE inline uint32_t RunSdmaQueueBoundaryCases(
                 scratchTile, workspace, session, queueNums[caseIndex], caseIndex, channelGroupIndices[caseIndex])) {
             return 100U + caseIndex;
         }
+        session.batchSize = UINT32_MAX;
         uint32_t initialTail[4] = {0U, 0U, 0U, 0U};
         for (uint32_t queue = 0U; queue < queueNums[caseIndex]; ++queue) {
             initialTail[queue] = session.sdmaRuntimeCtx.sqTail[queue];
         }
+        pto::comm::AsyncEvent event;
         for (uint32_t operation = 0U; operation < operationCounts[caseIndex]; ++operation) {
             const uint32_t elementOffset = (operationBase + operation) * kSmallOperationElements;
             BatchShape shape;
@@ -380,9 +383,11 @@ AICORE inline uint32_t RunSdmaQueueBoundaryCases(
             BatchGlobal dst;
             MakeBatchGlobal(send + elementOffset, kSmallOperationElements, shape, stride, src);
             MakeBatchGlobal(remoteRecv + elementOffset, kSmallOperationElements, shape, stride, dst);
-            pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session, pto::comm::AsyncPutMode::DEFER);
+            session.submitMode = operation + 1U == operationCounts[caseIndex] ?
+                                     pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT :
+                                     pto::comm::AsyncSubmitMode::DEFER;
+            event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session);
         }
-        pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
         if (!event.valid()) {
             return 200U + caseIndex;
         }
@@ -417,6 +422,8 @@ AICORE inline bool RunSdmaFullQueueCase(
     if (!BuildSdmaP0Session(scratchTile, workspace, session, 1U)) {
         return false;
     }
+    session.batchSize = UINT32_MAX;
+    session.submitMode = pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
     const uint32_t initialTail = session.sdmaRuntimeCtx.sqTail[0];
     BatchShape shape;
     BatchStride stride;
@@ -424,11 +431,7 @@ AICORE inline bool RunSdmaFullQueueCase(
     BatchGlobal dst;
     MakeBatchGlobal(send, kFullQueueElements, shape, stride, src);
     MakeBatchGlobal(remoteRecv, kFullQueueElements, shape, stride, dst);
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session, pto::comm::AsyncPutMode::DEFER);
-    if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != kFullQueueDataSqes) {
-        return false;
-    }
-    pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
+    const pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session);
     return event.valid() && session.sdmaRuntimeCtx.batchStagedDataSqeCount == 0U &&
            session.sdmaRuntimeCtx.sqTail[0] == initialTail && event.Wait(session);
 }
@@ -453,6 +456,7 @@ AICORE inline bool RunSdmaPriorFourQueuePost(
     if (!BuildSdmaP0Session(scratchTile, workspace, session, 4U)) {
         return false;
     }
+    session.batchSize = UINT32_MAX;
     BatchShape oldShape;
     BatchStride oldStride;
     BatchGlobal oldSrc;
@@ -469,11 +473,18 @@ AICORE inline bool RunSdmaPriorFourQueuePost(
     BatchGlobal batchDst;
     MakeBatchGlobal(send + kPriorPostElements, kSmallOperationElements, batchShape, batchStride, batchSrc);
     MakeBatchGlobal(remoteRecv + kPriorPostElements, kSmallOperationElements, batchShape, batchStride, batchDst);
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(batchDst, batchSrc, session, pto::comm::AsyncPutMode::DEFER);
-    if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 1U) {
+    session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+    const pto::comm::AsyncEvent deferredEvent =
+        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(batchDst, batchSrc, session);
+    if (!deferredEvent.valid() || session.sdmaRuntimeCtx.batchStagedDataSqeCount != 1U) {
         return false;
     }
-    const pto::comm::AsyncEvent batchEvent = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::SDMA>(session);
+    session.submitMode = pto::comm::AsyncSubmitMode::IMMEDIATE;
+    const pto::comm::AsyncEvent batchEvent =
+        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(batchDst, batchSrc, session);
+    if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+        return false;
+    }
     uint64_t postId = 0U;
     uint32_t queueCount = 0U;
     return batchEvent.valid() &&

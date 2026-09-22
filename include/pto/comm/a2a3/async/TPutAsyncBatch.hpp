@@ -18,32 +18,30 @@ namespace pto {
 namespace comm {
 
 template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
-    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session)
+PTO_INTERNAL AsyncEvent
+TPUT_ASYNC_DEFER_IMPL(GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session)
 {
     static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC(DEFER): only SDMA is supported on A2/A3.");
     if (!detail::ValidateAsyncPutBatchSession<engine>(session)) {
-        return;
+        return {};
     }
     uint64_t totalBytes = 0U;
     if (!detail::TPutAsyncBatchValidatePayload(dstGlobalData, srcGlobalData, session, totalBytes) || totalBytes == 0U) {
-        return;
+        return {};
     }
-    sdma::detail::SdmaDeferAsyncPut(
+    return sdma::detail::SdmaDeferAsyncPut(
         reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
         reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), totalBytes, session);
 }
 
 template <DmaEngine engine>
-PTO_INTERNAL AsyncEvent TPUT_ASYNC_SUBMIT_IMPL(const AsyncSession& session, uint32_t peer, uint32_t jettyIndex)
+PTO_INTERNAL AsyncEvent FLUSH_PENDING_ASYNC_PUT_IMPL(const AsyncSession& session)
 {
-    static_assert(engine == DmaEngine::SDMA, "SubmitAsyncPutBatch: only SDMA is supported on A2/A3.");
+    static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC batch flush: only SDMA is supported on A2/A3.");
     if (!detail::ValidateAsyncPutBatchSession<engine>(session)) {
         return {};
     }
-    (void)peer;
-    (void)jettyIndex;
-    return sdma::detail::SdmaTPutAsyncSubmit(session);
+    return sdma::detail::SdmaFlushPendingAsyncPut(session);
 }
 
 } // namespace comm

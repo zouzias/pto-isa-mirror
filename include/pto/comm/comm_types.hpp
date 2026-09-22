@@ -92,11 +92,13 @@ enum class NotifyOp : uint8_t {
     Set = 1,       // Direct set operation
 };
 
-// Controls whether TPUT_ASYNC publishes immediately or stages the write for
-// SubmitAsyncPutBatch.
-enum class AsyncPutMode : uint8_t {
+// Controls whether an asynchronous transfer is published immediately, staged,
+// or staged and then published. The mode lives in AsyncSession so instruction
+// signatures remain unchanged and future asynchronous GET batching can reuse it.
+enum class AsyncSubmitMode : uint8_t {
     IMMEDIATE = 0,
     DEFER = 1,
+    DEFER_AND_SUBMIT = 2,
 };
 
 // ============================================================================

@@ -76,6 +76,8 @@ struct SdmaRuntimeContext {
     uint32_t usedQueueCount;
     // Data SQEs staged by TPUT_ASYNC(DEFER) but not published yet.
     uint32_t batchStagedDataSqeCount;
+    // Successful non-empty TPUT_ASYNC calls in the current physical batch.
+    uint32_t batchStagedOperationCount;
     __gm__ uint8_t* postDoneBase;
 };
 
@@ -100,11 +102,13 @@ namespace urma {
 namespace detail {
 
 struct UrmaRuntimeContext {
-    uint32_t batchStartBbProducer;
-    uint32_t batchStartCqeExpected;
     uint32_t batchStagedWqeCount;
+    uint32_t batchStagedOperationCount;
+    // WQE sequence within the logical batch. It is retained across automatic
+    // physical submissions so Jetty selection keeps rotating.
+    uint32_t batchLogicalWqeCount;
     uint32_t batchPeer;
-    uint32_t batchJettyIndex;
+    uint32_t batchActive;
 };
 
 } // namespace detail
@@ -118,6 +122,10 @@ struct UrmaRuntimeContext {
 struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};
     bool valid{false};
+    AsyncSubmitMode submitMode{AsyncSubmitMode::IMMEDIATE};
+    // Zero disables batching. UINT32_MAX effectively disables threshold-based
+    // auto-submit while retaining explicit mode-controlled submission.
+    uint32_t batchSize{UINT32_MAX};
 
     __gm__ uint8_t* contextGm{nullptr};
     __ubuf__ uint8_t* tmpBufAddr{nullptr};

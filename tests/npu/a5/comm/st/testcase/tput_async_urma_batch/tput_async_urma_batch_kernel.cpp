@@ -24,7 +24,7 @@ constexpr uint32_t kStressBatchRounds = 65U;
 constexpr uint32_t kElementsPerOperation = 256U;
 constexpr uint32_t kElementsPerBatch = kBatchOperationCount * kElementsPerOperation;
 constexpr uint32_t kRequestedSqDepth = 64U;
-constexpr uint32_t kSelectedJettyIndex = 1U;
+constexpr uint32_t kObservedJettyIndex = 1U;
 constexpr uint32_t kSelectedJettiesPerCore = 2U;
 constexpr int32_t kConsumeAdd = 100;
 constexpr int32_t kPoison = -777777;
@@ -72,24 +72,20 @@ __global__ AICORE void BatchPutUrma(
     if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, peer, session)) {
         return;
     }
+    session.batchSize = 2U;
 
-    // Compile-only coverage for mode-aware WaitEvents call forms.
+    // Compile-only coverage for the unchanged WaitEvents call forms.
     if (status == nullptr) {
         AsyncPutWaitEventStub waitEvent;
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-            dst0, src0, session, pto::comm::AsyncPutMode::IMMEDIATE, 0U, waitEvent);
-        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-            dst0, src0, session, peer, pto::comm::AsyncPutMode::DEFER, 0U, waitEvent);
+        (void)pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, peer, waitEvent);
     }
 
-    const pto::comm::AsyncEvent deferEvent =
-        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, pto::comm::AsyncPutMode::DEFER);
-    if (deferEvent.valid()) {
+    session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+    const pto::comm::AsyncEvent deferEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session);
+    if (!deferEvent.valid()) {
         return;
     }
-    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst1, src1, session, pto::comm::AsyncPutMode::DEFER);
-
-    pto::comm::AsyncEvent event = pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session);
+    pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst1, src1, session);
     if (!event.valid()) {
         return;
     }
@@ -168,6 +164,7 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
             status[0] = 0U;
             return;
         }
+        session.batchSize = 3U;
         if (jettyIndex >= session.qpCount) {
             status[0] = 0U;
             return;
@@ -220,20 +217,20 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
                 const uint32_t offset = (round * kBatchOperationCount + operation) * kElementsPerOperation;
                 BatchGlobal sendGlobal(send + offset, shape, stride);
                 BatchGlobal recvGlobal(remoteRecv + offset, shape, stride);
-                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(
-                    recvGlobal, sendGlobal, session, kTargetPeer, pto::comm::AsyncPutMode::DEFER, jettyIndex);
+                session.submitMode = operation + 1U == kBatchOperationCount ?
+                                         pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT :
+                                         pto::comm::AsyncSubmitMode::DEFER;
+                lastBatchEvent =
+                    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(recvGlobal, sendGlobal, session, kTargetPeer);
                 if (oldNotifyPrefix && round == 0U && operation == 0U &&
-                    (session.urmaRuntimeCtx.batchStartBbProducer != prefixTargetBb ||
-                     session.urmaRuntimeCtx.batchStartCqeExpected != prefixTargetCqe ||
-                     session.urmaRuntimeCtx.batchJettyIndex != jettyIndex)) {
+                    (lastBatchEvent.urmaTargetBbPerJetty[0] != prefixTargetBb + 1U ||
+                     lastBatchEvent.urmaTargetCqePerJetty[0] != prefixTargetCqe + 1U)) {
                     status[0] = 0U;
                     return;
                 }
             }
-            lastBatchEvent =
-                pto::comm::SubmitAsyncPutBatch<pto::comm::DmaEngine::URMA>(session, kTargetPeer, jettyIndex);
-            if (!lastBatchEvent.valid() || lastBatchEvent.urmaJettyCount != 1U ||
-                lastBatchEvent.urmaJettyBase != physicalJetty) {
+            if (!lastBatchEvent.valid() || lastBatchEvent.urmaJettyCount != session.qpCount ||
+                lastBatchEvent.urmaJettyBase != session.qpIdxBase) {
                 producerStatus = 0U;
                 break;
             }
@@ -250,7 +247,7 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
         }
         if (producerStatus != 0U && verifyJettySelection &&
             (ld_dev(reinterpret_cast<__gm__ uint32_t*>(wq->headAddr), 0) == initialSelectedHead ||
-             ld_dev(reinterpret_cast<__gm__ uint32_t*>(baseWq->headAddr), 0) != initialBaseHead)) {
+             ld_dev(reinterpret_cast<__gm__ uint32_t*>(baseWq->headAddr), 0) == initialBaseHead)) {
             producerStatus = 0U;
         }
 
@@ -475,11 +472,11 @@ bool RunTPutAsyncUrmaBatchSharedPoolBasicRank(
         rankId, nRanks, nDevices, firstDeviceId, firstRankId, rootRank, true, false, 1U, false);
 }
 
-bool RunTPutAsyncUrmaBatchSelectedJettyRank(
+bool RunTPutAsyncUrmaBatchMultiJettyRank(
     int rankId, int nRanks, int nDevices, int firstDeviceId, int firstRankId, int rootRank)
 {
     return RunTPutAsyncUrmaBatchConsumeRank(
-        rankId, nRanks, nDevices, firstDeviceId, firstRankId, rootRank, true, false, 1U, false, kSelectedJettyIndex,
+        rankId, nRanks, nDevices, firstDeviceId, firstRankId, rootRank, true, false, 1U, false, kObservedJettyIndex,
         kSelectedJettiesPerCore, true);
 }
 
@@ -509,7 +506,7 @@ bool RunTPutAsyncUrmaBatchDocExample(int nRanks, int nDevices, int firstRankId, 
     return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaBatchDocExampleRank);
 }
 
-bool RunTPutAsyncUrmaBatchSelectedJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+bool RunTPutAsyncUrmaBatchMultiJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
 {
-    return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaBatchSelectedJettyRank);
+    return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaBatchMultiJettyRank);
 }

@@ -15,6 +15,6 @@ bool RunTPutAsyncUrmaBatchBasic(int nRanks, int nDevices, int firstRankId, int f
 bool RunTPutAsyncUrmaBatchDocExample(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
 bool RunTPutAsyncUrmaBatchConsume(
     int nRanks, int nDevices, int firstRankId, int firstDeviceId, bool sharedPool, bool oldNotifyPrefix = false);
-bool RunTPutAsyncUrmaBatchSelectedJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
+bool RunTPutAsyncUrmaBatchMultiJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
 
 #endif // TPUT_ASYNC_URMA_BATCH_KERNEL_H

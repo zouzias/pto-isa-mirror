@@ -20,9 +20,8 @@ namespace pto {
 namespace comm {
 
 template <DmaEngine engine, typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
-    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
-    uint32_t jettyIndex)
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_DEFER_IMPL(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer)
 {
     static_assert(
         engine == DmaEngine::URMA,
@@ -30,34 +29,33 @@ PTO_INTERNAL void TPUT_ASYNC_DEFER_IMPL(
 #ifdef PTO_URMA_SUPPORTED
     uint64_t totalBytes = 0U;
     if (!detail::TPutAsyncBatchValidatePayload(dstGlobalData, srcGlobalData, session, totalBytes) || totalBytes == 0U) {
-        return;
+        return {};
     }
-    urma::detail::UrmaDeferAsyncPut(
+    return urma::detail::UrmaDeferAsyncPut(
         reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
-        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), totalBytes, session, peer, jettyIndex);
+        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()), totalBytes, session, peer);
 #else
     (void)dstGlobalData;
     (void)srcGlobalData;
     (void)session;
     (void)peer;
-    (void)jettyIndex;
     static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC(DEFER): URMA requires NPU_ARCH 3510.");
+    return {};
 #endif
 }
 
 template <DmaEngine engine>
-PTO_INTERNAL AsyncEvent TPUT_ASYNC_SUBMIT_IMPL(const AsyncSession& session, uint32_t peer, uint32_t jettyIndex)
+PTO_INTERNAL AsyncEvent FLUSH_PENDING_ASYNC_PUT_IMPL(const AsyncSession& session, uint32_t peer)
 {
     static_assert(
         engine == DmaEngine::URMA,
-        "SubmitAsyncPutBatch: A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
+        "TPUT_ASYNC batch flush: A5 SDMA uses a synchronous MTE fallback; aggregate PUT requires URMA.");
 #ifdef PTO_URMA_SUPPORTED
-    return urma::detail::UrmaTPutAsyncSubmit(session, peer, jettyIndex);
+    return urma::detail::UrmaFlushPendingAsyncPut(session, peer);
 #else
     (void)session;
     (void)peer;
-    (void)jettyIndex;
-    static_assert(engine != DmaEngine::URMA, "SubmitAsyncPutBatch: URMA requires NPU_ARCH 3510.");
+    static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC batch flush: URMA requires NPU_ARCH 3510.");
     return {};
 #endif
 }
