@@ -249,9 +249,12 @@ For `IMMEDIATE` mode, the completion mechanism differs by engine, but user-facin
 - **URMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE and rings the doorbell immediately. `Wait` polls the Completion Queue (CQ) until all expected CQEs have been consumed.
 - **RDMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE to the queue selected by `peer`. Completion is tracked independently for each peer/queue.
 
-- `event.Wait(session)` — blocks until **all async operations issued since the last Wait** are complete
+- For an Event returned by an `IMMEDIATE` call, `event.Wait(session)` blocks until that operation and the earlier
+  same-session operations covered by its completion target are complete.
 
-This means after multiple `TPUT_ASYNC` calls, a single `Wait` on the last returned `AsyncEvent` drains all pending operations (similar to shmem's quiet semantics).
+This means that after multiple `IMMEDIATE` `TPUT_ASYNC` calls, one `Wait` on the last returned `AsyncEvent` drains
+the covered pending operations (similar to shmem's quiet semantics). A `DEFER` Event instead uses the prefix
+snapshot semantics described below.
 
 For RDMA operations targeting different peers, wait for the last event of each peer separately.
 

@@ -107,6 +107,14 @@ $$
 `DmaEngine::RDMA` 不支持 `NotifyOp::AtomicAdd`。上述payload先于signal的顺序仅适用于同一次调用，不定义
 不同Session或不同执行流之间的顺序。
 
+若同一Session中存在相同引擎的pending Defer PUT Batch，`TPUT_ASYNC_NOTIFY`会先提交该Batch，再发布
+自身的payload和signal。对于URMA，本次调用的`peer`必须与pending逻辑Batch的peer一致；Batch仍处于
+active状态时切换peer属于契约错误。成功时，返回的Event覆盖此前Batch和本次调用的发送端完成。
+
+该隐式提交只建立本端发布顺序。特别是，A5 URMA在一条Jetty上发布的signal不是其他Jetty上Defer写的
+远端完成栅栏；若要把signal作为全部Defer payload远端可见的依据，必须先等待Batch Event或使用明确
+的顺序协议。
+
 ## AsyncSession构建
 
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。该函数按引擎提供不同的

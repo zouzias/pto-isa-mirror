@@ -236,9 +236,11 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, m
 - **URMA**：`TPUT_ASYNC` 立即提交RDMA WRITE WQE并敲门铃。`Wait` 通过轮询Completion Queue（CQ）等待所有预期的CQE被消费。
 - **RDMA**：`TPUT_ASYNC` 向 `peer` 选择的队列提交RDMA WRITE WQE；不同peer/queue分别跟踪完成状态。
 
-- `event.Wait(session)` —阻塞，直到**自上次Wait以来所有已发出的异步操作**全部完成
+- 对`IMMEDIATE`调用返回的Event执行`event.Wait(session)`，会阻塞到本次操作及其完成目标覆盖的
+  同Session先前操作均已完成。
 
-这意味着多次 `TPUT_ASYNC` 调用后，只需对最后一个返回的 `AsyncEvent` 调用一次 `Wait`，即可等待所有pending操作完成（类似shmem的quiet语义）。
+这意味着连续执行多次`IMMEDIATE TPUT_ASYNC`后，只需等待最后一个返回的`AsyncEvent`，即可等待其
+覆盖的pending操作完成（类似shmem的quiet语义）。`DEFER` Event则采用下文所述的前缀快照语义。
 
 RDMA操作涉及不同peer时，必须分别等待每个peer的最后一个Event。
 
