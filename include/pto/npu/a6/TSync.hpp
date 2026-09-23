@@ -25,7 +25,8 @@ PTO_INTERNAL static constexpr pipe_t GetPipeByOpForA6()
 template <pipe_t P>
 PTO_INTERNAL static constexpr bool IsValidFlagPipe()
 {
-    return (P == PIPE_S) || (P == PIPE_MTE1) || (P == PIPE_MTE2) || (P == PIPE_MTE3) || (P == PIPE_FIX);
+    return (P == PIPE_S) || (P == PIPE_MTE1) || (P == PIPE_MTE2) || (P == PIPE_MTE3) || (P == PIPE_FIX) ||
+           (P == PIPE_V);
 }
 
 // single pipeline wait
