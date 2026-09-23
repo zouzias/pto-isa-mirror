@@ -800,6 +800,13 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
                 (DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::ColMajor))) {
                 TMovNdTo2Zn<DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } else {
+                // No layout conversion here: reject unsupported layout pairs
+                // instead of copying raw bytes across formats.
+                static_assert(
+                    (SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) ||
+                        (SrcTileData::isRowMajor == DstTileData::isRowMajor &&
+                         SrcTileData::SFractal == DstTileData::SFractal),
+                    "TMov Vec->Vec: DN source is not supported, declare ND tiles instead");
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }
         } else if constexpr (DstTileData::Loc == TileType::Mat) {
