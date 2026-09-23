@@ -340,6 +340,164 @@ PTO_INST RecordEvent TREDUCE(
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
 // ============================================================================
 
+#if defined(PTO_NPU_ARCH_A2A3)
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    static_assert(engine == DmaEngine::SDMA, "TPUT_ASYNC: only SDMA is supported on A2/A3.");
+    const AsyncSubmitMode mode = session.submitMode;
+    if (mode != AsyncSubmitMode::IMMEDIATE && mode != AsyncSubmitMode::DEFER &&
+        mode != AsyncSubmitMode::DEFER_AND_SUBMIT) {
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous submission mode.");
+        return {};
+    }
+    if (session.batchSize == 0U && mode != AsyncSubmitMode::IMMEDIATE) {
+        PTO_ASSERT(false, "TPUT_ASYNC: batching is disabled when AsyncSession::batchSize is zero.");
+        return {};
+    }
+    if (mode == AsyncSubmitMode::IMMEDIATE) {
+        AsyncEvent batchEvent;
+        if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+            batchEvent = ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+        const AsyncEvent immediateEvent = ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+        return !immediateEvent.valid() && ::pto::comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent :
+                                                                                                     immediateEvent;
+    }
+    const AsyncEvent deferredEvent = ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    if (!deferredEvent.valid()) {
+        return deferredEvent;
+    }
+    const bool reachesBatchSize = session.sdmaRuntimeCtx.batchStagedOperationCount >= session.batchSize;
+    if (mode == AsyncSubmitMode::DEFER_AND_SUBMIT || reachesBatchSize) {
+        return ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session);
+    }
+    return deferredEvent;
+}
+
+#elif defined(PTO_NPU_ARCH_A5)
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    if constexpr (engine != DmaEngine::URMA) {
+        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    } else {
+        const uint32_t peer = session.destRankId;
+        const AsyncSubmitMode mode = session.submitMode;
+        if (mode != AsyncSubmitMode::IMMEDIATE && mode != AsyncSubmitMode::DEFER &&
+            mode != AsyncSubmitMode::DEFER_AND_SUBMIT) {
+            PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous submission mode.");
+            return {};
+        }
+        if (session.batchSize == 0U && mode != AsyncSubmitMode::IMMEDIATE) {
+            PTO_ASSERT(false, "TPUT_ASYNC: batching is disabled when AsyncSession::batchSize is zero.");
+            return {};
+        }
+        if (mode == AsyncSubmitMode::IMMEDIATE) {
+            AsyncEvent batchEvent;
+            if (session.urmaRuntimeCtx.batchLogicalWqeCount != 0U) {
+                if (session.urmaRuntimeCtx.batchPeer != peer) {
+                    PTO_ASSERT(false, "TPUT_ASYNC URMA: immediate peer differs from the pending logical batch.");
+                    return {};
+                }
+                batchEvent = ::pto::comm::urma::detail::FinishUrmaAsyncPutBatch(session, peer);
+                if (!batchEvent.valid()) {
+                    return {};
+                }
+            }
+            const AsyncEvent immediateEvent =
+                ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+            if (!immediateEvent.valid()) {
+                return ::pto::comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent : immediateEvent;
+            }
+            if (!batchEvent.valid()) {
+                return immediateEvent;
+            }
+            return ::pto::comm::urma::detail::MakeUrmaSessionCompletionEvent(session, peer, false);
+        }
+        const AsyncEvent deferredEvent =
+            ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+        if (!deferredEvent.valid()) {
+            return deferredEvent;
+        }
+        const bool reachesBatchSize = session.urmaRuntimeCtx.batchStagedOperationCount >= session.batchSize;
+        if (mode == AsyncSubmitMode::DEFER_AND_SUBMIT || reachesBatchSize) {
+            const AsyncEvent submittedEvent = ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session, peer);
+            if (mode == AsyncSubmitMode::DEFER_AND_SUBMIT) {
+                session.urmaRuntimeCtx = {};
+            }
+            return submittedEvent;
+        }
+        return deferredEvent;
+    }
+}
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(
+    GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
+    WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    if constexpr (engine != DmaEngine::URMA) {
+        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+    } else {
+        const AsyncSubmitMode mode = session.submitMode;
+        if (mode != AsyncSubmitMode::IMMEDIATE && mode != AsyncSubmitMode::DEFER &&
+            mode != AsyncSubmitMode::DEFER_AND_SUBMIT) {
+            PTO_ASSERT(false, "TPUT_ASYNC: unsupported asynchronous submission mode.");
+            return {};
+        }
+        if (session.batchSize == 0U && mode != AsyncSubmitMode::IMMEDIATE) {
+            PTO_ASSERT(false, "TPUT_ASYNC: batching is disabled when AsyncSession::batchSize is zero.");
+            return {};
+        }
+        if (mode == AsyncSubmitMode::IMMEDIATE) {
+            AsyncEvent batchEvent;
+            if (session.urmaRuntimeCtx.batchLogicalWqeCount != 0U) {
+                if (session.urmaRuntimeCtx.batchPeer != peer) {
+                    PTO_ASSERT(false, "TPUT_ASYNC URMA: immediate peer differs from the pending logical batch.");
+                    return {};
+                }
+                batchEvent = ::pto::comm::urma::detail::FinishUrmaAsyncPutBatch(session, peer);
+                if (!batchEvent.valid()) {
+                    return {};
+                }
+            }
+            const AsyncEvent immediateEvent =
+                ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+            if (!immediateEvent.valid()) {
+                return ::pto::comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent : immediateEvent;
+            }
+            if (!batchEvent.valid()) {
+                return immediateEvent;
+            }
+            return ::pto::comm::urma::detail::MakeUrmaSessionCompletionEvent(session, peer, false);
+        }
+        const AsyncEvent deferredEvent =
+            ::pto::comm::TPUT_ASYNC_DEFER_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+        if (!deferredEvent.valid()) {
+            return deferredEvent;
+        }
+        const bool reachesBatchSize = session.urmaRuntimeCtx.batchStagedOperationCount >= session.batchSize;
+        if (mode == AsyncSubmitMode::DEFER_AND_SUBMIT || reachesBatchSize) {
+            const AsyncEvent submittedEvent = ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session, peer);
+            if (mode == AsyncSubmitMode::DEFER_AND_SUBMIT) {
+                session.urmaRuntimeCtx = {};
+            }
+            return submittedEvent;
+        }
+        return deferredEvent;
+    }
+}
+
+#elif defined(__CPU_SIM)
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
@@ -348,14 +506,6 @@ PTO_INST AsyncEvent TPUT_ASYNC(
     return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
-#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-/**
- * @brief Asynchronous remote write with explicit peer (A5 / CPU stub).
- *
- * For URMA and RDMA: @p peer selects the per-peer queue and memory metadata (session need not bind peer).
- * For SDMA: @p peer is ignored; addressing comes from the GlobalTensor VA.
- * For CPU: @p peer is ignored; use default implementation
- */
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, uint32_t peer,
@@ -392,8 +542,40 @@ PTO_INST AsyncEvent TPUT_ASYNC_NOTIFY(
     NotifyOp notifyOp, const AsyncSession& session, uint32_t peer, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
+    AsyncEvent batchEvent;
+#if defined(PTO_NPU_ARCH_A2A3)
+    if constexpr (engine == DmaEngine::SDMA) {
+        if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+            batchEvent = ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+    }
+#elif defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        if (session.urmaRuntimeCtx.batchLogicalWqeCount != 0U) {
+            if (session.urmaRuntimeCtx.batchPeer != peer) {
+                PTO_ASSERT(false, "TPUT_ASYNC_NOTIFY URMA: peer differs from the pending logical batch.");
+                return {};
+            }
+            batchEvent = ::pto::comm::urma::detail::FinishUrmaAsyncPutBatch(session, peer);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+    }
+#endif
+    const AsyncEvent event = ::pto::comm::TPUT_ASYNC_NOTIFY_IMPL<engine>(
         dstGlobalData, srcGlobalData, dstSignalData, signalValue, notifyOp, session, peer);
+#if defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        if (event.valid() && batchEvent.valid()) {
+            return ::pto::comm::urma::detail::MakeUrmaSessionCompletionEvent(session, peer, false);
+        }
+    }
+#endif
+    return event;
 }
 #endif
 
@@ -407,7 +589,40 @@ PTO_INST AsyncEvent TGET_ASYNC(
     GlobalDstData& dstGlobalData, GlobalSrcData& srcGlobalData, const AsyncSession& session, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+    AsyncEvent batchEvent;
+#if defined(PTO_NPU_ARCH_A2A3)
+    if constexpr (engine == DmaEngine::SDMA) {
+        if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+            batchEvent = ::pto::comm::FLUSH_PENDING_ASYNC_PUT_IMPL<engine>(session);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+    }
+#elif defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        const uint32_t peer = session.destRankId;
+        if (session.urmaRuntimeCtx.batchLogicalWqeCount != 0U) {
+            if (session.urmaRuntimeCtx.batchPeer != peer) {
+                PTO_ASSERT(false, "TGET_ASYNC URMA: peer differs from the pending logical batch.");
+                return {};
+            }
+            batchEvent = ::pto::comm::urma::detail::FinishUrmaAsyncPutBatch(session, peer);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+    }
+#endif
+    const AsyncEvent event = ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+#if defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        if (event.valid() && batchEvent.valid()) {
+            return ::pto::comm::urma::detail::MakeUrmaSessionCompletionEvent(session, session.destRankId, false);
+        }
+    }
+#endif
+    return !event.valid() && ::pto::comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent : event;
 }
 
 #if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
@@ -424,7 +639,30 @@ PTO_INST AsyncEvent TGET_ASYNC(
     WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+    AsyncEvent batchEvent;
+#if defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        if (session.urmaRuntimeCtx.batchLogicalWqeCount != 0U) {
+            if (session.urmaRuntimeCtx.batchPeer != peer) {
+                PTO_ASSERT(false, "TGET_ASYNC URMA: peer differs from the pending logical batch.");
+                return {};
+            }
+            batchEvent = ::pto::comm::urma::detail::FinishUrmaAsyncPutBatch(session, peer);
+            if (!batchEvent.valid()) {
+                return {};
+            }
+        }
+    }
+#endif
+    const AsyncEvent event = ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session, peer);
+#if defined(PTO_NPU_ARCH_A5)
+    if constexpr (engine == DmaEngine::URMA) {
+        if (event.valid() && batchEvent.valid()) {
+            return ::pto::comm::urma::detail::MakeUrmaSessionCompletionEvent(session, peer, false);
+        }
+    }
+#endif
+    return !event.valid() && ::pto::comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent : event;
 }
 #endif
 
