@@ -26,6 +26,12 @@ constexpr uint32_t kElementsPerBatch = kBatchOperationCount * kElementsPerOperat
 constexpr uint32_t kRequestedSqDepth = 64U;
 constexpr uint32_t kObservedJettyIndex = 1U;
 constexpr uint32_t kSelectedJettiesPerCore = 2U;
+constexpr uint32_t kPolicyElementsPerOperation = 16U;
+constexpr uint32_t kPolicyScenarioCount = 7U;
+constexpr uint32_t kPolicyTotalElements = kPolicyScenarioCount * kPolicyElementsPerOperation;
+constexpr uint32_t kPolicySignalPollLimit = 1000000U;
+constexpr uint64_t kLargeTransferBytes = pto::comm::urma::kUrmaMaxWqeTransferBytes + sizeof(int32_t);
+constexpr uint32_t kLargeTransferElements = static_cast<uint32_t>(kLargeTransferBytes / sizeof(int32_t));
 constexpr int32_t kConsumeAdd = 100;
 constexpr int32_t kPoison = -777777;
 constexpr size_t kDataOffset = 64U * sizeof(int32_t);
@@ -278,6 +284,253 @@ __global__ AICORE void TPutAsyncUrmaBatchConsumeKernel(
     status[0] = 8U;
 }
 
+AICORE inline void MakeUrmaPolicyGlobal(
+    __gm__ int32_t* data, uint32_t elements, BatchShape& shape, BatchStride& stride, BatchGlobal& global)
+{
+    shape = BatchShape(1, 1, 1, 1, elements);
+    stride = BatchStride(elements, elements, elements, elements, 1);
+    global = BatchGlobal(data, shape, stride);
+}
+
+__global__ AICORE void TPutAsyncUrmaBatchPolicyKernel(
+    __gm__ uint8_t* localBuf, int myRank, int firstRankId, int rootRank, __gm__ uint8_t* urmaWorkspace,
+    __gm__ uint32_t* status)
+{
+#ifdef PTO_URMA_SUPPORTED
+    __gm__ int32_t* send = reinterpret_cast<__gm__ int32_t*>(localBuf + kDataOffset);
+    __gm__ int32_t* recv = send + kPolicyTotalElements;
+    const uint32_t myPeer = static_cast<uint32_t>(myRank - firstRankId);
+    constexpr uint32_t kTargetPeer = 1U;
+    if (myRank == rootRank) {
+        const uint64_t peerBase = pto::comm::urma::UrmaPeerMrBaseAddr(urmaWorkspace, kTargetPeer);
+        __gm__ int32_t* remoteSend = reinterpret_cast<__gm__ int32_t*>(peerBase + kDataOffset);
+        __gm__ int32_t* remoteRecv = remoteSend + kPolicyTotalElements;
+
+        BatchShape implicitSignalShape;
+        BatchStride implicitSignalStride;
+        BatchGlobal remoteImplicitSignal;
+        MakeUrmaPolicyGlobal(
+            reinterpret_cast<__gm__ int32_t*>(peerBase), 1U, implicitSignalShape, implicitSignalStride,
+            remoteImplicitSignal);
+        BatchShape visibilitySignalShape;
+        BatchStride visibilitySignalStride;
+        BatchGlobal remoteVisibilitySignal;
+        MakeUrmaPolicyGlobal(
+            reinterpret_cast<__gm__ int32_t*>(peerBase) + 1U, 1U, visibilitySignalShape, visibilitySignalStride,
+            remoteVisibilitySignal);
+
+        for (uint32_t scenario = 0U; scenario < kPolicyScenarioCount; ++scenario) {
+            const uint32_t offset = scenario * kPolicyElementsPerOperation;
+            BatchShape shape;
+            BatchStride stride;
+            BatchGlobal src;
+            BatchGlobal dst;
+            MakeUrmaPolicyGlobal(send + offset, kPolicyElementsPerOperation, shape, stride, src);
+            MakeUrmaPolicyGlobal(remoteRecv + offset, kPolicyElementsPerOperation, shape, stride, dst);
+
+            pto::comm::AsyncSession session;
+            if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, session)) {
+                status[0] = 0U;
+                return;
+            }
+            pto::comm::AsyncEvent event;
+            if (scenario == 0U) {
+                session.batchSize = 0U;
+                session.submitMode = pto::comm::AsyncSubmitMode::IMMEDIATE;
+                event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+            } else if (scenario == 1U) {
+                session.batchSize = 1U;
+                session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+                event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+                if (session.urmaRuntimeCtx.batchStagedWqeCount != 0U) {
+                    status[0] = 0U;
+                    return;
+                }
+            } else if (scenario == 2U) {
+                BatchShape halfShape0;
+                BatchStride halfStride0;
+                BatchGlobal src0;
+                BatchGlobal dst0;
+                BatchShape halfShape1;
+                BatchStride halfStride1;
+                BatchGlobal src1;
+                BatchGlobal dst1;
+                MakeUrmaPolicyGlobal(send + offset, kPolicyElementsPerOperation / 2U, halfShape0, halfStride0, src0);
+                MakeUrmaPolicyGlobal(
+                    remoteRecv + offset, kPolicyElementsPerOperation / 2U, halfShape0, halfStride0, dst0);
+                MakeUrmaPolicyGlobal(
+                    send + offset + kPolicyElementsPerOperation / 2U, kPolicyElementsPerOperation / 2U, halfShape1,
+                    halfStride1, src1);
+                MakeUrmaPolicyGlobal(
+                    remoteRecv + offset + kPolicyElementsPerOperation / 2U, kPolicyElementsPerOperation / 2U,
+                    halfShape1, halfStride1, dst1);
+                session.batchSize = UINT32_MAX;
+                session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+                const pto::comm::AsyncEvent firstEvent =
+                    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst0, src0, session, kTargetPeer);
+                session.submitMode = pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
+                event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst1, src1, session, kTargetPeer);
+                if (!firstEvent.valid() || !firstEvent.Wait(session) || !firstEvent.Test(session)) {
+                    status[0] = 0U;
+                    return;
+                }
+            } else {
+                session.batchSize = UINT32_MAX;
+                session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+                const pto::comm::AsyncEvent deferredEvent =
+                    pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+                if (!deferredEvent.valid()) {
+                    status[0] = 0U;
+                    return;
+                }
+                if (scenario == 3U) {
+                    session.submitMode = pto::comm::AsyncSubmitMode::IMMEDIATE;
+                    event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+                } else if (scenario == 4U) {
+                    BatchShape getShape;
+                    BatchStride getStride;
+                    BatchGlobal getSrc;
+                    BatchGlobal getDst;
+                    MakeUrmaPolicyGlobal(remoteSend + offset, kPolicyElementsPerOperation, getShape, getStride, getSrc);
+                    MakeUrmaPolicyGlobal(recv + offset, kPolicyElementsPerOperation, getShape, getStride, getDst);
+                    event = pto::comm::TGET_ASYNC<pto::comm::DmaEngine::URMA>(getDst, getSrc, session, kTargetPeer);
+                } else if (scenario == 5U) {
+                    event = pto::comm::TPUT_ASYNC_NOTIFY<pto::comm::DmaEngine::URMA>(
+                        dst, src, remoteImplicitSignal, 1, pto::comm::NotifyOp::Set, session, kTargetPeer);
+                } else {
+                    session.submitMode = pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
+                    event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+                    if (!event.valid() || !event.Wait(session)) {
+                        status[0] = 0U;
+                        return;
+                    }
+                    event = pto::comm::TPUT_ASYNC_NOTIFY<pto::comm::DmaEngine::URMA>(
+                        dst, src, remoteVisibilitySignal, 2, pto::comm::NotifyOp::Set, session, kTargetPeer);
+                }
+            }
+            if (!event.valid() || !event.Wait(session)) {
+                status[0] = 0U;
+                return;
+            }
+        }
+        dcci(static_cast<__gm__ void*>(0), cache_line_t::ENTIRE_DATA_CACHE);
+        dsb(DSB_DDR);
+        const uint32_t getOffset = 4U * kPolicyElementsPerOperation;
+        for (uint32_t index = 0U; index < kPolicyElementsPerOperation; ++index) {
+            const uint32_t expected = 0x2000U + kTargetPeer * 0x1000U + getOffset + index;
+            if (ld_dev(reinterpret_cast<__gm__ uint32_t*>(recv + getOffset + index), 0) != expected) {
+                status[0] = 0U;
+                return;
+            }
+        }
+        status[0] = 3U;
+        return;
+    }
+
+    if (myPeer != kTargetPeer) {
+        return;
+    }
+    pto::comm::Signal implicitSignal(reinterpret_cast<__gm__ int32_t*>(localBuf));
+    pto::comm::Signal visibilitySignal(reinterpret_cast<__gm__ int32_t*>(localBuf) + 1U);
+    bool implicitSignaled = false;
+    for (uint32_t poll = 0U; poll < kPolicySignalPollLimit; ++poll) {
+        if (pto::comm::TTEST(implicitSignal, 1, pto::comm::WaitCmp::GE)) {
+            implicitSignaled = true;
+            break;
+        }
+    }
+    bool visibilitySignaled = false;
+    for (uint32_t poll = 0U; poll < kPolicySignalPollLimit; ++poll) {
+        if (pto::comm::TTEST(visibilitySignal, 2, pto::comm::WaitCmp::GE)) {
+            visibilitySignaled = true;
+            break;
+        }
+    }
+    bool signaled = implicitSignaled && visibilitySignaled;
+    if (signaled) {
+        dcci(static_cast<__gm__ void*>(0), cache_line_t::ENTIRE_DATA_CACHE);
+        dsb(DSB_DDR);
+        const uint32_t rootPeer = static_cast<uint32_t>(rootRank - firstRankId);
+        for (uint32_t index = 0U; index < kPolicyTotalElements; ++index) {
+            const uint32_t expected = 0x2000U + rootPeer * 0x1000U + index;
+            if (ld_dev(reinterpret_cast<__gm__ uint32_t*>(recv + index), 0) != expected) {
+                signaled = false;
+                break;
+            }
+        }
+    }
+    status[0] = signaled ? 4U : 0U;
+#else
+    (void)localBuf;
+    (void)myRank;
+    (void)firstRankId;
+    (void)rootRank;
+    (void)urmaWorkspace;
+    status[0] = 0U;
+#endif
+}
+
+__global__ AICORE void TPutAsyncUrmaLargeMultiWqeKernel(
+    __gm__ uint8_t* localBuf, int myRank, int firstRankId, int rootRank, __gm__ uint8_t* urmaWorkspace,
+    __gm__ uint32_t* status)
+{
+#ifdef PTO_URMA_SUPPORTED
+    constexpr uint32_t kTargetPeer = 1U;
+    if (myRank != rootRank) {
+        status[0] = static_cast<uint32_t>(myRank - firstRankId) == kTargetPeer ? 4U : 0U;
+        return;
+    }
+
+    pto::comm::AsyncSession session;
+    if (!pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(urmaWorkspace, session) ||
+        session.qpCount < kSelectedJettiesPerCore) {
+        status[0] = 0U;
+        return;
+    }
+    __gm__ int32_t* send = reinterpret_cast<__gm__ int32_t*>(localBuf + kDataOffset);
+    const uint64_t peerBase = pto::comm::urma::UrmaPeerMrBaseAddr(urmaWorkspace, kTargetPeer);
+    __gm__ int32_t* remoteRecv = reinterpret_cast<__gm__ int32_t*>(peerBase + kDataOffset + kLargeTransferBytes);
+    BatchShape shape(1, 1, 1, 1, kLargeTransferElements);
+    BatchStride stride(
+        kLargeTransferElements, kLargeTransferElements, kLargeTransferElements, kLargeTransferElements, 1);
+    BatchGlobal src(send, shape, stride);
+    BatchGlobal dst(remoteRecv, shape, stride);
+
+    uint32_t initialHead[kSelectedJettiesPerCore]{};
+    for (uint32_t slot = 0U; slot < kSelectedJettiesPerCore; ++slot) {
+        __gm__ pto::comm::urma::UrmaWQCtx* wq =
+            pto::comm::urma::detail::GetWqContextAt(session, kTargetPeer, session.qpIdxBase + slot);
+        initialHead[slot] = ld_dev(reinterpret_cast<__gm__ uint32_t*>(wq->headAddr), 0);
+    }
+
+    session.batchSize = UINT32_MAX;
+    session.submitMode = pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
+    const pto::comm::AsyncEvent event =
+        pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(dst, src, session, kTargetPeer);
+    if (!event.valid() || event.urmaJettyCount != session.qpCount || !event.Wait(session)) {
+        status[0] = 0U;
+        return;
+    }
+    for (uint32_t slot = 0U; slot < kSelectedJettiesPerCore; ++slot) {
+        __gm__ pto::comm::urma::UrmaWQCtx* wq =
+            pto::comm::urma::detail::GetWqContextAt(session, kTargetPeer, session.qpIdxBase + slot);
+        if (ld_dev(reinterpret_cast<__gm__ uint32_t*>(wq->headAddr), 0) != initialHead[slot] + 1U ||
+            event.urmaTargetBbPerJetty[slot] != initialHead[slot] + 1U) {
+            status[0] = 0U;
+            return;
+        }
+    }
+    status[0] = 3U;
+#else
+    (void)localBuf;
+    (void)myRank;
+    (void)firstRankId;
+    (void)rootRank;
+    (void)urmaWorkspace;
+    status[0] = 0U;
+#endif
+}
+
 bool RunTPutAsyncUrmaBatchDocExampleRank(
     int rankId, int nRanks, int nDevices, int firstDeviceId, int firstRankId, int rootRank)
 {
@@ -343,6 +596,140 @@ bool RunTPutAsyncUrmaBatchDocExampleRank(
     }
     if (!isOk) {
         std::cerr << "[FAIL] URMA documentation kernel rank=" << rankId << " status=" << statusValue << std::endl;
+    }
+
+    (void)aclrtFree(deviceStatus);
+    ctx.Cleanup();
+    return isOk;
+}
+
+bool RunTPutAsyncUrmaBatchPolicySuiteRank(
+    int rankId, int nRanks, int nDevices, int firstDeviceId, int firstRankId, int rootRank)
+{
+    const size_t dataBytes = static_cast<size_t>(kPolicyTotalElements) * sizeof(int32_t);
+    const size_t commBytesNeeded = kDataOffset + 2U * dataBytes;
+    UrmaTestContext ctx;
+    const bool contextReady = ctx.Setup(
+        rankId, nRanks, nDevices, firstDeviceId, rootRank, commBytesNeeded, UrmaLayout::PER_PEER, 1U,
+        kSelectedJettiesPerCore, kRequestedSqDepth);
+    if (!AllRanksReady(contextReady, rankId, nRanks)) {
+        ctx.Cleanup();
+        return false;
+    }
+
+    std::vector<int32_t> source(kPolicyTotalElements);
+    std::vector<int32_t> recv(kPolicyTotalElements, kPoison);
+    const uint32_t localPeer = static_cast<uint32_t>(rankId - firstRankId);
+    for (uint32_t index = 0U; index < kPolicyTotalElements; ++index) {
+        source[index] = static_cast<int32_t>(0x2000U + localPeer * 0x1000U + index);
+    }
+    uint8_t* localBuf = reinterpret_cast<uint8_t*>(ctx.devBuf);
+    int32_t* deviceSend = reinterpret_cast<int32_t*>(localBuf + kDataOffset);
+    int32_t* deviceRecv = deviceSend + kPolicyTotalElements;
+    uint32_t* deviceStatus = nullptr;
+    bool setupOk = aclrtMalloc(reinterpret_cast<void**>(&deviceStatus), sizeof(uint32_t), ACL_MEM_MALLOC_HUGE_FIRST) ==
+                   ACL_SUCCESS;
+    if (setupOk) {
+        setupOk =
+            aclrtMemcpy(deviceSend, dataBytes, source.data(), dataBytes, ACL_MEMCPY_HOST_TO_DEVICE) == ACL_SUCCESS &&
+            aclrtMemcpy(deviceRecv, dataBytes, recv.data(), dataBytes, ACL_MEMCPY_HOST_TO_DEVICE) == ACL_SUCCESS &&
+            aclrtMemset(localBuf, 2U * sizeof(int32_t), 0, 2U * sizeof(int32_t)) == ACL_SUCCESS &&
+            aclrtMemset(deviceStatus, sizeof(uint32_t), 0, sizeof(uint32_t)) == ACL_SUCCESS;
+    }
+    if (!AllRanksReady(setupOk, rankId, nRanks)) {
+        if (deviceStatus != nullptr) {
+            (void)aclrtFree(deviceStatus);
+        }
+        ctx.Cleanup();
+        return false;
+    }
+
+    CommMpiBarrier();
+    TPutAsyncUrmaBatchPolicyKernel<<<1, nullptr, ctx.stream>>>(
+        localBuf, rankId, firstRankId, rootRank, reinterpret_cast<uint8_t*>(ctx.urmaMgr.GetWorkspaceAddr()),
+        deviceStatus);
+    const int syncRet = aclrtSynchronizeStream(ctx.stream);
+    CommMpiBarrier();
+
+    uint32_t statusValue = 0U;
+    (void)aclrtMemcpy(&statusValue, sizeof(statusValue), deviceStatus, sizeof(statusValue), ACL_MEMCPY_DEVICE_TO_HOST);
+    bool isOk = syncRet == ACL_SUCCESS;
+    if (rankId == rootRank) {
+        isOk = isOk && statusValue == 3U;
+    } else {
+        (void)aclrtMemcpy(recv.data(), dataBytes, deviceRecv, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+        const uint32_t rootPeer = static_cast<uint32_t>(rootRank - firstRankId);
+        for (uint32_t index = 0U; isOk && index < kPolicyTotalElements; ++index) {
+            isOk = recv[index] == static_cast<int32_t>(0x2000U + rootPeer * 0x1000U + index);
+        }
+        isOk = isOk && statusValue == 4U;
+    }
+    if (!isOk) {
+        std::cerr << "[FAIL] URMA session batch policy rank=" << rankId << " status=" << statusValue << std::endl;
+    }
+
+    (void)aclrtFree(deviceStatus);
+    ctx.Cleanup();
+    return isOk;
+}
+
+bool RunTPutAsyncUrmaLargeMultiWqeRank(
+    int rankId, int nRanks, int nDevices, int firstDeviceId, int firstRankId, int rootRank)
+{
+    const size_t dataBytes = static_cast<size_t>(kLargeTransferBytes);
+    const size_t commBytesNeeded = kDataOffset + 2U * dataBytes;
+    UrmaTestContext ctx;
+    const bool contextReady = ctx.Setup(
+        rankId, nRanks, nDevices, firstDeviceId, rootRank, commBytesNeeded, UrmaLayout::PER_PEER, 1U,
+        kSelectedJettiesPerCore, kRequestedSqDepth);
+    if (!AllRanksReady(contextReady, rankId, nRanks)) {
+        ctx.Cleanup();
+        return false;
+    }
+
+    uint8_t* localBuf = reinterpret_cast<uint8_t*>(ctx.devBuf);
+    uint8_t* deviceSend = localBuf + kDataOffset;
+    uint8_t* deviceRecv = deviceSend + dataBytes;
+    uint32_t* deviceStatus = nullptr;
+    bool setupOk = aclrtMalloc(reinterpret_cast<void**>(&deviceStatus), sizeof(uint32_t), ACL_MEM_MALLOC_HUGE_FIRST) ==
+                   ACL_SUCCESS;
+    if (setupOk) {
+        setupOk = aclrtMemset(deviceSend, dataBytes, 0x5A, dataBytes) == ACL_SUCCESS &&
+                  aclrtMemset(deviceRecv, dataBytes, 0, dataBytes) == ACL_SUCCESS &&
+                  aclrtMemset(deviceStatus, sizeof(uint32_t), 0, sizeof(uint32_t)) == ACL_SUCCESS;
+    }
+    if (!AllRanksReady(setupOk, rankId, nRanks)) {
+        if (deviceStatus != nullptr) {
+            (void)aclrtFree(deviceStatus);
+        }
+        ctx.Cleanup();
+        return false;
+    }
+
+    CommMpiBarrier();
+    TPutAsyncUrmaLargeMultiWqeKernel<<<1, nullptr, ctx.stream>>>(
+        localBuf, rankId, firstRankId, rootRank, reinterpret_cast<uint8_t*>(ctx.urmaMgr.GetWorkspaceAddr()),
+        deviceStatus);
+    const int syncRet = aclrtSynchronizeStream(ctx.stream);
+    CommMpiBarrier();
+
+    uint32_t statusValue = 0U;
+    (void)aclrtMemcpy(&statusValue, sizeof(statusValue), deviceStatus, sizeof(statusValue), ACL_MEMCPY_DEVICE_TO_HOST);
+    bool isOk = syncRet == ACL_SUCCESS && statusValue == (rankId == rootRank ? 3U : 4U);
+    if (rankId != rootRank) {
+        constexpr size_t kSampleCount = 3U;
+        const size_t offsets[kSampleCount] = {
+            0U, static_cast<size_t>(pto::comm::urma::kUrmaMaxWqeTransferBytes) - sizeof(uint32_t),
+            static_cast<size_t>(pto::comm::urma::kUrmaMaxWqeTransferBytes)};
+        for (size_t sample = 0U; isOk && sample < kSampleCount; ++sample) {
+            uint32_t value = 0U;
+            (void)aclrtMemcpy(
+                &value, sizeof(value), deviceRecv + offsets[sample], sizeof(value), ACL_MEMCPY_DEVICE_TO_HOST);
+            isOk = value == 0x5A5A5A5AU;
+        }
+    }
+    if (!isOk) {
+        std::cerr << "[FAIL] URMA large multi-WQE batch rank=" << rankId << " status=" << statusValue << std::endl;
     }
 
     (void)aclrtFree(deviceStatus);
@@ -504,6 +891,16 @@ bool RunTPutAsyncUrmaBatchBasic(int nRanks, int nDevices, int firstRankId, int f
 bool RunTPutAsyncUrmaBatchDocExample(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
 {
     return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaBatchDocExampleRank);
+}
+
+bool RunTPutAsyncUrmaBatchPolicySuite(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+{
+    return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaBatchPolicySuiteRank);
+}
+
+bool RunTPutAsyncUrmaLargeMultiWqe(int nRanks, int nDevices, int firstRankId, int firstDeviceId)
+{
+    return RunUrmaTestMpiLaunch(nRanks, nDevices, firstRankId, firstDeviceId, RunTPutAsyncUrmaLargeMultiWqeRank);
 }
 
 bool RunTPutAsyncUrmaBatchMultiJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId)

@@ -45,6 +45,22 @@ TEST(TPutAsyncUrmaBatch, SharedPoolRoundRobinAcrossTwoJetties)
     ASSERT_TRUE(RunTPutAsyncUrmaBatchMultiJetty(2, 2, 0, 0));
 }
 
+TEST(TPutAsyncUrmaBatch, SessionPolicyAndImplicitFlushBoundaries)
+{
+    if (CommMpiSize() != 2) {
+        GTEST_SKIP() << "Requires exactly 2 MPI ranks";
+    }
+    ASSERT_TRUE(RunTPutAsyncUrmaBatchPolicySuite(2, 2, 0, 0));
+}
+
+TEST(TPutAsyncUrmaBatch, SinglePutSplitsAcrossTwoJetties)
+{
+    if (CommMpiSize() != 2) {
+        GTEST_SKIP() << "Requires exactly 2 MPI ranks";
+    }
+    ASSERT_TRUE(RunTPutAsyncUrmaLargeMultiWqe(2, 2, 0, 0));
+}
+
 TEST(TPutAsyncUrmaBatch, PerPeer65UniqueBatchesWqWrapAndConsume)
 {
     if (CommMpiSize() != 2) {

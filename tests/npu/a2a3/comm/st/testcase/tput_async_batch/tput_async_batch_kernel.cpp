@@ -322,6 +322,13 @@ enum class SdmaBatchP0Mode : uint32_t {
     FULL_SINGLE_QUEUE = 1U,
     CAPACITY_MODEL = 2U,
     PRIOR_FOUR_QUEUE_POST = 3U,
+    BATCH_SIZE_ZERO = 4U,
+    BATCH_SIZE_ONE = 5U,
+    INTERMEDIATE_EVENT = 6U,
+    DEFER_THEN_TGET = 7U,
+    DEFER_THEN_NOTIFY = 8U,
+    DEFER_THEN_PREFETCH = 9U,
+    WAIT_THEN_NOTIFY_VISIBILITY = 10U,
 };
 
 constexpr uint32_t kSmallOperationElements = 16U;
@@ -330,6 +337,8 @@ constexpr uint32_t kFullQueueDataSqes = 2047U;
 constexpr uint32_t kFullQueueElements = kFullQueueDataSqes * kSmallOperationElements;
 constexpr uint32_t kPriorPostElements = 4U * kSmallOperationElements;
 constexpr uint32_t kPriorAndBatchElements = kPriorPostElements + kSmallOperationElements;
+constexpr uint32_t kSessionPolicyOperationCount = 4U;
+constexpr uint32_t kSessionPolicyElements = kSessionPolicyOperationCount * kSmallOperationElements;
 
 AICORE inline bool BuildSdmaP0Session(
     ScratchTile& scratchTile, __gm__ uint8_t* workspace, pto::comm::AsyncSession& session, uint32_t queueNum,
@@ -492,6 +501,121 @@ AICORE inline bool RunSdmaPriorFourQueuePost(
            batchEvent.Wait(session);
 }
 
+AICORE inline bool RunSdmaSessionPolicyCase(
+    SdmaBatchP0Mode mode, __gm__ int32_t* send, __gm__ int32_t* localRecv, __gm__ int32_t* remoteRecv,
+    __gm__ int32_t* signal, __gm__ CommDeviceContext* hcclCtx, __gm__ uint8_t* workspace, ScratchTile& scratchTile)
+{
+    pto::comm::AsyncSession session;
+    const pto::comm::sdma::SdmaBaseConfig config{
+        static_cast<uint64_t>(kSmallOperationElements) * sizeof(int32_t), 0U, 2U};
+    if (!pto::comm::BuildAsyncSession(scratchTile, workspace, session, 0U, config, 0U)) {
+        return false;
+    }
+    session.batchSize = mode == SdmaBatchP0Mode::BATCH_SIZE_ZERO ? 0U :
+                        mode == SdmaBatchP0Mode::BATCH_SIZE_ONE  ? 1U :
+                                                                   UINT32_MAX;
+
+    pto::comm::AsyncEvent firstEvent;
+    pto::comm::AsyncEvent lastEvent;
+    for (uint32_t operation = 0U; operation < kSessionPolicyOperationCount; ++operation) {
+        const uint32_t offset = operation * kSmallOperationElements;
+        BatchShape shape;
+        BatchStride stride;
+        BatchGlobal src;
+        BatchGlobal dst;
+        MakeBatchGlobal(send + offset, kSmallOperationElements, shape, stride, src);
+        MakeBatchGlobal(remoteRecv + offset, kSmallOperationElements, shape, stride, dst);
+        if (mode == SdmaBatchP0Mode::BATCH_SIZE_ZERO) {
+            session.submitMode = pto::comm::AsyncSubmitMode::IMMEDIATE;
+        } else if (
+            mode == SdmaBatchP0Mode::INTERMEDIATE_EVENT || mode == SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY) {
+            session.submitMode = operation + 1U == kSessionPolicyOperationCount ?
+                                     pto::comm::AsyncSubmitMode::DEFER_AND_SUBMIT :
+                                     pto::comm::AsyncSubmitMode::DEFER;
+        } else {
+            session.submitMode = pto::comm::AsyncSubmitMode::DEFER;
+        }
+        lastEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dst, src, session);
+        if (operation == 0U) {
+            firstEvent = lastEvent;
+        }
+        if (!lastEvent.valid()) {
+            return false;
+        }
+        if (mode == SdmaBatchP0Mode::BATCH_SIZE_ONE && session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+            return false;
+        }
+    }
+
+    if (mode == SdmaBatchP0Mode::BATCH_SIZE_ZERO || mode == SdmaBatchP0Mode::BATCH_SIZE_ONE) {
+        return lastEvent.Wait(session);
+    }
+    if (mode == SdmaBatchP0Mode::INTERMEDIATE_EVENT) {
+        return firstEvent.Wait(session) && firstEvent.Test(session) && lastEvent.Wait(session);
+    }
+    if (mode == SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY) {
+        if (!lastEvent.Wait(session)) {
+            return false;
+        }
+        BatchShape shape;
+        BatchStride stride;
+        BatchGlobal src;
+        BatchGlobal dst;
+        MakeBatchGlobal(send, kSmallOperationElements, shape, stride, src);
+        MakeBatchGlobal(remoteRecv, kSmallOperationElements, shape, stride, dst);
+        pto::comm::Signal remoteSignal(CommRemotePtr(hcclCtx, signal, 1));
+        const pto::comm::AsyncEvent notifyEvent =
+            pto::comm::TPUT_ASYNC_NOTIFY(dst, src, remoteSignal, 1, pto::comm::NotifyOp::Set, session, 1U);
+        return notifyEvent.valid() && notifyEvent.Wait(session);
+    }
+    if (mode == SdmaBatchP0Mode::DEFER_THEN_TGET) {
+        BatchShape shape;
+        BatchStride stride;
+        BatchGlobal remoteSrc;
+        BatchGlobal localDst;
+        MakeBatchGlobal(CommRemotePtr(hcclCtx, send, 1), kSmallOperationElements, shape, stride, remoteSrc);
+        MakeBatchGlobal(localRecv, kSmallOperationElements, shape, stride, localDst);
+        const pto::comm::AsyncEvent getEvent =
+            pto::comm::TGET_ASYNC<pto::comm::DmaEngine::SDMA>(localDst, remoteSrc, session);
+        if (!getEvent.valid() || !getEvent.Wait(session)) {
+            return false;
+        }
+        dcci(static_cast<__gm__ void*>(0), cache_line_t::ENTIRE_DATA_CACHE);
+        dsb(DSB_DDR);
+        for (uint32_t index = 0U; index < kSmallOperationElements; ++index) {
+            const uint32_t expected = 0x20000U + index;
+            if (ld_dev(reinterpret_cast<__gm__ uint32_t*>(localRecv + index), 0) != expected) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (mode == SdmaBatchP0Mode::DEFER_THEN_NOTIFY) {
+        BatchShape shape;
+        BatchStride stride;
+        BatchGlobal src;
+        BatchGlobal dst;
+        MakeBatchGlobal(send, kSmallOperationElements, shape, stride, src);
+        MakeBatchGlobal(remoteRecv, kSmallOperationElements, shape, stride, dst);
+        pto::comm::Signal remoteSignal(CommRemotePtr(hcclCtx, signal, 1));
+        const pto::comm::AsyncEvent notifyEvent =
+            pto::comm::TPUT_ASYNC_NOTIFY(dst, src, remoteSignal, 1, pto::comm::NotifyOp::Set, session, 1U);
+        return notifyEvent.valid() && notifyEvent.Wait(session);
+    }
+    if (mode == SdmaBatchP0Mode::DEFER_THEN_PREFETCH) {
+        BatchShape shape;
+        BatchStride stride;
+        BatchGlobal src;
+        BatchGlobal ignoredDst;
+        MakeBatchGlobal(send, kSessionPolicyElements, shape, stride, src);
+        MakeBatchGlobal(remoteRecv, kSessionPolicyElements, shape, stride, ignoredDst);
+        pto::PrefetchAsyncContext prefetchCtx(workspace, &session);
+        const pto::comm::AsyncEvent prefetchEvent = pto::TPREFETCH_ASYNC(src, prefetchCtx);
+        return prefetchEvent.valid() && prefetchEvent.Wait(session);
+    }
+    return false;
+}
+
 __global__ AICORE void TPutAsyncBatchP0Kernel(
     __gm__ int32_t* send, __gm__ int32_t* recv, __gm__ int32_t* signal, __gm__ uint32_t* status,
     __gm__ CommDeviceContext* hcclCtx, __gm__ uint8_t* sdmaWorkspace, uint32_t modeValue)
@@ -513,11 +637,14 @@ __global__ AICORE void TPutAsyncBatchP0Kernel(
             ok = RunSdmaCapacityModel(sdmaWorkspace, scratchTile);
         } else if (mode == SdmaBatchP0Mode::PRIOR_FOUR_QUEUE_POST) {
             ok = RunSdmaPriorFourQueuePost(send, remoteRecv, sdmaWorkspace, scratchTile);
+        } else {
+            ok = RunSdmaSessionPolicyCase(mode, send, recv, remoteRecv, signal, hcclCtx, sdmaWorkspace, scratchTile);
         }
         if (mode != SdmaBatchP0Mode::QUEUE_BOUNDARIES) {
             status[0] = ok ? 3U : 0U;
         }
-        if (mode != SdmaBatchP0Mode::CAPACITY_MODEL) {
+        if (mode != SdmaBatchP0Mode::CAPACITY_MODEL && mode != SdmaBatchP0Mode::DEFER_THEN_NOTIFY &&
+            mode != SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY) {
             pto::comm::Signal remoteSignal(CommRemotePtr(hcclCtx, signal, 1));
             pto::comm::TNOTIFY(remoteSignal, 2, pto::comm::NotifyOp::Set);
         }
@@ -530,8 +657,11 @@ __global__ AICORE void TPutAsyncBatchP0Kernel(
     }
     pto::comm::Signal localSignal(signal);
     bool signaled = false;
+    const bool waitsAsyncNotify =
+        mode == SdmaBatchP0Mode::DEFER_THEN_NOTIFY || mode == SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY;
+    const int32_t expectedSignal = waitsAsyncNotify ? 1 : 2;
     for (uint32_t poll = 0U; poll < kSignalPollLimit; ++poll) {
-        if (pto::comm::TTEST(localSignal, 2, pto::comm::WaitCmp::GE)) {
+        if (pto::comm::TTEST(localSignal, expectedSignal, pto::comm::WaitCmp::GE)) {
             signaled = true;
             break;
         }
@@ -539,6 +669,15 @@ __global__ AICORE void TPutAsyncBatchP0Kernel(
     if (signaled) {
         dcci(static_cast<__gm__ void*>(0), cache_line_t::ENTIRE_DATA_CACHE);
         dsb(DSB_DDR);
+    }
+    if (signaled && mode == SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY) {
+        for (uint32_t index = 0U; index < kSessionPolicyElements; ++index) {
+            const uint32_t expected = 0x10000U + index;
+            if (ld_dev(reinterpret_cast<__gm__ uint32_t*>(recv + index), 0) != expected) {
+                signaled = false;
+                break;
+            }
+        }
     }
     status[0] = signaled ? 4U : 0U;
 }
@@ -553,6 +692,9 @@ size_t SdmaBatchP0ElementCount(SdmaBatchP0Mode mode)
     }
     if (mode == SdmaBatchP0Mode::PRIOR_FOUR_QUEUE_POST) {
         return kPriorAndBatchElements;
+    }
+    if (mode >= SdmaBatchP0Mode::BATCH_SIZE_ZERO) {
+        return kSessionPolicyElements;
     }
     return 1U;
 }
@@ -860,7 +1002,7 @@ bool RunTPutAsyncBatchP0Rank(
     std::vector<int32_t> source(elementCount);
     std::vector<int32_t> recv(elementCount, kPoison);
     for (size_t index = 0U; index < elementCount; ++index) {
-        source[index] = static_cast<int32_t>(0x10000U + index);
+        source[index] = static_cast<int32_t>(0x10000U + static_cast<uint32_t>(rankId) * 0x10000U + index);
     }
 
     size_t winOffset = 0U;
@@ -915,9 +1057,10 @@ bool RunTPutAsyncBatchP0Rank(
             ctx.aclStatus |= aclrtMemcpy(recv.data(), dataBytes, deviceRecv, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
             bool dataOk = true;
             for (size_t index = 0U; index < elementCount; ++index) {
-                if (recv[index] != source[index]) {
+                const int32_t expected = static_cast<int32_t>(0x10000U + index);
+                if (recv[index] != expected) {
                     std::cerr << "[FAIL] SDMA batch data rank=" << rankId << " mode=" << static_cast<uint32_t>(mode)
-                              << " index=" << index << " expected=" << source[index] << " actual=" << recv[index]
+                              << " index=" << index << " expected=" << expected << " actual=" << recv[index]
                               << std::endl;
                     dataOk = false;
                     break;
@@ -987,6 +1130,34 @@ bool RunTPutAsyncBatchFunctionalSuiteRank(
         "prior-four-queue-post",
         RunTPutAsyncBatchP0Rank(
             rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::PRIOR_FOUR_QUEUE_POST, &ctx));
+    runCase(
+        "batch-size-zero",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::BATCH_SIZE_ZERO, &ctx));
+    runCase(
+        "batch-size-one",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::BATCH_SIZE_ONE, &ctx));
+    runCase(
+        "intermediate-event",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::INTERMEDIATE_EVENT, &ctx));
+    runCase(
+        "defer-then-tget",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::DEFER_THEN_TGET, &ctx));
+    runCase(
+        "defer-then-notify",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::DEFER_THEN_NOTIFY, &ctx));
+    runCase(
+        "defer-then-prefetch",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::DEFER_THEN_PREFETCH, &ctx));
+    runCase(
+        "wait-then-notify-visibility",
+        RunTPutAsyncBatchP0Rank(
+            rankId, nRanks, nDevices, firstDeviceId, rootInfo, SdmaBatchP0Mode::WAIT_THEN_NOTIFY_VISIBILITY, &ctx));
 
     const bool contextOk = ctx.aclStatus == ACL_SUCCESS;
     return ctx.Finalize() && allOk && contextOk;

@@ -13,6 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 bool RunTPutAsyncUrmaBatchBasic(int nRanks, int nDevices, int firstRankId, int firstDeviceId, bool sharedPool);
 bool RunTPutAsyncUrmaBatchDocExample(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
+bool RunTPutAsyncUrmaBatchPolicySuite(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
+bool RunTPutAsyncUrmaLargeMultiWqe(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
 bool RunTPutAsyncUrmaBatchConsume(
     int nRanks, int nDevices, int firstRankId, int firstDeviceId, bool sharedPool, bool oldNotifyPrefix = false);
 bool RunTPutAsyncUrmaBatchMultiJetty(int nRanks, int nDevices, int firstRankId, int firstDeviceId);
