@@ -399,6 +399,11 @@ __tf__ PTO_INTERNAL void TInsertZNImpl(
 template <typename T, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TInsertVecToMatImpl(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
+    static_assert(
+        SrcTileData::isRowMajor || (!SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::RowMajor),
+        "TINSERT Vec->Mat: unsupported source layout. Supported: ND, NZ, ZN. A DN source "
+        "(col-major/NoneBox) has no insert path — transpose-view it into ND first.");
+
     uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
     uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
 

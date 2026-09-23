@@ -44,16 +44,30 @@ __global__ AICORE void runTExtractNd2xNz(
         TileType::Vec, T, nzRows1, W1Cols, BLayout::ColMajor, V1Rows, V1Cols, SLayout::RowMajor, 512, PadValue::Null,
         CM>;
 
+    using Dst0ZeroTile = Tile<
+        TileType::Vec, uint8_t, nzRows0, W0Cols* static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows0,
+        W0Cols* static_cast<int>(sizeof(T))>;
+    using Dst1ZeroTile = Tile<
+        TileType::Vec, uint8_t, nzRows1, W1Cols* static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows1,
+        W1Cols* static_cast<int>(sizeof(T))>;
+
     SrcTile srcTile(SrcRows, SrcCols);
     Dst0Tile dst0Tile;
     Dst1Tile dst1Tile;
+    Dst0ZeroTile dst0Zero;
+    Dst1ZeroTile dst1Zero;
     TASSIGN(srcTile, 0x0);
     TASSIGN(dst0Tile, 0x20000);
     TASSIGN(dst1Tile, 0x30000);
+    TASSIGN(dst0Zero, 0x20000);
+    TASSIGN(dst1Zero, 0x30000);
 
     SrcGlobal srcGlobal(src);
     Dst0Global dst0Global(out0);
     Dst1Global dst1Global(out1);
+
+    TEXPANDS(dst0Zero, static_cast<uint8_t>(0));
+    TEXPANDS(dst1Zero, static_cast<uint8_t>(0));
 
     TLOAD(srcTile, srcGlobal);
 
