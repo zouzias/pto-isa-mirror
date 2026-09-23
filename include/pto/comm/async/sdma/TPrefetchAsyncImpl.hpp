@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_ASYNC_SDMA_TPREFETCH_ASYNC_IMPL_HPP
 
 // TPREFETCH_ASYNC - L2 cache prefetch via SDMA CMO (opcode = 6).
+#include "pto/comm/async/sdma/sdma_async_batch.hpp"
 //
 // This instruction is logically a *memory access* instruction (it stages data
 // from GM/HBM into the on-chip L2 cache so that subsequent TLOADs hit warm
@@ -183,7 +184,15 @@ PTO_INTERNAL comm::AsyncEvent TPREFETCH_ASYNC_IMPL(GlobalData& srcGlobalData, Pr
     if (session.engine != comm::DmaEngine::SDMA) {
         return comm::AsyncEvent(0, comm::DmaEngine::SDMA);
     }
-    return detail::TPrefetchAsyncSdmaImpl(srcGlobalData, session);
+    comm::AsyncEvent batchEvent;
+    if (session.sdmaRuntimeCtx.batchStagedDataSqeCount != 0U) {
+        batchEvent = comm::sdma::detail::SdmaFlushPendingAsyncPut(session);
+        if (!batchEvent.valid()) {
+            return {};
+        }
+    }
+    const comm::AsyncEvent event = detail::TPrefetchAsyncSdmaImpl(srcGlobalData, session);
+    return !event.valid() && comm::detail::IsEmptyAsyncTransfer(srcGlobalData) ? batchEvent : event;
 }
 
 } // namespace pto

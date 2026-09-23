@@ -112,6 +112,16 @@ same signal.
 `DmaEngine::RDMA` does not support `NotifyOp::AtomicAdd`. The payload-before-signal order above applies only within
 one invocation and does not define ordering between different sessions or independent execution flows.
 
+If the same Session has a pending deferred PUT batch for the same engine, `TPUT_ASYNC_NOTIFY` submits that batch
+before publishing its own payload and signal. For URMA, the call's `peer` must match the pending logical batch's
+peer; changing peer while that batch is active is a contract violation. The returned Event retains its standard
+scope and covers this invocation only; wait on the last deferred Event separately to check completion of the
+submitted batch.
+
+This implicit submission establishes local publication order only. In particular, an A5 URMA signal posted on one
+Jetty is not a remote completion fence for deferred writes posted on other Jetties. Wait for the batch Event or use
+an explicit ordering protocol before treating the signal as proof that all deferred payloads are remotely visible.
+
 ## AsyncSession Construction
 
 Use `BuildAsyncSession` from `include/pto/comm/async_common/async_event_impl.hpp`. It provides an engine-specific
