@@ -43,8 +43,8 @@ struct PtoBinaryMetaAscFeature {
 };
 // CCE aicore may not define __NPU_DEVICE__; still emit like AscendC device path.
 inline __gm__ PtoOpSystemRunCfg g_opL2CacheHintCfg = {0};
-static const PtoBinaryMetaAscFeature __pto_asc_feature_l2cache__
-    __attribute__((used, section(".ascend.meta"))) = {4, 4, 3};
+// Identifier is not ABI (AscendC uses __asc_feature_l2cache__); runtime reads .ascend.meta TLV {4,4,3}.
+static const PtoBinaryMetaAscFeature pto_feature_l2cache __attribute__((used, section(".ascend.meta"))) = {4, 4, 3};
 #endif
 #elif defined(PTO_NPU_ARCH_A2A3)
 // CPU/costmodel/host: zero stub so references compile; Apply ignores offset.
