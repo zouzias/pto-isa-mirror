@@ -100,6 +100,7 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
     textract_acc2mat_layout
+    tload_large_stride
     tsubs
     tmaxs
     tci

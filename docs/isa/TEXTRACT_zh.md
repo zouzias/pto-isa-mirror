@@ -69,6 +69,11 @@ template <STPhase Phase, typename DstTileData, typename SrcTileData, typename Fp
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 
+template <typename Dst0TileData, typename Dst1TileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(Dst0TileData &dst0, Dst1TileData &dst1, SrcTileData &src,
+                              uint16_t indexRow0 = 0, uint16_t indexCol0 = 0,
+                              uint16_t indexRow1 = 0, uint16_t indexCol1 = 0, WaitEvents &... events);
+
 template <STPhase Phase, typename DstTileData, typename SrcTileData,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
@@ -161,6 +166,14 @@ ReLU 需选择显式指定 `ReluPreMode` 模板实参的重载。
 half/bfloat16 路径按每组最多 32 列执行 Fixpipe NZ→ND。组内目标行跨度为 32 个元素，
 各组起始偏移为 `group * DstTileData::Rows * 32` 个元素；末组只有 16 个有效列时仅写这 16 列。
 int32 路径通过 float 指令重载的 channel split 生成 8 列分组，不进行数值类型转换或浮点运算。
+
+![A5 Acc→Mat 的 NZ1024 分组与 int32 NZ512 channel split](../figures/isa/TEXTRACT_ACC_NZ_GROUPS.svg)
+
+上半图中，目标物理行数为 16，有效窗口为 `8 × 48`。第一个 32 列分组的元素偏移为 0，
+第二组的元素偏移为 `16 * 32 = 512`，且仅写入第二组的前 16 列。
+灰色列以及 8 个有效行之外的行保持原值。外层为 `STPhase::Final` 时，两条指令分别使用
+`Partial`、`Final`。下半图展示独立的 int32 channel split 路径：一个 16 列源分组映射为
+两个 8 列目标分组，保持各元素的位模式。
 
 调用方须满足以下存储要求：
 
@@ -323,6 +336,37 @@ A5 主机测试模拟底层搬运指令并执行真实 A5 后端分发入口及 
 - A5 ND fp4 路径以打包元素（每个 1 字节包含两个 fp4 值）计数；行步长、静态有效列字节数以及列偏移字节数须 32 字节对齐。
 - ND 路径：源/目标行步进须 32 字节对齐；`Dst` 行/列不得超过 `Src`。
 - A5 ND Vec→Vec 路径先检查 `indexRow + dst.GetValidRow() <= SrcTileData::Rows` 和 `indexCol + dst.GetValidCol() <= SrcTileData::Cols`；通过检查后，目标有效行数或列数为 0 时直接返回，不读取源或写入目标。对齐与非对齐列偏移均遵循此规则；这不扩展该路径的类型支持，仍不支持 int64。
+
+### ND → 2×NZ 提取路径 <a id="nd-to-two-nz"></a>
+
+双目标 `TEXTRACT` 重载从同一个 ND 源 Tile 中提取两个独立定位的窗口，分别写入两个 NZ 目标 Tile。
+
+![两个独立 ND 窗口分别映射到 NZ Tile](../figures/isa/TEXTRACT_ND2NZ_WINDOWS.svg)
+
+图中使用 A5 `half`，ND 源为 `8 × 64`，两个目标的有效窗口均为 `4 × 32`、物理行数均为 16。
+调用 `TEXTRACT(dst0, dst1, src, 0, 0, 4, 32)` 后，`dst0` 取源第 0–3 行、第 0–31 列，
+`dst1` 取源第 4–7 行、第 32–63 列。偏移用于选择源窗口，不表示目标内部的写入偏移。
+每个 NZ 目标排列两个 16 列的列块，每个列块写入 4 行。图中的位置只是一个例子，
+调用方分别指定两个窗口的起点和有效形状。
+
+其中 `ceil16(x)` 表示将 `x` 向上对齐到 16 的倍数。
+此 A5 路径的目标列块步长为 `P * 32` 字节：普通 NZ 使用 `P = ceil16(validRow)`，
+`CompactMode::RowPlusOne` 使用 `P = ceil16(validRow) + 1`。
+因此图中第二个列块分别从 512 字节或 544 字节处开始。`RowPlusOne` 多出的一行改变存储间距，
+不增加提取窗口的行数；目标存储须覆盖所选 compact 模式。与插入时的 burst 分组及对齐尾部搬运的区别，
+见 [TINSERT split 图](TINSERT_zh.md#nz-split-transfer)。
+
+- 源与两个目标均为 `TileType::Vec`，数据类型相同。源为 ND（`BLayout::RowMajor`、
+  `SLayout::NoneBox`），目标为 NZ（`BLayout::ColMajor`、`SLayout::RowMajor`）。
+- 各窗口须满足 `indexRow_k + dst_k.GetValidRow() <= SrcTileData::Rows`、
+  `indexCol_k + dst_k.GetValidCol() <= SrcTileData::Cols`。目标列数按 C0 对齐，源行步长按 32 字节对齐。
+  窗口边界使用 `PTO_ASSERT` 检查，仅在定义 `_DEBUG` 时生效；发布构建同样须满足这些约束。
+- A5 支持普通 NZ 和 `RowPlusOne`；A2A3 仅支持普通 NZ。图中的地址步长说明针对 A5。
+- A5 对列起点非 C0 对齐的窗口使用非对齐向量路径；A2A3 的源窗口起点若不满足 32 字节对齐，
+  则使用逐元素复制。`1 × 1` 窗口使用标量复制。
+- A5 支持 `half`、`bfloat16_t`、`float`、`int32_t`、`int8_t`、`hifloat8_t`、
+  `float8_e4m3_t`、`float8_e5m2_t`、`float8_e8m0_t`、`float4_e2m1x2_t`、`float4_e1m2x2_t`；
+  A2A3 支持 `half`、`bfloat16_t`、`float`、`int32_t`、`int8_t`。
 
 ## 示例
 

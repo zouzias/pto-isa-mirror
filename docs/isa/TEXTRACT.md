@@ -184,6 +184,15 @@ Each group's destination row stride is 32 elements; its starting offset is
 The int32 path uses the float instruction overload with channel splitting to produce 8-column groups;
 it performs no numerical cast or floating-point arithmetic.
 
+![A5 Acc-to-Mat NZ1024 groups and int32 NZ512 channel splitting](../figures/isa/TEXTRACT_ACC_NZ_GROUPS.svg)
+
+For the top example, the destination has 16 physical rows and an `8 × 48` valid window.
+Its first 32-column group starts at element offset 0; its second starts at `16 * 32 = 512`.
+Only the first 16 columns of the second group are written. The gray columns and rows beyond
+the eight valid rows retain their contents. With outer `STPhase::Final`, the two instructions
+use `Partial` then `Final`. The bottom example shows the separate int32 channel-split path:
+one 16-column source group maps to two 8-column destination groups with the bit patterns preserved.
+
 Callers must satisfy the following storage requirements:
 
 - The source uses the ordinary 16-column L0C layout with `SrcTileData::Rows` as its physical stride;
@@ -374,13 +383,31 @@ In addition to the `Mat/Acc -> ...` paths above, `TEXTRACT` supports a `TileType
 - ND path: source/destination row strides must be 32-byte aligned; `Dst` rows/cols must not exceed `Src`.
 - A5 ND Vec-to-Vec checks `indexRow + dst.GetValidRow() <= SrcTileData::Rows` and `indexCol + dst.GetValidCol() <= SrcTileData::Cols` first. After those checks, a zero destination valid row or column count returns without reading the source or writing the destination. This applies to aligned and unaligned column offsets; it does not extend dtype support to int64.
 
-### ND → 2×NZ extraction path
+### ND → 2×NZ extraction path <a id="nd-to-two-nz"></a>
 
 The two-destination `TEXTRACT` overload extracts two independent ND sub-windows from a single ND source and writes each as a separate NZ destination in one call. It is implemented entirely with vector-frontend intrinsics (no MTE copy).
 
+![Two independently positioned ND windows mapped to separate NZ tiles](../figures/isa/TEXTRACT_ND2NZ_WINDOWS.svg)
+
+The diagram uses A5 `half`: an ND source of `8 × 64`, two destination valid windows of `4 × 32`,
+and 16 physical rows per destination. The call `TEXTRACT(dst0, dst1, src, 0, 0, 4, 32)` selects
+rows 0–3 / columns 0–31 for `dst0`, and rows 4–7 / columns 32–63 for `dst1`.
+The offsets select source windows; they do not place data at an offset within the destinations.
+Each NZ destination stores two 16-column blocks, with four written rows per block.
+These two windows illustrate one choice of offsets; callers supply each window's own origin and valid shape.
+
+Here, `ceil16(x)` rounds `x` up to a multiple of 16.
+For this A5 path, the destination block pitch is `P * 32` bytes, where `P = ceil16(validRow)`
+for plain NZ and `P = ceil16(validRow) + 1` for `CompactMode::RowPlusOne`.
+In the example, the second block starts at 512 bytes or 544 bytes, respectively.
+The extra row in `RowPlusOne` changes storage spacing; it does not add a row to the extracted window.
+Allocate destination storage for the selected compact mode. The [TINSERT split diagram](TINSERT.md#nz-split-transfer)
+shows how burst grouping and aligned-tail copying differ from this window extraction.
+
 - Source must be a `TileType::Vec` ND tile (`BLayout::RowMajor`, `SLayout::NoneBox`); both destinations must be `TileType::Vec` NZ tiles (`BLayout::ColMajor`, `SLayout::RowMajor`).
 - `DstTileData::DType` must equal `SrcTileData::DType`.
-- Each window is placed by its own `(indexRow, indexCol)`. Runtime bounds checks per window `k`:
+- Each window is placed by its own `(indexRow, indexCol)`. The following bounds for window `k`
+  are checked with `PTO_ASSERT` only when `_DEBUG` is defined; release callers must satisfy them too:
     - `indexRow_k + dst_k.GetValidRow() <= SrcTileData::Rows`
     - `indexCol_k + dst_k.GetValidCol() <= SrcTileData::Cols`
 - Structural constraints (same as the Vec → Vec paths): destination `Cols` must be `c0`-aligned (NZ fractal width), and source row-stride bytes must be 32-byte aligned.

@@ -270,6 +270,25 @@ canonical overload.
     - FP4 column counts and offsets are logical element counts; two elements share one byte.
     - CPU_SIM follows the same type, layout, and data-transfer rules described above.
 
+### Reading an NZ split transfer <a id="nz-split-transfer"></a>
+
+![NZ column blocks, copied tails, and SPLIT2/SPLIT4 burst groups](../figures/isa/TINSERT_NZ_SPLIT.svg)
+
+The diagram uses A5 `half`, `CompactMode::Null`, an insertion offset of `(0, 0)`,
+source physical shape `32 × 80`, destination physical shape `48 × 80`, and source valid shape `17 × 65`.
+Each NZ column block contains 16 columns; each row within that block occupies 32 bytes.
+The source stores all 32 rows of block `B0`, then all rows of `B1`, and so on.
+
+- The copy covers `ceil16(17) = 32` rows and `ceil(65 / 16) = 5` column blocks.
+  Gray source tails are copied too: rows 17–31 and columns 65–79 are not synthesized as zeros.
+- `SPLIT2` assigns the five blocks as `2 + 3`; `SPLIT4` assigns them as `1 + 1 + 1 + 2`.
+  Each DMA copies consecutive blocks into the same destination tile, preserving block order.
+- Source block starts are 1024 bytes apart; destination block starts are 1536 bytes apart.
+  Each burst copies 1024 bytes, leaving destination rows 32–47 in each block unchanged.
+
+These are groups of DMA bursts within one insertion. For extraction into two independently
+positioned windows, see [ND → 2×NZ extraction](TEXTRACT.md#nd-to-two-nz).
+
 ## Examples
 
 ### Auto

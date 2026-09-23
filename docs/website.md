@@ -56,3 +56,16 @@ cmake --build build/docs --target pto_docs_serve
 
 - The MkDocs source directory is `docs/mkdocs/src/`.
 - `docs/mkdocs/gen_pages.py` mirrors repository markdown into the site at build time, preserving paths so repo-relative links keep working.
+
+## Detailed memory-layout diagrams
+
+The TLOAD stride fallback, TINSERT NZ split, and TEXTRACT NZ diagrams are generated
+from `docs/tools/gen_memory_layout_svgs.py`. Both language versions share the SVGs.
+After editing the generator, regenerate the figures and check that they match:
+
+```bash
+python3 docs/tools/gen_memory_layout_svgs.py
+python3 docs/tools/gen_memory_layout_svgs.py --check
+```
+
+The figures are written to `docs/figures/isa/`. Use `--output-dir` to render into another directory.

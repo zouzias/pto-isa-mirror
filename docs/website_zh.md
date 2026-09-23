@@ -56,3 +56,16 @@ cmake --build build/docs --target pto_docs_serve
 
 - MkDocs 源目录是 `docs/mkdocs/src/`。
 - `docs/mkdocs/gen_pages.py` 在构建时将仓库 markdown 文件镜像到站点中，保留路径以便仓库相对链接继续工作。
+
+## 内存布局详图
+
+TLOAD 步长回退、TINSERT NZ split 和 TEXTRACT NZ 配图由
+`docs/tools/gen_memory_layout_svgs.py` 生成，中英文文档共用 SVG。
+修改生成脚本后，重新生成配图并检查产物是否一致：
+
+```bash
+python3 docs/tools/gen_memory_layout_svgs.py
+python3 docs/tools/gen_memory_layout_svgs.py --check
+```
+
+配图输出到 `docs/figures/isa/`，可通过 `--output-dir` 指定其他目录。
