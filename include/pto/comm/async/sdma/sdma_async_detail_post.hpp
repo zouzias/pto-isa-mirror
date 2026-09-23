@@ -88,8 +88,7 @@ PTO_INTERNAL bool InitializeRuntimeCtx(const SdmaSession& session)
     return true;
 }
 
-PTO_INTERNAL bool StoreFlagPayload(
-    uint64_t postId, uint32_t queueCount, __gm__ uint8_t* flagPayload, const SdmaSession& session, UbTmpBuf& tmpBuf)
+PTO_INTERNAL bool EnsureFlagPayloadSlotAvailable(uint64_t postId, const SdmaSession& session, UbTmpBuf& tmpBuf)
 {
     SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     if (postId > kSdmaFlagPayloadDepth) {
@@ -116,10 +115,25 @@ PTO_INTERNAL bool StoreFlagPayload(
             UpdateCachedPostDoneIds(oldPostId, oldQueueMask, runtimeCtx);
         }
     }
+    return true;
+}
 
+PTO_INTERNAL void WriteFlagPayload(
+    uint64_t postId, uint32_t queueCount, __gm__ uint8_t* flagPayload, const SdmaSession& session)
+{
+    SdmaRuntimeContext& runtimeCtx = session.runtimeCtx;
     *reinterpret_cast<volatile __gm__ uint64_t*>(flagPayload) = postId;
     __asm__ __volatile__("" ::: "memory");
     runtimeCtx.flagPayloadQueueCount[postId % kSdmaFlagPayloadDepth] = static_cast<uint8_t>(queueCount);
+}
+
+PTO_INTERNAL bool StoreFlagPayload(
+    uint64_t postId, uint32_t queueCount, __gm__ uint8_t* flagPayload, const SdmaSession& session, UbTmpBuf& tmpBuf)
+{
+    if (!EnsureFlagPayloadSlotAvailable(postId, session, tmpBuf)) {
+        return false;
+    }
+    WriteFlagPayload(postId, queueCount, flagPayload, session);
     return true;
 }
 
