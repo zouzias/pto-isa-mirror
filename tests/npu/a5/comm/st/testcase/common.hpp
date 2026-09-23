@@ -146,6 +146,8 @@ inline void* WindowAlloc(uint64_t windowBase, size_t& offset, size_t bytes)
     return ptr;
 }
 
+constexpr size_t kDirectNotifyWindowOffset = 64U * sizeof(int32_t);
+
 // ============================================================================
 // TestContext: ACL + HCCL initialization / teardown helper.
 // ============================================================================
@@ -398,6 +400,8 @@ struct UrmaTestContext {
     void* devBuf{nullptr};
     size_t allocSize{0};
     UrmaWorkspaceManager urmaMgr;
+    CommDeviceContext* notifyDeviceCtx{nullptr};
+    CommDeviceContext notifyHostCtx{};
 
     // Symmetric MR buffer: exact commBytesNeeded (no 2MB round-up).
     // HCCL registers with nonPin=1 and 4KB BufAlign internally, so 2MB huge page is not required.
@@ -456,12 +460,53 @@ struct UrmaTestContext {
         return true;
     }
 
+    bool SetupNotifyWindow()
+    {
+        char group[128] = {};
+        if (HcclGetCommName(comm, group) != HCCL_SUCCESS) {
+            return false;
+        }
+        HcclComm commHandle = nullptr;
+        if (HcomGetCommHandleByGroup(group, &commHandle) != HCCL_SUCCESS) {
+            return false;
+        }
+
+        Mc2CommConfigV2 tiling{};
+        tiling.init.version = 100U;
+        tiling.init.mc2HcommCnt = 1U;
+        tiling.init.commBlockNum = 48U;
+        tiling.init.devType = 4U;
+        tiling.init.offset[0] =
+            static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
+        tiling.inner.opType = 18U;
+        tiling.inner.commEngine = 3U;
+        tiling.inner.version = 1U;
+        strncpy(tiling.inner.groupName, group, GROUP_NAME_SIZE - 1);
+        strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", ALG_CONFIG_SIZE - 1);
+
+        void* ctxPtr = nullptr;
+        if (HcclAllocComResourceByTiling(commHandle, stream, &tiling, &ctxPtr) != HCCL_SUCCESS || ctxPtr == nullptr) {
+            return false;
+        }
+        notifyDeviceCtx = reinterpret_cast<CommDeviceContext*>(ctxPtr);
+        if (aclrtMemcpy(
+                &notifyHostCtx, sizeof(notifyHostCtx), notifyDeviceCtx, sizeof(notifyHostCtx),
+                ACL_MEMCPY_DEVICE_TO_HOST) != ACL_SUCCESS) {
+            return false;
+        }
+        return notifyHostCtx.rankId < notifyHostCtx.rankNum && notifyHostCtx.rankId < HCCL_MAX_RANK_NUM &&
+               notifyHostCtx.windowsIn[notifyHostCtx.rankId] != 0U &&
+               notifyHostCtx.winSize >= kDirectNotifyWindowOffset + sizeof(int32_t);
+    }
+
     void CleanupSetupFailure()
     {
         if (comm) {
             HcclCommDestroy(comm);
             comm = nullptr;
         }
+        notifyDeviceCtx = nullptr;
+        notifyHostCtx = {};
         urmaMgr.Finalize();
         if (devBuf) {
             aclrtFree(devBuf);
@@ -476,7 +521,7 @@ struct UrmaTestContext {
     bool Setup(
         int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded,
         UrmaLayout layout = UrmaLayout::PER_PEER, uint32_t aivCount = pto::comm::urma::kUrmaAutoAivCount,
-        uint32_t jettiesPerCore = 1)
+        uint32_t jettiesPerCore = 1, uint32_t sqDepth = 0, bool enableNotifyWindow = false)
     {
         if (n_devices <= 0 || n_ranks <= 0) {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
@@ -490,9 +535,14 @@ struct UrmaTestContext {
             CleanupSetupFailure();
             return false;
         }
+        if (enableNotifyWindow && !SetupNotifyWindow()) {
+            std::cerr << "[ERROR] Direct notify window setup failed!" << std::endl;
+            CleanupSetupFailure();
+            return false;
+        }
         if (!urmaMgr.Init(
                 comm, static_cast<uint32_t>(rank_id), static_cast<uint32_t>(n_ranks), devBuf, allocSize, layout,
-                aivCount, jettiesPerCore)) {
+                aivCount, jettiesPerCore, sqDepth)) {
             std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
             CleanupSetupFailure();
             return false;
@@ -507,6 +557,8 @@ struct UrmaTestContext {
             HcclCommDestroy(comm);
             comm = nullptr;
         }
+        notifyDeviceCtx = nullptr;
+        notifyHostCtx = {};
         urmaMgr.Finalize();
         if (devBuf) {
             aclrtFree(devBuf);
@@ -527,10 +579,9 @@ struct UrmaTestContext {
 // KernelFn: (rank_id, n_ranks, n_devices, first_device_id, first_rank_id, root_rank).
 // URMA peer index in workspace is CommMpiRank() == rank_id - first_rank_id.
 // ============================================================================
-using UrmaKernelFn = bool (*)(int, int, int, int, int, int);
-
+template <typename KernelFn>
 inline bool RunUrmaTestMpiLaunch(
-    int n_ranks, int n_devices, int first_rank_id, int first_device_id, UrmaKernelFn kernelFn)
+    int n_ranks, int n_devices, int first_rank_id, int first_device_id, KernelFn&& kernelFn)
 {
     int mpiRank = CommMpiRank();
     int mpiSize = CommMpiSize();
