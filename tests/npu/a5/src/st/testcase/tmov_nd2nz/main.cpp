@@ -17,11 +17,12 @@ using namespace PtoTestCommon;
 template <int kRows, int kCols>
 void launchTMOV_nd2nz(uint8_t* out, uint8_t* src, void* stream);
 
-template <int kRows, int kCols>
-void launchTMOV_nd2nz_f4e1m2(uint8_t* out, uint8_t* src, void* stream);
-
-template <int kRows, int kCols>
-void launchTMOV_nd2nz_f4e2m1(uint8_t* out, uint8_t* src, void* stream);
+// fp4 kind selected by int tag (defined in the kernel TU): 0 = e1m2, 1 = e2m1.
+// The host driver never names a fp4 C++ type (it lives in a __CPU_SIM-only header).
+constexpr int kFp4E1M2 = 0;
+constexpr int kFp4E2M1 = 1;
+template <int kFp4Kind, int kRows, int kCols>
+void launchTMOV_nd2nz_f4(uint8_t* out, uint8_t* src, void* stream);
 
 class TMovNd2NzTest : public testing::Test {
 protected:
@@ -85,12 +86,12 @@ void test_tmov_nd2nz()
     EXPECT_TRUE(ret);
 }
 
-template <bool isE2M1, int kRows, int kCols>
+template <int kFp4Kind, int kRows, int kCols>
 void test_tmov_nd2nz_f4()
 {
     constexpr int c0 = 64;                                  // f4 nibbles per NZ panel row (32 bytes)
     constexpr int alignedCols = (kCols + c0 - 1) / c0 * c0; // padded to full NZ panels
-    size_t inputSize = kRows * kCols / 2;                   // dense feed (2 x f4 per byte), NOT pre-padded
+    size_t inputSize = kRows * kCols / 2;                   // dense GM feed, 2 nibbles/byte
     size_t outputSize = kRows * alignedCols / 2;            // NZ over the padded width
 
     aclInit(nullptr);
@@ -110,11 +111,7 @@ void test_tmov_nd2nz_f4()
     aclrtMemset(dstDevice, outputSize, 0, outputSize);
 
     aclrtMemcpy(srcDevice, inputSize, srcHost, inputSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    if constexpr (isE2M1) {
-        launchTMOV_nd2nz_f4e2m1<kRows, kCols>(dstDevice, srcDevice, stream);
-    } else {
-        launchTMOV_nd2nz_f4e1m2<kRows, kCols>(dstDevice, srcDevice, stream);
-    }
+    launchTMOV_nd2nz_f4<kFp4Kind, kRows, kCols>(dstDevice, srcDevice, stream);
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, outputSize, dstDevice, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -144,27 +141,18 @@ TEST_F(TMovNd2NzTest, case_hif8_32x64) { test_tmov_nd2nz<32, 64>(); }
 
 TEST_F(TMovNd2NzTest, case_hif8_64x64) { test_tmov_nd2nz<64, 64>(); }
 
-// fp4: dense (non-32B-aligned where noted) GM feeds — TLOAD auto zero-pads
-TEST_F(TMovNd2NzTest, case_f4e1m2_16x32) { test_tmov_nd2nz_f4<false, 16, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160) { test_tmov_nd2nz_f4<kFp4E1M2, 16, 8160>(); }
 
-TEST_F(TMovNd2NzTest, case_f4e2m1_16x32) { test_tmov_nd2nz_f4<true, 16, 32>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160) { test_tmov_nd2nz_f4<false, 16, 8160>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e2m1_16x8160) { test_tmov_nd2nz_f4<true, 16, 8160>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e1m2_4080x32) { test_tmov_nd2nz_f4<false, 4080, 32>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e2m1_4080x32) { test_tmov_nd2nz_f4<true, 4080, 32>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e1m2_32x32) { test_tmov_nd2nz_f4<false, 32, 32>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e2m1_32x32) { test_tmov_nd2nz_f4<true, 32, 32>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e1m2_32x64) { test_tmov_nd2nz_f4<false, 32, 64>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e2m1_32x64) { test_tmov_nd2nz_f4<true, 32, 64>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e1m2_64x64) { test_tmov_nd2nz_f4<false, 64, 64>(); }
-
-TEST_F(TMovNd2NzTest, case_f4e2m1_64x64) { test_tmov_nd2nz_f4<true, 64, 64>(); }
+// 12 fp4 regression cases: 6 sizes × {e1m2, e2m1}
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x32) { test_tmov_nd2nz_f4<kFp4E1M2, 16, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_16x8160b) { test_tmov_nd2nz_f4<kFp4E1M2, 16, 8160>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_4080x32) { test_tmov_nd2nz_f4<kFp4E1M2, 4080, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_32x32) { test_tmov_nd2nz_f4<kFp4E1M2, 32, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_32x64) { test_tmov_nd2nz_f4<kFp4E1M2, 32, 64>(); }
+TEST_F(TMovNd2NzTest, case_f4e1m2_64x64) { test_tmov_nd2nz_f4<kFp4E1M2, 64, 64>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_16x32) { test_tmov_nd2nz_f4<kFp4E2M1, 16, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_16x8160) { test_tmov_nd2nz_f4<kFp4E2M1, 16, 8160>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_4080x32) { test_tmov_nd2nz_f4<kFp4E2M1, 4080, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_32x32) { test_tmov_nd2nz_f4<kFp4E2M1, 32, 32>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_32x64) { test_tmov_nd2nz_f4<kFp4E2M1, 32, 64>(); }
+TEST_F(TMovNd2NzTest, case_f4e2m1_64x64) { test_tmov_nd2nz_f4<kFp4E2M1, 64, 64>(); }
