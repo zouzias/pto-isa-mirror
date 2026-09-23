@@ -800,6 +800,20 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
                 (DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::ColMajor))) {
                 TMovNdTo2Zn<DstTileData, SrcTileData>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } else {
+                // Only an ND source can be fractalized here (the two branches
+                // above cover ND->NZ and ND->ZN). Anything else reaching this
+                // arm — e.g. a DN source (ColMajor + NoneBox) into an NZ
+                // destination — would silently copy unfractalized bytes under
+                // an NZ type (TMovToVec is a plain row copy with no layout
+                // conversion), which only surfaces as garbage/stalls on the
+                // board. Assert the supported set like the sibling arms.
+                static_assert(
+                    (SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox) ||
+                        (SrcTileData::isRowMajor == DstTileData::isRowMajor &&
+                         SrcTileData::SFractal == DstTileData::SFractal),
+                    "TMov Vec->Vec: only an ND source can be fractalized (ND->NZ, ND->ZN); "
+                    "any other layout change is unimplemented. Transpose-view the source "
+                    "into ND first.");
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }
         } else if constexpr (DstTileData::Loc == TileType::Mat) {
