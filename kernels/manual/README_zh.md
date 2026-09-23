@@ -12,6 +12,7 @@
 
 - `a2a3/`：Ascend A2/A3 平台的手工调优 kernels。
 - `a5/`：Ascend A5 平台的手工调优 kernels。
+- `a6/`：Ascend A6 平台的手工调优 kernels。
 - `common/`：跨平台手工调优 kernels（共享示例）。
 
 ## 如何运行
@@ -20,4 +21,5 @@
 
 - [a2a3/README_zh.md](a2a3/README_zh.md)
 - [a5/README_zh.md](a5/README_zh.md)
+- [a6/README_zh.md](a6/README_zh.md)
 - [common/flash_atten/README_zh.md](common/flash_atten/README_zh.md)
