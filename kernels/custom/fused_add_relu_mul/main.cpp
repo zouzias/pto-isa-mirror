@@ -8,11 +8,22 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "acl/acl.h"
-#include "test_common.h"
-#include <vector>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
+#include <string>
+#include <vector>
+
+#ifdef __CPU_SIM
+#include <pto/common/cpu_stub.hpp>
+#else
+#include "acl/acl.h"
+#endif
+
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -259,6 +270,11 @@ void BenchmarkKernel(
 
 int main(int argc, char* argv[])
 {
+    const bool functionalOnly = argc == 2 && std::string(argv[1]) == "--functional-only";
+    if (argc > 1 && !functionalOnly) {
+        std::cerr << "Usage: " << argv[0] << " [--functional-only]\n";
+        return 1;
+    }
     printf("========================================\n");
     printf("Fused Add-ReLU-Mul Custom Operator Test\n");
     printf("========================================\n");
@@ -287,6 +303,18 @@ int main(int argc, char* argv[])
 
     // 测试5：大 Tile 版本
     all_passed &= TestKernel("Large Tile Kernel", LaunchFusedAddReLUMulLargeTile<float>, 1024 * 1024, bias, scale);
+
+#ifdef __CPU_SIM
+    all_passed &= TestKernel("Basic Kernel (Tail)", LaunchFusedAddReLUMul<float>, 4 * 4096 + 1003, bias, scale);
+    all_passed &=
+        TestKernel("Optimized Kernel (Tail)", LaunchFusedAddReLUMulOptimized<float>, 4 * 4096 + 1003, bias, scale);
+    all_passed &=
+        TestKernel("Large Tile Kernel (Tail)", LaunchFusedAddReLUMulLargeTile<float>, 4 * 16384 + 1003, bias, scale);
+#endif
+
+    if (functionalOnly) {
+        return all_passed ? 0 : 1;
+    }
 
     // ========== 性能测试 ==========
     printf("\n========== Performance Benchmarks ==========\n");

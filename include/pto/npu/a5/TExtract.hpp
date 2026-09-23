@@ -157,9 +157,12 @@ template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(
-        is_textract_supported_type<typename DstTileData::DType>,
+        is_textract_supported_type<typename DstTileData::DType> ||
+            (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat &&
+             std::is_same_v<typename SrcTileData::DType, int32_t> &&
+             std::is_same_v<typename DstTileData::DType, int32_t>),
         "TExtract: Unsupported data type! Supported types: int8_t, hifloat8_t, fp8_e5m2_t, fp8_e4m3fn_t, \
-        half, bfloat16_t, float, float4_e2m1x2_t, float4_e1m2x2_t, float8_e8m0_t");
+        half, bfloat16_t, float, float4_e2m1x2_t, float4_e1m2x2_t, float8_e8m0_t; int32_t for Acc-to-Mat.");
     static_assert(
         (SrcTileData::Loc == TileType::Acc) ||
             std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
@@ -455,7 +458,8 @@ PTO_INTERNAL void TExtractNd2NzWindowLoop(
             uint32_t remaining = validCol;
             for (uint32_t cb = 0; cb < totalColBlk; ++cb) {
                 uint32_t colsThis = remaining < c0Elems ? remaining : c0Elems;
-                preg = CreatePredicate<WorkT>(colsThis);
+                uint32_t predCount = colsThis;
+                preg = CreatePredicate<WorkT>(predCount);
                 __ubuf__ WorkT* psrc = rowBase + cb * c0Elems;
                 vldas(ureg, psrc);
                 vldus(vreg, ureg, psrc);

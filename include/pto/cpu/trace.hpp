@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_CPU_TRACE_HPP
 #define PTO_CPU_TRACE_HPP
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <iomanip>
@@ -34,6 +35,35 @@ inline constexpr bool kInstructionTraceEnabled = true;
 inline constexpr bool kInstructionTraceEnabled = false;
 #endif
 
+enum class InstructionTraceSetting { DefaultEnabled, DefaultDisabled, Enabled, Disabled };
+
+inline std::atomic<InstructionTraceSetting> g_instruction_trace_setting{InstructionTraceSetting::DefaultEnabled};
+
+inline void SetInstructionTraceEnabled(bool enabled)
+{
+    g_instruction_trace_setting.store(
+        enabled ? InstructionTraceSetting::Enabled : InstructionTraceSetting::Disabled, std::memory_order_relaxed);
+}
+
+// Runtime initialization supplies the environment default without replacing an explicit API setting.
+inline void SetInstructionTraceDefault(bool enabled)
+{
+    auto setting = g_instruction_trace_setting.load(std::memory_order_relaxed);
+    const auto desired = enabled ? InstructionTraceSetting::DefaultEnabled : InstructionTraceSetting::DefaultDisabled;
+    while (setting == InstructionTraceSetting::DefaultEnabled || setting == InstructionTraceSetting::DefaultDisabled) {
+        if (g_instruction_trace_setting.compare_exchange_weak(setting, desired, std::memory_order_relaxed)) {
+            return;
+        }
+    }
+}
+
+inline bool IsInstructionTraceEnabled()
+{
+    const auto setting = g_instruction_trace_setting.load(std::memory_order_relaxed);
+    return kInstructionTraceEnabled &&
+           (setting == InstructionTraceSetting::DefaultEnabled || setting == InstructionTraceSetting::Enabled);
+}
+
 struct TileOperandTrace {
     std::uintptr_t address = 0;
     std::vector<int64_t> shape;
@@ -48,6 +78,7 @@ struct ScalarOperandTrace {
 
 struct InstructionTraceRecord {
     uint32_t block_idx = 0;
+    uint32_t subblock_id = 0;
     uint64_t sequence_id = 0;
     std::string opcode;
     std::vector<TileOperandTrace> input_tiles;
@@ -407,8 +438,9 @@ inline void DumpInstructionTraceJson(std::ostream& os)
 {
     const auto records = CopyInstructionTraceRecords();
     for (const auto& record : records) {
-        os << "{\"block_idx\":" << record.block_idx << ",\"sequence_id\":" << record.sequence_id << ",\"opcode\":\""
-           << JsonEscape(record.opcode) << "\",\"input_tiles\":[";
+        os << "{\"block_idx\":" << record.block_idx << ",\"subblock_id\":" << record.subblock_id
+           << ",\"sequence_id\":" << record.sequence_id << ",\"opcode\":\"" << JsonEscape(record.opcode)
+           << "\",\"input_tiles\":[";
         for (std::size_t i = 0; i < record.input_tiles.size(); ++i) {
             const auto& operand = record.input_tiles[i];
             if (i != 0) {
@@ -462,7 +494,7 @@ public:
             (void)opcode;
             (void)output_tile_count;
             (void)sizeof...(Args);
-        } else {
+        } else if (IsInstructionTraceEnabled()) {
             Initialize(opcode);
             remaining_output_tiles_ = output_tile_count;
             (VisitArg(std::forward<Args>(args)), ...);
@@ -476,7 +508,7 @@ public:
             (void)opcode;
             (void)roles;
             (void)sizeof...(Args);
-        } else {
+        } else if (IsInstructionTraceEnabled()) {
             Initialize(opcode);
             std::size_t arg_index = 0;
             (VisitArgWithRole(arg_index < roles.size() ? roles[arg_index++] : 'A', std::forward<Args>(args)), ...);
@@ -503,6 +535,7 @@ private:
     {
         active_ = true;
         record_.block_idx = ::get_block_idx();
+        record_.subblock_id = ::get_subblockid();
         record_.sequence_id = ReserveInstructionTraceSequenceId();
         record_.opcode = std::string(opcode);
     }

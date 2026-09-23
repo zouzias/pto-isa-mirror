@@ -21,6 +21,12 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
     return (num_1 + num_2 - 1) / num_2 * num_2;
 }
 
+template <typename PtrT>
+__tf__ AICORE inline PtrT GetTilePtr(PtrT ptr)
+{
+    return (PtrT)__cce_get_tile_ptr(ptr);
+}
+
 template <
     typename OutType, typename AType, typename BType, typename BiasType, int validM, int validK, int validN,
     bool isBias>
@@ -124,7 +130,7 @@ __global__ AICORE void RunTMATMUL(
 
     MatmulMacroConfig cfg;
     if constexpr (isFp16) {
-        cfg.preQuantTileAddr = (uint64_t)__cce_get_tile_ptr(quantFbTile.data());
+        cfg.preQuantTileAddr = (uint64_t)GetTilePtr(quantFbTile.data());
     }
 
     if constexpr (isBias) {

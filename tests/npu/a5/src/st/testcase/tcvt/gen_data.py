@@ -494,11 +494,17 @@ if __name__ == "__main__":
     # Partial tiles (2D path: ValidCol != Cols)
     partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129)]
 
+    # fp4 packs 2 nibbles/byte: 32-nibble columns = 16B rows violate the 32B
+    # vec row alignment, so fp4 pairs skip the (4, 32) shape (matches the
+    # kernel-side GENERATE_TCVT_TESTS_FP4 macro and the CPU harness convention).
+    fp4_pairs = {"bf16_fp4_e1m2x2", "bf16_fp4_e2m1x2", "fp4_e1m2x2_bf16", "fp4_e2m1x2_bf16"}
+
     case_name_list = []
     case_params_list = []
 
     for type_name, src, dst in type_pairs:
-        for m, n in shapes:
+        pair_shapes = [s for s in shapes if not (type_name in fp4_pairs and s == (4, 32))]
+        for m, n in pair_shapes:
             case_name = f"case_{type_name}_{m}x{n}"
             case_name_list.append(f"TCVTTest.{case_name}")
             case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))

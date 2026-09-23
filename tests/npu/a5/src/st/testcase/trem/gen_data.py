@@ -11,7 +11,9 @@
 # --------------------------------------------------------------------------------
 
 import os
+
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -30,26 +32,80 @@ def gen_golden_data_trem(case_name, param):
 
     if dtype == np.int64:
         input1 = np.random.randint(-1000000, 1000000, size=(h_valid, w_valid)).astype(dtype)
-        input2 = np.random.randint(1, 1000, size=(h_valid, w_valid)).astype(dtype)
-        input1.flat[:4] = [np.iinfo(np.int64).min, -7, 7, np.iinfo(np.int64).max]
-        input2.flat[:4] = [-1, 3, -3, 0]
+        input2 = np.random.randint(-1000, 1000, size=(h_valid, w_valid)).astype(dtype)
+        if param.use_edge_cases:
+            int_min, int_max = int(np.iinfo(dtype).min), int(np.iinfo(dtype).max)
+            pairs = np.array(
+                [
+                    (-7, 3),
+                    (7, -3),
+                    (-7, -3),
+                    (7, 3),
+                    (-6, 3),
+                    (6, -3),
+                    (-6, -3),
+                    (6, 3),
+                    (0, -3),
+                    (-1, 3),
+                    (1, -3),
+                    (int_min, -1),
+                    (int_min, 3),
+                    (int_max, -3),
+                    (int_min, int_max),
+                    (int_max, int_min),
+                    (-1, int_min),
+                    (1, int_min),
+                    (int_min, int_min),
+                    (int_max, 0),
+                    (int_min, 0),
+                    (0, 0),
+                    (-7, 0),
+                    (-(2**53 + 1), 2**32 + 1),
+                    (2**53 + 1, -(2**32 + 1)),
+                ],
+                dtype=dtype,
+            )
+            input1 = np.resize(pairs[:, 0], (h_valid, w_valid))
+            input2 = np.resize(pairs[:, 1], (h_valid, w_valid))
+        else:
+            input1.flat[:4] = [np.iinfo(np.int64).min, -7, 7, np.iinfo(np.int64).max]
+            input2.flat[:4] = [-1, 3, -3, 0]
         golden = np.zeros_like(input1)
         for i in range(h_valid):
             for j in range(w_valid):
                 lhs = int(input1[i, j])
                 rhs = int(input2[i, j])
-                if rhs == 0 or (lhs == np.iinfo(np.int64).min and rhs == -1):
-                    golden[i, j] = 0
-                else:
-                    quotient = abs(lhs) // abs(rhs)
-                    quotient = -quotient if (lhs < 0) != (rhs < 0) else quotient
-                    golden[i, j] = lhs - quotient * rhs
+                golden[i, j] = -1 if rhs == 0 else lhs % rhs
     elif dtype == np.uint64:
         input1 = np.random.randint(0, 2000000, size=(h_valid, w_valid)).astype(dtype)
         input2 = np.random.randint(1, 1000, size=(h_valid, w_valid)).astype(dtype)
-        input1.flat[:3] = [np.iinfo(np.uint64).max, 7, 0]
-        input2.flat[:3] = [3, 0, np.iinfo(np.uint64).max]
-        golden = np.zeros_like(input1)
+        uint_max = int(np.iinfo(dtype).max)
+        pairs = np.array(
+            [
+                (uint_max, 3),
+                (7, 0),
+                (0, uint_max),
+                (0, 0),
+                (uint_max, 0),
+                (uint_max, 1),
+                (uint_max, uint_max),
+                (uint_max, 2**63),
+                (uint_max - 1, uint_max),
+                (2**63, 3),
+                (2**63, 2**63 + 1),
+                (2**63 + 1, 2**63),
+                (2**53 + 1, 2**32 + 1),
+                (uint_max, 2**32 + 1),
+            ],
+            dtype=dtype,
+        )
+        if param.use_edge_cases:
+            input1 = np.resize(pairs[:, 0], (h_valid, w_valid))
+            input2 = np.resize(pairs[:, 1], (h_valid, w_valid))
+        else:
+            input1.flat[: len(pairs)] = pairs[:, 0]
+            input2.flat[: len(pairs)] = pairs[:, 1]
+        golden = np.full_like(input1, uint_max)
         nonzero = input2 != 0
         golden[nonzero] = input1[nonzero] % input2[nonzero]
     else:
@@ -80,13 +136,15 @@ def gen_golden_data_trem(case_name, param):
 
 
 class TremParams:
-    def __init__(self, name, dtype, tile_row, tile_col, valid_row, valid_col):
+    def __init__(self, name, dtype, tile_row, tile_col, valid_row, valid_col, use_edge_cases=False):
         self.name = name
         self.dtype = dtype
         self.tile_row = tile_row
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+        self.use_edge_cases = use_edge_cases
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -117,10 +175,14 @@ if __name__ == "__main__":
         TremParams("TREMTest.case_int64_32x32", np.int64, 32, 32, 32, 32),
         TremParams("TREMTest.case_uint64_32x32", np.uint64, 32, 32, 32, 32),
         TremParams("TREMTest.case_int64_4x32_inplace", np.int64, 4, 32, 4, 32),
-TremParams("TREMTest.case_uint64_4x32_inplace", np.uint64, 4, 32, 4, 32),
+        TremParams("TREMTest.case_uint64_4x32_inplace", np.uint64, 4, 32, 4, 32),
         TremParams("TREMTest.case_int64_1x1024_inplace", np.int64, 1, 1024, 1, 1024),
         TremParams("TREMTest.case_int64_1x2048_2045_inplace", np.int64, 1, 2048, 1, 2045),
         TremParams("TREMTest.case_int64_4x64_40_inplace", np.int64, 4, 64, 4, 40),
+        TremParams("TREMTest.case_uint64_edge_4x64", np.uint64, 4, 64, 4, 64, use_edge_cases=True),
+        TremParams("TREMTest.case_uint64_edge_4x64_40_inplace", np.uint64, 4, 64, 4, 40, use_edge_cases=True),
+        TremParams("TREMTest.case_int64_floor_4x64", np.int64, 4, 64, 4, 64, use_edge_cases=True),
+        TremParams("TREMTest.case_int64_floor_4x64_40_inplace", np.int64, 4, 64, 4, 40, use_edge_cases=True),
     ]
 
     for param in case_params_list:

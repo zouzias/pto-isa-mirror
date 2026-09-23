@@ -29,11 +29,17 @@ def nd_to_nz_bytes(win, rows, cols, esize):
 def gen_golden(src_rows, src_cols, esize, wins):
     src = np.random.randint(0, 256, size=(src_rows, src_cols, esize), dtype=np.uint8)
     src.tofile("input_arr.bin")
-    for idx, (rows, cols, ir, ic) in enumerate(wins):
-        win = src[ir : ir + rows, ic : ic + cols, :]
-        if rows == 1 and cols == 1:
-            golden = win.reshape(-1)
+    for idx, win_spec in enumerate(wins):
+        if len(win_spec) == 6:
+            rows, cols, ir, ic, vrows, vcols = win_spec
         else:
+            rows, cols, ir, ic = win_spec
+            vrows, vcols = rows, cols
+        if rows == 1 and cols == 1:
+            golden = src[ir : ir + 1, ic : ic + 1, :].reshape(-1)
+        else:
+            win = np.zeros((rows, cols, esize), dtype=np.uint8)
+            win[0:vrows, 0:vcols, :] = src[ir : ir + vrows, ic : ic + vcols, :]
             golden = nd_to_nz_bytes(win, rows, cols, esize)
         golden.tofile(f"golden{idx}.bin")
 
@@ -64,6 +70,8 @@ CASES = [
     Case("case_half_1x1", 2, 64, 128, [(1, 1, 0, 0), (1, 1, 5, 7)]),
     Case("case_float_1x1", 4, 64, 128, [(1, 1, 0, 0), (1, 1, 10, 3)]),
     Case("case_int8_1x1", 1, 64, 128, [(1, 1, 0, 0), (1, 1, 20, 17)]),
+    Case("case_int8_tail_unaligned", 1, 64, 128,
+         [(32, 64, 0, 0, 32, 63), (32, 64, 0, 2, 32, 61)]),
 ]
 
 

@@ -266,6 +266,51 @@ AICORE inline void FillNotifySignalAt(
     DcciCachelines(reinterpret_cast<__gm__ uint8_t*>(region), kUrmaNotifyResourceCachelineBytes);
 }
 
+struct UrmaNotifyPostState {
+    __gm__ UrmaWQCtx* wq;
+    __gm__ UrmaCqCtx* cq;
+    __gm__ UrmaMemInfo* remoteMem;
+    uint32_t announcedHead;
+    uint32_t pendingHead;
+    uint32_t submittedWqeCount;
+};
+
+AICORE inline bool EnsureNotifyRingRoom(
+    const AsyncSession& session, uint32_t peer, UrmaNotifyPostState& state, uint32_t requiredBb)
+{
+    if (UrmaRingHasRoom(state.wq, state.cq, state.pendingHead, state.submittedWqeCount, requiredBb, 1U)) {
+        return true;
+    }
+    if (state.pendingHead != state.announcedHead) {
+        CommitPostedWqes(state.wq, state.pendingHead, state.submittedWqeCount);
+    }
+    bool completed = false;
+    return UrmaPollCq(session, peer, state.pendingHead, state.submittedWqeCount, true, completed) && completed;
+}
+
+AICORE inline bool PostNotifyPayload(
+    __gm__ uint8_t* remotePayload, __gm__ uint8_t* localPayload, uint64_t messageLen, const AsyncSession& session,
+    uint32_t peer, UrmaNotifyPostState& state)
+{
+    const uint32_t payloadWqeCount = UrmaNotifyPayloadWqeCount(messageLen);
+    uint64_t offset = 0U;
+    for (uint32_t i = 0U; i < payloadWqeCount; ++i) {
+        if (!EnsureNotifyRingRoom(session, peer, state, 1U)) {
+            return false;
+        }
+        const uint64_t remaining = messageLen - offset;
+        const uint32_t chunk =
+            static_cast<uint32_t>(remaining < kUrmaMaxWqeTransferBytes ? remaining : kUrmaMaxWqeTransferBytes);
+        FillTransferWqeAt(
+            state.wq, state.remoteMem, remotePayload + offset, localPayload + offset, chunk, UrmaOpcode::WRITE,
+            state.pendingHead, kUrmaPlaceOrderRelax);
+        state.pendingHead += 1U;
+        state.submittedWqeCount += 1U;
+        offset += chunk;
+    }
+    return true;
+}
+
 AICORE inline UrmaPostResult UrmaPostNotify(
     __gm__ uint8_t* remotePayload, __gm__ uint8_t* localPayload, uint64_t messageLen, __gm__ int32_t* remoteSignal,
     int32_t signalValue, NotifyOp notifyOp, const AsyncSession& session, uint32_t peer)
@@ -284,62 +329,36 @@ AICORE inline UrmaPostResult UrmaPostNotify(
     const uint32_t signalBb = isAtomicAdd ? 2U : 1U; // FAA occupies SQE + immediate BB; SET a single BB.
     const uint32_t jetty = session.qpIdxBase;
     __gm__ UrmaNotifyResourceRegion* region = GetUrmaNotifyResourceRegion(session, peer);
-    __gm__ UrmaWQCtx* wq = GetWqContextAt(session, peer, jetty);
-    __gm__ UrmaCqCtx* cq = GetCqContextAt(session, peer, jetty);
-    __gm__ UrmaMemInfo* remoteMem = GetRemoteMemInfo(info, peer, jetty);
+    UrmaNotifyPostState state{};
+    state.wq = GetWqContextAt(session, peer, jetty);
+    state.cq = GetCqContextAt(session, peer, jetty);
+    state.remoteMem = GetRemoteMemInfo(info, peer, jetty);
 
     uint32_t setSlotIndex = 0U;
     if (!PrepareNotifySetSlot(session, peer, region, isAtomicAdd, setSlotIndex)) {
         return result;
     }
 
-    const uint32_t payloadWqeCount = UrmaNotifyPayloadWqeCount(messageLen);
-    const uint32_t announcedHead = ld_dev(reinterpret_cast<__gm__ uint32_t*>(wq->headAddr), 0);
-    uint32_t pendingHead = announcedHead;
-    uint32_t submittedWqeCount = wq->submittedWqeCount;
-    uint64_t offset = 0U;
-    for (uint32_t i = 0U; i < payloadWqeCount; ++i) {
-        if (!UrmaRingHasRoom(wq, cq, pendingHead, submittedWqeCount, 1U, 1U)) {
-            if (pendingHead != announcedHead) {
-                CommitPostedWqes(wq, pendingHead, submittedWqeCount);
-            }
-            bool completed = false;
-            if (!UrmaPollCq(session, peer, pendingHead, submittedWqeCount, true, completed) || !completed) {
-                return result;
-            }
-        }
-        const uint64_t remaining = messageLen - offset;
-        const uint32_t chunk =
-            static_cast<uint32_t>(remaining < kUrmaMaxWqeTransferBytes ? remaining : kUrmaMaxWqeTransferBytes);
-        FillTransferWqeAt(
-            wq, remoteMem, remotePayload + offset, localPayload + offset, chunk, UrmaOpcode::WRITE, pendingHead,
-            kUrmaPlaceOrderRelax);
-        pendingHead += 1U;
-        submittedWqeCount += 1U;
-        offset += chunk;
-    }
-
-    if (!UrmaRingHasRoom(wq, cq, pendingHead, submittedWqeCount, signalBb, 1U)) {
-        if (pendingHead != announcedHead) {
-            CommitPostedWqes(wq, pendingHead, submittedWqeCount);
-        }
-        bool completed = false;
-        if (!UrmaPollCq(session, peer, pendingHead, submittedWqeCount, true, completed) || !completed) {
-            return result;
-        }
+    state.announcedHead = ld_dev(reinterpret_cast<__gm__ uint32_t*>(state.wq->headAddr), 0);
+    state.pendingHead = state.announcedHead;
+    state.submittedWqeCount = state.wq->submittedWqeCount;
+    if (!PostNotifyPayload(remotePayload, localPayload, messageLen, session, peer, state) ||
+        !EnsureNotifyRingRoom(session, peer, state, signalBb)) {
+        return result;
     }
 
     if (!isAtomicAdd) {
         region->nextSetSlot = (region->nextSetSlot + 1U) % kUrmaNotifySetSlotCount;
         region->setRingStarted = 1U;
     }
-    FillNotifySignalAt(wq, remoteMem, region, remoteSignal, signalValue, isAtomicAdd, setSlotIndex, pendingHead);
-    const uint32_t targetBb = pendingHead + signalBb;
-    submittedWqeCount += 1U; // the signal contributes exactly one completion (FAA's second BB carries no CQE)
+    FillNotifySignalAt(
+        state.wq, state.remoteMem, region, remoteSignal, signalValue, isAtomicAdd, setSlotIndex, state.pendingHead);
+    const uint32_t targetBb = state.pendingHead + signalBb;
+    state.submittedWqeCount += 1U; // the signal contributes exactly one completion (FAA's second BB carries no CQE)
 
-    CommitPostedWqes(wq, targetBb, submittedWqeCount);
+    CommitPostedWqes(state.wq, targetBb, state.submittedWqeCount);
     result.handle = EncodeHandle(peer, targetBb);
-    result.targetCqe = submittedWqeCount;
+    result.targetCqe = state.submittedWqeCount;
     return result;
 }
 

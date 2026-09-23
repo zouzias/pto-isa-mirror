@@ -58,9 +58,9 @@ __tf__ PTO_INTERNAL void TExpandS(
         int nElem = TRANS::TransSize(validRow * validCol);
         TExpandsVec1D(dst, transScalar, nElem);
     } else {
-        bool isValidDataContinue = (isRowMajor && ((validRow == 1) || (validCol == TileData::ValidCol))) ||
-                                   (!isRowMajor && ((validCol == 1) || (validRow == TileData::ValidRow)));
-        if (isValidDataContinue) {
+        const bool isValidRegionContiguous = (isRowMajor && ((validRow == 1) || (validCol == TileData::Cols))) ||
+                                             (!isRowMajor && ((validCol == 1) || (validRow == TileData::Rows)));
+        if (isValidRegionContiguous) {
             int nElem = TRANS::TransSize(validRow * validCol);
             TExpandsVec1D(dst, transScalar, nElem);
         } else {

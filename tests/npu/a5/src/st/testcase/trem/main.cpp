@@ -188,3 +188,8 @@ TEST_F(TREMTest, case_uint64_4x32_inplace) { test_trem_inplace<uint64_t, 4, 32, 
 TEST_F(TREMTest, case_int64_1x1024_inplace) { test_trem_inplace<int64_t, 1, 1024, 1, 1024>(); }
 TEST_F(TREMTest, case_int64_1x2048_2045_inplace) { test_trem_inplace<int64_t, 1, 2048, 1, 2045>(); }
 TEST_F(TREMTest, case_int64_4x64_40_inplace) { test_trem_inplace<int64_t, 4, 64, 4, 40>(); }
+TEST_F(TREMTest, case_int64_floor_4x64) { test_trem<int64_t, 4, 64, 4, 64, false>(); }
+TEST_F(TREMTest, case_int64_floor_4x64_40_inplace) { test_trem_inplace<int64_t, 4, 64, 4, 40>(); }
+
+TEST_F(TREMTest, case_uint64_edge_4x64) { test_trem<uint64_t, 4, 64, 4, 64, false>(); }
+TEST_F(TREMTest, case_uint64_edge_4x64_40_inplace) { test_trem_inplace<uint64_t, 4, 64, 4, 40>(); }

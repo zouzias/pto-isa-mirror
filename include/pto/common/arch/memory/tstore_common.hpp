@@ -443,14 +443,13 @@ PTO_INTERNAL void TStoreUb2gmNz2nz(
         GlobalData::staticShape[3] == FRACTAL_NZ_ROW &&
             GlobalData::staticShape[4] == BLOCK_BYTE_SIZE / sizeof(typename TileData::DType),
         "When TileData is NZ format, the last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
-    PTO_ASSERT(validRow == gShape2 * gShape3, "The validRow of TileData must be equal to Shape2 * Shape3 of NZ shape!");
     PTO_ASSERT(
         validCol == gShape0 * gShape1 * gShape4,
         "The validCol of TileData must be equal to Shape0 * Shape1 * Shape4 of NZ shape!");
     PTO_ASSERT(gShape1 < 4096, "The gshape1 (which equals nBurst) must be less than 4096");
     uint16_t nBurst = gShape1;
     uint32_t lenBurst = validRow * C0_SIZE_BYTE;
-    uint32_t gmGap = (gStride1 - gShape2 * gShape3 * gShape4) * sizeof(typename TileData::DType);
+    uint32_t gmGap = (gStride1 - validRow * gShape4) * sizeof(typename TileData::DType);
     uint32_t ubGap = TileData::Rows - validRow;
 
     typename GlobalData::DType* dstGlobalAddr = dstAddr;

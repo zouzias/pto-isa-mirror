@@ -15,6 +15,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+template <typename PtrT>
+__tf__ PTO_INTERNAL PtrT GetCbufTilePtr(PtrT ptr)
+{
+    return (PtrT)__cce_get_tile_ptr(ptr);
+}
+
 PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
 {
     PTO_ASSERT(
@@ -184,12 +190,12 @@ PTO_INTERNAL void TMATMUL_MACRO_ACC_IMPL(
             static_assert(
                 (TileBias::Rows == TileRes::Rows) && (TileBias::Cols == TileRes::Cols),
                 "Non-broadcast bias must have same shape as TileRes.");
-            biasPtr = (__cbuf__ int32_t*)__cce_get_tile_ptr(biasData->data());
+            biasPtr = (__cbuf__ int32_t*)GetCbufTilePtr(biasData->data());
         } else {
             static_assert(sizeof(typename TileBias::DType) == 0, "Bias tile must be TileType::Bias or TileType::Mat.");
         }
     } else if constexpr (!isClear) {
-        biasPtr = (__cbuf__ int32_t*)__cce_get_tile_ptr(cMatrix.data());
+        biasPtr = (__cbuf__ int32_t*)GetCbufTilePtr(cMatrix.data());
     }
 
     if constexpr (hasBias) {
@@ -228,7 +234,7 @@ PTO_INTERNAL void TMATMUL_MACRO_IMPL(
         static_assert(
             (TileBias::Rows == TileRes::Rows) && (TileBias::Cols == TileRes::Cols),
             "Non-broadcast bias must have same shape as TileRes.");
-        biasPtr = (__cbuf__ int32_t*)__cce_get_tile_ptr(biasData.data());
+        biasPtr = (__cbuf__ int32_t*)GetCbufTilePtr(biasData.data());
     } else {
         static_assert(sizeof(typename TileBias::DType) == 0, "Bias tile must be TileType::Bias or TileType::Mat.");
     }
@@ -249,7 +255,7 @@ PTO_INTERNAL void TMATMUL_MACRO_IMPL(
 
     __cbuf__ int32_t* biasPtr = nullptr;
     if constexpr (isAcc) {
-        biasPtr = (__cbuf__ int32_t*)__cce_get_tile_ptr(cMatrix.data());
+        biasPtr = (__cbuf__ int32_t*)GetCbufTilePtr(cMatrix.data());
     }
     TMatmulMacro<TileRes, TileLeft, TileRight, false, false, isAcc>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasPtr, 0, m, k, n, cfg);

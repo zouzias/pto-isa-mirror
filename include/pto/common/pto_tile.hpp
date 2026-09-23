@@ -1427,10 +1427,21 @@ struct Tile {
 public:
     using DType = Element_;
 
+    // Twin/packed dtypes (fp4x2) store 2 elements per byte on NPU as well:
+    // keeps the 32B-alignment static_assert consistent with __CPU_SIM (fp4
+    // Cols are nibble-counted -> Cols % 64 == 0 == 32B-aligned rows).
+    // IsTwinType lives in cpu/MXTypes.hpp (only available under __CPU_SIM),
+    // so the packed types are listed explicitly, as in GetNZC0Size.
 #ifdef __CPU_SIM
     static constexpr size_t kPackedElementsPerByte = IsTwinType<DType>() ? 2 : 1;
 #else
-    static constexpr size_t kPackedElementsPerByte = 1;
+    static constexpr bool kIsPackedTwin = std::is_same_v<DType, float4_e2m1x2_t> ||
+                                          std::is_same_v<DType, float4_e1m2x2_t>
+#if defined(PTO_NPU_ARCH_A6)
+                                          || std::is_same_v<DType, hifloat4x2_t>
+#endif
+        ;
+    static constexpr size_t kPackedElementsPerByte = kIsPackedTwin ? 2 : 1;
 #endif
 
     static constexpr int getInnerRow()

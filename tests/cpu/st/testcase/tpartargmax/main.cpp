@@ -40,11 +40,10 @@ static std::string GetGoldenDir()
     return "../" + std::string(testInfo->test_suite_name()) + "." + testInfo->name();
 }
 
-TEST_F(TPARTARGMAX_Test, case_float_64x64_src1_32x32)
+static void RunTPARTARGMAXCase(const std::string& goldenDir)
 {
     const size_t valSize = static_cast<size_t>(kRows) * kCols * sizeof(float);
     const size_t idxSize = static_cast<size_t>(kRows) * kCols * sizeof(uint32_t);
-    const std::string goldenDir = GetGoldenDir();
 
     float *dstValHost = nullptr, *src0ValHost = nullptr, *src1ValHost = nullptr;
     float *dstValDevice = nullptr, *src0ValDevice = nullptr, *src1ValDevice = nullptr;
@@ -89,3 +88,7 @@ TEST_F(TPARTARGMAX_Test, case_float_64x64_src1_32x32)
 
     EXPECT_TRUE(VerifyPartArgResults(goldenDir, valSize, idxSize, kRows, kCols, kEpsilon));
 }
+
+TEST_F(TPARTARGMAX_Test, case_float_64x64_src1_32x32) { RunTPARTARGMAXCase(GetGoldenDir()); }
+
+TEST_F(TPARTARGMAX_Test, case_float_64x64_src1_32x32_tie) { RunTPARTARGMAXCase(GetGoldenDir()); }
