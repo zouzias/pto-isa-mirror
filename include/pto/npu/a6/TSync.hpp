@@ -25,7 +25,8 @@ PTO_INTERNAL static constexpr pipe_t GetPipeByOpForA6()
 template <pipe_t P>
 PTO_INTERNAL static constexpr bool IsValidFlagPipe()
 {
-    return (P == PIPE_S) || (P == PIPE_MTE1) || (P == PIPE_MTE2) || (P == PIPE_MTE3) || (P == PIPE_FIX);
+    return (P == PIPE_S) || (P == PIPE_MTE1) || (P == PIPE_MTE2) || (P == PIPE_MTE3) || (P == PIPE_FIX) ||
+           (P == PIPE_V);
 }
 
 // single pipeline wait
@@ -54,6 +55,7 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
 #ifndef __PTO_AUTO__
     // Whether both srcPipe and dstPipe are valid for set_flag/wait_flag on A6.
     static constexpr bool isValidFlagPair = IsValidFlagPipe<Base::srcPipe>() && IsValidFlagPipe<Base::dstPipe>();
+    static constexpr bool isValidBarrierPipe = ((Base::srcPipe == PIPE_MTE2) || (Base::dstPipe == PIPE_MTE3));
 
     PTO_STATIC_ASSERT(Base::srcPipe != PIPE_ALL, "SrcOp are invalid.");
     PTO_STATIC_ASSERT(Base::dstPipe != PIPE_ALL, "DstOp are invalid.");
@@ -66,7 +68,9 @@ struct Event : EventBase<Event<SrcOp, DstOp, AutoToken, EventID>, SrcOp, DstOp, 
     {
 #ifndef __PTO_AUTO__
         if constexpr (Base::isSamePipe) {
-            pipe_barrier((pipe_t)Base::srcPipe);
+            if constexpr (isValidBarrierPipe) {
+                pipe_barrier((pipe_t)Base::srcPipe);
+            }
         } else if constexpr (isValidFlagPair) {
             wait_flag((pipe_t)Base::srcPipe, (pipe_t)Base::dstPipe, Base::token);
         } else {
