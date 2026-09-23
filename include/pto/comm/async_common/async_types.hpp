@@ -74,6 +74,10 @@ struct SdmaRuntimeContext {
     uint32_t sqHead[kSdmaMaxChannelGroups];
     // Cumulative queue prefix used by this session. Every Post fences these queues.
     uint32_t usedQueueCount;
+    // Data SQEs staged by TPUT_ASYNC(DEFER) but not published yet.
+    uint32_t batchStagedDataSqeCount;
+    // Successful non-empty TPUT_ASYNC calls in the current physical batch.
+    uint32_t batchStagedOperationCount;
     __gm__ uint8_t* postDoneBase;
 };
 
@@ -94,6 +98,21 @@ constexpr uint64_t kDefaultSdmaBlockBytes = 1024 * 1024;
 
 } // namespace sdma
 
+namespace urma {
+namespace detail {
+
+struct UrmaRuntimeContext {
+    uint32_t batchStagedWqeCount;
+    uint32_t batchStagedOperationCount;
+    // WQE sequence within the logical batch. It is retained across automatic
+    // physical submissions so Jetty selection keeps rotating.
+    uint32_t batchLogicalWqeCount;
+    uint32_t batchPeer;
+};
+
+} // namespace detail
+} // namespace urma
+
 // ============================================================================
 // AsyncSession: engine-agnostic session for async DMA operations.
 // Users build via comm::BuildAsyncSession<engine>() and pass to
@@ -102,6 +121,10 @@ constexpr uint64_t kDefaultSdmaBlockBytes = 1024 * 1024;
 struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};
     bool valid{false};
+    AsyncSubmitMode submitMode{AsyncSubmitMode::IMMEDIATE};
+    // Zero disables batching. UINT32_MAX effectively disables threshold-based
+    // auto-submit while retaining explicit mode-controlled submission.
+    uint32_t batchSize{UINT32_MAX};
 
     __gm__ uint8_t* contextGm{nullptr};
     __ubuf__ uint8_t* tmpBufAddr{nullptr};
@@ -120,6 +143,7 @@ struct AsyncSession {
     uint32_t destRankId{0};
     uint32_t qpIdxBase{0};
     uint32_t qpCount{1};
+    mutable urma::detail::UrmaRuntimeContext urmaRuntimeCtx{};
 
     RdmaBackend rdmaBackend{RdmaBackend::NONE};
     uint32_t myPe{0};

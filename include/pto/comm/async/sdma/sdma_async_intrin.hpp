@@ -104,6 +104,8 @@ PTO_INTERNAL bool BuildSdmaSession(
     ScratchTile& scratchTile, __gm__ uint8_t* workspace, AsyncSession& session, uint32_t syncId = 0,
     const SdmaBaseConfig& baseConfig = {kDefaultSdmaBlockBytes, 0, 1}, uint32_t channelGroupIdx = kAutoChannelGroupIdx)
 {
+    session.sdmaRuntimeCtx = {};
+    session.urmaRuntimeCtx = {};
     if (channelGroupIdx == kAutoChannelGroupIdx) {
         channelGroupIdx = static_cast<uint32_t>(get_block_idx());
     }
@@ -129,7 +131,6 @@ PTO_INTERNAL bool BuildSdmaSession(
     session.queueNum = baseConfig.queue_num;
     // Initialize the persistent runtime state once, mirroring the
     // SdmaSession build path (the backend requires runtimeCtx per session).
-    session.sdmaRuntimeCtx = {};
     SdmaSession probe;
     detail::LoadSdmaSession(session, probe);
     session.valid = detail::InitializeRuntimeCtx(probe);
