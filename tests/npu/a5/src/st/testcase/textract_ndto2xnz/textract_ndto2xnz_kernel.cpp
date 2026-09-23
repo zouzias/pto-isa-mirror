@@ -45,11 +45,11 @@ __global__ AICORE void runTExtractNd2xNz(
         CM>;
 
     using Dst0ZeroTile = Tile<
-        TileType::Vec, uint8_t, nzRows0, W0Cols * static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows0,
-        W0Cols * static_cast<int>(sizeof(T))>;
+        TileType::Vec, uint8_t, nzRows0, W0Cols* static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows0,
+        W0Cols* static_cast<int>(sizeof(T))>;
     using Dst1ZeroTile = Tile<
-        TileType::Vec, uint8_t, nzRows1, W1Cols * static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows1,
-        W1Cols * static_cast<int>(sizeof(T))>;
+        TileType::Vec, uint8_t, nzRows1, W1Cols* static_cast<int>(sizeof(T)), BLayout::RowMajor, nzRows1,
+        W1Cols* static_cast<int>(sizeof(T))>;
 
     SrcTile srcTile(SrcRows, SrcCols);
     Dst0Tile dst0Tile;
