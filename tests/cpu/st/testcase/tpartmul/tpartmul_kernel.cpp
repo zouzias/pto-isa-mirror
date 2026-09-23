@@ -58,8 +58,7 @@ void LaunchTPARTMUL(T* out, T* src0, T* src1, void* stream)
 }
 
 #define INSTANTIATE_TPARTMUL(T, RS0, CS0, RS1, CS1, RO, CO) \
-    template void LaunchTPARTMUL<T, RS0, CS0, RS1, CS1, RO, CO>( \
-        T* out, T* src0, T* src1, void* stream)
+    template void LaunchTPARTMUL<T, RS0, CS0, RS1, CS1, RO, CO>(T * out, T * src0, T * src1, void* stream)
 
 INSTANTIATE_TPARTMUL(float, 64, 64, 64, 64, 64, 64);
 INSTANTIATE_TPARTMUL(float, 64, 64, 32, 32, 64, 64);
