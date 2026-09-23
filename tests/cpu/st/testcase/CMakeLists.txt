@@ -115,6 +115,7 @@ tpartargmax
 tpartargmin
 tpartmax
 tpartmin
+tpartmul
 tpow
 tpows
 tprefetch
