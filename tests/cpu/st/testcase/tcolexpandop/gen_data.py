@@ -23,8 +23,15 @@ def gen_golden_data_tcolexpandop(param, kind: str):
     is_integer = np.issubdtype(dtype, np.integer)
 
     if is_integer:
-        input1 = np.random.randint(1, 8, size=[param.src_row, param.src_col]).astype(dtype)
-        input2 = np.random.randint(1, 8, size=[1, param.src_col]).astype(dtype)
+        if dtype == np.int64:
+            input1 = np.random.randint(2**32, 2**34, size=[param.src_row, param.src_col], dtype=np.int64)
+            input2 = np.random.randint(1, 8, size=[1, param.src_col], dtype=np.int64)
+        elif dtype == np.uint64:
+            input1 = np.random.randint(2**32, 2**34, size=[param.src_row, param.src_col], dtype=np.int64).astype(np.uint64)
+            input2 = np.random.randint(1, 8, size=[1, param.src_col], dtype=np.int64).astype(np.uint64)
+        else:
+            input1 = np.random.randint(1, 8, size=[param.src_row, param.src_col]).astype(dtype)
+            input2 = np.random.randint(1, 8, size=[1, param.src_col]).astype(dtype)
     else:
         input1 = np.random.uniform(low=-2, high=2, size=[param.src_row, param.src_col]).astype(dtype)
         input2 = np.random.uniform(low=1, high=2, size=[1, param.src_col]).astype(dtype)
@@ -75,7 +82,8 @@ def generate_case_name(param, kind: str):
     dtype_str = {
         np.float32: "float", np.float16: "half",
         np.int16: "int16", np.int32: "int32",
-        np.uint16: "uint16", np.uint32: "uint32",
+        np.int64: "int64", np.uint16: "uint16",
+        np.uint32: "uint32", np.uint64: "uint64",
         np.uint8: "uint8",
     }[param.dtype]
 
@@ -98,8 +106,10 @@ if __name__ == "__main__":
     case_int_params_list = [
         TColExpandOpParams(np.int16, 16, 256),
         TColExpandOpParams(np.int32, 64, 64),
+        TColExpandOpParams(np.int64, 64, 64),
         TColExpandOpParams(np.uint16, 64, 64),
         TColExpandOpParams(np.uint32, 64, 64),
+        TColExpandOpParams(np.uint64, 64, 64),
     ]
     case_uint8_params_list = [
         TColExpandOpParams(np.uint8, 64, 64),

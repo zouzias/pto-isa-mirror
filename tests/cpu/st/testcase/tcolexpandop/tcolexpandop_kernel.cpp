@@ -207,6 +207,13 @@ template void LaunchTCOLEXPANDADD<int32_t, 64, 64>(int32_t* out, int32_t* src0, 
 template void LaunchTCOLEXPANDMAX<int32_t, 64, 64>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 template void LaunchTCOLEXPANDMIN<int32_t, 64, 64>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 
+template void LaunchTCOLEXPANDDIV<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMUL<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCOLEXPANDSUB<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCOLEXPANDADD<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMAX<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMIN<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+
 template void LaunchTCOLEXPANDDIV<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
 template void LaunchTCOLEXPANDMUL<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
 template void LaunchTCOLEXPANDSUB<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
@@ -220,3 +227,10 @@ template void LaunchTCOLEXPANDSUB<uint32_t, 64, 64>(uint32_t* out, uint32_t* src
 template void LaunchTCOLEXPANDADD<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
 template void LaunchTCOLEXPANDMAX<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
 template void LaunchTCOLEXPANDMIN<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+
+template void LaunchTCOLEXPANDDIV<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMUL<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTCOLEXPANDSUB<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTCOLEXPANDADD<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMAX<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTCOLEXPANDMIN<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
