@@ -21,6 +21,9 @@ python3 tests/script/run_st.py -r npu -v a5 -t comm/tget_async_rdma -d -n 2
 python3 tests/script/run_st.py -r npu -v a5 -t comm/tput_async_notify_rdma -d -n 2
 ```
 
+`TPutAsyncRdma.Vec_Int32_MultiAiv` checks 16 AIVs sharing one peer/QP, covering PUT/notify traffic, ring wraparound,
+and data/event correctness. Add `-g TPutAsyncRdma.Vec_Int32_MultiAiv` to the `tput_async_rdma` command to run it alone.
+
 For the first `TPUT_ASYNC_NOTIFY` validation, run only the focused two-rank case:
 
 ```bash

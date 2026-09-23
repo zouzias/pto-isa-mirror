@@ -97,6 +97,7 @@ private:
         RoceCqCtx* scq{nullptr};
         RoceCqCtx* rcq{nullptr};
         RdmaMemInfo* memory{nullptr};
+        uint64_t stateDeviceBase{0};
     };
 
     template <typename... Args>
@@ -150,6 +151,7 @@ private:
     static bool ReadU32Device(uint64_t deviceAddress, uint32_t& value);
     static bool WriteU32Device(uint64_t deviceAddress, uint32_t value);
     bool InitializeQueueMirrors(const host::SqContext& sq, const host::CqContext& cq, uint32_t peer) const;
+    bool InitializeSqOwners(const host::SqContext& sq, uint32_t peer) const;
     bool PrepareRdmaInfoLayout(std::vector<uint8_t>& hostBuffer, RdmaInfoHostLayout& layout);
     bool FillLocalMemoryInfo(RdmaMemInfo* memory);
     bool FillPeerRdmaInfo(size_t channelIndex, RdmaInfoHostLayout& layout);

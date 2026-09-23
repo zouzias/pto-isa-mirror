@@ -21,9 +21,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <utility>
 #include <vector>
 
+#include <acl/acl.h>
 #include <pto/pto-inst.hpp>
 
-#include "../common.hpp"
+#include "../comm_mpi.h"
 #include "tput_async_rdma_kernel.h"
 #include "pto/common/pto_tile.hpp"
 #ifdef PTO_RDMA_SUPPORTED
@@ -33,6 +34,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef PTO_RDMA_SUPPORTED
+// Runtime stream APIs used by this ST.
+using rtError_t = int32_t;
+using rtStream_t = void*;
+static constexpr int32_t RT_STREAM_PRIORITY_DEFAULT = 0;
+extern "C" rtError_t rtStreamCreate(rtStream_t* stream, int32_t priority);
+extern "C" rtError_t rtStreamDestroy(rtStream_t stream);
+
 template <typename... Args>
 static void RdmaTrace(uint32_t caseId, int rankId, Args&&... args)
 {
@@ -71,7 +79,7 @@ static uint32_t gRdmaCaseSequence = 0;
 // Data plane is a true one-sided remote write posted from AIV: root rank writes
 // its send buffer into every peer's recv buffer. The symmetric communication
 // buffer layout matches the URMA test:
-//   [64 x int32 header][sendBuf: count x T][recvBuf: count x T]
+//   [per-block status header][sendBuf: count x T][recvBuf: count x T]
 // The remote target VA is computed from the peer's registered MR base VA
 // (PeerMrBaseAddr) plus the recv-region offset.
 // ============================================================================
@@ -79,7 +87,9 @@ static uint32_t gRdmaCaseSequence = 0;
 #ifdef PTO_RDMA_SUPPORTED
 constexpr uint32_t kRdmaPublicEventWaitError = 0x30000;
 constexpr uint32_t kRdmaPublicEventTestError = 0x30001;
-constexpr size_t kRdmaTestDataOffset = 64 * sizeof(int32_t);
+constexpr size_t kRdmaTestStatusStride = 64;
+constexpr int kRdmaTestMaxBlocks = 16;
+constexpr size_t kRdmaTestDataOffset = kRdmaTestMaxBlocks * kRdmaTestStatusStride;
 constexpr size_t kRdmaNotifyCanaryBeforeOffset = sizeof(uint32_t);
 constexpr size_t kRdmaNotifySignalOffset = 2U * sizeof(uint32_t);
 constexpr size_t kRdmaNotifyCanaryAfterOffset = 3U * sizeof(uint32_t);
@@ -87,6 +97,12 @@ constexpr int32_t kRdmaNotifySignalValue = 37;
 constexpr int32_t kRdmaNotifyCanaryBefore = 0x13572468;
 constexpr int32_t kRdmaNotifyCanaryAfter = 0x24681357;
 constexpr uint32_t kRdmaNotifyPollLimit = 10000000U;
+constexpr int kRdmaConcurrentBlocks = 16;
+constexpr int kRdmaConcurrentSlotWords = 8;
+constexpr int kRdmaConcurrentPayloadWords = 4;
+constexpr uint64_t kRdmaConcurrentMinOperationsPerBlock = 64U * 1024U + 1U;
+constexpr size_t kRdmaConcurrentCount =
+    kRdmaConcurrentBlocks * (kRdmaConcurrentMinOperationsPerBlock + 1U) * kRdmaConcurrentSlotWords;
 using RdmaTestShape = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using RdmaTestStride = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using RdmaScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::rdma::kRdmaScratchBytes>;
@@ -139,7 +155,7 @@ AICORE inline bool BuildRdmaTestSession(
     if (pto::comm::BuildAsyncSession<pto::comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, myPeer, session, syncId)) {
         return true;
     }
-    *deviceStatus = pto::comm::rdma::kRdmaSessionBuildError;
+    st_dev(pto::comm::rdma::kRdmaSessionBuildError, deviceStatus, 0);
     pipe_barrier(PIPE_ALL);
     return false;
 }
@@ -194,8 +210,13 @@ AICORE inline void ExecutePutRdma(
     __gm__ T* localBuf, int nranks, int myRank, int firstRankId, int rootRank, int elemOffset, int elemCount,
     int operationCount, RdmaCompletionMode completionMode, __gm__ uint8_t* rdmaWorkspace, uint32_t syncId)
 {
-    __gm__ uint32_t* deviceStatus = reinterpret_cast<__gm__ uint32_t*>(localBuf);
-    *deviceStatus = 0;
+    const int block = static_cast<int>(get_block_idx());
+    const int operationsPerBlock = operationCount / static_cast<int>(get_block_num());
+    elemOffset += block * operationsPerBlock * elemCount;
+    operationCount = operationsPerBlock;
+    __gm__ uint32_t* deviceStatus =
+        reinterpret_cast<__gm__ uint32_t*>(reinterpret_cast<__gm__ uint8_t*>(localBuf) + block * kRdmaTestStatusStride);
+    st_dev(uint32_t{0}, deviceStatus, 0);
     if (myRank != rootRank) {
         pipe_barrier(PIPE_ALL);
         return;
@@ -220,7 +241,7 @@ AICORE inline void ExecutePutRdma(
         const uint32_t completionStatus = PostPutOperations<T, count>(
             sendBuf, peerBase, targetPeer, elemOffset, elemCount, operationCount, shape, stride, session,
             completionMode);
-        *deviceStatus = completionStatus;
+        st_dev(completionStatus, deviceStatus, 0);
         if (completionStatus != 0) {
             break;
         }
@@ -311,6 +332,96 @@ template <typename T, size_t count>
         rdmaWorkspace, syncId);
 }
 #endif // PTO_RDMA_SUPPORTED && PTO_RDMA_GET_TEST
+
+#ifdef PTO_RDMA_SUPPORTED
+[[bisheng::core_ratio(0, 1)]] __global__ AICORE void TPutAsyncRdmaConcurrentKernel(
+    __gm__ int32_t* localBuf, int myPeer, int operationsPerBlock, bool checkCompletedEvents,
+    __gm__ uint8_t* rdmaWorkspace)
+{
+    const int block = static_cast<int>(get_block_idx());
+    __gm__ uint32_t* deviceStatus =
+        reinterpret_cast<__gm__ uint32_t*>(reinterpret_cast<__gm__ uint8_t*>(localBuf) + block * kRdmaTestStatusStride);
+    st_dev(uint32_t{0}, deviceStatus, 0);
+    if (myPeer != 0) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+    RdmaScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+    pto::comm::AsyncSession session;
+    if (!BuildRdmaTestSession(scratchTile, rdmaWorkspace, 0, session, 0, deviceStatus)) {
+        return;
+    }
+    __gm__ int32_t* sendBuf =
+        reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(localBuf) + kRdmaTestDataOffset);
+    if (checkCompletedEvents) {
+        uint32_t status = 0;
+        for (int which = 0; which < 2 && status == 0; ++which) {
+            const int operation = which == 0 ? 0 : operationsPerBlock - 1;
+            const int offset = (block * operationsPerBlock + operation) * kRdmaConcurrentSlotWords + 6;
+            pto::comm::AsyncEvent event(
+                ld_dev(reinterpret_cast<__gm__ uint64_t*>(sendBuf + offset), 0), pto::comm::DmaEngine::RDMA);
+            status = CompleteRdmaEvent(event, session, RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST);
+        }
+        st_dev(status, deviceStatus, 0);
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+    __gm__ int32_t* remoteRecv =
+        reinterpret_cast<__gm__ int32_t*>(pto::comm::rdma::PeerMrBaseAddr(rdmaWorkspace, 1) + kRdmaTestDataOffset) +
+        kRdmaConcurrentCount;
+    const RdmaTestShape shape(1, 1, 1, 1, kRdmaConcurrentPayloadWords);
+    const RdmaTestStride stride(
+        kRdmaConcurrentPayloadWords, kRdmaConcurrentPayloadWords, kRdmaConcurrentPayloadWords,
+        kRdmaConcurrentPayloadWords, 1);
+    pto::comm::AsyncEvent lastEvent;
+    uint32_t status = 0;
+    uint32_t previousIndex = 0;
+    const int burstOperations = operationsPerBlock / 2;
+    for (int operation = 0; operation < operationsPerBlock; ++operation) {
+        // The initial burst leaves CQ progress to the backend's capacity checks.
+        const bool mixedCompletion = operation >= burstOperations;
+        if (mixedCompletion && (operation % 17) == 0) {
+            const uint64_t start = AscendC::GetSystemCycle();
+            const uint64_t delay = 256U * (1U + ((operation / 17 + block) % kRdmaConcurrentBlocks));
+            while (AscendC::GetSystemCycle() - start < delay) {
+            }
+        }
+        const int slot = block * operationsPerBlock + operation;
+        const int offset = slot * kRdmaConcurrentSlotWords;
+        RdmaTestGlobal<int32_t> source(sendBuf + offset + 1, shape, stride);
+        RdmaTestGlobal<int32_t> destination(remoteRecv + offset + 1, shape, stride);
+        if ((operation & 1) != 0) {
+            pto::comm::Signal signal(remoteRecv + offset + 6);
+            lastEvent = pto::comm::TPUT_ASYNC_NOTIFY<pto::comm::DmaEngine::RDMA>(
+                destination, source, signal, slot + 1, pto::comm::NotifyOp::Set, session, 1);
+        } else {
+            lastEvent = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::RDMA>(destination, source, session, 1);
+        }
+        st_dev(lastEvent.handle, reinterpret_cast<__gm__ uint64_t*>(sendBuf + offset + 6), 0);
+        if (lastEvent.handle == 0 || pto::comm::rdma::IsErrorHandle(lastEvent.handle) ||
+            static_cast<uint32_t>(lastEvent.handle) <= previousIndex) {
+            status = kRdmaPublicEventWaitError;
+            break;
+        }
+        previousIndex = static_cast<uint32_t>(lastEvent.handle);
+        // Repeat the completion patterns across groups of four producers.
+        if (mixedCompletion && (block % 4) == 1 && (operation % 37) == 36) {
+            if (!lastEvent.Wait(session)) {
+                status = kRdmaPublicEventWaitError;
+                break;
+            }
+        } else if (mixedCompletion && (block % 4) != 2 && (operation % (17 + block % 4)) == 0) {
+            (void)lastEvent.Test(session);
+        }
+    }
+    if (status == 0) {
+        status = CompleteRdmaEvent(lastEvent, session, RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST);
+    }
+    st_dev(status, deviceStatus, 0);
+    pipe_barrier(PIPE_ALL);
+}
+#endif
 
 template <size_t count>
 [[bisheng::core_ratio(0, 1)]] __global__ AICORE void TPutAsyncNotifyRdmaKernelImpl(
@@ -627,11 +738,12 @@ static const char* RdmaCompletionModeName(RdmaCompletionMode mode)
 }
 
 #ifdef PTO_RDMA_SUPPORTED
-static void PrintRdmaDeviceStatus(const char* operation, int rankId, int deviceId, int syncRet, uint32_t devStatus)
+static void PrintRdmaDeviceStatus(
+    const char* operation, int rankId, int deviceId, int syncRet, uint32_t devStatus, int block = 0)
 {
     std::cerr << "[RDMA][" << pto::comm::rdma::RdmaWorkspaceManager::ConfiguredBackendName() << "] " << operation
-              << " Rank " << rankId << " Device " << deviceId << " SyncRet " << syncRet << " DevStatus 0x" << std::hex
-              << devStatus << std::dec;
+              << " Rank " << rankId << " Device " << deviceId << " Block " << block << " SyncRet " << syncRet
+              << " DevStatus 0x" << std::hex << devStatus << std::dec;
     if (devStatus == pto::comm::rdma::kRdmaSessionBuildError) {
         std::cerr << " (session_build_fail)";
     } else if (devStatus == kRdmaPublicEventWaitError) {
@@ -657,6 +769,7 @@ struct RdmaCaseConfig {
     int elemCount;
     int operationCount;
     RdmaCompletionMode completionMode;
+    int blockCount{1};
 };
 
 template <typename T>
@@ -722,9 +835,11 @@ static RdmaTestResult PrepareRdmaCase(
     RdmaTrace(
         config.caseId, config.rankId, "CASE begin op=", operation, " elemSize=", sizeof(T), " count=", count,
         " bytes=", count * sizeof(T), " offset=", config.elemOffset, " elemsPerOp=", config.elemCount,
-        " operations=", config.operationCount, " completion=", RdmaCompletionModeName(config.completionMode));
+        " operations=", config.operationCount, " blocks=", config.blockCount,
+        " completion=", RdmaCompletionModeName(config.completionMode));
     const bool localPlanValid =
-        config.elemOffset >= 0 && config.elemCount > 0 && config.operationCount > 0 &&
+        config.elemOffset >= 0 && config.elemCount > 0 && config.operationCount > 0 && config.blockCount > 0 &&
+        config.blockCount <= kRdmaTestMaxBlocks && config.operationCount % config.blockCount == 0 &&
         static_cast<int64_t>(config.elemOffset) + static_cast<int64_t>(config.elemCount) * config.operationCount <=
             static_cast<int64_t>(count);
     const std::string validationStage = std::string(operation) + " transfer plan validation";
@@ -762,8 +877,7 @@ static bool InitializeRdmaBuffers(
         staging.output[index] = RdmaSentinelValue<T>(index % count);
     }
 
-    constexpr size_t kDataOffset = 64 * sizeof(int32_t);
-    sendBuffer = reinterpret_cast<T*>(static_cast<uint8_t*>(context.devBuf) + kDataOffset);
+    sendBuffer = reinterpret_cast<T*>(static_cast<uint8_t*>(context.devBuf) + kRdmaTestDataOffset);
     recvBuffer = sendBuffer + count;
     bool localOk =
         aclrtMemcpy(sendBuffer, count * sizeof(T), staging.input, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE) ==
@@ -772,10 +886,13 @@ static bool InitializeRdmaBuffers(
                    recvBuffer, outputElements * sizeof(T), staging.output, outputElements * sizeof(T),
                    ACL_MEMCPY_HOST_TO_DEVICE) == ACL_SUCCESS) &&
               localOk;
-    const uint32_t zero = 0;
-    localOk =
-        (aclrtMemcpy(context.devBuf, sizeof(zero), &zero, sizeof(zero), ACL_MEMCPY_HOST_TO_DEVICE) == ACL_SUCCESS) &&
-        localOk;
+    const uint32_t notExecuted = UINT32_MAX;
+    for (int block = 0; block < config.blockCount; ++block) {
+        localOk = (aclrtMemcpy(
+                       static_cast<uint8_t*>(context.devBuf) + block * kRdmaTestStatusStride, sizeof(notExecuted),
+                       &notExecuted, sizeof(notExecuted), ACL_MEMCPY_HOST_TO_DEVICE) == ACL_SUCCESS) &&
+                  localOk;
+    }
     const char* stage = IsGet ? "GET input initialization" : "PUT input initialization";
     return AllRanksReady(localOk, config.nRanks, stage);
 }
@@ -790,10 +907,19 @@ static RdmaKernelResult CollectRdmaKernelResult(
         config.caseId, config.rankId, "CASE ", operation, " kernel synchronized syncRet=", syncResult,
         " elapsed_us=", RdmaElapsedUs(kernelStart));
     uint32_t deviceStatus = 0;
-    bool copied = aclrtMemcpy(
-                      &deviceStatus, sizeof(deviceStatus), context.devBuf, sizeof(deviceStatus),
-                      ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS;
-    PrintRdmaDeviceStatus(operation, config.rankId, context.deviceId, syncResult, deviceStatus);
+    bool copied = true;
+    for (int block = 0; block < config.blockCount; ++block) {
+        uint32_t blockStatus = UINT32_MAX;
+        copied = (aclrtMemcpy(
+                      &blockStatus, sizeof(blockStatus),
+                      static_cast<uint8_t*>(context.devBuf) + block * kRdmaTestStatusStride, sizeof(blockStatus),
+                      ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) &&
+                 copied;
+        PrintRdmaDeviceStatus(operation, config.rankId, context.deviceId, syncResult, blockStatus, block);
+        if (deviceStatus == 0) {
+            deviceStatus = blockStatus;
+        }
+    }
     copied = (aclrtMemcpy(
                   output, outputElements * sizeof(T), deviceOutput, outputElements * sizeof(T),
                   ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) &&
@@ -808,7 +934,7 @@ static RdmaKernelResult LaunchPutRdmaKernel(
     CommMpiBarrier();
     const auto kernelStart = std::chrono::steady_clock::now();
     // clang-format off
-    TPutAsyncRdmaKernelImpl<T, count><<<1, nullptr, context.stream>>>(
+    TPutAsyncRdmaKernelImpl<T, count><<<config.blockCount, nullptr, context.stream>>>(
         reinterpret_cast<T*>(context.devBuf), config.nRanks, config.rankId, config.firstRankId, config.rootRank,
         config.elemOffset, config.elemCount, config.operationCount, config.completionMode,
         reinterpret_cast<uint8_t*>(context.rdmaMgr.GetWorkspaceAddr()), 0);
@@ -910,6 +1036,160 @@ static RdmaTestResult AbortRdmaCase(const RdmaCaseConfig& config, RdmaTestContex
     (void)context.Cleanup();
     return RdmaTestResult::FAILED;
 }
+
+static bool VerifyConcurrentRdmaBuffers(
+    const RdmaCaseConfig& config, const RdmaHostStaging<int32_t>& staging, int operationsPerBlock,
+    uint64_t expectedWqes)
+{
+    const size_t operationCount = static_cast<size_t>(operationsPerBlock) * kRdmaConcurrentBlocks;
+    std::vector<std::pair<uint32_t, uint32_t>> reservations;
+    if (config.rankId == config.rootRank) {
+        reservations.reserve(operationCount);
+    }
+    for (size_t index = 0; index < kRdmaConcurrentCount; ++index) {
+        const size_t slot = index / kRdmaConcurrentSlotWords;
+        const size_t word = index % kRdmaConcurrentSlotWords;
+        const bool active = slot < operationCount;
+        const bool notify = active && ((slot % operationsPerBlock) & 1U) != 0;
+        int32_t expected = -1;
+        if (config.rankId != config.rootRank && active) {
+            if (word >= 1 && word <= kRdmaConcurrentPayloadWords) {
+                expected = RdmaInputValue<int32_t>(index, config.rootRank);
+            } else if (notify && word == 6) {
+                expected = static_cast<int32_t>(slot + 1);
+            }
+        }
+        const bool eventRecord = config.rankId == config.rootRank && active && word >= 6;
+        if (staging.output[index] != expected ||
+            (!eventRecord && staging.input[index] != RdmaInputValue<int32_t>(index, config.rankId))) {
+            std::cerr << "[RDMA] concurrent buffer mismatch rank=" << config.rankId << " slot=" << slot
+                      << " word=" << word << " expected=" << expected << " received=" << staging.output[index]
+                      << std::endl;
+            return false;
+        }
+        if (eventRecord && word == 6) {
+            uint64_t handle = 0;
+            std::memcpy(&handle, staging.input + index, sizeof(handle));
+            const uint32_t peer = static_cast<uint32_t>(handle >> pto::comm::rdma::kHandleRankShift);
+            const uint32_t end = static_cast<uint32_t>(handle);
+            const uint32_t wqes = notify ? 2U : 1U;
+            if (peer != 1 || end < wqes) {
+                std::cerr << "[RDMA] invalid concurrent event slot=" << slot << " handle=" << handle << std::endl;
+                return false;
+            }
+            reservations.emplace_back(end - wqes, end);
+        }
+    }
+    std::sort(reservations.begin(), reservations.end());
+    uint64_t end = 0;
+    for (const auto& reservation : reservations) {
+        if (reservation.first != end) {
+            std::cerr << "[RDMA] duplicate or missing reservation at " << end << std::endl;
+            return false;
+        }
+        end = reservation.second;
+    }
+    return config.rankId != config.rootRank || end == expectedWqes;
+}
+
+static RdmaTestResult RunPutAsyncRdmaConcurrentKernel(
+    int rankId, int nRanks, int nDevices, int firstDeviceId, int firstRankId, uint32_t caseId)
+{
+    const auto caseStart = std::chrono::steady_clock::now();
+    RdmaCaseConfig config{
+        rankId,
+        nRanks,
+        nDevices,
+        firstDeviceId,
+        firstRankId,
+        firstRankId,
+        caseId,
+        0,
+        1,
+        kRdmaConcurrentBlocks,
+        RdmaCompletionMode::PUBLIC_EVENT_WAIT_TEST,
+        kRdmaConcurrentBlocks};
+    RdmaTestContext context;
+    const size_t communicationBytes = kRdmaTestDataOffset + 2U * kRdmaConcurrentCount * sizeof(int32_t);
+    const RdmaTestResult preparation =
+        PrepareRdmaCase<int32_t, kRdmaConcurrentCount>("MULTI_AIV", config, communicationBytes, context);
+    if (preparation != RdmaTestResult::PASSED) {
+        return preparation;
+    }
+    RdmaHostStaging<int32_t> staging;
+    pto::comm::rdma::test::BackendQueueSnapshot snapshot{};
+    bool planReady = pto::comm::rdma::test::ReadBackendQueueSnapshot(
+        context.rdmaMgr.GetWorkspaceAddr(), 1U - static_cast<uint32_t>(context.rankId), snapshot);
+    uint32_t depths[2]{};
+    const uint32_t localDepth = std::max(snapshot.sqDepth, snapshot.cqDepth);
+    planReady = (CommMpiAllgather(&localDepth, sizeof(localDepth), depths, sizeof(localDepth)) == 0) && planReady;
+    // Keep each operation's data and event distinct throughout the sustained burst.
+    const uint64_t perBlock =
+        std::max<uint64_t>(kRdmaConcurrentMinOperationsPerBlock, static_cast<uint64_t>(depths[0]) / 8U + 1U);
+    planReady = planReady && depths[0] > 0 &&
+                perBlock * kRdmaConcurrentBlocks * kRdmaConcurrentSlotWords <= kRdmaConcurrentCount;
+    if (!AllRanksReady(planReady, nRanks, "concurrent ring depths and buffer capacity")) {
+        std::cerr << "[RDMA] cannot read queue depths or cover them with the concurrent test buffer" << std::endl;
+        return AbortRdmaCase(config, context, staging);
+    }
+    const int operationsPerBlock = static_cast<int>(perBlock);
+    config.operationCount = operationsPerBlock * kRdmaConcurrentBlocks;
+    const uint64_t expectedWqes = (perBlock + perBlock / 2U) * kRdmaConcurrentBlocks;
+    int32_t* sendBuffer = nullptr;
+    int32_t* receiveBuffer = nullptr;
+    if (!InitializeRdmaBuffers<false, int32_t, kRdmaConcurrentCount>(
+            config, context, staging, sendBuffer, receiveBuffer)) {
+        return AbortRdmaCase(config, context, staging);
+    }
+    CommMpiBarrier();
+    const auto kernelStart = std::chrono::steady_clock::now();
+    // clang-format off
+    TPutAsyncRdmaConcurrentKernel<<<kRdmaConcurrentBlocks, nullptr, context.stream>>>(
+        reinterpret_cast<int32_t*>(context.devBuf), context.rankId, operationsPerBlock, false,
+        reinterpret_cast<uint8_t*>(context.rdmaMgr.GetWorkspaceAddr()));
+    // clang-format on
+    const int syncResult = aclrtSynchronizeStream(context.stream);
+    const RdmaKernelResult kernelResult = CollectRdmaKernelResult(
+        "MULTI_AIV", config, context, syncResult, kernelStart, staging.output, kRdmaConcurrentCount, receiveBuffer);
+    bool valid = kernelResult.copied && kernelResult.syncResult == 0 && kernelResult.deviceStatus == 0;
+    // Start a second kernel only after every producer has drained. This makes
+    // old-event checks occur after the full ring-wrap workload, regardless of skew.
+    valid = AllRanksReady(valid, nRanks, "concurrent producers completed");
+    if (valid) {
+        const auto checkStart = std::chrono::steady_clock::now();
+        // clang-format off
+        TPutAsyncRdmaConcurrentKernel<<<kRdmaConcurrentBlocks, nullptr, context.stream>>>(
+            reinterpret_cast<int32_t*>(context.devBuf), context.rankId, operationsPerBlock, true,
+            reinterpret_cast<uint8_t*>(context.rdmaMgr.GetWorkspaceAddr()));
+        // clang-format on
+        const int checkSync = aclrtSynchronizeStream(context.stream);
+        const RdmaKernelResult checked = CollectRdmaKernelResult(
+            "MULTI_AIV_RECHECK", config, context, checkSync, checkStart, staging.output, kRdmaConcurrentCount,
+            receiveBuffer);
+        valid = checked.copied && checked.syncResult == 0 && checked.deviceStatus == 0;
+    }
+    valid = (aclrtMemcpy(
+                 staging.input, kRdmaConcurrentCount * sizeof(int32_t), sendBuffer,
+                 kRdmaConcurrentCount * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST) == ACL_SUCCESS) &&
+            valid;
+    valid = pto::comm::rdma::test::ReadBackendQueueSnapshot(
+                context.rdmaMgr.GetWorkspaceAddr(), 1U - static_cast<uint32_t>(context.rankId), snapshot) &&
+            valid;
+    const auto& state = snapshot.state;
+    const uint64_t target = context.rankId == 0 ? expectedWqes : 0U;
+    valid = valid && state.reserveHead == target && state.readyHead == target && state.postedHead == target &&
+            state.completedHead == target && state.error == 0 && state.postLock == 0 && state.cqLock == 0;
+    valid = valid && VerifyConcurrentRdmaBuffers(config, staging, operationsPerBlock, expectedWqes);
+    std::cerr << "[RDMA] MULTI_AIV rank=" << context.rankId << " SQ=" << snapshot.sqDepth << " CQ=" << snapshot.cqDepth
+              << " blocks=" << kRdmaConcurrentBlocks << " operations/block=" << operationsPerBlock
+              << " expectedWqes=" << target << " reserve/ready/posted/completed=" << state.reserveHead << '/'
+              << state.readyHead << '/' << state.postedHead << '/' << state.completedHead
+              << " sqLaps=" << (snapshot.sqDepth == 0 ? 0 : state.completedHead / snapshot.sqDepth)
+              << " cqLaps=" << (snapshot.cqDepth == 0 ? 0 : state.completedHead / snapshot.cqDepth)
+              << " valid=" << valid << std::endl;
+    valid = AllRanksReady(valid, nRanks, "concurrent payload, canaries, events, and queue progress");
+    return FinishRdmaCase("MULTI_AIV", config, context, staging, valid, caseStart);
+}
 #endif
 
 template <typename... Args>
@@ -925,19 +1205,19 @@ static RdmaTestResult SkipUnsupportedRdmaKernel(Args&&...)
 template <bool IsGet, typename T, size_t count>
 static RdmaTestResult RunAsyncRdmaRootKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int first_rank_id, int root_rank, uint32_t caseId,
-    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode)
+    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode, int blockCount = 1)
 {
 #ifndef PTO_RDMA_SUPPORTED
     return SkipUnsupportedRdmaKernel(
         rank_id, n_ranks, n_devices, first_device_id, first_rank_id, root_rank, caseId, elemOffset, elemCount,
-        operationCount, completionMode);
+        operationCount, completionMode, blockCount);
 #else
     const auto caseStart = std::chrono::steady_clock::now();
     const char* operation = IsGet ? "GET" : "PUT";
-    const RdmaCaseConfig config{rank_id, n_ranks,    n_devices, first_device_id, first_rank_id, root_rank,
-                                caseId,  elemOffset, elemCount, operationCount,  completionMode};
+    const RdmaCaseConfig config{rank_id, n_ranks,    n_devices, first_device_id, first_rank_id,  root_rank,
+                                caseId,  elemOffset, elemCount, operationCount,  completionMode, blockCount};
     const size_t recvElements = IsGet ? static_cast<size_t>(n_ranks) * count : count;
-    const size_t commBytesNeeded = 64 * sizeof(int32_t) + (recvElements + count) * sizeof(T);
+    const size_t commBytesNeeded = kRdmaTestDataOffset + (recvElements + count) * sizeof(T);
     RdmaTestContext context;
     const RdmaTestResult preparation = PrepareRdmaCase<T, count>(operation, config, commBytesNeeded, context);
     if (preparation != RdmaTestResult::PASSED) {
@@ -969,11 +1249,11 @@ static RdmaTestResult RunAsyncRdmaRootKernel(
 template <typename T, size_t count>
 RdmaTestResult RunPutAsyncRdmaRootPutKernel(
     int rank_id, int n_ranks, int n_devices, int first_device_id, int first_rank_id, int root_rank, uint32_t caseId,
-    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode)
+    int elemOffset, int elemCount, int operationCount, RdmaCompletionMode completionMode, int blockCount)
 {
     return RunAsyncRdmaRootKernel<false, T, count>(
         rank_id, n_ranks, n_devices, first_device_id, first_rank_id, root_rank, caseId, elemOffset, elemCount,
-        operationCount, completionMode);
+        operationCount, completionMode, blockCount);
 }
 
 static RdmaTestResult RunPutAsyncNotifyRdmaSetKernel(
@@ -1095,9 +1375,29 @@ static bool ValidateRdmaLaunchConfiguration(int nRanks, int nDevices, int mpiRan
 }
 
 #ifdef PTO_RDMA_SUPPORTED
+static int GetRdmaDeviceCount()
+{
+    static int cachedCount = -1;
+    if (cachedCount >= 0) {
+        return cachedCount;
+    }
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        return 0;
+    }
+    uint32_t count = 0;
+    aRet = aclrtGetDeviceCount(&count);
+    if (aRet != ACL_SUCCESS) {
+        return 0;
+    }
+    cachedCount = static_cast<int>(count);
+    return cachedCount;
+}
+
 static RdmaTestResult CheckRdmaDeviceAvailability(int nRanks, int nDevices, int firstDeviceId, int mpiRank)
 {
-    const int deviceCount = GetAvailableDeviceCount();
+    const int deviceCount = GetRdmaDeviceCount();
     const bool localDevicesReady = deviceCount >= nDevices + firstDeviceId;
     bool anyDeviceMissing = false;
     if (AllRanksReady(localDevicesReady, nRanks, "device availability", &anyDeviceMissing)) {
@@ -1160,7 +1460,7 @@ RdmaTestResult RunPutAsyncRdmaRootPut(int n_ranks, int n_devices, int first_rank
 template <bool IsGet, typename T, size_t count>
 static RdmaTestResult RunAsyncRdmaPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RdmaCompletionMode completion_mode)
+    int operation_count, RdmaCompletionMode completion_mode, int block_count = 1)
 {
     const RdmaLaunchPreparation preparation = PrepareRdmaLaunch(n_ranks, n_devices, first_device_id);
     if (preparation.result != RdmaTestResult::PASSED) {
@@ -1179,7 +1479,7 @@ static RdmaTestResult RunAsyncRdmaPlan(
     } else {
         return RunPutAsyncRdmaRootPutKernel<T, count>(
             rankId, n_ranks, n_devices, first_device_id, first_rank_id, rootRank, caseId, elem_offset, elem_count,
-            operation_count, completion_mode);
+            operation_count, completion_mode, block_count);
     }
     return RdmaTestResult::FAILED;
 #else
@@ -1203,13 +1503,31 @@ RdmaTestResult RunPutAsyncNotifyRdmaSet(int n_ranks, int n_devices, int first_ra
 #endif
 }
 
+RdmaTestResult RunPutAsyncRdmaConcurrent(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    const RdmaLaunchPreparation preparation = PrepareRdmaLaunch(n_ranks, n_devices, first_device_id);
+    if (preparation.result != RdmaTestResult::PASSED) {
+        return preparation.result;
+    }
+    if (n_ranks != 2) {
+        return RdmaTestResult::FAILED;
+    }
+#ifdef PTO_RDMA_SUPPORTED
+    return RunPutAsyncRdmaConcurrentKernel(
+        first_rank_id + preparation.mpiRank, n_ranks, n_devices, first_device_id, first_rank_id, ++gRdmaCaseSequence);
+#else
+    return RdmaTestResult::SKIPPED;
+#endif
+}
+
 template <typename T, size_t count>
 RdmaTestResult RunPutAsyncRdmaRootPutPlan(
     int n_ranks, int n_devices, int first_rank_id, int first_device_id, int elem_offset, int elem_count,
-    int operation_count, RdmaCompletionMode completion_mode)
+    int operation_count, RdmaCompletionMode completion_mode, int block_count)
 {
     return RunAsyncRdmaPlan<false, T, count>(
-        n_ranks, n_devices, first_rank_id, first_device_id, elem_offset, elem_count, operation_count, completion_mode);
+        n_ranks, n_devices, first_rank_id, first_device_id, elem_offset, elem_count, operation_count, completion_mode,
+        block_count);
 }
 
 #ifdef PTO_RDMA_GET_TEST
@@ -1231,14 +1549,18 @@ template RdmaTestResult RunPutAsyncRdmaRootPut<uint8_t, 64>(int, int, int, int);
 template RdmaTestResult RunPutAsyncRdmaRootPut<float, 64>(int, int, int, int);
 template RdmaTestResult RunPutAsyncRdmaRootPut<float, 524288>(int, int, int, int);
 
-template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 256>(int, int, int, int, int, int, int, RdmaCompletionMode);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 256>(
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
 template RdmaTestResult RunPutAsyncRdmaRootPutPlan<int32_t, 4096>(
-    int, int, int, int, int, int, int, RdmaCompletionMode);
-template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 512>(int, int, int, int, int, int, int, RdmaCompletionMode);
-template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
-template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 64>(int, int, int, int, int, int, int, RdmaCompletionMode);
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 512>(
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<uint8_t, 64>(
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
+template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 64>(
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
 template RdmaTestResult RunPutAsyncRdmaRootPutPlan<float, 524288>(
-    int, int, int, int, int, int, int, RdmaCompletionMode);
+    int, int, int, int, int, int, int, RdmaCompletionMode, int);
 
 #ifdef PTO_RDMA_GET_TEST
 template RdmaTestResult RunGetAsyncRdmaRootGetPlan<float, 256>(int, int, int, int, int, int, int, RdmaCompletionMode);

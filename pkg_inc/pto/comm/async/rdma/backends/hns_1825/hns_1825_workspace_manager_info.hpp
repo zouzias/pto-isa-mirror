@@ -100,18 +100,39 @@ inline bool WorkspaceManager::InitializeQueueMirrors(
     return true;
 }
 
+inline bool WorkspaceManager::InitializeSqOwners(const host::SqContext& sq, uint32_t peer) const
+{
+    const auto context = DecodeRoceSqContext(sq);
+    // These channels belong exclusively to this workspace and have not posted
+    // any work. Every slot must stop NIC prefetch before its first publication.
+    std::vector<uint8_t> ring(static_cast<size_t>(context.depth) * kWqebbSize, 0);
+    for (size_t offset = 0; offset < ring.size(); offset += kWqebbSize) {
+        ring[offset] = 0xc0; // fixed control bit + invalid owner for lap zero
+    }
+    if (aclrtMemcpy(
+            reinterpret_cast<void*>(context.sqVa), ring.size(), ring.data(), ring.size(), ACL_MEMCPY_HOST_TO_DEVICE) !=
+        ACL_SUCCESS) {
+        std::cerr << "[RoCE] peer " << peer << " SQ owner initialization failed" << std::endl;
+        return false;
+    }
+    return true;
+}
+
 inline bool WorkspaceManager::PrepareRdmaInfoLayout(std::vector<uint8_t>& hostBuffer, RdmaInfoHostLayout& layout)
 {
     constexpr uint32_t kQpNum = 1;
     const size_t sqBytes = sizeof(RoceSqCtx) * rankCount_ * kQpNum;
     const size_t cqBytes = sizeof(RoceCqCtx) * rankCount_ * kQpNum;
     const size_t memBytes = sizeof(RdmaMemInfo) * rankCount_;
-    layout.totalSize = sizeof(RdmaInfo) + 2 * sqBytes + 2 * cqBytes + memBytes;
+    const size_t metadataBytes = sizeof(RdmaInfo) + 2 * sqBytes + 2 * cqBytes + memBytes;
+    const size_t stateOffset = (metadataBytes + sizeof(QueueState) - 1) & ~(sizeof(QueueState) - 1);
+    layout.totalSize = stateOffset + sizeof(QueueState) * rankCount_ * kQpNum;
     if (aclrtMalloc(&rdmaInfoDevice_, layout.totalSize, ACL_MEM_MALLOC_HUGE_FIRST) != 0 || rdmaInfoDevice_ == nullptr) {
         std::cerr << "[RoCE] aclrtMalloc(rdmaInfo) failed" << std::endl;
         return false;
     }
     hostBuffer.assign(layout.totalSize, 0);
+    layout.stateDeviceBase = reinterpret_cast<uint64_t>(rdmaInfoDevice_) + stateOffset;
     layout.info = reinterpret_cast<RdmaInfo*>(hostBuffer.data());
     layout.info->magic = kRdmaWorkspaceMagic;
     layout.info->version = kRdmaWorkspaceVersion;
@@ -200,11 +221,12 @@ inline bool WorkspaceManager::FillPeerRdmaInfo(size_t channelIndex, RdmaInfoHost
         return false;
     }
     CopyRoceSq(layout.sq[peer], sq);
+    layout.sq[peer].stateAddr = layout.stateDeviceBase + sizeof(QueueState) * peer;
     layout.rq[peer] = layout.sq[peer];
     host::CqContext cq{};
     if (entity.cqNum == 0 || entity.cqContextAddr == nullptr ||
         !ReadDeviceStruct(entity.cqContextAddr, &cq, sizeof(cq)) || !ValidateCqContext(cq, peer) ||
-        !InitializeQueueMirrors(sq, cq, peer)) {
+        !InitializeQueueMirrors(sq, cq, peer) || !InitializeSqOwners(sq, peer)) {
         return false;
     }
     CopyRoceCq(layout.scq[peer], cq);
@@ -323,9 +345,9 @@ inline bool WorkspaceManager::ValidateCqContext(const host::CqContext& cq, uint3
     const uint32_t cqeSize = context.cqeSize == 0 ? kHns1825DefaultCqeSize : context.cqeSize;
     const uint64_t cqRing = static_cast<uint64_t>(context.cqDepth);
     const bool supportedCqeSize = cqeSize == sizeof(Hns1825Cqe) || cqeSize == kHns1825DefaultCqeSize;
-    if (cq.type != host::CQ_CONTEXT_TYPE_ROCE || !IsPowerOfTwo(cqRing) || !supportedCqeSize || context.cqVa == 0 ||
-        context.headAddr == 0 || context.tailAddr == 0 || context.dbSwVa == 0 || !IsCacheLineAligned(context.cqVa) ||
-        !IsU32Aligned(context.tailAddr) || !IsU32Aligned(context.dbSwVa)) {
+    if (cq.type != host::CQ_CONTEXT_TYPE_ROCE || !IsPowerOfTwo(cqRing) || cqRing < 4 || !supportedCqeSize ||
+        context.cqVa == 0 || context.headAddr == 0 || context.tailAddr == 0 || context.dbSwVa == 0 ||
+        !IsCacheLineAligned(context.cqVa) || !IsU32Aligned(context.tailAddr) || !IsU32Aligned(context.dbSwVa)) {
         std::cerr << "[RoCE] peer " << peer << " has an unusable RoCE CQ context: type=" << static_cast<int>(cq.type)
                   << " depth=" << context.cqDepth << " cqeSize=" << context.cqeSize << std::endl;
         return false;

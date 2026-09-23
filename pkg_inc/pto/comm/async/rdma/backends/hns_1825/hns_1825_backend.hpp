@@ -11,10 +11,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // HNS_1825 (Hi1825) RoCE RDMA device-side backend for A5.
 //
 // Posts RDMA WRITE / READ from AIV using the RdmaInfo table supplied via RdmaExecContext.
-// WQE/CQE staging uses the RDMA session's UB scratch; atomics are not supported.
+// WQE/CQE staging uses each AIV's own UB scratch. Local scalar atomics coordinate
+// shared queues; remote RDMA atomic operations are not supported.
 
 #ifndef PTO_COMM_ASYNC_RDMA_BACKENDS_HNS_1825_BACKEND_HPP
 #define PTO_COMM_ASYNC_RDMA_BACKENDS_HNS_1825_BACKEND_HPP
+
+#if defined(__NPU_ARCH__) && __NPU_ARCH__ != 0 && __NPU_ARCH__ != 3510
+#error "The HNS1825 shared-queue backend requires Ascend950 (__NPU_ARCH__ == 3510)."
+#endif
 
 #include "pto/pto-inst.hpp"
 #include "pto/comm/async_common/async_types.hpp"
@@ -61,6 +66,65 @@ AICORE inline uint64_t Htobe64(uint64_t v)
 AICORE inline uint32_t ReadU32Gm(uint64_t addr) { return ld_dev((__gm__ uint32_t*)addr, 0); }
 
 AICORE inline void WriteU32Gm(uint64_t addr, uint32_t value) { st_dev(value, (__gm__ uint32_t*)addr, 0); }
+
+// The HNS1825 backend runs on Ascend950 (3510). Scalar atomics serialize local
+// GM queue state; DSB orders the scalar accesses and the completed MTE copies
+// before ownership crosses AIVs or passes to the NIC.
+AICORE inline void QueueFence()
+{
+    __asm__ __volatile__("" ::: "memory");
+    dsb(DSB_DDR);
+    __asm__ __volatile__("" ::: "memory");
+}
+
+AICORE inline uint64_t AtomicLoad(__gm__ uint64_t* address) { return atomicAdd(address, uint64_t{0}); }
+
+AICORE inline __gm__ QueueState* GetQueueState(__gm__ RoceSqCtx* sq)
+{
+    return reinterpret_cast<__gm__ QueueState*>(sq->stateAddr);
+}
+
+AICORE inline bool TryQueueLock(__gm__ uint64_t* lock)
+{
+    if (atomicCAS(lock, uint64_t{0}, uint64_t{1}) != 0) {
+        return false;
+    }
+    QueueFence();
+    return true;
+}
+
+AICORE inline void UnlockQueue(__gm__ uint64_t* lock)
+{
+    QueueFence();
+    (void)atomicCAS(lock, uint64_t{1}, uint64_t{0});
+}
+
+AICORE inline uint32_t QueueError(__gm__ QueueState* state) { return static_cast<uint32_t>(AtomicLoad(&state->error)); }
+
+AICORE inline uint32_t FailQueue(__gm__ QueueState* state, uint32_t status)
+{
+    QueueFence();
+    const uint64_t previous = atomicCAS(&state->error, uint64_t{0}, static_cast<uint64_t>(status));
+    return previous == 0 ? status : static_cast<uint32_t>(previous);
+}
+
+AICORE inline bool QueueTimedOut(uint64_t startCycles)
+{
+    return static_cast<uint64_t>(AscendC::GetSystemCycle()) - startCycles >= kHns1825PollCqTimeoutCycles;
+}
+
+AICORE inline bool TryPostSend(__gm__ RoceSqCtx* sq, uint64_t end, __ubuf__ uint8_t* ub, uint32_t syncId);
+
+// Completion and capacity waits can flush a ready prefix whose producer returned
+// before ringing the doorbell. Never wait for the doorbell lock while progressing.
+AICORE inline void SubmitReady(__gm__ RoceSqCtx* sq, __ubuf__ uint8_t* ub, uint32_t syncId)
+{
+    __gm__ QueueState* state = GetQueueState(sq);
+    const uint64_t ready = AtomicLoad(&state->readyHead);
+    if (ready > AtomicLoad(&state->postedHead)) {
+        (void)TryPostSend(sq, ready, ub, syncId);
+    }
+}
 
 // Order scalar UB writes before MTE3 copies a NIC-visible record (WQE / software doorbell) to GM, then order the
 // MTE3 store before the subsequent scalar dcci / st_dev. Post-copy sync MUST be MTE3->Scalar (not MTE3->MTE2):
@@ -117,67 +181,88 @@ AICORE inline void RingCqDoorbell(
     dcci((__gm__ void*)cqCtx->dbSwAddr, SINGLE_CACHE_LINE);
 }
 
-// Poll until the CQ consumer index reaches targetIdx, or return non-zero status on error/timeout.
-// Timeout is wall-clock based on AscendC::GetSystemCycle
-// (A5: us = cycles/1000; A2/A3: us = cycles/50 — see kHns1825CycleToTimeBase).
-// On timeout do NOT ring the CQ doorbell — the consumer index did not advance.
-AICORE inline uint32_t PollCq(
-    __gm__ RdmaInfo* info, uint32_t pe, uint32_t qpIdx, uint32_t targetIdx, __ubuf__ uint8_t* ub, uint32_t syncId)
+// All CQ consumers, including capacity waits and Test, share this short lock.
+// Inspect a bounded batch of ready CQEs and release it before waiting for NIC
+// progress. Physical CI includes an error CQE; completedHead only counts success.
+AICORE inline void ProgressCq(__gm__ RdmaInfo* info, uint32_t pe, uint32_t qpIdx, __ubuf__ uint8_t* ub, uint32_t syncId)
 {
     constexpr uint32_t kCqeOpcodeShift = 27;
     constexpr uint32_t kCqeOpcodeMask = 0x1f;
     constexpr uint32_t kCqeOptypeError = 0x1e;
     constexpr uint32_t kCqeOptypeInvalid = 0x1f;
 
-    if (targetIdx == 0) {
-        return 0;
+    const uint64_t index = static_cast<uint64_t>(pe) * info->qpNum + qpIdx;
+    __gm__ RoceSqCtx* sq = reinterpret_cast<__gm__ RoceSqCtx*>(info->sqPtr) + index;
+    __gm__ RoceCqCtx* cq = reinterpret_cast<__gm__ RoceCqCtx*>(info->scqPtr) + index;
+    __gm__ QueueState* state = GetQueueState(sq);
+    if (!TryQueueLock(&state->cqLock)) {
+        return;
     }
-    uint32_t qpNum = info->qpNum;
-    __gm__ RoceCqCtx* cqCtx = (__gm__ RoceCqCtx*)(info->scqPtr + ((uint64_t)pe * qpNum + qpIdx) * sizeof(RoceCqCtx));
-
-    uint32_t cqeSize = cqCtx->cqeSize == 0 ? kHns1825DefaultCqeSize : cqCtx->cqeSize;
-    uint32_t cqRing = cqCtx->depth;
-    uint32_t curTail = ReadU32Gm(cqCtx->tailAddr);
-    // A later event may already have advanced the shared CQ beyond this
-    // target. Monotonic 32-bit indices are unambiguous while outstanding work
-    // stays below 2^31, which is guaranteed by the much smaller SQ depth.
-    if (static_cast<int32_t>(curTail - targetIdx) >= 0) {
-        return 0;
+    if (QueueError(state) != 0) {
+        UnlockQueue(&state->cqLock);
+        return;
     }
-    const uint32_t startTail = curTail;
+    const uint32_t cqeSize = cq->cqeSize == 0 ? kHns1825DefaultCqeSize : cq->cqeSize;
+    const uint64_t startTail = AtomicLoad(&state->completedHead);
+    const uint64_t posted = AtomicLoad(&state->postedHead);
+    QueueFence();
+    uint64_t curTail = startTail;
+    uint64_t completed = startTail;
     uint32_t status = 0;
-
-    while (curTail != targetIdx) {
-        __gm__ uint8_t* cqeAddr = (__gm__ uint8_t*)(cqCtx->bufAddr + (uint64_t)(curTail & (cqRing - 1)) * cqeSize);
-        __ubuf__ Hns1825Cqe* cqe = (__ubuf__ Hns1825Cqe*)(__ubuf__ void*)ub;
-        uint32_t cqeType = kCqeOptypeInvalid;
-        const uint64_t startCycles = static_cast<uint64_t>(AscendC::GetSystemCycle());
-        bool cqeReady = false;
-
-        while (!cqeReady &&
-               static_cast<uint64_t>(AscendC::GetSystemCycle()) - startCycles < kHns1825PollCqTimeoutCycles) {
-            dcci((__gm__ void*)cqeAddr, SINGLE_CACHE_LINE);
-            ReadGmToUb(ub, (uint64_t)cqeAddr, kCqeReadSize, syncId);
-            cqeType = (cqe->op_sr_wqebb >> kCqeOpcodeShift) & kCqeOpcodeMask;
-            cqeReady = cqeType != kCqeOptypeInvalid && CheckCqeOwner(cqe, curTail, cqRing);
-        }
-        if (!cqeReady) {
-            status = kHns1825PollCqTimeoutError;
+    for (uint32_t count = 0; count < kCqProgressBatch && curTail < posted; ++count) {
+        const uint64_t cqeAddr = cq->bufAddr + (curTail & (cq->depth - 1U)) * cqeSize;
+        dcci(reinterpret_cast<__gm__ void*>(cqeAddr), SINGLE_CACHE_LINE);
+        ReadGmToUb(ub, cqeAddr, kCqeReadSize, syncId);
+        __ubuf__ Hns1825Cqe* cqe = reinterpret_cast<__ubuf__ Hns1825Cqe*>(ub);
+        const uint32_t cqeType = (cqe->op_sr_wqebb >> kCqeOpcodeShift) & kCqeOpcodeMask;
+        if (cqeType == kCqeOptypeInvalid || !CheckCqeOwner(cqe, static_cast<uint32_t>(curTail), cq->depth)) {
             break;
         }
+        ++curTail;
         if (cqeType == kCqeOptypeError) {
             status = cqe->syndrome == 0 ? kHns1825CqeError : cqe->syndrome;
-            curTail++;
             break;
         }
-        curTail++;
+        completed = curTail;
     }
-
-    // Ring doorbell only if the consumer index moved (success or error-CQE consumed).
     if (curTail != startTail) {
-        RingCqDoorbell(info, pe, qpIdx, curTail, ub, syncId);
+        RingCqDoorbell(info, pe, qpIdx, static_cast<uint32_t>(curTail), ub, syncId);
+        QueueFence();
+        (void)atomicCAS(&state->completedHead, startTail, completed);
     }
-    return status;
+    if (status != 0) {
+        (void)FailQueue(state, status);
+    }
+    UnlockQueue(&state->cqLock);
+}
+
+// Poll outside both queue locks. A timeout poisons the queue without reclaiming
+// uncompleted slots, rolling back reservations, or forcing another AIV's lock.
+AICORE inline uint32_t PollCq(
+    __gm__ RdmaInfo* info, uint32_t pe, uint32_t qpIdx, uint32_t targetIdx, __ubuf__ uint8_t* ub, uint32_t syncId)
+{
+    __gm__ RoceSqCtx* sq =
+        reinterpret_cast<__gm__ RoceSqCtx*>(info->sqPtr) + static_cast<uint64_t>(pe) * info->qpNum + qpIdx;
+    __gm__ QueueState* state = GetQueueState(sq);
+    const uint64_t startCycles = static_cast<uint64_t>(AscendC::GetSystemCycle());
+    while (true) {
+        if (AtomicLoad(&state->completedHead) >= targetIdx) {
+            QueueFence();
+            return 0;
+        }
+        const uint32_t status = QueueError(state);
+        if (status != 0) {
+            // A CQ consumer publishes its successful prefix before the error.
+            // Re-read it in case our first load raced that publication.
+            QueueFence();
+            return AtomicLoad(&state->completedHead) >= targetIdx ? 0U : status;
+        }
+        if (QueueTimedOut(startCycles)) {
+            return FailQueue(state, kHns1825PollCqTimeoutError);
+        }
+        SubmitReady(sq, ub, syncId);
+        ProgressCq(info, pe, qpIdx, ub, syncId);
+    }
 }
 
 // Fill the 16B WQE control segment in the UB staging buffer; returns pointer just after it.
@@ -195,7 +280,7 @@ AICORE inline __ubuf__ uint8_t* FillWqeCtrlSeg(__ubuf__ uint8_t* ubBase, uint32_
     uint16_t wf_bdsl = (uint16_t)(kDataSegBdsl | ((curHead & kMsnMask) << kMsnShift));
 
     __ubuf__ Hns1825WqeCtrlSeg* ctrl = (__ubuf__ Hns1825WqeCtrlSeg*)(__ubuf__ void*)ubBase;
-    ctrl->owner_sl = (((curHead & depth) == 0) ? 0 : (1U << kOwnerShift)) | kCtrlValue;
+    ctrl->owner_sl = (((curHead & depth) == 0) ? (1U << kOwnerShift) : 0) | kCtrlValue;
     ctrl->df_tsl = (uint8_t)((1U << kCqeSignalShift) | kVaValue | (sizeof(Hns1825WqeRdmaTaskSeg) / kSegLenUnit));
     ctrl->wf_bdsl = Htobe16(wf_bdsl);
     ctrl->cl_pi = Htobe32(1U << kCmpTaskLenShift);
@@ -220,7 +305,7 @@ AICORE inline __ubuf__ uint8_t* FillInlineWqeCtrlSeg(__ubuf__ uint8_t* ubBase, u
     const uint16_t wfBdsl = static_cast<uint16_t>(kInlineBdsl | ((curHead & kMsnMask) << kMsnShift));
 
     __ubuf__ Hns1825WqeCtrlSeg* ctrl = reinterpret_cast<__ubuf__ Hns1825WqeCtrlSeg*>(ubBase);
-    ctrl->owner_sl = (((curHead & depth) == 0U) ? 0U : (1U << kOwnerShift)) | kCtrlValue;
+    ctrl->owner_sl = (((curHead & depth) == 0U) ? (1U << kOwnerShift) : 0U) | kCtrlValue;
     ctrl->df_tsl = static_cast<uint8_t>(
         (1U << kCqeSignalShift) | (1U << kDataInlineShift) | kVaValue | (sizeof(Hns1825WqeRdmaTaskSeg) / kSegLenUnit));
     ctrl->wf_bdsl = Htobe16(wfBdsl);
@@ -270,22 +355,14 @@ AICORE inline __ubuf__ uint8_t* FillWqeDataSeg(__ubuf__ uint8_t* addr, const Rdm
     return addr + sizeof(Hns1825WqeDataSeg);
 }
 
-// Pre-mark the next WQEBB owner byte as invalid so the NIC stops there until the next WQE is posted.
-AICORE inline void WriteInvalidWqebb(__gm__ RoceSqCtx* sqCtx, uint32_t idx)
-{
-    __gm__ Hns1825WqeCtrlSeg* ctrl = (__gm__ Hns1825WqeCtrlSeg*)GetSendWqe(sqCtx, idx & (sqCtx->depth - 1));
-    ctrl->owner_sl = ((idx & sqCtx->depth) == 0) ? 0xff : 0x7f;
-    dcci((__gm__ void*)ctrl, SINGLE_CACHE_LINE);
-}
-
-// Assemble the whole 64B WQE in UB, mark the next WQEBB invalid, then MTE-copy the WQE into the SQ slot.
+// Copy only this producer's reserved slot, with its owner still invalid. The
+// untouched next slot is invalid from initialization or the preceding ring lap.
 AICORE inline uint32_t FillWqeWriteRead(
     const RdmaSendWr& wr, __gm__ RoceSqCtx* sqCtx, __gm__ uint8_t* wqeAddr, uint32_t curHead, RdmaOpcode opcode,
     __ubuf__ uint8_t* ub, uint32_t syncId)
 {
     __ubuf__ uint8_t* dataUb = FillWqeTaskSeg(FillWqeCtrlSeg(ub, curHead, sqCtx->depth), wr, opcode);
     (void)FillWqeDataSeg(dataUb, wr);
-    WriteInvalidWqebb(sqCtx, curHead + 1);
     WriteUbToGmWithSync((uint64_t)wqeAddr, ub, kHns1825WriteReadWqeSize, syncId);
     return kHns1825WriteReadWqeSize;
 }
@@ -301,7 +378,6 @@ AICORE inline void FillWqeInlineSet(
         FillWqeTaskSeg(FillInlineWqeCtrlSeg(ub, curHead, sqCtx->depth), wr, RdmaOpcode::OP_RDMA_WRITE, true);
     *reinterpret_cast<__ubuf__ uint64_t*>(inlineData) = static_cast<uint32_t>(signalValue);
     *reinterpret_cast<__ubuf__ uint64_t*>(inlineData + sizeof(uint64_t)) = 0U;
-    WriteInvalidWqebb(sqCtx, curHead + 1U);
     WriteUbToGmWithSync(reinterpret_cast<uint64_t>(wqeAddr), ub, kHns1825WriteReadWqeSize, syncId);
 }
 
@@ -319,6 +395,7 @@ AICORE inline void RingSqDoorbell(__gm__ RoceSqCtx* sqCtx, uint32_t curHead, __u
     *reinterpret_cast<__ubuf__ uint32_t*>(ub) = Htobe32(curHead);
     WriteUbToGmWithSync(sqCtx->dbSwAddr, ub, sizeof(uint32_t), syncId);
     dcci((__gm__ void*)sqCtx->dbSwAddr, SINGLE_CACHE_LINE);
+    QueueFence();
 
     // Hardware doorbell register: single 64-bit st_dev write.
     Hns1825SqDb db;
@@ -340,7 +417,129 @@ AICORE inline void RingSqDoorbell(__gm__ RoceSqCtx* sqCtx, uint32_t curHead, __u
     pipe_barrier(PIPE_ALL);
 }
 
-// Post one WRITE/READ WQE and preserve any pre-drain error for the returned event.
+// Only elected submitters and completion helpers contend for this lock. An older
+// target can arrive after a newer one; it must not repeat owners or regress PI.
+AICORE inline bool TryPostSend(__gm__ RoceSqCtx* sq, uint64_t end, __ubuf__ uint8_t* ub, uint32_t syncId)
+{
+    __gm__ QueueState* state = GetQueueState(sq);
+    if (AtomicLoad(&state->postedHead) >= end) {
+        return true;
+    }
+    if (!TryQueueLock(&state->postLock)) {
+        return false;
+    }
+    const uint64_t posted = AtomicLoad(&state->postedHead);
+    if (QueueError(state) == 0 && end > posted) {
+        // The ready handoff follows each producer's completed MTE copies. HNS1825
+        // owners are published here, in the same critical section as the DB.
+        for (uint64_t index = posted; index < end; ++index) {
+            const uint64_t address = reinterpret_cast<uint64_t>(GetSendWqe(sq, index & (sq->depth - 1U)));
+            WriteU32Gm(address, ReadU32Gm(address) ^ 0x80U);
+        }
+        QueueFence();
+        RingSqDoorbell(sq, static_cast<uint32_t>(end), ub, syncId);
+        QueueFence();
+        (void)atomicCAS(&state->postedHead, posted, end);
+    }
+    UnlockQueue(&state->postLock);
+    return true;
+}
+
+AICORE inline uint32_t PostSend(__gm__ RoceSqCtx* sq, uint64_t end, __ubuf__ uint8_t* ub, uint32_t syncId)
+{
+    __gm__ QueueState* state = GetQueueState(sq);
+    const uint64_t startCycles = static_cast<uint64_t>(AscendC::GetSystemCycle());
+    while (true) {
+        const uint32_t status = QueueError(state);
+        if (status != 0) {
+            return status;
+        }
+        if (TryPostSend(sq, end, ub, syncId)) {
+            return QueueError(state);
+        }
+        if (QueueTimedOut(startCycles)) {
+            return FailQueue(state, kHns1825PollCqTimeoutError);
+        }
+    }
+}
+
+AICORE inline uint32_t QueueCapacity(__gm__ RoceSqCtx* sq, __gm__ RoceCqCtx* cq)
+{
+    const uint32_t sqCapacity = sq->depth - kHns1825PollCqThreshold;
+    const uint32_t cqCapacity = cq->depth - 1U;
+    return sqCapacity < cqCapacity ? sqCapacity : cqCapacity;
+}
+
+// Reserve adjacent WQEBBs before preparing them. Both SQ and CQ capacity matter:
+// each WQE is signaled, and CQ entries must not be overwritten before CI reaches
+// the NIC. Reservations beyond capacity wait without touching their SQ slots.
+AICORE inline uint32_t ReserveWqes(const RdmaExecContext& ctx, uint32_t count, uint64_t& start)
+{
+    __gm__ RdmaInfo* info = reinterpret_cast<__gm__ RdmaInfo*>(ctx.contextGm);
+    const uint64_t index = static_cast<uint64_t>(ctx.destRankId) * info->qpNum + ctx.qpIdx;
+    __gm__ RoceSqCtx* sq = reinterpret_cast<__gm__ RoceSqCtx*>(info->sqPtr) + index;
+    __gm__ RoceCqCtx* cq = reinterpret_cast<__gm__ RoceCqCtx*>(info->scqPtr) + index;
+    __gm__ QueueState* state = GetQueueState(sq);
+    const uint32_t capacity = QueueCapacity(sq, cq);
+    if (count > capacity) {
+        return kHns1825InvalidContextError;
+    }
+    uint32_t status = QueueError(state);
+    if (status != 0) {
+        return status;
+    }
+    start = atomicAdd(&state->reserveHead, static_cast<uint64_t>(count));
+    const uint64_t end = start + count;
+    if (end > kMaxQueueIndex) {
+        return FailQueue(state, kQueueIndexExhaustedError);
+    }
+    if (end > capacity) {
+        status =
+            PollCq(info, ctx.destRankId, ctx.qpIdx, static_cast<uint32_t>(end - capacity), ctx.tmpBuf.addr, ctx.syncId);
+        if (status != 0) {
+            return status;
+        }
+    }
+    QueueFence();
+    return QueueError(state);
+}
+
+// Hand off readiness after the MTE copies complete, in reservation order.
+// As in IBGDA, only the reservation tail or a batch boundary must post-send;
+// other producers can return early.
+AICORE inline uint32_t SubmitReadyWqes(
+    __gm__ RoceSqCtx* sq, __gm__ RoceCqCtx* cq, uint64_t start, uint64_t end, __ubuf__ uint8_t* ub, uint32_t syncId)
+{
+    __gm__ QueueState* state = GetQueueState(sq);
+    const uint64_t startCycles = static_cast<uint64_t>(AscendC::GetSystemCycle());
+    QueueFence();
+    while (true) {
+        const uint32_t status = QueueError(state);
+        if (status != 0) {
+            return status;
+        }
+        if (atomicCAS(&state->readyHead, start, end) == start) {
+            break;
+        }
+        if (QueueTimedOut(startCycles)) {
+            return FailQueue(state, kHns1825PollCqTimeoutError);
+        }
+    }
+    QueueFence();
+    uint32_t batch = kPostSendBatch;
+    const uint32_t capacity = QueueCapacity(sq, cq);
+    // A batch must fit even when the CQ is shallower than the SQ.
+    while (batch > capacity) {
+        batch >>= 1U;
+    }
+    const uint64_t mask = ~(static_cast<uint64_t>(batch) - 1U);
+    const bool batchLimitReached = (start & mask) != (end & mask);
+    const bool noConcurrentSubmissions = end == AtomicLoad(&state->reserveHead);
+    return batchLimitReached || noConcurrentSubmissions ? PostSend(sq, end, ub, syncId) : QueueError(state);
+}
+
+// Post one WRITE/READ WQE. The event's index is this reservation's end, even
+// when a different AIV publishes a larger prefix on its behalf.
 template <RdmaOpcode OP>
 AICORE inline PostSendResult PostSendReadWrite(const RdmaExecContext& ctx, RdmaSendWr& wr)
 {
@@ -352,17 +551,13 @@ AICORE inline PostSendResult PostSendReadWrite(const RdmaExecContext& ctx, RdmaS
     uint32_t syncId = ctx.syncId;
 
     __gm__ RoceSqCtx* sqCtx = (__gm__ RoceSqCtx*)(info->sqPtr + ((uint64_t)pe * qpNum + qpIdx) * sizeof(RoceSqCtx));
-    uint32_t depth = sqCtx->depth;
-    uint32_t curHead = ReadU32Gm(sqCtx->headAddr);
-    uint32_t curTail = ReadU32Gm(sqCtx->tailAddr);
-
-    // Drain CQEs if the SQ is about to be full.
-    if (curHead - curTail >= depth - kHns1825PollCqThreshold) {
-        uint32_t ret = PollCq(info, pe, qpIdx, curHead, ub, syncId);
-        if (ret != 0) {
-            return {curHead, ret};
-        }
+    __gm__ RoceCqCtx* cqCtx = (__gm__ RoceCqCtx*)(info->scqPtr + ((uint64_t)pe * qpNum + qpIdx) * sizeof(RoceCqCtx));
+    uint64_t start = 0;
+    const uint32_t status = ReserveWqes(ctx, 1, start);
+    if (status != 0) {
+        return {0, status};
     }
+    const uint32_t curHead = static_cast<uint32_t>(start);
 
     __gm__ RdmaMemInfo* remoteMem = (__gm__ RdmaMemInfo*)(info->memPtr + sizeof(RdmaMemInfo) * pe);
     __gm__ RdmaMemInfo* localMem = (__gm__ RdmaMemInfo*)(info->memPtr + sizeof(RdmaMemInfo) * ctx.myPe);
@@ -371,11 +566,7 @@ AICORE inline PostSendResult PostSendReadWrite(const RdmaExecContext& ctx, RdmaS
 
     __gm__ uint8_t* wqeAddr = GetSendWqe(sqCtx, curHead & (sqCtx->depth - 1));
     (void)FillWqeWriteRead(wr, sqCtx, wqeAddr, curHead, OP, ub, syncId);
-    dcci((__gm__ void*)wqeAddr, SINGLE_CACHE_LINE);
-    curHead++;
-
-    RingSqDoorbell(sqCtx, curHead, ub, syncId);
-    return {curHead, 0};
+    return {curHead + 1U, SubmitReadyWqes(sqCtx, cqCtx, start, start + 1U, ub, syncId)};
 }
 
 // Post payload WRITE followed by a fenced inline signal WRITE. Both WQEs are
@@ -393,19 +584,15 @@ AICORE inline PostSendResult PostSendWriteNotify(
 
     __gm__ RoceSqCtx* sqCtx = reinterpret_cast<__gm__ RoceSqCtx*>(
         info->sqPtr + (static_cast<uint64_t>(pe) * qpNum + qpIdx) * sizeof(RoceSqCtx));
+    __gm__ RoceCqCtx* cqCtx = reinterpret_cast<__gm__ RoceCqCtx*>(
+        info->scqPtr + (static_cast<uint64_t>(pe) * qpNum + qpIdx) * sizeof(RoceCqCtx));
     const uint32_t depth = sqCtx->depth;
-    uint32_t curHead = ReadU32Gm(sqCtx->headAddr);
-    const uint32_t curTail = ReadU32Gm(sqCtx->tailAddr);
-
-    // The workspace rejects depths <= the threshold. If the threshold is
-    // reached, draining all outstanding CQEs leaves room for both WQEs before
-    // any queue state is modified.
-    if (curHead - curTail >= depth - kHns1825PollCqThreshold) {
-        const uint32_t status = PollCq(info, pe, qpIdx, curHead, ub, syncId);
-        if (status != 0U) {
-            return {curHead, status};
-        }
+    uint64_t start = 0;
+    const uint32_t status = ReserveWqes(ctx, 2, start);
+    if (status != 0) {
+        return {0, status};
     }
+    uint32_t curHead = static_cast<uint32_t>(start);
 
     __gm__ RdmaMemInfo* remoteMem = reinterpret_cast<__gm__ RdmaMemInfo*>(info->memPtr + sizeof(RdmaMemInfo) * pe);
     __gm__ RdmaMemInfo* localMem = reinterpret_cast<__gm__ RdmaMemInfo*>(info->memPtr + sizeof(RdmaMemInfo) * ctx.myPe);
@@ -416,16 +603,13 @@ AICORE inline PostSendResult PostSendWriteNotify(
 
     __gm__ uint8_t* payloadWqe = GetSendWqe(sqCtx, curHead & (depth - 1U));
     (void)FillWqeWriteRead(payloadWr, sqCtx, payloadWqe, curHead, RdmaOpcode::OP_RDMA_WRITE, ub, syncId);
-    dcci(reinterpret_cast<__gm__ void*>(payloadWqe), SINGLE_CACHE_LINE);
 
     ++curHead;
     __gm__ uint8_t* signalWqe = GetSendWqe(sqCtx, curHead & (depth - 1U));
     FillWqeInlineSet(signalWr, signalValue, sqCtx, signalWqe, curHead, ub, syncId);
-    dcci(reinterpret_cast<__gm__ void*>(signalWqe), SINGLE_CACHE_LINE);
 
     ++curHead;
-    RingSqDoorbell(sqCtx, curHead, ub, syncId);
-    return {curHead, 0U};
+    return {curHead, SubmitReadyWqes(sqCtx, cqCtx, start, start + 2U, ub, syncId)};
 }
 
 AICORE inline bool IsRangeInsideMr(uint64_t address, uint64_t length, __gm__ const RdmaMemInfo* mem)
@@ -436,11 +620,28 @@ AICORE inline bool IsRangeInsideMr(uint64_t address, uint64_t length, __gm__ con
     return address - mem->addr <= mem->size - length;
 }
 
+AICORE inline bool IsQueueValid(
+    __gm__ RdmaInfo* info, uint32_t peer, uint32_t qpIdx, const RdmaTmpBuffer& tmpBuf, uint32_t syncId)
+{
+    if (!IsWorkspaceHeaderValid(info) || info->backend != RdmaBackend::HNS_1825 || peer >= info->rankCount ||
+        qpIdx >= info->qpNum || info->sqPtr == 0 || info->scqPtr == 0 || tmpBuf.addr == nullptr ||
+        tmpBuf.size < kHns1825WriteReadWqeSize || syncId > kHns1825MaxSyncId) {
+        return false;
+    }
+    const uint64_t index = static_cast<uint64_t>(peer) * info->qpNum + qpIdx;
+    __gm__ RoceSqCtx* sq = reinterpret_cast<__gm__ RoceSqCtx*>(info->sqPtr) + index;
+    __gm__ RoceCqCtx* cq = reinterpret_cast<__gm__ RoceCqCtx*>(info->scqPtr) + index;
+    const uint32_t cqeSize = cq->cqeSize == 0 ? kHns1825DefaultCqeSize : cq->cqeSize;
+    return sq->stateAddr != 0 && (sq->stateAddr % alignof(QueueState)) == 0 && sq->depth > kHns1825PollCqThreshold &&
+           (sq->depth & (sq->depth - 1U)) == 0 && cq->depth >= 4 && (cq->depth & (cq->depth - 1U)) == 0 &&
+           (cqeSize == sizeof(Hns1825Cqe) || cqeSize == kHns1825DefaultCqeSize);
+}
+
 AICORE inline uint32_t ValidateTransfer(
     const RdmaExecContext& ctx, uint64_t localAddr, uint64_t remoteAddr, uint64_t len)
 {
     __gm__ RdmaInfo* info = reinterpret_cast<__gm__ RdmaInfo*>(ctx.contextGm);
-    if (!IsWorkspaceHeaderValid(info) || info->backend != RdmaBackend::HNS_1825 ||
+    if (!IsQueueValid(info, ctx.destRankId, ctx.qpIdx, ctx.tmpBuf, ctx.syncId) ||
         ctx.backend != RdmaBackend::HNS_1825 || ctx.destRankId >= info->rankCount || ctx.myPe >= info->rankCount ||
         info->memPtr == 0) {
         return kHns1825InvalidContextError;
@@ -610,8 +811,7 @@ AICORE inline uint32_t WaitEventStatus(uint64_t handle, const RdmaEventContext& 
     uint32_t curHead = 0;
     DecodeHandle(handle, destRankId, curHead);
     __gm__ RdmaInfo* info = (__gm__ RdmaInfo*)ctx.contextGm;
-    if (!IsWorkspaceHeaderValid(info) || info->backend != RdmaBackend::HNS_1825 ||
-        ctx.backend != RdmaBackend::HNS_1825) {
+    if (!detail::IsQueueValid(info, destRankId, 0, ctx.tmpBuf, ctx.syncId) || ctx.backend != RdmaBackend::HNS_1825) {
         return kHns1825InvalidContextError;
     }
     return detail::PollCq(info, destRankId, /*qpIdx*/ 0, curHead, ctx.tmpBuf.addr, ctx.syncId);
@@ -619,8 +819,9 @@ AICORE inline uint32_t WaitEventStatus(uint64_t handle, const RdmaEventContext& 
 
 AICORE inline bool WaitEvent(uint64_t handle, const RdmaEventContext& ctx) { return WaitEventStatus(handle, ctx) == 0; }
 
-// Non-blocking completion check (read-only peek; does not advance the CQ tail). Returns true if the
-// transfers up to curHead have completed. Mirrors URMA UrmaTestEvent.
+// Non-blocking completion check. Flush ready submissions and inspect a bounded
+// CQ batch; neither attempt waits on a busy lock.
+// True denotes a terminal event, including errors reported by WaitEventStatus.
 AICORE inline bool TestEvent(uint64_t handle, const RdmaEventContext& ctx)
 {
     if (handle == 0) {
@@ -634,30 +835,21 @@ AICORE inline bool TestEvent(uint64_t handle, const RdmaEventContext& ctx)
     DecodeHandle(handle, destRankId, curHead);
 
     __gm__ RdmaInfo* info = (__gm__ RdmaInfo*)ctx.contextGm;
-    uint32_t qpNum = info->qpNum;
-    __gm__ RoceCqCtx* cqCtx =
-        (__gm__ RoceCqCtx*)(info->scqPtr + ((uint64_t)destRankId * qpNum + 0) * sizeof(RoceCqCtx));
-
-    uint32_t cqeSize = cqCtx->cqeSize == 0 ? kHns1825DefaultCqeSize : cqCtx->cqeSize;
-    uint32_t cqRing = cqCtx->depth;
-    uint32_t curTail = detail::ReadU32Gm(cqCtx->tailAddr);
-    // Already drained to or past the target (a previous Wait or post_send poll advanced the tail).
-    if (static_cast<int32_t>(curTail - curHead) >= 0) {
+    if (!detail::IsQueueValid(info, destRankId, 0, ctx.tmpBuf, ctx.syncId) || ctx.backend != RdmaBackend::HNS_1825) {
         return true;
     }
-
-    // Peek the CQE for the last expected completion (curHead-1) without advancing the tail.
-    uint32_t lastIdx = curHead - 1;
-    __gm__ uint8_t* cqeAddr = (__gm__ uint8_t*)(cqCtx->bufAddr + (uint64_t)(lastIdx & (cqRing - 1)) * cqeSize);
-    // The NIC updates CQ memory asynchronously; invalidate cached CQE data before the one-shot Test read.
-    dcci((__gm__ void*)cqeAddr, SINGLE_CACHE_LINE);
-    detail::ReadGmToUb(ctx.tmpBuf.addr, (uint64_t)cqeAddr, detail::kCqeReadSize, ctx.syncId);
-    __ubuf__ Hns1825Cqe* cqe = (__ubuf__ Hns1825Cqe*)(__ubuf__ void*)ctx.tmpBuf.addr;
-    constexpr uint32_t kCqeOpcodeShift = 27;
-    constexpr uint32_t kCqeOpcodeMask = 0x1f;
-    constexpr uint32_t kCqeOptypeInvalid = 0x1f;
-    const uint32_t cqeType = (cqe->op_sr_wqebb >> kCqeOpcodeShift) & kCqeOpcodeMask;
-    return cqeType != kCqeOptypeInvalid && detail::CheckCqeOwner(cqe, lastIdx, cqRing);
+    __gm__ RoceSqCtx* sq =
+        reinterpret_cast<__gm__ RoceSqCtx*>(info->sqPtr) + static_cast<uint64_t>(destRankId) * info->qpNum;
+    __gm__ QueueState* state = detail::GetQueueState(sq);
+    if (detail::AtomicLoad(&state->completedHead) < curHead && detail::QueueError(state) == 0) {
+        detail::SubmitReady(sq, ctx.tmpBuf.addr, ctx.syncId);
+        detail::ProgressCq(info, destRankId, 0, ctx.tmpBuf.addr, ctx.syncId);
+    }
+    const bool terminal = detail::AtomicLoad(&state->completedHead) >= curHead || detail::QueueError(state) != 0;
+    if (terminal) {
+        detail::QueueFence();
+    }
+    return terminal;
 }
 
 } // namespace hns_1825
