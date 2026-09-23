@@ -386,6 +386,64 @@ TEST_F(TEXTRACTTest, ZNPlacementMatchesFractalOrder)
     }
 }
 
+// ND -> NZ: extract a window from an ND (RowMajor/NoneBox) source tile and store
+// it into an NZ (ColMajor/RowMajor fractal) destination tile.
+template <typename T, TileType SrcLoc, int SrcRows, int SrcCols, int DstRows, int DstCols>
+void TestNdToNz()
+{
+    using SrcTile = Tile<SrcLoc, T, SrcRows, SrcCols, BLayout::RowMajor, SrcRows, SrcCols, SLayout::NoneBox>;
+    using DstTile = Tile<SrcLoc, T, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
+
+    static_assert(DstTile::InnerCols > 0 && DstTile::InnerRows > 0, "NZ destination must be boxed");
+
+    SrcTile src;
+    DstTile dst;
+    size_t addr = 0;
+    CpuTileTestUtils::AssignTileStorage(addr, src, dst);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            CpuTileTestUtils::SetValue(src, r, c, T((r * 31 + c + 1) % 97));
+        }
+    }
+    CpuTileTestUtils::FillAll(dst, T(0));
+
+    constexpr int idxRow = 4;
+    constexpr int idxCol = 8;
+    TEXTRACT(dst, src, idxRow, idxCol);
+
+    for (int r = 0; r < dst.GetValidRow(); ++r) {
+        for (int c = 0; c < dst.GetValidCol(); ++c) {
+            const auto expected = CpuTileTestUtils::GetValue(src, r + idxRow, c + idxCol);
+            // Logical element access must see the extracted ND window.
+            CpuTileTestUtils::ExpectValueEquals(CpuTileTestUtils::GetValue(dst, r, c), expected);
+            // Physical placement must be NZ: outer blocks column-major, inner boxes row-major.
+            const int subTileR = r / DstTile::InnerRows;
+            const int innerR = r % DstTile::InnerRows;
+            const int subTileC = c / DstTile::InnerCols;
+            const int innerC = c % DstTile::InnerCols;
+            const size_t nzOffset = static_cast<size_t>(subTileC) * DstTile::Rows * DstTile::InnerCols +
+                                    static_cast<size_t>(subTileR) * DstTile::InnerNumel +
+                                    static_cast<size_t>(innerR) * DstTile::InnerCols + static_cast<size_t>(innerC);
+            CpuTileTestUtils::ExpectValueEquals(dst.data()[nzOffset], expected);
+        }
+    }
+}
+
+TEST_F(TEXTRACTTest, VecNdToNzFloat) { TestNdToNz<float, TileType::Vec, 32, 64, 16, 32>(); }
+
+TEST_F(TEXTRACTTest, VecNdToNzHalf) { TestNdToNz<half, TileType::Vec, 32, 64, 16, 32>(); }
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TEXTRACTTest, VecNdToNzBfloat16) { TestNdToNz<bfloat16_t, TileType::Vec, 32, 64, 16, 32>(); }
+#endif
+
+TEST_F(TEXTRACTTest, VecNdToNzInt8) { TestNdToNz<int8_t, TileType::Vec, 32, 64, 16, 32>(); }
+
+TEST_F(TEXTRACTTest, MatNdToNzFloat) { TestNdToNz<float, TileType::Mat, 32, 64, 16, 32>(); }
+
+TEST_F(TEXTRACTTest, MatNdToNzHalf) { TestNdToNz<half, TileType::Mat, 32, 64, 16, 32>(); }
+
 template <typename T, bool Compact, bool Dynamic>
 void TestMatToLeftSmallM()
 {
