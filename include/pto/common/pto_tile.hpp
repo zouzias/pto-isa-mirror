@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/arch_capability.hpp>
 #include "pto/common/debug.h"
 #if defined(__CPU_SIM)
 #include <pto/cpu/atomic.hpp>
@@ -1427,21 +1428,33 @@ struct Tile {
 public:
     using DType = Element_;
 
-    // Twin/packed dtypes (fp4x2) store 2 elements per byte on NPU as well:
-    // keeps the 32B-alignment static_assert consistent with __CPU_SIM (fp4
-    // Cols are nibble-counted -> Cols % 64 == 0 == 32B-aligned rows).
-    // IsTwinType lives in cpu/MXTypes.hpp (only available under __CPU_SIM),
-    // so the packed types are listed explicitly, as in GetNZC0Size.
-#ifdef __CPU_SIM
+    // fp4 (twin) types pack two nibbles per byte: a row of `Cols` elements
+    // occupies `Cols / 2` bytes, so 32-byte row alignment requires
+    // `Cols % 64 == 0`, not `Cols % 32 == 0`. The packed factor must be honoured
+    // on every target that has the type; the previous NPU-only `= 1` let fp4
+    // tiles with 16-byte rows (e.g. Cols = 32) pass the alignment static_assert
+    // and later fault in `vlds` (RV_VLDS needs 32-byte-aligned addresses).
+    //
+    // The fp4 type names (float4_e2m1x2_t / float4_e1m2x2_t / hifloat4x2_t) are
+    // CANN builtins that only exist on fp4-capable targets (A5/A6, and CPU sim
+    // via MXTypes.hpp). Naming them unconditionally breaks every other build --
+    // e.g. the demos (CANN 8.5.0, no fp4 builtins, no A5/A6 arch macro) fail to
+    // compile `add_custom.cpp` -> `<pto/pto-inst.hpp>` -> this header. So the
+    // branch structure mirrors GetNZC0Size below:
+    //   * __CPU_SIM          : MXTypes.hpp is pulled in (constants.hpp), so the
+    //                          fp4 types and IsTwinType are visible -> use it.
+    //   * PTO_NPU_ARCH_A5/A6 : use the arch-safe caps::IsFP4 (routes through
+    //                          Arch::Float4*Type, which is `void` elsewhere, so
+    //                          the missing builtins are never named). Covers
+    //                          e2m1 + e1m2 AND HiF4 (hifloat4x2_t) on A6.
+    //   * else (demos / A2A3 / Kirin / old CANN / no arch) : `= 1`, no fp4
+    //                          type is referenced -> compiles everywhere.
+#if defined(__CPU_SIM)
     static constexpr size_t kPackedElementsPerByte = IsTwinType<DType>() ? 2 : 1;
+#elif defined(PTO_NPU_ARCH_A5) || defined(PTO_NPU_ARCH_A6)
+    static constexpr size_t kPackedElementsPerByte = caps::IsFP4<DType>() ? 2 : 1;
 #else
-    static constexpr bool kIsPackedTwin = std::is_same_v<DType, float4_e2m1x2_t> ||
-                                          std::is_same_v<DType, float4_e1m2x2_t>
-#if defined(PTO_NPU_ARCH_A6)
-                                          || std::is_same_v<DType, hifloat4x2_t>
-#endif
-        ;
-    static constexpr size_t kPackedElementsPerByte = kIsPackedTwin ? 2 : 1;
+    static constexpr size_t kPackedElementsPerByte = 1;
 #endif
 
     static constexpr int getInnerRow()
