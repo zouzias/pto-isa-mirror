@@ -28,25 +28,6 @@ $$
 `pad` is determined by `TileDataDst::PadVal` and the element type. Built-in `Zero`/`Min`/`Max` maps live in
 `PadValueMap<DType, PadVal>`; custom bit patterns use `PadValueCustom`.
 
-## Assembly Syntax
-
-Synchronous form (conceptual):
-
-```text
-%dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Implemented in the backend headers pulled in by `include/pto/common/pto_instr_impl.hpp`:
@@ -121,31 +102,4 @@ void example2() {
   TileMatData matTile;
   TFILLPAD(matTile, matTile);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

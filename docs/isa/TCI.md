@@ -23,25 +23,6 @@ For a linearized index `k` over the valid elements:
 
 The linearization order depends on the tile layout (implementation-defined).
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tci %S {descending = false} : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -141,31 +122,4 @@ void example_manual_tmp() {
   TASSIGN(tmp, 0x2000);
   TCI<TileT, TmpT, int32_t, /*descending=*/1>(dst, /*S=*/100, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tci %S {descending = false} : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
