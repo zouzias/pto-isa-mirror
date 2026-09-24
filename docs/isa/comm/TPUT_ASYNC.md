@@ -2,7 +2,9 @@
 
 ## Introduction
 
-`TPUT_ASYNC` is an asynchronous remote write primitive. It starts a transfer from local GM to remote GM and returns an `AsyncEvent` immediately.
+`TPUT_ASYNC` is an asynchronous remote write primitive. By default it publishes a transfer from local GM to remote
+GM and returns its `AsyncEvent`. On A2/A3 SDMA and A5 URMA, `AsyncSession::submitMode` can instead stage several
+writes and publish them as a batch without changing the `TPUT_ASYNC` function signature.
 
 Data flow:
 
@@ -26,11 +28,52 @@ Data flow:
 Declared in `include/pto/comm/pto_comm_inst.hpp`.
 
 ```cpp
+// A2/A3
 template <DmaEngine engine = DmaEngine::SDMA,
           typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &... events);
+                               const AsyncSession &session,
+                               WaitEvents &... events);
+
+// A5, peer obtained from session.destRankId
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session,
+                               WaitEvents &... events);
+
+// A5, explicit peer
+template <DmaEngine engine = DmaEngine::SDMA,
+          typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                               const AsyncSession &session, uint32_t peer,
+                               WaitEvents &... events);
 ```
+
+The call signatures and the position of `peer` are unchanged. Configure batching on the Session after
+`BuildAsyncSession`. Prerequisite `WaitEvents...` retain their original call form.
+
+## Submission Modes
+
+```cpp
+session.submitMode = AsyncSubmitMode::DEFER;
+session.batchSize = 16U;
+```
+
+- `AsyncSubmitMode::IMMEDIATE` (default): first publishes any pending batch for the same Session and engine, then
+  publishes the current write. On A5 URMA, the returned Event retains the standard per-operation scope; wait on the
+  last deferred Event separately when completion of the preceding logical batch is required. On A2/A3 SDMA, the
+  current Event fences the Session's previously used queues and therefore also covers the implicitly submitted batch.
+- `AsyncSubmitMode::DEFER`: stages the current write. The returned non-zero Event is a future completion-target
+  snapshot. It may be waited or tested only after the physical batch containing it has been submitted.
+- `AsyncSubmitMode::DEFER_AND_SUBMIT`: stages the current write and submits the remaining physical batch. The
+  returned Event is immediately eligible for `Wait/Test`.
+
+`batchSize` is the maximum number of non-empty deferred calls in one physical batch. Reaching the threshold submits
+that physical batch automatically. `batchSize == UINT32_MAX` effectively disables threshold-based submission;
+switch the last real write to `DEFER_AND_SUBMIT`, or execute a following same-engine immediate operation.
+`batchSize == 0` disables batching, so `DEFER` and `DEFER_AND_SUBMIT` are contract violations.
+Keep `batchSize` unchanged while a logical batch is active.
 
 `AsyncSession` is an engine-agnostic session object. Build once with
 `BuildAsyncSession<engine>()`, then pass to all async calls and event waits.
@@ -114,7 +157,9 @@ Build one peer-independent session, then select the destination rank with the ex
 comm::AsyncSession session;
 if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, myPe, session, syncId)) {
     auto event = comm::TPUT_ASYNC<comm::DmaEngine::RDMA>(dstG, srcG, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -135,6 +180,56 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(scratchTile, rdmaWorkspace, m
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
 
+### Deferred Batch Constraints
+
+- Aggregate mode supports `DmaEngine::SDMA` on A2/A3 and `DmaEngine::URMA` on A5. A5 SDMA aggregate mode is not
+  supported.
+- A2/A3 does not expose `peer`. A5 retains both the bound-peer and explicit-peer forms.
+- The first successful non-empty Defer starts a batch. A zero-length `DEFER` or `DEFER_AND_SUBMIT` returns an invalid
+  Event, does not modify batch state, and does not submit an existing batch.
+- Every deferred write in one logical batch must use the same Session and engine. One URMA logical batch must also
+  keep the same `peer`.
+- A same-engine immediate `TPUT_ASYNC`, `TGET_ASYNC`, or `TPUT_ASYNC_NOTIFY` using the same Session first submits
+  pending Put descriptors. `TPREFETCH_ASYNC` does so only when it reuses that external SDMA Session.
+- This implicit submission establishes local publication order only. An A5 URMA notify posted on one Jetty is not a
+  remote completion fence for deferred writes posted on other Jetties. To use a signal as proof that all Batch
+  payloads are remotely visible, submit the Batch, successfully wait for its multi-Jetty Event, and only then issue a
+  separate notify; alternatively, use an explicit ordering protocol. Waiting after the signal has already been
+  issued cannot make an earlier receiver observation safe.
+- A5 `TPUT_ASYNC<SDMA>` uses the synchronous MTE fallback and never submits or otherwise changes a pending URMA
+  batch.
+- Do not copy, rebuild, destroy, or transfer ownership of the Session while it has pending work.
+- Keep every source range, Session, and workspace alive until the corresponding Event has completed.
+- If a deferred call detects an argument, resource, or capacity error before publication, the current unsubmitted
+  physical batch is discarded and is not published.
+- An automatically submitted physical batch clears its staged counters but remains part of the logical completion
+  prefix. A subsequent deferred call begins another physical batch.
+- Remote destination ranges in one batch must not overlap. Defer order must not be used to express dependencies
+  between writes.
+- Before submission, do not call `Wait/Test` on a deferred Event and do not pass it as a prerequisite Event. This
+  release relies on the caller to enforce that rule and performs no runtime submitted-state check.
+
+### Deferred Batch Resource Limits
+
+- Source and destination tensors must have the same raw data type and layout, must both be flat contiguous logical 1D
+  tensors, and must provide non-null pointers for every non-empty transfer.
+- Tensor element counts, byte counts, and address-range calculations must fit in `uint64_t`. The destination element
+  capacity must be at least the source element count.
+- The interface does not validate communication-memory membership, address bounds, overlap, or target-peer ownership;
+  the caller must guarantee them.
+- Each SDMA Defer consumes `ceil(transferBytes / blockBytes)` data SQEs. Distribution is round-robin across
+  `queueNum` using the cumulative SQE index of the current physical batch. The number assigned to each queue must be
+  less than that queue's SQ depth.
+- SDMA adds `commBlockOffset` to both tensor base addresses. The backing allocations must cover
+  `[base + commBlockOffset, base + commBlockOffset + transferBytes)` without overflow.
+- URMA requires a valid registered workspace and peer memory registration. `peer` must be less than the workspace
+  rank count.
+- The complete URMA source range must be within the local communication buffer registered by
+  `UrmaWorkspaceManager::Init()`, and the complete destination range must be within the selected peer's registered
+  communication buffer.
+- URMA splits one remote write into WQEs of at most 256 MiB and distributes them deterministically over
+  `session.qpCount` Jetties. Each physical batch must fit every participating WQ and CQ.
+
 ## scratchTile Role
 
 `scratchTile` is **not** the payload staging buffer for user data.
@@ -154,23 +249,43 @@ Data payload moves between GM buffers directly; `scratchTile` only supports cont
 
 Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>` (256Byte).
 
-## Completion Semantics (Quiet Semantics)
+## Completion Semantics
 
-The completion mechanism differs by engine, but user-facing quiet semantics are identical:
+For `IMMEDIATE` mode, Event scope differs by engine:
 
 - **SDMA**: Each `TPUT_ASYNC` submits data-transfer SQEs and flag SQEs that mark completion of that operation. `Wait` or `Test` on its returned event polls the corresponding flags to determine whether that `TPUT_ASYNC` has completed; completion also guarantees that all earlier SDMA operations in the same session have completed.
-- **URMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE and rings the doorbell immediately. `Wait` polls the Completion Queue (CQ) until all expected CQEs have been consumed.
+- **URMA**: `TPUT_ASYNC` submits RDMA WRITE WQEs and rings the corresponding doorbells immediately. `Wait` polls the Completion Queues (CQs) used by that invocation. Its Event does not aggregate completion targets from an earlier invocation that used other Jetties.
 - **RDMA**: `TPUT_ASYNC` submits an RDMA WRITE WQE to the queue selected by `peer`. Completion is tracked independently for each peer/queue.
 
-- `event.Wait(session)` — blocks until **all async operations issued since the last Wait** are complete
+- On A2/A3 SDMA, waiting for the last `IMMEDIATE` Event drains the earlier same-Session operations fenced by that
+  completion target.
+- On A5 URMA, do not use a later operation's Event as a general quiet operation for earlier multi-Jetty work. Wait
+  each Event whose completion is required.
+- For RDMA operations targeting different peers, wait for the last Event of each peer separately.
 
-This means after multiple `TPUT_ASYNC` calls, a single `Wait` on the last returned `AsyncEvent` drains all pending operations (similar to shmem's quiet semantics).
+For SDMA, up to 64 flag-payload slots may be outstanding in one Session before submission applies backpressure.
+URMA backpressure instead depends on the configured WQ/CQ depths.
 
-For RDMA operations targeting different peers, wait for the last event of each peer separately.
+For asynchronous A2/A3 SDMA, URMA, and RDMA operations, check `event.valid()` before every `Wait/Test`. An invalid
+asynchronous Event has a zero handle, and its `Wait/Test` returns immediately without proving that any transfer was
+issued or completed. A5 `DmaEngine::SDMA` is a synchronous MTE fallback: a successful call completes before return
+and intentionally returns a zero-handle Event, so no asynchronous wait is required.
 
-Up to 64 operations may be outstanding in one session before submission can apply backpressure.
+For `DEFER` mode, every non-empty call returns a future completion-target snapshot. Before the physical batch
+containing that snapshot is submitted, calling `Wait/Test` is unsupported. After submission, an intermediate Event
+can check completion of its deferred prefix, and the Event returned by the last call covers the complete logical
+prefix. Every deferred call must return a valid Event. After validity is established, a successful Wait/Test provides
+sender-side completion and permits reuse of the corresponding source range.
 
-After wait succeeds, all issued writes to `dstGlobalData` are complete.
+An aggregate batch is not a transaction. The receiver may observe writes incrementally, completed writes are not
+rolled back after an error, and the public contract does not define completion order between individual writes. The
+final Event does not notify the receiver. Receiver consumption still requires an application protocol such as
+`TNOTIFY`/`TWAIT` and platform-appropriate cache-visibility handling.
+
+For an asynchronous backend, only a valid Event followed by a successful Wait/Test result confirms completion. A
+failed result does not cancel the submitted transfer; do not reuse source data or release/rebuild the session,
+workspace, scratch tile, Channel Group, or Jetty in that state. A successful A5 SDMA fallback call is already
+complete when the instruction returns.
 
 ## SDMA Concurrency and Session Ownership
 
@@ -178,6 +293,23 @@ After wait succeeds, all issued writes to `dstGlobalData` are complete.
 - Operations that share a channel group must also share the same session.
 - Concurrent kernels, or multiple independent sessions within one kernel, must use isolated channel groups.
 - Complete all outstanding events before rebuilding a session or reusing its channel group.
+
+### Deferred Batch Concurrency and Session Ownership
+
+- Build/Rebuild, instruction calls, Wait, and Test on one Session must execute serially.
+- Distinct sessions do not imply distinct physical resources. From Build until the last event completes, do not map a
+  second session to the same SDMA Channel, URMA WQ, or URMA CQ.
+- In URMA `PER_PEER` mode, calls to the same peer share one physical WQ/CQ and must be serialized; different peers use
+  different queues.
+- In URMA `SHARED_POOL` mode, a batching Session owns the Jetty range
+  `[session.qpIdxBase, session.qpIdxBase + session.qpCount)`. Sessions alias when these ranges overlap, even when
+  their peers differ.
+- Wait/Test on a physical Channel Group, WQ, or CQ must not run concurrently with Defer, submission, or another Wait/Test
+  on the same resource.
+- Rebuild or destroy a session and its communication resources only after every outstanding event on all physical
+  queues used by that session has completed.
+- Before releasing URMA communication resources, also synchronize every host stream that uses the communication
+  context so that no later stream work can reference the context.
 
 ## Example
 
@@ -212,7 +344,9 @@ __global__ AICORE void SimplePut(__gm__ T *remoteDst, __gm__ T *localSrc,
     }
 
     auto event = comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(dstG, srcG, session);
-    (void)event.Wait(session);
+    if (event.valid() && !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -223,6 +357,9 @@ template <typename T>
 __global__ AICORE void BatchPut(__gm__ T *remoteDstBase, __gm__ T *localSrc,
                                 __gm__ uint8_t *sdmaWorkspace, int nranks)
 {
+    if (nranks <= 0) {
+        return;
+    }
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
@@ -244,8 +381,59 @@ __global__ AICORE void BatchPut(__gm__ T *remoteDstBase, __gm__ T *localSrc,
     for (int rank = 0; rank < nranks; ++rank) {
         GT dstG(remoteDstBase + rank * 1024, shape, stride);
         lastEvent = comm::TPUT_ASYNC(dstG, srcG, session);
+        if (!lastEvent.valid()) {
+            return;
+        }
     }
-    (void)lastEvent.Wait(session);  // single Wait drains all pending ops
+    if (!lastEvent.Wait(session)) {
+        return;
+    }
+}
+```
+
+### Aggregate Batch Transfer
+
+```cpp
+template <typename GT>
+AICORE void AggregatePutSdma(
+    GT& dst0, GT& src0, GT& dst1, GT& src1,
+    comm::AsyncSession& session)
+{
+    session.batchSize = UINT32_MAX;
+    session.submitMode = comm::AsyncSubmitMode::DEFER;
+    auto firstEvent =
+        comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(dst0, src0, session);
+    if (!firstEvent.valid()) {
+        return;
+    }
+    session.submitMode = comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
+    auto batchEvent =
+        comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(dst1, src1, session);
+    if (!batchEvent.valid() || !batchEvent.Wait(session)) {
+        return;
+    }
+}
+```
+
+`firstEvent` is a valid future snapshot, but it must not be waited before the second call submits its physical batch.
+After submission, either Event may be waited; `batchEvent` covers both writes.
+
+For A5 URMA with an explicit peer, keep the original peer position and use the same `peer` for the complete logical
+batch. WQEs are distributed over the Jetty range owned by the Session:
+
+```cpp
+session.batchSize = UINT32_MAX;
+session.submitMode = comm::AsyncSubmitMode::DEFER;
+auto firstEvent = comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+    dst0, src0, session, peer);
+if (!firstEvent.valid()) {
+    return;
+}
+session.submitMode = comm::AsyncSubmitMode::DEFER_AND_SUBMIT;
+auto batchEvent = comm::TPUT_ASYNC<comm::DmaEngine::URMA>(
+    dst1, src1, session, peer);
+if (!batchEvent.valid() || !batchEvent.Wait(session)) {
+    return;
 }
 ```
 
@@ -276,6 +464,8 @@ __global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
     }
 
     auto event = comm::TPUT_ASYNC<comm::DmaEngine::URMA>(dstG, srcG, session);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```

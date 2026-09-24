@@ -107,6 +107,17 @@ $$
 `DmaEngine::RDMA` 不支持 `NotifyOp::AtomicAdd`。上述payload先于signal的顺序仅适用于同一次调用，不定义
 不同Session或不同执行流之间的顺序。
 
+若同一Session中存在相同引擎的pending Defer PUT Batch，`TPUT_ASYNC_NOTIFY`会先提交该Batch，再发布
+自身的payload和signal。对于URMA，本次调用的`peer`必须与pending逻辑Batch的peer一致；Batch仍处于
+active状态时切换peer属于契约错误。A5 URMA返回的Event保持标准范围，只覆盖本次调用；若需检查前序
+Batch完成，必须另行等待最后一个Defer Event。A2/A3 SDMA的Notify Event会对Session此前使用过的队列
+建立完成栅栏，因此也覆盖隐式提交的Batch。
+
+该隐式提交只建立本端发布顺序。特别是，A5 URMA在一条Jetty上发布的signal不是其他Jetty上Defer写的
+远端完成栅栏。若要把signal作为全部Defer payload远端可见的依据，必须先提交Batch并成功等待其多
+Jetty Event，再单独发出Notify；也可以使用其他明确的顺序协议。signal已经发出后再等待Batch Event，
+不能使接收端此前对signal的观察变得安全。
+
 ## AsyncSession构建
 
 使用 `include/pto/comm/async_common/async_event_impl.hpp` 中的 `BuildAsyncSession`。该函数按引擎提供不同的
@@ -188,7 +199,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::RDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -227,6 +240,10 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
 - 两个接口都必须使用发起操作时的同一个Session。
 - 成功完成同时覆盖完整payload传输及其后的signal更新。
 
+对于A2/A3 SDMA、URMA和RDMA异步操作，必须先确认Event有效，再确认`Wait/Test`成功。A5
+`DmaEngine::SDMA`是同步MTE fallback；成功调用在返回前已经完成，并且有意返回handle为0的Event，
+因此无需异步等待。
+
 同一Session、同一后端队列中的异步操作按提交顺序完成。连续提交多次操作后，等待该队列最后一次操作的
 Event，也会覆盖此前尚未完成的操作。URMA或RDMA访问不同peer时，各peer的队列独立，调用方必须分别等待
 每个peer的最后一个Event；调用 `Wait` 或 `Test` 时无需再次传入peer。
@@ -258,6 +275,8 @@ Event，也会覆盖此前尚未完成的操作。URMA或RDMA访问不同peer时
 以下示例假设Host通信运行时已经完成远端地址转换，并初始化相应引擎的workspace。
 
 ### SDMA Set
+
+以下SDMA示例对应A2/A3异步路径。A5 SDMA使用“完成语义”中说明的同步MTE fallback。
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -296,7 +315,9 @@ __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -311,7 +332,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::SDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::AtomicAdd, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -326,7 +349,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -341,7 +366,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::AtomicAdd, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -356,7 +383,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::RDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
