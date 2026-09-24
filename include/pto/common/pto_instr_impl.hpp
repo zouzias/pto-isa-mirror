@@ -17,73 +17,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_cce_intrinsic.hpp>
 
 #ifdef PTO_NPU_ARCH_A2A3
-#ifdef __COSTMODEL
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
-#include "pto/npu/a2a3/TAdd.hpp"
-#include "pto/npu/a2a3/TAddS.hpp"
-#include "pto/npu/a2a3/TSub.hpp"
-#include "pto/npu/a2a3/TSubS.hpp"
-#include "pto/npu/a2a3/TMul.hpp"
-#include "pto/npu/a2a3/TMAdd.hpp"
-#include "pto/npu/a2a3/TMulS.hpp"
-#include "pto/npu/a2a3/TMin.hpp"
-#include "pto/npu/a2a3/TMins.hpp"
-#include "pto/npu/a2a3/TMax.hpp"
-#include "pto/npu/a2a3/TMaxS.hpp"
-#include "pto/npu/a2a3/TDiv.hpp"
-#include "pto/npu/a2a3/TDivS.hpp"
-#include "pto/npu/a2a3/TCmp.hpp"
-#include "pto/npu/a2a3/TCmps.hpp"
-#include "pto/npu/a2a3/TLoad.hpp"
-#include "pto/npu/a2a3/TCvt.hpp"
-#include "pto/npu/a2a3/TStore.hpp"
-#include "pto/npu/a2a3/TMrgSort.hpp"
-#include "pto/npu/a2a3/TExtract.hpp"
-#include "pto/npu/a2a3/TInsert.hpp"
-#include "pto/npu/a2a3/TMov.hpp"
-#include "pto/npu/a2a3/TScatter.hpp"
-#include "pto/npu/a2a3/TTrans.hpp"
-#include "pto/npu/a2a3/TMatmul.hpp"
-#include "pto/npu/a2a3/TSel.hpp"
-#include "pto/npu/a2a3/TSels.hpp"
-#include "pto/npu/a2a3/TSort32.hpp"
-#include "pto/npu/a2a3/TGather.hpp"
-#include "pto/npu/a2a3/TRowExpand.hpp"
-#include "pto/npu/a2a3/TRowSum.hpp"
-#include "pto/npu/a2a3/TRowMax.hpp"
-#include "pto/npu/a2a3/TRowMin.hpp"
-#include "pto/npu/a2a3/TColMax.hpp"
-#include "pto/npu/a2a3/TColMin.hpp"
-#include "pto/npu/a2a3/TColSum.hpp"
-#include "pto/npu/a2a3/TUnaryOp.hpp"
-#include "pto/npu/a2a3/TPush.hpp"
-#include "pto/npu/a2a3/TPop.hpp"
-#include "pto/npu/a2a3/TAlloc.hpp"
-#include "pto/npu/a2a3/TFree.hpp"
-#include "pto/npu/a2a3/TReshape.hpp"
-#include "pto/npu/a2a3/TPrefetch.hpp"
-#include "pto/npu/a2a3/TRowExpandSub.hpp"
-#include "pto/npu/a2a3/TRowExpandMul.hpp"
-#include "pto/npu/a2a3/TRowExpandDiv.hpp"
-#include "pto/npu/a2a3/TRowExpandAdd.hpp"
-#include "pto/npu/a2a3/TImg2col.hpp"
-#include "pto/npu/a2a3/SetFmatrix.hpp"
-// Bitwise / axpy / leaky-relu ops: their MAP_INSTR_IMPL entries already exist in
-// pto/costmodel/pto_instr.hpp (TAND/TOR/TSHL/TSHR/TAXPY/TLRELU), but the headers
-// providing the *_IMPL were only in the real-kernel #else block. Including them
-// here wires vand/vor/vshl/vshr/vaxpy/vlrelu into the mock so their (currently
-// bare 6/2 placeholder) coefficients are actually exercised and can be calibrated.
-#include "pto/npu/a2a3/TAnd.hpp"
-#include "pto/npu/a2a3/TOr.hpp"
-#include "pto/npu/a2a3/TShl.hpp"
-#include "pto/npu/a2a3/TShr.hpp"
-#include "pto/npu/a2a3/TAxpy.hpp"
-#include "pto/npu/a2a3/TLRelu.hpp"
-#else
-#include "pto/npu/a2a3/TAssign.hpp"
-#include "pto/npu/a2a3/TSync.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a2a3/SyncAll.hpp"
+#endif
 #include "pto/npu/a2a3/TAdd.hpp"
 #include "pto/npu/a2a3/TAnd.hpp"
 #include "pto/npu/a2a3/TOr.hpp"
@@ -129,7 +67,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TSort32.hpp"
 #include "pto/npu/a2a3/TSel.hpp"
 #include "pto/npu/a2a3/TGather.hpp"
-#include "pto/npu/a2a3/TCvt.hpp"
 #include "pto/npu/a2a3/TDiv.hpp"
 #include "pto/npu/a2a3/TPartAdd.hpp"
 #include "pto/npu/a2a3/TPartMul.hpp"
@@ -139,11 +76,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TPow.hpp"
 #include "pto/npu/a2a3/TImg2col.hpp"
 #include "pto/npu/a2a3/SetFmatrix.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a2a3/SetImg2colRpt.hpp"
 #include "pto/npu/a2a3/SetImg2colPadding.hpp"
 #include "pto/npu/a2a3/SetQuantScalar.hpp"
 #include "pto/npu/a2a3/SetQuantVector.hpp"
-#ifdef _DEBUG
+#endif
+#if !defined(__COSTMODEL) && defined(_DEBUG)
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
 #include "pto/npu/a2a3/TRowExpand.hpp"
@@ -153,7 +92,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowExpandMin.hpp"
 #include "pto/npu/a2a3/TRowExpandMul.hpp"
 #include "pto/npu/a2a3/TRowExpandSub.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a2a3/TCI.hpp"
+#endif
 #include "pto/npu/a2a3/TMaxS.hpp"
 #include "pto/npu/a2a3/TColSum.hpp"
 #include "pto/npu/a2a3/TColProd.hpp"
@@ -168,8 +109,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TPrefetch.hpp"
 #include "pto/npu/a2a3/TPrelu.hpp"
 #include "pto/npu/a2a3/TInsert.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a2a3/MGather.hpp"
 #include "pto/npu/a2a3/MScatter.hpp"
+#endif
 #include "pto/npu/a2a3/TRowExpandExpdif.hpp"
 #include "pto/npu/a2a3/TColExpandAdd.hpp"
 #include "pto/npu/a2a3/TColExpandMax.hpp"
@@ -178,7 +121,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpandMul.hpp"
 #include "pto/npu/a2a3/TColExpandDiv.hpp"
 #include "pto/npu/a2a3/TColExpandExpdif.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a2a3/TQuant.hpp"
+#endif
 #include "pto/npu/a2a3/TDequant.hpp"
 #include "pto/npu/a2a3/TPush.hpp"
 #include "pto/npu/a2a3/TPop.hpp"
@@ -187,19 +132,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColReduceIdx.hpp"
 #include "pto/npu/a2a3/TMula.hpp"
 #endif
-#endif
 
 #ifdef PTO_NPU_ARCH_A5
-#ifdef __COSTMODEL
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/SyncAll.hpp"
 #include "pto/npu/a5/TAdd.hpp"
-#else
-#include "pto/npu/a5/TAssign.hpp"
-#include "pto/npu/a5/TSync.hpp"
-#include "pto/npu/a5/SyncAll.hpp"
-#include "pto/npu/a5/TAdd.hpp"
+#ifndef __COSTMODEL
 #include "pto/npu/a5/TAnd.hpp"
 #include "pto/npu/a5/TAndS.hpp"
 #include "pto/npu/a5/TOr.hpp"
@@ -312,7 +251,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TInterleave.hpp"
 #include "pto/npu/a5/TDeInterleave.hpp"
 #include "pto/npu/a5/TMula.hpp"
-#endif // __COSTMODEL
+#endif
 #endif
 
 #ifdef PTO_NPU_ARCH_A6

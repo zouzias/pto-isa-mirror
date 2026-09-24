@@ -567,12 +567,33 @@ def maybe_generate_formula_params(source_dir: Path, repo_root: Path, verbose: bo
         )
 
 
+def generate_cce_cycle_profiles(repo_root: Path, verbose: bool) -> None:
+    gen_script = (
+        repo_root.parent
+        / "include"
+        / "pto"
+        / "costmodel"
+        / "a2a3"
+        / "cce_costmodel"
+        / "gen_cce_cycle_profiles_header.py"
+    )
+    if not gen_script.exists():
+        raise RuntimeError(f"CCE cycle profile generator not found: {gen_script}")
+    run_command(
+        [sys.executable, str(gen_script)],
+        cwd=repo_root.parent,
+        title="[STEP] generate A2/A3 CCE cycle profiles",
+        verbose=verbose,
+    )
+
+
 def run_test_mode(args, repo_root, cxx, cc) -> int:
     source_dir = repo_root / "costmodel" / args.suite
     if not source_dir.exists():
         logging.error(f"error: not found costmodel dir: {source_dir}")
         return 2
 
+    generate_cce_cycle_profiles(repo_root, args.verbose)
     maybe_generate_formula_params(source_dir, repo_root, args.verbose)
 
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")

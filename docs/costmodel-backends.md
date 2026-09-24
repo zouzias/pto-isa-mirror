@@ -44,13 +44,24 @@ Related build roots:
 
 ## Formula Parameter Generation
 
-When running the `fit` backend (`st_fit` suite), the runner generates formula parameter header from CSV:
+Before building a costmodel suite, the runner generates the formula parameter header from CSV:
 
 - Script: `include/pto/costmodel/a2a3/formula_costmodel/gen_formula_params_header.py`
 - Input: `include/pto/costmodel/a2a3/formula_costmodel/formula_params.csv`
 - Output: `include/pto/costmodel/a2a3/formula_costmodel/formula_params_generated.hpp`
 
-`stub` (`st`) does not require this generation step.
+Both formula headers are generated because the shared lightweight backend includes the A2/A3 and A5 definitions.
+
+## CCE Cycle Profile Generation
+
+A2/A3 CCE vector cycle profiles are generated from CSV before a costmodel suite is built:
+
+- Script: `include/pto/costmodel/a2a3/cce_costmodel/gen_cce_cycle_profiles_header.py`
+- Input: `include/pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles.csv`
+- Output: `include/pto/costmodel/a2a3/cce_costmodel/cce_cycle_profiles_generated.hpp`
+
+The generated header is a build artifact and is not committed. `tests/run_costmodel.py` runs the generator before configuring
+the build. A direct build that bypasses the runner must invoke the generator first.
 
 ## Run Commands
 

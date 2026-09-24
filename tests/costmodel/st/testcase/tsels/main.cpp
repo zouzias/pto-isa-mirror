@@ -57,7 +57,7 @@ TEST(TSels, case_uint16_uint8_2x16_2x32_2x16_2x16)
 
 TEST(TSels, case_uint16_uint16_2x16_2x16_2x16_2x16)
 {
-    runTSels<uint16_t, uint16_t, 2, 16, 2, 16, 2, 16, 2, 16, 0.0f, 0.0f>(1);
+    runTSels<uint16_t, uint16_t, 2, 16, 2, 16, 2, 16, 2, 16, 50.0f, 1.0f>(1);
 }
 
 TEST(TSels, case_uint16_uint32_2x16_2x8_2x16_2x16)
@@ -72,7 +72,10 @@ TEST(TSels, case_uint32_uint16_2x8_2x16_2x8_2x8)
     runTSels<uint32_t, uint16_t, 2, 8, 2, 16, 2, 8, 2, 8, 0.0f, 0.0f>(1);
 }
 
-TEST(TSels, case_uint32_uint32_2x8_2x8_2x8_2x8) { runTSels<uint32_t, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8, 0.0f, 0.0f>(1); }
+TEST(TSels, case_uint32_uint32_2x8_2x8_2x8_2x8)
+{
+    runTSels<uint32_t, uint32_t, 2, 8, 2, 8, 2, 8, 2, 8, 36.0f, 1.0f>(1);
+}
 
 TEST(TSels, case_half_uint8_2x16_2x32_2x16_2x16)
 {
@@ -121,4 +124,19 @@ TEST(TSels, case_float_uint8_32x672_32x96_32x672_32x666)
 TEST(TSels, case_float_uint8_1x8192_1x4096_1x8192_1x8192)
 {
     runTSels<float, uint8_t, 1, 8192, 1, 4096, 1, 8192, 1, 8192, 0.0f, 0.0f>(1.0f);
+}
+
+TEST(TSels, int32_uses_b32_path_below_mask_boundary)
+{
+    runTSels<int32_t, uint8_t, 16, 16, 16, 32, 16, 16, 16, 16, 36.0f, 1.0f>(1);
+}
+
+TEST(TSels, int32_uses_b32_path_at_mask_boundary)
+{
+    runTSels<int32_t, uint8_t, 16, 64, 16, 32, 16, 64, 16, 64, 47.0f, 1.0f>(1);
+}
+
+TEST(TSels, int32_uses_b32_repeat_width)
+{
+    runTSels<int32_t, uint8_t, 16, 128, 16, 32, 16, 128, 16, 128, 68.0f, 1.0f>(1);
 }

@@ -124,6 +124,17 @@ inline uint64_t EstimateLightweightCycles(const std::string& opcode, int rows, i
 
 inline uint64_t FallbackCycles(const std::string& opcode, int rows, int cols)
 {
+    if (opcode == "TROWEXPAND") {
+        constexpr uint64_t kIntegerRowCycles = 14;
+        constexpr uint64_t kFixedEventCycles = 37;
+        // The non-VBRCB A2/A3 implementation serializes every output row through
+        // V->S and S->V event pairs before issuing vector_dup.  Existing fitted
+        // TROWEXPAND entries reduce to approximately 14 cycles per row plus a
+        // 37-cycle fixed cost.  Keep that behavior for integer dtypes and column
+        // sizes not present in the formula table instead of falling through to
+        // the generic element-throughput estimate, which misses the row events.
+        return kIntegerRowCycles * static_cast<uint64_t>(rows) + kFixedEventCycles;
+    }
     uint64_t elems = static_cast<uint64_t>(rows) * cols;
     PipeStage stage = StaticPipeStageLookup(opcode);
     if (stage == PipeStage::Scalar)
