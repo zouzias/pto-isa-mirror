@@ -71,6 +71,9 @@ pto.tsort32 ins(%src, %idx :
                     v_row=1, v_col=64, blayout=row_major, slayout=none_box,
                     fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tmrgsort` — 归并排序
 
 `pto.tmrgsort` 有两种格式：单列表归并排序（format1）和多列表归并排序（format2）。
@@ -96,7 +99,7 @@ format1：
 format2：
     dst = merge(src0, src1, ...)
     // 将 2~4 个已排序的输入列表归并为单个有序输出
-    excuted = 每路消耗的元素计数
+    executed = 每路消耗的元素计数
 ```
 
 **参数：**
@@ -107,9 +110,9 @@ format2：
 | `blockLen` | `AnyInteger` | format1 中的块长度 |
 | `dst` | `pto.tile_buf` | 输出 tile |
 | `tmp` | `pto.tile_buf` | format2 中的临时 tile（仅 format2） |
-| `excuted` | `vector<4xi16>` | format2 中输出的每路消耗计数向量（仅 format2） |
+| `executed` | `vector<4xi16>` | format2 中输出的每路消耗计数向量（仅 format2） |
 
-**返回值：** 无 SSA 返回。以 DPS 的形式写入 `dst`；format2 还会写入 `excuted`。
+**返回值：** 无 SSA 返回。以 DPS 的形式写入 `dst`；format2 还会写入 `executed`。
 
 **属性：**
 
@@ -121,7 +124,7 @@ format2：
 
 - **实现检查（A2A3/A5）**
   - format1：元素类型必须为 `f16` 或 `f32`，且 `src` 和 `dst` 元素类型必须一致。`src` 和 `dst` 必须为 rank-2，且 `rows == 1`（数据存储在单行中）。`src` 和 `dst` 的 `cols` 必须一致。`blockLen` 必须大于 0 且为 64 的整数倍。`src` 有效列数必须为 `blockLen * 4` 的整数倍。`repeatTimes = src 有效列数 / (blockLen * 4)` 必须在 `[1, 255]` 范围内。
-  - format2：接受 2 路、3 路或 4 路归并。`dst` 和 `tmp` 元素类型和 shape 必须一致。所有 `src` 的元素类型必须与 `dst`/`tmp` 一致，且为 `f16` 或 `f32`。所有 tile 必须为 rank-2，且 `rows == 1`。`tmp.cols >= dst.cols`。`excuted` 必须为 `vector<4xi16>` 类型。
+  - format2：接受 2 路、3 路或 4 路归并。`dst` 和 `tmp` 元素类型和 shape 必须一致。所有 `src` 的元素类型必须与 `dst`/`tmp` 一致，且为 `f16` 或 `f32`。所有 tile 必须为 rank-2，且 `rows == 1`。`tmp.cols >= dst.cols`。`executed` 必须为 `vector<4xi16>` 类型。
 
 **示例：**
 
@@ -143,6 +146,9 @@ pto.tmrgsort ins(%src0, %src1, %tmp2 {exhausted = false} :
                      fractal=512, pad=0>,
                  vector<4xi16>)
 ```
+
+---
+
 ### `pto.thistogram` — 逐行直方图累加
 
 ```mlir

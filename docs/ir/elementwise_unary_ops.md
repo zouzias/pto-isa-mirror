@@ -5,7 +5,7 @@
 这一类操作通常具有如下装配形式：
 
 ```mlir
- pto.op ins(%lhs, %rhs : !pto.tile_buf<...>, !pto.tile_buf<...>)
+ pto.op ins(%src : !pto.tile_buf<...>)
         outs(%dst : !pto.tile_buf<...>)
 ```
 
@@ -70,6 +70,9 @@ pto.tabs ins(%a : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=16,
              v_row=16, v_col=16, blayout=row_major, slayout=none_box,
              fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tnot` — 逐元素按位取反
 
 ```mlir
@@ -126,6 +129,9 @@ pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=i16, rows=16, cols=16,
              v_row=16, v_col=16, blayout=row_major, slayout=none_box,
              fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trelu` — ReLU 激活
 
 ```mlir
@@ -167,6 +173,9 @@ pto.trelu ins(%a : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
               v_row=16, v_col=16, blayout=row_major, slayout=none_box,
               fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tneg` — 逐元素取负
 
 ```mlir
