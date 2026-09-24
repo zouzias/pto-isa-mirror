@@ -19,25 +19,6 @@ For a nonzero `scalar`, a nonzero result has the same sign as `scalar`; exact di
 For example, `remainder(-7, 3) = 2`, `remainder(7, -3) = -2`, and `remainder(-6, 3) = 0`.
 On A5, `int64_t` follows this floor-based definition, with the same remainder semantics as `int32_t` for nonzero divisors.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trems %src, %scalar : !pto.tile<...>, f32
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -95,31 +76,4 @@ void example() {
   Tile<TileType::Vec, float, 16, 16> tmp;
   TREMS(out, x, 3.0f, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trems %src, %scalar : !pto.tile<...>, f32
-# AS Level 2 (DPS)
-pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

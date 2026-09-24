@@ -21,33 +21,6 @@ For each element `(i, j)` in the valid region:
 
   $$ \mathrm{dst}_{i,j} = \frac{\mathrm{scalar}}{\mathrm{src}_{i,j}} $$
 
-## Assembly Syntax
-
-Tile/scalar form:
-
-```text
-%dst = tdivs %src, %scalar : !pto.tile<...>, f32
-```
-
-Scalar/tile form:
-
-```text
-%dst = tdivs %scalar, %src : f32, !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-%dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -122,31 +95,4 @@ void example_manual() {
   TDIVS(dst, 2.0f, src);
   TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, 2.0f, src);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

@@ -17,26 +17,6 @@ $$ \mathrm{dst}_{i,0} = \underset{0 \le j < C}{\operatorname{argmin}} \; \mathrm
 
 $$ \mathrm{dstval}_{i,0} = \min_{0 \le j < C} \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
-```
-Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
-
-### IR Level 1 (SSA)
-
-```text
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### IR Level 2 (DPS)
-
-```text
-pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -177,31 +157,4 @@ void example_manual() {
   TROWARGMIN(dst, src, tmp);
   TROWARGMIN(dstVal, dst, src, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
-pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

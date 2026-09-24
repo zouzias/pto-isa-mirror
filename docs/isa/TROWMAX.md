@@ -15,27 +15,6 @@ Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
 
 $$ \mathrm{dst}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trowmax %src : !pto.tile<...> -> !pto.tile<...>
-```
-Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -146,31 +125,4 @@ void example_int64() {
   DstT dst;
   TROWMAX(dst, src, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trowmax %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

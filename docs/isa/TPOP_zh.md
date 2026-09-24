@@ -166,7 +166,3 @@ AICORE void example_globaldata(__gm__ void *fifoMem)
     TFREE<Pipe, SlotGlobal, TileSplitAxis::TILE_UP_DOWN>(pipe, slot);
 }
 ```
-
-## ASM形式示例
-
-当前公开的汇编参考尚未为 `TPOP` 定义稳定的PTO-AS写法。手写CV FIFO程序时请使用C++ intrinsic形式。
