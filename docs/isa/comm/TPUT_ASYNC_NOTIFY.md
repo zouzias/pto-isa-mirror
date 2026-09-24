@@ -112,6 +112,19 @@ same signal.
 `DmaEngine::RDMA` does not support `NotifyOp::AtomicAdd`. The payload-before-signal order above applies only within
 one invocation and does not define ordering between different sessions or independent execution flows.
 
+If the same Session has a pending deferred PUT batch for the same engine, `TPUT_ASYNC_NOTIFY` submits that batch
+before publishing its own payload and signal. For URMA, the call's `peer` must match the pending logical batch's
+peer; changing peer while that batch is active is a contract violation. On A5 URMA, the returned Event retains its
+standard scope and covers this invocation only; wait on the last deferred Event separately to check completion of
+the submitted batch. On A2/A3 SDMA, the notify Event fences the Session's previously used queues and therefore also
+covers the implicitly submitted batch.
+
+This implicit submission establishes local publication order only. In particular, an A5 URMA signal posted on one
+Jetty is not a remote completion fence for deferred writes posted on other Jetties. To use a signal as proof that
+all deferred payloads are remotely visible, submit the Batch, successfully wait for its multi-Jetty Event, and then
+issue a separate notify; alternatively, use an explicit ordering protocol. Waiting after the signal has already
+been issued cannot make an earlier receiver observation safe.
+
 ## AsyncSession Construction
 
 Use `BuildAsyncSession` from `include/pto/comm/async_common/async_event_impl.hpp`. It provides an engine-specific
@@ -195,7 +208,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::RDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -235,6 +250,10 @@ be a `pto::Tile` in UB/Vec memory and remain valid until the associated events h
 - Both methods must use the same session that issued the operation.
 - Successful completion covers the complete payload transfer and the following signal update.
 
+For asynchronous A2/A3 SDMA, URMA, and RDMA operations, require a valid Event and a successful `Wait/Test`. A5
+`DmaEngine::SDMA` is a synchronous MTE fallback; a successful call completes before return and intentionally
+returns a zero-handle Event, so it does not require an asynchronous wait.
+
 Asynchronous operations in one session and one backend queue complete in submission order. After several operations
 have been submitted, waiting for the last event in that queue also covers earlier outstanding operations. URMA or
 RDMA queues for different peers complete independently, so wait for the last event of each peer separately. `Wait`
@@ -270,6 +289,9 @@ The following examples assume that the host communication runtime has translated
 the workspace for the selected engine.
 
 ### SDMA Set
+
+The SDMA examples below show the asynchronous A2/A3 path. On A5, SDMA uses the synchronous MTE fallback described
+under Completion Semantics.
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -308,7 +330,9 @@ __global__ AICORE void PutAndNotifySdma(__gm__ T *remoteDst,
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -323,7 +347,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::SDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::SDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::AtomicAdd, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -338,7 +364,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -353,7 +381,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::URMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::URMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::AtomicAdd, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
@@ -368,7 +398,9 @@ if (comm::BuildAsyncSession<comm::DmaEngine::RDMA>(
     auto event = comm::TPUT_ASYNC_NOTIFY<comm::DmaEngine::RDMA>(
         dstGlobalData, srcGlobalData, remoteSignal, 1,
         comm::NotifyOp::Set, session, peer);
-    (void)event.Wait(session);
+    if (!event.valid() || !event.Wait(session)) {
+        return;
+    }
 }
 ```
 
