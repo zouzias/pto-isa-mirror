@@ -64,7 +64,7 @@ inline auto getGlobalTensor(T* addr, int gShape0, int gShape1, int gShape2, int 
             GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, shape4, 1));
             return srcGlobal;
         } else {
-            GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, 1, shape4));
+            GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, 1, shape3));
             return srcGlobal;
         }
     } else {
@@ -79,7 +79,7 @@ inline auto getGlobalTensor(T* addr, int gShape0, int gShape1, int gShape2, int 
             GlobalData srcGlobal(addr);
             return srcGlobal;
         } else {
-            using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, 1, shape4>;
+            using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, 1, shape3>;
             using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout_>;
             GlobalData srcGlobal(addr);
             return srcGlobal;
@@ -119,6 +119,14 @@ void runTLoadDN()
     auto srcGlobal = getGlobalTensor<
         T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::ColMajor, dyn, Layout::DN>(
         reinterpret_cast<T*>(0x10000), gShape0, gShape1, gShape2, shape3, kGTCols);
+
+    ASSERT_EQ(srcGlobal.GetStride(GlobalTensorDim::DIM_3), 1);
+    ASSERT_EQ(srcGlobal.GetStride(GlobalTensorDim::DIM_4), srcGlobal.GetShape(GlobalTensorDim::DIM_3));
+    ASSERT_EQ(vecTile.GetValidRow(), srcGlobal.GetShape(GlobalTensorDim::DIM_3));
+    ASSERT_EQ(
+        vecTile.GetValidCol(), srcGlobal.GetShape(GlobalTensorDim::DIM_0) * srcGlobal.GetShape(GlobalTensorDim::DIM_1) *
+                                   srcGlobal.GetShape(GlobalTensorDim::DIM_2) *
+                                   srcGlobal.GetShape(GlobalTensorDim::DIM_4));
 
     TLOAD(vecTile, srcGlobal);
 
@@ -172,7 +180,17 @@ TEST(TLoad, c09_dn_float_64x128)
     runTLoadDN<float, 1, 1, 32, 64, 128, 64, 128, 1, PadValue::Null, 1, 1, 32, 64, 128, 8704.0f, 0.062500f>();
 }
 
-TEST(TLoad, c10_dn_float_256x60)
+TEST(TLoad, c10_dn_float_256x64)
 {
-    runTLoadDN<float, 2, 2, 2, 255, 60, 256, 64, 1, PadValue::Null, 2, 2, 2, 255, 60, 8352.0f, 0.133141f>();
+    runTLoadDN<float, 2, 2, 2, 255, 64, 256, 64, 1, PadValue::Null, 2, 2, 2, 255, 64, 8352.0f, 0.133141f>();
+}
+
+TEST(TLoad, c11_dn_float_64x128_static)
+{
+    runTLoadDN<float, 1, 1, 32, 64, 128, 64, 128, 0, PadValue::Null, 1, 1, 32, 64, 128, 8704.0f, 0.062500f>();
+}
+
+TEST(TLoad, c12_dn_float_256x64_static)
+{
+    runTLoadDN<float, 2, 2, 2, 255, 64, 256, 64, 0, PadValue::Null, 2, 2, 2, 255, 64, 8352.0f, 0.133141f>();
 }

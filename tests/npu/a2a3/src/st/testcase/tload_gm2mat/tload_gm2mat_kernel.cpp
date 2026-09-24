@@ -504,6 +504,9 @@ template void LaunchTLoad<0, uint16_t, 1, 1, 1, 128, 128, 1, 1, 1, 256, 256>(
 template void LaunchTLoad<1, uint16_t, 1, 2, 2, 128, 311, 4, 3, 3, 256, 400>(
     uint16_t* out, uint16_t* src, void* stream);
 template void LaunchTLoad<2, uint16_t, 2, 4, 5, 16, 16, 7, 7, 7, 16, 16>(uint16_t* out, uint16_t* src, void* stream);
+template void LaunchTLoad<2, int16_t, 1, 2, 8, 16, 16, 1, 2, 4096, 16, 16>(int16_t* out, int16_t* src, void* stream);
+template void LaunchTLoad<2, int16_t, 1, 2, 8, 16, 16, 1, 2, 4104, 16, 16>(int16_t* out, int16_t* src, void* stream);
+template void LaunchTLoad<2, int16_t, 1, 2, 16, 16, 16, 1, 2, 4104, 16, 16>(int16_t* out, int16_t* src, void* stream);
 template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1>(uint16_t* out, uint16_t* src, void* stream);
 template void LaunchTLoad<3, uint16_t, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16>(uint16_t* out, uint16_t* src, void* stream);
 template void LaunchTLoad<3, uint16_t, 1, 1, 1, 256, 1024, 1, 1, 1, 256, 1024>(
@@ -553,3 +556,11 @@ template void LaunchTLoad<8, uint16_t, 1, 1, 10, 16, 2, 2, 2, 256, 16, 100>(uint
 template void LaunchTLoad<8, uint16_t, 1, 1, 1, 1, 8192, 2, 8, 16, 16, 8192>(
     uint16_t* out, uint16_t* src, void* stream);
 template void LaunchTLoad<8, float, 1, 1, 1, 112, 112, 2, 2, 3, 224, 224>(float* out, float* src, void* stream);
+
+template void LaunchTLoad<5, int8_t, 1, 1, 2, 1, 32, 1, 1, 2, 65537, 32>(int8_t* out, int8_t* src, void* stream);
+
+template void LaunchTLoad<6, int8_t, 1, 1, 2, 16, 32, 1, 1, 2, 65552, 32>(int8_t* out, int8_t* src, void* stream);
+
+template void LaunchTLoad<7, int8_t, 1, 2, 1, 16, 32, 1, 2, 4097, 16, 32>(int8_t* out, int8_t* src, void* stream);
+
+template void LaunchTLoad<8, int8_t, 1, 1, 1, 2, 1, 1, 1, 1, 2, 65537>(int8_t* out, int8_t* src, void* stream);
