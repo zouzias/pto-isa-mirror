@@ -909,6 +909,167 @@ __tf__ PTO_INTERNAL void TTransConvNCDHW2FractalZ3D(
     }
 }
 
+////////////// NCHW -> FRACTAL_Z three-stage direct conversion ///////
+
+/// Zero-fill a UB buffer using vmuls (in-place multiply by 0).
+/// Zeroing is type-agnostic at the byte level, and a2a3 vmuls has no int8/int16/int32
+/// overload, so we reinterpret the buffer as half and use the half vmuls overload.
+/// The caller guarantees totalElems * sizeof(T) is a multiple of BLOCK_BYTE_SIZE (32),
+/// hence halfElems is a multiple of 16.
+template <typename T>
+PTO_INTERNAL void ZeroFillBuf(__ubuf__ T* ptr, unsigned totalElems)
+{
+    __ubuf__ half* hptr = reinterpret_cast<__ubuf__ half*>(ptr);
+    unsigned totalBytes = totalElems * static_cast<unsigned>(sizeof(T));
+    unsigned halfElems = totalBytes / static_cast<unsigned>(sizeof(half));
+    constexpr unsigned halfPerRepeat = REPEAT_BYTE / sizeof(half); // 128
+    unsigned numRepeats = halfElems / halfPerRepeat;
+    unsigned tailHalf = halfElems % halfPerRepeat;
+    while (numRepeats > 0) {
+        uint8_t repeat = (numRepeats > REPEAT_MAX) ? REPEAT_MAX : static_cast<uint8_t>(numRepeats);
+        vmuls(hptr, hptr, (half)0, repeat, 1, 1, 8, 8);
+        hptr += repeat * halfPerRepeat;
+        numRepeats -= repeat;
+    }
+    if (tailHalf > 0) {
+        SetContMaskByDType<half>(tailHalf);
+        vmuls(hptr, hptr, (half)0, 1, 1, 1, 8, 8);
+        set_mask_norm();
+        set_vector_mask(-1, -1);
+    }
+}
+
+/// Stage 1: NCHW [N, C, HW] -> [N_padded, C1, C0, HW_padded]
+/// Pre-zero bufB, then copy valid data with copy_ubuf_to_ubuf or scalar fallback
+template <typename T, unsigned blockSizeElem>
+PTO_INTERNAL void Stage1_NCHW_Pad(
+    __ubuf__ T* bufB, __ubuf__ T* srcPtr, unsigned srcN, unsigned srcC, unsigned HW, unsigned HW_padded, unsigned C0,
+    unsigned C1, unsigned N_padded)
+{
+    unsigned totalBufBElems = N_padded * C1 * C0 * HW_padded;
+    ZeroFillBuf<T>(bufB, totalBufBElems);
+    pipe_barrier(PIPE_V);
+
+    unsigned bufBSliceSize = C0 * HW_padded;
+    uint16_t hwBytes = static_cast<uint16_t>(HW * sizeof(T));
+
+    if (hwBytes % BLOCK_BYTE_SIZE == 0 && (hwBytes / BLOCK_BYTE_SIZE) <= 255) {
+        uint16_t lenBurst = hwBytes / BLOCK_BYTE_SIZE;
+        uint16_t srcGap = 0;
+        uint16_t dstGap = static_cast<uint16_t>(HW_padded * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst);
+        for (unsigned n = 0; n < srcN; n++) {
+            for (unsigned c1 = 0; c1 < C1; c1++) {
+                unsigned validC0 = srcC - c1 * C0;
+                if (validC0 > C0) {
+                    validC0 = C0;
+                }
+                __ubuf__ T* src = srcPtr + n * srcC * HW + c1 * C0 * HW;
+                __ubuf__ T* dst = bufB + n * C1 * bufBSliceSize + c1 * bufBSliceSize;
+                pto_copy_ubuf_to_ubuf(dst, src, static_cast<uint16_t>(validC0), lenBurst, srcGap, dstGap);
+            }
+        }
+    } else {
+#ifndef __PTO_AUTO__
+        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#else
+        set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+#endif
+        for (unsigned n = 0; n < srcN; n++) {
+            for (unsigned c1 = 0; c1 < C1; c1++) {
+                unsigned validC0 = srcC - c1 * C0;
+                if (validC0 > C0) {
+                    validC0 = C0;
+                }
+                __ubuf__ T* src = srcPtr + n * srcC * HW + c1 * C0 * HW;
+                __ubuf__ T* dst = bufB + n * C1 * bufBSliceSize + c1 * bufBSliceSize;
+                for (unsigned c0 = 0; c0 < validC0; c0++) {
+                    for (unsigned hw = 0; hw < HW; hw++) {
+                        dst[c0 * HW_padded + hw] = src[c0 * HW + hw];
+                    }
+                }
+            }
+        }
+#ifndef __PTO_AUTO__
+        PtoSetWaitFlag<PIPE_S, PIPE_V>();
+#else
+        set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+#endif
+    }
+}
+
+/// Stage 2: [N_padded, C1, C0, HW_padded] -> [N_padded, C1, HW_padded, C0]
+/// In-place transpose per (n, c1) slice using TTransRepeatXOperation
+template <typename T, unsigned blockSizeElem>
+PTO_INTERNAL void Stage2_Vnchwconv(
+    __ubuf__ T* bufB, __ubuf__ T* scatterTmp, unsigned C0, unsigned HW_padded, unsigned C1, unsigned N_padded)
+{
+    unsigned sliceSize = C0 * HW_padded;
+    for (unsigned n = 0; n < N_padded; n++) {
+        for (unsigned c1 = 0; c1 < C1; c1++) {
+            unsigned offset = (n * C1 + c1) * sliceSize;
+            __ubuf__ T* slicePtr = bufB + offset;
+            TTransRepeatXOperation<T, blockSizeElem>(slicePtr, slicePtr, scatterTmp, C0, HW_padded, C0, HW_padded);
+        }
+    }
+}
+
+/// Stage 3: [N_padded, C1, HW_padded, C0] -> [C1*HW_padded, N_padded, C0]
+/// N-split reordering using copy_ubuf_to_ubuf
+template <typename T>
+PTO_INTERNAL void Stage3_NSplit(
+    __ubuf__ T* dstPtr, __ubuf__ T* bufB, unsigned C1, unsigned HW_padded, unsigned C0, unsigned N_padded)
+{
+    unsigned C1HW = C1 * HW_padded;
+    unsigned nStride = C1HW * C0;
+    uint16_t burstNum = static_cast<uint16_t>(C1HW);
+    uint16_t lenBurst = static_cast<uint16_t>(C0 * sizeof(T) / BLOCK_BYTE_SIZE);
+    uint16_t srcGap = 0;
+    uint16_t dstGap = static_cast<uint16_t>(N_padded * C0 * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst);
+
+    pipe_barrier(PIPE_V);
+    for (unsigned n = 0; n < N_padded; n++) {
+        __ubuf__ T* src = bufB + n * nStride;
+        __ubuf__ T* dst = dstPtr + n * C0;
+        pto_copy_ubuf_to_ubuf(dst, src, burstNum, lenBurst, srcGap, dstGap);
+    }
+}
+
+/// NCHW -> FRACTAL_Z three-stage direct conversion (single kernel, all-UB)
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned blockSizeElem>
+__tf__ PTO_INTERNAL void TTransConvNCHW2FractalZ(
+    typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src,
+    typename TileDataTmp::TileDType __in__ tmp, unsigned srcN, unsigned srcC, unsigned srcH, unsigned srcW,
+    unsigned dstN0, unsigned dstC0)
+{
+    using T = typename TileDataSrc::DType;
+
+    __ubuf__ T* dstPtrOrig = (__ubuf__ T*)__cce_get_tile_ptr(dst);
+    __ubuf__ T* srcPtrOrig = (__ubuf__ T*)__cce_get_tile_ptr(src);
+    __ubuf__ T* tmpPtr = (__ubuf__ T*)__cce_get_tile_ptr(tmp);
+
+    const unsigned HW = srcH * srcW;
+    const unsigned HW_padded = ((HW + blockSizeElem - 1) / blockSizeElem) * blockSizeElem;
+    const unsigned C1 = (srcC + dstC0 - 1) / dstC0;
+    const unsigned N1 = (srcN + dstN0 - 1) / dstN0;
+    const unsigned N_padded = N1 * dstN0;
+
+    // Stage 1: vzero + copy_ubuf_to_ubuf
+    __ubuf__ T* bufB = tmpPtr;
+    Stage1_NCHW_Pad<T, blockSizeElem>(bufB, srcPtrOrig, srcN, srcC, HW, HW_padded, dstC0, C1, N_padded);
+    pipe_barrier(PIPE_V);
+
+    // Stage 2: scatter_vnchwconv (in-place transpose)
+    __ubuf__ T* scatterTmp = srcPtrOrig;
+    Stage2_Vnchwconv<T, blockSizeElem>(bufB, scatterTmp, dstC0, HW_padded, C1, N_padded);
+    pipe_barrier(PIPE_V);
+
+    // Stage 3: copy_ubuf_to_ubuf (N-split)
+    Stage3_NSplit<T>(dstPtrOrig, bufB, C1, HW_padded, dstC0, N_padded);
+    pipe_barrier(PIPE_V);
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
 PTO_INTERNAL void CheckConv3DTile(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp)
 {
@@ -942,6 +1103,7 @@ PTO_INTERNAL void CheckConvTile(TileDataDst& dst, TileDataSrc& src, TileDataTmp&
 {
 #ifdef _DEBUG
     using T = typename TileDataSrc::DType;
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr const int UB_SIZE = 196608; // 192*1024 B
     if (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
         unsigned dstN = dst.GetShape(GlobalTensorDim::DIM_0);
@@ -978,6 +1140,25 @@ PTO_INTERNAL void CheckConvTile(TileDataDst& dst, TileDataSrc& src, TileDataTmp&
         PTO_ASSERT(
             srcC1 * srcH * srcW == dstC1HW && srcC0 == dstC0 && dstN1 == (srcN + dstN0 - 1) / dstN0,
             "expect same size for src and dst.");
+    } else if (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::FRACTAL_Z) {
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned dstC1HW = dst.GetShape(GlobalTensorDim::DIM_0);
+        unsigned dstN1 = dst.GetShape(GlobalTensorDim::DIM_1);
+        unsigned dstN0 = dst.GetShape(GlobalTensorDim::DIM_2);
+        unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_3);
+        unsigned HW = srcH * srcW;
+        unsigned HW_padded = ((HW + blockSizeElem - 1) / blockSizeElem) * blockSizeElem;
+        unsigned dstC1 = (srcC + dstC0 - 1) / dstC0;
+        unsigned srcSize = srcN * srcC * HW;
+        unsigned dstSize = dstC1HW * dstN1 * dstN0 * dstC0;
+        unsigned tmpSize = TileDataTmp::Rows * TileDataTmp::Cols;
+        PTO_ASSERT(dstC1HW == dstC1 * HW_padded, "Fix: C1HW must use HW_padded.");
+        PTO_ASSERT(dstN1 == (srcN + dstN0 - 1) / dstN0, "Fix: N1 mismatch.");
+        PTO_ASSERT(HW_padded / blockSizeElem <= 255, "Fix: HW_padded exceeds scatter repeat limit.");
+        PTO_ASSERT((srcSize + dstSize + tmpSize) * sizeof(T) < UB_SIZE, "ERROR: memory usage exceeds UB limit!");
     }
 #endif
 }
@@ -1077,6 +1258,16 @@ PTO_INTERNAL void TTransImplConvTile(TileDataDst& dst, TileDataSrc& src, TileDat
         unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_4);
         TTransConvNCHW2NC1HWC0<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
             dst.data(), src.data(), tmp.data(), srcN, srcC, srcH, srcW, dstC0);
+    } else if constexpr (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::FRACTAL_Z) {
+        CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned dstN0 = dst.GetShape(GlobalTensorDim::DIM_2);
+        unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_3);
+        TTransConvNCHW2FractalZ<TileDataDst, TileDataSrc, TileDataTmp, blockSizeElem>(
+            dst.data(), src.data(), tmp.data(), srcN, srcC, srcH, srcW, dstN0, dstC0);
     } else if constexpr (TileDataSrc::layout == Layout::NCDHW && TileDataDst::layout == Layout::FRACTAL_Z_3D) {
         CheckConv3DTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
         unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);

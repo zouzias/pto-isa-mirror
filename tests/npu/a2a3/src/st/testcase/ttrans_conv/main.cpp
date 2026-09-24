@@ -25,6 +25,9 @@ template <
     int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int gWholeShape5>
 void LaunchTTRANSGroupConv(T* out, T* src, void* stream);
 
+template <typename T, int srcN, int srcC, int srcH, int srcW, int dstC1HW, int dstN1, int dstN0, int dstC0>
+void LaunchTTRANSConvNCHW2FZ(T* out, T* src, void* stream);
+
 class TTRANSConvTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -146,6 +149,55 @@ void test_ttrans_group()
     EXPECT_TRUE(ret);
 }
 
+template <typename T, int srcN, int srcC, int srcH, int srcW, int dstC1HW, int dstN1, int dstN0, int dstC0>
+void test_ttrans_nchw2fz()
+{
+    size_t srcFileSize = srcN * srcC * srcH * srcW * sizeof(T);
+    size_t dstFileSize = dstC1HW * dstN1 * dstN0 * dstC0 * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T *dstHost, *srcHost;
+    T *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void**)(&dstHost), dstFileSize);
+    aclrtMallocHost((void**)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void**)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void**)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTTRANSConvNCHW2FZ<T, srcN, srcC, srcH, srcW, dstC1HW, dstN1, dstN0, dstC0>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(dstFileSize / sizeof(T));
+    std::vector<T> result(dstFileSize / sizeof(T));
+    ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, result.data(), dstFileSize);
+
+    bool ret = ResultCmp(golden, result, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
 TEST_F(TTRANSConvTest, float32_1_32_6_56) { test_ttrans<float, 0, 1, 4, 6, 56, 8, 1, 1, 1, 32, 6, 56>(); }
 
 TEST_F(TTRANSConvTest, int32_1_8_1_8) { test_ttrans<int32_t, 0, 1, 1, 1, 8, 8, 1, 1, 1, 8, 1, 8>(); }
@@ -237,3 +289,12 @@ TEST_F(TTRANSConvTest, float32_GNC1HWC02GNC1C0HW_2)
 {
     test_ttrans_group<float, 2, 2, 2, 2, 3, 4, 8, 1, 2, 2, 2, 3, 4, 8>();
 }
+
+// NCHW -> FRACTAL_Z
+TEST_F(TTRANSConvTest, half_7_32_2_8_FZ) { test_ttrans_nchw2fz<aclFloat16, 7, 32, 2, 8, 32, 1, 16, 16>(); }
+
+TEST_F(TTRANSConvTest, half_4_17_4_1_FZ) { test_ttrans_nchw2fz<aclFloat16, 4, 17, 4, 1, 32, 1, 16, 16>(); }
+
+TEST_F(TTRANSConvTest, float32_5_4_3_8_FZ) { test_ttrans_nchw2fz<float, 5, 4, 3, 8, 24, 1, 16, 8>(); }
+
+TEST_F(TTRANSConvTest, int8_4_32_3_7_FZ) { test_ttrans_nchw2fz<int8_t, 4, 32, 3, 7, 32, 1, 16, 32>(); }

@@ -25,6 +25,7 @@ class DataFormat(Enum):
     GNC1HWC02C1HWN1N0C0 = 4
     NC1HWC02NC1C0HW = 5
     GNC1HWC02GNC1C0HW = 6
+    NCHW2C1HWN1N0C0 = 7
 
 
 def nchw_to_nc1hwc0(nchw_tensor: np.ndarray, c0: int) -> np.ndarray:
@@ -214,6 +215,59 @@ def _golden_gnc1hwc0_to_gnc1c0hw(g_info):
     return input_arr, output_arr
 
 
+def _golden_nchw2c1hwn1n0c0(g_info):
+    """[N, C, H, W] -> [C1*HW_padded, N1, N0, C0]; pads N, C, HW when needed."""
+    dtype = g_info.data_type
+    dtype_size = np.dtype(dtype).itemsize
+    block_size = 32 // dtype_size
+
+    src_n = g_info.g_whole_shape0
+    src_c = g_info.g_whole_shape1
+    src_h = g_info.g_whole_shape2
+    src_w = g_info.g_whole_shape3
+    c0 = g_info.g_shape4
+    n0 = g_info.g_shape3
+    n1 = g_info.g_shape2
+
+    hw = src_h * src_w
+    hw_padded = ((hw + block_size - 1) // block_size) * block_size
+    c1 = (src_c + c0 - 1) // c0
+    n_padded = n1 * n0
+
+    input_arr = np.random.randint(1, 5, size=(src_n, src_c, src_h, src_w)).astype(dtype)
+    input_ori = input_arr.copy()
+
+    # Pad N
+    pad_n = n_padded - src_n
+    if pad_n > 0:
+        input_arr = np.pad(input_arr, ((0, pad_n), (0, 0), (0, 0), (0, 0)), mode="constant", constant_values=0)
+
+    # Pad C
+    padded_c = c1 * c0
+    pad_c = padded_c - src_c
+    if pad_c > 0:
+        input_arr = np.pad(input_arr, ((0, 0), (0, pad_c), (0, 0), (0, 0)), mode="constant", constant_values=0)
+
+    # Reshape: (N_padded, C1, C0, H, W) -> (N_padded, C1, C0, HW)
+    input_arr = input_arr.reshape(n_padded, c1, c0, src_h, src_w).reshape(n_padded, c1, c0, hw)
+
+    # Pad HW
+    pad_hw = hw_padded - hw
+    if pad_hw > 0:
+        input_arr = np.pad(input_arr, ((0, 0), (0, 0), (0, 0), (0, pad_hw)), mode="constant", constant_values=0)
+
+    # (N_padded, C1, C0, HW_padded) -> transpose C0 <-> HW_padded -> (N_padded, C1, HW_padded, C0)
+    input_arr = input_arr.transpose(0, 1, 3, 2)
+
+    # Reshape to (N1, N0, C1, HW_padded, C0) -> transpose to (C1, HW_padded, N1, N0, C0)
+    input_arr = input_arr.reshape(n1, n0, c1, hw_padded, c0)
+    output_arr = input_arr.transpose(2, 3, 0, 1, 4)
+
+    # Flatten to (C1*HW_padded, N1, N0, C0)
+    output_arr = output_arr.reshape(c1 * hw_padded, n1, n0, c0)
+    return input_ori, output_arr
+
+
 def gen_golden_data(g_info):
     shape1 = g_info.shape
     if shape1 == DataFormat["NCHW2NC1HWC0"].value:
@@ -228,6 +282,8 @@ def gen_golden_data(g_info):
         input_arr, output_arr = _golden_nc1hwc0_to_nc1c0hw(g_info)
     elif shape1 == DataFormat["GNC1HWC02GNC1C0HW"].value:
         input_arr, output_arr = _golden_gnc1hwc0_to_gnc1c0hw(g_info)
+    elif shape1 == DataFormat["NCHW2C1HWN1N0C0"].value:
+        input_arr, output_arr = _golden_nchw2c1hwn1n0c0(g_info)
     else:
         data_type = g_info.data_type
         g_shape3 = g_info.g_shape3
@@ -855,6 +911,72 @@ if __name__ == "__main__":
             4,
             1,
             8
+        ),
+        # NCHW -> FRACTAL_Z
+        # g_shape2=N1, g_shape3=N0, g_shape4=C0 <- g_whole_shape0=N, g_whole_shape1=C, g_whole_shape2=H, g_whole_shape3=W
+        TTRANSParams(
+            "TTRANSConvTest.half_7_32_2_8_FZ",
+            np.float16,
+            DataFormat["NCHW2C1HWN1N0C0"].value,
+            1,
+            1,
+            1,
+            16,
+            16,
+            1,
+            7,
+            32,
+            2,
+            8,
+            1,
+        ),
+        TTRANSParams(
+            "TTRANSConvTest.half_4_17_4_1_FZ",
+            np.float16,
+            DataFormat["NCHW2C1HWN1N0C0"].value,
+            1,
+            1,
+            1,
+            16,
+            16,
+            1,
+            4,
+            17,
+            4,
+            1,
+            1,
+        ),
+        TTRANSParams(
+            "TTRANSConvTest.float32_5_4_3_8_FZ",
+            np.float32,
+            DataFormat["NCHW2C1HWN1N0C0"].value,
+            1,
+            1,
+            1,
+            16,
+            8,
+            1,
+            5,
+            4,
+            3,
+            8,
+            1,
+        ),
+        TTRANSParams(
+            "TTRANSConvTest.int8_4_32_3_7_FZ",
+            np.int8,
+            DataFormat["NCHW2C1HWN1N0C0"].value,
+            1,
+            1,
+            1,
+            16,
+            32,
+            1,
+            4,
+            32,
+            3,
+            7,
+            1,
         ),
     ]
 
