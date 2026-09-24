@@ -226,11 +226,39 @@ PTO_INTERNAL void pto_copy_gm_to_cbuf_multi_nd2nz(
     }
 #elif defined(PTO_NPU_ARCH_KIRINX90)
     if constexpr (sizeof(T) == sizeof(uint32_t)) {
-        uint16_t dValueb32 = dValue * sizeof(T) / sizeof(uint16_t);
-        uint16_t srcDValueb32 = srcDValue * sizeof(T) / sizeof(uint16_t);
-        copy_gm_to_cbuf_multi_nd2nz_b16(
-            reinterpret_cast<__cbuf__ uint16_t*>(dst), reinterpret_cast<__gm__ uint16_t*>(src), sid, ndNum, nValue,
-            dValueb32, srcNdMatrixStride, srcDValueb32, dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
+        constexpr uint32_t C0_ELEMENTS_B16 = 32 / sizeof(uint16_t);
+        uint32_t dValueB16 = uint32_t(dValue) * 2;
+        uint32_t srcDValueB16 = uint32_t(srcDValue) * 2;
+        uint32_t srcMatrixStrideB16 = uint32_t(srcNdMatrixStride) * 2;
+        uint32_t dstMatrixStrideB16 = uint32_t(dstNzMatrixStride) * 2;
+        if (dValueB16 <= UINT16_MAX && srcDValueB16 <= UINT16_MAX &&
+            (ndNum == 1 || (srcMatrixStrideB16 <= UINT16_MAX && dstMatrixStrideB16 <= UINT16_MAX))) {
+            copy_gm_to_cbuf_multi_nd2nz_b16(
+                reinterpret_cast<__cbuf__ uint16_t*>(dst), reinterpret_cast<__gm__ uint16_t*>(src), sid, ndNum, nValue,
+                static_cast<uint16_t>(dValueB16), static_cast<uint16_t>(srcMatrixStrideB16),
+                static_cast<uint16_t>(srcDValueB16), dstNzC0Stride, dstNzNStride,
+                static_cast<uint16_t>(dstMatrixStrideB16));
+            return;
+        }
+        // Split after converting element counts to the b16 instruction's units.
+        constexpr uint32_t MAX_CHUNK_ELEMENTS_B16 = UINT16_MAX / C0_ELEMENTS_B16 * C0_ELEMENTS_B16;
+        for (uint32_t matrix = 0; matrix < ndNum; ++matrix) {
+            for (uint32_t row = 0; row < nValue; ++row) {
+                auto srcRow = reinterpret_cast<__gm__ uint16_t*>(src) + uint64_t(matrix) * srcMatrixStrideB16 +
+                              uint64_t(row) * srcDValueB16;
+                auto dstRow = reinterpret_cast<__cbuf__ uint16_t*>(dst) + uint64_t(matrix) * dstMatrixStrideB16 +
+                              uint64_t(row) * dstNzNStride * C0_ELEMENTS_B16;
+                for (uint32_t column = 0; column < dValueB16; column += MAX_CHUNK_ELEMENTS_B16) {
+                    uint32_t chunkElementsB16 = dValueB16 - column;
+                    if (chunkElementsB16 > MAX_CHUNK_ELEMENTS_B16) {
+                        chunkElementsB16 = MAX_CHUNK_ELEMENTS_B16;
+                    }
+                    copy_gm_to_cbuf_multi_nd2nz_b16(
+                        dstRow + uint64_t(column / C0_ELEMENTS_B16) * dstNzC0Stride * C0_ELEMENTS_B16, srcRow + column,
+                        sid, 1, 1, static_cast<uint16_t>(chunkElementsB16), 0, 0, dstNzC0Stride, dstNzNStride, 0);
+                }
+            }
+        }
     } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
         uint16_t dValueb64 = dValue * sizeof(T) / sizeof(uint16_t);
         uint16_t srcDValueb64 = srcDValue * sizeof(T) / sizeof(uint16_t);

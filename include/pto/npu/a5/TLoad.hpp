@@ -44,8 +44,8 @@ struct A5LoadOp : LoadOpL2Base<l2Control> {
 template <typename Op, typename TileData, typename GlobalData, bool IsDN>
 PTO_INTERNAL void TLoadVecAxisSwapImpl(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad)
 {
     typename GlobalData::DType* srcAddrP = srcAddr;
     __ubuf__ typename TileData::DType* dstAddrP = dstAddr;
@@ -75,13 +75,16 @@ PTO_INTERNAL void TLoadVecAxisSwapImpl(
     }
     uint64_t loop2 = gShape1;
     uint64_t loop1 = gShape2;
-    uint64_t loop2_src_stride = GetByteSize<typename TileData::DType>(gStride1);
-    uint64_t loop1_src_stride = GetByteSize<typename TileData::DType>(gStride2);
-    uint64_t loop2_dst_stride = GetByteSize<typename TileData::DType>(dstStride1);
-    uint64_t loop1_dst_stride = GetByteSize<typename TileData::DType>(dstStride2);
-    if (loop1 != 1 || loop2 != 1) {
-        set_loop2_stride_outtoub(loop2_dst_stride << 40 | loop2_src_stride);
-        set_loop1_stride_outtoub(loop1_dst_stride << 40 | loop1_src_stride);
+    uint64_t loop2SrcStride = GetByteSize<typename TileData::DType>(gStride1);
+    uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride2);
+    uint64_t loop2DstStride = GetByteSize<typename TileData::DType>(dstStride1);
+    uint64_t loop1DstStride = GetByteSize<typename TileData::DType>(dstStride2);
+    bool useSoftwareLoop = loop1SrcStride > TLOAD_MAX_SRC_STRIDE || loop2SrcStride > TLOAD_MAX_SRC_STRIDE;
+    if (useSoftwareLoop) {
+        set_loop_size_outtoub(1ULL << 21 | 1ULL);
+    } else if (loop1 != 1 || loop2 != 1) {
+        set_loop2_stride_outtoub(loop2DstStride << 40 | loop2SrcStride);
+        set_loop1_stride_outtoub(loop1DstStride << 40 | loop1SrcStride);
         set_loop_size_outtoub(loop2 << 21 | loop1);
     }
 
@@ -90,7 +93,19 @@ PTO_INTERNAL void TLoadVecAxisSwapImpl(
         int64_t srcAddr0 = i * gStride0;
         dstAddrP = dstAddr + dstAddr0;
         srcAddrP = srcAddr + srcAddr0;
-        Op::TLoadInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, ubStride, enableUBPad);
+        if (useSoftwareLoop) {
+            for (uint32_t j = 0; j < gShape1; ++j) {
+                for (uint32_t k = 0; k < gShape2; ++k) {
+                    auto srcLoop = reinterpret_cast<decltype(srcAddrP)>(
+                        reinterpret_cast<__gm__ uint8_t*>(srcAddrP) + j * loop2SrcStride + k * loop1SrcStride);
+                    auto dstLoop = reinterpret_cast<decltype(dstAddrP)>(
+                        reinterpret_cast<__ubuf__ uint8_t*>(dstAddrP) + j * loop2DstStride + k * loop1DstStride);
+                    Op::TLoadInstr(dstLoop, srcLoop, nBurst, lenBurst, gmStride, ubStride, enableUBPad);
+                }
+            }
+        } else {
+            Op::TLoadInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, ubStride, enableUBPad);
+        }
     }
     if (loop1 != 1 || loop2 != 1) {
         set_loop_size_outtoub(1 << 21 | 1); // resume to normal mode
@@ -100,8 +115,8 @@ PTO_INTERNAL void TLoadVecAxisSwapImpl(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecND2ND(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad)
 {
     TLoadVecAxisSwapImpl<Op, TileData, GlobalData, false>(
         dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -111,8 +126,8 @@ PTO_INTERNAL void TLoadVecND2ND(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecDN2DN(
     __ubuf__ typename TileData::DType* dstAddr, typename GlobalData::DType* srcAddr, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol, bool enableUBPad)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol, bool enableUBPad)
 {
     TLoadVecAxisSwapImpl<Op, TileData, GlobalData, true>(
         dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -184,7 +199,7 @@ PTO_INTERNAL void TLoadMxCubeCheck()
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeNN2NN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4)
 {
     // [0   1       2      3   4]
     // [1, N/16, scaleK/2, 16, 2]
@@ -207,7 +222,7 @@ PTO_INTERNAL void TLoadMxCubeNN2NN(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeZZ2ZZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4)
 {
     // [0   1       2      3   4]
     // [1, M/16, scaleK/2, 16, 2]
@@ -232,8 +247,8 @@ PTO_INTERNAL void TLoadMxCubeZZ2ZZ(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeAND2ZZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     uint16_t nValue = validCol >> 1;
     uint32_t dValue = validRow;
@@ -255,8 +270,8 @@ PTO_INTERNAL void TLoadMxCubeAND2ZZ(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadMxCubeAVector(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     // gm: shape <1,1,1,1,k> stride <k,k,k,k,1>
     static_assert(
@@ -276,16 +291,7 @@ __tf__ PTO_INTERNAL void TLoadMxCubeAVector(
     uint32_t padCount = gapElement % blockSizeElem;
     pto_set_tload_pad_val<TileType::Mat>(GetPadValue<TileData>());
 
-    constexpr uint64_t loop2 = 1;
-    constexpr uint64_t loop1 = 1;
-    uint64_t loop2SrcStride = GetByteSize<L1Type>(gStride1);
-    uint64_t loop1SrcStride = GetByteSize<L1Type>(gStride2);
-    constexpr uint64_t loop2DstStride = TileData::Cols * sizeof(L1Type);
-    constexpr uint64_t loop1DstStride = TileData::Cols * sizeof(L1Type);
-
-    set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride);
-    set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride);
-    set_loop_size_outtol1(loop2 << 21 | loop1);
+    set_loop_size_outtol1(1ULL << 21 | 1ULL);
 
     Op::TLoadCubeInstr(dstAddrP, srcAddrP, 1, lenBurst, gmStride, dstStride, padCount);
 }
@@ -293,8 +299,8 @@ __tf__ PTO_INTERNAL void TLoadMxCubeAVector(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeADN2ZZ(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     uint16_t nValue = validCol >> 1;
     uint32_t dValue = validRow;
@@ -315,8 +321,8 @@ PTO_INTERNAL void TLoadMxCubeADN2ZZ(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeBND2NN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     uint16_t nValue = validRow >> 1;
     uint32_t dValue = validCol;
@@ -338,8 +344,8 @@ PTO_INTERNAL void TLoadMxCubeBND2NN(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeBDN2NN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     uint16_t nValue = validRow >> 1;
     uint32_t dValue = validCol;
@@ -361,8 +367,8 @@ PTO_INTERNAL void TLoadMxCubeBDN2NN(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadMxCube(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int gShape0, int gShape1,
-    int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int validRow, int validCol)
+    int gShape2, int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int validRow, int validCol)
 {
     using L1Type = __cbuf__ typename TileData::DType*;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
@@ -416,8 +422,8 @@ __tf__ PTO_INTERNAL void TLoadMxCube(
 template <typename Op, typename TileData, typename GlobalData, bool IsDN>
 PTO_INTERNAL void TLoadCubeAxisSwapImpl(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     __cbuf__ typename TileData::DType* dstAddrP = dst;
     typename GlobalData::DType* srcAddrP = src;
@@ -462,7 +468,10 @@ PTO_INTERNAL void TLoadCubeAxisSwapImpl(
     uint64_t loop2DstStride = GetByteSize<typename TileData::DType>(dstStride1);
     uint64_t loop1DstStride = GetByteSize<typename TileData::DType>(dstStride2);
 
-    if (loop1 != 1 || loop2 != 1) {
+    bool useSoftwareLoop = loop1SrcStride > TLOAD_MAX_SRC_STRIDE || loop2SrcStride > TLOAD_MAX_SRC_STRIDE;
+    if (useSoftwareLoop) {
+        set_loop_size_outtol1(1ULL << 21 | 1ULL);
+    } else if (loop1 != 1 || loop2 != 1) {
         set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride);
         set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride);
         set_loop_size_outtol1(loop2 << 21 | loop1);
@@ -476,7 +485,19 @@ PTO_INTERNAL void TLoadCubeAxisSwapImpl(
         int64_t srcAddr0 = i * gStride0;
         dstAddrP = dst + dstAddr0;
         srcAddrP = src + srcAddr0;
-        Op::TLoadCubeInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, dstStride, padCount);
+        if (useSoftwareLoop) {
+            for (uint32_t j = 0; j < gShape1; ++j) {
+                for (uint32_t k = 0; k < gShape2; ++k) {
+                    auto srcLoop = reinterpret_cast<decltype(srcAddrP)>(
+                        reinterpret_cast<__gm__ uint8_t*>(srcAddrP) + j * loop2SrcStride + k * loop1SrcStride);
+                    auto dstLoop = reinterpret_cast<decltype(dstAddrP)>(
+                        reinterpret_cast<__cbuf__ uint8_t*>(dstAddrP) + j * loop2DstStride + k * loop1DstStride);
+                    Op::TLoadCubeInstr(dstLoop, srcLoop, nBurst, lenBurst, gmStride, dstStride, padCount);
+                }
+            }
+        } else {
+            Op::TLoadCubeInstr(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, dstStride, padCount);
+        }
     }
     if (loop1 != 1 || loop2 != 1) {
         set_loop_size_outtol1(1 << 21 | 1); // resume to normal mode
@@ -489,8 +510,8 @@ PTO_INTERNAL void TLoadCubeAxisSwapImpl(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeND2ND(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     TLoadCubeAxisSwapImpl<Op, TileData, GlobalData, false>(
         dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -500,8 +521,8 @@ PTO_INTERNAL void TLoadCubeND2ND(
 template <typename Op, typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadCubeDN2DN(
     __cbuf__ typename TileData::DType* dst, typename GlobalData::DType* src, int gShape0, int gShape1, int gShape2,
-    int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int validRow,
-    int validCol)
+    int gShape3, int gShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3, int64_t gStride4,
+    int validRow, int validCol)
 {
     TLoadCubeAxisSwapImpl<Op, TileData, GlobalData, true>(
         dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1, gStride2, gStride3, gStride4,
@@ -549,8 +570,8 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData& dst, GlobalData& src)
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNHWC(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
 #if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
@@ -596,8 +617,8 @@ __tf__ PTO_INTERNAL void TLoadNHWC(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNCHW(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
 #if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
@@ -649,8 +670,8 @@ __tf__ PTO_INTERNAL void TLoadNCHW(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
 #if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
@@ -691,8 +712,8 @@ __tf__ PTO_INTERNAL void TLoadNCHW2FractalZ(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNCDHW2NDC1HWC0(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstShape4)
 {
 #if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
@@ -746,8 +767,8 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2NDC1HWC0(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadNCDHW2FractalZ3D(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int srcShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-    int dstShape0, int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int srcShape4, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
 #if defined(PTO_COMPILE_CUBE)
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
@@ -787,8 +808,8 @@ __tf__ PTO_INTERNAL void TLoadNCDHW2FractalZ3D(
 template <typename Op, typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoad5HD(
     typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__* src, int srcShape0, int srcShape1,
-    int srcShape2, int srcShape3, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstShape0,
-    int dstShape1, int dstShape2, int dstShape3)
+    int srcShape2, int srcShape3, int64_t gStride0, int64_t gStride1, int64_t gStride2, int64_t gStride3,
+    int64_t gStride4, int dstShape0, int dstShape1, int dstShape2, int dstShape3)
 {
     __cbuf__ typename TileData::DType* dstAddr = (__cbuf__ typename TileData::DType*)__cce_get_tile_ptr(dst);
     typename GlobalData::DType* srcAddr = src;
@@ -813,10 +834,24 @@ __tf__ PTO_INTERNAL void TLoad5HD(
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride1);
     uint64_t loop1DstStride = GetByteSize<typename TileData::DType>(dstShape2 * dstShape3 * c0ElemCount);
 #if defined(PTO_COMPILE_CUBE)
-    set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride); // [39:0] is loop2 src stride,[60:40] is dst stride
-    set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride); // [39:0] is loop1 src stride,[60:40] is dst stride
-    set_loop_size_outtol1(loop2 << 21 | loop1);                      // [20:0] is loop1 size, [40:21] is loop2 size
-    Op::TLoadCubeInstr(dstAddr, srcAddr, nBurst, lenBurst, gmStride, dstStride, 0);
+    if (loop1SrcStride > TLOAD_MAX_SRC_STRIDE || loop2SrcStride > TLOAD_MAX_SRC_STRIDE) {
+        set_loop_size_outtol1(1ULL << 21 | 1ULL);
+        for (uint32_t i = 0; i < loop2; ++i) {
+            for (uint32_t j = 0; j < loop1; ++j) {
+                auto srcLoop = reinterpret_cast<decltype(srcAddr)>(
+                    reinterpret_cast<__gm__ uint8_t*>(srcAddr) + i * loop2SrcStride + j * loop1SrcStride);
+                auto dstLoop = reinterpret_cast<decltype(dstAddr)>(
+                    reinterpret_cast<__cbuf__ uint8_t*>(dstAddr) + i * loop2DstStride + j * loop1DstStride);
+                Op::TLoadCubeInstr(dstLoop, srcLoop, nBurst, lenBurst, gmStride, dstStride, 0);
+            }
+        }
+    } else {
+        set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride);
+        set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride);
+        set_loop_size_outtol1(loop2 << 21 | loop1);
+        Op::TLoadCubeInstr(dstAddr, srcAddr, nBurst, lenBurst, gmStride, dstStride, 0);
+    }
+    set_loop_size_outtol1(1ULL << 21 | 1ULL);
 #endif
 }
 
