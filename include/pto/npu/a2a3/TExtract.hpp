@@ -19,6 +19,11 @@ template <typename DstTileData, typename SrcTileData, typename DstType, typename
 PTO_INTERNAL void CheckTExtract()
 {
     static_assert(
+        (SrcTileData::Loc == TileType::Mat &&
+         (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right)) ||
+            (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat),
+        "TEXTRACT A2A3: Unsupported source and destination TileType combination.");
+    static_assert(
         (SrcTileData::Loc == TileType::Acc) || std::is_same<DstType, SrcType>::value,
         "TExtract: Destination and Source tile data types must be the same.");
     static_assert(
@@ -580,19 +585,17 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
 {
     if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
         CheckTExtractVecToVecCommon<DstTileData, SrcTileData>();
-        if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
+        constexpr bool IS_ND_TO_ND = DstTileData::isRowMajor && SrcTileData::isRowMajor &&
+                                     DstTileData::SFractal == SLayout::NoneBox &&
+                                     SrcTileData::SFractal == SLayout::NoneBox;
+        constexpr bool IS_NZ_TO_NZ = !DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
+                                     DstTileData::SFractal == SLayout::RowMajor &&
+                                     SrcTileData::SFractal == SLayout::RowMajor;
+        static_assert(IS_ND_TO_ND || IS_NZ_TO_NZ, "TEXTRACT A2A3 Vec->Vec: Only ND-to-ND and NZ-to-NZ are supported.");
+        if constexpr (IS_ND_TO_ND) {
             TExtractVecToVecNDDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
-        } else if constexpr (
-            !DstTileData::isRowMajor && !SrcTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor &&
-            SrcTileData::SFractal == SLayout::RowMajor) {
+        } else if constexpr (IS_NZ_TO_NZ) {
             TExtractVecToVecNZDispatch<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
-        } else {
-            static_assert(
-                DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                "TEXTRACT Vec->Vec : Source and destination layout must match (both ND or both NZ).");
-            static_assert(
-                DstTileData::SFractal == SrcTileData::SFractal,
-                "TEXTRACT Vec->Vec : Source and destination SFractal must match.");
         }
     } else if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);

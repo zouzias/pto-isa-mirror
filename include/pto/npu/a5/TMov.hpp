@@ -811,9 +811,19 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
             }
         } else if constexpr (DstTileData::Loc == TileType::Mat) {
             CommonCheck<DstTileData, SrcTileData>();
-            TExtractVecToMat<DstTileData, SrcTileData>(
-                dst.data(), src.data(), 0, 0, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
-                dst.GetValidCol());
+            if constexpr (
+                SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox && !DstTileData::isRowMajor &&
+                DstTileData::SFractal == SLayout::RowMajor) {
+                PTO_ASSERT(
+                    src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol(),
+                    "TMOV ND-to-NZ requires matching valid shapes.");
+                TCopyNdToNzUbToMat<DstTileData, SrcTileData>(
+                    dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+            } else {
+                TExtractVecToMat<DstTileData, SrcTileData>(
+                    dst.data(), src.data(), 0, 0, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
+                    dst.GetValidCol());
+            }
         }
     }
 }

@@ -14,6 +14,59 @@ Common test entry points:
 
 > `run_st.sh` requires a platform flag (`--a3`/`--a5`/`--a3_a5`/`--kirin9030`) **and**, for `--a3`/`--a5`, a mode flag (`--simple` or `--all`); optionally a run mode (`--sim`/`--npu`, defaults to on-board `npu`). Run `./tests/run_st.sh` with no/invalid arguments to print the full usage. Note the `--` prefixes are required.
 
+## A2/A3 TEXTRACT Compiler Checks
+
+After sourcing CANN `set_env.sh`, run `python3 tests/script/check_a2a3_textract.py`.
+The check compiles the public TEXTRACT interface for the A2/A3 target and requires a
+specific compile-time diagnostic for unsupported TileType pairs, including ND/NZ
+Vec-to-Mat inputs, and all unsupported pairs of Vec outer/inner layouts.
+Positive controls cover Vec-to-Vec, Mat-to-Left/Right, Acc-to-Mat,
+small-M extraction, and dual-output ND-to-NZ extraction. No kernels run on a device.
+The A2/A3 `--simple` and `--all` ST entry points run this check before building the tests.
+
+## A5 UB ND-to-L1 NZ Regression Tests
+
+Cases belong to their instruction directories under `npu/a5/src/st/testcase/` and are
+registered in the existing test targets:
+
+| Instruction | Test target | GTest filter | ND-to-NZ cases |
+|-------------|-------------|--------------|----------------|
+| TMOV | `tmov_ub2l1` | `TMovUb2l1Test.nd2nz_*` | 14 |
+| TEXTRACT | `textract` | `TEXTRACTTest.nd2nz_*` | 14 |
+| TINSERT | `tinsert` | `TInsertTest.nd2nz_*` | 18 |
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tmov_ub2l1
+python3 tests/script/run_st.py -r npu -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*'
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.nd2nz_*'
+```
+
+The first command also runs the 9 NZ-input cases in `tmov_ub2l1`, for 55 cases across
+these commands. ND-to-NZ cases generate inputs and byte-exact golden data on the host,
+including checks that data outside the valid window is preserved.
+Shared golden generation, L1 initialization, readback, and AIV/AIC synchronization live in
+`npu/a5/src/st/testcase/tmov_ub2l1/ub2l1_nd2nz_*.h`. The `textract` and `tinsert` targets
+include these shared headers; each instruction directory owns its `nd2nz_cases.h` parameter list.
+Large NZ results are initialized and read back in chunks of at most 128 KiB,
+with synchronization before reusing the UB buffer. The TEXTRACT UB-to-L1 kernel uses mixed compilation.
+
+TMOV and TEXTRACT cover all 10 supported data types; TINSERT also covers `int32_t` (11 types).
+Boundary cases include FP4 offsets, static and dynamic valid shapes, zero rows and columns,
+extraction at a smaller source valid-window edge, dual-AIV FP4 insertion, and static/dynamic
+FP4 widths of 65536 columns, including a larger source row stride.
+The manual A5 `--simple` and `--all` entry points include this regression coverage.
+These cases require manual Tile address aliasing and are not registered in auto mode.
+In auto mode, `tmov_ub2l1` retains its 9 NZ-input cases; `textract` and `tinsert` are
+excluded by the existing auto-mode target list.
+
+After sourcing CANN `set_env.sh`, run `python3 tests/script/check_ub2l1_nd2nz.py` to check
+unsupported types/layouts and invalid alignment/windows. This check compiles constant-input
+kernels and verifies diagnostics and debug trap instructions; it does not execute invalid
+kernels on a device. Valid-copy and empty-window controls check the disassembly expectations.
+The CANN toolchain must provide an `llvm-objdump` that decodes A5 instructions;
+unavailable or unknown instructions cause an explicit toolchain error.
+Both manual A5 entry points run this compiler check automatically.
+
 ## Layout
 
 - `script/`: Recommended entry scripts
