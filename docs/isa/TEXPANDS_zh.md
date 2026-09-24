@@ -14,26 +14,6 @@
 
 $$ \mathrm{dst}_{i,j} = \mathrm{scalar} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = texpands %scalar : f32, !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -101,28 +81,4 @@ void example_manual() {
   TASSIGN(dst, 0x1000);
   TEXPANDS(dst, 0.0f);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = texpands %scalar : f32, !pto.tile<...>
-# AS Level 2 (DPS)
-pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```

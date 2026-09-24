@@ -24,26 +24,6 @@ $$
 \mathrm{dst}_{\mathrm{indexRow}+i,\;\mathrm{indexCol}+j} = \mathrm{src}_{i,j}
 $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tinsert ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -317,30 +297,4 @@ void example_unit_flag() {
   // TINSERT<STPhase::Partial>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
   // TINSERT<STPhase::Final>(l1, c, /*indexRow=*/0, /*indexCol=*/0);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tinsert %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tinsert ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

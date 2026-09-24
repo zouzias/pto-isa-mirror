@@ -16,17 +16,6 @@ $$\mathrm{dst}^{\mathrm{local}}_{i,j} = \bigoplus_{r=0}^{N-1} \mathrm{src}^{(r)}
 
 其中 $N$ 为rank总数，$\oplus$ 为归约运算（求和、取最大值、取最小值等）。
 
-## 汇编语法
-
-同步形式：
-
-```text
-treduce %group, %dst {op = #pto.reduce_op<Sum>} : (!pto.group<...>, !pto.memref<...>)
-treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<...>)
-```
-
-降级时会为reduce流水线引入内部累加Tile和接收Tile；C++内建接口需要显式传入 `accTileData`、`recvTileData`（或 `accTileData`、`pingTileData`、`pongTileData`）操作数。
-
 ## 模板参数
 
 - `engine`：
