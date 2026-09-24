@@ -119,20 +119,6 @@ $$
 
 填充值（$-\infty$ = `-1.0/0.0` 或 `std::numeric_limits<T>::lowest()`）落在降序排序的底部。若 `validCol > 32 × 255`，行按 `REPEAT_MAX` 大小的组拆分，每组通过独立的 `vbitsort` 调用排序。
 
-## 汇编语法
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## 示例
 
 ```cpp
@@ -152,29 +138,4 @@ using IdxT2 = Tile<TileType::Vec, uint32_t, 1, 100>;
 using DstT2 = Tile<TileType::Vec, half, 1, 400>;  // 4× src 列数（half）
 using TmpT  = Tile<TileType::Vec, half, 1, 128>;  // ≥ ceil32(100)=128
 TSort32(dst2, src2, idx2, tmp);
-```
-
-## ASM形式示例
-
-### Auto模式
-
-```text
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual模式
-
-```text
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dst = pto.tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = tsort32 %src, %idx : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-# AS Level 2（DPS）
-pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

@@ -28,20 +28,6 @@ $$ \mathrm{dst}_{i, j} = \begin{cases} \mathrm{src0}_{i, j} & \text{若 } 0 \le 
 
 其中 `validCols0 = src0.GetValidCol()` 和 `validCols1 = src1.GetValidCol()`。
 
-## 汇编语法
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建函数
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -158,26 +144,6 @@ void example_indexed() {
 
     TCONCAT(dst, src0, src1, src0Idx, src1Idx);
 }
-```
-
-## ASM形式示例
-
-### Auto模式
-
-```text
-# Auto 模式：编译器/运行时管理放置和调度。
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
-```
-
-### Manual模式
-
-```text
-# Manual 模式：在发出指令之前必须显式绑定资源。
-# Tile 操作数的可选绑定：
-# pto.tassign %src0, @tile(0x1000)
-# pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst, @tile(0x3000)
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ## 相关指令

@@ -14,26 +14,6 @@ Tile与标量的逐元素按位与。
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;\&\; \mathrm{scalar} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tands %src, %scalar : !pto.tile<...>, i32
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tands %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -75,31 +55,4 @@ void example() {
   TileSrc src;
   TANDS(dst, src, 0xffu);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tands %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tands %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = tands %src, %scalar : !pto.tile<...>, i32
-# AS Level 2 (DPS)
-pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```

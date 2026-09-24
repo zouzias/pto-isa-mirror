@@ -75,14 +75,6 @@ TDEQUANT在向量流水线（`PIPE_V`）上执行，无需 `tmp` scratch Tile（
 
 TDEQUANT属于TEPL（Tile Elementwise Pipeline）复合变换类指令：
 
-```text
-BSTART.TEPL TDEQUANT, DataType +
-B.DATR(optional) +
-B.DIM LB0 +
-B.DIM (LB1/LB2 for 2D) +
-B.IOT
-```
-
 | 字段 | 取值 |
 |------|------|
 | Mode | 3（复合变换） |

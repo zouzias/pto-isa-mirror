@@ -22,48 +22,6 @@ $$ \mathrm{dstVal}_{0,j} = \max_{0 \le i < R} \mathrm{src}_{i,j} $$
 
 $$ \mathrm{dstIdx}_{0,j} = \underset{0 \le i < R}{\operatorname{argmax}} \; \mathrm{src}_{i,j} $$
 
-## 汇编语法
-
-### 纯索引模式
-
-同步形式：
-
-```text
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-IR Level 1（SSA）：
-
-```text
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-IR Level 2（DPS）：
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-```
-
-### 值 + 索引模式
-
-同步形式：
-
-```text
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-```
-
-IR Level 1（SSA）：
-
-```text
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-IR Level 2（DPS）：
-
-```text
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -270,54 +228,4 @@ void example_manual_val_idx() {
   TASSIGN(tmp, 0x3000);
   TCOLARGMAX(dstVal, dstIdx, src, tmp);
 }
-```
-
-## 汇编示例（ASM）
-
-### 纯索引自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 纯索引手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### 值 + 索引自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### 值 + 索引手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dstVal, %dstIdx = pto.tcolargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO汇编形式
-
-```text
-# 纯索引
-%dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>
-# 值 + 索引
-%dstVal, %dstIdx = tcolargmax %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-
-# IR Level 2 (DPS) - 纯索引
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-
-# IR Level 2 (DPS) - 值 + 索引
-pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```

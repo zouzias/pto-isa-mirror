@@ -20,13 +20,6 @@ $$\forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\
 
 其中 `cmp` ∈ {`EQ`， `NE`， `GT`， `GE`， `LT`， `LE`}
 
-## 汇编语法
-
-```text
-twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
-twait %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/comm/pto_comm_inst.hpp`：
