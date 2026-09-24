@@ -224,6 +224,80 @@ __global__ AICORE void runTTRANSConv3(__gm__ T __out__* out, __gm__ T __in__* sr
     TSTORE(dstGlobal, dst0Tile);
 }
 
+// NCHW -> FRACTAL_Z (three-stage direct conversion)
+template <typename T, int srcN, int srcC, int srcH, int srcW, int dstC1HW, int dstN1, int dstN0, int dstC0>
+__global__ AICORE void runTTRANSConv4(__gm__ T __out__* out, __gm__ T __in__* src)
+{
+    constexpr int DTypeSize = sizeof(T);
+    constexpr int blockSize = 32 / DTypeSize;
+    constexpr int HW = srcH * srcW;
+    constexpr int HW_padded = ((HW + blockSize - 1) / blockSize) * blockSize;
+    constexpr int C1 = (srcC + dstC0 - 1) / dstC0;
+    constexpr int N_padded = dstN1 * dstN0;
+    static_assert(dstC1HW == C1 * HW_padded, "");
+    static_assert(dstN1 == (srcN + dstN0 - 1) / dstN0, "");
+    static_assert(dstC0 == 32 / DTypeSize, "");
+
+    constexpr int srcElemNum = srcN * srcC * HW;
+    constexpr int srcBufferSize = srcElemNum * DTypeSize;
+
+    constexpr int dstElemNum = dstC1HW * dstN1 * dstN0 * dstC0;
+    constexpr int dstBufferSize = dstElemNum * DTypeSize;
+
+    constexpr int tmpElemNum = N_padded * C1 * dstC0 * HW_padded;
+    constexpr int tmpBufferSize = tmpElemNum * DTypeSize;
+
+    using SrcShapeDim5 = Shape<1, 1, 1, 1, srcElemNum>;
+    using SrcStrideDim5 = pto::Stride<srcElemNum, srcElemNum, srcElemNum, srcElemNum, 1>;
+    using SrcGlobalData = GlobalTensor<T, SrcShapeDim5, SrcStrideDim5>;
+
+    using DstShapeDim5 = Shape<1, 1, 1, 1, dstElemNum>;
+    using DstStrideDim5 = pto::Stride<dstElemNum, dstElemNum, dstElemNum, dstElemNum, 1>;
+    using DstGlobalData = GlobalTensor<T, DstShapeDim5, DstStrideDim5>;
+
+    using SrcTileData = Tile<TileType::Vec, T, 1, srcElemNum, BLayout::RowMajor, 1, srcElemNum>;
+    SrcTileData src0Tile;
+    TASSIGN(src0Tile, 0x0);
+    using SrcConvTile = ConvTile<TileType::Vec, T, srcBufferSize, Layout::NCHW, ConvTileShape<srcN, srcC, srcH, srcW>>;
+    SrcConvTile srcTile;
+    static_assert(srcTile.totalDimCount == 4);
+    TASSIGN(srcTile, 0x0);
+#ifdef __PTO_AUTO__
+    TRESHAPE(src0Tile, srcTile);
+#endif
+
+    using DstTileData = Tile<TileType::Vec, T, 1, dstElemNum, BLayout::RowMajor, 1, dstElemNum>;
+    DstTileData dst0Tile;
+    TASSIGN(dst0Tile, 0x0 + srcBufferSize);
+    using DstConvTile =
+        ConvTile<TileType::Vec, T, dstBufferSize, Layout::FRACTAL_Z, ConvTileShape<dstC1HW, dstN1, dstN0, dstC0>>;
+    DstConvTile dstTile;
+    static_assert(dstTile.totalDimCount == 4);
+    TASSIGN(dstTile, 0x0 + srcBufferSize);
+#ifdef __PTO_AUTO__
+    TRESHAPE(dst0Tile, dstTile);
+#endif
+
+    using TmpTileData = Tile<TileType::Vec, T, 1, tmpElemNum, BLayout::RowMajor, 1, tmpElemNum>;
+    TmpTileData tmpTile;
+    TASSIGN(tmpTile, 0x0 + srcBufferSize + dstBufferSize);
+
+    SrcGlobalData srcGlobal(src);
+    DstGlobalData dstGlobal(out);
+
+    TLOAD(src0Tile, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+    TTRANS(dstTile, srcTile, tmpTile);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+    TSTORE(dstGlobal, dst0Tile);
+}
+
 template <
     typename T, int format, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gShape5,
     int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
@@ -298,6 +372,25 @@ template void LaunchTTRANSConv<uint8_t, 1, 2, 7, 7, 1, 16, 32, 11, 2, 7, 7, 32>(
 template void LaunchTTRANSConv<float, 2, 1, 1, 2, 4, 8, 1, 1, 1, 2, 4, 8>(float* out, float* src, void* stream);
 template void LaunchTTRANSConv<float, 2, 2, 2, 2, 4, 8, 1, 2, 2, 2, 4, 8>(float* out, float* src, void* stream);
 template void LaunchTTRANSConv<float, 2, 2, 2, 3, 4, 8, 1, 2, 2, 3, 4, 8>(float* out, float* src, void* stream);
+
+// NCHW -> FRACTAL_Z
+template <typename T, int srcN, int srcC, int srcH, int srcW, int dstC1HW, int dstN1, int dstN0, int dstC0>
+void LaunchTTRANSConvNCHW2FZ(T* out, T* src, void* stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>) {
+        runTTRANSConv4<half, srcN, srcC, srcH, srcW, dstC1HW, dstN1, dstN0, dstC0>
+            <<<1, nullptr, stream>>>((half*)(out), (half*)(src));
+    } else {
+        runTTRANSConv4<T, srcN, srcC, srcH, srcW, dstC1HW, dstN1, dstN0, dstC0><<<1, nullptr, stream>>>(out, src);
+    }
+}
+
+template void LaunchTTRANSConvNCHW2FZ<aclFloat16, 7, 32, 2, 8, 32, 1, 16, 16>(
+    aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTTRANSConvNCHW2FZ<aclFloat16, 4, 17, 4, 1, 32, 1, 16, 16>(
+    aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTTRANSConvNCHW2FZ<float, 5, 4, 3, 8, 24, 1, 16, 8>(float* out, float* src, void* stream);
+template void LaunchTTRANSConvNCHW2FZ<int8_t, 4, 32, 3, 7, 32, 1, 16, 32>(int8_t* out, int8_t* src, void* stream);
 
 // GNCHW -> GNC1HWC0
 template <
