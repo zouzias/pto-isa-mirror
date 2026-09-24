@@ -65,6 +65,9 @@ view = reinterpret_view(src, result_type)
                               v_row=32, v_col=16, blayout=row_major,
                               slayout=none_box, fractal=512, pad=0>
 ```
+
+---
+
 ### `pto.tconcat` — 列方向 Tile 拼接
 
 ```mlir
@@ -118,6 +121,9 @@ pto.tconcat
                             v_row=32, v_col=32, blayout=row_major,
                             slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tconcatidx` — 索引控制列拼接
 
 ```mlir
@@ -182,6 +188,9 @@ pto.tconcatidx
                               v_row=16, v_col=64, blayout=row_major,
                               slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.textract` — 子 Tile 提取
 
 ```mlir
@@ -235,6 +244,9 @@ pto.textract
                               v_row=16, v_col=16, blayout=row_major,
                               slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.textract` 的 `fp` 形式
 
 ```mlir
@@ -288,6 +300,9 @@ pto.textract ins(%src, %row, %col : !pto.tile_buf<loc=acc, dtype=f32, rows=32, c
                  v_row=32, v_col=32, blayout=col_major, slayout=row_major,
                  fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tinsert` — 子 Tile 插入
 
 ```mlir
@@ -341,6 +356,9 @@ pto.tinsert
                               v_row=32, v_col=32, blayout=row_major,
                               slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tinsert` 的 `fp` 形式
 
 ```mlir
@@ -394,6 +412,9 @@ pto.tinsert ins(%src, %row, %col : !pto.tile_buf<loc=acc, dtype=f32, rows=32, co
                 v_row=32, v_col=32, blayout=col_major, slayout=row_major,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tgather` — 聚集/选择元素
 
 `pto.tgather` 有三种使用形式：索引形式、比较形式和掩码形式。
@@ -517,6 +538,9 @@ pto.tgather ins(%src, %indices :
                     v_row=1, v_col=32, blayout=row_major, slayout=none_box,
                     fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tgatherb` — 按字节偏移聚集 32 字节块
 
 ```mlir
@@ -570,6 +594,9 @@ pto.tgatherb ins(%src, %offsets :
                      v_row=8, v_col=32, blayout=row_major, slayout=none_box,
                      fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tscatter` — 散射元素
 
 `pto.tscatter` 有两种使用形式：索引形式和掩码形式。

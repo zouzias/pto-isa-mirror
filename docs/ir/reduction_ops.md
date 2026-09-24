@@ -79,6 +79,9 @@ pto.trowsum ins(%src : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
                 v_row=16, v_col=1, blayout=col_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowprod` — 行乘积归约
 
 ```mlir
@@ -128,6 +131,9 @@ pto.trowprod ins(%src, %tmp : !pto.tile_buf<loc=vec, dtype=i16, rows=16, cols=16
                  v_row=16, v_col=1, blayout=col_major, slayout=none_box,
                  fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowmax` — 行最大值归约
 
 ```mlir
@@ -171,6 +177,9 @@ pto.trowmax ins(%src : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
                 v_row=16, v_col=1, blayout=row_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowmin` — 行最小值归约
 
 ```mlir
@@ -219,6 +228,9 @@ pto.trowmin ins(%src, %tmp : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
                 v_row=16, v_col=1, blayout=row_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowargmax` — 行最大值索引归约
 
 ```mlir
@@ -269,6 +281,9 @@ pto.trowargmax ins(%src, %tmp : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=
                    v_row=16, v_col=1, blayout=col_major, slayout=none_box,
                    fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowargmin` — 行最小值索引归约
 
 ```mlir
@@ -319,6 +334,9 @@ pto.trowargmin ins(%src, %tmp : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=
                    v_row=16, v_col=1, blayout=col_major, slayout=none_box,
                    fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolsum` — 列求和归约
 
 ```mlir
@@ -379,6 +397,9 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<loc=vec, dtype=f32
                 v_row=1, v_col=16, blayout=row_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolprod` — 列乘积归约
 
 ```mlir
@@ -427,6 +448,9 @@ pto.tcolprod ins(%src : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=16,
                  v_row=1, v_col=16, blayout=row_major, slayout=none_box,
                  fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolmax` — 列最大值归约
 
 ```mlir
@@ -476,6 +500,9 @@ pto.tcolmax ins(%src : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
                 v_row=1, v_col=16, blayout=row_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolmin` — 列最小值归约
 
 ```mlir
@@ -525,6 +552,9 @@ pto.tcolmin ins(%src : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
                 v_row=1, v_col=16, blayout=row_major, slayout=none_box,
                 fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolargmax` — 列最大值索引归约
 
 ```mlir
@@ -574,6 +604,9 @@ pto.tcolargmax ins(%src, %tmp : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=
                    v_row=1, v_col=32, blayout=row_major, slayout=none_box,
                    fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolargmin` — 列最小值索引归约
 
 ```mlir

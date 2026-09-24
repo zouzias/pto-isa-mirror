@@ -88,6 +88,7 @@ pto.tadd ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tand` — 逐元素按位与
 
 ```mlir
@@ -141,6 +142,7 @@ pto.tand ins(%a, %b : !pto.tile_buf<loc=vec, dtype=i16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tor` — 逐元素按位或
 
 ```mlir
@@ -194,6 +196,7 @@ pto.tor ins(%a, %b : !pto.tile_buf<loc=vec, dtype=i16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tsub` — 逐元素减法
 
 ```mlir
@@ -247,6 +250,7 @@ pto.tsub ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tmul` — 逐元素乘法
 
 ```mlir
@@ -300,6 +304,7 @@ pto.tmul ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tmin` — 逐元素取最小值
 
 ```mlir
@@ -353,6 +358,7 @@ pto.tmin ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tmax` — 逐元素取最大值
 
 ```mlir
@@ -406,6 +412,7 @@ pto.tmax ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tcmp` — 逐元素比较
 
 ```mlir
@@ -467,6 +474,7 @@ pto.tcmp ins(%a, %b {cmpMode = #pto<cmp lt>} :
 ```
 
 ---
+
 ### `pto.tshl` — 逐元素左移
 
 ```mlir
@@ -514,6 +522,7 @@ pto.tshl ins(%a, %b : !pto.tile_buf<loc=vec, dtype=i32, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tshr` — 逐元素右移
 
 ```mlir
@@ -561,6 +570,7 @@ pto.tshr ins(%a, %b : !pto.tile_buf<loc=vec, dtype=i32, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.txor` — 逐元素按位异或
 
 ```mlir
@@ -636,6 +646,7 @@ pto.txor ins(%src0, %src1, %dst :
 ```
 
 ---
+
 ### `pto.tsel` — 掩码选择
 
 ```mlir
@@ -718,6 +729,7 @@ pto.tsel ins(%mask, %a, %b, %tmp :
 ```
 
 ---
+
 ### `pto.tprelu` — 参数化 ReLU
 
 ```mlir
@@ -797,6 +809,7 @@ pto.tprelu ins(%a, %slopes, %c :
 ```
 
 ---
+
 ### `pto.taddc` — 三元逐元素加法
 
 ```mlir
@@ -847,6 +860,7 @@ pto.taddc ins(%a, %b, %c :
 ```
 
 ---
+
 ### `pto.tsubc` — 三元逐元素减加
 
 ```mlir

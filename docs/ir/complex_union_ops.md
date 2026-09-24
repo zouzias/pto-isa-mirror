@@ -75,6 +75,9 @@ pto.tpartadd ins(%a, %b :
                      v_row=16, v_col=64, blayout=row_major, slayout=none_box,
                      fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tpartmul` — 部分逐元素乘法
 
 ```mlir
@@ -128,6 +131,9 @@ pto.tpartmul ins(%src0, %src1 :
                      v_row=32, v_col=32, blayout=row_major, slayout=none_box,
                      fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tpartmax` — 部分逐元素取最大值
 
 ```mlir
@@ -181,6 +187,9 @@ pto.tpartmax ins(%a, %b :
                      v_row=16, v_col=64, blayout=row_major, slayout=none_box,
                      fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tpartmin` — 部分逐元素取最小值
 
 ```mlir
@@ -234,6 +243,9 @@ pto.tpartmin ins(%a, %b :
                      v_row=16, v_col=64, blayout=row_major, slayout=none_box,
                      fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tpartargmax` — 部分逐元素取最大值及索引
 
 ```mlir
@@ -299,6 +311,9 @@ pto.tpartargmax
                       v_row=16, v_col=32, blayout=row_major,
                       slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tpartargmin` — 部分逐元素取最小值及索引
 
 ```mlir
