@@ -67,7 +67,7 @@ the model's 256 KiB L0C capacity, compared with 128 KiB for A2A3. Explicit capac
 ### Memory capacity overrides
 
 The simulated memory capacities can be overridden with the following environment variables. Values are specified in
-bytes and must be positive integers:
+bytes and must be positive decimal integers representable by `std::size_t`, with no sign or whitespace:
 
 - `PTO_CPU_SIM_UB_BYTES`
 - `PTO_CPU_SIM_L1_BYTES`
@@ -75,8 +75,17 @@ bytes and must be positive integers:
 - `PTO_CPU_SIM_L0B_BYTES`
 - `PTO_CPU_SIM_L0C_BYTES`
 
-By default, CPU_SIM provides at least 512 KiB of UB scratch space. Set the variables before initializing the memory
-model.
+By default, CPU_SIM uses the architecture UB capacity: 192 KiB for A2A3 and 256 KiB for A5.
+`PTO_CPU_SIM_UB_BYTES` overrides this capacity. Set the variables before initializing the memory model.
+
+Unset, empty, zero, malformed, or out-of-range values use the selected architecture's default capacity for that
+region. Leading zeros are accepted for positive values (for example, `00032768` means 32768 bytes).
+
+`TASSIGN` accepts a byte offset into a simulated memory region or the integer representation of an existing
+pointer into a simulated buffer. The pointer form creates an alias over the same storage. Both forms check that
+the entire Tile or ConvTile fits within the selected buffer, using the Tile's physical storage size or
+`ConvTile::bufferSize`. An out-of-bounds assignment aborts with a `PTO_CPU_ASSERT` diagnostic in both Debug and
+Release builds, including when `NDEBUG` is defined.
 
 When `__PTO_AUTO__` is defined, regular `Tile` objects support lazy fallback storage in CPU_SIM. If a tile has not
 been bound by `TASSIGN`, its first `data()` access allocates private host storage. Without `__PTO_AUTO__`, regular

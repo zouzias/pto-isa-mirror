@@ -116,8 +116,13 @@ void ExpectFp32ReductionResult(pto::NPUArch arch, const std::array<float, Cols>&
     SrcTile tmp(validCols);
     DstTile dst;
     pto::TASSIGN(src, 0);
-    pto::TASSIGN(tmp, SrcTile::GetSizeInBytes());
-    pto::TASSIGN(dst, SrcTile::GetSizeInBytes() * 2);
+    if (arch == pto::NPUArch::A2A3) {
+        pto::TASSIGN(tmp, SrcTile::GetSizeInBytes());
+        pto::TASSIGN(dst, SrcTile::GetSizeInBytes() * 2);
+    } else {
+        // A5 TROWSUM does not use the temporary tile.
+        pto::TASSIGN(dst, SrcTile::GetSizeInBytes());
+    }
 
     for (int row = 0; row < Rows; ++row) {
         std::copy(input.begin(), input.end(), src.data() + row * Cols);
@@ -234,8 +239,8 @@ void ExpectA5TypedReduction(const std::array<T, Cols>& input, int validCols, T e
     Src tmp(validCols);
     Dst dst;
     pto::TASSIGN(src, 0);
-    pto::TASSIGN(tmp, Src::GetSizeInBytes());
-    pto::TASSIGN(dst, Src::GetSizeInBytes() * 2);
+    // A5 TROWSUM does not use the temporary tile.
+    pto::TASSIGN(dst, Src::GetSizeInBytes());
     for (int row = 0; row < Rows; ++row) {
         std::copy(input.begin(), input.end(), src.data() + row * Cols);
     }

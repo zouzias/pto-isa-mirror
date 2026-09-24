@@ -76,7 +76,7 @@ PTO-Auto (high level):
 
 - You describe the dataflow: `TLOAD → compute → TSTORE`.
 - Tile buffer management and some synchronization can be handled by the compiler/runtime.
-- In the API model, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled (see [TASSIGN Instruction](../isa/TASSIGN.md)).
+- On NPU targets, `TASSIGN(tile, addr)` is a no-op when `__PTO_AUTO__` is enabled. In CPU_SIM, it still binds and checks simulated storage (see [TASSIGN Instruction](../isa/TASSIGN.md)).
 
 PTO-Manual (expert mode):
 

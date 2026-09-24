@@ -29,6 +29,7 @@
 #define PTO_NPU_MEMORY_MODEL_HPP
 
 #include <algorithm>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -82,8 +83,6 @@ private:
         throw std::invalid_argument("PTO_CPU_SIM_ARCH must be a2a3 or a5");
     }
 
-    static inline constexpr std::size_t kDefaultCpuSimUBScratchSize = 512 * 1024;
-
     // Memory sizes by architecture
     // A2/A3:
     // https://www.hiascend.com/doc_center/source/zh/canncommercial/80RC3/devguide/appdevg/sdpdevg/atlasprogramming_12_0003.html
@@ -116,18 +115,17 @@ private:
             return fallback;
         }
         const std::string strValue(value);
-        std::size_t pos = 0;
-        const unsigned long long parsed = std::stoull(strValue, &pos, 10);
-        if (pos != strValue.size() || parsed == 0) {
+        std::size_t capacityBytes = 0;
+        const auto result = std::from_chars(strValue.data(), strValue.data() + strValue.size(), capacityBytes);
+        if (result.ec != std::errc{} || result.ptr != strValue.data() + strValue.size() || capacityBytes == 0) {
             return fallback;
         }
-        return static_cast<std::size_t>(parsed);
+        return capacityBytes;
     }
 
     void ApplySizeOverrides()
     {
-        sizes_[MemoryRegion::UB] =
-            ReadSizeOverride("PTO_CPU_SIM_UB_BYTES", std::max(sizes_[MemoryRegion::UB], kDefaultCpuSimUBScratchSize));
+        sizes_[MemoryRegion::UB] = ReadSizeOverride("PTO_CPU_SIM_UB_BYTES", sizes_[MemoryRegion::UB]);
         sizes_[MemoryRegion::L1] = ReadSizeOverride("PTO_CPU_SIM_L1_BYTES", sizes_[MemoryRegion::L1]);
         sizes_[MemoryRegion::L0A] = ReadSizeOverride("PTO_CPU_SIM_L0A_BYTES", sizes_[MemoryRegion::L0A]);
         sizes_[MemoryRegion::L0B] = ReadSizeOverride("PTO_CPU_SIM_L0B_BYTES", sizes_[MemoryRegion::L0B]);
@@ -200,28 +198,20 @@ public:
     TileDef::DType* GetPointer(std::size_t byteOffset)
     {
         static_assert(is_tile_data_v<TileDef> || is_conv_tile_v<TileDef>);
-        int numElem;
-        if constexpr (is_tile_data_v<TileDef>) {
-            numElem = TileDef::Numel;
-        } else {
-            numElem = TileDef::bufferSize / sizeof(typename TileDef::DType);
-        }
         if constexpr (TileDef::Loc == TileType::Mat) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L1>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L1);
         } else if constexpr (TileDef::Loc == TileType::Left) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0A>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L0A);
         } else if constexpr (TileDef::Loc == TileType::Right) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0B>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L0B);
         } else if constexpr (TileDef::Loc == TileType::Acc) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0C>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L0C);
         } else if constexpr (TileDef::Loc == TileType::ScaleLeft) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0A_MX>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L0A_MX);
         } else if constexpr (TileDef::Loc == TileType::ScaleRight) {
-            return GetPointer<typename TileDef::DType, MemoryRegion::L0B_MX>(byteOffset, numElem);
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::L0B_MX);
         } else {
-            return GetPointer<typename TileDef::DType, MemoryRegion::UB>(
-                byteOffset,
-                numElem); // For Vec and unknown types
+            return GetPointer<TileDef>(byteOffset, MemoryRegion::UB); // For Vec and unknown types
         }
     }
 
@@ -235,7 +225,7 @@ public:
         static_assert(is_tile_data_v<TileDef> || is_conv_tile_v<TileDef>);
         EnsureInitialized();
 
-        if (auto* direct = TryResolveExistingPointer<typename TileDef::DType>(addr)) {
+        if (auto* direct = TryResolveExistingPointer<TileDef>(addr)) {
             return direct;
         }
         return GetPointer<TileDef>(static_cast<std::size_t>(addr));
@@ -319,27 +309,36 @@ public:
     }
 
 private:
-    template <typename T>
-    T* TryResolveExistingPointer(std::uintptr_t addr)
+    template <typename TileDef>
+    typename TileDef::DType* TryResolveExistingPointer(std::uintptr_t addr)
     {
         for (int region = 0; region < MemoryRegion::_MAX_REGIONS; ++region) {
             auto* base = buffers_[region].data();
             const auto start = reinterpret_cast<std::uintptr_t>(base);
             const auto end = start + buffers_[region].size();
             if (addr >= start && addr < end) {
-                return reinterpret_cast<T*>(addr);
+                return GetPointer<TileDef>(addr - start, static_cast<MemoryRegion>(region));
             }
         }
         return nullptr;
     }
 
-    template <typename T, MemoryRegion region>
-    inline T* GetPointer(std::size_t byteOffset, size_t numel)
+    template <typename TileDef>
+    inline typename TileDef::DType* GetPointer(std::size_t byteOffset, MemoryRegion region)
     {
         EnsureInitialized();
 
-        assert(byteOffset + numel * sizeof(T) <= sizes_[region]);
-        return reinterpret_cast<T*>(buffers_[region].data() + byteOffset);
+        constexpr std::size_t tileBytes = [] {
+            if constexpr (is_tile_data_v<TileDef>) {
+                return TileDef::GetSizeInBytes();
+            } else {
+                return static_cast<std::size_t>(TileDef::bufferSize);
+            }
+        }();
+        PTO_CPU_ASSERT(
+            byteOffset <= sizes_[region] && tileBytes <= sizes_[region] - byteOffset,
+            "Tile assignment exceeds memory region capacity.");
+        return reinterpret_cast<typename TileDef::DType*>(buffers_[region].data() + byteOffset);
     }
 
     NPUMemoryModel() = default;

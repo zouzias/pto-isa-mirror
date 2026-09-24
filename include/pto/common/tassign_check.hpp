@@ -14,7 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <pto/common/pto_tile.hpp>
 
-// CPUSIM does not model on-chip buffer capacities, so skip all static checks.
+// CPU_SIM checks buffer capacity at runtime using its memory model.
+// CPU_SIM and COSTMODEL skip the NPU-specific static checks.
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 
 namespace pto {
