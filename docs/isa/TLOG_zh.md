@@ -14,26 +14,6 @@ Tile的逐元素自然对数。
 
 $$ \mathrm{dst}_{i,j} = \log(\mathrm{src}_{i,j}) $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = tlog %src : !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tlog %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -78,31 +58,4 @@ void example() {
   TLOG(out, x);
   TLOG<LogAlgorithm::HIGH_PRECISION>(out, x);  // A5 Only
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tlog %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tlog %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = tlog %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

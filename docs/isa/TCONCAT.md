@@ -28,20 +28,6 @@ $$ \mathrm{dst}_{i, j} = \begin{cases} \mathrm{src0}_{i, j} & \text{if } 0 \le j
 
 Where `validCols0 = src0.GetValidCol()` and `validCols1 = src1.GetValidCol()`.
 
-## Assembly Syntax
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tconcat ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -157,26 +143,6 @@ void example_indexed() {
 
     TCONCAT(dst, src0, src1, src0Idx, src1Idx);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<16x32xf32>, !pto.tile<16x32xf32>) -> !pto.tile<16x64xf32>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %src0, @tile(0x1000)
-# pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst, @tile(0x3000)
-%dst = pto.tconcat %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ## Related Instructions

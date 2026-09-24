@@ -18,26 +18,6 @@ The algorithm uses:
 - 64-bit key (2 × 32-bit words)
 - ChaCha-like quarter-round operations with vector instructions
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-trandom %dst, %key, %counter : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trandom ins(%key, %counter : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -90,30 +70,4 @@ void example_manual() {
   TASSIGN(dst, 0x0);
   TRANDOM<10>(dst, key, counter);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x3000)
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-trandom %dst, %key, %counter : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trandom ins(%key, %counter : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

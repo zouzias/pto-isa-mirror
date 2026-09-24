@@ -18,26 +18,6 @@
 - 64位密钥（2 × 32位字）
 - 类似ChaCha的四分之一轮操作，使用向量指令
 
-## 汇编语法
-
-同步形式：
-
-```text
-trandom %dst, %key, %counter : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trandom ins(%key, %counter : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内置函数
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -91,30 +71,4 @@ void example_manual() {
   TASSIGN(dst, 0x0);
   TRANDOM<10>(dst, key, counter);
 }
-```
-
-## 汇编形式示例
-
-### Auto模式
-
-```text
-# Auto 模式：编译器/运行时管理的布局和调度。
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual模式
-
-```text
-# Manual 模式：在发出指令之前显式绑定资源。
-# Tile 操作数可选：
-# pto.tassign %arg0, @tile(0x3000)
-%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-trandom %dst, %key, %counter : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trandom ins(%key, %counter : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
