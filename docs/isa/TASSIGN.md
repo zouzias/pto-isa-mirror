@@ -27,6 +27,11 @@ PTO_INST void TASSIGN(T& obj, AddrType addr);
 Binds `obj` to the on-chip address `addr`. No compile-time bounds checking is
 performed (the address value is not available at compile time).
 
+In CPU_SIM, `addr` can be a byte offset into a simulated memory region or the integer representation of a pointer
+into an existing simulated buffer. The pointer form creates an alias over the same storage. Both forms check at
+runtime that the entire Tile or ConvTile fits within the selected buffer; out-of-bounds assignments abort in both
+Debug and Release builds. See [CPU_SIM memory capacity overrides](../coding/cpu_sim.md#memory-capacity-overrides).
+
 ### Form 2: Compile-time address (with static bounds check)
 
 ```cpp
@@ -34,9 +39,11 @@ template <std::size_t Addr, typename T>
 PTO_INST void TASSIGN(T& obj);
 ```
 
-Binds `obj` to the on-chip address `Addr`. Because `Addr` is a non-type
-template parameter, the compiler performs the following **compile-time** checks
-via `static_assert`:
+Binds `obj` to the on-chip address `Addr`. In CPU_SIM, this overload delegates to the same runtime capacity checks
+as Form 1; it skips the NPU-specific compile-time bounds and alignment checks.
+
+On NPU targets, `Addr` is a non-type template parameter, so the compiler performs the following **compile-time**
+checks via `static_assert`:
 
 | Check | Condition | Assertion ID | Error message |
 |-------|-----------|--------------|---------------|
@@ -62,7 +69,7 @@ Tile's `TileType` (i.e. `Loc` template parameter):
 | ScaleLeft | L0A | N/A | 4KB | N/A | N/A | 32 B |
 | ScaleRight | L0B | N/A | 4KB | N/A | N/A | 32 B |
 
-Capacities can be overridden at build time via `-D` flags (e.g.
+On NPU targets, capacities can be overridden at build time via `-D` flags (e.g.
 `-DPTO_UBUF_SIZE_BYTES=262144`). See `include/pto/common/buffer_limits.hpp`.
 
 **Note:** This overload is only available for `Tile` and `ConvTile` types. For
@@ -72,8 +79,9 @@ Capacities can be overridden at build time via `-D` flags (e.g.
 
 - **Implementation checks**:
     - If `obj` is a Tile (including ConvTile):
-        - In manual mode (when `__PTO_AUTO__` is not defined), `addr` must be an integral type and is reinterpreted as the tile's storage address.
-        - In auto mode (when `__PTO_AUTO__` is defined), `TASSIGN(tile, addr)` is a no-op.
+        - In CPU_SIM, `addr` must be an integral type. `TASSIGN` binds and checks simulated storage in both manual and auto modes.
+        - On NPU targets in manual mode (when `__PTO_AUTO__` is not defined), `addr` must be an integral type and is reinterpreted as the tile's storage address.
+        - On NPU targets in auto mode (when `__PTO_AUTO__` is defined), `TASSIGN(tile, addr)` is a no-op.
     - If `obj` is a `GlobalTensor`:
         - `addr` must be a pointer type.
         - The pointed-to element type must match `GlobalTensor::DType`.
@@ -115,7 +123,7 @@ void example_checked() {
 }
 ```
 
-The following triggers a compile error:
+The following triggers a compile error on NPU targets:
 
 ```cpp
 void example_oob() {

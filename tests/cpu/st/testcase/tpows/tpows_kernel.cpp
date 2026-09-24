@@ -24,15 +24,15 @@ PTO_INTERNAL void runTPowS(__gm__ T* out, __gm__ T* src, T scalar)
     GlobalData srcGlobal(src, DynDim2Shape(validRow, validCol), DynDim2Stride(iRow, iCol));
     GlobalData dstGlobal(out, DynDim2Shape(validRow, validCol), DynDim2Stride(oRow, oCol));
 
-    using srcTileData = Tile<TileType::Vec, T, iRow, iCol, BLayout::RowMajor, -1, -1>;
-    using dstTileData = Tile<TileType::Vec, T, oRow, oCol, BLayout::RowMajor, -1, -1>;
-    using tmpTileData = Tile<TileType::Vec, T, oRow, oCol, BLayout::RowMajor, -1, -1>;
-    srcTileData srcTile(validRow, validCol);
-    dstTileData dstTile(validRow, validCol);
-    tmpTileData tmpTile(validRow, validCol);
+    using SrcTile = Tile<TileType::Vec, T, iRow, iCol, BLayout::RowMajor, -1, -1>;
+    using DstTile = Tile<TileType::Vec, T, oRow, oCol, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, T, oRow, oCol, BLayout::RowMajor, -1, -1>;
+    SrcTile srcTile(validRow, validCol);
+    DstTile dstTile(validRow, validCol);
+    TmpTile tmpTile(validRow, validCol);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x28000);
-    TASSIGN(tmpTile, 0x50000);
+    TASSIGN(dstTile, SrcTile::GetSizeInBytes());
+    TASSIGN(tmpTile, SrcTile::GetSizeInBytes() + DstTile::GetSizeInBytes());
 
     TLOAD(srcTile, srcGlobal);
 

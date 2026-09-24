@@ -48,6 +48,10 @@ PTO_INST void TASSIGN(T& obj, AddrType addr);
 
 将 `obj` 绑定到片上地址 `addr`。不执行编译时边界检查（地址值在编译时不可知）。
 
+在 CPU_SIM 中，`addr` 可以是模拟内存区域中的字节偏移，也可以是指向已有模拟缓冲区的指针所转换的整数地址。
+指针形式会在同一存储上创建别名。两种形式均在运行时检查整个 Tile 或 ConvTile 是否完全位于所选缓冲区内。
+越界分配在 Debug 和 Release 构建中都会终止进程。容量配置见 [CPU_SIM 内存容量覆盖](../coding/cpu_sim_zh.md#内存容量覆盖)。
+
 ### 形式2：编译时地址（含静态边界检查）
 
 ```cpp
@@ -55,7 +59,10 @@ template <std::size_t Addr, typename T>
 PTO_INST void TASSIGN(T& obj);
 ```
 
-将 `obj` 绑定到片上地址 `Addr`。由于 `Addr` 是非类型模板参数，编译器通过 `static_assert`
+将 `obj` 绑定到片上地址 `Addr`。在 CPU_SIM 中，该重载执行与形式1相同的运行时容量检查，
+跳过 NPU 专用的编译时边界和对齐检查。
+
+在 NPU 目标上，由于 `Addr` 是非类型模板参数，编译器通过 `static_assert`
 执行以下**编译时**检查：
 
 | 检查项 | 条件 | 断言ID | 错误信息 |
@@ -81,7 +88,7 @@ PTO_INST void TASSIGN(T& obj);
 | ScaleLeft | L0A | N/A | 4KB | N/A | N/A | 32Byte |
 | ScaleRight | L0B | N/A | 4KB | N/A | N/A | 32Byte |
 
-容量可通过编译标志 `-D` 覆盖（如 `-DPTO_UBUF_SIZE_BYTES=262144`）。详见 `include/pto/common/buffer_limits.hpp`。
+在 NPU 目标上，容量可通过编译标志 `-D` 覆盖（如 `-DPTO_UBUF_SIZE_BYTES=262144`）。详见 `include/pto/common/buffer_limits.hpp`。
 
 **注意：** 该重载仅适用于 `Tile` 和 `ConvTile` 类型。对于 `GlobalTensor`，请使用 `TASSIGN(obj, pointer)`（形式1）。
 
@@ -89,8 +96,9 @@ PTO_INST void TASSIGN(T& obj);
 
 - **实现检查**:
     - 如果 `obj` 是Tile（含ConvTile）：
-        - 在手动模式下（未定义 `__PTO_AUTO__` 时），`addr` 必须是整数类型，并被重新解释为tile的存储地址。
-        - 在自动模式下（定义了 `__PTO_AUTO__` 时），`TASSIGN(tile, addr)` 是空操作。
+        - 在 CPU_SIM 中，`addr` 必须是整数类型。手动模式和自动模式下，`TASSIGN` 均绑定并检查模拟存储。
+        - 在 NPU 目标的手动模式下（未定义 `__PTO_AUTO__` 时），`addr` 必须是整数类型，并被重新解释为 Tile 的存储地址。
+        - 在 NPU 目标的自动模式下（定义了 `__PTO_AUTO__` 时），`TASSIGN(tile, addr)` 是空操作。
     - 如果 `obj` 是 `GlobalTensor`：
         - `addr` 必须是指针类型。
         - 指向的元素类型必须匹配 `GlobalTensor::DType`。
@@ -132,7 +140,7 @@ void example_checked() {
 }
 ```
 
-以下示例触发编译错误：
+以下示例在 NPU 目标上触发编译错误：
 
 ```cpp
 void example_oob() {
