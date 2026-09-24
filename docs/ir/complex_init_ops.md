@@ -80,6 +80,9 @@ pto.tci ins(%start : i16)
     v_row=1, v_col=4, blayout=row_major, slayout=none_box,
     fractal=512, pad=0>) {descending = true}
 ```
+
+---
+
 ### `pto.trandom` — 随机数生成
 
 ```mlir
@@ -143,6 +146,9 @@ pto.trandom
                               v_row=2, v_col=256, blayout=row_major,
                               slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.ttri` — 三角掩码生成
 
 ```mlir
@@ -204,6 +210,9 @@ pto.ttri
                                 v_row=16, v_col=16, blayout=row_major,
                                 slayout=none_box, fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tfillpad` — 填充 Padding 区域
 
 ```mlir

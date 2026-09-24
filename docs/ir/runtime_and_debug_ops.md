@@ -229,7 +229,7 @@ result = src[offset]  // 从线性偏移处读取单个标量值
 
 - 此类操作具有内存写副作用（`MemWrite`），用于标记调试输出
 - 输出在宿主（Host）端可见
-- 仅当编译时启用 `PTOAS_ENABLE_CCE_PRINT`（或 `-D_DEBUG --cce-enable-print`）选项时才生成有效代码
+- 是否生成有效输出由具体实现与目标平台决定
 
 ### `pto.print` — 格式化标量打印
 

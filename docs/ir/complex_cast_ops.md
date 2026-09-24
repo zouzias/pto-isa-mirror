@@ -73,7 +73,7 @@ For each element (i, j):
 - **可选 tmp 操作数**
   - `tmp` 为可选操作数；仅在 A2/A3 上、`satmode=OFF` 且转换对为 `f32 -> i16`、`f16 -> i16` 或 `f16 -> i8` 时才需要。
   - 默认的 `satmode=ON` 不需要 `tmp`；A5 上的窄化转换也不需要 `tmp`。
-  - 省略 `tmp` 时， `ptoas` 自动补写临时空间。
+  - 省略 `tmp` 时，由实现自动补写临时空间。
 
 **硬件：**
 
@@ -90,6 +90,9 @@ pto.tcvt ins(%src {rmode = #pto<round_mode FLOOR>, satmode = #pto<saturation_mod
              v_row=16, v_col=16, blayout=row_major, slayout=none_box,
              fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tquant` — Tile 量化
 
 ```mlir
@@ -146,6 +149,9 @@ pto.tquant
                               slayout=none_box, fractal=512, pad=0>)
     {quant_type = #pto<quant_type INT8_SYM>}
 ```
+
+---
+
 ### `pto.tdequant` — Tile 反量化
 
 ```mlir

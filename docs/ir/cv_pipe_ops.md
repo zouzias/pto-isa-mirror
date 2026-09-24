@@ -1,6 +1,6 @@
 # 核内 CV Pipe 通信操作
 
-本节描述了 PTO ISA 中用于 Cube（AIC）和 Vector（AIV）核心之间 FIFO 风格数据交换的前端 Pipe 通信接口。这些操作支持 MPMD（多程序多数据）执行模型，允许 Cube 核和 Vector 核通过管道进行异步数据交换。Pipe 条目可以是本地 tile buffer 或 GlobalTensor 风格的全局内存视图描述符。所有 Pipe 通信操作均需通过编译时属性 `id` 进行绑定，该属性将 `initialize_pipe` 与对应的 `tpush`/`tpop`/`tfree` 操作关联。
+本节描述了 PTO ISA 中用于 Cube（AIC）和 Vector（AIV）核心之间 FIFO 风格数据交换的 Pipe 通信接口。这些操作支持 MPMD（多程序多数据）执行模型，允许 Cube 核和 Vector 核通过管道进行异步数据交换。Pipe 条目可以是本地 tile buffer 或 GlobalTensor 风格的全局内存视图描述符。所有 Pipe 通信操作均需通过编译时属性 `id` 进行绑定，该属性将 `initialize_pipe` 与对应的 `tpush`/`tpop`/`tfree` 操作关联。
 
 这一类操作的通用特性包括：
 

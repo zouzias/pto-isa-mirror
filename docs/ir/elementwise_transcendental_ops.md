@@ -5,7 +5,7 @@
 这一类操作通常具有如下装配形式：
 
 ```mlir
- pto.op ins(%lhs, %rhs : !pto.tile_buf<...>, !pto.tile_buf<...>)
+ pto.op ins(%src : !pto.tile_buf<...>)
         outs(%dst : !pto.tile_buf<...>)
 ```
 
@@ -93,6 +93,7 @@ pto.tdiv ins(%a, %b : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tlog` — 逐元素自然对数
 
 ```mlir
@@ -146,6 +147,7 @@ pto.tlog ins(%a : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.trecip` — 逐元素倒数
 
 ```mlir
@@ -200,6 +202,7 @@ pto.trecip ins(%a : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.trsqrt` — 逐元素倒数平方根
 
 ```mlir
@@ -277,6 +280,7 @@ pto.trsqrt ins(%a, %tmp : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.tsqrt` — 逐元素平方根
 
 ```mlir
@@ -328,6 +332,7 @@ pto.tsqrt ins(%a : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.texp` — 逐元素指数函数
 
 ```mlir
@@ -376,6 +381,7 @@ pto.texp ins(%a : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=16,
 ```
 
 ---
+
 ### `pto.trem` — 逐元素取余（带临时 tile）
 
 ```mlir
@@ -441,6 +447,7 @@ pto.trem ins(%a, %b, %tmp :
 ```
 
 ---
+
 ### `pto.tfmod` — 逐元素取余（无需临时 tile）
 
 ```mlir

@@ -71,6 +71,9 @@ pto.tsort32 ins(%src, %idx :
                     v_row=1, v_col=64, blayout=row_major, slayout=none_box,
                     fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tmrgsort` — 归并排序
 
 `pto.tmrgsort` 有两种格式：单列表归并排序（format1）和多列表归并排序（format2）。
@@ -143,6 +146,9 @@ pto.tmrgsort ins(%src0, %src1, %tmp2 {exhausted = false} :
                      fractal=512, pad=0>,
                  vector<4xi16>)
 ```
+
+---
+
 ### `pto.thistogram` — 逐行直方图累加
 
 ```mlir

@@ -80,6 +80,9 @@ pto.tcolexpand ins(%src : !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=16,
                    v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                    fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpand` — 行广播
 
 ```mlir
@@ -123,6 +126,9 @@ pto.trowexpand ins(%src : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=8,
                    v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                    fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandsub` — 行广播减法
 
 ```mlir
@@ -179,6 +185,9 @@ pto.trowexpandsub ins(%src0, %src1, %tmp : !pto.tile_buf<loc=vec, dtype=f32, row
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandmul` — 行广播乘法
 
 ```mlir
@@ -227,6 +236,9 @@ pto.trowexpandmul ins(%src0, %src1, %tmp : !pto.tile_buf<loc=vec, dtype=f32, row
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpanddiv` — 行广播除法
 
 ```mlir
@@ -300,6 +312,9 @@ pto.trowexpanddiv ins(%src0, %src1, %tmp : !pto.tile_buf<loc=vec, dtype=f32, row
                       fractal=512, pad=0>)
                   {precisionType = #pto<div_precision high_precision>}
 ```
+
+---
+
 ### `pto.tcolexpandmax` — 列广播取最大值
 
 ```mlir
@@ -353,6 +368,9 @@ pto.tcolexpandmax ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpandmin` — 列广播取最小值
 
 ```mlir
@@ -406,6 +424,9 @@ pto.tcolexpandmin ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpandmul` — 列广播乘法
 
 ```mlir
@@ -459,6 +480,9 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpandadd` — 列广播加法
 
 ```mlir
@@ -512,6 +536,9 @@ pto.tcolexpandadd ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpanddiv` — 列广播除法
 
 ```mlir
@@ -565,6 +592,9 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpandexpdif` — 列广播指数差
 
 ```mlir
@@ -611,6 +641,9 @@ pto.tcolexpandexpdif ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=1
                          v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                          fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.tcolexpandsub` — 列广播减法
 
 ```mlir
@@ -664,6 +697,9 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandadd` — 行广播加法
 
 ```mlir
@@ -719,6 +755,9 @@ pto.trowexpandadd ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandexpdif` — 行广播指数差
 
 ```mlir
@@ -764,6 +803,9 @@ pto.trowexpandexpdif ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=1
                          v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                          fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandmax` — 行广播取最大值
 
 ```mlir
@@ -817,6 +859,9 @@ pto.trowexpandmax ins(%src0, %src1 : !pto.tile_buf<loc=vec, dtype=f32, rows=16, 
                       v_row=16, v_col=16, blayout=row_major, slayout=none_box,
                       fractal=512, pad=0>)
 ```
+
+---
+
 ### `pto.trowexpandmin` — 行广播取最小值
 
 ```mlir
