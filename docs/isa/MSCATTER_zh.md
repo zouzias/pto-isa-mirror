@@ -73,26 +73,6 @@ enum class ScatterOOB : uint8_t {
 
 没有 `Zero` 选项—OOB索引从未标识真实目标槽位，因此 `Skip` 是自然的"OOB时无操作"策略。
 
-## 汇编语法
-
-同步形式：
-
-```text
-mscatter %src, %idx, %mem : !pto.tile<...>, !pto.tile<...>, !pto.memref<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -504,32 +484,6 @@ AICORE void example_scalar(__gm__ float* tablePtr, __gm__ float* srcPtr, __gm__ 
 
     MSCATTER<Coalesce::Elem>(tableGM, src, idx);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
-```
-
-### PTO汇编形式
-
-```text
-mscatter %src, %idx, %mem : !pto.tile<...>, !pto.tile<...>, !pto.memref<...>
-# AS Level 2 (DPS)
-pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 
 ## 性能考量

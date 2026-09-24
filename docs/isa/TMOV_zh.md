@@ -81,31 +81,6 @@ AIC 须等待所有参与搬运的 AIV。连续调用写入重叠的 L1 区域�
 列偏移须 32 字节对齐，窗口须位于目标物理形状内。行偏移无需分形对齐。
 这些普通形式均不需要 `tmp` 操作数。
 
-## 汇编语法
-
-PTO AS设计建议将 `TMOV` 拆分为一组操作：
-
-```text
-%left  = tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
-%right = tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
-%bias  = tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
-%scale = tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
-%vec   = tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
-%v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
@@ -382,30 +357,4 @@ void example_manual() {
   TASSIGN(left, 0x2000);
   TMOV(left, mat);
 }
-```
-
-## ASM形式示例
-
-### Auto模式
-
-```text
-# Auto 模式：由编译器/运行时管理资源放置与调度。
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual模式
-
-```text
-# Manual 模式：须先显式绑定资源再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2（DPS）
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

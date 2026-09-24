@@ -26,26 +26,6 @@ $$
 
 `pad` 由 `TileDataDst::PadVal` 和元素类型决定（例如，当浮点类型支持时使用 `+inf/-inf`，否则使用 `std::numeric_limits<T>::max()/min()`）。
 
-## 汇编语法
-
-同步形式（概念性）：
-
-```text
-%dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 在 `include/pto/common/pto_instr_impl.hpp` 引入的后端头文件中实现：
@@ -88,31 +68,4 @@ void example2() {
   TileMatData matTile;
   TFILLPAD(matTile, matTile);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 可选（当该指令包含 tile 操作数时）：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

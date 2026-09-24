@@ -17,28 +17,6 @@ $$ \mathrm{dst}_{0,j} = \sum_{i=0}^{R-1} \mathrm{src}_{i,j} $$
 
 `isBinary` selects binary-tree or sequential accumulation; the A5 64-bit integer path ignores it.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = tcolsum %src {isBinary = false} : !pto.tile<...> -> !pto.tile<...>
-```
-Lowering may introduce scratch tiles; the C++ API provides both an overload without `tmp` and one with `tmp, isBinary`.
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
-%dst = pto.tcolsum %src, %tmp {isBinary = false} : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tcolsum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -147,31 +125,4 @@ void example_manual() {
   TASSIGN(tmp, 0x3000);
   TCOLSUM(dst, src, tmp, /*isBinary=*/false);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tcolsum %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = tcolsum %src {isBinary = false} : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tcolsum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
