@@ -23,48 +23,6 @@ $$ \mathrm{dstVal}_{0,j} = \min_{0 \le i < R} \mathrm{src}_{i,j} $$
 
 $$ \mathrm{dstIdx}_{0,j} = \underset{0 \le i < R}{\operatorname{argmin}} \; \mathrm{src}_{i,j} $$
 
-## Assembly Syntax
-
-### Pure Index Mode
-
-Synchronous form:
-
-```text
-%dstIdx = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-IR Level 1 (SSA):
-
-```text
-%dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-IR Level 2 (DPS):
-
-```text
-pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-```
-
-### Value + Index Mode
-
-Synchronous form:
-
-```text
-%dstVal, %dstIdx = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-```
-
-IR Level 1 (SSA):
-
-```text
-%dstVal, %dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-IR Level 2 (DPS):
-
-```text
-pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -270,54 +228,4 @@ void example_manual_val_idx() {
   TASSIGN(tmp, 0x3000);
   TCOLARGMIN(dstVal, dstIdx, src, tmp);
 }
-```
-
-## ASM Form Examples
-
-### Pure Index Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Pure Index Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Value + Index Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dstVal, %dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### Value + Index Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-# pto.tassign %arg2, @tile(0x3000)
-%dstVal, %dstIdx = pto.tcolargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO Assembly Form
-
-```text
-# Pure index
-%dstIdx = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>
-# Value + index
-%dstVal, %dstIdx = tcolargmin %src : !pto.tile<...> -> !pto.tile<...>, !pto.tile<...>
-
-# IR Level 2 (DPS) - pure index
-pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstIdx : !pto.tile_buf<...>)
-
-# IR Level 2 (DPS) - value + index
-pto.tcolargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
