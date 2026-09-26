@@ -149,6 +149,7 @@ using SrcT2 = Tile<TileType::Vec, half, 1, 100>;
 using IdxT2 = Tile<TileType::Vec, uint32_t, 1, 100>;
 using DstT2 = Tile<TileType::Vec, half, 1, 400>;  // 4× src cols (half)
 using TmpT  = Tile<TileType::Vec, half, 1, 128>;  // ≥ ceil32(100)=128
+SrcT2 src2; IdxT2 idx2; DstT2 dst2; TmpT tmp;
 TSort32(dst2, src2, idx2, tmp);
 ```
 
