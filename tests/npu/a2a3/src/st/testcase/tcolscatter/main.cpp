@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask>
+template <
+    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
 void launchTScatterMaskTestCase(void* out, void* src, void* stream);
 
 class TCOLSCATTERTest : public testing::Test {
@@ -35,7 +36,9 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, pto::MaskPattern PATTERN, uint32_t DST_ROW, uint32_t DST_COL, uint32_t SRC_ROW, uint32_t SRC_COL>
+template <
+    typename T, pto::MaskPattern PATTERN, uint32_t DST_ROW, uint32_t DST_COL, uint32_t SRC_ROW, uint32_t SRC_COL,
+    uint32_t SRC_VALID_COL = SRC_COL>
 void test_scatter_mask()
 {
     aclInit(nullptr);
@@ -56,7 +59,9 @@ void test_scatter_mask()
 
     ReadFile(GetGoldenDir() + "/input.bin", srcSize, srcHost, srcSize);
     aclrtMemcpy(srcDevice, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTScatterMaskTestCase<T, DST_ROW, DST_COL, SRC_ROW, SRC_COL, PATTERN>(dstDevice, srcDevice, stream);
+    aclrtMemset(dstDevice, dstSize, 0, dstSize);
+    launchTScatterMaskTestCase<T, DST_ROW, DST_COL, SRC_ROW, SRC_COL, PATTERN, SRC_VALID_COL>(
+        dstDevice, srcDevice, stream);
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstSize, dstDevice, dstSize, ACL_MEMCPY_DEVICE_TO_HOST);
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstSize);
@@ -101,6 +106,36 @@ TEST_F(TCOLSCATTERTest, case_mask_half_16x64_32x128_P1010)
 TEST_F(TCOLSCATTERTest, case_mask_half_16x64_32x128_P0101)
 {
     test_scatter_mask<uint16_t, pto::MaskPattern::P0101, 32, 128, 16, 64>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_half_16x64_32x64_P0101)
+{
+    test_scatter_mask<uint16_t, pto::MaskPattern::P0101, 32, 64, 16, 64>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_half_16x64_32x64_P0101_valid_63)
+{
+    test_scatter_mask<uint16_t, pto::MaskPattern::P0101, 32, 64, 16, 64, 63>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_int8_16x64_32x64_P0101)
+{
+    test_scatter_mask<int8_t, pto::MaskPattern::P0101, 32, 64, 16, 64>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_uint8_16x64_32x64_P0101)
+{
+    test_scatter_mask<uint8_t, pto::MaskPattern::P0101, 32, 64, 16, 64>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_int8_16x64_32x64_P0101_valid_63)
+{
+    test_scatter_mask<int8_t, pto::MaskPattern::P0101, 32, 64, 16, 64, 63>();
+}
+
+TEST_F(TCOLSCATTERTest, case_mask_uint8_16x64_32x64_P0101_valid_63)
+{
+    test_scatter_mask<uint8_t, pto::MaskPattern::P0101, 32, 64, 16, 64, 63>();
 }
 
 TEST_F(TCOLSCATTERTest, case_mask_float_16x64_32x128_P1010)
