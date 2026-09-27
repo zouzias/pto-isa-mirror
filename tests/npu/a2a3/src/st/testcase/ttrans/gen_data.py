@@ -20,8 +20,13 @@ def gen_golden_trans_data(case_name, param):
 
     H, W = [param.tile_row, param.tile_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
-    src = np.random.randint(1, 10, size=[H, W]).astype(dtype)
-    golden = src.transpose((1, 0)).astype(dtype)
+    if W == 1:
+        src = np.zeros([H, 32 // np.dtype(dtype).itemsize], dtype=dtype)
+        src[:, 0] = np.random.randint(1, 10, size=H).astype(dtype)
+        golden = src[:, :1].transpose((1, 0)).astype(dtype)
+    else:
+        src = np.random.randint(1, 10, size=[H, W]).astype(dtype)
+        golden = src.transpose((1, 0)).astype(dtype)
     output = np.zeros([W, H]).astype(dtype)
     for h in range(H):
         for w in range(W):
@@ -116,6 +121,10 @@ if __name__ == "__main__":
         TTRANSParams(np.int8, 64, 64, 22, 63),
         TTRANSParams(np.float32, 8, 8, 8, 8),
         TTRANSParams(np.float16, 128, 128, 64, 64),
+        TTRANSParams(np.float32, 4096, 1, 4096, 1),
+        TTRANSParams(np.float32, 4080, 1, 4080, 1),
+        TTRANSParams(np.float16, 4096, 1, 4096, 1),
+        TTRANSParams(np.float16, 4080, 1, 4080, 1),
     ]
 
     for i, param in enumerate(case_params_list):

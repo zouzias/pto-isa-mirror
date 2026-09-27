@@ -27,7 +27,7 @@ __global__ AICORE void runTTRANS(__gm__ T __out__* out, __gm__ T __in__* src, in
     using GlobalDataDst = GlobalTensor<T, DynShapeDst, DynStrideDst>;
 
     constexpr int srcTileH = tRows;
-    constexpr int srcTileW = tCols;
+    constexpr int srcTileW = (tCols == 1) ? BLOCK_BYTE_SIZE / sizeof(T) : tCols;
     constexpr int dstTileH = tCols;
     constexpr int dstTileW =
         (tRows * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE / sizeof(T); // 104
@@ -53,10 +53,28 @@ __global__ AICORE void runTTRANS(__gm__ T __out__* out, __gm__ T __in__* src, in
     TASSIGN(dstTile, alignedSrcTileSize);
     TASSIGN(tmpTile, alignedSrcTileSize + alignedDstTileSize);
 
-    GlobalDataSrc srcGlobal(src, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, tCols, 1));
+    GlobalDataSrc srcGlobal(src, pto::Shape(1, 1, 1, vRows, srcTileW), pto::Stride(1, 1, 1, srcTileW, 1));
     GlobalDataDst dstGlobal(out, pto::Shape(1, 1, 1, vCols, vRows), pto::Stride(1, 1, 1, tRows, 1));
 
-    TLOAD(srcTile, srcGlobal);
+    if constexpr (tCols == 1) {
+        constexpr int loadRows = (tRows == 4096) ? 2048 : tRows;
+        using TileDataLoad = Tile<TileType::Vec, T, loadRows, srcTileW, BLayout::RowMajor, -1, -1>;
+        TileDataLoad srcLoad(loadRows, srcTileW);
+        if constexpr (tRows == 4096) {
+            for (int block = 0; block < 2; ++block) {
+                TASSIGN(srcLoad, block * loadRows * srcTileW * sizeof(T));
+                GlobalDataSrc srcLoadGlobal(
+                    src + block * loadRows * srcTileW, pto::Shape(1, 1, 1, loadRows, srcTileW),
+                    pto::Stride(1, 1, 1, srcTileW, 1));
+                TLOAD(srcLoad, srcLoadGlobal);
+            }
+        } else {
+            TASSIGN(srcLoad, 0);
+            TLOAD(srcLoad, srcGlobal);
+        }
+    } else {
+        TLOAD(srcTile, srcGlobal);
+    }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -99,6 +117,10 @@ template void LaunchTTRANS<uint8_t, 32, 32, 32, 32>(uint8_t* out, uint8_t* src, 
 template void LaunchTTRANS<uint8_t, 64, 64, 22, 63>(uint8_t* out, uint8_t* src, void* stream);
 template void LaunchTTRANS<float, 8, 8, 8, 8>(float* out, float* src, void* stream);
 template void LaunchTTRANS<aclFloat16, 128, 128, 64, 64>(aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTTRANS<float, 4096, 1, 4096, 1>(float* out, float* src, void* stream);
+template void LaunchTTRANS<float, 4080, 1, 4080, 1>(float* out, float* src, void* stream);
+template void LaunchTTRANS<aclFloat16, 4096, 1, 4096, 1>(aclFloat16* out, aclFloat16* src, void* stream);
+template void LaunchTTRANS<aclFloat16, 4080, 1, 4080, 1>(aclFloat16* out, aclFloat16* src, void* stream);
 
 // Multi-dim transpose: [D0, D1, H, W] -> [D0, D1, W, H].
 // TLOAD/TSTORE one D0 plane at a time (fits UB for [16,16,16,16]); TTRANS runs in the D1 loop.
