@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/tile_offsets.hpp"
 #include "pto/cpu/MXTypes.hpp"
 #include "pto/common/debug.h"
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <type_traits>
@@ -165,6 +166,74 @@ inline T from_double_value(double val)
     }
 }
 
+template <typename S>
+inline float convert_integral_to_fp32(S val, RoundMode mode)
+{
+    static_assert(std::is_integral_v<S> && sizeof(S) <= sizeof(uint64_t));
+    static_assert(
+        std::numeric_limits<float>::is_iec559 && std::numeric_limits<float>::digits == 24 &&
+        std::numeric_limits<float>::max_exponent == 128);
+
+    bool negative = false;
+    uint64_t magnitude = 0;
+    if constexpr (std::is_signed_v<S>) {
+        const int64_t signedValue = static_cast<int64_t>(val);
+        negative = signedValue < 0;
+        magnitude = negative ? static_cast<uint64_t>(-(signedValue + 1)) + 1 : static_cast<uint64_t>(signedValue);
+    } else {
+        magnitude = static_cast<uint64_t>(val);
+    }
+
+    if (magnitude == 0) {
+        return 0.0f;
+    }
+
+    constexpr int kFloatPrecision = std::numeric_limits<float>::digits;
+    int exponent = static_cast<int>(std::bit_width(magnitude)) - 1;
+    if (exponent < kFloatPrecision) {
+        return static_cast<float>(val);
+    }
+
+    const int shift = exponent - (kFloatPrecision - 1);
+    uint64_t significand = magnitude >> shift;
+    const uint64_t remainder = magnitude & ((uint64_t{1} << shift) - 1);
+    const uint64_t halfway = uint64_t{1} << (shift - 1);
+
+    bool increment = false;
+    switch (mode) {
+        case RoundMode::CAST_CEIL:
+            increment = !negative && remainder != 0;
+            break;
+        case RoundMode::CAST_ROUND:
+            increment = remainder >= halfway;
+            break;
+        case RoundMode::CAST_FLOOR:
+            increment = negative && remainder != 0;
+            break;
+        case RoundMode::CAST_TRUNC:
+            break;
+        case RoundMode::CAST_RINT:
+        default:
+            increment = remainder > halfway || (remainder == halfway && (significand & 1) != 0);
+            break;
+    }
+
+    if (increment) {
+        ++significand;
+        if (significand == (uint64_t{1} << kFloatPrecision)) {
+            significand >>= 1;
+            ++exponent;
+        }
+    }
+
+    constexpr uint32_t kExponentBias = 127;
+    constexpr uint32_t kFractionMask = (uint32_t{1} << (kFloatPrecision - 1)) - 1;
+    const uint32_t sign = negative ? uint32_t{1} << 31 : 0;
+    const uint32_t exponentBits = static_cast<uint32_t>(exponent + kExponentBias) << (kFloatPrecision - 1);
+    const uint32_t fractionBits = static_cast<uint32_t>(significand) & kFractionMask;
+    return std::bit_cast<float>(sign | exponentBits | fractionBits);
+}
+
 template <typename D, typename S>
 inline D convert_value(S val, RoundMode mode, SaturationMode satMode = SaturationMode::OFF)
 {
@@ -196,6 +265,8 @@ inline D convert_value(S val, RoundMode mode, SaturationMode satMode = Saturatio
             }
             return static_cast<D>(dval);
         }
+    } else if constexpr (std::is_integral_v<S> && std::is_same_v<D, float>) {
+        return convert_integral_to_fp32(val, mode);
     } else if constexpr (std::is_integral_v<S> && is_float_like_v<D>) {
         return static_cast<D>(static_cast<double>(val));
     } else {
