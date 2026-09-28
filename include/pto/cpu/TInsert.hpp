@@ -68,8 +68,7 @@ PTO_INTERNAL void TINSERT_IMPL(
     constexpr bool useRelu = reluMode == ReluPreMode::NormalRelu;
     constexpr QuantMode_t quantMode = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
 
-    size_t quantVectorSize = SrcTileData::isRowMajor ? src.GetValidCol() : src.GetValidRow();
-    std::vector<uint64_t> scalars(quantVectorSize, preQuantScalar);
+    std::vector<uint64_t> scalars(src.GetValidCol(), preQuantScalar);
 
     TInsert_Impl<DstTileData, SrcTileData, quantMode, useRelu>(dst, src, indexRow, indexCol, scalars);
 }
