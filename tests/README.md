@@ -4,6 +4,10 @@ Tests and examples for PTO Tile Lib, covering both CPU simulation and NPU (inclu
 
 ## Test Entry Points
 
+> All ST suites (CPU / NPU / Comm / CostModel) are built on GoogleTest. A system
+> installation is preferred and required for the NPU suites; see
+> [Prerequisites: GTest](#prerequisites-gtest) below.
+
 Common test entry points:
 
 - Full CPU Simulator run: `python3 tests/run_cpu.py --clean --verbose`
@@ -46,6 +50,25 @@ Common test entry points:
 - `run_costmodel_tests.sh`: Cost model one-click script
 - `validate_op_coverage.py`: Operator coverage validation script
 - `validate_testcase_names.py`: Testcase name validation script
+
+## Prerequisites: GTest
+
+All ST suites use GoogleTest:
+
+- **CPU Simulator / CostModel ST** prefer a system GTest (`libgtest-dev`) and fall
+  back to fetching googletest v1.14.0 automatically at configure time when it is
+  missing.
+- **NPU / Comm ST** are compiled with the custom `bisheng` compiler and **require a
+  system GTest** (the nested googletest build cannot be reused there, so CMake
+  fails with an explicit error if GTest is missing).
+
+```bash
+# Ubuntu / Debian
+sudo apt install libgtest-dev
+
+# CentOS / RHEL / EulerOS
+sudo yum install gtest-devel
+```
 
 ## Communication Tests (Comm ST)
 

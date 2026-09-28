@@ -34,14 +34,28 @@ set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
-find_package(GTest REQUIRED)
+# NPU ST is compiled with the custom bisheng compiler, which cannot host the
+# nested googletest subproject used by the CPU/CostModel suites, so a system
+# GTest is required (see tests/README.md, Prerequisites: GTest).
+find_package(GTest QUIET)
+if (NOT GTest_FOUND)
+    message(FATAL_ERROR
+        "GTest not found. NPU ST requires a system GTest; install it with "
+        "'sudo apt install libgtest-dev' (Debian/Ubuntu) or "
+        "'sudo yum install gtest-devel' (CentOS/RHEL/EulerOS), "
+        "or see tests/README.md (Prerequisites: GTest)."
+    )
+endif()
 
 set(PTO_GLIBCXX_USE_CXX11_ABI "auto" CACHE STRING "Force _GLIBCXX_USE_CXX11_ABI (auto/0/1) for linking with system libs such as GTest.")
 set_property(CACHE PTO_GLIBCXX_USE_CXX11_ABI PROPERTY STRINGS auto 0 1)
 if (PTO_GLIBCXX_USE_CXX11_ABI STREQUAL "auto")
     if (UNIX AND NOT APPLE AND TARGET GTest::gtest AND (CMAKE_NM OR EXISTS "/usr/bin/nm"))
+        get_target_property(_pto_gtest_imported GTest::gtest IMPORTED)
         get_target_property(_pto_gtest_loc GTest::gtest IMPORTED_LOCATION)
-        if (NOT _pto_gtest_loc)
+        if (NOT _pto_gtest_imported)
+            unset(_pto_gtest_loc)
+        elseif (NOT _pto_gtest_loc)
             get_target_property(_pto_gtest_loc GTest::gtest LOCATION)
         endif()
         if (_pto_gtest_loc AND EXISTS "${_pto_gtest_loc}")
@@ -53,6 +67,7 @@ if (PTO_GLIBCXX_USE_CXX11_ABI STREQUAL "auto")
                 set(PTO_GLIBCXX_USE_CXX11_ABI "0" CACHE STRING "" FORCE)
             endif()
         endif()
+        unset(_pto_gtest_imported)
         unset(_pto_gtest_loc)
         unset(_pto_gtest_is_abi1)
     endif()
