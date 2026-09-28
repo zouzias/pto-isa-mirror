@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -589,6 +590,82 @@ void checkAccToMatInsert()
     }
 }
 } // namespace
+
+// The scalar pre-quant path builds a per-column quant scalar vector sized by the
+// source valid columns. A ColMajor source (isRowMajor == false) with more valid
+// columns than rows previously sized the vector by GetValidRow(), so every column
+// past the row count read out of bounds. validCols > validRows below triggers it.
+namespace {
+template <typename SrcT, typename DstT, int IdxRow = 0, int IdxCol = 0, bool ApplyRelu = false>
+void checkScalarPreQuantColMajor()
+{
+    NPU_MEMORY_INIT(NPUArch::A5);
+    constexpr int SRC_ROWS = 32;
+    constexpr int SRC_COLS = 64;
+    constexpr int VALID_ROWS = 16;
+    constexpr int VALID_COLS = 48;
+    using SrcTile = Tile<
+        TileType::Vec, SrcT, SRC_ROWS, SRC_COLS, BLayout::ColMajor, VALID_ROWS, VALID_COLS, SLayout::RowMajor, 512>;
+    using DstTile =
+        Tile<TileType::Mat, DstT, SRC_ROWS, SRC_COLS, BLayout::RowMajor, SRC_ROWS, SRC_COLS, SLayout::NoneBox, 512>;
+
+    auto srcValue = [](int row, int col) { return static_cast<SrcT>(row * 4 + col * 2 - 60); };
+
+    SrcTile src;
+    DstTile dst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    std::fill_n(src.data(), SRC_ROWS * SRC_COLS, 0);
+    std::fill_n(dst.data(), SRC_ROWS * SRC_COLS, static_cast<DstT>(-1));
+    for (int row = 0; row < VALID_ROWS; ++row) {
+        for (int col = 0; col < VALID_COLS; ++col) {
+            src.SetElement(row, col, srcValue(row, col));
+        }
+    }
+
+    float scale = 0.5f;
+    uint64_t scalar = 0;
+    std::memcpy(&scalar, &scale, sizeof(float));
+    scalar |= static_cast<uint64_t>(1) << 46; // signed output range for integer destinations
+
+    if constexpr (ApplyRelu) {
+        TINSERT<DstTile, SrcTile, ReluPreMode::NormalRelu>(
+            dst, src, scalar, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    } else {
+        TINSERT(dst, src, scalar, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    }
+
+    constexpr float HALF_MAX = 65504.0f;
+    for (int row = 0; row < SRC_ROWS; ++row) {
+        for (int col = 0; col < SRC_COLS; ++col) {
+            const bool inWindow =
+                row >= IdxRow && row < IdxRow + VALID_ROWS && col >= IdxCol && col < IdxCol + VALID_COLS;
+            if (inWindow) {
+                const float scaled = static_cast<float>(srcValue(row - IdxRow, col - IdxCol)) * scale;
+                float expected = 0.0f;
+                if constexpr (std::is_same_v<DstT, int8_t>) {
+                    expected = std::clamp(std::rint(scaled), -128.0f, 127.0f);
+                } else {
+                    expected = std::clamp(scaled, -HALF_MAX, HALF_MAX);
+                }
+                if constexpr (ApplyRelu) {
+                    expected = expected < 0.0f ? 0.0f : expected;
+                }
+                ASSERT_EQ(expected, static_cast<float>(dst.GetElement(row, col))) << "row=" << row << " col=" << col;
+            } else {
+                ASSERT_EQ(-1.0f, static_cast<float>(dst.GetElement(row, col))) << "row=" << row << " col=" << col;
+            }
+        }
+    }
+}
+} // namespace
+
+TEST_F(TINSERTTest, ScalarPreQuantColMajorFloatToInt8) { checkScalarPreQuantColMajor<float, int8_t>(); }
+TEST_F(TINSERTTest, ScalarPreQuantColMajorFloatToHalf) { checkScalarPreQuantColMajor<float, half>(); }
+TEST_F(TINSERTTest, ScalarPreQuantColMajorInt32ToInt8) { checkScalarPreQuantColMajor<int32_t, int8_t>(); }
+TEST_F(TINSERTTest, ScalarPreQuantColMajorInt32ToHalf) { checkScalarPreQuantColMajor<int32_t, half>(); }
+TEST_F(TINSERTTest, ScalarPreQuantColMajorOffsetInsert) { checkScalarPreQuantColMajor<float, int8_t, 8, 16>(); }
+TEST_F(TINSERTTest, ScalarPreQuantColMajorRelu) { checkScalarPreQuantColMajor<int32_t, half, 0, 0, true>(); }
 
 TEST_F(TINSERTTest, Split2NullAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT2, CompactMode::Null>(); }
 TEST_F(TINSERTTest, Split4NullAlignedTail) { checkSplitAlignedTail<TInsertMode::SPLIT4, CompactMode::Null>(); }
