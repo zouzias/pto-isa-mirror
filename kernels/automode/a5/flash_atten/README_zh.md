@@ -1,10 +1,10 @@
-# Flash Attention 性能 Kernel（A5）
+# Flash Attention 性能 Kernel（A5，自动模式）
 
 ## 概览
 
-本示例演示如何使用 PTO 在 Ascend A5 平台上实现混合精度的 Flash Attention（FA）算子，包含工程结构、构建与运行方式。
+本示例演示如何使用 PTO 自动模式在 Ascend A5 平台上实现混合精度的 Flash Attention（FA）算子，包含工程结构、构建与运行方式。CMake 配置通过 `--cce-pto-auto-enable` 启用自动模式。
 
-关于 Flash Attention 算子的详细说明、优化策略和流水线编排，请参考通用版本文档：[../../common/flash_atten/README_zh.md](../../common/flash_atten/README_zh.md)
+关于算法背景和 A2/A3 手工模式参考实现，请参阅[通用 Flash Attention 文档](../../../manual/common/flash_atten/README_zh.md)。本 A5 自动模式示例的构建命令、平台配置和调度细节以当前目录中的文件为准。
 
 ## 支持的 AI 处理器
 
@@ -13,7 +13,7 @@
 ## 目录结构
 
 ```
-kernels/manual/a5/flash_atten/
+kernels/automode/a5/flash_atten/
 ├── scripts/
 │   ├── gen_data.py                  # 生成输入与 golden 输出
 │   ├── generate_cases.py            # 生成测试用例
@@ -41,7 +41,7 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 2. 运行示例：
 
 ```bash
-cd ${git_clone_path}/kernels/manual/a5/flash_atten
+cd ${git_clone_path}/kernels/automode/a5/flash_atten
 
 # 运行默认 case（与 generated_cases.* 中内置集合一致）
 bash run.sh -r npu -v Ascend910_9599
@@ -66,7 +66,7 @@ test success
 
 ## 性能
 
-本节记录该目录下手工 Flash Attention kernel 在 A5 平台上的参考性能数据。
+本节说明当前目录下 A5 自动模式 Flash Attention kernel 的性能测量情况。
 
 定义：
 - `S0`：query 序列长度（Q/O 的行数）。
@@ -75,9 +75,9 @@ test success
 - `GOps`：该 task 计数的总运算量。
 - `TFLOPS`：`GOps / time`。
 
-### 实测性能（参考）
+### 性能测量（待测）
 
-以下数据在 Ascend A5 上测得：
+以下工作负载在 Ascend A5 上的耗时和吞吐率尚未记录：
 
 | Cores | S0 | S1 | Total task time (us) | GOps | TFLOPS |
 | --- | --- | --- | --- | --- | --- |
@@ -89,9 +89,9 @@ test success
 
 ## 算子说明
 
-Flash Attention 算子的详细实现说明、数学公式、分块计算策略、流水线编排等内容，请参考：
+关于 A2/A3 手工模式参考实现中的数学公式、分块计算策略和流水线编排，请参阅：
 
-- [通用 Flash Attention 文档](../../common/flash_atten/README_zh.md)
+- [通用 Flash Attention 文档](../../../manual/common/flash_atten/README_zh.md)
 
 该文档包含：
 1. 计算流程（FlashAttention 2.0）

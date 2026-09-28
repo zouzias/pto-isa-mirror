@@ -1,8 +1,8 @@
-# TSort32
+# TSORT32
 
 ## Tile Operation Diagram
 
-![TSort32 tile operation](../figures/isa/TSort32.svg)
+![TSORT32 tile operation](../figures/isa/TSORT32.svg)
 
 ## Introduction
 
@@ -10,7 +10,7 @@ Sort each 32-element block of `src` together with the corresponding indices from
 
 ## Hardware: VBS32 (`vbitsort`)
 
-VBS32 runs on the **SFU** (not the vector pipeline). One invocation sorts `repeat` consecutive 32-element blocks, each consisting of 32 values + 32 indices packed as value-index pairs:
+VBS32 runs on the **SFU**. PTO maps `TSORT32` to `PIPE_V` for event synchronization. One invocation sorts `repeat` consecutive 32-element blocks, each consisting of 32 values + 32 indices packed as value-index pairs:
 
 ```cpp
 void vbitsort(__ubuf__ T *dst,        // sorted value-index pairs out
@@ -50,11 +50,11 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 // 3-arg: src must be 32-aligned (validCol % 32 == 0)
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
-PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &idx);
+PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx);
 
 // 4-arg: supports non-32-aligned tails (validCol % 32 != 0) via tmp padding
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
-PTO_INST RecordEvent TSort32(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp);
+PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx, TmpTileData& tmp);
 ```
 
 ## Tile Sizes & Data Types
@@ -68,26 +68,31 @@ For `src` of shape $R \times C$ (valid region), block size 32:
 | `dst` | $T$ | $R \times (2C)$ float, $R \times (4C)$ half | sorted value-index pairs (expansion below) |
 | `tmp` (4-arg only) | $T$ | see tmp-size equation below | tail-padding scratch |
 
-**`dst` expansion factor** (`typeCoef`): each input element becomes an 8-byte tuple `[value (4 B), index (4 B)]` — for `float` the value fills 4 B; for `half` the 2-B value is zero-padded to 4 B. So `dst` is always `C × 8` bytes.
+**`dst` expansion factor** (`typeCoef`): each input element becomes an 8-byte tuple `[value (4 B), index (4 B)]` — for `float` the value fills 4 B; for `half` the 2-B value is zero-padded to 4 B. The valid output occupies `C × 8` bytes per row; physical storage must also cover the padded tail block.
 
 | dtype | `dst` cols per `src` col (in dtype units) | tuple layout | bytes/tuple |
 |-------|-------------------------------------------|--------------|------------|
 | `float` | ×2 (2 float slots) | `[value_f32, index_u32]` | 8 |
 | `half` | ×4 (4 half slots) | `[value_f16, 0x0000, index_u32]` | 8 |
 
+For physical storage, let $P = \mathrm{ceil}_{32}(C)$. Allocating `src` and `idx` with $P$ columns, and `dst` with $2P$ (`float`) or $4P$ (`half`) columns, covers the full tail block and satisfies 32-byte row alignment. Set the valid columns separately to $C$ for `src`/`idx` and $2C$ or $4C$ for `dst`. The NPU reads indices and writes output for all 32 positions of the last block; padding positions are not part of the valid result.
+
 ## Constraints
 
 | Constraint | Reason |
 |------------|--------|
 | `dst`/`src` dtype = `half` or `float` (must match); `idx` = `uint32_t` | VBS32 type dispatch |
-| All tiles `TileType::Vec`, `BLayout::RowMajor` | SFU addressing |
+| All tiles `TileType::Vec`, `BLayout::RowMajor`, `SLayout::NoneBox`; `tmp` has the same dtype as `src` | contiguous row storage and matching scratch element size |
+| `src` and `dst` have the same valid row count; `idx` has that count or one broadcast row | the NPU iterates over `dst.GetValidRow()` |
 | `validCol % 32 == 0` (3-arg) | each block exactly 32 elements |
-| `validCol` arbitrary (4-arg) | tail block padded to 32 with $-\infty$ via `tmp` |
+| `validCol` arbitrary (4-arg) | tail block padded to 32 via `tmp` |
 | `repeat = validCol/32` (3-arg) or `ceil(validCol/32)` (4-arg) | VBS32 repeat count, ≤ 255 per call; larger `validCol` splits into multiple `vbitsort` calls |
 | `tmp` (4-arg) ≥ `tmpSize` elements (equation below) | holds the padded copy of the tail/row |
 | No `WaitEvents&...` / no internal event synchronization | synchronize explicitly if needed |
 
 ### `tmp` size equation (4-arg)
+
+The formula applies when `validCol % 32 != 0`; otherwise the 4-argument overload takes the aligned path without using `tmp`. One scratch row is reused for all source rows.
 
 Let $C$ = `validCol`, $b$ = `sizeof(T)` bytes, $G$ = 32 (block size). The implementation branches on whether the whole row fits `MAX_UB_TMP = 8160`; the threshold unit differs between targets:
 
@@ -102,20 +107,20 @@ $$
 - `ceil_G(C)` = $C$ rounded up to the next multiple of 32.
 - **A2A3**: the threshold is in **elements** (`srcShapeBytesPerRow / sizeof(T) <= MAX_UB_TMP`), so $C \le 8160$ regardless of dtype (float → $C \le 8160$, half → $C \le 8160$).
 - **A5**: the threshold is in **bytes** (`srcShapeBytesPerRow <= MAX_UB_TMP`), so $C \cdot b \le 8160$ (float → $C \le 2040$, half → $C \le 4080$). This is the `pto_copy_ubuf_to_ubuf` (MOV_UB_TO_UB) repeat cap = 255 blocks × 32 B.
-- Tail block = $t = C \bmod G$ elements (the trailing partial block), extended to $G$ with $-\infty$.
-- Path A ($C \cdot b \le 8160$) copies the **entire row** from its start into tmp, then pads the last 32 elements in place.
-- Path B ($C \cdot b > 8160$) copies **only the tail block** into tmp; full blocks are sorted directly from `src`.
+- Tail block = $t = C \bmod G$ elements (the trailing partial block), extended to $G$ with the padding sentinel described below.
+- Path A (within the target-specific threshold) copies the **entire row** from its start into tmp, then pads only the invalid positions in the last 32-element block.
+- Path B (above the target-specific threshold) copies **only the tail block** into tmp; full blocks are sorted directly from `src`.
 - VBS32 hard cap: `repeat ≤ REPEAT_MAX = 255` blocks per call (≤ 8160 elements); rows longer than 255 blocks are split across multiple `vbitsort` calls.
-- **UB placement:** `tmp` should be placed right after `dst` (32-B aligned), sized `ceil(C·b, 32)` bytes (equivalently `ceil(ceil(C, 32)·b, 32)` since $b \in \{2,4\}$ divides 32) — not at a fixed 8KB offset, since Path A (A2A3) needs up to ~32KB for float near the threshold ($C \le 8160$ elements = 32 KB for float).
+- **UB placement:** give `tmp` a separate, 32-byte-aligned region of at least `tmpSize * sizeof(T)` bytes. If it follows `dst`, start after the full physical output allocation, including the padded tail block. For example, `C = 100` and `T = half` require 128 scratch elements (256 bytes); rounding `C * sizeof(T)` to 32 bytes gives only 224 bytes and is insufficient.
 
 ### 4-arg tail handling
 
 When `validCol % 32 != 0`, the trailing partial block ($t = C \bmod 32$ elements) must be padded to a full 32-element block before `vbitsort`. Two paths:
 
-- **A2A3: $C \le 8160$ (elements)** / **A5: $C \cdot b \le 8160$ (bytes)** (small row): the **entire row** is copied to `tmp`, then the last 32 elements are overwritten in place with $-\infty$ padding via `vdup`; the row is sorted from `tmp`.
+- **A2A3: $C \le 8160$ (elements)** / **A5: $C \cdot b \le 8160$ (bytes)** (small row): the **entire row** is copied to `tmp`, then only the invalid positions in the last 32-element block are padded; the row is sorted from `tmp`.
 - **A2A3: $C > 8160$ (elements)** / **A5: $C \cdot b > 8160$ (bytes)** (large row): only the **tail block** is copied to `tmp` and padded; full blocks are sorted directly from `src`, only the tail is sorted from `tmp`.
 
-Padding values ($-\infty$ = `-(0.0/0.0)`) land at the bottom of the descending order. If `validCol > 32 × 255`, the row is chunked into `REPEAT_MAX`-sized groups, each sorted via a separate `vbitsort` call.
+The current A2A3 and A5 implementations use `T minVal = -(0.0 / 0.0)` as the padding sentinel. This expression produces NaN, not negative infinity; `std::numeric_limits<T>::lowest()` is a finite value and is not equivalent either. Padding positions must not be treated as valid output pairs. If `validCol > 32 × 255`, the row is chunked into `REPEAT_MAX`-sized groups, each sorted via a separate `vbitsort` call.
 
 ## Assembly Syntax
 
@@ -133,23 +138,49 @@ pto.tsort32 ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ## Examples
 
+The following kernel skeletons show manual UB assignment and the two overloads; input loads, output stores, and pipeline synchronization are omitted. Load the valid `src`/`idx` data and synchronize its producer before each `TSORT32` call, then synchronize before consuming `dst`. The UB regions below are 32-byte aligned and do not overlap.
+
 ```cpp
+#include <cstdint>
 #include <pto/pto-inst.hpp>
 using namespace pto;
 
-// 32-aligned: single block per row
-using SrcT = Tile<TileType::Vec, float, 1, 32>;
-using IdxT = Tile<TileType::Vec, uint32_t, 1, 32>;
-using DstT = Tile<TileType::Vec, float, 1, 64>;   // 2× src cols (float)
-SrcT src; IdxT idx; DstT dst;
-TSort32(dst, src, idx);
+extern "C" __global__ AICORE void exampleAligned()
+{
+    // 32-aligned: single block per row
+    using SrcTile = Tile<TileType::Vec, float, 1, 32>;
+    using IdxTile = Tile<TileType::Vec, uint32_t, 1, 32>;
+    using DstTile = Tile<TileType::Vec, float, 1, 64>; // 2× srcTile cols (float)
+    SrcTile srcTile;
+    IdxTile idxTile;
+    DstTile dstTile;
+    TASSIGN(srcTile, 0x0000);
+    TASSIGN(idxTile, 0x0080);
+    TASSIGN(dstTile, 0x0100);
+    // Load srcTile and idxTile, then synchronize before sorting.
+    TSORT32(dstTile, srcTile, idxTile);
+}
 
-// Non-32-aligned tail: 4-arg with tmp
-using SrcT2 = Tile<TileType::Vec, half, 1, 100>;
-using IdxT2 = Tile<TileType::Vec, uint32_t, 1, 100>;
-using DstT2 = Tile<TileType::Vec, half, 1, 400>;  // 4× src cols (half)
-using TmpT  = Tile<TileType::Vec, half, 1, 128>;  // ≥ ceil32(100)=128
-TSort32(dst2, src2, idx2, tmp);
+extern "C" __global__ AICORE void exampleTail()
+{
+    // 100 valid columns, 128 physical columns: 4-arg with tmpTile
+    using SrcTile = Tile<TileType::Vec, half, 1, 128, BLayout::RowMajor, 1, 100>;
+    using IdxTile = Tile<TileType::Vec, uint32_t, 1, 128, BLayout::RowMajor, 1, 100>;
+    // Each half value-index pair occupies four half elements.
+    using DstTile = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, 1, 400>;
+    // Scratch covers ceil32(100) = 128 elements.
+    using TmpTile = Tile<TileType::Vec, half, 1, 128>;
+    SrcTile srcTile;
+    IdxTile idxTile;
+    DstTile dstTile;
+    TmpTile tmpTile;
+    TASSIGN(srcTile, 0x0200);
+    TASSIGN(idxTile, 0x0300);
+    TASSIGN(dstTile, 0x0500);
+    TASSIGN(tmpTile, 0x0900);
+    // Load srcTile and idxTile, then synchronize before sorting.
+    TSORT32(dstTile, srcTile, idxTile, tmpTile);
+}
 ```
 
 ## ASM Form Examples

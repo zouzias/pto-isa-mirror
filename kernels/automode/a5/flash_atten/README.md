@@ -1,10 +1,10 @@
-# Flash Attention Performance Kernel (A5)
+# Flash Attention Performance Kernel (A5, Auto Mode)
 
 ## Overview
 
-This example demonstrates how to implement a mixed-precision Flash Attention (FA) operator using PTO on the Ascend A5 platform, including project setup, build, and execution.
+This example demonstrates how to implement a mixed-precision Flash Attention (FA) operator using PTO auto mode on the Ascend A5 platform, including project setup, build, and execution. Its CMake configuration enables auto mode with `--cce-pto-auto-enable`.
 
-For detailed operator description, optimization strategies, and pipeline orchestration of Flash Attention, please refer to the common version documentation: [../../common/flash_atten/README.md](../../common/flash_atten/README.md)
+For algorithm background and a manual A2/A3 implementation reference, see the [common Flash Attention documentation](../../../manual/common/flash_atten/README.md). Build commands, platform-specific configuration, and scheduling details for this A5 auto-mode example are defined in this directory.
 
 ## Supported AI Processors
 
@@ -13,7 +13,7 @@ For detailed operator description, optimization strategies, and pipeline orchest
 ## Directory Layout
 
 ```
-kernels/manual/a5/flash_atten/
+kernels/automode/a5/flash_atten/
 ├── scripts/
 │   ├── gen_data.py                  # Generates input and golden output
 │   ├── generate_cases.py            # Generates test cases
@@ -41,7 +41,7 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 2. Run the example:
 
 ```bash
-cd ${git_clone_path}/kernels/manual/a5/flash_atten
+cd ${git_clone_path}/kernels/automode/a5/flash_atten
 
 # Run default cases (same set baked into generated_cases.*)
 bash run.sh -r npu -v Ascend910_9599
@@ -66,7 +66,7 @@ test success
 
 ## Performance
 
-This section records reference performance numbers for the manual Flash Attention kernel on the A5 platform in this directory.
+This section covers performance measurements for the A5 auto-mode Flash Attention kernel in this directory.
 
 Definitions:
 - `S0`: query sequence length (rows of Q/O).
@@ -75,9 +75,9 @@ Definitions:
 - `GOps`: total operations counted for the task.
 - `TFLOPS`: `GOps / time`.
 
-### Measured Performance (Reference)
+### Performance Measurements (Pending)
 
-The following data were collected on Ascend A5:
+Timing and throughput for the following workloads have not yet been recorded on Ascend A5:
 
 | Cores | S0 | S1 | Total task time (us) | GOps | TFLOPS |
 | --- | --- | --- | --- | --- | --- |
@@ -89,9 +89,9 @@ The following data were collected on Ascend A5:
 
 ## Operator Description
 
-For detailed implementation notes, mathematical formulas, tiling strategies, and pipeline orchestration of the Flash Attention operator, please refer to:
+For mathematical formulas, tiling strategies, and pipeline orchestration in the manual A2/A3 reference implementation, see:
 
-- [Common Flash Attention Documentation](../../common/flash_atten/README.md)
+- [Common Flash Attention Documentation](../../../manual/common/flash_atten/README.md)
 
 The documentation includes:
 1. Computation Flow (FlashAttention 2.0)
