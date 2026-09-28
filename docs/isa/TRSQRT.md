@@ -15,25 +15,6 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}_{i,j} = \frac{1}{\sqrt{\mathrm{src}_{i,j}}} $$
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst = trsqrt %src : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -99,31 +80,4 @@ void example_manual() {
   TASSIGN(dst, 0x2000);
   TRSQRT(dst, src);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = trsqrt %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

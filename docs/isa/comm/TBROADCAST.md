@@ -16,15 +16,6 @@ $$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k
 
 where $N$ is the number of ranks and `root` is the calling NPU.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-tbroadcast %group, %src : (!pto.group<...>, !pto.memref<...>)
-```
-Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
-
 ## Template Parameter
 
 - `engine`:

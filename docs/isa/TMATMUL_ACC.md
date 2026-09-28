@@ -23,25 +23,6 @@ $$ \mathrm{C1}_{i,j} = \mathrm{C0}_{i,j} + \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cd
 
 `C0` is the initial accumulator value for the fused multiply-accumulate sequence. It is not added after computing an independent dot product from zero; this distinction can affect floating-point rounding across K tiles.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%acc1 = tmatmul.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%c_out = pto.tmatmul.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tmatmul.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -108,31 +89,4 @@ void example_manual() {
   TASSIGN(c1, 0x4000);
   TMATMUL_ACC(c1, c0, a, b);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%c_out = pto.tmatmul.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%c_out = pto.tmatmul.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%acc1 = tmatmul.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tmatmul.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
 ```

@@ -48,20 +48,6 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 - **64-bit types (A5)**: use a RowMajor Vec tile with physical `Cols % 4 == 0`. Only the valid region is written; padding is preserved and an empty valid region causes no writes.
 - **Diagonal range (A5)**: the full `int` range is supported, including `INT_MIN` / `INT_MAX`. Diagonals outside the matrix produce all-zero or all-one results according to the math above.
 
-## Assembly Syntax
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## Examples
 
 ```cpp
@@ -82,29 +68,4 @@ void example_upper() {
   TASSIGN(dst, 0x1000);
   TTRI<TileT, 1>(dst, /*diagonal=*/-1);  // upper triangular
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.ttri {isUpperOrLower = 0} : i32 -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# pto.tassign %arg0, @tile(0x1000)
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
 ```

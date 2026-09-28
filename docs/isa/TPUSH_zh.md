@@ -258,7 +258,3 @@ AICORE void example_globaldata(__gm__ void *fifoMem)
     TPUSH<Pipe, SlotGlobal, TileSplitAxis::TILE_NO_SPLIT>(pipe, slot);
 }
 ```
-
-## ASM形式示例
-
-当前公开的汇编参考尚未为 `TPUSH` 定义稳定的PTO-AS写法。手写CV FIFO程序时请使用C++ intrinsic形式。

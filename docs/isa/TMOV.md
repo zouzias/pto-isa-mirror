@@ -109,52 +109,6 @@ Only the **X→ZZ** transforms take a `tmp` operand (the 3-arg overload). ND→Z
 the `vgather2` index buffer; DN→ZZ accepts it for interface parity but does not access it
 (the `vsstb` scatter needs no scratch). ND→NZ has no `tmp`.
 
-## Assembly Syntax
-
-The PTO AS design recommends splitting `TMOV` into a family of ops:
-
-```text
-%left  = tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
-%right = tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
-%bias  = tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
-%scale = tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
-%vec   = tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
-%v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
-### IR Level 1 (SSA)
-
-```text
-%left  = pto.tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
-%right = pto.tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
-%bias  = pto.tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
-%scale = pto.tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
-%vec   = pto.tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
-%v1    = pto.tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
-```
-
-### IR Level 2 (DPS)
-
-```text
-pto.tmov.m2l ins(%mat : !pto.tile_buf<...>) outs(%left : !pto.tile_buf<...>)
-pto.tmov.m2r ins(%mat : !pto.tile_buf<...>) outs(%right : !pto.tile_buf<...>)
-pto.tmov.m2b ins(%mat : !pto.tile_buf<...>) outs(%bias : !pto.tile_buf<...>)
-pto.tmov.m2s ins(%mat : !pto.tile_buf<...>) outs(%scale : !pto.tile_buf<...>)
-pto.tmov.a2v ins(%acc : !pto.tile_buf<...>) outs(%vec : !pto.tile_buf<...>)
-pto.tmov.v2v ins(%v0 : !pto.tile_buf<...>) outs(%v1 : !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
@@ -432,31 +386,4 @@ void example_manual() {
   TASSIGN(left, 0x2000);
   TMOV(left, mat);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-```
-
-### PTO Assembly Form
-
-```text
-%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

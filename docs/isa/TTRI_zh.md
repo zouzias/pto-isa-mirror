@@ -24,20 +24,6 @@ $$
 \mathrm{dst}_{i,j} = \begin{cases}0 & j < i + d \\\\ 1 & \text{否则}\end{cases}
 $$
 
-## 汇编语法
-
-### AS Level 1（SSA）
-
-```text
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-```
-
-### AS Level 2（DPS）
-
-```text
-pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -82,29 +68,4 @@ void example_upper() {
   TASSIGN(dst, 0x1000);
   TTRI<TileT, 1>(dst, /*diagonal=*/-1);  // 上三角
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.ttri {isUpperOrLower = 0} : i32 -> !pto.tile<...>
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# pto.tassign %arg0, @tile(0x1000)
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = pto.ttri %diag : i32 -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.ttri ins(%diag : i32) outs(%dst : !pto.tile_buf<...>)
 ```
