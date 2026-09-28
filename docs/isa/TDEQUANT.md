@@ -74,14 +74,6 @@ TDEQUANT runs on the vector pipeline (`PIPE_V`) and needs no `tmp` scratch tile 
 
 TDEQUANT is a TEPL (Tile Elementwise Pipeline) complex-transform instruction:
 
-```text
-BSTART.TEPL TDEQUANT, DataType +
-B.DATR(optional) +
-B.DIM LB0 +
-B.DIM (LB1/LB2 for 2D) +
-B.IOT
-```
-
 | Field | Value |
 |-------|-------|
 | Mode | 3 (complex transform) |

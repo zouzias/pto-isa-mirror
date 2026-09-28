@@ -27,25 +27,6 @@ $$ \mathrm{dst1}_{i, j} = \mathrm{interleaved}_{\mathrm{validCols} + j}, \quad 0
 
 Where `validRows = dst0.GetValidRow()` and `validCols = dst0.GetValidCol()`.
 
-## Assembly Syntax
-
-Synchronous form:
-
-```text
-%dst0, %dst1 = tinterleave %src0, %src1 : !pto.tile<...>
-```
-
-### AS Level 1 (SSA)
-
-```text
-%dst0, %dst1 = pto.tinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.tinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -104,35 +85,6 @@ void example_manual() {
 
     TINTERLEAVE(dst1, dst0, src1, src0);
 }
-```
-
-## ASM Form Examples
-
-### Auto Mode
-
-```text
-# Auto mode: compiler/runtime-managed placement and scheduling.
-%dst0, %dst1 = pto.tinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### Manual Mode
-
-```text
-# Manual mode: resources must be bound explicitly before issuing the instruction.
-# Optional for tile operands:
-# pto.tassign %src0, @tile(0x1000)
-# pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst0, @tile(0x3000)
-# pto.tassign %dst1, @tile(0x4000)
-%dst0, %dst1 = pto.tinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO Assembly Form
-
-```text
-%dst0, %dst1 = tinterleave %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
 ## Related Instructions

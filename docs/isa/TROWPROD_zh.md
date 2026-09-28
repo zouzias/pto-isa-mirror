@@ -14,28 +14,6 @@
 
 $$ \mathrm{dst}_{i,0} = \prod_{j=0}^{C-1} \mathrm{src}_{i,j} $$
 
-## 汇编语法
-
-同步形式：
-
-```text
-%dst = trowprod %src : !pto.tile<...> -> !pto.tile<...>
-```
-
-降级可能引入内部临时tile；C++内建函数需要显式的 `tmp` 操作数。
-
-### AS Level 1 (SSA)
-
-```text
-%dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### AS Level 2 (DPS)
-
-```text
-pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
-```
-
 ## C++内建函数
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -125,31 +103,4 @@ void example_manual() {
   TASSIGN(tmp, 0x3000);
   TROWPROD(dst, src, tmp);
 }
-```
-
-## ASM形式示例
-
-### Auto模式
-
-```text
-# Auto 模式：编译器/运行时管理的放置和调度。
-%dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### Manual模式
-
-```text
-# Manual 模式：在发出指令前显式绑定资源。
-# Tile 操作数可选：
-# pto.tassign %arg0, @tile(0x1000)
-# pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-```
-
-### PTO汇编形式
-
-```text
-%dst = trowprod %src : !pto.tile<...> -> !pto.tile<...>
-# AS Level 2 (DPS)
-pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

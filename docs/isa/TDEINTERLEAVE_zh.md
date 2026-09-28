@@ -39,48 +39,6 @@ $$ \mathrm{dst1}_{i, k} = \mathrm{src}_{i, 2k+1}, \quad 0 \le k < \mathrm{halfVa
 
 > **注意**：单源形式要求源Tile的行宽至少为 `2 × ElementsPerRepeat` 个元素（其中 `ElementsPerRepeat = 256 / sizeof(T)`，即 `2 × sregLower`），以确保每次重复中加载的两个相邻寄存器大小的数据块不会跨越行边界。
 
-## 汇编语法
-
-同步形式（双源）：
-
-```text
-%dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
-```
-
-同步形式（单源）：
-
-```text
-%dst0, %dst1 = tdeinterleave %src : !pto.tile<...>
-```
-
-### AS Level 1（SSA）
-
-双源形式：
-
-```text
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-单源形式：
-
-```text
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### AS Level 2（DPS）
-
-双源形式：
-
-```text
-pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
-单源形式：
-
-```text
-pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-```
-
 ## C++内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -183,49 +141,6 @@ void example_manual_single_src() {
 
     TDeInterleave(dst1, dst0, src);
 }
-```
-
-## 汇编示例（ASM）
-
-### 自动模式
-
-```text
-# 自动模式：由编译器/运行时负责资源放置与调度。
-# 双源形式：
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-# 单源形式：
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### 手动模式
-
-```text
-# 手动模式：先显式绑定资源，再发射指令。
-# 双源形式：
-# pto.tassign %src0, @tile(0x1000)
-# pto.tassign %src1, @tile(0x2000)
-# pto.tassign %dst0, @tile(0x3000)
-# pto.tassign %dst1, @tile(0x4000)
-%dst0, %dst1 = pto.tdeinterleave %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-# 单源形式：
-# pto.tassign %src,  @tile(0x1000)
-# pto.tassign %dst0, @tile(0x2000)
-# pto.tassign %dst1, @tile(0x3000)
-%dst0, %dst1 = pto.tdeinterleave %src : (!pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
-```
-
-### PTO汇编形式
-
-```text
-# 双源形式：
-%dst0, %dst1 = tdeinterleave %src0, %src1 : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdeinterleave ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
-
-# 单源形式：
-%dst0, %dst1 = tdeinterleave %src : !pto.tile<...>
-# AS Level 2 (DPS)
-pto.tdeinterleave ins(%src : !pto.tile_buf<...>) outs(%dst0, %dst1 : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
 ## 相关指令
