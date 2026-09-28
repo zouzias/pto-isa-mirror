@@ -36,7 +36,18 @@ set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
-find_package(GTest REQUIRED)
+# NPU ST is compiled with the custom bisheng compiler, which cannot host the
+# nested googletest subproject used by the CPU/CostModel suites, so a system
+# GTest is required (see tests/README.md, Prerequisites: GTest).
+find_package(GTest QUIET)
+if (NOT GTest_FOUND)
+    message(FATAL_ERROR
+        "GTest not found. NPU ST requires a system GTest; install it with "
+        "'sudo apt install libgtest-dev' (Debian/Ubuntu) or "
+        "'sudo yum install gtest-devel' (CentOS/RHEL/EulerOS), "
+        "or see tests/README.md (Prerequisites: GTest)."
+    )
+endif()
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
