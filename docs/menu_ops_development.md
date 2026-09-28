@@ -1,7 +1,7 @@
 # PTO虚拟指令集
 
 - [总体介绍](menu/overview_zh.md)
-  - [PTO虚拟指令集的编程模型&机器模型](menu/programming_model_zh.md)
+  - [编程模型&机器模型](menu/programming_model_zh.md)
     - [PTO 机器模型](programming_model/machine_model.md)
     - [PTO 执行模型](programming_model/execution_model.md)
     - [Tile 与 Tensor View](programming_model/tile_and_tensor_view.md)
