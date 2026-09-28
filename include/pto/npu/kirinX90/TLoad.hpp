@@ -56,6 +56,7 @@ PTO_INTERNAL void TLoadInstrGm2L1(
     }
 
     constexpr uint32_t MAX_CHUNK_BYTES = UINT16_MAX / BLOCK_BYTE_SIZE * BLOCK_BYTE_SIZE;
+    const uint32_t tailPadBytes = (BLOCK_BYTE_SIZE - lenBurst % BLOCK_BYTE_SIZE) % BLOCK_BYTE_SIZE;
     for (uint16_t i = 0; i < nBurst; i++) {
         auto srcBurst = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(src) + i * (lenBurst + gmGap));
         auto dstBurst = reinterpret_cast<decltype(dst)>(
@@ -66,7 +67,10 @@ PTO_INTERNAL void TLoadInstrGm2L1(
             if (chunkBytes > UINT16_MAX) {
                 chunkBytes = MAX_CHUNK_BYTES;
             }
-            pto_copy_gm_to_cbuf_align(dstBurst, srcBurst, (uint8_t)0, 1, static_cast<uint16_t>(chunkBytes), 0, 0);
+            uint32_t chunkPadBytes = (remainingBytes == chunkBytes && tailPadBytes <= l1Gap) ? tailPadBytes : 0;
+            pto_copy_gm_to_cbuf_align(
+                dstBurst, srcBurst, (uint8_t)0, 1, static_cast<uint16_t>(chunkBytes), 0,
+                static_cast<uint16_t>(chunkPadBytes));
             srcBurst = reinterpret_cast<decltype(src)>(reinterpret_cast<uintptr_t>(srcBurst) + chunkBytes);
             dstBurst = reinterpret_cast<decltype(dst)>(reinterpret_cast<uintptr_t>(dstBurst) + chunkBytes);
             remainingBytes -= chunkBytes;
