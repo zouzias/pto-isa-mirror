@@ -31,18 +31,17 @@ CV Pipe 主要描述以下问题：
 
 ## 接口
 
-CV Pipe 的接口包括：
+CV Pipe 在两种接口形态下都提供同一组语义操作，命名方式不同：
 
-- `pto.aic_initialize_pipe`
-- `pto.aiv_initialize_pipe`
-- `pto.tpush_to_aiv`
-- `pto.tpush_to_aic`
-- `pto.tpop_from_aic`
-- `pto.tpop_from_aiv`
-- `pto.tfree_from_aic`
-- `pto.tfree_from_aiv`
+| 语义 | C++ 内建接口 | IR 操作 |
+| --- | --- | --- |
+| 初始化 pipe | （由 `TPipe` 模板参数声明） | `pto.aic_initialize_pipe` / `pto.aiv_initialize_pipe` |
+| 生产者推送 | `TPUSH(Pipe&, ...)` | `pto.tpush_to_aiv` / `pto.tpush_to_aic` |
+| 消费者弹出 | `TPOP(Pipe&, ...)` | `pto.tpop_from_aic` / `pto.tpop_from_aiv` |
+| 消费后释放 | `TFREE(Pipe&, ...)` | `pto.tfree_from_aic` / `pto.tfree_from_aiv` |
+| 分配全局槽位 | `TALLOC(Pipe&, GlobalData&)` | — |
 
-这些操作采用“谁向谁发送”的命名方式，表达更直观：
+以下 IR 侧的操作名采用"谁向谁发送"的方式，方向更直观：
 
 - `tpush_to_aiv`：Cube 侧把条目推送给 Vector 侧
 - `tpush_to_aic`：Vector 侧把条目推送给 Cube 侧
@@ -84,8 +83,8 @@ CV Pipe 的接口包括：
 
 两侧对同一个 pipe 中条目的理解必须一致，例如：
 
-- 都是同一类 `tile_buf`
-- 或都对应兼容的 `tensor_view`
+- 都是同一类本地 tile 对象
+- 或都对应兼容的全局张量视图
 
 否则后续验证会失败。
 

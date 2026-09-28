@@ -19,7 +19,8 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 在上层模型中，它表示 kernel 拿到的一段全局地址入口。
 
-在 IR 中的表示是 `!pto.ptr<T>`。
+- C++ 表示：`__gm__` 指针（内核入口参数，如 `__gm__ float* in`）
+- IR 表示：`!pto.ptr<T>`
 
 它只表达“某类元素的全局地址”，不携带：
 
@@ -34,7 +35,8 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 在上层模型中，它表示“把一段全局地址按张量方式来理解”。
 
-在 IR 中的表示是 `!pto.tensor_view<...>`。
+- C++ 表示：`pto::GlobalTensor<Element, Shape, Stride, Layout>`
+- IR 表示：`!pto.tensor_view<...>`
 
 `tensor_view` 用于描述：
 
@@ -52,7 +54,8 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 在上层模型中，它表示“从整张量中取出当前这次要处理的一块”。
 
-在 IR 中的表示是 `!pto.partition_tensor_view<...>`。
+- C++ 表示：同样是 `GlobalTensor`，通过指针偏移和子形状构造（C++ 侧没有独立的分区类型，第②③层共用同一类型）
+- IR 表示：`!pto.partition_tensor_view<...>`
 
 `partition_tensor_view` 进一步把一个全局张量视图收缩到逻辑分区。它表达的是：
 
@@ -64,7 +67,7 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 - 当前 block 只处理整张量中的一块
 - 当前循环轮次只处理某个子块
-- 当前一次 `tload` / `tstore` 只对应其中一个局部区域
+- 当前一次 `TLOAD` / `TSTORE` 只对应其中一个局部区域
 
 也就是说，它回答的是“这次要处理哪一块”。
 
@@ -72,7 +75,8 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 在上层模型中，它表示“已经进入片上、可直接参与计算的局部数据块”。
 
-在 IR 中的表示是 `!pto.tile_buf<...>`。
+- C++ 表示：`pto::Tile<TileType::Loc, Element, Rows, Cols, ...>`
+- IR 表示：`!pto.tile_buf<loc=..., dtype=..., rows=..., cols=..., ...>`
 
 `tile_buf` 是本地 tile 对象，显式带有：
 
@@ -94,14 +98,31 @@ PTO 把“全局张量对象”和“片上 tile 对象”明确分成两套模�
 
 最常见的路径是：
 
-1. `ptr`
-2. `make_tensor_view`
-3. `partition_view`
-4. `tload` / `tprefetch`
-5. `tile_buf` 上的本地计算
-6. `tstore`
+| 步骤 | C++ | IR |
+| --- | --- | --- |
+| ① 全局地址 | `__gm__` 指针（内核参数） | `ptr` |
+| ② 构造全局视图 | 构造 `GlobalTensor<...>` | `make_tensor_view` |
+| ③ 切出分区 | 构造带偏移的 `GlobalTensor<...>` | `partition_view` |
+| ④ 搬到片上 | `TLOAD` | `tload` / `tprefetch` |
+| ⑤ 本地计算 | 在 `Tile<...>` 上 | 在 `tile_buf` 上 |
+| ⑥ 写回 | `TSTORE` | `tstore` |
 
-例如：
+C++ 写法：
+
+```cpp
+using GT = pto::GlobalTensor<float,
+                             pto::Shape<1,1,1,32,32>,
+                             pto::Stride<1,1,1,32,1>>;
+using TileT = pto::Tile<pto::TileType::Vec, float, 32, 32>;
+
+GT gin(in);        // ①→② 从 __gm__ 指针构造全局视图
+TileT t;           // ④ 本地 tile 对象
+TLOAD(t, gin);     // ②→④ 从全局搬到片上
+// ... 在 t 上做本地计算 ...
+TSTORE(gout, t);   // ④→② 写回
+```
+
+IR 写法：
 
 ```mlir
 %tv = pto.make_tensor_view %arg0,
@@ -152,7 +173,7 @@ PTO 正是通过这两套对象模型，把这些阶段区别稳定保留下来�
 
 ### 全局切块和本地计算要分开表达
 
-全局切块通常通过 `make_tensor_view`、`partition_view` 完成；本地计算通常发生在 `tile_buf` 上。把这两步分开写，程序会更清楚。
+全局切块通常通过构造全局张量视图（可带偏移）完成；本地计算通常发生在本地 tile 对象上。把这两步分开写，程序会更清楚。
 
 ### 让数据流路径保持直观
 
@@ -160,8 +181,8 @@ PTO 正是通过这两套对象模型，把这些阶段区别稳定保留下来�
 
 1. 从 `ptr` 构造 `tensor_view`
 2. 从 `tensor_view` 切出 `partition_tensor_view`
-3. 用 `tload` 把分区搬到 `tile_buf`
+3. 用 `TLOAD` 把数据搬到本地 tile
 4. 在 `tile_buf` 上完成局部计算
-5. 用 `tstore` 写回
+5. 用 `TSTORE` 写回
 
 越是保持这条路径清楚，后续阅读、调试和维护就越直接。

@@ -59,7 +59,7 @@ PTO 机器模型中，Core 不只是执行 tile 算子，还包含标量控制�
 - 地址计算
 - 事件与同步协调
 
-因此，PTO 程序里的标量 SSA 值与 tile SSA 值并不是两个互不相干的世界，前者通常用于驱动后者的数据选择、视图偏移和执行次序。
+因此，PTO 程序里的标量值与 tile 对象并不是两个互不相干的世界，前者通常用于驱动后者的数据选择、视图偏移和执行次序。
 
 ### 逻辑执行部件
 
@@ -96,7 +96,7 @@ PTO 机器模型中的设备执行不是“一个 kernel 单线程顺序跑完�
 - `block_idx` 通常表示当前逻辑 block 的编号
 - `subblock_idx` 通常表示 block 内更细粒度的执行参与者编号
 
-这也是为什么 `pto.get_block_idx`、`pto.get_subblock_idx` 这类运行时查询 op 会直接进入 PTO ISA。
+这也是为什么 `get_block_idx()`、`get_subblockid()` 这类运行时查询接口会直接进入 PTO ISA。
 
 ### 独立 Block 的并行性
 

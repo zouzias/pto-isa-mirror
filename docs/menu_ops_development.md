@@ -6,7 +6,7 @@
     - [PTO 执行模型](programming_model/execution_model.md)
     - [Tile 与 Tensor View](programming_model/tile_and_tensor_view.md)
     - [CV Pipe](programming_model/cv_pipe.md)
-    - [目标架构与使用差异](programming_model/architecture_notes.md)
+
   - [C++接口与IR接口区别介绍](menu/interface_comparison_zh.md)
 - [PTO虚拟指令集（C++）](menu/pto_isa_cpp_zh.md)
   - [头文件和库文件说明](menu/header_and_library_zh.md)
