@@ -22,9 +22,10 @@ template <
     uint32_t stepKa, uint32_t stepKb, uint32_t stepN>
 void GemmE2E()
 {
+    constexpr size_t cElementCount = m * n;
     size_t aFileSize = m * k * sizeof(U); // uint16_t represent half
     size_t bFileSize = k * n * sizeof(S); // uint16_t represent half
-    size_t cFileSize = m * n * sizeof(T);
+    size_t cFileSize = cElementCount * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -65,8 +66,8 @@ void GemmE2E()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<float> golden(cFileSize);
-    std::vector<float> devFinal(cFileSize);
+    std::vector<T> golden(cElementCount);
+    std::vector<T> devFinal(cElementCount);
     ReadFile("../output/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile("../output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
