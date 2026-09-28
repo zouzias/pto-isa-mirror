@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 from gen_isa_svg_core import (
+    ARROW_PAD,
     CANVAS_W,
     CELL,
     COLOR_BY_TEMPLATE,
@@ -1395,29 +1396,45 @@ def _render_complex(instr: str, summary: str, accent: str, bg: str) -> str:
         return _end_svg(out)
 
     if instr == "TSORT32":
-        expr = "dst[i,k] = src[i, pi_i(k)] ; idx = pi"
-        proc = ["for each row i:", "  (dst_row, idx_row) = sort_with_indices(src_row)"]
+        expr = "Each 32-element block: (src values, input idx) -> dst value-index pairs"
+        proc = [
+            "for each row r:",
+            "  for each 32-element block b:",
+            "    pairs = zip(src[r,b], idx[r,b])",
+            "    dst_pairs[r,b] = sort_descending_by_value(pairs)",
+        ]
         _draw_expr(out, expr, accent)
-        x_src = (CANVAS_W - tile_w) // 2
+        xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
+        x_src, x_idx = xs[0], xs[1]
         _draw_tile_grid(
-            out, x=x_src, y=y_src, label="src (block)", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
+            out, x=x_src, y=y_src, label="src (values)", prefix="a", highlight_cells=[(EX_R, EX_C)], accent=accent
+        )
+        _draw_tile_grid(
+            out,
+            x=x_idx,
+            y=y_src,
+            label="idx (input indices)",
+            prefix="i",
+            highlight_cells=[(EX_R, EX_C)],
+            accent=accent,
         )
 
-        xs = _layout_row_lefts(CANVAS_W // 2, [tile_w, tile_w], 120)
-        x_dst, x_idx = xs[0], xs[1]
+        x_dst = (CANVAS_W - tile_w) // 2
         _draw_tile_grid(
-            out, x=x_dst, y=y_dst, label="dst (sorted)", prefix="d", highlight_cells=[(EX_R, EX_C)], accent=accent
-        )
-        _draw_tile_grid(
-            out, x=x_idx, y=y_dst, label="idx (perm)", prefix="p", highlight_cells=[(EX_R, EX_C)], accent=accent
+            out,
+            x=x_dst,
+            y=y_dst,
+            label="dst (packed value-index pairs)",
+            prefix="d",
+            highlight_cells=[(EX_R, EX_C)],
+            accent=accent,
         )
 
         s_x, s_y = _tile_port_bottom(x=x_src, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-        d1_x, d1_y = _tile_port_top(x=x_dst, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-        d2_x, d2_y = _tile_port_top(x=x_idx, y=y_dst, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
-        via_base = int((y_src + tile_h + y_dst) / 2)
-        _draw_ortho_arrow(out, x1=s_x, y1=s_y, x2=d1_x, y2=d1_y, via_y=via_base - 10, accent=accent)
-        _draw_ortho_arrow(out, x1=s_x, y1=s_y, x2=d2_x, y2=d2_y, via_y=via_base + 10, accent=accent)
+        i_x, i_y = _tile_port_bottom(x=x_idx, y=y_src, rows=TILE_ROWS, cols=TILE_COLS, c=EX_C)
+        dst_mid_y = y_dst + tile_h // 2
+        _draw_ortho_arrow(out, x1=s_x, y1=s_y, x2=x_dst - ARROW_PAD, y2=dst_mid_y, via_x=s_x, accent=accent)
+        _draw_ortho_arrow(out, x1=i_x, y1=i_y, x2=x_dst + tile_w + ARROW_PAD, y2=dst_mid_y, via_x=i_x, accent=accent)
         _draw_procedure(out, lines=proc, accent=accent)
         return _end_svg(out)
 
