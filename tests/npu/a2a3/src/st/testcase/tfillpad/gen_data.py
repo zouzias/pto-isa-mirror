@@ -11,7 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import numpy as np
 
 if __name__ == "__main__":
     # 用例名称
@@ -38,6 +37,8 @@ if __name__ == "__main__":
         "TFILLPADTest.case_u8_GT_1_15_VT_1_32_BLK1_PADMIN",
         "TFILLPADTest.case_u8_GT_1_15_VT_1_32_BLK1_PADMAX",
         "TFILLPADTest.case_s8_GT_1_40_VT_1_64_BLK1_PADMIN_PADMAX",
+        "TFILLPADTest.case_float_GT_510_7_VT_510_16_BLK1_PADMIN_PADCUSTOM_NEG1",
+        "TFILLPADTest.case_float_GT_511_7_VT_511_16_BLK1_PADMIN_PADCUSTOM_NEG1",
     ]
 
     for i, case_name in enumerate(case_name_list):

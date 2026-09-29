@@ -202,6 +202,8 @@ TEST_F(TFILLPADTest, case_s8_GT_1_40_VT_1_64_BLK1_PADMIN_PADMAX) { tfillpad_test
 // ACL_SUCCESS + golden compare). Keep ASSERT_EQ(syncRet, ACL_SUCCESS) so a future
 // regression still fails gtest instead of a false PASS via empty/zero bins.
 TEST_F(TFILLPADTest, case_fp32_GT_1_16384_VT_1_16384_UBTOP_FULLWIDTH_INPLACE) { tfillpad_test<23, float, 1>(); }
+TEST_F(TFILLPADTest, case_float_GT_510_7_VT_510_16_BLK1_PADMIN_PADCUSTOM_NEG1) { tfillpad_test<40, float, 1>(); }
+TEST_F(TFILLPADTest, case_float_GT_511_7_VT_511_16_BLK1_PADMIN_PADCUSTOM_NEG1) { tfillpad_test<41, float, 1>(); }
 #endif // !PTO_NPU_ARCH_A5
 
 #if defined(PTO_NPU_ARCH_A5)

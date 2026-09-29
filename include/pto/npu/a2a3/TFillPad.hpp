@@ -95,7 +95,7 @@ PTO_INTERNAL void Handle32BAlignedPad_Other(
     uint64_t fillRow = srcValidRow;
     auto _dstPtr = dstPtr + (srcValidCol32B - elements_per_block);
     if constexpr (TileDataSrc::Rows > REPEAT_MAX) {
-        if (fillRow > REPEAT_MAX) {
+        while (fillRow > REPEAT_MAX) {
             vector_dup(_dstPtr, padValue, REPEAT_MAX, 1, 1, dstRepeatStride, 0);
             _dstPtr += REPEAT_MAX * TileDataDst::Cols;
             fillRow -= REPEAT_MAX;
