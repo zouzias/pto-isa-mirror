@@ -430,6 +430,22 @@ extern "C" __global__ AICORE void launchTFILLPAD_22(
         (__gm__ int8_t*)out, (__gm__ int8_t*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+extern "C" __global__ AICORE void launchTFILLPAD_40(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 510, 7, 510, 16, 1, PadValue::Min, PadCustomNeg1>(
+        (__gm__ float*)out, (__gm__ float*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
+extern "C" __global__ AICORE void launchTFILLPAD_41(
+    __gm__ uint8_t* out, __gm__ uint8_t* src, int gShape0, int gShape1, int gShape2, int gRows, int gCols,
+    __gm__ uint64_t* gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 511, 7, 511, 16, 1, PadValue::Min, PadCustomNeg1>(
+        (__gm__ float*)out, (__gm__ float*)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 #if !defined(PTO_NPU_ARCH_A5)
 // ---------------------------------------------------------------------------
 // Case 23 (UB-OOB repro, GitHub #291): a FULL-width 16384-fp32 (64 KiB) tile
@@ -665,6 +681,10 @@ void launchTFILLPAD(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream)
 #if !defined(PTO_NPU_ARCH_A5)
     else if constexpr (testKey == 23) {
         launchTFILLPAD_23<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 1, 16384, gLog);
+    } else if constexpr (testKey == 40) {
+        launchTFILLPAD_40<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 510, 7, gLog);
+    } else if constexpr (testKey == 41) {
+        launchTFILLPAD_41<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 511, 7, gLog);
     }
 #endif // !PTO_NPU_ARCH_A5
 #if defined(PTO_NPU_ARCH_A5)
@@ -847,7 +867,11 @@ int get_input_golden(uint8_t* input, uint8_t* golden)
         return get_input_golden_case<int8_t, 1, 1, 1, 1, 40, 1, 64, PadValue::Max>(input, golden);
     }
 #if !defined(PTO_NPU_ARCH_A5)
-    else if constexpr (testKey == 23) {
+    else if constexpr (testKey == 40) {
+        return get_input_golden_case<float, 1, 1, 1, 510, 7, 510, 16, PadCustomNeg1>(input, golden);
+    } else if constexpr (testKey == 41) {
+        return get_input_golden_case<float, 1, 1, 1, 511, 7, 511, 16, PadCustomNeg1>(input, golden);
+    } else if constexpr (testKey == 23) {
         // Pass-through (GT 1x16384 -> VT 1x16384, PadValue::Zero). On buggy pto-isa
         // this case never reaches the compare: the kernel faults the AIV first (-100).
         return get_input_golden_case<float, 1, 1, 1, 1, 16384, 1, 16384, PadValue::Zero>(input, golden);
@@ -942,7 +966,11 @@ template int get_input_golden<22>(uint8_t* input, uint8_t* golden);
 
 #if !defined(PTO_NPU_ARCH_A5)
 template void launchTFILLPAD<23>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTFILLPAD<40>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
+template void launchTFILLPAD<41>(uint8_t* out, uint8_t* src, uint64_t* gLog, void* stream);
 template int get_input_golden<23>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<40>(uint8_t* input, uint8_t* golden);
+template int get_input_golden<41>(uint8_t* input, uint8_t* golden);
 #endif // !PTO_NPU_ARCH_A5
 
 #if defined(PTO_NPU_ARCH_A5)
