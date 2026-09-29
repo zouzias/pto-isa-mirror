@@ -18,8 +18,9 @@ void LaunchMxMatmul(uint8_t* out, uint8_t* src0, uint8_t* src1, uint8_t* src2, u
 template <typename T>
 void VerifyResult(size_t cFileSize)
 {
-    std::vector<T> golden(cFileSize);
-    std::vector<T> devFinal(cFileSize);
+    const size_t cElementCount = cFileSize / sizeof(T);
+    std::vector<T> golden(cElementCount);
+    std::vector<T> devFinal(cElementCount);
     ReadFile("../output/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile("../output/output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
