@@ -18,6 +18,62 @@ Common test entry points:
 
 > `run_st.sh` requires a platform flag (`--a3`/`--a5`/`--a3_a5`/`--kirin9030`) **and**, for `--a3`/`--a5`, a mode flag (`--simple` or `--all`); optionally a run mode (`--sim`/`--npu`, defaults to on-board `npu`). Run `./tests/run_st.sh` with no/invalid arguments to print the full usage. Note the `--` prefixes are required.
 
+## A5 UB ND-to-L1 NZ Regression Tests
+
+Conversion cases explicitly use `TileCopyMode::ND2NZ`. Default calls are checked against
+byte-exact legacy copy results (2 Null cases per instruction), including nonzero window offsets.
+The CPU cases check the explicit overloads against element-wise layout semantics.
+
+Cases belong to their instruction directories under `npu/a5/src/st/testcase/` and are
+registered in the existing test targets:
+
+| Instruction | Test target | GTest filter | ND-to-NZ cases |
+|-------------|-------------|--------------|----------------|
+| TMOV | `tmov_ub2l1` | `TMovUb2l1Test.nd2nz_*` | 14 |
+| TEXTRACT | `textract` | `TEXTRACTTest.nd2nz_*` | 14 |
+| TINSERT | `tinsert` | `TInsertTest.nd2nz_*` | 20 |
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tmov_ub2l1
+python3 tests/script/run_st.py -r npu -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*:TEXTRACTTest.legacy_null_*'
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.nd2nz_*:TInsertTest.legacy_null_*'
+```
+
+The first command also runs the 9 NZ-input cases in `tmov_ub2l1`, for 63 cases across
+these commands, including 6 default Null-copy cases.
+Each instruction registers its cases and generates inputs and byte-exact golden data in its existing `main.cpp`,
+including checks that data outside the valid window is preserved.
+Kernel implementations and explicit launch specializations live in `tmov_ub2l1_kernel.cpp`,
+`textract_acc2mat_kernel.cpp`, and `tinsert_kernel.cpp`, respectively.
+TEXTRACT reuses the existing mixed-kernel target for its AIV/AIC transfers.
+Large NZ results are initialized and read back in chunks of at most 128 KiB,
+with synchronization before reusing the UB buffer.
+
+TMOV and TEXTRACT cover all 10 supported data types; TINSERT also covers `int32_t` (11 types).
+Boundary cases include FP4 offsets, static and dynamic valid shapes, zero rows and columns,
+extraction at a smaller source valid-window edge, insertion at a smaller destination valid-window edge,
+dual-AIV FP4 insertion, and static/dynamic
+FP4 widths of 65536 columns, including a larger source row stride.
+The manual A5 `--simple` and `--all` entry points include this regression coverage.
+These cases require manual Tile address aliasing and are not registered in auto mode.
+In auto mode, `tmov_ub2l1` retains its 9 NZ-input cases; `textract` and `tinsert` are
+excluded by the existing auto-mode target list.
+
+CPU reference cases cover float and both packed FP4 types with byte-exact checks, including padding.
+Debug builds also check insertion windows that exceed the destination valid shape while fitting physical storage.
+Run them with:
+
+```bash
+python3 tests/run_cpu.py --rebuild --build-type Debug --testcase tmov --gtest_filter 'TMOVTest.nd2nz_*'
+```
+
+Four `TINSERT` ND copy cases cover a `CompactMode::Normal` Mat destination, dynamic valid shapes,
+row and column offsets, and unchanged data outside the copied window. Run them with:
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.case_nd_compact_normal_*'
+```
+
 ## Layout
 
 - `script/`: Recommended entry scripts

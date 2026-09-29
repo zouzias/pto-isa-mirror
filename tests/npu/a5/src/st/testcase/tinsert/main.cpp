@@ -8,9 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
+#include <cstdint>
+#include <cstdlib>
+#include <vector>
+
 #include <gtest/gtest.h>
+#include "acl/acl.h"
+
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -538,3 +543,216 @@ TEST_F(TInsertTest, case_compact_rowplusone_tmov_bf16_idx0_16)
 {
     testTInsertCompactTMov<4, uint16_t, 64, 48, 128, 128>(launchTInsertCompactRowPlusOneTMov<4>);
 }
+
+template <int32_t TestKey>
+void launchTInsertNd2Nz(uint64_t* out, uint64_t* src, void* stream);
+
+static void testTInsertUbToL1Nd2Nz(
+    void (*launch)(uint64_t*, uint64_t*, void*), int elementBits, int srcRows, int srcCols, int dstRows, int dstCols,
+    int validRows, int validCols, int indexRow, int indexCol, bool useDefaultCopy = false, bool dualInsert = false)
+{
+    const size_t srcTileBytes = srcRows * srcCols * elementBits / 8;
+    const int partCount = dualInsert ? 2 : 1;
+    const size_t srcBytes = partCount * srcTileBytes;
+    const size_t dstBytes = dstRows * dstCols * elementBits / 8;
+    std::vector<uint8_t> input(srcBytes);
+    std::vector<uint8_t> output(dstBytes, 0xa5);
+    std::vector<uint8_t> golden = output;
+    for (size_t i = 0; i < input.size(); ++i) {
+        input[i] = static_cast<uint8_t>((i * 17 + i / 7) % 251);
+    }
+    for (int part = 0; part < partCount; ++part) {
+        for (int row = 0; row < validRows; ++row) {
+            for (int colByte = 0; colByte < validCols * elementBits / 8; ++colByte) {
+                const int srcRow = row;
+                const int srcColByte = colByte;
+                const int dstRow = row + indexRow + part * validRows;
+                const int dstColByte = colByte + indexCol * elementBits / 8;
+                const size_t nzOffset = (dstColByte / 32 * dstRows + dstRow) * 32 + dstColByte % 32;
+                const size_t offset = useDefaultCopy ? dstRow * dstCols * elementBits / 8 + dstColByte : nzOffset;
+                golden[offset] = input[part * srcTileBytes + srcRow * srcCols * elementBits / 8 + srcColByte];
+            }
+        }
+    }
+    ASSERT_EQ(aclInit(nullptr), ACL_SUCCESS);
+    const char* deviceEnv = std::getenv("PTO_DEVICE_ID");
+    const int deviceId = deviceEnv ? std::atoi(deviceEnv) : 0;
+    ASSERT_EQ(aclrtSetDevice(deviceId), ACL_SUCCESS);
+    aclrtStream stream;
+    ASSERT_EQ(aclrtCreateStream(&stream), ACL_SUCCESS);
+    void* srcDevice = nullptr;
+    void* dstDevice = nullptr;
+    ASSERT_EQ(aclrtMalloc(&srcDevice, srcBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMalloc(&dstDevice, dstBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(srcDevice, srcBytes, input.data(), srcBytes, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(dstDevice, dstBytes, output.data(), dstBytes, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    launch(static_cast<uint64_t*>(dstDevice), static_cast<uint64_t*>(srcDevice), stream);
+    EXPECT_EQ(aclrtSynchronizeStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtMemcpy(output.data(), dstBytes, dstDevice, dstBytes, ACL_MEMCPY_DEVICE_TO_HOST), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(srcDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(dstDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtDestroyStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtResetDevice(deviceId), ACL_SUCCESS);
+    EXPECT_EQ(aclFinalize(), ACL_SUCCESS);
+    EXPECT_EQ(output, golden);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_offset)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<22>, 16, 16, 64, 48, 96, 7, 48, 5, 32, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_wide)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<23>, 32, 16, 128, 32, 160, 3, 128, 17, 8, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_dual_insert)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<26>, 16, 16, 64, 32, 64, 16, 64, 0, 0, false, true);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_bfloat16)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<30>, 16, 16, 64, 48, 96, 7, 48, 5, 32, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_int8)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<31>, 8, 16, 128, 48, 192, 7, 96, 5, 64, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_hifloat8)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<32>, 8, 16, 128, 48, 192, 7, 96, 5, 64, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp8_e4m3)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<33>, 8, 16, 128, 48, 192, 7, 96, 5, 64, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp8_e5m2)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<34>, 8, 16, 128, 48, 192, 7, 96, 5, 64, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp8_e8m0)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<35>, 8, 16, 128, 48, 192, 7, 96, 5, 64, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp4_e2m1)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<36>, 4, 16, 256, 48, 384, 7, 192, 5, 128, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp4_e1m2)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<37>, 4, 16, 256, 48, 384, 7, 192, 5, 128, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_int32)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<38>, 32, 16, 32, 48, 48, 7, 24, 5, 16, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_static)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<40>, 16, 16, 64, 48, 96, 7, 48, 5, 32, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_empty_rows)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<41>, 16, 16, 64, 32, 64, 0, 32, 5, 16, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_empty_cols)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<42>, 32, 16, 32, 32, 32, 7, 0, 3, 8, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_dual_insert_fp4)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<43>, 4, 16, 128, 32, 128, 16, 128, 0, 0, false, true);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp4_65536_static)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<44>, 4, 1, 65536, 16, 65536, 1, 65536, 5, 0, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_fp4_65536_dynamic)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<45>, 4, 1, 65600, 16, 65536, 1, 65536, 5, 0, false, false);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_valid_edge_static)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<46>, 16, 16, 64, 48, 96, 7, 48, 5, 32);
+}
+
+TEST_F(TInsertTest, nd2nz_insert_valid_edge_dynamic)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<47>, 16, 16, 64, 48, 96, 7, 48, 5, 32);
+}
+
+TEST_F(TInsertTest, legacy_null_row_offset)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<70>, 16, 16, 64, 16, 64, 1, 16, 1, 0, true, false);
+}
+
+TEST_F(TInsertTest, legacy_null_window)
+{
+    testTInsertUbToL1Nd2Nz(launchTInsertNd2Nz<71>, 16, 16, 64, 16, 64, 7, 32, 3, 16, true, false);
+}
+
+void launchTInsertNdCompactNormal(
+    uint8_t* output, uint8_t* input, uint32_t validRows, uint32_t validCols, uint16_t indexRow, uint16_t indexCol,
+    void* stream);
+
+void testTInsertNdCompactNormal(uint32_t validRows, uint32_t validCols, uint16_t indexRow, uint16_t indexCol)
+{
+    constexpr size_t SRC_BYTES = 16 * 4096;
+    constexpr size_t DST_BYTES = 64 * 256;
+    std::vector<uint8_t> input(SRC_BYTES);
+    std::vector<uint8_t> output(DST_BYTES, 0xa5);
+    std::vector<uint8_t> golden = output;
+    for (size_t i = 0; i < input.size(); ++i) {
+        input[i] = static_cast<uint8_t>((i * 17 + i / 7) % 251);
+    }
+    // The legacy ND path copies row fragments without an NZ layout conversion.
+    for (uint32_t row = 0; row < validRows; ++row) {
+        for (uint32_t col = 0; col < validCols; ++col) {
+            golden[(indexRow + row) * 256 + indexCol + col] = input[row * 4096 + col];
+        }
+    }
+    ASSERT_EQ(aclInit(nullptr), ACL_SUCCESS);
+    const char* deviceEnv = std::getenv("PTO_DEVICE_ID");
+    const int deviceId = deviceEnv ? std::atoi(deviceEnv) : 0;
+    ASSERT_EQ(aclrtSetDevice(deviceId), ACL_SUCCESS);
+    aclrtStream stream;
+    ASSERT_EQ(aclrtCreateStream(&stream), ACL_SUCCESS);
+    void* srcDevice = nullptr;
+    void* dstDevice = nullptr;
+    ASSERT_EQ(aclrtMalloc(&srcDevice, SRC_BYTES, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMalloc(&dstDevice, DST_BYTES, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(srcDevice, SRC_BYTES, input.data(), SRC_BYTES, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(dstDevice, DST_BYTES, output.data(), DST_BYTES, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    launchTInsertNdCompactNormal(
+        static_cast<uint8_t*>(dstDevice), static_cast<uint8_t*>(srcDevice), validRows, validCols, indexRow, indexCol,
+        stream);
+    EXPECT_EQ(aclrtSynchronizeStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtMemcpy(output.data(), DST_BYTES, dstDevice, DST_BYTES, ACL_MEMCPY_DEVICE_TO_HOST), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(srcDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(dstDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtDestroyStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtResetDevice(deviceId), ACL_SUCCESS);
+    EXPECT_EQ(aclFinalize(), ACL_SUCCESS);
+    EXPECT_EQ(output, golden);
+}
+
+TEST_F(TInsertTest, case_nd_compact_normal_full_width) { testTInsertNdCompactNormal(16, 256, 0, 0); }
+TEST_F(TInsertTest, case_nd_compact_normal_partial_window) { testTInsertNdCompactNormal(7, 96, 17, 32); }
+TEST_F(TInsertTest, case_nd_compact_normal_last_rows) { testTInsertNdCompactNormal(16, 256, 48, 0); }
+TEST_F(TInsertTest, case_nd_compact_normal_last_columns) { testTInsertNdCompactNormal(3, 64, 5, 192); }

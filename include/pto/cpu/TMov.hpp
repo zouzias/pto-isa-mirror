@@ -100,5 +100,19 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, uint64_t preQuan
     (void)mode;
     TEXTRACT<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, 0, 0);
 }
+
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
+{
+    static_assert(Mode == TileCopyMode::ND2NZ, "Unsupported tile copy mode.");
+    static_assert(
+        isUbToL1Nd2NzLayout<DstTileData, SrcTileData>(),
+        "ND2NZ requires an ND Vec source and a non-compact NZ512 Mat destination.");
+    static_assert(
+        std::is_same_v<typename DstTileData::DType, typename SrcTileData::DType>,
+        "UB-to-L1 ND-to-NZ requires matching data types.");
+    TMOV_IMPL<DstTileData, SrcTileData>(dst, src);
+}
+
 } // namespace pto
 #endif // TMOV_HPP

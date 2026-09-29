@@ -22,6 +22,11 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{indexRow}+i,\; \mathrm{indexCol}+j
 > 公共包含头为 `<pto/pto-inst.hpp>`，内部声明位于 `pto/common/pto_instr.hpp`。
 
 ```cpp
+// 显式 UB ND -> L1 NZ（A5 / CPU 模拟器）
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src,
+                             uint16_t indexRow, uint16_t indexCol, WaitEvents &...events);
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0, WaitEvents &... events);
 
@@ -124,6 +129,16 @@ Ascend 950PR/Ascend 950DT 和 CPU 模拟器），适用范围与配对规则见�
   （A5、kirin9030、kirinX90 和 CPU 模拟器），接受
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`。
 - 对于 `TileType::Acc -> TileType::Vec`，当目标为32位类型（`float`/`int32_t`）且使用 `DualModeSplitN` 时，切分前的 `ValidCol` 必须是 `32` 的整数倍。
+
+### A5 Vec ND→Mat NZ 提取
+
+`TEXTRACT<TileCopyMode::ND2NZ>(dst, src, indexRow, indexCol)` 显式将 ND Vec 源提取到非 compact 的 NZ512 Mat 目标。
+目标须为 `CompactMode::Null` 且分形大小为 512，不支持的布局在编译期报错。
+不带模式参数的 `TEXTRACT` 保持原有搬运行为，包括 Null 目标。转换路径中，目标有效形状定义从
+`(indexRow, indexCol)` 开始的源窗口，完整窗口须位于源有效形状内。
+列宽、源物理行跨度及列偏移须 32 字节对齐，行偏移和有效行数无需分形对齐。
+仅写入有效窗口，目标 padding 保持不变。共享的存储与 MTE3 同步要求见
+[UB ND → L1 NZ](TMOV_zh.md#ub-nd-to-l1-nz)。
 
 ### A5 Acc→Mat NZ 布局转换
 

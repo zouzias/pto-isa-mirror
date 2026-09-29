@@ -12,6 +12,7 @@ Move/copy between tiles, optionally applying implementation-defined conversion m
 `TMOV` is used for:
 
 - Vec -> Vec moves
+- Vec -> Mat moves, including explicit ND-to-NZ conversion on A5
 - Mat -> Left/Right/Bias/Scaling/Scale(Microscaling) moves (target-dependent)
 - Acc -> Mat/Vec moves (target-dependent)
 
@@ -26,17 +27,18 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 ### ND → NZ (data repack for the Cube Unit)
 
 The Cube Unit consumes operands in **NZ** (Normal-ZigZag) fractal format: the tile is
-tiled into `C0 × C0` fractals, each fractal stored with `BLayout = ColMajor` (the "N" —
+tiled into `16 × C0` fractals, each fractal stored with `BLayout = ColMajor` (the "N" —
 column-major outer blocks) and `SLayout = RowMajor` (the "Z" — row-major within each
-fractal). `TMOV(dstNZ, src)` repacks a RowMajor `Vec`/`Mat` tile (`NoneBox`) into this
-NZ layout. No `tmp` is required.
+fractal). `TMOV(dstNZ, src)` repacks a RowMajor `Vec` tile (`NoneBox`) into an NZ `Vec`.
+On A5, use `TMOV<TileCopyMode::ND2NZ>(dstNZ, src)` for an NZ `Mat` destination.
+Neither form requires `tmp`.
 
 | Operand (GM/L1 side) | `BLayout` | `SLayout` | Meaning |
 |----------------------|-----------|-----------|---------|
 | Left (A, NT)         | `ColMajor` | `RowMajor` | normal NZ |
 | Right (B, NT)        | `RowMajor` | `ColMajor` | transposed NZ |
 
-A `CompactMode::RowPlusOne` destination (`Rows = Vec_S0 + 1`) is the canonical idiom to
+For UB-to-UB repacking, a `CompactMode::RowPlusOne` destination (`Rows = Vec_S0 + 1`) is the canonical idiom to
 avoid UB bank conflicts on the `vsstb` scatter.
 
 ### ND → ZN (within-fractal transpose for the transposed Cube operand)
@@ -50,7 +52,7 @@ $N \bmod 16 = 0$. Supported element types: `half`, `bfloat16_t`, `float`, `int32
 `int8_t`, `uint8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `hifloat8_t`,
 `float4_e2m1x2_t`, `float4_e1m2x2_t` (all 1/2/4-byte storage types).
 
-Unlike ND→NZ (which only rearranges 32 B blocks on the block grid via `vsstb` and leaves
+Unlike UB-to-UB ND→NZ (which only rearranges 32 B blocks on the block grid via `vsstb` and leaves
 within-block data untouched), ND→ZN must also transpose the elements **inside** each
 $K_0 \times 16$ fractal, so `vsstb` alone is insufficient. Each output fractal is the
 transpose of a $K_0 \times 16$ source slice:
@@ -109,6 +111,43 @@ Only the **X→ZZ** transforms take a `tmp` operand (the 3-arg overload). ND→Z
 the `vgather2` index buffer; DN→ZZ accepts it for interface parity but does not access it
 (the `vsstb` scatter needs no scratch). ND→NZ has no `tmp`.
 
+<a id="ub-nd-to-l1-nz"></a>
+
+### UB ND → L1 NZ (A5)
+
+`TMOV<TileCopyMode::ND2NZ>(dst, src)` converts an ND `TileType::Vec` source (`RowMajor`, `NoneBox`) directly
+into an NZ512 `TileType::Mat` destination (`ColMajor`, `RowMajor`, `CompactMode::Null`).
+The data type and valid shape must match. This path preserves the bits of the supported
+b8/b16/b32 types and packed FP4 types; it performs no numerical conversion.
+
+The implementation uses multiple strided 32-byte MTE3 transfers, selecting a row or
+column-block traversal. It requires neither a temporary UB tile nor GM staging.
+Source row stride and valid column width must be 32-byte aligned; FP4 widths count
+logical 4-bit elements (64 elements per 32-byte block). Addresses must be 32-byte aligned.
+Physical source row stride and destination row count determine storage offsets, independently
+of the valid shape. The source row stride in 32-byte blocks and the destination row count
+must each be at most 65536 so that the DMA gaps fit in 16 bits. Both windows must fit their
+allocated storage. Row tails need no 16-row alignment; padding outside the valid region is
+preserved. An empty region performs no transfer. This conversion does not support non-aligned column tails.
+The explicit mode requires a non-compact NZ512 destination; other layouts are rejected at compile time.
+Calls without `TileCopyMode::ND2NZ` retain their existing behavior, including ND sources with
+`CompactMode::Null` destinations. Layout metadata alone does not enable this conversion.
+The explicit overloads are available on A5 and in the CPU simulator (element-wise reference).
+`TileCopyMode` is declared in `include/pto/common/type.hpp`; its supported value is `ND2NZ`.
+On A5, static stride constraints are checked at compile time; dynamic bounds and column alignment
+checks use `PTO_ASSERT` and are enabled by `_DEBUG`.
+
+Issue the operation on AIV. Synchronize the producer with `PIPE_MTE3`, then notify AIC
+after MTE3 completes and wait on `PIPE_MTE1` before consuming L1. Multiple AIVs must write
+disjoint destination regions, and AIC must wait for every participating AIV. Calls that
+write overlapping L1 regions require MTE3 synchronization between them.
+
+`TEXTRACT<TileCopyMode::ND2NZ>(dst, src, row, col)` uses the same conversion for an ND source window; its
+column offset must be 32-byte aligned and the window must fit the source valid shape.
+`TINSERT<TileCopyMode::ND2NZ>(dst, src, row, col)` converts into a destination window with a 32-byte-aligned
+column offset. The destination window must fit its valid shape and allocated storage. Row offsets need
+no fractal alignment. These explicit forms do not require a `tmp` operand.
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
@@ -165,8 +204,12 @@ selected only for `FpTileData::Loc == TileType::Scaling`.
 ### ND → NZ / X → ZZ overloads
 
 ```cpp
-// ND -> NZ (2-arg, no tmp)
+// Vec-to-Vec ND -> NZ (2-arg, no tmp)
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events);
+
+// Explicit UB ND -> L1 NZ (A5 / CPU simulator)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &...events);
 
 // X -> ZZ (3-arg, with tmp). grp_axis=1 (default) = ND->ZZ; grp_axis=0 = DN->ZZ.
@@ -183,7 +226,8 @@ The 3-argument `tmp` overloads exclude `TileType::Scaling`; a `Scaling` third op
 
 | Overload | `grp_axis` | Transform | `tmp` used? |
 |----------|-----------|-----------|-------------|
-| `TMOV(dst, src)` | — | ND → NZ | no |
+| `TMOV(dst, src)` | — | Vec-to-Vec ND → NZ | no |
+| `TMOV<TileCopyMode::ND2NZ>(dst, src)` | — | UB ND → L1 NZ | no |
 | `TMOV(dst, src, tmp)` | 1 (default) | ND → ZZ | yes (vgather2 index buffer) |
 | `TMOV<0>(dst, src, tmp)` | 0 | DN → ZZ | no (accepted for parity) |
 
@@ -193,6 +237,7 @@ The 3-argument `tmp` overloads exclude `TileType::Scaling`; a `Scaling` third op
 
 - `TMOV` has these overload families:
     - plain move: `TMOV(dst, src)`
+    - explicit UB ND-to-L1 NZ conversion: `TMOV<TileCopyMode::ND2NZ>(dst, src)` (A5 / CPU simulator)
     - relu form: `TMOV<..., reluMode>(dst, src)`
     - accumulator-to-vector form: `TMOV<..., mode, reluMode>(dst, src)`
     - vector-quant forms:
@@ -253,7 +298,7 @@ A5 Vec-to-Vec moves currently do not support `int64_t` / `uint64_t`; 64-bit Scal
 
 - `CommonCheck()` requires:
     - destination/source dtype must be identical
-    - supported element types are `int8_t`, `hifloat8_t`, `float8_e5m2_t`, `float8_e4m3_t`, `half`, `bfloat16_t`, `float`, `float4_e2m1x2_t`, `float4_e1m2x2_t`
+    - supported element types are `int8_t`, `hifloat8_t`, `float8_e5m2_t`, `float8_e4m3_t`, `float8_e8m0_t`, `half`, `bfloat16_t`, `float`, `float4_e2m1x2_t`, `float4_e1m2x2_t`
     - source layout must satisfy one of:
         - `(SrcTileData::SFractal == SLayout::ColMajor && SrcTileData::isRowMajor)`
         - `(SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor)`
@@ -288,6 +333,9 @@ A5 Vec-to-Vec moves currently do not support `int64_t` / `uint64_t`; 64-bit Scal
 
 ### ND → NZ (data) — (128, 256) BF16
 
+This Vec-to-Mat example targets A5. Issue it on AIV and follow the
+[MTE3 synchronization requirements](#ub-nd-to-l1-nz) before AIC consumes the result.
+
 ```cpp
 // Source: 128 rows × 256 cols BF16 RowMajor Vec tile (ND).
 // Destination: NZ fractal Mat tile for the Cube Unit (Left operand).
@@ -295,10 +343,11 @@ constexpr uint32_t R = 128, C = 256;
 using SrcT = Tile<TileType::Vec, bfloat16_t, R, C, BLayout::RowMajor, R, C, SLayout::NoneBox>;
 using DstT = Tile<TileType::Mat, bfloat16_t, R, C, BLayout::ColMajor, R, C, SLayout::RowMajor>;
 SrcT src; DstT dst;
-TMOV(dst, src);   // ND -> NZ, no tmp
+TMOV<TileCopyMode::ND2NZ>(dst, src);   // ND -> NZ, no tmp
 ```
 
-**`tmp` for ND→NZ:** none — the 2-arg overload repacks in-place via `vsstb`.
+**`tmp` for ND→NZ:** none. This Vec-to-Mat example uses strided MTE3 transfers;
+Vec-to-Vec repacking uses `vsstb` in UB.
 
 ### ND → ZZ (exponents) — `tmp` size derivation
 
@@ -351,7 +400,7 @@ using Fp8NzT = Tile<TileType::Mat, int8_t, M, N, BLayout::ColMajor, M, N, SLayou
 // 1. Quantize (DN grouping)
 TQUANT<0, MxQuantAlg::OcpMxFp8E4M3>(fp8Tile, srcTile, &e8DnTile, &maxTile, &scalingTile);
 // 2. Repack data ND->NZ (2-arg, no tmp)
-TMOV(fp8NzTile, fp8Tile);
+TMOV<TileCopyMode::ND2NZ>(fp8NzTile, fp8Tile);
 // 3. Repack exponents DN->ZZ (3-arg, tmp accepted but unused)
 TMOV<0>(e8ZzTile, e8DnTile, tmpTile);
 ```

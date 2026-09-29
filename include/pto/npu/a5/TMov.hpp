@@ -243,7 +243,7 @@ PTO_INTERNAL constexpr void CommonCheck()
     static_assert(
         is_textract_supported_type<typename DstTileData::DType>,
         "TMov: Unsupported data type! Supported types: int8_t, hifloat8_t, float8_e5m2_t, float8_e4m3_t, \
-            half, bfloat16_t, float, float4_e2m1x2_t, float4_e1m2x2_t");
+            half, bfloat16_t, float, float4_e2m1x2_t, float4_e1m2x2_t, float8_e8m0_t");
     static_assert(
         std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
         "TMov: Destination and Source tile data types must be the same.");
@@ -754,7 +754,7 @@ PTO_INTERNAL void TMOV_CONVTILE_IMPL(DstTileData& dst, SrcTileData& src)
     }
 }
 
-template <typename DstTileData, typename SrcTileData>
+template <typename DstTileData, typename SrcTileData, bool Nd2Nz = false>
 PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
 {
     if constexpr (SrcTileData::Loc == TileType::Mat) {
@@ -811,9 +811,16 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData& dst, SrcTileData& src)
             }
         } else if constexpr (DstTileData::Loc == TileType::Mat) {
             CommonCheck<DstTileData, SrcTileData>();
-            TExtractVecToMat<DstTileData, SrcTileData>(
-                dst.data(), src.data(), 0, 0, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
-                dst.GetValidCol());
+            if constexpr (Nd2Nz) {
+                PTO_ASSERT(
+                    src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol(),
+                    "TMOV ND-to-NZ requires matching valid shapes.");
+                copyUbToL1Nd2Nz<DstTileData, SrcTileData>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+            } else {
+                TExtractVecToMat<DstTileData, SrcTileData>(
+                    dst.data(), src.data(), 0, 0, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
+                    dst.GetValidCol());
+            }
         }
     }
 }
@@ -954,5 +961,18 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src, FpTileData& fp)
     SetFPC<FpTileData>(fp.data());
     TMovCcToUb<DstTileData, SrcTileData, mode, quantPre, reluMode, Phase>(dst.data(), src.data(), m, n);
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TMOV_IMPL(DstTileData& dst, SrcTileData& src)
+{
+    static_assert(Mode == TileCopyMode::ND2NZ, "Unsupported tile copy mode.");
+    static_assert(
+        isUbToL1Nd2NzLayout<DstTileData, SrcTileData>(),
+        "ND2NZ requires an ND Vec source and a non-compact NZ512 Mat destination.");
+    TMOV_TILE_IMPL<DstTileData, SrcTileData, true>(dst, src);
+}
+#endif
+
 } // namespace pto
 #endif

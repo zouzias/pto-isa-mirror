@@ -142,5 +142,19 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t inde
         }
     }
 }
+
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
+{
+    static_assert(Mode == TileCopyMode::ND2NZ, "Unsupported tile copy mode.");
+    static_assert(
+        isUbToL1Nd2NzLayout<DstTileData, SrcTileData>(),
+        "ND2NZ requires an ND Vec source and a non-compact NZ512 Mat destination.");
+    static_assert(
+        std::is_same_v<typename DstTileData::DType, typename SrcTileData::DType>,
+        "UB-to-L1 ND-to-NZ requires matching data types.");
+    TINSERT_IMPL<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
+}
+
 } // namespace pto
 #endif // TINSERT_HPP

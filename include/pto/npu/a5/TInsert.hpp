@@ -12,6 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TINSERT_HPP
 #include "common.hpp"
 #include "utils.hpp"
+#if defined(PTO_NPU_ARCH_A5)
+#include "TExtractCommon.hpp"
+#endif
 #include "pto/common/arch/register/tinsert_common.hpp"
 
 namespace pto {
@@ -396,7 +399,7 @@ __tf__ PTO_INTERNAL void TInsertZNImpl(
     copy_ubuf_to_cbuf(dstAddr2, srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
 }
 
-template <typename T, typename DstTileData, typename SrcTileData>
+template <typename T, typename DstTileData, typename SrcTileData, bool Nd2Nz = false>
 PTO_INTERNAL void TInsertVecToMatImpl(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(
@@ -417,6 +420,14 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData& dst, SrcTileData& src, uint16
         PTO_ASSERT(validRow % irSize == 0, "TINSERT ZN : validRow must be aligned to the fractal row size!");
         TInsertZNImpl<T, DstTileData, SrcTileData>(
             dst.data(), src.data(), validRow, validCol, dstCol, indexRow, indexCol);
+#if defined(PTO_NPU_ARCH_A5)
+    } else if constexpr (Nd2Nz) {
+        PTO_ASSERT(
+            indexRow + src.GetValidRow() <= dst.GetValidRow() && indexCol + src.GetValidCol() <= dst.GetValidCol(),
+            "TINSERT ND-to-NZ destination window exceeds valid shape.");
+        copyUbToL1Nd2Nz<DstTileData, SrcTileData>(
+            dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), 0, 0, indexRow, indexCol);
+#endif
     } else if constexpr (SrcTileData::isRowMajor) {
         uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
         TInsertNDImpl<T, DstTileData, SrcTileData>(
@@ -430,7 +441,7 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData& dst, SrcTileData& src, uint16
     }
 }
 
-template <typename DstTileData, typename SrcTileData>
+template <typename DstTileData, typename SrcTileData, bool Nd2Nz = false>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     if constexpr (
@@ -457,7 +468,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t inde
         if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
             TInsertVecToVecImpl<T>(dst, src, indexRow, indexCol);
         } else if constexpr (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Vec) {
-            TInsertVecToMatImpl<T>(dst, src, indexRow, indexCol);
+            TInsertVecToMatImpl<T, DstTileData, SrcTileData, Nd2Nz>(dst, src, indexRow, indexCol);
         }
     } // else (non Acc→Mat)
 }
@@ -495,6 +506,18 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t inde
             dst.data(), src.data(), validRow, validCol, indexRow, indexCol);
     }
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TINSERT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
+{
+    static_assert(Mode == TileCopyMode::ND2NZ, "Unsupported tile copy mode.");
+    static_assert(
+        isUbToL1Nd2NzLayout<DstTileData, SrcTileData>(),
+        "ND2NZ requires an ND Vec source and a non-compact NZ512 Mat destination.");
+    TINSERT_IMPL<DstTileData, SrcTileData, true>(dst, src, indexRow, indexCol);
+}
+#endif
 
 } // namespace pto
 #endif // TInsert_HPP

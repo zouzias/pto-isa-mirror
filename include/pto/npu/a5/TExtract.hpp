@@ -153,7 +153,7 @@ PTO_INTERNAL void TExtractToRight(DstTileData& dst, SrcTileData& src, uint16_t i
     }
 }
 
-template <typename DstTileData, typename SrcTileData>
+template <typename DstTileData, typename SrcTileData, bool Nd2Nz = false>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(
@@ -177,9 +177,17 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData& dst, SrcTileData& src, uint16_
     } else if constexpr (DstTileData::Loc == TileType::Right) {
         TExtractToRight(dst, src, indexRow, indexCol);
     } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Mat) {
-        TExtractVecToMat<DstTileData, SrcTileData>(
-            dst.data(), src.data(), indexRow, indexCol, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
-            dst.GetValidCol());
+        if constexpr (Nd2Nz) {
+            PTO_ASSERT(
+                indexRow + dst.GetValidRow() <= src.GetValidRow() && indexCol + dst.GetValidCol() <= src.GetValidCol(),
+                "TEXTRACT ND-to-NZ source window exceeds valid shape.");
+            copyUbToL1Nd2Nz<DstTileData, SrcTileData>(
+                dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+        } else {
+            TExtractVecToMat<DstTileData, SrcTileData>(
+                dst.data(), src.data(), indexRow, indexCol, src.GetValidRow(), src.GetValidCol(), dst.GetValidRow(),
+                dst.GetValidCol());
+        }
     } else if constexpr (DstTileData::Loc == TileType::ScaleLeft) {
         TExtractToAmx<DstTileData, SrcTileData>(
             dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
@@ -664,6 +672,18 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t ind
         TEXTRACT_TILE_IMPL(dst, src, indexRow, indexCol);
     }
 }
+
+#if defined(PTO_NPU_ARCH_A5)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol)
+{
+    static_assert(Mode == TileCopyMode::ND2NZ, "Unsupported tile copy mode.");
+    static_assert(
+        isUbToL1Nd2NzLayout<DstTileData, SrcTileData>(),
+        "ND2NZ requires an ND Vec source and a non-compact NZ512 Mat destination.");
+    TEXTRACT_TILE_IMPL<DstTileData, SrcTileData, true>(dst, src, indexRow, indexCol);
+}
+#endif
 
 } // namespace pto
 

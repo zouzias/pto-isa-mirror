@@ -8,9 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include "acl/acl.h"
+#include <cstdint>
+#include <cstdlib>
+#include <vector>
+
 #include <gtest/gtest.h>
+#include "acl/acl.h"
+
+#include "test_common.h"
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -425,3 +430,136 @@ TEST_F(TMOVTest, case15) { tmov_mx_test<15, float, int8_t, int8_t>(128, 64, 128)
 TEST_F(TMOVTest, case16) { tmov_mx_test<16, float, int8_t, int8_t>(128, 64, 128); }
 
 TEST_F(TMOVTest, case17) { tmov_mx_test<17, float, int8_t, int8_t>(128, 64, 128); }
+
+template <int32_t TestKey>
+void launchTExtractNd2Nz(uint64_t* out, uint64_t* src, void* stream);
+
+static void testTExtractUbToL1Nd2Nz(
+    void (*launch)(uint64_t*, uint64_t*, void*), int elementBits, int srcRows, int srcCols, int dstRows, int dstCols,
+    int validRows, int validCols, int indexRow, int indexCol, bool useDefaultCopy = false)
+{
+    const size_t srcBytes = srcRows * srcCols * elementBits / 8;
+    const size_t dstBytes = dstRows * dstCols * elementBits / 8;
+    std::vector<uint8_t> input(srcBytes);
+    std::vector<uint8_t> output(dstBytes, 0xa5);
+    std::vector<uint8_t> golden = output;
+    for (size_t i = 0; i < input.size(); ++i) {
+        input[i] = static_cast<uint8_t>((i * 17 + i / 7) % 251);
+    }
+    if (useDefaultCopy) {
+        // These cases use the full source valid width for the default contiguous copy.
+        const size_t sourceOffset = (indexRow * srcCols + indexCol) * elementBits / 8;
+        for (size_t byte = 0; byte < static_cast<size_t>(validRows * validCols * elementBits / 8); ++byte) {
+            golden[byte] = input[sourceOffset + byte];
+        }
+    } else {
+        for (int row = 0; row < validRows; ++row) {
+            for (int colByte = 0; colByte < validCols * elementBits / 8; ++colByte) {
+                const size_t offset = (colByte / 32 * dstRows + row) * 32 + colByte % 32;
+                golden[offset] =
+                    input[(row + indexRow) * srcCols * elementBits / 8 + indexCol * elementBits / 8 + colByte];
+            }
+        }
+    }
+    ASSERT_EQ(aclInit(nullptr), ACL_SUCCESS);
+    const char* deviceEnv = std::getenv("PTO_DEVICE_ID");
+    const int deviceId = deviceEnv ? std::atoi(deviceEnv) : 0;
+    ASSERT_EQ(aclrtSetDevice(deviceId), ACL_SUCCESS);
+    aclrtStream stream;
+    ASSERT_EQ(aclrtCreateStream(&stream), ACL_SUCCESS);
+    void* srcDevice = nullptr;
+    void* dstDevice = nullptr;
+    ASSERT_EQ(aclrtMalloc(&srcDevice, srcBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMalloc(&dstDevice, dstBytes, ACL_MEM_MALLOC_HUGE_FIRST), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(srcDevice, srcBytes, input.data(), srcBytes, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    ASSERT_EQ(aclrtMemcpy(dstDevice, dstBytes, output.data(), dstBytes, ACL_MEMCPY_HOST_TO_DEVICE), ACL_SUCCESS);
+    launch(static_cast<uint64_t*>(dstDevice), static_cast<uint64_t*>(srcDevice), stream);
+    EXPECT_EQ(aclrtSynchronizeStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtMemcpy(output.data(), dstBytes, dstDevice, dstBytes, ACL_MEMCPY_DEVICE_TO_HOST), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(srcDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtFree(dstDevice), ACL_SUCCESS);
+    EXPECT_EQ(aclrtDestroyStream(stream), ACL_SUCCESS);
+    EXPECT_EQ(aclrtResetDevice(deviceId), ACL_SUCCESS);
+    EXPECT_EQ(aclFinalize(), ACL_SUCCESS);
+    EXPECT_EQ(output, golden);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_offset)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<21>, 16, 48, 96, 32, 64, 17, 48, 3, 16, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_bfloat16)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<30>, 16, 48, 96, 32, 64, 17, 48, 3, 16, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_float)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<31>, 32, 48, 48, 32, 32, 17, 24, 3, 8, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_int8)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<32>, 8, 48, 192, 32, 128, 17, 96, 3, 32, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_hifloat8)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<33>, 8, 48, 192, 32, 128, 17, 96, 3, 32, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_fp8_e4m3)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<34>, 8, 48, 192, 32, 128, 17, 96, 3, 32, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_fp8_e5m2)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<35>, 8, 48, 192, 32, 128, 17, 96, 3, 32, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_fp8_e8m0)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<36>, 8, 48, 192, 32, 128, 17, 96, 3, 32, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_fp4_e2m1)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<37>, 4, 48, 384, 32, 256, 17, 192, 3, 64, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_fp4_e1m2)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<38>, 4, 48, 384, 32, 256, 17, 192, 3, 64, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_static)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<40>, 16, 48, 96, 32, 64, 17, 48, 3, 16, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_empty_rows)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<41>, 16, 16, 64, 16, 32, 0, 16, 3, 16, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_empty_cols)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<42>, 16, 16, 64, 16, 32, 7, 0, 3, 16, false);
+}
+
+TEST_F(TEXTRACTTest, nd2nz_extract_valid_edge)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<43>, 32, 48, 64, 32, 32, 17, 24, 3, 8, false);
+}
+
+TEST_F(TEXTRACTTest, legacy_null_static)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<70>, 16, 16, 64, 16, 64, 2, 32, 1, 16, true);
+}
+
+TEST_F(TEXTRACTTest, legacy_null_dynamic)
+{
+    testTExtractUbToL1Nd2Nz(launchTExtractNd2Nz<71>, 16, 16, 64, 16, 64, 7, 32, 3, 16, true);
+}
