@@ -15,22 +15,36 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 namespace TColExpandAddTest {
 
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
+template <bool StaticShape, typename TileData, uint32_t Rows, uint32_t Cols>
+AICORE inline TileData CreateTColExpandAddTile()
+{
+    if constexpr (StaticShape) {
+        return TileData{};
+    } else {
+        return TileData(Rows, Cols);
+    }
+}
+
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool StaticShape = false>
 __global__ AICORE void runCOLEXPANDADD(__gm__ T __out__* out, __gm__ T __in__* src0, __gm__ T __in__* src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, src1Row, src1Col>;
     using DynStridDim5 = pto::Stride<1, 1, 1, src1Col, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
-    using TileData = Tile<TileType::Vec, T, src1Row, src1Col, BLayout::RowMajor, -1, -1>;
+    using TileData = std::conditional_t<
+        StaticShape, Tile<TileType::Vec, T, src1Row, src1Col, BLayout::RowMajor, src1Row, src1Col>,
+        Tile<TileType::Vec, T, src1Row, src1Col, BLayout::RowMajor, -1, -1>>;
 
     using DstDynShapeDim5 = Shape<1, 1, 1, dstRow, dstCol>;
     using DstDynStridDim5 = pto::Stride<1, 1, 1, dstCol, 1>;
     using DstGlobalData = GlobalTensor<T, DstDynShapeDim5, DstDynStridDim5>;
-    using DstTileData = Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, -1, -1>;
+    using DstTileData = std::conditional_t<
+        StaticShape, Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, dstRow, dstCol>,
+        Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, -1, -1>>;
 
-    DstTileData src0Tile(dstRow, dstCol);
-    TileData src1Tile(src1Row, src1Col);
-    DstTileData dstTile(dstRow, dstCol);
+    DstTileData src0Tile = CreateTColExpandAddTile<StaticShape, DstTileData, dstRow, dstCol>();
+    TileData src1Tile = CreateTColExpandAddTile<StaticShape, TileData, src1Row, src1Col>();
+    DstTileData dstTile = CreateTColExpandAddTile<StaticShape, DstTileData, dstRow, dstCol>();
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, 0x10000);
     TASSIGN(dstTile, 0x20000);
@@ -65,14 +79,14 @@ __global__ AICORE void runCOLEXPANDADD(__gm__ T __out__* out, __gm__ T __in__* s
     out = dstGlobal.data();
 }
 
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool StaticShape = false>
 void launchTColExpandAdd(T* out, T* src0, T* src1, void* stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runCOLEXPANDADD<half, dstRow, dstCol, src1Row, src1Col>
+        runCOLEXPANDADD<half, dstRow, dstCol, src1Row, src1Col, StaticShape>
             <<<1, nullptr, stream>>>((half*)out, (half*)src0, (half*)src1);
     } else {
-        runCOLEXPANDADD<T, dstRow, dstCol, src1Row, src1Col><<<1, nullptr, stream>>>(out, src0, src1);
+        runCOLEXPANDADD<T, dstRow, dstCol, src1Row, src1Col, StaticShape><<<1, nullptr, stream>>>(out, src0, src1);
     }
 }
 
@@ -84,4 +98,6 @@ template void launchTColExpandAdd<aclFloat16, 10, 64, 1, 64>(
     aclFloat16* out, aclFloat16* src0, aclFloat16* src1, void* stream);
 template void launchTColExpandAdd<int32_t, 8, 32, 1, 32>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 template void launchTColExpandAdd<int16_t, 8, 32, 1, 32>(int16_t* out, int16_t* src0, int16_t* src1, void* stream);
+template void launchTColExpandAdd<float, 2, 2040, 1, 2040, true>(float* out, float* src0, float* src1, void* stream);
+template void launchTColExpandAdd<float, 2, 2048, 1, 2048, true>(float* out, float* src0, float* src1, void* stream);
 } // namespace TColExpandAddTest
