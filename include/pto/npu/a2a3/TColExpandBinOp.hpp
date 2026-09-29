@@ -36,27 +36,35 @@ template <
 PTO_INTERNAL void TColExpandBinaryNormMode(
     __ubuf__ T* dstPtr, __ubuf__ T* src0Ptr, __ubuf__ T* src1Ptr, unsigned validRow, unsigned validCol)
 {
-    constexpr uint8_t dstRepeatStride = (uint8_t)(DstRowStride / BlockSizeElem);
-    constexpr uint8_t src0RepeatStride = (uint8_t)(Src0RowStride / BlockSizeElem);
-    if constexpr (DstRowStride < ElementsPerRepeat && Src0RowStride < ElementsPerRepeat) {
-        SetContMaskByDType<T>(validCol);
-        Op::ColExpandBinInstr(dstPtr, src0Ptr, src1Ptr, validRow, dstRepeatStride, src0RepeatStride, src0RepeatStride);
-        SetFullVecMaskByDType<T>();
+    constexpr bool repeatStrideOverflow =
+        DstRowStride / BlockSizeElem > REPEAT_STRIDE_MAX || Src0RowStride / BlockSizeElem > REPEAT_STRIDE_MAX;
+    if constexpr (repeatStrideOverflow) {
+        TColExpandBinaryCountMode<Op, T, BlockSizeElem, DstRowStride, Src0RowStride>(
+            dstPtr, src0Ptr, src1Ptr, validRow, validCol);
     } else {
-        unsigned numLoop = validCol / ElementsPerRepeat;
-        unsigned numRemainAfterLoop = validCol % ElementsPerRepeat;
-        for (unsigned i = 0; i < numLoop; i++) {
-            Op::ColExpandBinInstr(
-                dstPtr, src0Ptr, src1Ptr, validRow, dstRepeatStride, src0RepeatStride, src0RepeatStride);
-            dstPtr += ElementsPerRepeat;
-            src0Ptr += ElementsPerRepeat;
-            src1Ptr += ElementsPerRepeat;
-        }
-        if (numRemainAfterLoop) {
-            SetContMaskByDType<T>(numRemainAfterLoop);
+        constexpr uint8_t dstRepeatStride = static_cast<uint8_t>(DstRowStride / BlockSizeElem);
+        constexpr uint8_t src0RepeatStride = static_cast<uint8_t>(Src0RowStride / BlockSizeElem);
+        if constexpr (DstRowStride < ElementsPerRepeat && Src0RowStride < ElementsPerRepeat) {
+            SetContMaskByDType<T>(validCol);
             Op::ColExpandBinInstr(
                 dstPtr, src0Ptr, src1Ptr, validRow, dstRepeatStride, src0RepeatStride, src0RepeatStride);
             SetFullVecMaskByDType<T>();
+        } else {
+            unsigned numLoop = validCol / ElementsPerRepeat;
+            unsigned numRemainAfterLoop = validCol % ElementsPerRepeat;
+            for (unsigned i = 0; i < numLoop; i++) {
+                Op::ColExpandBinInstr(
+                    dstPtr, src0Ptr, src1Ptr, validRow, dstRepeatStride, src0RepeatStride, src0RepeatStride);
+                dstPtr += ElementsPerRepeat;
+                src0Ptr += ElementsPerRepeat;
+                src1Ptr += ElementsPerRepeat;
+            }
+            if (numRemainAfterLoop) {
+                SetContMaskByDType<T>(numRemainAfterLoop);
+                Op::ColExpandBinInstr(
+                    dstPtr, src0Ptr, src1Ptr, validRow, dstRepeatStride, src0RepeatStride, src0RepeatStride);
+                SetFullVecMaskByDType<T>();
+            }
         }
     }
 }

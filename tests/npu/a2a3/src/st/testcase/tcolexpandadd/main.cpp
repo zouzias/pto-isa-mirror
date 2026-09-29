@@ -16,7 +16,7 @@ using namespace std;
 using namespace PtoTestCommon;
 
 namespace TColExpandAddTest {
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool StaticShape = false>
 void launchTColExpandAdd(T* out, T* src0, T* src1, void* stream);
 
 class TColExpandAddTest : public testing::Test {
@@ -34,7 +34,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col>
+template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool StaticShape = false>
 void test_tcolexpandadd()
 {
     size_t inputFileSize = src1Row * src1Col * sizeof(T);
@@ -61,7 +61,7 @@ void test_tcolexpandadd()
 
     aclrtMemcpy(src0Device, outputFileSize, src0Host, outputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, inputFileSize, src1Host, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTColExpandAdd<T, dstRow, dstCol, src1Row, src1Col>(dstDevice, src0Device, src1Device, stream);
+    launchTColExpandAdd<T, dstRow, dstCol, src1Row, src1Col, StaticShape>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, outputFileSize, dstDevice, outputFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -95,4 +95,6 @@ TEST_F(TColExpandAddTest, case_fp16_4_256_1_256) { test_tcolexpandadd<aclFloat16
 TEST_F(TColExpandAddTest, case_fp16_10_64_1_64) { test_tcolexpandadd<aclFloat16, 10, 64, 1, 64>(); }
 TEST_F(TColExpandAddTest, case_int32_8_32_1_32) { test_tcolexpandadd<int32_t, 8, 32, 1, 32>(); }
 TEST_F(TColExpandAddTest, case_int16_8_32_1_32) { test_tcolexpandadd<int16_t, 8, 32, 1, 32>(); }
+TEST_F(TColExpandAddTest, case_fp32_2_2040_1_2040) { test_tcolexpandadd<float, 2, 2040, 1, 2040, true>(); }
+TEST_F(TColExpandAddTest, case_fp32_2_2048_1_2048) { test_tcolexpandadd<float, 2, 2048, 1, 2048, true>(); }
 } // namespace TColExpandAddTest
