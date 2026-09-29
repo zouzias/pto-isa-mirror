@@ -357,6 +357,55 @@ TEST_F(TCOLEXPANDOPTest, case_min_int32_64x64_64x64_64x64)
     });
 }
 
+TEST_F(TCOLEXPANDOPTest, case_div_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDDIV<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_mul_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMUL<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_sub_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDSUB<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_add_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDADD<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_max_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMAX<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_min_int64_64x64_64x64_64x64)
+{
+    run_vec_op<int64_t, 64, 64>([](int64_t* out, int64_t* src0, int64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMIN<int64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_mul_uint8_64x64_64x64_64x64)
+{
+    run_vec_op<uint8_t, 64, 64>([](uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream) {
+        LaunchTCOLEXPANDMUL<uint8_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
 TEST_F(TCOLEXPANDOPTest, case_div_uint16_64x64_64x64_64x64)
 {
     run_vec_op<uint16_t, 64, 64>([](uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream) {
@@ -413,13 +462,6 @@ TEST_F(TCOLEXPANDOPTest, case_mul_uint32_64x64_64x64_64x64)
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_mul_uint8_64x64_64x64_64x64)
-{
-    run_vec_op<uint8_t, 64, 64>([](uint8_t* out, uint8_t* src0, uint8_t* src1, void* stream) {
-        LaunchTCOLEXPANDMUL<uint8_t, 64, 64>(out, src0, src1, stream);
-    });
-}
-
 TEST_F(TCOLEXPANDOPTest, case_sub_uint32_64x64_64x64_64x64)
 {
     run_vec_op<uint32_t, 64, 64>([](uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream) {
@@ -445,5 +487,47 @@ TEST_F(TCOLEXPANDOPTest, case_min_uint32_64x64_64x64_64x64)
 {
     run_vec_op<uint32_t, 64, 64>([](uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream) {
         LaunchTCOLEXPANDMIN<uint32_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_div_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDDIV<uint64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_mul_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMUL<uint64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_sub_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDSUB<uint64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_add_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDADD<uint64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_max_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMAX<uint64_t, 64, 64>(out, src0, src1, stream);
+    });
+}
+
+TEST_F(TCOLEXPANDOPTest, case_min_uint64_64x64_64x64_64x64)
+{
+    run_vec_op<uint64_t, 64, 64>([](uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream) {
+        LaunchTCOLEXPANDMIN<uint64_t, 64, 64>(out, src0, src1, stream);
     });
 }

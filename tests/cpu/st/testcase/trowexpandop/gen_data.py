@@ -23,9 +23,16 @@ def gen_golden_data_trowexpandop(param, element_op: str):
     is_integer = np.issubdtype(dtype, np.integer)
 
     if is_integer:
-        input1 = np.random.randint(1, 8, size=[param.in_row, param.in_col]).astype(dtype)
-        input2 = np.random.randint(1, 8, size=[param.in_row, 1]).astype(dtype)
-    else:
+        if dtype == np.int64:
+            input1 = np.random.randint(2**32, 2**34, size=[param.in_row, param.in_col], dtype=np.int64)
+            input2 = np.random.randint(1, 8, size=[param.in_row, 1], dtype=np.int64)
+        elif dtype == np.uint64:
+            input1 = np.random.randint(2**32, 2**34, size=[param.in_row, param.in_col], dtype=np.int64).astype(np.uint64)
+            input2 = np.random.randint(1, 8, size=[param.in_row, 1], dtype=np.int64).astype(np.uint64)
+        else:
+            input1 = np.random.randint(1, 8, size=[param.in_row, param.in_col]).astype(dtype)
+            input2 = np.random.randint(1, 8, size=[param.in_row, 1]).astype(dtype)
+    else: 
         input1 = np.random.uniform(low=-2, high=2, size=[param.in_row, param.in_col]).astype(dtype)
         input2 = np.random.uniform(low=1, high=2, size=[param.in_row, 1]).astype(dtype)
     golden = np.zeros((param.out_row, param.out_col)).astype(dtype)
@@ -73,7 +80,8 @@ def generate_case_name(param, element_op: str):
     dtype_str = {
         np.float32: "float", np.float16: "half",
         np.int16: "int16", np.int32: "int32",
-        np.uint16: "uint16", np.uint32: "uint32",
+        np.int64: "int64", np.uint16: "uint16",
+        np.uint32: "uint32", np.uint64: "uint64",
         np.uint8: "uint8",
     }[param.dtype]
 
@@ -96,8 +104,10 @@ if __name__ == "__main__":
     case_int_params_list = [
         TRowExpandOpParams(np.int16, 16, 256),
         TRowExpandOpParams(np.int32, 64, 64),
+        TRowExpandOpParams(np.int64, 64, 64),
         TRowExpandOpParams(np.uint16, 64, 64),
         TRowExpandOpParams(np.uint32, 64, 64),
+        TRowExpandOpParams(np.uint64, 64, 64),
     ]
     case_uint8_params_list = [
         TRowExpandOpParams(np.uint8, 64, 64),

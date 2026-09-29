@@ -207,6 +207,13 @@ template void LaunchTROWEXPANDADD<int32_t, 64, 64>(int32_t* out, int32_t* src0, 
 template void LaunchTROWEXPANDMAX<int32_t, 64, 64>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 template void LaunchTROWEXPANDMIN<int32_t, 64, 64>(int32_t* out, int32_t* src0, int32_t* src1, void* stream);
 
+template void LaunchTROWEXPANDDIV<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTROWEXPANDMUL<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTROWEXPANDSUB<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTROWEXPANDADD<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTROWEXPANDMAX<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+template void LaunchTROWEXPANDMIN<int64_t, 64, 64>(int64_t* out, int64_t* src0, int64_t* src1, void* stream);
+
 template void LaunchTROWEXPANDDIV<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
 template void LaunchTROWEXPANDMUL<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
 template void LaunchTROWEXPANDSUB<uint16_t, 64, 64>(uint16_t* out, uint16_t* src0, uint16_t* src1, void* stream);
@@ -220,3 +227,10 @@ template void LaunchTROWEXPANDSUB<uint32_t, 64, 64>(uint32_t* out, uint32_t* src
 template void LaunchTROWEXPANDADD<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
 template void LaunchTROWEXPANDMAX<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
 template void LaunchTROWEXPANDMIN<uint32_t, 64, 64>(uint32_t* out, uint32_t* src0, uint32_t* src1, void* stream);
+
+template void LaunchTROWEXPANDDIV<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTROWEXPANDMUL<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTROWEXPANDSUB<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTROWEXPANDADD<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTROWEXPANDMAX<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
+template void LaunchTROWEXPANDMIN<uint64_t, 64, 64>(uint64_t* out, uint64_t* src0, uint64_t* src1, void* stream);
