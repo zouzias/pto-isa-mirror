@@ -22,6 +22,11 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{indexRow}+i,\; \mathrm{indexCol}+j
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+// Explicit UB ND -> L1 NZ (A5 / CPU simulator)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src,
+                             uint16_t indexRow, uint16_t indexCol, WaitEvents &...events);
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0, WaitEvents &... events);
 
@@ -133,6 +138,18 @@ For Mat-to-Left/Right layout extraction:
   (A5, kirin9030, kirinX90, and CPU simulator). It accepts
   `mode = AccToVecMode::{SingleModeVec0, SingleModeVec1, DualModeSplitM, DualModeSplitN}`.
 - For `TileType::Acc -> TileType::Vec` with a 32-bit destination type (`float`/`int32_t`), when using `DualModeSplitN` the `ValidCol` (before the split) must be a multiple of `32`.
+
+### A5 Vec ND-to-Mat NZ extraction
+
+`TEXTRACT<TileCopyMode::ND2NZ>(dst, src, indexRow, indexCol)` explicitly extracts an ND Vec source
+into a non-compact NZ512 Mat destination. It requires `CompactMode::Null` and fractal size 512;
+unsupported layouts are rejected at compile time. `TEXTRACT(dst, src, indexRow, indexCol)`
+retains its existing copy behavior, including for Null destinations.
+The destination valid shape defines the source window at `(indexRow, indexCol)`.
+The full window must fit the source valid shape; column width, source row stride,
+and column offset must be 32-byte aligned. Row offsets and row tails need no fractal alignment.
+Only the valid window is written; destination padding is preserved. See
+[UB ND → L1 NZ](TMOV.md#ub-nd-to-l1-nz) for the shared storage and MTE3 synchronization requirements.
 
 ### A5 Acc-to-Mat NZ layout conversion
 

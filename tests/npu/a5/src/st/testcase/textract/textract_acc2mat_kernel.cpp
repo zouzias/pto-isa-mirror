@@ -139,3 +139,230 @@ template void launchTEXTRACTAcc2Mat<23>(uint8_t*, uint8_t*, uint8_t*, void*);
 template void launchTEXTRACTAcc2Mat<24>(uint8_t*, uint8_t*, uint8_t*, void*);
 template void launchTEXTRACTAcc2Mat<25>(uint8_t*, uint8_t*, uint8_t*, void*);
 template void launchTEXTRACTAcc2Mat<26>(uint8_t*, uint8_t*, uint8_t*, void*);
+
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void readbackTExtractNd2NzMat(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t vectorId,
+    uint16_t blockCount, uint32_t srcByteOffset = 0)
+{
+    __cbuf__ T* srcMatAddr = (__cbuf__ T*)((__cbuf__ uint8_t*)__cce_get_tile_ptr(src) + srcByteOffset);
+    __ubuf__ T* dstUbAddr = __cce_get_tile_ptr(dst);
+    copy_cbuf_to_ubuf((__ubuf__ void*)dstUbAddr, (__cbuf__ void*)srcMatAddr, vectorId, 1, blockCount, 0, 0);
+}
+
+template <typename MatTile, typename UbTile>
+__tf__ PTO_INTERNAL void initTExtractNd2NzMat(
+    typename MatTile::TileDType __out__ dst, typename UbTile::TileDType __in__ src, uint32_t byteCount,
+    uint32_t dstByteOffset)
+{
+    copy_ubuf_to_cbuf(
+        (__cbuf__ uint8_t*)__cce_get_tile_ptr(dst) + dstByteOffset, (__ubuf__ void*)__cce_get_tile_ptr(src), 0, 1,
+        byteCount / BLOCK_BYTE_SIZE, 0, 0);
+}
+
+template <
+    typename T, int ElementBits, int SrcRows, int SrcCols, int DstRows, int DstCols, int ValidRows, int ValidCols,
+    bool UseDefaultCopy, int IndexRow, int IndexCol, bool Dynamic, int SrcValidRows, int SrcValidCols>
+__global__ AICORE void runTExtractUbToL1Nd2Nz(
+    __gm__ uint8_t* out, __gm__ uint8_t* input, uint32_t validRows, uint32_t validCols, uint32_t srcValidRows,
+    uint32_t srcValidCols)
+{
+    constexpr uint32_t L1_READY = 0;
+    constexpr uint32_t UB_READY = 1;
+    constexpr uint32_t DST_BYTES = DstRows * DstCols * ElementBits / 8;
+    static_assert(SrcRows * SrcCols * ElementBits / 8 <= 256 * 1024, "ST source exceeds A5 UB capacity.");
+    static_assert(DST_BYTES <= 512 * 1024, "ST destination exceeds A5 L1 capacity.");
+    constexpr uint32_t MAX_READBACK_BYTES = 128 * 1024;
+    constexpr uint32_t READBACK_BYTES = DST_BYTES > MAX_READBACK_BYTES ? MAX_READBACK_BYTES : DST_BYTES;
+    constexpr uint32_t READBACK_COUNT = (DST_BYTES + READBACK_BYTES - 1) / READBACK_BYTES;
+    using SrcTile = Tile<
+        TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor, Dynamic ? DYNAMIC : SrcValidRows,
+        Dynamic ? DYNAMIC : SrcValidCols>;
+    using DstTile = Tile<
+        TileType::Mat, T, DstRows, DstCols, BLayout::ColMajor, Dynamic ? DYNAMIC : ValidRows,
+        Dynamic ? DYNAMIC : ValidCols, SLayout::RowMajor>;
+    using RawSrc = Tile<TileType::Vec, uint8_t, SrcRows, SrcCols * ElementBits / 8>;
+    using RawDst = Tile<TileType::Vec, uint8_t, 1, READBACK_BYTES, BLayout::RowMajor, DYNAMIC, DYNAMIC>;
+    using SrcGlobal = GlobalTensor<
+        uint8_t, Shape<1, 1, 1, SrcRows, SrcCols * ElementBits / 8>,
+        pto::Stride<1, 1, 1, SrcCols * ElementBits / 8, 1>>;
+    using DstGlobal = GlobalTensor<uint8_t, Shape<1, 1, 1, 1, DYNAMIC>, pto::Stride<1, 1, 1, READBACK_BYTES, 1>>;
+    SrcTile src;
+    DstTile dst;
+    if constexpr (Dynamic) {
+        src.SetValidShape(srcValidRows, srcValidCols);
+        dst.SetValidShape(validRows, validCols);
+    }
+    RawSrc rawSrc;
+    RawDst rawDst(1, READBACK_BYTES);
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    TASSIGN(rawSrc, 0);
+    TASSIGN(rawDst, 0);
+    SrcGlobal srcGlobal(input);
+#if defined(__DAV_VEC__)
+    if (get_subblockid() == 0) {
+        for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+            const uint32_t offset = chunk * READBACK_BYTES;
+            const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+            rawDst.SetValidShape(1, bytes);
+            DstGlobal dstGlobal(out + offset, Shape<1, 1, 1, 1, DYNAMIC>(bytes));
+            TLOAD(rawDst, dstGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            initTExtractNd2NzMat<DstTile, RawDst>(dst.data(), rawDst.data(), bytes, offset);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        }
+        TLOAD(rawSrc, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        if constexpr (UseDefaultCopy) {
+            TEXTRACT(dst, src, IndexRow, IndexCol);
+        } else {
+            TEXTRACT<TileCopyMode::ND2NZ>(dst, src, IndexRow, IndexCol);
+        }
+        set_intra_block(PIPE_MTE3, L1_READY);
+        for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+            const uint32_t offset = chunk * READBACK_BYTES;
+            const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+            rawDst.SetValidShape(1, bytes);
+            DstGlobal dstGlobal(out + offset, Shape<1, 1, 1, 1, DYNAMIC>(bytes));
+            wait_intra_block(PIPE_MTE3, UB_READY);
+            TSTORE(dstGlobal, rawDst);
+            if (chunk + 1 < READBACK_COUNT) {
+                set_intra_block(PIPE_MTE3, L1_READY);
+            }
+        }
+    }
+#endif
+#if defined(__DAV_CUBE__)
+    wait_intra_block(PIPE_MTE1, L1_READY);
+    // Wait for GM stores before reusing the bounded UB readback buffer.
+    for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+        if (chunk > 0) {
+            wait_intra_block(PIPE_MTE1, L1_READY);
+        }
+        const uint32_t offset = chunk * READBACK_BYTES;
+        const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+        readbackTExtractNd2NzMat<uint8_t, RawDst, DstTile>(
+            rawDst.data(), dst.data(), 0, bytes / BLOCK_BYTE_SIZE, offset);
+        set_intra_block(PIPE_MTE1, UB_READY);
+    }
+#endif
+}
+
+template <int32_t TestKey>
+void launchTExtractNd2Nz(uint64_t* out, uint64_t* src, void* stream);
+
+template <>
+void launchTExtractNd2Nz<21>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 48, 96, 32, 64, 17, 48, false, 3, 16, true, 48, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 48, 48, 96);
+}
+
+template <>
+void launchTExtractNd2Nz<30>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<bfloat16_t, 16, 48, 96, 32, 64, 17, 48, false, 3, 16, true, 24, 80>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 48, 24, 80);
+}
+
+template <>
+void launchTExtractNd2Nz<31>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float, 32, 48, 48, 32, 32, 17, 24, false, 3, 8, true, 24, 40>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 24, 24, 40);
+}
+
+template <>
+void launchTExtractNd2Nz<32>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<int8_t, 8, 48, 192, 32, 128, 17, 96, false, 3, 32, true, 24, 160>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 96, 24, 160);
+}
+
+template <>
+void launchTExtractNd2Nz<33>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<hifloat8_t, 8, 48, 192, 32, 128, 17, 96, false, 3, 32, true, 24, 160>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 96, 24, 160);
+}
+
+template <>
+void launchTExtractNd2Nz<34>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float8_e4m3_t, 8, 48, 192, 32, 128, 17, 96, false, 3, 32, true, 24, 160>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 96, 24, 160);
+}
+
+template <>
+void launchTExtractNd2Nz<35>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float8_e5m2_t, 8, 48, 192, 32, 128, 17, 96, false, 3, 32, true, 24, 160>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 96, 24, 160);
+}
+
+template <>
+void launchTExtractNd2Nz<36>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float8_e8m0_t, 8, 48, 192, 32, 128, 17, 96, false, 3, 32, true, 24, 160>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 96, 24, 160);
+}
+
+template <>
+void launchTExtractNd2Nz<37>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float4_e2m1x2_t, 4, 48, 384, 32, 256, 17, 192, false, 3, 64, true, 24, 320>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 192, 24, 320);
+}
+
+template <>
+void launchTExtractNd2Nz<38>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float4_e1m2x2_t, 4, 48, 384, 32, 256, 17, 192, false, 3, 64, true, 24, 320>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 192, 24, 320);
+}
+
+template <>
+void launchTExtractNd2Nz<40>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 48, 96, 32, 64, 17, 48, false, 3, 16, false, 20, 64>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 48, 20, 64);
+}
+
+template <>
+void launchTExtractNd2Nz<41>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 16, 64, 16, 32, 0, 16, false, 3, 16, true, 8, 48>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 0, 16, 8, 48);
+}
+
+template <>
+void launchTExtractNd2Nz<42>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 16, 64, 16, 32, 7, 0, false, 3, 16, true, 10, 48>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 0, 10, 48);
+}
+
+template <>
+void launchTExtractNd2Nz<43>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<float, 32, 48, 64, 32, 32, 17, 24, false, 3, 8, true, 20, 32>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 17, 24, 20, 32);
+}
+
+template <>
+void launchTExtractNd2Nz<70>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 16, 64, 16, 64, 2, 32, true, 1, 16, false, 16, 64>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 2, 32, 16, 64);
+}
+
+template <>
+void launchTExtractNd2Nz<71>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTExtractUbToL1Nd2Nz<half, 16, 16, 64, 16, 64, 7, 32, true, 3, 16, true, 16, 64>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 32, 16, 64);
+}

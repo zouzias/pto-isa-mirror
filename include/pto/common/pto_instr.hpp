@@ -1192,6 +1192,17 @@ PTO_INST RecordEvent TMRGSORT(DstTileData& dst, SrcTileData& src, uint32_t block
     return {};
 }
 
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent
+TEXTRACT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TEXTRACT, PTO_TEMPLATE_ARGS(Mode, DstTileData, SrcTileData), dst, src, indexRow, indexCol);
+    return {};
+}
+#endif
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent
 TEXTRACT(DstTileData& dst, SrcTileData& src, uint16_t indexRow = 0, uint16_t indexCol = 0, WaitEvents&... events)
@@ -1433,6 +1444,17 @@ PTO_INST RecordEvent SET_IMG2COL_PADDING(ConvTileData& src, WaitEvents&... event
 {
     detail::PtoWaitEvents(events...);
     MAP_INSTR_IMPL_T_OUTS(SET_IMG2COL_PADDING, PTO_TEMPLATE_ARGS(ConvTileData, FmatrixMode), 0, src);
+    return {};
+}
+#endif
+
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent
+TINSERT(DstTileData& dst, SrcTileData& src, uint16_t indexRow, uint16_t indexCol, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TINSERT, PTO_TEMPLATE_ARGS(Mode, DstTileData, SrcTileData), dst, src, indexRow, indexCol);
     return {};
 }
 #endif
@@ -1830,6 +1852,16 @@ PTO_INST RecordEvent TCVT(TileDataD& dst, TileDataS& src, RoundMode mode, WaitEv
     MAP_INSTR_IMPL(TCVT, dst, src, mode, NeedSetCtrl);
     return {};
 }
+
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)
+{
+    detail::PtoWaitEvents(events...);
+    MAP_INSTR_IMPL_T(TMOV, PTO_TEMPLATE_ARGS(Mode, DstTileData, SrcTileData), dst, src);
+    return {};
+}
+#endif
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events)

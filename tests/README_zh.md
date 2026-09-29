@@ -14,6 +14,53 @@ PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `np
 
 > `run_st.sh` 必须指定平台参数（`--a3`/`--a5`/`--a3_a5`/`--kirin9030`），并且对 `--a3`/`--a5` 还需指定模式参数（`--simple` 或 `--all`）；可选地指定运行模式（`--sim`/`--npu`，默认板上 `npu`）。不带参数或参数非法运行 `./tests/run_st.sh` 会打印完整用法。注意各参数均需 `--` 前缀。
 
+## A5 UB ND→L1 NZ 回归测试
+
+转换用例显式使用 `TileCopyMode::ND2NZ`。默认调用按原有搬运结果逐字节校验，
+每条指令有 2 个 Null 用例，包含非零窗口偏移；CPU 用例验证显式重载的逐元素布局语义。
+
+用例按指令归属放在 `npu/a5/src/st/testcase/` 下的对应目录，并注册到已有测试目标：
+
+| 指令 | 测试目标 | GTest 过滤条件 | ND→NZ 用例数 |
+|------|----------|----------------|---------------|
+| TMOV | `tmov_ub2l1` | `TMovUb2l1Test.nd2nz_*` | 14 |
+| TEXTRACT | `textract` | `TEXTRACTTest.nd2nz_*` | 14 |
+| TINSERT | `tinsert` | `TInsertTest.nd2nz_*` | 20 |
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tmov_ub2l1
+python3 tests/script/run_st.py -r npu -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*:TEXTRACTTest.legacy_null_*'
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.nd2nz_*:TInsertTest.legacy_null_*'
+```
+
+第一条命令还运行 `tmov_ub2l1` 的 9 个 NZ 输入用例，以上命令共执行 63 个用例，包含 6 个默认 Null 搬运用例。
+各指令在已有 `main.cpp` 中注册用例、生成输入和逐字节标杆，包含有效窗口外的数据校验。
+kernel 及启动函数特化分别放在
+`tmov_ub2l1_kernel.cpp`、`textract_acc2mat_kernel.cpp` 和 `tinsert_kernel.cpp` 中。
+TEXTRACT 复用已有混合核目标完成 AIV/AIC 搬运。
+大尺寸 NZ 结果按不超过 128 KiB 分块初始化和回读，复用 UB 缓冲区前进行同步。
+
+TMOV 和 TEXTRACT 覆盖各自支持的全部 10 种数据类型；TINSERT 额外覆盖 `int32_t`，共 11 种。
+边界用例包含 FP4 非零偏移、静态与动态有效形状、零行和零列、源有效窗口小于物理形状时的边界提取、
+目标有效窗口小于物理形状时的边界插入、双 AIV FP4 插入，
+以及 65536 列 FP4 的静态和动态有效形状，其中动态用例的源行跨度大于有效列宽。
+A5 手动同步模式的 `--simple` 和 `--all` 入口均包含这些回归用例。
+这些用例依赖手动 Tile 地址别名，不在 auto 模式注册。
+auto 模式下 `tmov_ub2l1` 保留原有的 9 个 NZ 输入用例；`textract` 和 `tinsert` 由现有 auto 模式目标列表排除。
+
+CPU 参考用例逐字节校验 float 和两种 packed FP4，包含 padding 检查。
+Debug 构建还检查插入窗口超出目标有效形状、但仍位于物理存储内的情况。运行命令：
+
+```bash
+python3 tests/run_cpu.py --rebuild --build-type Debug --testcase tmov --gtest_filter 'TMOVTest.nd2nz_*'
+```
+
+另有 4 个 `TINSERT` ND 搬运用例覆盖 `CompactMode::Normal` Mat 目标、动态有效形状、行列偏移及窗口外数据保留：
+
+```bash
+python3 tests/script/run_st.py -r npu -v a5 -t tinsert -g 'TInsertTest.case_nd_compact_normal_*'
+```
+
 ## 目录结构
 
 - `script/`：推荐的入口脚本

@@ -30,6 +30,11 @@ $$
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+// Explicit UB ND -> L1 NZ (A5 / CPU simulator)
+template <TileCopyMode Mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
+                             uint16_t indexRow, uint16_t indexCol, WaitEvents &...events);
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                              uint16_t indexRow, uint16_t indexCol,
@@ -218,6 +223,15 @@ canonical overload.
 - **Vec → Mat** (`TileType::Vec → TileType::Mat`, UB → L1):
     - `DstTileData::DType` must equal `SrcTileData::DType`.
     - Supported element types: `half`, `bfloat16_t`, `float`, `int32_t`, `int8_t`, `hifloat8_t`, `float8_e4m3_t`, `float8_e5m2_t`, `float8_e8m0_t`, `float4_e2m1x2_t`, `float4_e1m2x2_t`.
+    - Explicit ND-to-NZ path (A5): `TINSERT<TileCopyMode::ND2NZ>(dst, src, indexRow, indexCol)` converts an ND
+      (`RowMajor`, `NoneBox`) Vec source into a non-compact NZ512 Mat destination. It requires
+      `CompactMode::Null` and fractal size 512; other layouts are rejected at compile time.
+      Calls without the mode parameter retain the existing ND copy path, including for Null destinations.
+      Source row stride, valid column width, and `indexCol` must be 32-byte aligned; `indexRow` need not be fractal aligned.
+      Only the source valid region is written, preserving surrounding data.
+      The window must fit the destination valid shape and allocated storage.
+      Packed FP4 columns count logical elements. See [UB ND → L1 NZ](TMOV.md#ub-nd-to-l1-nz) for MTE3
+      synchronization and other shared constraints.
     - ND path: source must be `isRowMajor`; uses `copy_ubuf_to_cbuf`. Data bytes per row must be aligned to `BLOCK_BYTE_SIZE` (32 bytes) for row-wise burst.
     - NZ path: source must be `(!isRowMajor, SFractal: RowMajor)`; uses `ComputeNZBlockParams` for fractal-block `copy_ubuf_to_cbuf`. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validCol and indexCol are halved for byte addressing.
     - ZN path: source and destination must both be `(isRowMajor, SFractal: ColMajor)`; uses `ComputeZNBlockParams` for fractal-block `copy_ubuf_to_cbuf`. ZN is the transpose-dual of NZ: rows are the fractal dimension and columns are the free dimension. `indexRow` and `validRow` must be aligned to the fractal row size (`BLOCK_BYTE_SIZE / sizeof(T)`); `indexCol` and `validCol` are unconstrained (free dimension), matching the NZ row dimension. For fp4 types (`float4_e2m1x2_t`, `float4_e1m2x2_t`), validRow and indexRow are halved for byte addressing.

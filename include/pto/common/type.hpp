@@ -435,6 +435,8 @@ enum class GatherAxis : uint8_t { GATHER_ROW = 0, GATHER_COL = 1 };
 
 enum class GatherOOB : uint8_t { Undefined = 0, Clamp = 1, Wrap = 2, Zero = 3 };
 
+enum class TileCopyMode : uint8_t { ND2NZ };
+
 #ifndef TINSERT_MODE_DEFINED
 #define TINSERT_MODE_DEFINED
 enum class TInsertMode : uint8_t {

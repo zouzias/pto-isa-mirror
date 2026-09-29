@@ -15,6 +15,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #pragma once
 
 namespace pto {
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL constexpr bool isUbToL1Nd2NzLayout()
+{
+    return SrcTileData::Loc == TileType::Vec && SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::NoneBox &&
+           DstTileData::Loc == TileType::Mat && !DstTileData::isRowMajor &&
+           DstTileData::SFractal == SLayout::RowMajor && DstTileData::SFractalSize == CUBE_BLOCK_SIZE &&
+           DstTileData::Compact == CompactMode::Null;
+}
+#endif
+
 template <typename T, typename... Types>
 using isSupportTypeImpl = std::disjunction<std::is_same<T, Types>...>;
 template <typename T, typename... Types>

@@ -1022,6 +1022,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum_trowexpand -g TROWSUM_TROWEXPANDTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpand_tdiv -g TROWEXPAND_TDIVTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_ub2l1 -g TMovUb2l1Test.case1
+    if [ "$IS_AUTO_MODE" = "false" ]; then
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tmov_ub2l1 -g 'TMovUb2l1Test.nd2nz_*:TMovUb2l1Test.legacy_null_*'
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g 'TEXTRACTTest.nd2nz_*:TEXTRACTTest.legacy_null_*'
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g 'TInsertTest.nd2nz_*:TInsertTest.legacy_null_*'
+    fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tneg -g TNEGTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpand -g TCOLEXPANDTest.case_float_1_8_128_63
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_n3

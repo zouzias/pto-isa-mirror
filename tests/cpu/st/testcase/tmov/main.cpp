@@ -8,11 +8,16 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <algorithm>
+#include <functional>
+#include <vector>
+
+#include <gtest/gtest.h>
+
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+
 #include "test_common.h"
-#include <gtest/gtest.h>
-#include <functional>
 
 using namespace std;
 using namespace pto;
@@ -207,3 +212,85 @@ TMOV_ND_TO_ZN_TEST(float, 32, 32)
 TMOV_ND_TO_ZN_TEST(float, 32, 64)
 TMOV_ND_TO_ZN_TEST(float, 64, 64)
 TMOV_ND_TO_ZN_TEST(float, 128, 128)
+
+enum class Nd2NzOperation { MOV, EXTRACT, INSERT };
+
+template <Nd2NzOperation Operation, typename T = float>
+void testUbToL1Nd2Nz()
+{
+    constexpr int PACKED_ELEMENTS = IsTwinType<T>() ? 2 : 1;
+    constexpr int C0_SIZE = 32 * PACKED_ELEMENTS / sizeof(T);
+    constexpr int SRC_ROWS = 48;
+    constexpr int SRC_COLS = 8 * C0_SIZE;
+    constexpr int DST_ROWS = 32;
+    constexpr int DST_COLS = 6 * C0_SIZE;
+    constexpr int VALID_ROWS = 17;
+    constexpr int VALID_COLS = 3 * C0_SIZE;
+    constexpr int INDEX_ROW = 3;
+    constexpr int INDEX_COL = C0_SIZE;
+    constexpr int SRC_ROW_BYTES = SRC_COLS * sizeof(T) / PACKED_ELEMENTS;
+    constexpr int DST_BYTES = DST_ROWS * DST_COLS * sizeof(T) / PACKED_ELEMENTS;
+    using SrcTile = Tile<TileType::Vec, T, SRC_ROWS, SRC_COLS, BLayout::RowMajor, DYNAMIC, DYNAMIC>;
+    using DstTile = Tile<TileType::Mat, T, DST_ROWS, DST_COLS, BLayout::ColMajor, DYNAMIC, DYNAMIC, SLayout::RowMajor>;
+    SrcTile src(
+        Operation == Nd2NzOperation::EXTRACT ? SRC_ROWS : VALID_ROWS,
+        Operation == Nd2NzOperation::EXTRACT ? SRC_COLS : VALID_COLS);
+    DstTile dst(
+        Operation == Nd2NzOperation::INSERT ? INDEX_ROW + VALID_ROWS : VALID_ROWS,
+        Operation == Nd2NzOperation::INSERT ? INDEX_COL + VALID_COLS : VALID_COLS);
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    auto* input = reinterpret_cast<uint8_t*>(src.data());
+    auto* output = reinterpret_cast<uint8_t*>(dst.data());
+    for (int i = 0; i < SRC_ROWS * SRC_ROW_BYTES; ++i) {
+        input[i] = static_cast<uint8_t>((i * 17 + i / 7) % 251);
+    }
+    std::fill(output, output + DST_BYTES, 0xa5);
+    std::vector<uint8_t> expected(DST_BYTES, 0xa5);
+    for (int row = 0; row < VALID_ROWS; ++row) {
+        for (int colByte = 0; colByte < VALID_COLS * sizeof(T) / PACKED_ELEMENTS; ++colByte) {
+            const int srcRow = row + (Operation == Nd2NzOperation::EXTRACT ? INDEX_ROW : 0);
+            const int srcColByte = colByte + (Operation == Nd2NzOperation::EXTRACT ? 32 : 0);
+            const int dstRow = row + (Operation == Nd2NzOperation::INSERT ? INDEX_ROW : 0);
+            const int dstColByte = colByte + (Operation == Nd2NzOperation::INSERT ? 32 : 0);
+            const int offset = (dstColByte / 32 * DST_ROWS + dstRow) * 32 + dstColByte % 32;
+            expected[offset] = input[srcRow * SRC_ROW_BYTES + srcColByte];
+        }
+    }
+    if constexpr (Operation == Nd2NzOperation::EXTRACT) {
+        TEXTRACT<TileCopyMode::ND2NZ>(dst, src, INDEX_ROW, INDEX_COL);
+    } else if constexpr (Operation == Nd2NzOperation::INSERT) {
+        TINSERT<TileCopyMode::ND2NZ>(dst, src, INDEX_ROW, INDEX_COL);
+    } else {
+        TMOV<TileCopyMode::ND2NZ>(dst, src);
+    }
+    EXPECT_TRUE(std::equal(expected.begin(), expected.end(), output));
+}
+
+TEST_F(TMOVTest, nd2nz_ub_to_l1_strides) { testUbToL1Nd2Nz<Nd2NzOperation::MOV>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_extract) { testUbToL1Nd2Nz<Nd2NzOperation::EXTRACT>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_insert) { testUbToL1Nd2Nz<Nd2NzOperation::INSERT>(); }
+
+TEST_F(TMOVTest, nd2nz_ub_to_l1_fp4_e2m1) { testUbToL1Nd2Nz<Nd2NzOperation::MOV, float4_e2m1x2_t>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_extract_fp4_e2m1) { testUbToL1Nd2Nz<Nd2NzOperation::EXTRACT, float4_e2m1x2_t>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_insert_fp4_e2m1) { testUbToL1Nd2Nz<Nd2NzOperation::INSERT, float4_e2m1x2_t>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_fp4_e1m2) { testUbToL1Nd2Nz<Nd2NzOperation::MOV, float4_e1m2x2_t>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_extract_fp4_e1m2) { testUbToL1Nd2Nz<Nd2NzOperation::EXTRACT, float4_e1m2x2_t>(); }
+TEST_F(TMOVTest, nd2nz_ub_to_l1_insert_fp4_e1m2) { testUbToL1Nd2Nz<Nd2NzOperation::INSERT, float4_e1m2x2_t>(); }
+
+#ifndef NDEBUG
+static void testInsertNd2NzOutsideValidShape(uint16_t indexRow, uint16_t indexCol)
+{
+    using SrcTile = Tile<TileType::Vec, float, 16, 32, BLayout::RowMajor, 7, 8>;
+    using DstTile = Tile<TileType::Mat, float, 32, 32, BLayout::ColMajor, DYNAMIC, DYNAMIC, SLayout::RowMajor>;
+    SrcTile src;
+    DstTile dst(20, 24);
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    // Both windows fit physical storage, but cross one edge of the valid shape.
+    EXPECT_DEATH(TINSERT<TileCopyMode::ND2NZ>(dst, src, indexRow, indexCol), "Assertion");
+}
+
+TEST_F(TMOVTest, nd2nz_insert_outside_valid_rows) { testInsertNd2NzOutsideValidShape(14, 16); }
+TEST_F(TMOVTest, nd2nz_insert_outside_valid_cols) { testInsertNd2NzOutsideValidShape(13, 24); }
+#endif

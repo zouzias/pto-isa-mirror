@@ -2373,3 +2373,354 @@ template void launchTInsertNDVec<10>(uint8_t* out, uint8_t* srcIn, uint8_t* dstI
 template void launchTInsertNDVec<11>(uint8_t* out, uint8_t* srcIn, uint8_t* dstIn, void* stream);
 template void launchTInsertND<1>(uint64_t* out, uint64_t* src, void* stream);
 template void launchTInsertND<2>(uint64_t* out, uint64_t* src, void* stream);
+
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void readbackTInsertNd2NzMat(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, uint16_t vectorId,
+    uint16_t blockCount, uint32_t srcByteOffset = 0)
+{
+    __cbuf__ T* srcMatAddr = (__cbuf__ T*)((__cbuf__ uint8_t*)__cce_get_tile_ptr(src) + srcByteOffset);
+    __ubuf__ T* dstUbAddr = __cce_get_tile_ptr(dst);
+    copy_cbuf_to_ubuf((__ubuf__ void*)dstUbAddr, (__cbuf__ void*)srcMatAddr, vectorId, 1, blockCount, 0, 0);
+}
+
+template <typename MatTile, typename UbTile>
+__tf__ PTO_INTERNAL void initTInsertNd2NzMat(
+    typename MatTile::TileDType __out__ dst, typename UbTile::TileDType __in__ src, uint32_t byteCount,
+    uint32_t dstByteOffset)
+{
+    copy_ubuf_to_cbuf(
+        (__cbuf__ uint8_t*)__cce_get_tile_ptr(dst) + dstByteOffset, (__ubuf__ void*)__cce_get_tile_ptr(src), 0, 1,
+        byteCount / BLOCK_BYTE_SIZE, 0, 0);
+}
+
+template <
+    typename T, int ElementBits, int SrcRows, int SrcCols, int DstRows, int DstCols, bool UseDefaultCopy,
+    bool DualInsert, int IndexRow, int IndexCol, bool Dynamic, int SrcValidRows, int SrcValidCols,
+    int DstValidRows = DstRows, int DstValidCols = DstCols>
+__global__ AICORE void runTInsertUbToL1Nd2Nz(
+    __gm__ uint8_t* out, __gm__ uint8_t* input, uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRows,
+    uint32_t dstValidCols)
+{
+    constexpr uint32_t L1_READY = 0;
+    constexpr uint32_t UB_READY = 1;
+    constexpr uint32_t L1_INITIALIZED = 2;
+    constexpr uint32_t INIT_ACK = 3;
+    constexpr uint32_t AIV1_EVENT_OFFSET = 16;
+    constexpr uint32_t DST_BYTES = DstRows * DstCols * ElementBits / 8;
+    static_assert(SrcRows * SrcCols * ElementBits / 8 <= 256 * 1024, "ST source exceeds A5 UB capacity.");
+    static_assert(DST_BYTES <= 512 * 1024, "ST destination exceeds A5 L1 capacity.");
+    constexpr uint32_t MAX_READBACK_BYTES = 128 * 1024;
+    constexpr uint32_t READBACK_BYTES = DST_BYTES > MAX_READBACK_BYTES ? MAX_READBACK_BYTES : DST_BYTES;
+    constexpr uint32_t READBACK_COUNT = (DST_BYTES + READBACK_BYTES - 1) / READBACK_BYTES;
+    using SrcTile = Tile<
+        TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor, Dynamic ? DYNAMIC : SrcValidRows,
+        Dynamic ? DYNAMIC : SrcValidCols>;
+    using DstTile = Tile<
+        TileType::Mat, T, DstRows, DstCols, BLayout::ColMajor, Dynamic ? DYNAMIC : DstValidRows,
+        Dynamic ? DYNAMIC : DstValidCols, SLayout::RowMajor>;
+    using RawSrc = Tile<TileType::Vec, uint8_t, SrcRows, SrcCols * ElementBits / 8>;
+    using RawDst = Tile<TileType::Vec, uint8_t, 1, READBACK_BYTES, BLayout::RowMajor, DYNAMIC, DYNAMIC>;
+    using SrcGlobal = GlobalTensor<
+        uint8_t, Shape<1, 1, 1, SrcRows, SrcCols * ElementBits / 8>,
+        pto::Stride<1, 1, 1, SrcCols * ElementBits / 8, 1>>;
+    using DstGlobal = GlobalTensor<uint8_t, Shape<1, 1, 1, 1, DYNAMIC>, pto::Stride<1, 1, 1, READBACK_BYTES, 1>>;
+    SrcTile src;
+    DstTile dst;
+    if constexpr (Dynamic) {
+        src.SetValidShape(srcValidRows, srcValidCols);
+        dst.SetValidShape(dstValidRows, dstValidCols);
+    }
+    RawSrc rawSrc;
+    RawDst rawDst(1, READBACK_BYTES);
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    TASSIGN(rawSrc, 0);
+    TASSIGN(rawDst, 0);
+    SrcGlobal srcGlobal(input + (DualInsert ? get_subblockid() * SrcRows * SrcCols * ElementBits / 8 : 0));
+#if defined(__DAV_VEC__)
+    // Initialize L1 once; the dual-AIV case writes disjoint row windows.
+    if (get_subblockid() == 0) {
+        for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+            const uint32_t offset = chunk * READBACK_BYTES;
+            const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+            rawDst.SetValidShape(1, bytes);
+            DstGlobal dstGlobal(out + offset, Shape<1, 1, 1, 1, DYNAMIC>(bytes));
+            TLOAD(rawDst, dstGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            initTInsertNd2NzMat<DstTile, RawDst>(dst.data(), rawDst.data(), bytes, offset);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        }
+        if constexpr (DualInsert) {
+            set_intra_block(PIPE_MTE3, L1_INITIALIZED);
+        }
+    }
+    if constexpr (DualInsert) {
+        wait_intra_block(PIPE_MTE2, INIT_ACK);
+    }
+    if (DualInsert || get_subblockid() == 0) {
+        TLOAD(rawSrc, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        if constexpr (UseDefaultCopy) {
+            TINSERT(dst, src, IndexRow + (DualInsert ? get_subblockid() * srcValidRows : 0), IndexCol);
+        } else {
+            TINSERT<TileCopyMode::ND2NZ>(
+                dst, src, IndexRow + (DualInsert ? get_subblockid() * srcValidRows : 0), IndexCol);
+        }
+        set_intra_block(PIPE_MTE3, L1_READY);
+        if (get_subblockid() == 0) {
+            for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+                const uint32_t offset = chunk * READBACK_BYTES;
+                const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+                rawDst.SetValidShape(1, bytes);
+                DstGlobal dstGlobal(out + offset, Shape<1, 1, 1, 1, DYNAMIC>(bytes));
+                wait_intra_block(PIPE_MTE3, UB_READY);
+                TSTORE(dstGlobal, rawDst);
+                if (chunk + 1 < READBACK_COUNT) {
+                    set_intra_block(PIPE_MTE3, L1_READY);
+                }
+            }
+        }
+    }
+#endif
+#if defined(__DAV_CUBE__)
+    if constexpr (DualInsert) {
+        wait_intra_block(PIPE_MTE1, L1_INITIALIZED);
+        set_intra_block(PIPE_MTE1, INIT_ACK);
+        set_intra_block(PIPE_MTE1, INIT_ACK + AIV1_EVENT_OFFSET);
+    }
+    wait_intra_block(PIPE_MTE1, L1_READY);
+    if constexpr (DualInsert) {
+        wait_intra_block(PIPE_MTE1, L1_READY + AIV1_EVENT_OFFSET);
+    }
+    // Wait for GM stores before reusing the bounded UB readback buffer.
+    for (uint32_t chunk = 0; chunk < READBACK_COUNT; ++chunk) {
+        if (chunk > 0) {
+            wait_intra_block(PIPE_MTE1, L1_READY);
+        }
+        const uint32_t offset = chunk * READBACK_BYTES;
+        const uint32_t bytes = min(READBACK_BYTES, DST_BYTES - offset);
+        readbackTInsertNd2NzMat<uint8_t, RawDst, DstTile>(
+            rawDst.data(), dst.data(), 0, bytes / BLOCK_BYTE_SIZE, offset);
+        set_intra_block(PIPE_MTE1, UB_READY);
+    }
+#endif
+}
+
+template <int32_t TestKey>
+void launchTInsertNd2Nz(uint64_t* out, uint64_t* src, void* stream);
+
+template <>
+void launchTInsertNd2Nz<22>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 48, 96, false, false, 5, 32, true, 7, 48>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 48, 48, 96);
+}
+
+template <>
+void launchTInsertNd2Nz<23>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float, 32, 16, 128, 32, 160, false, false, 17, 8, true, 3, 128>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 3, 128, 32, 160);
+}
+
+template <>
+void launchTInsertNd2Nz<26>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 32, 64, false, true, 0, 0, true, 16, 64>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 16, 64, 32, 64);
+}
+
+template <>
+void launchTInsertNd2Nz<30>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<bfloat16_t, 16, 16, 64, 48, 96, false, false, 5, 32, true, 7, 48>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 48, 48, 96);
+}
+
+template <>
+void launchTInsertNd2Nz<31>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<int8_t, 8, 16, 128, 48, 192, false, false, 5, 64, true, 7, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 96, 48, 192);
+}
+
+template <>
+void launchTInsertNd2Nz<32>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<hifloat8_t, 8, 16, 128, 48, 192, false, false, 5, 64, true, 7, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 96, 48, 192);
+}
+
+template <>
+void launchTInsertNd2Nz<33>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float8_e4m3_t, 8, 16, 128, 48, 192, false, false, 5, 64, true, 7, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 96, 48, 192);
+}
+
+template <>
+void launchTInsertNd2Nz<34>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float8_e5m2_t, 8, 16, 128, 48, 192, false, false, 5, 64, true, 7, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 96, 48, 192);
+}
+
+template <>
+void launchTInsertNd2Nz<35>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float8_e8m0_t, 8, 16, 128, 48, 192, false, false, 5, 64, true, 7, 96>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 96, 48, 192);
+}
+
+template <>
+void launchTInsertNd2Nz<36>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float4_e2m1x2_t, 4, 16, 256, 48, 384, false, false, 5, 128, true, 7, 192>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 192, 48, 384);
+}
+
+template <>
+void launchTInsertNd2Nz<37>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float4_e1m2x2_t, 4, 16, 256, 48, 384, false, false, 5, 128, true, 7, 192>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 192, 48, 384);
+}
+
+template <>
+void launchTInsertNd2Nz<38>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<int32_t, 32, 16, 32, 48, 48, false, false, 5, 16, true, 7, 24>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 24, 48, 48);
+}
+
+template <>
+void launchTInsertNd2Nz<40>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 48, 96, false, false, 5, 32, false, 7, 48>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 48, 48, 96);
+}
+
+template <>
+void launchTInsertNd2Nz<41>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 32, 64, false, false, 5, 16, true, 0, 32>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 0, 32, 32, 64);
+}
+
+template <>
+void launchTInsertNd2Nz<42>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float, 32, 16, 32, 32, 32, false, false, 3, 8, true, 7, 0>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 0, 32, 32);
+}
+
+template <>
+void launchTInsertNd2Nz<43>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float4_e2m1x2_t, 4, 16, 128, 32, 128, false, true, 0, 0, true, 16, 128>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 16, 128, 32, 128);
+}
+
+template <>
+void launchTInsertNd2Nz<44>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float4_e2m1x2_t, 4, 1, 65536, 16, 65536, false, false, 5, 0, false, 1, 65536>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 1, 65536, 16, 65536);
+}
+
+template <>
+void launchTInsertNd2Nz<45>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<float4_e1m2x2_t, 4, 1, 65600, 16, 65536, false, false, 5, 0, true, 1, 65536>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 1, 65536, 16, 65536);
+}
+
+template <>
+void launchTInsertNd2Nz<46>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 48, 96, false, false, 5, 32, false, 7, 48, 12, 80>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 48, 12, 80);
+}
+
+template <>
+void launchTInsertNd2Nz<47>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 48, 96, false, false, 5, 32, true, 7, 48, 12, 80>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 48, 12, 80);
+}
+
+template <>
+void launchTInsertNd2Nz<70>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 16, 64, true, false, 1, 0, false, 1, 16>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 1, 16, 16, 64);
+}
+
+template <>
+void launchTInsertNd2Nz<71>(uint64_t* out, uint64_t* src, void* stream)
+{
+    runTInsertUbToL1Nd2Nz<half, 16, 16, 64, 16, 64, true, false, 3, 16, true, 7, 32>
+        <<<1, nullptr, stream>>>(reinterpret_cast<uint8_t*>(out), reinterpret_cast<uint8_t*>(src), 7, 32, 16, 64);
+}
+
+__global__ AICORE void runTInsertNdCompactNormal(
+    __gm__ uint8_t* output, __gm__ uint8_t* input, uint32_t validRows, uint32_t validCols, uint16_t indexRow,
+    uint16_t indexCol)
+{
+    constexpr uint32_t DST_BYTES = 64 * 256;
+    constexpr uint32_t L1_READY = 0;
+    constexpr uint32_t UB_READY = 1;
+    using SrcTile = Tile<
+        TileType::Vec, int8_t, 16, 4096, BLayout::RowMajor, DYNAMIC, DYNAMIC, SLayout::NoneBox, 512, PadValue::Null,
+        CompactMode::Null>;
+    using DstTile = Tile<
+        TileType::Mat, int8_t, 64, 256, BLayout::ColMajor, DYNAMIC, DYNAMIC, SLayout::RowMajor, 512, PadValue::Null,
+        CompactMode::Normal>;
+    using RawSrc = Tile<TileType::Vec, uint8_t, 16, 4096>;
+    using RawDst = Tile<TileType::Vec, uint8_t, 1, DST_BYTES>;
+    using SrcGlobal = GlobalTensor<uint8_t, Shape<1, 1, 1, 16, 4096>, pto::Stride<1, 1, 1, 4096, 1>>;
+    using DstGlobal = GlobalTensor<uint8_t, Shape<1, 1, 1, 1, DST_BYTES>, pto::Stride<1, 1, 1, DST_BYTES, 1>>;
+    SrcTile src(validRows, validCols);
+    DstTile dst(64, 256);
+    RawSrc rawSrc;
+    RawDst rawDst;
+    TASSIGN(src, 0);
+    TASSIGN(dst, 0);
+    TASSIGN(rawSrc, 0);
+    TASSIGN(rawDst, 0x10000);
+    SrcGlobal srcGlobal(input);
+    DstGlobal dstGlobal(output);
+#if defined(__DAV_VEC__)
+    if (get_subblockid() == 0) {
+        TLOAD(rawDst, dstGlobal);
+        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        initTInsertNd2NzMat<DstTile, RawDst>(dst.data(), rawDst.data(), DST_BYTES, 0);
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        TLOAD(rawSrc, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        TINSERT(dst, src, indexRow, indexCol);
+        set_intra_block(PIPE_MTE3, L1_READY);
+        wait_intra_block(PIPE_MTE3, UB_READY);
+        TSTORE(dstGlobal, rawDst);
+    }
+#endif
+#if defined(__DAV_CUBE__)
+    wait_intra_block(PIPE_MTE1, L1_READY);
+    readbackTInsertNd2NzMat<uint8_t, RawDst, DstTile>(rawDst.data(), dst.data(), 0, DST_BYTES / BLOCK_BYTE_SIZE);
+    set_intra_block(PIPE_MTE1, UB_READY);
+#endif
+}
+
+void launchTInsertNdCompactNormal(
+    uint8_t* output, uint8_t* input, uint32_t validRows, uint32_t validCols, uint16_t indexRow, uint16_t indexCol,
+    void* stream)
+{
+    runTInsertNdCompactNormal<<<1, nullptr, stream>>>(output, input, validRows, validCols, indexRow, indexCol);
+}
