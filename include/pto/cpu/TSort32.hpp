@@ -48,7 +48,7 @@ PTO_INTERNAL void TSort32(
 {
     for (int i = 0; i < validRow; i++) {
         for (int j = 0; j < validCol; j += sortNum) {
-            const size_t dstOffset = GetTileElementOffset<TileDataDst>(i, 2 * j);
+            const size_t dstOffset = GetTileElementOffset<TileDataDst>(i, j * totalByte / sizeof(T));
             const size_t srcOffset = GetTileElementOffset<TileDataSrc>(i, j);
             const size_t idxOffset = GetTileElementOffset<TileDataIdx>(i, j);
             int validNum = std::min(sortNum, validCol - j);

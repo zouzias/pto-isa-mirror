@@ -88,7 +88,10 @@ def gen_golden_data(param):
     if cols < 32:
         gen_golden_data_cols_less_than_32(rows, cols, data_type)
         return
-    input_arr = np.random.uniform(low=-10, high=10, size=(rows, cols)).astype(data_type)
+    if param.name == "TSORT32Test.half_two_blocks":
+        input_arr = np.arange(rows * cols, dtype=np.float32).reshape(rows, cols).astype(data_type)
+    else:
+        input_arr = np.random.uniform(low=-10, high=10, size=(rows, cols)).astype(data_type)
     input_arr.tofile("input0.bin")
     idx_arr = np.arange(rows * cols, dtype=np.uint32).reshape(rows, cols)
     idx_arr.tofile("input1.bin")
@@ -115,6 +118,7 @@ if __name__ == "__main__":
         TestParams('TSORT32Test.test1', np.float32, 8, 32),
         TestParams('TSORT32Test.test2', np.float32, 7, 32),
         TestParams('TSORT32Test.test3', np.float16, 32, 16),
+        TestParams("TSORT32Test.half_two_blocks", np.float16, 1, 64),
     ]
 
     for case in case_params_list:

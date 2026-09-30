@@ -68,3 +68,5 @@ template void launchTSort32<float, uint32_t, 7, 32, 7, 32, 7, 32>(
     float* out, float* src, uint32_t* idx, aclrtStream stream);
 template void launchTSort32<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16>(
     aclFloat16* out, aclFloat16* src, uint32_t* idx, aclrtStream stream);
+template void launchTSort32<aclFloat16, uint32_t, 1, 64, 1, 64, 1, 64>(
+    aclFloat16* out, aclFloat16* src, uint32_t* idx, aclrtStream stream);
