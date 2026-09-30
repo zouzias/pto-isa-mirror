@@ -116,3 +116,9 @@ TEST_F(TSORT32Test, test3)
     bool res = TSort32Test<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16>();
     EXPECT_TRUE(res);
 }
+
+TEST_F(TSORT32Test, half_two_blocks)
+{
+    bool res = TSort32Test<aclFloat16, uint32_t, 1, 64, 1, 64, 1, 64>();
+    EXPECT_TRUE(res);
+}
