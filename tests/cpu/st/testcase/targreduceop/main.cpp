@@ -292,6 +292,39 @@ TEST_F(TARGREDUCEOPTest, case_col_val_max_uint32_float_64x64_64x64_64x64_64x64)
     });
 }
 
+TEST_F(TARGREDUCEOPTest, case_col_val_max_single_row_output_for_multirow_input)
+{
+    using namespace pto;
+    using SrcTile = Tile<TileType::Vec, float, 2, 8, BLayout::RowMajor, -1, -1>;
+    using DstValTile = Tile<TileType::Vec, float, 2, 8, BLayout::RowMajor, -1, -1>;
+    using DstIdxTile = Tile<TileType::Vec, int32_t, 2, 8, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, float, 2, 8, BLayout::RowMajor, -1, -1>;
+
+    SrcTile src(2, 1);
+    DstValTile dstVal(1, 1);
+    DstIdxTile dstIdx(1, 1);
+    TmpTile tmp(2, 1);
+    TASSIGN(src, 0);
+    TASSIGN(tmp, 256);
+    TASSIGN(dstVal, 512);
+    TASSIGN(dstIdx, 768);
+
+    src.SetValidRow(1);
+    src.SetElement(0, 0, 3.0f);
+    TCOLARGMAX(dstVal, dstIdx, src, tmp);
+
+    EXPECT_FLOAT_EQ(dstVal.GetElement(0, 0), 3.0f);
+    EXPECT_EQ(dstIdx.GetElement(0, 0), 0);
+
+    src.SetValidRow(2);
+    src.SetElement(0, 0, 1.0f);
+    src.SetElement(1, 0, 9.0f);
+    TCOLARGMAX(dstVal, dstIdx, src, tmp);
+
+    EXPECT_FLOAT_EQ(dstVal.GetElement(0, 0), 9.0f);
+    EXPECT_EQ(dstIdx.GetElement(0, 0), 1);
+}
+
 TEST_F(TARGREDUCEOPTest, case_col_val_max_int32_half_16x256_16x256_16x256_16x256)
 {
     run_vec_op<int32_t, aclFloat16, 16, 256, true>([](aclFloat16* outVal, int32_t* out, aclFloat16* src, void* stream) {
