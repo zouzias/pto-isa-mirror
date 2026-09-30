@@ -98,7 +98,7 @@ CPU_SIM 默认采用架构对应的 UB 容量：A2A3 为 192 KiB，A5 为 256 Ki
 
 为避免 `__PTO_AUTO__` 模式下并发执行首次访问，CPU_SIM 的 `TMATMUL` 实现会在启动并行工作线程前，由调用线程完成输出、可选累加器和两个矩阵输入 Tile 的后备存储初始化。`TMATMUL_MX` 路径还会初始化两个缩放 Tile。
 
-### TPOP 后备存储与 Tile 视图
+### TPOP 后备存储与 Tile 视图 <a id="tpop-backed-tile-views"></a>
 
 若 TileData 目标的 `data()` 返回空指针，`TPOP` 会分配独立的线程局部主机存储，并将其范围登记到 `NPUMemoryModel`。
 该行为适用于切分和不切分流程；已有存储的目标保持原绑定。独立分配的存储不属于 UB、L1 或 L0，也不占用这些区域的配置容量。

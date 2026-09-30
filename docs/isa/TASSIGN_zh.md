@@ -30,7 +30,7 @@ PTO_INST void TASSIGN(T& obj, AddrType addr);
 这包括 CPU_SIM `TPOP` 为 `data()` 返回空指针的目标 Tile 分配的独立后备存储。基址和内部指针均可创建别名，
 不复制数据，也不延长后备存储的寿命；不支持任意未登记的主机指针。两种地址形式均在运行时检查整个 Tile 或 ConvTile 是否完全位于所选缓冲区内。
 越界分配在 Debug 和 Release 构建中都会终止进程。详见 [CPU_SIM 内存容量覆盖](../coding/cpu_sim_zh.md#memory-capacity-overrides)
-和 [TPOP 后备存储与 Tile 视图](../coding/cpu_sim_zh.md#tpop-tile)。
+和 [TPOP 后备存储与 Tile 视图](../coding/cpu_sim_zh.md#tpop-backed-tile-views)。
 
 ### 形式2：编译时地址（含静态边界检查）
 
