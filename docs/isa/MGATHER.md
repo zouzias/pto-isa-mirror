@@ -13,7 +13,7 @@
 
 Out-of-bounds handling is selected through the `GatherOOB` template parameter. `MGATHER` has no atomic or conflict policy: every destination slot has exactly one defined source index, so collisions cannot occur.
 
-The destination may also be an **L1 / cube `TileType::Mat` tile in NZ layout** (with the index supplied as a GM tensor). This GM → L1 path — for both `Coalesce::Row` and `Coalesce::Elem`, on A2/A3 and A5 — is documented in the [GM → L1 Gather](#gm--l1-gather-tiletypemat-destination) section below; the GM → UB behaviour described here is unchanged.
+The destination may also be an **L1 / cube `TileType::Mat` tile in NZ layout** (with the index supplied as a GM tensor). This GM → L1 path — for both `Coalesce::Row` and `Coalesce::Elem`, on A2/A3 and A5 — is documented in the [GM → L1 Gather](#gm-l1-gather-tiletypemat-destination) section below; the GM → UB behaviour described here is unchanged.
 
 Per-target dispatch summary:
 
@@ -681,7 +681,7 @@ L1 tile once via `pto_create_cbuf_matrix` and skips the DMA for OOB rows.
   handshake, exactly like `tload_mix`. `copy_cbuf_to_gm` / `copy_ubuf_to_gm` are not available
   on the AIC cube target. Elem mode additionally offers an opt-in **SIMT executor**
   (`GatherExec::Simt`) that runs the gather on the AIV vector core — see
-  [A5 only — SIMT executor](#a5-only--simt-executor-for-elem-gm--l1-gatherexecsimt) below.
+  [A5 only — SIMT executor](#a5-only-simt-executor-for-elem-gm-l1-gatherexecsimt) below.
 
 ### Example — Row gather into an L1 NZ tile
 
