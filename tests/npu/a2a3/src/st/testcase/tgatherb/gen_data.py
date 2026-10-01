@@ -24,7 +24,7 @@ def gen_golden_data_tgatherb(case_name, param):
     elif dtype == np.int8 or dtype == np.uint8:
         data_size = 1
     else:
-        ValueError(f"{dtype} unsupported data type!!")
+        raise ValueError(f"{dtype} unsupported data type!!")
     blockSizeElem = int(32/data_size)
 
     src_shape = [param.src_s1, param.src_s0]
