@@ -44,10 +44,10 @@ def gen_golden_data(case_name, param):
  
     # Apply valid region constraints
     output = np.zeros([h, w]).astype(dtype)
-    for h in range(h):
-        for w in range(w):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
+    for i in range(h):
+        for j in range(w):
+            if i >= h_valid or j >= w_valid:
+                golden[i][j] = output[i][j]
  
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
