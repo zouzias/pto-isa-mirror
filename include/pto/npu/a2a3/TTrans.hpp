@@ -73,28 +73,38 @@ PTO_INTERNAL void TransFullSubTiles(
         uint64_t srcUb[ADDR_NUM] = {0}, tmpUb[ADDR_NUM] = {0};
         uint64_t offset = i * blockSizeElem;
         uint16_t vconvSrcStride = Y_ELEM_OTHER * srcStride * sizeof(T) / BLOCK_BYTE_SIZE;
-        for (int j = 0; j < ADDR_NUM; j++) {
-            srcUb[j] = (uint64_t)(srcPtr + offset + j * srcStride);
-            tmpUb[j] = (sizeof(T) == 2) ?
-                           (uint64_t)(tmpPtr + (j + offset) * tmpStride) :
-                           (uint64_t)(tmpPtr + ((j >> 1) + offset) * tmpStride + (j & 1) * blockSizeElem);
-        }
-        set_va_reg_sb(VA2, srcUb);
-        set_va_reg_sb(VA3, &srcUb[HALF_ADDR_NUM]);
-        set_va_reg_sb(VA0, tmpUb);
-        set_va_reg_sb(VA1, &tmpUb[HALF_ADDR_NUM]);
-        if constexpr (sizeof(T) == 2) {
-            if (numSubTileY == 1) {
-                Op::TransB16Instr(1, 0, 0);
-            } else {
-                Op::TransB16Instr(numSubTileY, 1, vconvSrcStride);
+        // vnchwconv encodes repeat as uint8_t. Restart at the next 16-row segment
+        // so tiles with more than REPEAT_MAX subtile rows do not truncate it.
+        for (unsigned repeatStart = 0; repeatStart < numSubTileY;) {
+            const unsigned remaining = numSubTileY - repeatStart;
+            const unsigned repeatCount = remaining > REPEAT_MAX ? REPEAT_MAX : remaining;
+            const uint64_t srcRepeatOffset = static_cast<uint64_t>(repeatStart) * Y_ELEM_OTHER * srcStride;
+            const uint64_t tmpRepeatOffset = static_cast<uint64_t>(repeatStart) * Y_ELEM_OTHER;
+            for (int j = 0; j < ADDR_NUM; j++) {
+                srcUb[j] = (uint64_t)(srcPtr + offset + srcRepeatOffset + j * srcStride);
+                tmpUb[j] = (sizeof(T) == 2) ? (uint64_t)(tmpPtr + (j + offset) * tmpStride + tmpRepeatOffset) :
+                                              (uint64_t)(tmpPtr + ((j >> 1) + offset) * tmpStride +
+                                                         (j & 1) * blockSizeElem + tmpRepeatOffset);
             }
-        } else {
-            if (numSubTileY == 1) {
-                Op::TransB32Instr(1, 0, 0);
+            set_va_reg_sb(VA2, srcUb);
+            set_va_reg_sb(VA3, &srcUb[HALF_ADDR_NUM]);
+            set_va_reg_sb(VA0, tmpUb);
+            set_va_reg_sb(VA1, &tmpUb[HALF_ADDR_NUM]);
+            const uint8_t repeat = static_cast<uint8_t>(repeatCount);
+            if constexpr (sizeof(T) == 2) {
+                if (repeatCount == 1) {
+                    Op::TransB16Instr(repeat, 0, 0);
+                } else {
+                    Op::TransB16Instr(repeat, 1, vconvSrcStride);
+                }
             } else {
-                Op::TransB32Instr(numSubTileY, 2, vconvSrcStride);
+                if (repeatCount == 1) {
+                    Op::TransB32Instr(repeat, 0, 0);
+                } else {
+                    Op::TransB32Instr(repeat, 2, vconvSrcStride);
+                }
             }
+            repeatStart += repeatCount;
         }
     }
 }

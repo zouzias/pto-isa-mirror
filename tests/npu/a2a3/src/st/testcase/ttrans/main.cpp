@@ -41,7 +41,7 @@ void test_ttrans()
 {
     uint32_t M = tRows;
     uint32_t N = tCols;
-    size_t srcFileSize = M * N * sizeof(T);
+    size_t srcFileSize = M * ((N == 1) ? 32 / sizeof(T) : N) * sizeof(T);
     size_t dstFileSize = M * N * sizeof(T);
 
     aclInit(nullptr);
@@ -110,6 +110,10 @@ TEST_F(TTRANSTest, case17_int8_32_32_32_32) { test_ttrans<uint8_t, 32, 32, 32, 3
 TEST_F(TTRANSTest, case18_int8_64_64_22_63) { test_ttrans<uint8_t, 64, 64, 22, 63>(); }
 TEST_F(TTRANSTest, case19_float_8_8_8_8) { test_ttrans<float, 8, 8, 8, 8>(); }
 TEST_F(TTRANSTest, case20_half_128_128_64_64) { test_ttrans<aclFloat16, 128, 128, 64, 64>(); }
+TEST_F(TTRANSTest, case21_float_4096_1_4096_1) { test_ttrans<float, 4096, 1, 4096, 1>(); }
+TEST_F(TTRANSTest, case22_float_4080_1_4080_1) { test_ttrans<float, 4080, 1, 4080, 1>(); }
+TEST_F(TTRANSTest, case23_half_4096_1_4096_1) { test_ttrans<aclFloat16, 4096, 1, 4096, 1>(); }
+TEST_F(TTRANSTest, case24_half_4080_1_4080_1) { test_ttrans<aclFloat16, 4080, 1, 4080, 1>(); }
 
 template <typename T, int D0, int D1, int tRows, int tCols, int vRows, int vCols>
 void test_ttrans_multidim()
