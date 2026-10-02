@@ -189,7 +189,7 @@ error while loading shared libraries: libpto.so: cannot open shared object file
 export LD_LIBRARY_PATH=/path/to/pto/lib:$LD_LIBRARY_PATH
 
 # 方法2：添加到系统路径
-sudo echo "/path/to/pto/lib" > /etc/ld.so.conf.d/pto.conf
+printf '%s\n' "/path/to/pto/lib" | sudo tee /etc/ld.so.conf.d/pto.conf > /dev/null
 sudo ldconfig
 
 # 方法3：使用 RPATH
