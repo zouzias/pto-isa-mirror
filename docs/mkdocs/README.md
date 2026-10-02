@@ -49,7 +49,7 @@ After startup, the documentation is available at `http://127.0.0.1:8000`, and lo
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-The output is generated in `docs/mkdocs/site/`.
+The output is generated in `site/`.
 
 ## Option 2: Build via CMake
 

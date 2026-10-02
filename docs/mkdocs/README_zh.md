@@ -49,7 +49,7 @@ python -m mkdocs serve -f docs/mkdocs/mkdocs.yml
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-构建输出位于 `docs/mkdocs/site/`。
+构建输出位于 `site/`。
 
 ## 方式二：通过 CMake 构建
 
