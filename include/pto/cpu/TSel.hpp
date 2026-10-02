@@ -21,26 +21,15 @@ namespace pto {
 template <typename tile_shape, typename mask_tile_shape>
 PTO_INTERNAL void TSel_Impl(
     typename tile_shape::TileDType dst, typename tile_shape::TileDType src0, typename tile_shape::TileDType src1,
-    typename mask_tile_shape::TileDType selMask, unsigned validRow, unsigned validCol, unsigned validMaskCol)
+    typename mask_tile_shape::TileDType selMask, unsigned validRow, unsigned validCol)
 {
     constexpr uint8_t maskSize = 8;
-    size_t maskRowIdx = 0;
-    size_t maskColIdx = 0;
-    uint8_t bitIdx = 0;
     for (int i = 0; i < validRow; ++i) {
         for (int j = 0; j < validCol; ++j) {
             size_t dstIdx = GetTileElementOffset<tile_shape>(i, j);
-            size_t maskIdx = GetTileElementOffset<mask_tile_shape>(maskRowIdx, maskColIdx);
+            size_t maskIdx = GetTileElementOffset<mask_tile_shape>(i, j / maskSize);
+            const uint8_t bitIdx = j % maskSize;
             const uint8_t bit = (selMask[maskIdx] >> bitIdx) & 1;
-            bitIdx++;
-            if (bitIdx == 8) {
-                bitIdx = 0;
-                maskColIdx++;
-                if (maskColIdx == validMaskCol) {
-                    maskRowIdx++;
-                    maskColIdx = 0;
-                }
-            }
             dst[dstIdx] = (bit) ? src0[dstIdx] : src1[dstIdx];
         }
     }
@@ -51,9 +40,7 @@ PTO_INTERNAL void TSEL_IMPL(
 {
     unsigned row = dst.GetValidRow();
     unsigned col = dst.GetValidCol();
-    unsigned rowMask = selMask.GetValidRow();
-    unsigned colMask = selMask.GetValidCol();
-    TSel_Impl<tile_shape, mask_tile_shape>(dst.data(), src0.data(), src1.data(), selMask.data(), row, col, colMask);
+    TSel_Impl<tile_shape, mask_tile_shape>(dst.data(), src0.data(), src1.data(), selMask.data(), row, col);
 }
 } // namespace pto
 #endif
