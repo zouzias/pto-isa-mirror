@@ -42,7 +42,10 @@ def _missing_modules_for(python_exe: Path) -> list[str]:
         return REQUIRED_MODULES[:]
     if proc.returncode == 0:
         return []
-    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    missing = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if proc.returncode != 1 or not missing or any(name not in REQUIRED_MODULES for name in missing):
+        raise RuntimeError(f"Dependency probe failed for {python_exe} (exit {proc.returncode}): {proc.stderr.strip()}")
+    return missing
 
 
 def _venv_python(venv_dir: Path) -> Path:
