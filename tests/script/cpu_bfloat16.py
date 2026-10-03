@@ -145,31 +145,18 @@ def detect_bfloat16_cxx(explicit: Optional[str] = None) -> str:
 
 
 def derive_cc_from_cxx(cxx: Optional[str]) -> Optional[str]:
+    """Prefer the selected C++ compiler's matching C compiler installation."""
     if not cxx:
         return None
-    compiler = shutil.which(cxx) or cxx
-    name = Path(compiler).name
-    directory = str(Path(compiler).parent)
-
-    gcc_match = re.fullmatch(r"g\+\+(-\d+)?", name)
-    if gcc_match:
-        cc_name = f"gcc{gcc_match.group(1) or ''}"
-        cc_path = shutil.which(cc_name)
-        if cc_path:
-            return cc_path
-        candidate = Path(directory) / cc_name
-        return str(candidate) if candidate.exists() else None
-
-    clang_match = re.fullmatch(r"clang\+\+(-\d+)?", name)
-    if clang_match:
-        cc_name = f"clang{clang_match.group(1) or ''}"
-        cc_path = shutil.which(cc_name)
-        if cc_path:
-            return cc_path
-        candidate = Path(directory) / cc_name
-        return str(candidate) if candidate.exists() else None
-
-    if name == "c++":
-        return shutil.which("cc") or None
-
+    compiler = Path(shutil.which(cxx) or cxx)
+    match = re.fullmatch(r"(.*)(g\+\+|clang\+\+)(-\d+)?", compiler.name)
+    if match:
+        prefix, family, version = match.groups()
+        cc_name = prefix + ("gcc" if family == "g++" else "clang") + (version or "")
+        sibling = compiler.parent / cc_name
+        if sibling.is_file() and os.access(sibling, os.X_OK):
+            return str(sibling)
+        return shutil.which(cc_name)
+    if compiler.name == "c++":
+        return shutil.which("cc")
     return None
