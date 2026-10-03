@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -56,12 +57,11 @@ def _load_formula_rows() -> list[tuple[str, str, str, str, str]]:
     return rows
 
 
-def _fmt_float(s: str) -> str:
-    x = float(s)
-    text = f"{x:.10f}".rstrip("0").rstrip(".")
-    if "." not in text:
-        text += ".0"
-    return text
+def _fmt_float(text: str) -> str:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"Formula coefficients must be finite: {text!r}")
+    return repr(value)
 
 
 def _build_header_prefix(rows_count: int) -> list[str]:

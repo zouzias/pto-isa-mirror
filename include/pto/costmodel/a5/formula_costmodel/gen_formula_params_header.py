@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,10 +72,9 @@ def _validate_csv_header(fieldnames: list[str] | None) -> None:
 
 def _fmt_float(text: str) -> str:
     value = float(text)
-    out = f"{value:.10f}".rstrip("0").rstrip(".")
-    if "." not in out:
-        out += ".0"
-    return out
+    if not math.isfinite(value):
+        raise ValueError(f"Formula coefficients must be finite: {text!r}")
+    return repr(value)
 
 
 def _escape(text: str) -> str:
