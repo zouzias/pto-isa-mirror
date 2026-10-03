@@ -64,7 +64,8 @@ class NumExt:
         bits = data.view(np.uint32)
         lsb = (bits >> 16) & np.uint32(1)
         rounded = bits + np.uint32(0x7FFF) + lsb
-        return (rounded >> 16).astype(np.uint16)
+        upper = np.where(np.isnan(data), (bits >> 16) | np.uint32(0x40), rounded >> 16)
+        return upper.astype(np.uint16)
 
     @staticmethod
     def _bfloat16_bits_to_float32(values: np.ndarray) -> np.ndarray:
