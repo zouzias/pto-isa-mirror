@@ -593,6 +593,13 @@ def determine_need_build(args, source_dir: Path, build_dir: Path) -> bool:
         if configured_testcase:
             config_mismatch = True
 
+    for option, requested in (("PTO_CPU_SIM_ENABLE_BF16", args.enable_bf16),
+                              ("PTO_CPU_SIM_TRACE_MODE", args.trace_mode)):
+        cached = read_cmake_cache_var(build_dir, option)
+        enabled = (cached or "OFF").upper() in ("ON", "TRUE", "YES", "Y", "1")
+        if enabled != requested:
+            config_mismatch = True
+
     have_requested_binary = True
     if args.testcase:
         have_requested_binary = args.testcase in binaries_before
