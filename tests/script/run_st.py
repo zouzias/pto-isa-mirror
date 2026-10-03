@@ -48,9 +48,8 @@ def set_env_variables(run_mode, soc_version):
         if os.path.exists(setenv_path):
             print(f"run env shell: {setenv_path}")
             result = subprocess.run(
-                f"source {setenv_path} && env",
-                shell=True,
-                executable=shutil.which("bash") or "bash",
+                [shutil.which("bash") or "bash", "-c", 'source "$1" && env', "pto-setenv", setenv_path],
+                check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
