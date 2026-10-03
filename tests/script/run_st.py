@@ -160,13 +160,13 @@ def list_gtest_cases(testcase_dir, gtest_filter="*"):
         return []
     pairs = re.findall(r"^\s*TEST_F\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)", content, re.MULTILINE)
     tests = [f"{suite}.{name}" for suite, name in pairs]
-    if "-" in gtest_filter:
-        pos, neg = gtest_filter.split("-", 1)
-        neg_patterns = [p for p in neg.split(":") if p]
-        tests = [t for t in tests if not any(fnmatch.fnmatch(t, p) for p in neg_patterns)]
-    elif gtest_filter != "*":
-        patterns = [p for p in gtest_filter.split(":") if p]
-        tests = [t for t in tests if any(fnmatch.fnmatch(t, p) for p in patterns)]
+    positive, separator, negative = gtest_filter.partition("-")
+    if separator and not positive:
+        positive = "*"
+    positive_patterns = [p for p in positive.split(":") if p]
+    negative_patterns = [p for p in negative.split(":") if p]
+    tests = [t for t in tests if any(fnmatch.fnmatch(t, p) for p in positive_patterns)
+             and not any(fnmatch.fnmatch(t, p) for p in negative_patterns)]
     return tests
 
 
