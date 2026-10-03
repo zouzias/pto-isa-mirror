@@ -737,10 +737,11 @@ def main() -> int:
     setup_environment(args)
     repo_root = Path(__file__).resolve().parent
 
-    if args.enable_bf16:
+    building = not args.no_build or args.demo or args.demo_only
+    if args.enable_bf16 and building:
         resolve_bf16_compiler_pair(args)
 
-    cxx, cc = detect_compilers(args.cxx, args.cc)
+    cxx, cc = detect_compilers(args.cxx, args.cc) if building else (None, None)
     log_build_info(args, cxx, cc)
 
     if args.demo or args.demo_only:
