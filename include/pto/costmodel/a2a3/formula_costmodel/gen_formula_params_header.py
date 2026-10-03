@@ -40,7 +40,10 @@ def _parse_csv_row(row: dict[str, str]) -> tuple[str, str, str, str, str]:
     if dtype not in DTYPE_MAP:
         raise ValueError(f"Unsupported dtype '{dtype}' in {CSV_PATH}")
     if cols != "*":
-        _ = int(cols)
+        count = int(cols)
+        if not 1 <= count <= 65535:
+            raise ValueError(f"Column count must be '*' or in [1, 65535]: {cols!r}")
+        cols = str(count)
     _ = float(slope)
     _ = float(bias)
     return op, dtype, cols, slope, bias
