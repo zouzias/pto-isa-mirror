@@ -228,26 +228,23 @@ def _auto_detect_compilers() -> Tuple[str, Optional[str]]:
     raise RuntimeError(error_msg)
 
 
-def _derive_cc_from_cxx(cxx_path: str) -> Optional[str]:
-    """
-    Guess the corresponding CC based on the path name of CXX.
-    """
-    if not cxx_path:
+def _derive_cc_from_cxx(cxx: Optional[str]) -> Optional[str]:
+    """Prefer the selected C++ compiler's matching C compiler installation."""
+    if not cxx:
         return None
-
-    logging.debug("Attempting to derive CC from CXX: %s", cxx_path)
-    name = Path(cxx_path).name
-
-    # Match as long as the path contains "g++" or "clang" keywords
-    if "clang" in name:
-        logging.info("Derived CC as clang")
-        return shutil.which("clang")
-
-    if "g++" in name:
-        logging.info("Derived CC as gcc")
-        return shutil.which("gcc")
-
+    compiler = Path(shutil.which(cxx) or cxx)
+    match = re.fullmatch(r"(.*)(g\+\+|clang\+\+)(-\d+)?", compiler.name)
+    if match:
+        prefix, family, version = match.groups()
+        cc_name = prefix + ("gcc" if family == "g++" else "clang") + (version or "")
+        sibling = compiler.parent / cc_name
+        if sibling.is_file() and os.access(sibling, os.X_OK):
+            return str(sibling)
+        return shutil.which(cc_name)
+    if compiler.name == "c++":
+        return shutil.which("cc")
     return None
+
 
 
 def detect_compilers(cxx_arg: Optional[str], cc_arg: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
