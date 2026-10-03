@@ -388,6 +388,9 @@ def main():
                         fail_count += 1
             os.environ.pop("GTEST_FILTER", None)
             print("============================================================")
+            if total_runs == 0:
+                print("[ERROR] No comm ST runs executed; check rank limits, devices and test filters.")
+                sys.exit(1)
             if fail_count == 0:
                 print(f"[INFO] All {total_runs} comm ST run(s) passed.")
             else:
