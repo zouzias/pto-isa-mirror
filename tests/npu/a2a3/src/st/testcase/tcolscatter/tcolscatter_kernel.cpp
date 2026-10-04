@@ -16,8 +16,7 @@ using namespace std;
 using namespace pto;
 
 template <
-    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern maskPattern,
-    int SrcValidCol = SrcCol>
+    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern maskPattern, int SrcValidCol = SrcCol>
 __global__ AICORE void runTScatterMask(__gm__ T* out, __gm__ T* src)
 {
     using SrcShapeDim5 = Shape<1, 1, 1, SrcRow, SrcValidCol>;
@@ -45,16 +44,14 @@ __global__ AICORE void runTScatterMask(__gm__ T* out, __gm__ T* src)
     TSTORE(dstGlobal, dstTile);
 }
 
-template <
-    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
+template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
 void launchTScatterMaskTestCase(void* out, void* src, void* stream)
 {
     if constexpr (std::is_same_v<T, uint16_t>) {
-        runTScatterMask<half, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol><<<1, nullptr, stream>>>(
-            (half*)out, (half*)src);
+        runTScatterMask<half, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol>
+            <<<1, nullptr, stream>>>((half*)out, (half*)src);
     } else {
-        runTScatterMask<T, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol><<<1, nullptr, stream>>>(
-            (T*)out, (T*)src);
+        runTScatterMask<T, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol><<<1, nullptr, stream>>>((T*)out, (T*)src);
     }
 }
 

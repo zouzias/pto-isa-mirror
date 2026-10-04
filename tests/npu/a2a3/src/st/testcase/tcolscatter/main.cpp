@@ -15,8 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <
-    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
+template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
 void launchTScatterMaskTestCase(void* out, void* src, void* stream);
 
 class TCOLSCATTERTest : public testing::Test {
