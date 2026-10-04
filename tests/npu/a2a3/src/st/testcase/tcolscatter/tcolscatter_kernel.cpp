@@ -15,21 +15,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern maskPattern>
+template <
+    typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern maskPattern, int SrcValidCol = SrcCol>
 __global__ AICORE void runTScatterMask(__gm__ T* out, __gm__ T* src)
 {
-    using SrcShapeDim5 = Shape<1, 1, 1, SrcRow, SrcCol>;
+    using SrcShapeDim5 = Shape<1, 1, 1, SrcRow, SrcValidCol>;
     using SrcStridDim5 = Stride<SrcRow * SrcCol, SrcRow * SrcCol, SrcRow * SrcCol, SrcCol, 1>;
     using GlobalSrcData = GlobalTensor<T, SrcShapeDim5, SrcStridDim5>;
-    using DstShapeDim5 = Shape<1, 1, 1, DstRow, DstCol>;
+    using DstShapeDim5 = Shape<1, 1, 1, DstRow, SrcValidCol>;
     using DstStridDim5 = Stride<DstRow * DstCol, DstRow * DstCol, DstRow * DstCol, DstCol, 1>;
     using GlobalDstData = GlobalTensor<T, DstShapeDim5, DstStridDim5>;
 
     GlobalSrcData srcGlobal(src);
     GlobalDstData dstGlobal(out);
 
-    using DstTileData = Tile<TileType::Vec, T, DstRow, DstCol>;
-    using SrcTileData = Tile<TileType::Vec, T, SrcRow, SrcCol>;
+    using DstTileData = Tile<TileType::Vec, T, DstRow, DstCol, BLayout::RowMajor, DstRow, SrcValidCol>;
+    using SrcTileData = Tile<TileType::Vec, T, SrcRow, SrcCol, BLayout::RowMajor, SrcRow, SrcValidCol>;
 
     SrcTileData srcTile;
     DstTileData dstTile;
@@ -43,13 +44,14 @@ __global__ AICORE void runTScatterMask(__gm__ T* out, __gm__ T* src)
     TSTORE(dstGlobal, dstTile);
 }
 
-template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask>
+template <typename T, int DstRow, int DstCol, int SrcRow, int SrcCol, pto::MaskPattern mask, int SrcValidCol = SrcCol>
 void launchTScatterMaskTestCase(void* out, void* src, void* stream)
 {
     if constexpr (std::is_same_v<T, uint16_t>) {
-        runTScatterMask<half, DstRow, DstCol, SrcRow, SrcCol, mask><<<1, nullptr, stream>>>((half*)out, (half*)src);
+        runTScatterMask<half, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol>
+            <<<1, nullptr, stream>>>((half*)out, (half*)src);
     } else {
-        runTScatterMask<T, DstRow, DstCol, SrcRow, SrcCol, mask><<<1, nullptr, stream>>>((T*)out, (T*)src);
+        runTScatterMask<T, DstRow, DstCol, SrcRow, SrcCol, mask, SrcValidCol><<<1, nullptr, stream>>>((T*)out, (T*)src);
     }
 }
 
@@ -63,6 +65,18 @@ template void launchTScatterMaskTestCase<int32_t, 16, 64, 16, 64, pto::MaskPatte
 template void launchTScatterMaskTestCase<uint16_t, 32, 128, 16, 64, pto::MaskPattern::P1010>(
     void* out, void* src, void* stream);
 template void launchTScatterMaskTestCase<uint16_t, 32, 128, 16, 64, pto::MaskPattern::P0101>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<uint16_t, 32, 64, 16, 64, pto::MaskPattern::P0101>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<uint16_t, 32, 64, 16, 64, pto::MaskPattern::P0101, 63>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<int8_t, 32, 64, 16, 64, pto::MaskPattern::P0101>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<uint8_t, 32, 64, 16, 64, pto::MaskPattern::P0101>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<int8_t, 32, 64, 16, 64, pto::MaskPattern::P0101, 63>(
+    void* out, void* src, void* stream);
+template void launchTScatterMaskTestCase<uint8_t, 32, 64, 16, 64, pto::MaskPattern::P0101, 63>(
     void* out, void* src, void* stream);
 template void launchTScatterMaskTestCase<float, 32, 128, 16, 64, pto::MaskPattern::P1010>(
     void* out, void* src, void* stream);

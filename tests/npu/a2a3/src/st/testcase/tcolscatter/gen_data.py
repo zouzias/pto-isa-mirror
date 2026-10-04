@@ -17,6 +17,7 @@ TYPE_MAP = {
     np.float32: "float",
     np.float16: "half",
     np.int8: "int8",
+    np.uint8: "uint8",
     np.int32: "int32",
     np.int16: "int16",
     np.uint16: "uint16",
@@ -58,20 +59,23 @@ def scatter_mask(src, row, col, dst_row, dst_cols, pattern):
 
 
 class TColScatterMaskParams:
-    def __init__(self, data_type, row, col, dst_row, dst_col, pattern):
+    def __init__(self, data_type, row, col, dst_row, dst_col, pattern, valid_col=None):
         self.data_type = data_type
         self.row = row
         self.col = col
         self.dst_row = dst_row
         self.dst_col = dst_col
         self.pattern = pattern
+        self.valid_col = col if valid_col is None else valid_col
         data_type_str = TYPE_MAP.get(data_type, "unknown")
         self.name = f"TCOLSCATTERTest.case_mask_{data_type_str}_{row}x{col}_{dst_row}x{dst_col}_{pattern}"
+        if self.valid_col != col:
+            self.name += f"_valid_{self.valid_col}"
 
 
 def gen_golden_data(param):
     src_data = np.random.uniform(0, 100, (param.row, param.col)).astype(param.data_type)
-    golden = scatter_mask(src_data, param.row, param.col, param.dst_row, param.dst_col, param.pattern)
+    golden = scatter_mask(src_data, param.row, param.valid_col, param.dst_row, param.dst_col, param.pattern)
 
     src_data.tofile("input.bin")
     golden.tofile("golden.bin")
@@ -84,6 +88,12 @@ if __name__ == "__main__":
         TColScatterMaskParams(np.int32, 16, 64, 16, 64, "P1111"),
         TColScatterMaskParams(np.float16, 16, 64, 32, 128, "P1010"),
         TColScatterMaskParams(np.float16, 16, 64, 32, 128, "P0101"),
+        TColScatterMaskParams(np.float16, 16, 64, 32, 64, "P0101"),
+        TColScatterMaskParams(np.float16, 16, 64, 32, 64, "P0101", 63),
+        TColScatterMaskParams(np.int8, 16, 64, 32, 64, "P0101"),
+        TColScatterMaskParams(np.uint8, 16, 64, 32, 64, "P0101"),
+        TColScatterMaskParams(np.int8, 16, 64, 32, 64, "P0101", 63),
+        TColScatterMaskParams(np.uint8, 16, 64, 32, 64, "P0101", 63),
         TColScatterMaskParams(np.float32, 16, 64, 32, 128, "P1010"),
         TColScatterMaskParams(np.float32, 16, 64, 32, 128, "P0101"),
         TColScatterMaskParams(np.int32, 16, 64, 32, 128, "P1010"),

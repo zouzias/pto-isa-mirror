@@ -132,11 +132,32 @@ __tf__ PTO_INTERNAL void TScatterMaskImpl(
     if constexpr (ScatterType == ScatterAxis::SCATTER_COL) {
         using copyType = std::conditional_t<sizeof(T) == sizeof(int32_t), __ubuf__ int32_t, __ubuf__ int16_t>;
         uint16_t stride = 0;
-        set_mask_count();
-        set_vector_mask(0, validCol);
-        for (int i = 0; i < validRow; i++) {
-            stride = GetStrideByMask<mask, dstStride>(i);
-            vcopy((copyType*)(dstPtr + stride), (copyType*)(srcPtr + i * srcStride), 1, 1, 1, 8, 8);
+        if constexpr (sizeof(T) == sizeof(int8_t) && (dstStride % 2 != 0 || srcStride % 2 != 0)) {
+            for (int i = 0; i < validRow; i++) {
+                stride = GetStrideByMask<mask, dstStride>(i);
+                for (int j = 0; j < validCol; j++) {
+                    dstPtr[stride + j] = srcPtr[i * srcStride + j];
+                }
+            }
+        } else {
+            // For byte tiles vcopy operates on int16 lanes, so its mask counts pairs of bytes.
+            const uint32_t copyCols = sizeof(T) == sizeof(int8_t) ? validCol / 2 : validCol;
+            if (copyCols > 0) {
+                set_mask_count();
+                set_vector_mask(0, copyCols);
+                for (int i = 0; i < validRow; i++) {
+                    stride = GetStrideByMask<mask, dstStride>(i);
+                    vcopy((copyType*)(dstPtr + stride), (copyType*)(srcPtr + i * srcStride), 1, 1, 1, 8, 8);
+                }
+            }
+            if constexpr (sizeof(T) == sizeof(int8_t)) {
+                if (validCol % 2 != 0) {
+                    for (int i = 0; i < validRow; i++) {
+                        stride = GetStrideByMask<mask, dstStride>(i);
+                        dstPtr[stride + validCol - 1] = srcPtr[i * srcStride + validCol - 1];
+                    }
+                }
+            }
         }
         set_mask_norm();
         set_vector_mask(-1, -1);
