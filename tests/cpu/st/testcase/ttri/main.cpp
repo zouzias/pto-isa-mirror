@@ -11,6 +11,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include "pto/pto-inst.hpp"
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <array>
+#include <climits>
+#include <cstdint>
 
 using namespace std;
 using namespace PtoTestCommon;
@@ -109,3 +113,36 @@ TEST_F(TTRITest, case_float_128x128_128x31_0_444) { test_ttri<float, 0, 444, 128
 TEST_F(TTRITest, case_float_128x128_128x31_1_444) { test_ttri<float, 1, 444, 128, 128, 128, 31>(); }
 TEST_F(TTRITest, case_float_128x128_128x31_0__444) { test_ttri<float, 0, -444, 128, 128, 128, 31>(); }
 TEST_F(TTRITest, case_float_128x128_128x31_1__444) { test_ttri<float, 1, -444, 128, 128, 128, 31>(); }
+
+template <int isUpperOrLower>
+void ExpectTtriResult(int diagonal, std::uintptr_t addr, const std::array<int32_t, 8>& expected)
+{
+    using TileT = pto::Tile<pto::TileType::Vec, int32_t, 2, 8, pto::BLayout::RowMajor, -1, -1>;
+    TileT dst(2, 4);
+    pto::TASSIGN(dst, addr);
+    std::fill_n(dst.data(), TileT::Rows * TileT::Cols, -7);
+
+    pto::TTRI<TileT, isUpperOrLower>(dst, diagonal);
+
+    for (int row = 0; row < 2; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            EXPECT_EQ(dst.data()[row * TileT::Cols + col], expected[row * 4 + col]);
+        }
+        for (int col = 4; col < TileT::Cols; ++col) {
+            EXPECT_EQ(dst.data()[row * TileT::Cols + col], -7);
+        }
+    }
+}
+
+TEST_F(TTRITest, CpuSimSupportsFullIntDiagonalRange)
+{
+    pto::NPU_MEMORY_INIT(pto::NPUArch::A5);
+
+    ExpectTtriResult<0>(INT_MAX, 0x1000, {1, 1, 1, 1, 1, 1, 1, 1});
+    ExpectTtriResult<1>(INT_MAX, 0x2000, {0, 0, 0, 0, 0, 0, 0, 0});
+    ExpectTtriResult<0>(INT_MIN, 0x3000, {0, 0, 0, 0, 0, 0, 0, 0});
+    ExpectTtriResult<1>(INT_MIN, 0x4000, {1, 1, 1, 1, 1, 1, 1, 1});
+
+    ExpectTtriResult<0>(0, 0x5000, {1, 0, 0, 0, 1, 1, 0, 0});
+    ExpectTtriResult<1>(0, 0x6000, {1, 1, 1, 1, 0, 1, 1, 1});
+}
