@@ -30,36 +30,38 @@ PTO_INTERNAL void TTriCheck(const TileData& dst)
 }
 
 template <typename TileData>
-PTO_INTERNAL void TTril(__ubuf__ typename TileData::DType* dstPtr, unsigned validRow, unsigned validCol, int diagonal)
+PTO_INTERNAL void TTril(
+    __ubuf__ typename TileData::DType* dstPtr, unsigned validRow, unsigned validCol, int64_t diagonal)
 {
-    for (int r = 0; r < validRow; r++) {
-        int base = r * TileData::Cols;
-        int ends = std::min(diagonal + r + 1, (int)validCol);
-        int starts = std::max(diagonal + r + 1, 0);
+    for (int64_t r = 0; r < validRow; r++) {
+        int64_t base = r * TileData::Cols;
+        int64_t ends = std::min(diagonal + r + 1, static_cast<int64_t>(validCol));
+        int64_t starts = std::max(diagonal + r + 1, int64_t{0});
         PTO_CPU_VECTORIZE_LOOP
-        for (int c = 0; c < ends; c++) {
+        for (int64_t c = 0; c < ends; c++) {
             dstPtr[base + c] = 1;
         }
         PTO_CPU_VECTORIZE_LOOP
-        for (int c = starts; c < validCol; c++) {
+        for (int64_t c = starts; c < validCol; c++) {
             dstPtr[base + c] = 0;
         }
     }
 }
 
 template <typename TileData>
-PTO_INTERNAL void TTriu(__ubuf__ typename TileData::DType* dstPtr, unsigned validRow, unsigned validCol, int diagonal)
+PTO_INTERNAL void TTriu(
+    __ubuf__ typename TileData::DType* dstPtr, unsigned validRow, unsigned validCol, int64_t diagonal)
 {
-    for (int r = 0; r < validRow; r++) {
-        int base = r * TileData::Cols;
-        int ends = std::min(diagonal + r, (int)validCol);
-        int starts = std::max(diagonal + r, 0);
+    for (int64_t r = 0; r < validRow; r++) {
+        int64_t base = r * TileData::Cols;
+        int64_t ends = std::min(diagonal + r, static_cast<int64_t>(validCol));
+        int64_t starts = std::max(diagonal + r, int64_t{0});
         PTO_CPU_VECTORIZE_LOOP
-        for (int c = 0; c < ends; c++) {
+        for (int64_t c = 0; c < ends; c++) {
             dstPtr[base + c] = 0;
         }
         PTO_CPU_VECTORIZE_LOOP
-        for (int c = starts; c < validCol; c++) {
+        for (int64_t c = starts; c < validCol; c++) {
             dstPtr[base + c] = 1;
         }
     }
