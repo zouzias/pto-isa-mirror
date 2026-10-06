@@ -10,7 +10,7 @@
 torch==2.8.0
 torch-npu==2.8.0.post2
 numpy==1.26.0
-setuptools==80.9.0
+setuptools==83.0.0
 wheel
 pyyaml
 expecttest
